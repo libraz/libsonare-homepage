@@ -35,7 +35,7 @@ When a source pans from center to a side, its perceived loudness can jump unless
 
 **Stereo width** narrows or widens the image, usually by adjusting the side signal (left minus right — what differs between the channels) relative to the mid signal (what the two channels share).
 
-Widening adds spaciousness, but it can create [mono compatibility](../concepts/mono-compatibility.md) problems. Too much side energy can weaken or cancel when summed to mono.
+Widening adds spaciousness, but it can create [mono compatibility](../concepts/mono-compatibility.md) problems. Side-only content disappears in a mono sum. Pure M/S width scales the side while keeping the mono sum unchanged; Haas delays, polarity changes, subsequent limiting, or comparison normalization can change the mono result.
 
 Narrowing tightens focus and improves mono robustness. Width belongs late in the strip, after pan, so it acts on the already placed signal.
 

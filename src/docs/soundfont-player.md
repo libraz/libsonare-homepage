@@ -234,7 +234,7 @@ Passing an explicitly empty array `[]` (rather than a patch or `undefined`) bind
 ::: tip MIDI never renders silent for lack of data
 You can bounce with **no SoundFont loaded at all** — bound destinations still sound, because uncovered programs play through the NativeSynth GM fallback. The manifest tells you exactly which parts will use samples and which will use the fallback. See [NativeSynth](./native-synth.md) for the fallback engine.
 
-That fallback is broad enough for practical previews: pianos use the extended waveguide piano sketch, guitars/basses/harp use Karplus-Strong models, strings use bowed-string or pizzicato/harp/timpani voices, choir/voice programs use a vocal body resonance, and GM 56-79 brass/reed/flute programs use provisional physical models. It is still a fallback, not a replacement for a carefully chosen SF2; calibration is ongoing, but missing programs no longer collapse to one generic tone.
+That fallback is broad enough for practical previews: pianos use the tuned extended waveguide piano, guitars/basses/harp use Karplus-Strong models, strings use bowed-string or pizzicato/harp/timpani voices, choir/voice programs use a vocal body resonance, and GM 56-79 brass/reed/flute programs use physical models. Those non-piano physical models remain untuned; further adjustment is planned for future patch releases. It is still a fallback, not a replacement for a carefully chosen SF2, but missing programs do not collapse to one generic tone.
 :::
 
 ### Instrument config and the voice model

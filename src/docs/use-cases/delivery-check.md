@@ -195,7 +195,7 @@ Both numbers come from `after` in the `--report` the mastering step wrote — th
 If `report.json` also carries `loudness_target_limited: true` alongside a large `max_gain_reduction_db`, the mix ran out of headroom before the master reached its loudness target — that is a mix problem the gate cannot fix by adjusting a threshold. See "Believe the right number" in [Mix and Master a Song in the CLI](./cli-mix-and-master.md#step-6-—-believe-the-right-number).
 
 ::: danger Do not read loudness or true peak from `lufs` or `mastering-streaming` on a stereo file
-Both commands downmix a stereo input to mono before measuring, and warn on stderr when they do. [ITU-R BS.1770](../glossary/lufs.md) sums channel power across the pair, so the fold reads roughly 3 dB below the stereo programme — enough to change a pass into a fail, or the reverse.
+Both commands downmix a stereo input to mono before measuring, and warn on stderr when they do. There is no universal fold offset. With `m = (L + R) / 2`, identical channels put the mono fold 3.01 LU below the stereo channel-power reading, uncorrelated equal-power channels put it 6.02 LU below, and opposite polarity can cancel. These are signal-dependent examples; compare the actual stereo programme through the report or stereo APIs. [ITU-R BS.1770](../glossary/lufs.md) sums channel power across the pair, so a fold can change a pass into a fail, or the reverse.
 
 ```bash
 sonare lufs master.wav --json
@@ -218,7 +218,7 @@ sonare mastering-streaming master.wav --json
 ]}
 ```
 
-Applying that gain to the fold's own peak reading projects to `+2.37` dBTP — 3.37 dB past the `-1.0` dBTP ceiling, which reads as an alarming failure. Redo the same arithmetic with the report's real stereo numbers (`-14.11` LUFS, `-0.95` dBTP) and the required gain drops to about `+0.1` dB, putting the projected peak at `-0.84` dBTP — still over the ceiling, but by `0.16` dB instead of `3.37`. The fold does not invent the risk here; it exaggerates a small, real overage into one that looks twenty times worse than it is. On a mono deliverable there is no fold to correct for, and `lufs` / `mastering-streaming` read the file directly — see `take-clean.wav` below.
+The sample numbers above are one program, not a correction factor. Applying that gain to the fold's own peak reading projects to `+2.37` dBTP — 3.37 dB past the `-1.0` dBTP ceiling, which reads as an alarming failure. Redo the same arithmetic with the report's real stereo numbers (`-14.11` LUFS, `-0.95` dBTP) and the required gain drops to about `+0.1` dB, putting the projected peak at `-0.84` dBTP — still over the ceiling, but by `0.16` dB instead of `3.37`. The fold does not invent the risk here; it exaggerates a small, real overage into one that looks twenty times worse than it is. On a mono deliverable there is no fold to correct for, and `lufs` / `mastering-streaming` read the file directly — see `take-clean.wav` below.
 
 ```bash
 sonare lufs take-clean.wav --json
@@ -227,7 +227,7 @@ sonare mastering-profile take-clean.wav --json
 # {"loudness": {"integrated_lufs": -6.0630, ...}, ...}
 ```
 
-Reach for `mastering-streaming` directly when the deliverable is mono, or as a cross-check once you have applied this correction yourself. For stereo-accurate metering outside the mastering report, use the stereo entry points in the [Python API](../python-api.md) — `mastering_streaming_preview_stereo` and its siblings measure both channels instead of a downmix.
+Reach for `mastering-streaming` directly when the deliverable is mono, or as a cross-check. For stereo-accurate metering outside the mastering report, use the stereo entry points in the [Python API](../python-api.md) — `mastering_streaming_preview_stereo` and its siblings measure both channels instead of a downmix.
 :::
 
 `mastering-streaming` also takes your own delivery spec instead of the three built-in platforms. `platforms.json` here holds:

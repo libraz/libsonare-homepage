@@ -83,7 +83,7 @@ The blocks above describe *subtractive* synthesis, but it is only one way to mak
 | **Flute** | An air jet exciting an open-pipe waveguide | Flute, recorder, pan flute, whistles |
 | **Buzzing-bridge plucked string** | A plucked string whose bridge can be made to graze it and spray energy into the upper partials; at buzz 0 the termination stays clean (harp, koto) | Sitar, koto, harp |
 | **Source-filter vocal** | A glottal source (a buzzy sawtooth) shaped by a bank of vowel [formant](../editing/voice-formant.md) resonators (the resonant peaks that make one vowel sound different from another) | Choir and solo-voice vowels |
-| **Free reed** | A driven metal tongue swinging through a slot; adding a second tongue a few cents sharp of it gives the shimmering musette beat | Accordion, harmonica, bandoneon |
+| **Free reed** | An air-flow-driven metal tongue vibrating in a slot; adding a second tongue a few cents sharp of it gives the shimmering musette beat | Accordion, harmonica, bandoneon |
 | **Harpsichord** | A jack-and-plectrum mechanism plucking a registration of separate string choirs — two 8′ unisons and a 4′ octave are three independent strings, not one string with a mix knob | Harpsichord |
 | **Sample** | Plays PCM audio *you* supply, mapped over the keyboard, through the same filter, envelopes, and mod matrix as every other engine | Your own recordings, one-shot drums |
 
@@ -91,9 +91,9 @@ The blocks above describe *subtractive* synthesis, but it is only one way to mak
 In **FM (frequency modulation)** synthesis, instead of filtering a rich waveform, you take two simple sine oscillators and let one wobble the other's pitch very fast. The result is a complex, often metallic or bell-like tone that subtractive synthesis cannot easily make.
 :::
 
-Several of these — Karplus-Strong, modal, piano, pipe organ, bowed string, reed, brass, flute, buzzing-bridge plucked string, source-filter vocal, free reed, and harpsichord — are **physical modeling**: instead of stacking waveforms, they approximate the behavior of a vibrating object (a string, a metal bar, a pipe, a reed, the vocal tract, or an air jet). In libsonare's current NativeSynth these acoustic-style models are still provisional and being calibrated, so treat them as data-free preview/fallback voices rather than finished instrument simulations.
+Several of these — Karplus-Strong, modal, piano, pipe organ, bowed string, reed, brass, flute, buzzing-bridge plucked string, source-filter vocal, free reed, and harpsichord — are **physical modeling**: instead of stacking waveforms, they approximate the behavior of a vibrating object (a string, a metal bar, a pipe, a reed, the vocal tract, or an air jet). In the current NativeSynth, the piano model has been tuned; every other physical model still awaits adjustment and calibration, with more work planned for future patch releases. Treat those models as data-free preview/fallback voices rather than finished instrument simulations.
 
-The **sample** engine is the odd one out: it generates nothing. It takes PCM frames the host already has, resolves a key/velocity keymap at note-on, and hands the result to the oscillator's place in the subtractive chain — so your own audio arrives behind the same resonant filter and mod matrix as a synthesized tone. It is not a SoundFont reader; nothing is parsed, and you describe the mapping yourself.
+The **sample** engine is the odd one out: it generates nothing. It takes PCM frames the host already has, resolves note-number and velocity ranges at note-on, and hands the result to the oscillator's place in the subtractive chain — so your own audio arrives behind the same resonant filter and mod matrix as a synthesized tone. It is not a SoundFont reader; nothing is parsed, and you describe the mapping yourself.
 
 ## Filter character
 

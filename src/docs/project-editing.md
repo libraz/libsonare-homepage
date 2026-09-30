@@ -7,7 +7,7 @@ description: Beginner-friendly guide to libsonare's headless-DAW edit API — th
 
 **Want to build a song's arrangement in code — without opening a DAW?** That is what `Project` is for. A **project** is the timeline that holds everything a song is made of: audio tracks, MIDI tracks, the clips placed on them, the tempo map, time signatures, and markers. libsonare ships a `Project` model — a small, headless DAW editing API — so you can build, edit, and serialize that timeline **inside your own app**, with no DAW host required.
 
-The workflow is a short loop: you assemble an arrangement, edit it with undoable operations, [compile](./project-editing-midi.md#compiling-the-arrangement) it into a renderable timeline, save it to JSON, and finally [render audio](./project-editing-midi.md#rendering-audio) — see [MIDI, Compile & Save/Load](./project-editing-midi.md) for that half of the workflow. `Project` is an **offline, control-thread API** (it never runs on the audio thread), and it behaves identically in the browser (WASM), Node, and Python.
+The workflow is a short loop: you assemble an arrangement, edit it with undoable operations, [compile](./project-save-load.md#compiling-the-arrangement) it into a renderable timeline, save it to JSON, and finally [render audio](./project-bounce.md) — see [Project MIDI](./project-editing-midi.md) and [Project Save & Load](./project-save-load.md) for those parts of the workflow. `Project` is an **offline, control-thread API** (it never runs on the audio thread), and it behaves identically in the browser (WASM), Node, and Python.
 
 ::: info Three words to know first
 A **track** is one lane in the timeline (an audio lane or a MIDI lane). A **clip** is one block of content placed on a track — a slice of recorded audio or a region of MIDI notes. **PPQ** ("pulses per quarter note") is how libsonare measures musical time: every clip start, length, and event position is given in quarter-note units, so `lengthPpq: 4` is four quarter notes long regardless of tempo.
@@ -552,7 +552,7 @@ The lane's `targetParamId` is your own parameter id; the project stores the brea
 Typed lanes use `targetKind: 'track-fader-db'` or `'track-pan'` to target the owning track's mixer fader or pan. JavaScript accepts the names or ordinals `0` / `1` / `2`; at compile/install time the project resolves that lane to the engine's reserved parameter namespace (the persistent `targetParamId` is not the realtime id), and an offline bounce applies it through the track mixer. A track may have at most one lane for each typed kind. `targetKind: 'opaque'` is the host-defined legacy target and is used when `targetKind` is omitted. The JSON field is `target_kind`; a project containing a typed lane serializes as schema version `2`, while a project with only opaque lanes keeps schema version `1` and its existing bytes. The C extended entry points are `sonare_project_add_automation_lane_ex` and `sonare_project_edit_automation_lane_ex`; the legacy C calls remain opaque/preserve-kind paths.
 
 ::: warning Lanes are addressed by target parameter id, not by position
-`editAutomationLane` and `removeAutomationLane` take the target parameter id where they used to take a positional lane index. Both are numbers and the argument count is unchanged, so an index-based call still runs — it just edits a different lane. Audit any call that passed a stored index.
+`editAutomationLane` and `removeAutomationLane` take the target parameter id, not a positional lane index. Both are numbers and the argument count is the same, so an index-based call still runs — it just edits a different lane. Audit any call that passes a stored index.
 :::
 
 
@@ -562,12 +562,12 @@ Typed lanes use `targetKind: 'track-fader-db'` or `'track-pan'` to target the ow
 |---|---|
 | Key and chord annotation write-back | [MIDI, Compile & Save/Load](./project-editing-midi.md#key-and-chord-annotation-write-back) |
 | Assist sidecars | [MIDI, Compile & Save/Load](./project-editing-midi.md#assist-sidecars) |
-| MIDI content | [MIDI, Compile & Save/Load](./project-editing-midi.md#midi-content) |
+| MIDI content | [Edit MIDI Clips](./midi-editing.md#midi-content) |
 | Auto-tempo and snap-to-grid | [MIDI, Compile & Save/Load](./project-editing-midi.md#auto-tempo-and-snap-to-grid) |
-| Compiling the arrangement | [MIDI, Compile & Save/Load](./project-editing-midi.md#compiling-the-arrangement) |
-| Save and load: deterministic JSON | [MIDI, Compile & Save/Load](./project-editing-midi.md#save-and-load-deterministic-json) |
-| MIDI interchange: SMF and MIDI 2.0 Clip File | [MIDI, Compile & Save/Load](./project-editing-midi.md#midi-interchange-smf-and-midi-2-0-clip-file) |
-| Rendering audio | [MIDI, Compile & Save/Load](./project-editing-midi.md#rendering-audio) |
+| Compiling the arrangement | [Compile, Save, and Load Projects](./project-save-load.md#compiling-the-arrangement) |
+| Save and load: deterministic JSON | [Compile, Save, and Load Projects](./project-save-load.md#save-and-load-deterministic-json) |
+| MIDI interchange: SMF and MIDI 2.0 Clip File | [MIDI 2.0, UMP, and Clip Files](./midi2.md#midi-2-0-clip-file-smf2clip) |
+| Rendering audio | [Project Bounce & Rendering](./project-bounce.md) |
 
 ## Related
 
@@ -576,5 +576,8 @@ Typed lanes use `targetKind: 'track-fader-db'` or `'track-pan'` to target the ow
 - [Recording & Takes](./recording-and-takes.md) — takes, comp lanes, and loop-recording capture
 - [Native Synth](./native-synth.md) · [SoundFont Player](./soundfont-player.md) — make MIDI tracks audible
 - [MIDI Input](./midi-input.md) — play a project live from a controller
+- [Edit MIDI Clips](./midi-editing.md) — edit, validate, route, and bake project MIDI events
+- [MIDI 2.0, UMP, and Clip Files](./midi2.md) — preserve full-width UMP events or convert to SMF
+- [Project Save & Load](./project-save-load.md) — compile, serialize, and rebind audio after loading
 - [Mixing Scene JSON](./mixing-scene-json.md) — the scene a track routes into
 - [Binding Parity](./binding-parity.md) — per-runtime API differences

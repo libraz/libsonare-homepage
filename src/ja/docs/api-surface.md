@@ -80,8 +80,9 @@
 | 特徴量 | STFT、メル、MFCC、クロマ、定Qクロマ（`chromaCqt`）、spectral contrast/poly features、zero crossings、ピッチとチューニング、CQT/VQT、NNLS クロマ、NMF 分解、近傍フィルタリング、テンポグラム、Fourier tempogram、cyclic tempogram、PLP、LUFS/LRA | [JavaScript API](./js-api-features.md#特徴抽出)、[librosa 互換性](./librosa-compatibility.md) |
 | メータリング | レベル、ラウドネス、クレストファクター（モノラルとステレオペアの両方）、True Peak、DC オフセットのオフライン計測；クリッピング／ダイナミックレンジレポート；ステレオ相関・幅；ベクトルスコープ、フェーズスコープ、スペクトルスナップショット | [JavaScript API](./js-api-audio.md#メータリング)、[Python API](./python-api.md)、[ネイティブバインディング](./native-bindings.md) |
 | スケール量子化 | MIDI ノートをスケールにスナップし、補正量をセミトーンで測定、ピッチクラスの所属を判定 | [JavaScript API](./js-api-analysis.md#スケール量子化)、[Python API](./python-api.md) |
-| エフェクトと編集 | HPSS、残差付き HPSS、倍音成分／打撃成分の抽出、正規化、トリム、リミックス、フェーズボコーダー、タイムストレッチ、ピッチシフト、ピッチ補正、ノートストレッチ、領域指定スペクトル編集、ボイスのピッチ／フォルマント変更、リアルタイム音声プリセット | [編集 DSP](./editing-dsp.md)、[スペクトル編集](./spectral-editing.md)、[JavaScript API](./js-api-effects.md#オーディオエフェクト) |
-| ステム分解 | ソフトマスクによる分離。各成分がソース自身の位相を保ち、足し合わせると入力に戻ります：`decomposeStems` / `decompose_stems` / `sonare_decompose_stems`。マルチチャンネルを連動させる `decomposeStemsLinked` / `decompose_stems_linked` / `sonare_decompose_stems_linked` と、両方の CLI の `decompose-stems` も使えます | [逆変換特徴量](./inverse-features.md)、[連動ステム](./js-api-features.md#decomposestemslinked-request)、[Python API](./python-api.md) |
+| エフェクトと編集 | HPSS、残差付き HPSS、倍音成分／打撃成分の抽出、正規化、トリム、リミックス、フェーズボコーダー、タイムストレッチ、ピッチシフト、ピッチ補正、ノートストレッチ、ノート抽出とレンダリング、領域指定スペクトル編集、ボイスのピッチ／フォルマント変更、リアルタイム音声プリセット | [編集 DSP](./editing-dsp.md)、[音声内のノート編集](./note-editing.md)、[スペクトル編集](./spectral-editing.md)、[JavaScript API](./js-api-effects.md#オーディオエフェクト) |
+| ステム分解 | ソフトマスクによる分離。各成分がソース自身の位相を保ち、足し合わせると入力に戻ります：`decomposeStems` / `decompose_stems` / `sonare_decompose_stems`。マルチチャンネルを連動させる `decomposeStemsLinked` / `decompose_stems_linked` / `sonare_decompose_stems_linked` と、両方の CLI の `decompose-stems` も使えます | [音源分離](./source-separation.md)、[逆変換特徴量](./inverse-features.md)、[連動ステム](./js-api-features.md#decomposestemslinked-request)、[Python API](./python-api.md) |
+| リペア | 広帯域ノイズ、ハム、クリッピング、クリック、クラックル、拡散残響の検出器とオフラインリペア段 | [オーディオリペアの流れ](./audio-repair.md)、[広帯域ノイズとハムのリペア](./repair-noise.md)、[クリップ、クリック、クラックルのリペア](./repair-transients.md)、[拡散残響のリペア](./repair-reverb.md) |
 | ゼロ交差に揃えたリミックス区間 | カット位置をゼロ交差に一度だけスナップして解決し、テイクの全チャンネルを同じフレームで切り出せるようにします：`remixAlignedIntervals` / `remix_aligned_intervals` / `sonare_remix_aligned_intervals`。API のみで、どちらの CLI にもありません | [JavaScript API](./js-api-analysis.md)、[Python API](./python-api.md) |
 | ステレオ正規化 | 左右ペアのピークまたは RMS 正規化。JavaScript 側は `mode` を持つ `normalizeStereo` 1 つ、Python は `normalize_stereo` と `normalize_rms_stereo` の 2 関数です | [JavaScript API](./js-api-effects.md)、[Python API](./python-api.md) |
 | ルーム音響解析 | インパルス応答からの残響時間（RT60 / EDT）、明瞭度（C50 / C80）、定義度（D50）、ブラインド音響推定、等価ルーム推定、幾何ベースの RIR 合成、ルームモーフィング | [ルーム音響解析](./acoustic-analysis.md)、[JavaScript API](./js-api-effects.md#ルーム音響解析)、[Python API](./python-api-effects.md#ルーム音響解析) |
@@ -91,18 +92,18 @@
 | マスタリング | プリセット、フルチェーン、名前付きプロセッサ、プロセッサカタログメタデータ、インサートパラメータメタデータ、ペアプロセッサ、ペア解析、ステレオ解析、ストリーミングチェーン、任意バンド数の構造化マルチバンドコンプレッサー（チェーン設定スキーマバージョン 2） | [マスタリングプロセッサ](./mastering-processors.md)、[DSP 実装解説](./dsp-implementation.md)、[アルゴリズム根拠](./algorithm-references.md)、[マスタリング実装](./mastering-implementation.md) |
 | ストリーミング MIR | ライブのメル／クロマ／オンセットフレーム、時間とともに更新される BPM／キー／コード推定、コード進行、パターンスコア | [リアルタイムとストリーミング](./realtime-streaming.md)、[WASM](./wasm-streaming.md#ストリーミング解析) |
 | リアルタイムエンジン | トランスポート、テンポ、構造化マーカー、メトロノーム、オートメーションレーン（`resolveInstrumentAutomationId` / `sonare_engine_resolve_instrument_automation_id` で解決するホスト側インストゥルメントのパラメータ対象を含む）、予約パラメータのメタデータを返す `parameterInfo` / `parameterInfoByIndex`、タイムストレッチのボイスプールを設定する `setWarpVoiceCapacity` / `warpVoiceCapacity`、グラフトポロジー、クリップページの先読み幅を設定できるクリップ（`setClipPagePrefetchFrames` / `clipPagePrefetchFrames`）、MIDI クリップスケジュール、トラックごとのレーンミキサー（レーン、バス、センド、チャンネルストリップ、サラウンドパン、インサートパラメータ）、外部 MIDI 出力／クロック、キャプチャ、トラックごとの PFL/AFL キューモニタリング、名前付きテレメトリエラー序数を伴うステレオ／ワイドメーターテレメトリ、スコープテレメトリと Worklet スコープリング、バウンス／フリーズ | [リアルタイムエンジン](./realtime-engine.md#パラメータオートメーション)、[ボイス予算](./realtime-engine.md#time-stretch-のボイス予算)、[リアルタイムとストリーミング](./realtime-streaming.md) |
-| プロジェクトとアレンジ | オーディオ／MIDI トラックとクリップ、メモリ上でのプロジェクト作成、上限付き履歴メモリを備えたアンドゥ/リドゥ、テイク／コンピング、ワープ（クリップのモードは `off`、`repitch`、`tempo-sync`、`time-stretch`）、MIDI シーケンス、SMF および MIDI 2.0 クリップファイル（`SMF2CLIP`）の入出力、JSON 保存／読込、アシストサイドカー、オフラインバウンス | [プロジェクト編集](./project-editing.md)、[プロジェクトバウンス](./project-bounce.md)、[録音・テイク](./recording-and-takes.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
-| インストゥルメントと MIDI | GM フォールバックバンクを備えたマルチエンジンシンセ、GS 互換 SoundFont 2 プレイヤー、ライブ MIDI 再生、ライブ SysEx で選択する GS インサーションエフェクト（EFX） | [内蔵シンセサイザー](./native-synth.md)、[SoundFont 2 プレイヤー](./soundfont-player.md)、[MIDI 入力](./midi-input.md#ライブイベントのキューイング) |
+| プロジェクトとアレンジ | オーディオ／MIDI トラックとクリップ、メモリ上でのプロジェクト作成、上限付き履歴メモリを備えたアンドゥ/リドゥ、テイク／コンピング、ワープ（クリップのモードは `off`、`repitch`、`tempo-sync`、`time-stretch`）、MIDI シーケンス、SMF および MIDI 2.0 クリップファイル（`SMF2CLIP`）の入出力、JSON 保存／読込、アシストサイドカー、オフラインバウンス | [プロジェクト編集](./project-editing.md)、[音声から MIDI](./audio-to-notes.md)、[プロジェクトの MIDI](./project-editing-midi.md)、[プロジェクトの保存と読み込み](./project-save-load.md)、[プロジェクトバウンス](./project-bounce.md)、[録音・テイク](./recording-and-takes.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
+| インストゥルメントと MIDI | GM フォールバックバンクを備えたマルチエンジンシンセ、GS 互換 SoundFont 2 プレイヤー、ライブ MIDI 再生、ライブ SysEx で選択する GS インサーションエフェクト（EFX） | [内蔵シンセサイザー](./native-synth.md)、[SoundFont 2 プレイヤー](./soundfont-player.md)、[MIDI 入力](./midi-input.md#ライブイベントのキューイング)、[MIDI クリップ編集](./midi-editing.md)、[MIDI 2.0 と UMP](./midi2.md) |
 | 逆変換特徴量 | メルから STFT／音声、MFCC からメル／音声、CQT/VQT 振幅から音声 | [逆変換特徴量](./inverse-features.md) |
 | ユーティリティ / librosa 互換 | フレーム／サンプル／時間変換、dB 変換、pre/de-emphasis、無音 trim/split、frame/pad/fix、peak pick、vector normalize、PCEN、tonnetz、テスト信号生成（tone / chirp / clicks） | [librosa 互換性](./librosa-compatibility.md) |
 | 構造とセグメンテーション | クロス類似度、再帰行列／ラグ行列、パス強調、サブセグメンテーション、凝集型クラスタリング、F0 トラックからのノートセグメンテーション | [JavaScript API](./js-api-helpers.md#librosa-互換ヘルパー)、[Python API](./python-api-analysis.md#特徴抽出) |
 | ビルド機能の照会 | 機械可読な機能カタログ（プロセッサ、パラメータの範囲と既定値、プリセット一覧）とビルド診断レポート | [JavaScript API](./js-api.md#capabilitycatalog)、[Python API](./python-api.md#このビルドで何ができるか)、[CLI](./cli.md#doctor) |
 
-この表が示すのは「何があるか」であり、「どのランタイムがどれだけ公開しているか」ではありません。ランタイムごとに各ドメインのどれだけに手が届くかを実測した内訳は、[バインディング対応表](./binding-parity.md)を参照してください。
+この表が示すのは「何があるか」であり、「どのランタイムがどれだけ公開しているか」ではありません。ランタイムごとに各ドメインの機能をどれだけ呼び出せるかを実測した内訳は、[バインディング対応表](./binding-parity.md)を参照してください。
 
 ## 機能カタログが返すもの
 
-ビルドは自分のプロセッサ面を自分で説明できます。Node と WASM の `capabilityCatalog()`、Python の `capability_catalog()`、C ABI の `sonare_capability_catalog_json` は同じ JSON 文書を返します。内容は、ビルドのバージョンと ABI 番号、パラメータとスロットメタデータを持つ全プロセッサ、組み込みプリセット名一覧、マスタリングプリセットのメタデータです。どちらの CLI にもこのカタログはなく、`doctor` が出すのは別物のビルド診断レポートです。
+各ビルドは、自身が備えるプロセッサとそのパラメータを機械可読な形で報告できます。Node と WASM の `capabilityCatalog()`、Python の `capability_catalog()`、C ABI の `sonare_capability_catalog_json` は同じ JSON 文書を返します。内容は、ビルドのバージョンと ABI 番号、パラメータとスロットメタデータを持つ全プロセッサ、組み込みプリセット名一覧、マスタリングプリセットのメタデータです。どちらの CLI にもこのカタログはなく、`doctor` が出すのは別物のビルド診断レポートです。
 
 現行ビルドは **89 個のプロセッサと 5,352 個のパラメータ記述子** を公開します。どちらの数も鵜呑みにせず数え直せます。libsonare リポジトリは生成物を `tools/capability-catalog.json` として追跡しており、共有ライブラリが実際に返す内容とずれると `make capability-catalog-check` が失敗し、`schemas/capability-catalog.schema.json` が形を固定しています。
 
@@ -143,7 +144,7 @@ function accepts(value: number): boolean {
 }
 ```
 
-カタログはこの面を外側から記述します。どのプロセッサがあり、それぞれが何を受け付けるか、です。なぜ同じ id のプロセッサがどのランタイムからも届くのか、それらの既定値を生んだ設定ビルダーが、呼び出すバインディングに対してどの層にあるのかは語りません。それを整理しているのが[アーキテクチャ](./architecture.md)です。C++ コア、その上の機能モジュール、言語ごとの形を同じ呼び出しに翻訳する薄いバインディング、という層構成を示しており、カタログを見た直後の読者こそ、あのページが想定している読者です。
+カタログが外側から示すのは、どのプロセッサがあり、それぞれが何を受け付けるか、です。なぜ同じ id のプロセッサをどのランタイムからも呼べるのか、それらの既定値を決めている設定ビルダーが、呼び出し元のバインディングから見てどの層にあるのかは、カタログからは分かりません。それを整理しているのが[アーキテクチャ](./architecture.md)です。C++ コア、その上の機能モジュール、言語ごとの形を同じ呼び出しに翻訳する薄いバインディング、という層構成を示しており、カタログを見て構造が気になった読者に向けたページです。
 
 ## 実装と根拠のページ
 

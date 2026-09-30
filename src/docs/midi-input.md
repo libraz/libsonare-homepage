@@ -28,6 +28,8 @@ A **MIDI destination** is not a speaker output. It is an internal instrument slo
 This page is about *playing* the engine from a controller. To bind the instruments those notes reach, see [Native Synth](./native-synth.md) (patch-driven synthesizer) and [SoundFont Player](./soundfont-player.md) (GS/GM `.sf2` playback). To record what you play into a timeline, see [Recording and Takes](./recording-and-takes.md). Microphone audio input is a separate path — see the note at the end.
 :::
 
+For full-resolution builders and MIDI 2.0 Clip File interchange, see [MIDI 2.0, UMP, and Clip Files](./midi2.md). To edit the event list inside a project clip, see [Edit MIDI Clips](./midi-editing.md).
+
 ## The live MIDI path
 
 The browser receives MIDI bytes, `bindWebMidi` converts them into engine events, and the destination's instrument produces audio during `process(...)`. Each arrow below is one hop on that path — from raw key press to sample data — and the loop label marks the parts that repeat on every note.
@@ -516,6 +518,8 @@ Live MIDI is *control* input — it tells the engine what to play. **Audio** inp
 - [SoundFont Player](./soundfont-player.md) — GS/GM `.sf2` playback on a destination
 - [Recording and Takes](./recording-and-takes.md) — capture what you play (and microphone audio input)
 - [Project Editing](./project-editing.md) — MIDI clips, CC-learn, and turning CC into automation
+- [Edit MIDI Clips](./midi-editing.md) — project event lists, validation, routing, and MIDI-FX baking
+- [MIDI 2.0, UMP, and Clip Files](./midi2.md) — full-width UMP builders, live delivery, and file fidelity
 - [Project Bounce](./project-bounce.md) — render a MIDI performance offline
 - [Realtime and Streaming](./realtime-streaming.md) — the AudioWorklet engine bridge that renders audio output
 - [Realtime Engine](./glossary/realtime/realtime-engine.md) · [Realtime Safety](./glossary/realtime/realtime-safety.md)

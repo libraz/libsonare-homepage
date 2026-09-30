@@ -365,10 +365,10 @@ different components for the same input. Double precision removes that
 dependence.
 
 It is a reproducibility property, not an accuracy one — shapes, non-negativity
-and reconstruction quality are unchanged. But the factors themselves are not the
-same numbers a float seed produced. If you have **stored `w`/`h` matrices**, or
-you are diffing a stem render against one you rendered earlier, expect them to
-differ; re-derive stored factors rather than assuming a mismatch is a bug. The
+and reconstruction quality are unaffected. But the factors themselves are not the
+same numbers a float seed produces. **Stored `w`/`h` matrices**, or a stem render
+made with a single-precision seed, will differ; re-derive stored factors rather
+than treating a mismatch as a bug. The
 same applies to `decomposeWithInit(..., 'nndsvd')` and `decomposeStemsLinked(...)`.
 :::
 

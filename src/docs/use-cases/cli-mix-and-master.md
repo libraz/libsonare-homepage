@@ -232,7 +232,7 @@ Choose the base preset explicitly when the material has a known role: `sonare ma
 }
 ```
 
-Two fields decide whether the master is finished. `loudness_target_limited` says whether the chain hit its ceiling before it reached the loudness target — `false` means the target was met honestly. `max_gain_reduction_db` says how hard the limiter worked to get there; a large figure with `loudness_target_limited: true` means you are asking for more loudness than the mix has headroom to give, and the fix is in the mix, not the master.
+Use the report to check the target and the processing. `loudness_target_limited` reports whether the requested target was actually reached; `false` means it was reached within the configured constraints, but does not mean that the limiter was inactive or that the master is finished. `max_gain_reduction_db` reports the actual maximum gain reduction. Read the after loudness and true-peak values, then audition the result. If the flag is `true`, the target was not reached under the configured gain and ceiling constraints; review the mix, target, or ceiling before accepting it.
 
 ::: danger The report's numbers are the stereo ones. A separate `lufs` call's are not.
 On the Python CLI, `mastering` keeps the stereo pair end to end, but `lufs` and the other measurement commands downmix to mono first and warn on stderr. The two therefore disagree on the same file:

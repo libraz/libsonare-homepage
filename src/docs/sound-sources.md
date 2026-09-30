@@ -96,9 +96,9 @@ What makes the lift safe is where it lives:
 
 Two different facts wear the phrase "what the hardware does", and collapsing them is the mistake this section exists to prevent.
 
-*One unit for the whole module* is a resource limit, and it is gone. *Parts routed to the same unit sum through one instance* is not a limit at all, and **it is not lifted** (`src/midi/synth/docs/gs.md`). Two guitars into one overdrive intermodulate because that is what an effect is, not because the machine ran out of units — a file that routes two parts through one unit was written for that sound. So "restore the summing" never means "cap the unit count", and the two requests are not versions of each other.
+*One unit for the whole module* is a resource limit, and it does not apply. *Parts routed to the same unit sum through one instance* is not a limit at all, and **it is not lifted** (`src/midi/synth/docs/gs.md`). Two guitars into one overdrive intermodulate because that is what an effect is, not because the machine ran out of units — a file that routes two parts through one unit was written for that sound. So "restore the summing" never means "cap the unit count", and the two requests are not versions of each other.
 
-One consequence follows from the summing rather than from a separate decision: a unit's output is one signal, so its send to the system effects is the unit's own (`40 3u 17`–`19`) and no longer each part's.
+One consequence follows from the summing rather than from a separate decision: a unit's output is one signal, so its send to the system effects is the unit's own (`40 3u 17`–`19`), not each part's.
 
 ### The per-part insert is a separate stage
 

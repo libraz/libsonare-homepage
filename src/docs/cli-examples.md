@@ -137,15 +137,14 @@ The strip reads and writes true stereo, so a stereo source keeps its image.
 `--width` has nothing to act on for a mono source, so any value other than 1.0
 against a mono input is rejected instead of quietly doing nothing.
 
-::: warning `sonare-cli mix` no longer exists
+::: warning `sonare-cli mix` does not exist
 The native CLI has no `mix` command at all: the strip command answers to
-`mix-strip` and nothing else, so a script that still calls `sonare-cli mix` fails
-as an unknown command rather than as a bad option. Update the command name — the
-options carry over unchanged.
+`mix-strip` and nothing else, so a script that calls `sonare-cli mix` fails as an
+unknown command rather than as a bad option. Use `mix-strip` for the channel
+strip.
 
-The name went because one spelling was naming two different things: the channel
-strip here, and the scene mixer on the Python CLI. `sonare mix` on the Python CLI
-is still the scene mixer and is unaffected.
+The name is not shared because one spelling would name two different things: the
+channel strip on the native CLI, and the scene mixer on the Python CLI. `sonare mix` on the Python CLI is the scene mixer.
 :::
 
 Related: [Mixing Engine](./mixing.md).

@@ -43,8 +43,8 @@ Turning the full set on buys the labels a lead sheet actually uses, at three cos
 
 The chord detector can run on frame-level chroma or beat-synchronized chroma. Beat sync usually gives musically cleaner changes because chord boundaries often align with beats. Smoothing and minimum-duration merging avoid very short flickering labels.
 
-::: warning `detectChords()` is always frame-level, whatever `useBeatSync` says
-Beat synchronization needs a list of beat times, and only the whole-track analysis path (`analyze` / `MusicAnalyzer`) supplies one — it tracks beats first, then hands them to the chord analyzer. The standalone `detectChords()` entry point goes straight from audio to chroma, so it runs frame-level even though `useBeatSync` defaults to `true`. Run the full music analysis when you want beat-aligned chord boundaries.
+::: tip Standalone `detectChords()` can use beat sync
+Standalone `detectChords()` estimates a beat grid when `useBeatSync` is `true`; whole-track `analyze()` / `MusicAnalyzer` reuses its shared beat analysis. Pass `useBeatSync: false` for frame-level boundaries. If no beat grid is detected, processing falls back to frame-level chroma.
 :::
 
 Optional HMM smoothing (a hidden Markov model, which favors sequences of chords that follow one another plausibly rather than judging each region in isolation) can run over the chord candidates, with optional key context, to further suppress jitter. In streaming mode, chord estimates update over time and should be treated as provisional until enough context accumulates.
@@ -65,7 +65,7 @@ The bass register carries exactly that cue, so the recogniser adds a low-registe
 Expect occasional swaps between neighboring chords. Recognition is strongest on clean, sustained material and weakest on dense or distorted mixes, where overtones blur the chroma the templates read.
 
 ::: details How libsonare computes it
-`ChordAnalyzer` builds STFT or NNLS chroma, takes `generate_triad_templates()` or `generate_all_chord_templates()` according to `use_triads_only`, scores templates by correlation plus the low-register root term (`bass_root_weight`, C++ only; 0 disables it), prefers triads unless a non-triad template clears its margin — `kTetradThreshold` 0.05 by default, `kExtendedQualityThreshold` 0.09 for `mM7`, `11`, `13`, `7b9` and `7#9` — and merges short segments below `minDuration`. Defaults include `minDuration = 0.3`, `smoothingWindow = 2.0`, `threshold = 0.5`, `nFft = 2048`, `hopLength = 512`, and `useBeatSync = true` — the last of which is honored only by the constructor that receives beat times, so it has no effect on `detectChords()`. Public bindings expose chord roots, qualities, timing, confidence, and optional inversion/key/HMM options depending on the binding.
+`ChordAnalyzer` builds STFT or NNLS chroma, takes `generate_triad_templates()` or `generate_all_chord_templates()` according to `use_triads_only`, scores templates by correlation plus the low-register root term (`bass_root_weight`, C++ only; 0 disables it), prefers triads unless a non-triad template clears its margin — `kTetradThreshold` 0.05 by default, `kExtendedQualityThreshold` 0.09 for `mM7`, `11`, `13`, `7b9` and `7#9` — and merges short segments below `minDuration`. Defaults include `minDuration = 0.3`, `smoothingWindow = 2.0`, `threshold = 0.5`, `nFft = 2048`, `hopLength = 512`, and `useBeatSync = true`; standalone detection estimates beats when enabled and whole-track analysis reuses its shared beat grid. If no beat grid is available, it falls back to frame-level chroma. Public bindings expose chord roots, qualities, timing, confidence, and optional inversion/key/HMM options depending on the binding.
 :::
 
 Related: [Chroma Features](./chroma-features.md), [Key Detection](./key-detection.md), [Beats and Downbeats](./beats-downbeats.md)

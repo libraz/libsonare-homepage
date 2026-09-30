@@ -199,15 +199,21 @@ type VoicedFlags =
   | readonly number[]
   | readonly boolean[];
 
+type MasteringAssistantParams = Record<string, number | boolean | string>;
+
 interface MasteringAssistantSuggestStereoRequest {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate?: number;
+  params?: MasteringAssistantParams;
+}
+
+interface MasteringAudioProfileStereoRequest {
   left: Float32Array;
   right: Float32Array;
   sampleRate?: number;
   params?: Record<string, number | boolean>;
 }
-
-// Same fields; a distinct name for the profile entry point.
-interface MasteringAudioProfileStereoRequest extends MasteringAssistantSuggestStereoRequest {}
 
 interface MasteringStreamingPreviewStereoRequest {
   left: Float32Array;
@@ -229,7 +235,7 @@ interface MeteringStereoRequest {
 `Key.confidence` は、採点したすべての候補のプロファイル相関に対するソフトマックス
 です。範囲は `[0, 1)` で、候補全体の confidence の合計は 1 になるため、24 候補のうちの
 1 つが 1 に到達することはありません。次点が迫るほど値は下がるので、根拠が割れる 2 つの
-キー（多くは平行調どうし）はそれぞれおよそ半分を報告します。
+キー（多くは平行調どうし）はそれぞれおよそ半分の値になります。
 
 この値は、**当たる頻度ではなく**、クロマが候補集合の中からどれだけはっきり 1 つを
 選んだかを表すものとして読んでください。注釈付き音源に対してキャリブレーションされて

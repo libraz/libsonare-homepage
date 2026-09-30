@@ -6,7 +6,7 @@ This page routes you through the libsonare docs by what you want to build. You d
 **DSP** (digital signal processing) means measuring or changing audio as numbers. **MIR** (Music Information Retrieval) means reading musical information such as BPM, key, and chords from audio. **WASM / WebAssembly** is the browser runtime format. **API** means the functions and classes your app calls. **CLI** means a terminal command. At this stage, you only need enough vocabulary to choose the next page.
 :::
 
-The sidebar groups the guides into eight subject areas — Analysis, Instruments & MIDI, Mixing, Mastering, Editing, Arrangement & Projects, Realtime, and Room Acoustics — followed by the runtime references and the evidence pages. The routes below follow the same order, so a row you pick here is also a place in the sidebar.
+The sidebar groups the guides into nine subject areas — Analysis, Instruments & MIDI, Mixing, Mastering, Editing, Repair, Arrangement & Projects, Realtime, and Room Acoustics — followed by the runtime references and the evidence pages. The routes below follow the same order, so a row you pick here is also a place in the sidebar.
 
 If you want to read the docs linearly, use this order:
 
@@ -38,6 +38,7 @@ Every result in this area — tempo, key, chords, sections — is read off the s
 | Bars and time signatures scored over a beat series you already have | [Music Analysis](./analysis.md#meter-estimatemeter) | [Meter and Grouping](./glossary/analysis/meter-and-grouping.md) |
 | A migration from librosa | [librosa Compatibility](./librosa-compatibility.md) | [Music Analysis](./analysis.md#this-page-or-the-compatibility-layer) |
 | A librosa figure — frame and sample conversion, decibels, peak picking — checked against the engine from a shell | [CLI Utilities](./cli-utilities.md) | [librosa Compatibility](./librosa-compatibility.md) |
+| A source-separation view that keeps the harmonic and percussive paths available for editing | [Source Separation](./source-separation.md) | [Music Analysis](./analysis.md), [Editing DSP](./editing-dsp.md) |
 
 ### Instruments & MIDI
 
@@ -47,6 +48,7 @@ Nothing in this area plays back a recording: the engine ships no sample data, an
 |--------------------|------------|-----------|
 | A choice between a physical model, FM, subtractive synthesis, and a SoundFont you bring | [Sound Sources](./sound-sources.md) | [Built-in Synthesizer](./native-synth.md), [Physical Models](./physical-models.md) |
 | A synth or instrument app that renders MIDI to audio | [Built-in Synthesizer](./native-synth.md) | [MIDI Input](./midi-input.md), [Realtime and Streaming](./realtime-streaming.md) |
+| A MIDI clip editor or sequencer with MIDI 1.0 and MIDI 2.0 events | [MIDI Editing](./midi-editing.md) | [MIDI 2.0 & UMP](./midi2.md), [Project MIDI](./project-editing-midi.md) |
 | The acoustic voices — piano, bowed string, reed, brass, flute — heard side by side or voiced from code | [Physical Models](./physical-models.md) | [Built-in Synthesizer](./native-synth.md#the-named-preset-catalog) |
 | A lookup of which engine and voicing a General MIDI program falls back to when no SoundFont covers it | [GM Tone Map](./gm-tone-map.md) | [GM and GS](./gm-gs.md) |
 | SoundFont (SF2) playback through a built-in player | [SoundFont 2 Player](./soundfont-player.md) | [GM and GS](./gm-gs.md#nativesynth-and-the-soundfont-fallback), [MIDI Input](./midi-input.md) |
@@ -73,14 +75,24 @@ Nothing in this area plays back a recording: the engine ships no sample data, an
 | I want to build... | Read first | Then read |
 |--------------------|------------|-----------|
 | Pitch, time, voice, or source-separation editing | [Editing DSP](./editing-dsp.md) | [JavaScript API](./js-api-effects.md#audio-effects) |
+| Note-level edits that render back into an audio clip | [Note Editing in Audio](./note-editing.md) | [Editing DSP](./editing-dsp.md) |
 | Region-based spectral edits (attenuate, mute, gain, or heal a time-frequency rectangle) | [Spectral Editing](./spectral-editing.md) | [Editing DSP](./editing-dsp.md) |
 | A recorded take tuned to the melody in a MIDI file, from the shell | [CLI Utilities](./cli-utilities.md#tune-to-midi) | [Project MIDI](./project-editing-midi.md) |
+
+### Repair
+
+Measure the defect before choosing a repair stage. Broadband noise, mains hum, clipped peaks, impulsive clicks, crackle, and diffuse reverb need different evidence and different reconstruction limits.
+
+| I want to build... | Read first | Then read |
+|--------------------|------------|-----------|
+| A repair workflow that chooses stages from measured defects | [Audio Repair Workflow](./audio-repair.md) | [Repairing Noise and Hum](./repair-noise.md), [Repairing Clipping, Clicks, and Crackle](./repair-transients.md), [Repairing Diffuse Reverb](./repair-reverb.md) |
 
 ### Arrangement & Projects
 
 | I want to build... | Read first | Then read |
 |--------------------|------------|-----------|
 | A DAW, arrangement, or MIDI-sequencing tool | [Project Editing](./project-editing.md) | [Project MIDI](./project-editing-midi.md), [Bouncing Projects](./project-bounce.md) |
+| Audio transcription, clip replacement, and tempo-aware MIDI placement | [Audio to MIDI](./audio-to-notes.md) | [MIDI Editing](./midi-editing.md), [Project MIDI](./project-editing-midi.md) |
 | Microphone capture, loop takes, and comping into a clip | [Recording & Takes](./recording-and-takes.md) | [Project Editing](./project-editing.md) |
 | A project rendered to audio, with or without the built-in synth | [Bouncing Projects](./project-bounce.md) | [Built-in Synthesizer](./native-synth.md), [SoundFont 2 Player](./soundfont-player.md) |
 

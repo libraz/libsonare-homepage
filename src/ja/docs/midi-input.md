@@ -28,6 +28,8 @@ libsonare の `RealtimeEngine` は、トランスポート・クリップ・オ�
 本ページはコントローラーからエンジンを*演奏する*話です。ノートが届く楽器のバインドは [内蔵シンセサイザー](./native-synth.md)（NativeSynth。パッチ駆動のシンセサイザー）と [SoundFont プレイヤー](./soundfont-player.md)（GS/GM の `.sf2` 再生）を参照してください。演奏をタイムラインへ録音するには [録音とテイク](./recording-and-takes.md) を参照します。マイク音声の入力は別経路です。最後の節を参照してください。
 :::
 
+フル解像度のビルダーと MIDI 2.0 クリップファイルの交換は、[MIDI 2.0・UMP・クリップファイル](./midi2.md) を参照してください。プロジェクトの MIDI クリップ内にあるイベント列を編集する場合は、[MIDI クリップ編集](./midi-editing.md) を参照してください。
+
 ## ライブ MIDI の流れ
 
 ブラウザが MIDI バイトを受け取り、`bindWebMidi` がエンジンイベントへ変換し、デスティネーションの楽器が `process(...)` の中で音声を作ります。以下の矢印はそれぞれ、生の鍵盤入力からサンプルデータに至る経路上の 1 ホップであり、ループラベルは各ノートで繰り返される部分を示します。
@@ -103,12 +105,12 @@ engine.setSf2Instrument({ destinationId: 1, gain: 1 }, 1);
 
 ## ライブイベントのキューイング
 
-ライブイベントは同期実行ではなく*キューイング*されます。各呼び出しは、イベントを発火させるサンプル位置をエンジンへ渡します。次の `process(...)` ブロックが、そのブロックで処理すべきイベントをすべて消費します。イベントは「メッセージが届いた時」ではなく指定したフレームに着地するため、タイミングが正確になります。
+ライブイベントは同期実行ではなく*キューイング*されます。各呼び出しは、イベントを発火させるサンプル位置をエンジンへ渡します。次の `process(...)` ブロックが、そのブロックで処理すべきイベントをすべて消費します。イベントは「メッセージが届いた時」ではなく指定したフレームで処理されるため、タイミングが正確になります。
 
 キューイングの経路は 2 つあり、デスティネーションごとにどちらかを選びます。目安として、イベントを自分のコードで生成する場合（シーケンサーのステップ、オンスクリーンキーボード）は**即時コマンド**を使い、ハードウェアキーボードのように外部から独自のタイムスタンプ付きでイベントが届く場合（`bindWebMidi` 経由）は**入力ソース**を使います。後者のレーンは、Web MIDI ブリッジが必要とするポートごとのタイムスタンプを運ぶためです。
 
 - **即時エンジンコマンド** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` はそれぞれ `destinationId` と `renderFrame`（または「できるだけ早く」を表す `-1`）を取ります。`pushMidiPanic(renderFrame)` は `renderFrame` のみを取り、すべてのデスティネーションの発音中ノートを一括で解放します。
-- **エンジン所有のライブ入力ソース** — `setMidiInputSource(destinationId)` で専用の入力レーンを開き、`pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` で `portTimeSamples` タイムスタンプ付きのイベントを送ります。Web MIDI ブリッジはこのレーンへイベントを流します。
+- **エンジン側のライブ入力ソース** — `setMidiInputSource(destinationId)` で専用の入力レーンを開き、`pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` で `portTimeSamples` タイムスタンプ付きのイベントを送ります。Web MIDI ブリッジはこのレーンへイベントを流します。
 - **ライブ SysEx** — `pushMidiSysex(destinationId, data, renderFrame = -1)` は、デスティネーションへ完全な SysEx（System Exclusive。メーカー独自の自由形式メッセージ）フレームをキューイングします。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なメッセージ（1〜512 バイト）で、`renderFrame` はほかの `pushMidi*` 呼び出しと同じ即時／スケジュール規約に従います。主な用途は、再生を止めずに、ライブの SF2 バインド済みデスティネーションへ GS/GM リセットや GS インサーションエフェクト（EFX）の選択を届けることです。そのバイト列が何を選ぶかは [SoundFont プレイヤー](./soundfont-player.md) を参照してください。
 - **UMP メッセージ** — `pushMidiUmp(destinationId, words, renderFrame = -1)` は、1〜4 個の 32 ビットワードからなる配列または `Uint32Array` を最上位ワードから順に受け取ります。個数は先頭ワードのメッセージ種別と一致させます。MIDI 2.0 チャンネルボイス（MT `0x4`）は値の幅を保ったまま処理し、SysEx7／データメッセージ（MT `0x3`／`0x5`）は拒否するため `pushMidiSysex` を使います。`SonareEngine` の worklet ファサードは引き続き 1 ワード用の `pushMidiUmp(trackId, word0, renderFrame = -1)` を公開するため、複数ワード UMP は `RealtimeEngine` に送ります。
 
@@ -295,7 +297,7 @@ const binding = await bindWebMidi(engine, {
 
 ここには別々の 2 つのクロックがあります。Web MIDI は各メッセージをミリ秒の時刻（ページクロックの `DOMHighResTimeStamp`）付きで届けますが、エンジンはイベントを**サンプルフレーム**でスケジュールします。`timestampToSamples(eventTimeMs)` はその両者を橋渡しし、メッセージ時刻をエンジンがキューイングする `portTimeSamples` の値へ変換します。
 
-変換が正しければ、タイミングが詰まった箇所（和音や速いパッセージ）が、演奏したとおりの正確なフレームへ着地します。省略すると、すべてのイベントが次のブロックのサンプル `0` にキューイングされます。気軽な演奏には十分ですが、リズミカルな素材では聴き取れるほど緩くなります。
+変換が正しければ、タイミングが詰まった箇所（和音や速いパッセージ）が、演奏したとおりの正確なフレームに配置されます。省略すると、すべてのイベントが次のブロックのサンプル `0` にキューイングされます。気軽な演奏には十分ですが、リズミカルな素材ではタイミングのずれが聴き取れるほどになります。
 
 実用的な実装は、`performance.now()`（または `AudioContext.currentTime`）とエンジンのフレームクロックとの差分を追い、その差分をここで適用します。
 
@@ -514,6 +516,8 @@ C++ ソースビルドでは、既定で無効の CMake オプション `BUILD_C
 - [SoundFont プレイヤー](./soundfont-player.md) — デスティネーションでの GS/GM `.sf2` 再生
 - [録音とテイク](./recording-and-takes.md) — 演奏（およびマイク音声入力）の取り込み
 - [プロジェクト編集](./project-editing.md) — MIDI クリップ、CC ラーン、CC からオートメーションへの変換
+- [MIDI クリップ編集](./midi-editing.md) — プロジェクトのイベント列、検証、ルーティング、MIDI-FX のベイク
+- [MIDI 2.0・UMP・クリップファイル](./midi2.md) — フル解像度 UMP ビルダー、ライブ送信、ファイルの忠実度
 - [プロジェクトバウンス](./project-bounce.md) — MIDI 演奏のオフラインレンダー
 - [リアルタイムとストリーミング](./realtime-streaming.md) — 音声出力を動かす AudioWorklet エンジンブリッジ
 - [リアルタイムエンジン](./glossary/realtime/realtime-engine.md) · [リアルタイム安全性](./glossary/realtime/realtime-safety.md)

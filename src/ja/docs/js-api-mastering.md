@@ -86,8 +86,8 @@ console.log(report.after.loudnessRange - report.before.loudnessRange, 'LU 変化
 drawTiltCurve(report.bandEnergyDeltaDb);   // 32 バンド。正なら処理後の方が明るい
 ```
 
-同じオブジェクトが C ABI・ctypes・Node・Python・両 CLI のレポートファイルにミラーされて
-いるため、CLI から書き出したレポートとブラウザで読むレポートは同じ形になります。
+同じオブジェクトが C ABI・ctypes・Node・Python・両 CLI のレポートファイルにも同じ形で
+含まれるため、CLI から書き出したレポートとブラウザで読むレポートは同じ形になります。
 
 説明可能なマスタリングのヘルパー（`masteringAudioProfile(...)`、`masteringAssistantSuggest(...)`、`masteringStreamingPreview(...)`）は JSON 文字列を返します。正確な形、受け付けるオプション、提案をレンダー済みマスターに変換する方法は [マスタリングアシスタント](./mastering-assistant.md) を参照してください。リファレンストラック用途では `masteringPairProcessorNames()` と `masteringPairAnalyze()` を使います（サンプルレートを揃え、長さも近づける）。
 
@@ -97,7 +97,7 @@ drawTiltCurve(report.bandEnergyDeltaDb);   // 32 バンド。正なら処理後�
 
 ```typescript
 function masteringAudioProfileStereo(request: MasteringStereoParamsRequest): string
-function masteringAssistantSuggestStereo(request: MasteringStereoParamsRequest): string
+function masteringAssistantSuggestStereo(request: MasteringAssistantStereoParamsRequest): string
 function masteringStreamingPreviewStereo(request: MasteringStreamingPreviewStereoRequest): string
 
 interface MasteringStereoParamsRequest {
@@ -107,6 +107,15 @@ interface MasteringStereoParamsRequest {
   params?: MasteringProcessorParams;
 }
 
+type MasteringAssistantParams = Record<string, number | boolean | string>;
+
+interface MasteringAssistantStereoParamsRequest {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate?: number;
+  params?: MasteringAssistantParams;
+}
+
 interface MasteringStreamingPreviewStereoRequest {
   left: Float32Array;
   right: Float32Array;
@@ -114,6 +123,8 @@ interface MasteringStreamingPreviewStereoRequest {
   platforms?: StreamingPlatform[];
 }
 ```
+
+`MasteringAssistantParams` のアシスタント設定値は `number | boolean | string` です。ターゲットプラットフォームやプリセットなど、文字列を取る設定も渡せます。`MasteringStereoParamsRequest` はプロファイル用の形で、`params` の値は `number | boolean` のままです。
 
 ```typescript
 const profile = JSON.parse(masteringAudioProfileStereo({ left, right, sampleRate }));
@@ -346,8 +357,8 @@ function masteringRepairDereverbClassicalLinked(request: MasteringRepairDereverb
 
 | 結果の形 | エントリポイント | 形が意味すること |
 |----------|------------------|------------------|
-| `{ left, right, leftReport, rightReport }` | declick / declip / decrackle / dehum | レポートが 2 つ必要な程度には、チャンネルが別々に処理された。 |
-| `{ left, right, report }` | denoise / dereverb | 1 つの判断が両チャンネルを覆ったので、レポートは 1 つ。 |
+| `{ left, right, leftReport, rightReport }` | declick / declip / decrackle / dehum | チャンネルごとに別々に処理されたので、レポートも 2 つ。 |
+| `{ left, right, report }` | denoise / dereverb | 1 つの判断を両チャンネルに適用したので、レポートは 1 つ。 |
 | `{ left, right, report, leftRange, rightRange }` | 無音トリム | カットは 1 つ。加えて検査用に各チャンネルの検出範囲も返る。 |
 
 リンクのされ方は次のとおりです。
@@ -361,8 +372,8 @@ function masteringRepairDereverbClassicalLinked(request: MasteringRepairDereverb
   512 サンプルを超える区間は補間にフォールバックします。これは固定の上限で、`lpcOrder` や
   サンプルレートから導かれる値ではありません。
 - **decrackle** は何もリンクしません。クラックルは共通の事象を持たない表面的な損傷なので、
-  チャンネルは完全に独立です。このエントリポイントはレポートとチャンネル長の契約をまとめる
-  ためだけに存在します。選ばなかったモードに属するフィールドは `0` を返しますが、これは未設定
+  チャンネルは完全に独立です。このエントリポイントは、2 チャンネル分のレポートとチャンネル長の
+  検査を 1 回の呼び出しにまとめるためだけにあります。選ばなかったモードに属するフィールドは `0` を返しますが、これは未設定
   ではなく想定どおりの値です。
 - **dehum** は `adaptive` を指定したときにだけリンクします。このときトラッカーはチャンネル平均
   を読み、2 つのカスケードが 1 つの周波数に追従するため、`appliedFundamentalHz` と
@@ -440,7 +451,7 @@ interface TrimRange {
   この数値は、ウェーブレットモードのリペアが何を除去するかを説明しません。その代わり、モードを
   決める前でも同じ答えが得られます。
 - **`masteringRepairDetectHum`** は `adaptive` の指定にかかわらず常に推定パスを実行します。固定
-  パスはハムを探さないためです。`fundamentalProminence` は勝った候補の射影エネルギーを候補の
+  パスはハムを探さないためです。`fundamentalProminence` は最も強い候補の射影エネルギーを候補の
   中央値で割った値なので、**`1.0` はピークがまったく見つからなかったことを意味します**。ロック
   状態のフラグではなく、1 に近い値こそが陰性の結果です。`harmonicDbfs` はノッチされたものだけ
   でなく、そのサンプルレートが表現できる `k*f0` すべてを含み、ナイキスト以上の倍音は
@@ -458,8 +469,8 @@ interface TrimRange {
   `paddingSamples` はすでにその範囲の内側に含まれており、検出された信号の範囲そのものではあり
   ません。しきい値を超えるものが何もなければ `(長さ, 長さ)` が返ります。
 - **`masteringRepairDetectTrimRangeStereo`** はチャンネルごとに走査して和集合を取りますが、
-  しきい値を超えるものがないチャンネルは、バッファ端にエッジを置くのではなく**エッジを一切
-  提供しません**。そのため無音チャンネルと有音チャンネルの和集合は、有音チャンネルの範囲その
+  しきい値を超えるものがないチャンネルは、バッファ端を範囲の端とするのではなく、**範囲の
+  計算に一切加わりません**。そのため無音チャンネルと有音チャンネルの和集合は、有音チャンネルの範囲その
   ものになります。単純な min/max なら末尾全体を残してしまうところです。
 
 #### `masteringRepairDereverbConfigForRoom(...)`
@@ -504,10 +515,10 @@ interface MasteringRepairNoiseBandBinsRequest {
 
 `NoiseDetection.bandFloorDbfs` の背後にあるビン添字を **33 個**返します。32 バンド分に終端の
 1 個を加えたもので、単調非減少です。バンド `k` は片側スペクトルのビン `[bins[k], bins[k+1])` を
-覆い、ビン `b` は `b * sampleRate / nFft` Hz に位置します。グリッドを決めるのは解析側の幾何
+覆い、ビン `b` は `b * sampleRate / nFft` Hz に位置します。グリッドを決めるのは解析側の FFT 設定
 だけなので、ノイズリダクションの設定は受け取りません。
 
-これは 1 つの特定のあいまいさを解消するために存在します。等比で決まるバンド境界はビンに丸め
+この関数は、ある特定のあいまいさを解消するためにあります。等比で決まるバンド境界はビンに丸め
 られるため、ビン間隔より狭いバンドは**空**になり（`bins[k] === bins[k + 1]`）、その
 `bandFloorDbfs[k]` はフロアのセンチネル値を返します。そこが静かだったからではなく、ビンが
 1 つも入らなかったからです。バンド配列だけでは両者を区別できず、バンド数からも復元できま

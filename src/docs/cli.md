@@ -344,7 +344,7 @@ The commands that would deliver a worse result for it keep the pair instead:
 | `master`, `mastering-chain`, `declip` (Python CLI) | Kept as a pair; one gain is measured across both channels so the image does not collapse toward the centre |
 | Everything else | Downmixed to mono, with a warning |
 
-There is no option that selects the stereo path: the file's own channel count and the processor's own mono/stereo form decide it. `mastering-processor` refuses a `--stereo` flag as an unknown option (exit code 2) on both CLIs — drop the flag; a two-channel file already goes the way that flag used to request. The JSON report says which path ran through its `stereo` field, and `normalize --json` reports `length` per channel.
+There is no option that selects the stereo path: the file's own channel count and the processor's own mono/stereo form decide it. `mastering-processor` refuses a `--stereo` flag as an unknown option (exit code 2) on both CLIs — drop the flag; a two-channel file takes the stereo path on its own. The JSON report says which path ran through its `stereo` field, and `normalize --json` reports `length` per channel.
 
 A source with more than two channels is always downmixed, because the offline
 operations come in a mono and a stereo form and nothing wider. Keeping channel 0

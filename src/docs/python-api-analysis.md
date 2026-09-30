@@ -127,6 +127,7 @@ with Audio.from_file("music.mp3") as audio:
 | `detect_chords(samples, sample_rate, ...)` | `ChordAnalysisResult` | Chord segments over time; frames below the detection threshold are explicit `N.C.` intervals |
 | `analyze(samples, sample_rate)` | `AnalysisResult` | All-in-one analysis: BPM and its candidates, key, time signature and its candidates, beats, chords (each with `roman_numeral` relative to the detected key), sections, timbre, dynamics, rhythm, melody, form |
 | `analyze_with_progress(samples, sample_rate, on_progress?)` | `AnalysisResult` | Same result and analysis keyword options as `analyze`, with an optional `(progress, stage)` callback and keyword-only `cancel` callback |
+| `transcribe(samples, sample_rate, ...)` | `TranscribeResult` | Mono audio to MIDI events on a constant-tempo PPQ grid; returns `events`, `note_count`, and `tempo_bpm` |
 | `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | BPM with top candidates |
 | `estimate_meter(beat_times, beat_strengths, ...)` | `MeterEstimate` | Meter and accent grouping scored over a beat series you already have — no audio, no re-analysis |
 | `chord_functional_analysis(samples, key_root, key_mode?, ...)` | `list[str]` | Roman-numeral labels (`"I"`, `"IV"`, `"V"`, `"vi"`, ...) for detected chords, relative to a key |
@@ -148,6 +149,23 @@ with Audio.from_file("music.mp3") as audio:
 | `engine_abi_version()` | `int` | ABI version of the realtime engine interface |
 | `project_abi_version()` | `int` | ABI version of the project/editing API used by `Project` serialization, bounce, and realtime clip exchange |
 | `has_ffmpeg_support()` | `bool` | Whether the loaded native library can decode via FFmpeg |
+
+### `transcribe(...)`
+
+`sonare.transcribe` converts mono audio into note events on a constant-tempo PPQ grid. Pass `tempo_bpm` to choose the grid, or omit it to detect the tempo. The returned `TranscribeResult` contains `events`, `note_count`, and the `tempo_bpm` used; it does not install a project tempo map.
+
+```python
+result = sonare.transcribe(
+    samples,
+    sample_rate,
+    tempo_bpm=120.0,
+    polyphonic=True,
+)
+print(result.note_count, result.tempo_bpm)
+project.set_midi_events(clip_id, result.events)
+```
+
+Use `Project.transcribeToClip(...)` / `project.transcribe_to_clip(...)` when the events should follow a project's tempo map.
 
 Most core analysis, effects, feature, loudness, and mastering helpers are also
 available as `Audio` instance methods (e.g., `audio.detect_bpm()`). Some focused
@@ -336,7 +354,7 @@ print(linked["w"].shape, linked["h"].shape)
 `n_components`, `n_fft`, `hop_length` and `n_iter` carry real defaults on this entry point, so `0` is refused as a caller mistake rather than read as the "use the default" sentinel the same field means on the C ABI and the JavaScript surfaces.
 
 ::: warning NNDSVD seeding is solved in double precision
-This makes the factors **reproducible**, not more accurate — and it means `decompose` and `decompose_stems` return different factors for the same input than a build that seeded in single precision did. A magnitude spectrogram's trailing singular vectors sit at single precision's noise floor, so a float seed depended on summation order and different targets answered with different components. Shapes, non-negativity and reconstruction quality are unaffected. If you hold stored factors, or compare a stem render against an older one, expect them to differ.
+This makes the factors **reproducible**, not more accurate. A magnitude spectrogram's trailing singular vectors sit at single precision's noise floor, so a float seed would depend on summation order and different targets would answer with different components. Shapes, non-negativity and reconstruction quality are unaffected. `decompose` and `decompose_stems` return different factors from a single-precision seed for the same input, so stored factors, or a stem render made with one, will not match.
 :::
 
 ### Inverse Reconstruction Functions

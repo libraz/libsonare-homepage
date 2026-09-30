@@ -5,10 +5,10 @@ description: The offline mixing assistant — it measures a set of tracks, retur
 
 # Mixing Assistant
 
-Hand the assistant a set of tracks and it measures each one, measures what happens *between* them, and returns a **mixer scene**: input trims, faders, pans and widths, corrective EQ, dynamics, effect buses and sends — with a written reason for every decision it made.
+The assistant measures each track and the relationships between tracks, then returns a **mixer scene**: input trims, faders, pans and widths, corrective EQ, dynamics, effect buses and sends. Each change includes a reason.
 
 ::: warning It suggests; it does not apply
-No audio is processed and none is emitted. The assistant reads your buffers and returns parameters. Handing that scene to the mixer is your own explicit `Mixer.fromSceneJson` step, and there is deliberately no convenience entry point that collapses the two halves — a mix has no single right answer, so the moment where a human accepts or edits the proposal is the point of the API, not friction in it.
+No audio is processed or emitted. The assistant reads your buffers and returns parameters. Apply the scene explicitly with `Mixer.fromSceneJson`; there is no combined call, so the caller can review or edit the proposal before applying it.
 :::
 
 If strips, sends, and buses are new vocabulary, read [Mixing Basics](./glossary/concepts/mixing-basics.md) and the [Mixing Engine](./mixing.md) guide first. The scene document itself is specified field by field in [Mixing Scene JSON](./mixing-scene-json.md).
@@ -123,7 +123,7 @@ Most decisions use the two measurement layers described here. Source classificat
 | Dynamics | Class, integrated LUFS, crest factor, sustain ratio, attack density; low-band dominance for the sidechain. | A compressor from a per-class starting table whose threshold is an offset from the track's own measured loudness, never an absolute; the `drumKit` row starts at 3:1, a −6 dB threshold offset, 15 ms attack and 150 ms release. Ratio, attack and threshold move with crest factor around a 12 dB reference, release with sustain ratio. A transient shaper for `kick` `snare` `tom` `percussion`; a level rider and de-esser for `vocal` and `backing`. A gate only for `kick` `snare` `tom`, and only when the track is unmistakably a close mic (sustain ratio at most 0.25, crest factor at least 14 dB, at least 0.5 onsets per second, confidence near its class ceiling). The one sidechain: `bass` ducked under `kick`, at most 4 dB, only when the kick holds at least 0.55 of the sub and low band energy while both sound. |
 | Image | Class for placement; alignment, crowding and mono risks for the rest. | The class table pins `kick` `snare` `bass` `lead` `vocal` and `drumKit` to centre. A spreadable class is also centred when at least half of its energy is below 120 Hz, whatever its class. Other tracks alternate left, right, left, stepping inwards, out to a per-class extent (`guitar` and `percussion` 0.8, `fx` 0.9, `keys` `strings` `backing` `tom` `cymbal` 0.55, `hiHat` 0.3) and never past ±0.9. A lone member of a spreadable class goes halfway; a crowded band widens the spread by a quarter. A related, polarity-opposed pair has its later track inverted; a related pair with a lag has the earlier side delayed. A mono-risk track has its width pulled to 0.7 and, when its low end is wide, a `stereo.monoMaker` at 120 Hz. |
 
-**The confidence gate.** Balance, EQ, dynamics and pan placement act on a class only when `sourceConfidence` is at least 0.5; below that the track keeps its staged level and stays where the caller had it. Structure routes any classified track, because a part on a plausible-but-wrong bus is one drag from the right one while a part off every bus is one a mixer has to notice is missing. Polarity and delay ignore class entirely — a cancellation is measured between two signals whatever they turn out to be.
+**The confidence gate.** Balance, EQ, dynamics and pan placement act on a class only when `sourceConfidence` is at least 0.5; below that the track keeps its staged level and stays where the caller had it. Structure routes any classified track; an unclassified track joins no bus. Polarity and delay ignore class entirely — a cancellation is measured between two signals whatever they turn out to be.
 
 ### What it cannot know
 
@@ -131,7 +131,7 @@ The assistant works from measured signal characteristics, and everything a mixin
 
 - **Which part the song is about.** Role priority is a table: `lead` outranks `vocal`, which outranks `kick`. A guitar carrying the hook classifies as `guitar` and gives way to a vocal that is merely doubling it. Name the track `lead` if that is what it is.
 - **The arrangement.** Two parts both built around a band get no cut. A kick and a bass sharing 80 Hz is an arrangement question, and the assistant will not answer it by thinning one of them.
-- **Genre, tempo and taste.** Every level, pan and send figure is a starting position from studio convention, not something derived from your material. Tempo is known only when you pass `tempoBpm`; otherwise the delay lands near the beat rather than on it.
+- **Genre, tempo and taste.** Every level, pan and send figure is a starting position from studio convention, not something derived from your material. If `tempoBpm` is omitted, the fallback tempo is used, so the delay is not synchronized to the track's actual tempo.
 - **Keys, strings, lead, vocal, backing and effects.** No measured feature separates a piano from a plucked guitar, a backing stack from a lead vocal, or a voice from a sustained synth pad or lead line. These six classes can come from the track name when the measured family does not contradict it; an unnamed voice, pad or lead stays `unknown`.
 - **Time.** Every decision is one static setting for the whole song — no automation, no dynamic EQ, no section awareness. A part that collides only in the chorus is judged on how much of the song it collides in.
 - **What the effects will add.** The master headroom estimate sums the dry strips; reverb and delay returns and insert make-up gain are not in it, which is why the target sits at −6 dBTP.
@@ -170,7 +170,7 @@ Every place a source class appears — `tracks[].source`, the reasons in `explan
 | `mixSourceClassNames(): string[]` / `mix_source_class_names() -> list[str]` | The identifiers in wire order: `unknown` `kick` `snare` `hiHat` `tom` `cymbal` `bass` `guitar` `keys` `strings` `lead` `vocal` `backing` `percussion` `fx` `drumKit`. A name's position in this list is its ordinal. |
 | `mixSourceClassFromName(name: string): number` / `mix_source_class_from_name(name) -> int` | The ordinal of `name` in that list, or `-1` when it is not one of them. The match is exact and case-sensitive: `'hiHat'`, not `'hihat'`. |
 
-`-1` is the miss value on purpose. The core's own lookup folds an unknown name into `unknown`, which is ordinal 0 and a real class, so it could never report a miss; the bindings do the index lookup themselves. Use the pair to build a class picker or legend from the runtime list rather than a hard-coded copy, to validate a class string before acting on it, and to sort or group profiles by a stable ordinal instead of comparing strings. In a build without the assistant, `mixSourceClassNames` returns an empty array — an empty string from the C ABI, and a `RuntimeError` from Python, since an empty taxonomy is the one answer that cannot be real — and every name resolves to `-1`.
+`-1` is the miss value on purpose. The core's own lookup folds an unknown name into `unknown`, which is ordinal 0 and a real class, so it could never report a miss; the bindings do the index lookup themselves. Use the pair to build a class picker or legend from the runtime list rather than a hard-coded copy, to validate a class string before acting on it, and to sort or group profiles by a stable ordinal instead of comparing strings. In a build without the assistant, `mixSourceClassNames` returns an empty array — an empty string from the C ABI, and a `RuntimeError` from Python — and every name resolves to `-1`.
 
 These are the identifiers the assistant *reports*. They are not the list of words the classifier reacts to in a track name; that is a separate substring vocabulary (`bassdrum`, `vox`, `gtr`, `rhodes`, …) which happens to cover most of these but is not exposed.
 
@@ -191,7 +191,7 @@ The option set is deliberately flat — no nested groups, no per-domain sub-obje
 | `enableEq` | boolean | `true` | Corrective EQ. |
 | `enableDynamics` | boolean | `true` | Compression. |
 | `enableImage` | boolean | `true` | Pan and width. |
-| `enableHighPass` | boolean | **`false`** | Per-track high-pass. Off by default — see [below](#the-reluctant-eq-and-enablehighpass). |
+| `enableHighPass` | boolean | **`false`** | Per-track high-pass. Off by default — see [below](#conservative-eq-and-enablehighpass). |
 | `nFft` | number | `2048` | Shared [STFT](./glossary/analysis/spectrogram-stft.md) geometry. |
 | `hopLength` | number | `512` | |
 
@@ -272,11 +272,11 @@ If a cut ran into `eqMaxCutDb`, the line says so rather than pretending the coll
 …; the mid cut was held at the 4.0 dB ceiling, so the collision is only partly resolved
 ```
 
-These are good inline captions for an editable control. A user who can see that the vocal needs 41.6% of its energy in that band, and the guitar only 12.4%, can disagree with the number and still agree with the reasoning.
+This gives an editable control both the measured frequency and both tracks' energy shares.
 
 ## Turning a suggestion into a mix
 
-Two steps, always, and they are separate on purpose.
+Apply a suggestion in two steps: review or edit the scene, then load it into the mixer.
 
 ::: code-group
 
@@ -294,32 +294,32 @@ mixer = sonare.Mixer.from_scene_json(json.dumps(result["scene"]), sample_rate)
 
 ```bash [CLI]
 sonare suggest-mix --input kick=kick.wav --input vocal=vocal.wav --scene-out scene.json
-sonare mix --scene scene.json --input kick=kick.wav --input vocal=vocal.wav
+sonare mix --scene scene.json --input kick=kick.wav --input vocal=vocal.wav -o mixed.wav
 ```
 
 :::
 
 `suggest-mix` is on both command-line front-ends. The second command is not: **`mix --scene` is Python-only**, so a shell pipeline that renders the suggested scene end to end needs the PyPI `sonare` CLI for its second half.
 
-The scene the assistant writes is an ordinary mixer scene — lanes, faders, sends, buses. The demo below is that mixer, not the assistant, but it is the thing the suggestion turns into, so it is a good place to build the intuition for what a scene *is* before reading one:
+The scene the assistant writes is an ordinary mixer scene with lanes, faders, sends, and buses. The demo below shows that mixer scene:
 
 <SonareDemo id="engine-lane-mixer" />
 
-## The reluctant EQ, and `enableHighPass`
+## Conservative EQ and `enableHighPass`
 
 The assistant proposes far less EQ than a first-time reader expects, and that is the design rather than a gap in it.
 
 A band is carved only where one part is **built around** that band and the other **can spare** it — measured as each track's share of its own energy there. Two parts colliding in a band they are both made of get nothing, because there is no version of that cut which does not take the foundation out of one of them. A kick and a bass both living at 80 Hz is an arrangement problem, and an EQ that pretends otherwise just makes one of them thin.
 
-When a cut is justified, its centre frequency is measured inside the band rather than taken from the band's midpoint. A band here runs up to two octaves, so the midpoint can sit an octave away from the overlap the cut was justified by — which is exactly how a well-reasoned cut lands on the wrong note. The reason string tells you which of the two happened.
+When a cut is justified, its centre frequency is measured inside the band rather than taken from the band's midpoint. A band here runs up to two octaves, so the midpoint can be far from the measured overlap. The reason string says whether the frequency was measured or fell back to the midpoint.
 
 ### Why `enableHighPass` is off
 
-`enableHighPass` defaults to `false`, and the default is a position rather than an omission. A high-pass on every source that "has nothing down there" is the one blanket EQ move most mixing folklore recommends, and the same survey of professional practice cited above tested it and found it seldom used in studio mixing and unsupported by subjective testing. The habit belongs to live sound, where the filter protects a system from stage rumble. Filtering every track by default on the grounds that it is traditional would be a decision taken on the user's behalf — exactly what the assistant exists not to do — so the filter is offered, and off.
+`enableHighPass` defaults to `false`. When enabled, the source class supplies the corner frequency and the measured low-band energy share decides whether a high-pass is proposed. The confidence gate still applies, so the assistant does not add a blanket high-pass to every track.
 
 Switched on, the corner comes from the class and the decision from the measurement:
 
-| Class | Corner |
+| Class | Cutoff |
 |---|---|
 | `kick`, `bass`, `fx`, `drumKit` | Never filtered. The first two *are* the low end, a kit contains the kick, and an effect has no register to sit under. |
 | `keys` | 50 Hz |
@@ -336,7 +336,7 @@ The filter is proposed only when the share of the track's energy below its corne
 
 - **Are these studio stems?** The case for the filter is stage rumble, handling noise and proximity boost. Close-miked studio material usually has none of it worth a filter, which is what the survey found.
 - **Is the classification confident?** The corner follows `tracks[].source`. A snare that classified as `tom` inherits a 60 Hz corner instead of 80 Hz; check `sourceConfidence` before trusting the corner.
-- **Does any part play below its register for only part of the song?** The share is measured over the whole track. A keys part that drops an octave for eight bars can average under 10% and be filtered, on a rule that would have spared it had it played there throughout.
+- **Does any part play below its register for only part of the song?** The share is measured over the whole track. A part that drops an octave briefly can stay under 10% and still meet the filter rule, so inspect the measured share.
 - **Will you add low end back later?** A sub layer put under a filtered part later in the mix is fighting the assistant's own insert. Leave the filter off and decide per track.
 - **Is `enableEq` on?** The high-pass is part of the EQ domain, and `enableEq: false` skips it whatever `enableHighPass` says.
 

@@ -136,10 +136,10 @@ const tuned = pitchCorrectToMidi(vocal, sampleRate, currentMidi, targetMidi);
 
 `pitchCorrectToMidi(...)` applies the requested transpose immediately and preserves the input length. It does not follow a changing pitch contour.
 
-::: warning Correction is clamped to ±12 semitones
-`pitchCorrectToMidi(...)` and `pitchCorrectToMidiTimevarying(...)` build the corrector with its default limit of one octave, and neither entry point exposes a way to raise it. A larger interval is clamped silently, with no error and no diagnostic: `pitchCorrectToMidi(vocal, sampleRate, 48, 72)` asks for +24 semitones and returns audio moved by +12.
+::: warning Contour-following correction defaults to ±12 semitones
+`pitchCorrectToMidiTimevarying(...)` uses the corrector's default ±12-semitone bound for each measured frame. `pitchCorrectToMidi(...)` applies the caller-stated `targetMidi - currentMidi` interval in full after validating the MIDI endpoints, so `pitchCorrectToMidi(vocal, sampleRate, 48, 72)` moves by +24 semitones.
 
-When you need a wider move, call `pitchShift(...)` for a plain transpose, or `pitchCorrectTimevarying(...)` with an explicit `maxCorrectionSemitones`.
+When you need a wider contour correction, call `pitchCorrectTimevarying(...)` with an explicit `maxCorrectionSemitones`. For a plain transpose, use `pitchShift(...)`.
 :::
 
 Use `pitchCorrectToMidiTimevarying(...)` when correction should change from frame to frame. It follows a caller-supplied **per-frame F0 contour** and retunes each voiced frame toward `targetMidi`.
@@ -149,7 +149,7 @@ import { init, pitchPyin, pitchCorrectToMidiTimevarying } from '@libraz/libsonar
 
 await init();
 
-const frameLength = 512;
+const frameLength = 2048;
 const hopLength = 512;
 
 // 1. Measure a per-frame F0 contour (any detector that emits one F0 per hop).
@@ -333,6 +333,8 @@ Load them as inserts on a strip (see [Mixing Engine](./mixing.md)) rather than a
 ::: info Offline transforms vs arrange-time warp
 The functions on this page are **offline** transforms: you hand them a buffer and get a new buffer back. They are different from **arrange-time warp** — clip repitch and tempo-sync inside a project, where a clip follows the timeline rather than being baked once. For that project-level workflow, see [Project Editing](./project-editing.md).
 :::
+
+For note-by-note edits that are rendered back into audio, see [Note Editing in Audio](./note-editing.md). For edits that change a project MIDI clip, see [MIDI Editing](./midi-editing.md).
 
 The same offline-versus-realtime split shows up in the [`voiceChange(...)` versus `RealtimeVoiceChanger`](#offline-voicechange-vs-realtimevoicechanger) distinction above. It comes down to two processing shapes:
 

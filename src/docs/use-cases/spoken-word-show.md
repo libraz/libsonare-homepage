@@ -5,7 +5,7 @@ description: Host, guest, and a music bed to a ducked, loudness-compliant episod
 
 # Produce a Spoken-Word Show
 
-You have three files: a host track, a guest track, and a music bed. The turns don't overlap, the bed runs the whole episode, and the deliverable is a single ducked, loudness-compliant file you can hand to a podcast host. This page does that with a built-in mixer preset and an explicit mastering preset, both picked because the job is speech, not music.
+This page combines a host track, a guest track, and a music bed. It renders them with `commentaryDucking`, masters the result with `speech`, and checks the report.
 
 ## What You Will Learn
 
@@ -234,7 +234,7 @@ Run with `--explain` and check for `speech preset enables de-esser and mono comp
 }
 ```
 
--16 LUFS is what `--target-platform podcast` asked for, and `output_lufs` landed there. `loudness_target_limited: false` means the chain reached that target on gain alone, without the true-peak ceiling forcing it to stop short — see [LUFS](../glossary/lufs.md) for what the number means and [Delivery Targets](../glossary/mastering/delivery-targets.md) for what other platforms expect instead of -16.
+-16 LUFS is what `--target-platform podcast` asked for, and `after.integrated_lufs` is the measured result. `loudness_target_limited: false` means the requested target was reached within the configured constraints; it does not mean that the limiter was inactive or that the master is finished. `max_gain_reduction_db` reports the actual maximum gain reduction. Check the report's loudness and true-peak values, then audition the result. See [LUFS](../glossary/lufs.md) for what the number means and [Delivery Targets](../glossary/mastering/delivery-targets.md) for what other platforms expect instead of -16.
 
 As with the four-stem case in [Mix and Master a Song in the CLI](./cli-mix-and-master.md), a separate `sonare lufs show-master.wav` call would disagree with this figure — it downmixes to mono first and warns on stderr before doing so. For a stereo deliverable, the mastering report's number is the one to believe.
 

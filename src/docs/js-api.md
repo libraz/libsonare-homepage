@@ -100,13 +100,13 @@ same predicate as `cancel=`.
 
 ### Inputs are validated, not coerced
 
-Node and WASM reject values they used to quietly reshape: wrong-typed repair and
+Node and WASM reject values instead of quietly reshaping them: wrong-typed repair and
 dynamics options, an unknown track kind, capture source, or pitch-correction
 mode, a negative spectrum setting, enum spellings and ordinals that are not
 declared, and mastering override values that are neither number nor boolean.
 Instance methods also throw after `destroy()` instead of touching a freed
-handle. Where you previously got a surprising default, you now get a
-`SonareError` at the call site.
+handle. A bad value surfaces as a `SonareError` at the call site rather than as
+a surprising default.
 
 ## Pick The Smallest API That Solves The Job
 

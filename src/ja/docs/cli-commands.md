@@ -428,9 +428,9 @@ sonare polyphonic-render chord.wav -o out.wav \
 
 `--edit` は 1 回につき 1 つの `NOTE.FIELD=VALUE` を指定し、繰り返し渡せます。指定できるフィールドは `pitch_shift_semitones`、`gain_db`、`time_offset_samples`、`time_stretch_ratio`、`formant_shift_semitones`、`vibrato_depth_change`、`drift_change`、`muted` です。未知のフィールドは無視されるのではなくエラーになります。`polyphonic-render` は `-o` が必須で、`polyphonic-notes` は標準出力に表示するだけなので出力ファイルを取りません。
 
-::: warning 何もしない既定値はエラーになりました
-`--semitones` と `--rate` には以前既定値があり、省略するとコマンドが何もしない
-状態になっていました。現在はどちらも必須です。また、ピッチシフトの未知の
+::: warning 何もしない既定値はありません
+`--semitones` と `--rate` に既定値はありません。既定値があると、省略したときに
+コマンドが何もしない状態になるためです。どちらも必須です。また、ピッチシフトの未知の
 `--algorithm` やピッチ補正の未知の `--mode` も、既定値へフォールバックせずエラーになります。
 :::
 

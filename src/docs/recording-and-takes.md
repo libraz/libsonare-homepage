@@ -264,7 +264,7 @@ project.setClipCompSegments(clipId, [
 ]);
 ```
 
-`0` — the default — is the butt join, so a comp written before this option existed renders exactly as it did. A fade cannot outrun either its own segment or the part ahead of it, and the first segment has nothing in front of it, so a crossfade there is held at `0`.
+`0` — the default — is the butt join: segments meet with no overlap. A fade cannot outrun either its own segment or the part ahead of it, and the first segment has nothing in front of it, so a crossfade there is held at `0`.
 
 The third argument, `activeTakeId`, is optional and defaults to `0`. Pass `0` (or omit it) and the clip keeps playing its **base source** with no active-take override — useful when you have defined takes but do not want any of them to replace the original clip audio by default. Any non-zero `activeTakeId` must match the `id` of one of the takes you pass; take ids themselves are always non-zero, so `0` unambiguously means 'no active take'.
 

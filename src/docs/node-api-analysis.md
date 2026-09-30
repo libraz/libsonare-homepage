@@ -254,11 +254,11 @@ amount, so passing both is identical to passing `voiced` alone. The same holds
 for `PitchCorrectOptions.voicedProb` on `pitchCorrectTimevarying(...)`.
 
 ::: warning Correction strength is not weighted by `voicedProb`
-A caller who relied on the correction being scaled by `voicedProb` will hear
-**stronger correction in the low register**. pYIN's voiced probability is a
-frequency-dependent observation mass that rises with the fundamental rather than
-tracking confidence, so using it as a weight silently under-corrected low
-registers.
+Code that assumes the correction is scaled by `voicedProb` gets
+**stronger correction in the low register** than it expects. pYIN's voiced
+probability is a frequency-dependent observation mass that rises with the
+fundamental rather than tracking confidence, so as a weight it would
+under-correct low registers.
 :::
 
 `voiced` and `voicedProb` must each be the same length as `f0Hz`. A mismatch
@@ -344,14 +344,14 @@ const firstLeft = linked.components[0][0];
 const firstRight = linked.components[0][1];
 ```
 
-::: warning NNDSVD factors will not match stored ones
+::: warning NNDSVD factors will not match single-precision ones
 NNDSVD seeding is computed in double precision. A magnitude spectrogram's
 trailing singular vectors sit at single precision's noise floor, so a float seed
-depended on summation order, and wasm32 and arm64 answered with different
+would depend on summation order, and wasm32 and arm64 would answer with different
 components; the double-precision seed makes the result reproducible across
 builds. Shapes, non-negativity and reconstruction quality are unaffected — this
-is reproducibility, not accuracy — but a caller holding **stored factors**, or
-comparing against an older stem render, will find them different.
+is reproducibility, not accuracy — but **stored factors**, or a stem render made
+with a single-precision seed, will not match.
 :::
 
 ### `noteSegments`

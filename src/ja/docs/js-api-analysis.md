@@ -132,7 +132,7 @@ for (let i = 0; i < beats.length; i++) {
 
 ### `detectOnsets(samples, sampleRate)`
 
-オーディオサンプルからオンセット時刻（音の立ち上がり）を検出します。ビートより細かい粒度 - すべての音をキャプチャ。
+オーディオサンプルからオンセット時刻（音の立ち上がり）を検出します。ビートより細かい粒度で、すべての音の立ち上がりを捉えます。
 
 ::: info ユースケース
 - **ドラム採譜**: 個々のドラムヒットを検出
@@ -207,13 +207,13 @@ interface MusicAnalyzeOptions {
 :::
 
 `meterCandidateNumerators` は**探索範囲を広げるだけで、結果を強制しません**。推定器はその分子を
-報告する前に裏付けを見つける必要があります。ただし逆は絶対に成り立ちます。指定していない分子は
+報告する前に裏付けを見つける必要があります。ただし逆方向の制約は必ず働きます。指定していない分子は
 報告されえないため、既定の `[3, 4, 6]` で解析した 5/4 や 7/8 の曲は 4 拍子として返ってきます。
 `meterDenominator` は指定したとおりに報告されますが、複合拍子を解決したときには推定器が自ら
 `8` を報告します。
 
 `computeTempoCurve` は `beatLocalBpm` を埋めるスイッチで、精度改善ではなく追加出力であるため
-既定では無効です。このカーブは、それがデコードされたビートグリッドを記述します。したがって
+既定では無効です。このカーブは、デコードの元になったビートグリッドのテンポを表します。したがって
 テンポが実際に揺れる曲では `adaptiveTempo` も併せて指定してください。そうしないと、固定テンポ
 で敷かれたグリッドを局所的に読んだだけの値になります。
 
@@ -260,6 +260,41 @@ const result = analyzeWithProgress(samples, sampleRate, (progress, stage) => {
   console.log(`${stage}: ${Math.round(progress * 100)}%`);
 });
 ```
+
+### `transcribe(request)`
+
+`transcribe` はモノラル音声を、一定テンポの PPQ グリッド上のノートオン／ノートオフ `ProjectMidiEvent[]` に変換します。`tempoBpm` を渡すとそのテンポでグリッドを作り、省略するとテンポを検出します。結果には `events.length` の半分にあたる `noteCount` も含まれます。プロジェクトのテンポマップは変更しません。
+
+```typescript
+interface TranscribeRequest {
+  samples: Float32Array;
+  sampleRate: number;
+  tempoBpm?: number;  // 省略すると検出
+  polyphonic?: boolean;
+  // その他の TranscribeOptions の検出設定も省略可能
+}
+
+interface TranscribeResult {
+  events: ProjectMidiEvent[];
+  noteCount: number;
+  tempoBpm: number;
+}
+
+function transcribe(request: TranscribeRequest): TranscribeResult
+```
+
+```typescript
+const { events, noteCount, tempoBpm } = transcribe({
+  samples,
+  sampleRate,
+  tempoBpm: 120,
+  polyphonic: true,
+});
+project.setMidiEvents(clipId, events);
+console.log(noteCount, tempoBpm);
+```
+
+PPQ グリッドをプロジェクトのテンポマップに合わせる場合は `Project.transcribeToClip(...)` を使います。このリクエストには `tempoBpm` がなく、書き込んだノート数を返します。
 
 ### 目的別の詳細解析ヘルパー
 
@@ -331,7 +366,7 @@ for (const { time, strength } of boundaries) {
 
 ::: tip 2 つのしきい値は役割が違います
 `threshold` は「その曲の中でどれだけ突出したピークか」を問います。曲線が先に自身の最大値で
-正規化されるため、特徴量が実際にどれだけ変化したかについては何も言いません。
+正規化されるため、特徴量が実際にどれだけ変化したかについては何も示しません。
 `absoluteThreshold` のほうが「そもそも変化があったのか」を問う下限です。これを `0` にしても
 検出が有意に敏感になるわけではありません。正規化によって残留する揺らぎが 1.0 のピークに
 化けるので、定常的な入力でも区切られてしまいます。
@@ -417,12 +452,12 @@ interface MeterEstimate {
 が空の場合はフォールバックではなく例外になります。1〜7 拍ならフォールバックが返ります。
 :::
 
-`timeSignature.confidence` と `candidates[k].confidence` は、同じフィールド名で別の量を運びます。
+`timeSignature.confidence` と `candidates[k].confidence` は、同じフィールド名で別の量を表します。
 `timeSignature` 側は次点との差から導かれる値で、`candidates` の各要素ではその候補が支持の総和に
 占める割合なので、要素の合計は 1 になります。両者は比較できず、同じしきい値を共有しては
 いけません。手近な方ではなく、意図したフィールドから読んでください。
 
-`grouping` は変則拍子が姿を現す場所です。`[3, 2, 2]` は 3-2-2 でグルーピングされた 7/8 を、
+変則拍子は `grouping` に現れます。`[3, 2, 2]` は 3-2-2 でグルーピングされた 7/8 を、
 `[2, 2]` はごく普通の 4 拍子を意味します。要素が **1 つ**だけのときは内部分割が解決されなかった
 ことを表します（分子に分割がない、小節が広すぎて探索できない、列が短すぎる、のいずれか）。
 つまり `[4]` と `[2, 2]` は同じものの別表記ではなく、異なる答えです。

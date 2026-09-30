@@ -97,7 +97,7 @@ sonare voice-change vocal.wav --pitch-semitones 5 --formant-factor 1.1 -o charac
 :::
 
 ::: warning `formantFactor` はピッチシフトの*後*に掛かる
-`voiceChange` は先に移調を行いますが、移調そのものがすでにフォルマントを引きずり上げます。フォルマント段はその移動済みの信号に対して動くため、`formantFactor` は既存の移動量にさらに掛け算されます。つまり `formantFactor: 1.0` は「フォルマントを保つ」ではなく「追加で動かさない」という意味です。上の `{ pitchSemitones: 5, formantFactor: 1.1 }` では、フォルマントはおよそ 2<sup>5/12</sup> × 1.1（約 1.47 倍）まで上がるので、透明な移調ではなく意図的なキャラクター変更になります。
+`voiceChange` は先に移調を行いますが、移調そのものでフォルマントもすでに一緒に動きます。フォルマント段はその移動済みの信号に対して動くため、`formantFactor` は既存の移動量にさらに掛け算されます。つまり `formantFactor: 1.0` は「フォルマントを保つ」ではなく「追加で動かさない」という意味です。上の `{ pitchSemitones: 5, formantFactor: 1.1 }` では、フォルマントはおよそ 2<sup>5/12</sup> × 1.1（約 1.47 倍）まで上がるので、透明な移調ではなく意図的なキャラクター変更になります。
 
 自然に聞こえる移調にしたい場合は、ピッチ比の逆数を渡して移調によるフォルマント移動を打ち消してください。
 
@@ -131,15 +131,15 @@ const tuned = pitchCorrectToMidi(vocal, sampleRate, currentMidi, targetMidi);
 ### 時間変化するピッチ補正
 
 ::: info F0・フレーム・有声とは
-**F0** は基本周波数、つまりピッチのことで、Hz で測ります。ピッチ検出器は短い時間区切り（**フレーム**。ここではサンプル `hopLength` 個分）ごとに F0 を 1 つ返し、ピッチの動きをたどる F0 **輪郭**を作ります。フレームが**有声**とは、歌い手が息や無音ではなく実際に音高のある音（歌われた母音など）を出している状態で、補正する価値があるのは有声フレームだけです。
+**F0** は基本周波数、つまりピッチのことで、Hz で測ります。ピッチ検出器は短い時間区切り（**フレーム**。ここではサンプル `hopLength` 個分）ごとに F0 を 1 つ返し、ピッチの動きをたどる F0 **輪郭**を作ります。フレームが**有声**とは、歌い手が息や無音ではなく実際に音高のある音（歌われた母音など）を出している状態で、補正の対象になるのは有声フレームだけです。
 :::
 
 `pitchCorrectToMidi(...)` は、要求したトランスポーズ量をただちに適用し、入力の長さを保ちます。時間とともに変わるピッチ輪郭には追従しません。
 
-::: warning 補正量は ±12 半音でクランプされる
-`pitchCorrectToMidi(...)` と `pitchCorrectToMidiTimevarying(...)` は、補正上限が 1 オクターブの既定設定で内部の補正器を構築し、どちらの入口もその上限を変える手段を公開していません。これを超える音程は、エラーも診断も出さずに黙ってクランプされます。たとえば `pitchCorrectToMidi(vocal, sampleRate, 48, 72)` は +24 半音を要求しても、+12 半音だけ動いた音声を返します。
+::: warning 輪郭追従の補正は既定で ±12 半音
+`pitchCorrectToMidiTimevarying(...)` は、測定した各フレームに対して補正器の既定値である ±12 半音の上限を使います。`pitchCorrectToMidi(...)` は MIDI の端点を検証したうえで、呼び出し側が指定した `targetMidi - currentMidi` を全量適用するため、`pitchCorrectToMidi(vocal, sampleRate, 48, 72)` は +24 半音動かします。
 
-1 オクターブを超えて動かしたい場合は、単純な移調なら `pitchShift(...)` を、補正として行いたいなら `maxCorrectionSemitones` を明示した `pitchCorrectTimevarying(...)` を使ってください。
+輪郭追従の補正を広い範囲で行う場合は `maxCorrectionSemitones` を明示した `pitchCorrectTimevarying(...)` を使い、単純な移調には `pitchShift(...)` を使ってください。
 :::
 
 フレームごとに補正を変えたいときは `pitchCorrectToMidiTimevarying(...)` を使います。呼び出し側が用意した**フレームごとの F0 輪郭**に従い、有声フレームを `targetMidi` へ補正します。
@@ -149,7 +149,7 @@ import { init, pitchPyin, pitchCorrectToMidiTimevarying } from '@libraz/libsonar
 
 await init();
 
-const frameLength = 512;
+const frameLength = 2048;
 const hopLength = 512;
 
 // 1. フレームごとの F0 輪郭を測定する（hop ごとに F0 を 1 つ返す検出器なら何でもよい）。
@@ -337,6 +337,8 @@ sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
 ::: info オフライン変換とアレンジ時のワープの違い
 このページの関数は**オフライン**変換です。バッファを渡すと新しいバッファが返ります。これは**アレンジ時のワープ**、つまりプロジェクト内でのクリップのリピッチやテンポ同期とは別物です。後者ではクリップが一度焼き込まれるのではなく、タイムラインに追従します。そのプロジェクトレベルのワークフローは [プロジェクト編集](./project-editing.md) を参照してください。
 :::
+
+ノート単位の編集を音声へレンダリングし直す場合は、[音声内のノート編集](./note-editing.md) を参照してください。プロジェクトの MIDI クリップを変更する場合は、[MIDI クリップ編集](./midi-editing.md) を参照してください。
 
 同じオフラインとリアルタイムの違いは、上の [`voiceChange(...)` と `RealtimeVoiceChanger`](#オフライン-voicechange-と-realtimevoicechanger) の区別にも表れます。処理の形は 2 つです。
 

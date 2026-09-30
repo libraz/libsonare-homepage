@@ -44,7 +44,7 @@ Structure labelling is a fixed-threshold heuristic, not a trained segmenter, and
 
 `Unknown` is a deliberate answer rather than a failure code. It appears when no boundary was detected at all, when a segment matched none of the positive branches, or when the evidence for a musical function was too weak to assert one — in the last case the sub-threshold score is kept, so you can see how close it came.
 
-Two guards make `Unknown` more common than it used to be, on purpose. Adjacent segments whose chroma is indistinguishable are merged before anything is labelled, so a novelty peak inside one continuous stretch of music no longer splits it into two "repeating" sections. And when nearly every pair of sections counts as a repetition of every other — which is what uniform material looks like — repetition is treated as carrying no information rather than as evidence for a verse/chorus alternation. Uniform material used to produce a full song form out of bars that never changed.
+Two guards make `Unknown` more common, on purpose. Adjacent segments whose chroma is indistinguishable are merged before anything is labelled, so a novelty peak inside one continuous stretch of music does not split it into two "repeating" sections. And when nearly every pair of sections counts as a repetition of every other — which is what uniform material looks like — repetition is treated as carrying no information rather than as evidence for a verse/chorus alternation. Without that rule, uniform material would yield a full song form out of bars that never changed.
 
 For downstream algorithms, prefer the raw signals over the labels: `boundaryTimes` and the chroma cosine self-similarity matrix are exposed precisely so a caller can apply their own thresholds.
 

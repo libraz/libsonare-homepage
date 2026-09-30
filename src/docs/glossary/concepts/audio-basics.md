@@ -31,7 +31,7 @@ When a stereo signal is summed to mono, some side information can weaken or canc
 
 Amplitude is the instantaneous sample value. dB is a logarithmic way to describe level. Audio work uses dB because human loudness perception is closer to logarithmic than linear.
 
-Typical digital sample values are normalized to the range `-1.0` to `1.0`. When level is measured against that digital ceiling, it is written in **dBFS** (decibels relative to full scale): `0 dBFS` is the loudest value the format can represent, and every real signal sits below it as a negative number.
+Fixed-point PCM sample values are usually normalized to the range `-1.0` to `1.0`. When level is measured against that digital ceiling, it is written in **dBFS** (decibels relative to full scale): a full-scale sample is `0 dBFS`, and fixed-point values below it are negative. Floating-point intermediate buffers can exceed `1.0` before final export, so their dBFS can be above `0` until the signal is constrained.
 
 ## Clipping and Headroom
 

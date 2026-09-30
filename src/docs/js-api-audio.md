@@ -400,9 +400,8 @@ provided. Choose a quantized read explicitly with `readFramesU8` or
 `readFramesI16`; analysis itself always runs in float. See [Realtime and
 Streaming](./realtime-streaming.md#reading-frames-and-output-format).
 
-The legacy `computeMagnitude` flag is no longer supported; passing it makes the
-constructor throw. The flag was removed because magnitude frames are not exposed
-by the StreamAnalyzer read paths; use `stft`/`stftDb` offline or the spectrum
+There is no `computeMagnitude` flag: passing it makes the constructor throw,
+because magnitude frames are not exposed by the StreamAnalyzer read paths. Use `stft`/`stftDb` offline or the spectrum
 metering helpers for magnitude data.
 
 `streamAnalyzerConfigDefaults()` returns a fully-populated `StreamConfigDefaults`

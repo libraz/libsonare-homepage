@@ -9,6 +9,8 @@ A folder of rough takes lands on your drive: some clipped because the gain was t
 
 The job is **not** "run declip on everything". A repair stage that runs when nothing was wrong costs quality for nothing — declip resynthesizes samples that were never clipped, dehum notches out real musical content sitting at the mains frequency. The point of the repair assistant is that it declines a stage the evidence does not call for, and `--explain` is how you check that it actually did.
 
+For the library workflow and individual defects, see [Audio Repair](../audio-repair.md), [Noise and Hum Removal](../repair-noise.md), [Clicks, Crackle, and Clipping](../repair-transients.md), and [Dereverberation](../repair-reverb.md).
+
 ## What You Will Learn
 
 By the end of this page you should be able to:
@@ -319,8 +321,8 @@ Everything above ran on a mono take. `repair --detect` (and the repair chain its
 warning: 2-channel input is downmixed to mono by this CLI command; use the stereo library API for channel-preserving processing
 ```
 
-::: warning A stereo damage report is still a valid damage report
-The downmix warning means the *numbers* describe the summed signal, not that they are wrong to act on — clipping, clicks, hum, and crackle detected on the downmix are real defects in the stereo file too. What changes is the *repair*: fixing a stereo deliverable in place, channel by channel, needs the stereo entry points in the [Python API](../python-api.md) rather than this CLI path, which only ever writes a mono result.
+::: warning A stereo damage report describes the mono fold
+It describes the mono fold only. A defect visible in that fold is useful evidence, but a clean fold does not establish clean individual channels: asymmetric clipping, opposite-polarity hum or clicks, and channel-only defects can hide. Inspect and repair the channels with the stereo entry points in the [Python API](../python-api.md) rather than this CLI path, which only ever writes a mono result.
 :::
 
 ## Running it in a script

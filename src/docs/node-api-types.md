@@ -200,15 +200,21 @@ type VoicedFlags =
   | readonly number[]
   | readonly boolean[];
 
+type MasteringAssistantParams = Record<string, number | boolean | string>;
+
 interface MasteringAssistantSuggestStereoRequest {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate?: number;
+  params?: MasteringAssistantParams;
+}
+
+interface MasteringAudioProfileStereoRequest {
   left: Float32Array;
   right: Float32Array;
   sampleRate?: number;
   params?: Record<string, number | boolean>;
 }
-
-// Same fields; a distinct name for the profile entry point.
-interface MasteringAudioProfileStereoRequest extends MasteringAssistantSuggestStereoRequest {}
 
 interface MasteringStreamingPreviewStereoRequest {
   left: Float32Array;

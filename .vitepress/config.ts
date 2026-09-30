@@ -572,6 +572,7 @@ const enDocsSidebar = [
   },
   {
     text: 'Use Cases',
+    collapsed: true,
     items: [
       { text: 'Overview', link: '/docs/use-cases' },
       { text: 'Mix and Master in the CLI', link: '/docs/use-cases/cli-mix-and-master' },
@@ -584,13 +585,16 @@ const enDocsSidebar = [
   },
   {
     text: 'Analysis',
+    collapsed: true,
     items: [
       { text: 'Music Analysis', link: '/docs/analysis' },
+      { text: 'Source Separation', link: '/docs/source-separation' },
       { text: 'librosa Compatibility', link: '/docs/librosa-compatibility' },
     ],
   },
   {
     text: 'Instruments & MIDI',
+    collapsed: true,
     items: [
       { text: 'Sound Sources', link: '/docs/sound-sources' },
       { text: 'Built-in Synthesizer', link: '/docs/native-synth' },
@@ -599,10 +603,13 @@ const enDocsSidebar = [
       { text: 'GM Tone Map', link: '/docs/gm-tone-map' },
       { text: 'SoundFont Player', link: '/docs/soundfont-player' },
       { text: 'MIDI Input', link: '/docs/midi-input' },
+      { text: 'MIDI Editing', link: '/docs/midi-editing' },
+      { text: 'MIDI 2.0 & UMP', link: '/docs/midi2' },
     ],
   },
   {
     text: 'Mixing',
+    collapsed: true,
     items: [
       { text: 'Mixing Engine', link: '/docs/mixing' },
       { text: 'Effects Inserts', link: '/docs/effects-inserts' },
@@ -613,6 +620,7 @@ const enDocsSidebar = [
   },
   {
     text: 'Mastering',
+    collapsed: true,
     items: [
       { text: 'Mastering Processors', link: '/docs/mastering-processors' },
       { text: 'Mastering Assistant', link: '/docs/mastering-assistant' },
@@ -621,22 +629,38 @@ const enDocsSidebar = [
   },
   {
     text: 'Editing',
+    collapsed: true,
     items: [
+      { text: 'Audio to MIDI', link: '/docs/audio-to-notes' },
+      { text: 'Note Editing in Audio', link: '/docs/note-editing' },
       { text: 'Editing DSP', link: '/docs/editing-dsp' },
       { text: 'Spectral Editing', link: '/docs/spectral-editing' },
     ],
   },
   {
+    text: 'Repair',
+    collapsed: true,
+    items: [
+      { text: 'Audio Repair Workflow', link: '/docs/audio-repair' },
+      { text: 'Noise and Hum', link: '/docs/repair-noise' },
+      { text: 'Clipping, Clicks, and Crackle', link: '/docs/repair-transients' },
+      { text: 'Diffuse Reverb', link: '/docs/repair-reverb' },
+    ],
+  },
+  {
     text: 'Arrangement & Projects',
+    collapsed: true,
     items: [
       { text: 'Project Editing', link: '/docs/project-editing' },
       { text: 'Project MIDI', link: '/docs/project-editing-midi' },
+      { text: 'Project Save & Load', link: '/docs/project-save-load' },
       { text: 'Recording & Takes', link: '/docs/recording-and-takes' },
       { text: 'Bouncing Projects', link: '/docs/project-bounce' },
     ],
   },
   {
     text: 'Realtime',
+    collapsed: true,
     items: [
       { text: 'Realtime and Streaming', link: '/docs/realtime-streaming' },
       { text: 'Realtime Engine', link: '/docs/realtime-engine' },
@@ -645,6 +669,7 @@ const enDocsSidebar = [
   },
   {
     text: 'Room Acoustics',
+    collapsed: true,
     items: [
       { text: 'Acoustic Analysis', link: '/docs/acoustic-analysis' },
       { text: 'Inverse Features', link: '/docs/inverse-features' },
@@ -652,6 +677,7 @@ const enDocsSidebar = [
   },
   {
     text: 'Playback',
+    collapsed: true,
     items: [
       { text: 'Playback Renderer', link: '/docs/playback' },
       { text: 'Channel Formats', link: '/docs/channel-formats' },
@@ -659,6 +685,7 @@ const enDocsSidebar = [
   },
   {
     text: 'API By Runtime',
+    collapsed: true,
     items: [
       {
         text: 'Browser / WASM',
@@ -729,6 +756,7 @@ const enDocsSidebar = [
   },
   {
     text: 'Understand The Details',
+    collapsed: true,
     items: [
       { text: 'DSP Implementation Notes', link: '/docs/dsp-implementation' },
       { text: 'Algorithm References', link: '/docs/algorithm-references' },
@@ -797,7 +825,7 @@ const softwareApplicationJsonLd = (lang: 'en' | 'ja') => ({
   },
   description:
     lang === 'ja'
-      ? '依存ゼロの C++ コアの上に構築された、Apache-2.0 の音声エンジン。C++・Python・Node・CLI・WebAssembly から使え、librosa 互換の解析、放送品質のマスタリングとミキシング、内蔵音源、ヘッドレス DAW / リアルタイムランタイムを備えます。'
+      ? '依存ゼロの C++ コアを持つ、Apache-2.0 の音声エンジン。C++・Python・Node・CLI・WebAssembly から使え、librosa 互換の解析、放送品質のマスタリングとミキシング、内蔵音源、ヘッドレス DAW / リアルタイムランタイムを備えます。'
       : 'Apache-2.0 audio engine for C++, Python, Node, CLI, and WebAssembly, built on a dependency-free C++ core: librosa-compatible analysis, broadcast-grade mastering and mixing, built-in instruments, and a headless-DAW/realtime runtime.',
   url: lang === 'ja' ? `${siteUrl}/ja/` : siteUrl,
   softwareHelp: `${siteUrl}/docs/introduction.html`,
@@ -1081,6 +1109,7 @@ export default defineConfig({
             },
             {
               text: '実践ユースケース',
+              collapsed: true,
               items: [
                 { text: '概要', link: '/ja/docs/use-cases' },
                 {
@@ -1099,13 +1128,16 @@ export default defineConfig({
             },
             {
               text: '解析',
+              collapsed: true,
               items: [
                 { text: '楽曲解析', link: '/ja/docs/analysis' },
+                { text: '音源分離', link: '/ja/docs/source-separation' },
                 { text: 'librosa互換性', link: '/ja/docs/librosa-compatibility' },
               ],
             },
             {
               text: '楽器と MIDI',
+              collapsed: true,
               items: [
                 { text: '音源方式', link: '/ja/docs/sound-sources' },
                 { text: '内蔵シンセサイザー', link: '/ja/docs/native-synth' },
@@ -1114,10 +1146,13 @@ export default defineConfig({
                 { text: 'GM 音色マップ', link: '/ja/docs/gm-tone-map' },
                 { text: 'SoundFont プレイヤー', link: '/ja/docs/soundfont-player' },
                 { text: 'MIDI 入力', link: '/ja/docs/midi-input' },
+                { text: 'MIDI クリップ編集', link: '/ja/docs/midi-editing' },
+                { text: 'MIDI 2.0 と UMP', link: '/ja/docs/midi2' },
               ],
             },
             {
               text: 'ミキシング',
+              collapsed: true,
               items: [
                 { text: 'ミキシングエンジン', link: '/ja/docs/mixing' },
                 { text: 'エフェクトインサート', link: '/ja/docs/effects-inserts' },
@@ -1131,6 +1166,7 @@ export default defineConfig({
             },
             {
               text: 'マスタリング',
+              collapsed: true,
               items: [
                 { text: 'マスタリングプロセッサ', link: '/ja/docs/mastering-processors' },
                 { text: 'マスタリングアシスタント', link: '/ja/docs/mastering-assistant' },
@@ -1139,22 +1175,38 @@ export default defineConfig({
             },
             {
               text: '編集',
+              collapsed: true,
               items: [
+                { text: '音声から MIDI', link: '/ja/docs/audio-to-notes' },
+                { text: '音声内のノート編集', link: '/ja/docs/note-editing' },
                 { text: '編集 DSP', link: '/ja/docs/editing-dsp' },
                 { text: 'スペクトル編集', link: '/ja/docs/spectral-editing' },
               ],
             },
             {
+              text: 'リペア',
+              collapsed: true,
+              items: [
+                { text: 'オーディオリペアの流れ', link: '/ja/docs/audio-repair' },
+                { text: 'ノイズとハム', link: '/ja/docs/repair-noise' },
+                { text: 'クリップ、クリック、クラックル', link: '/ja/docs/repair-transients' },
+                { text: '拡散残響', link: '/ja/docs/repair-reverb' },
+              ],
+            },
+            {
               text: 'アレンジとプロジェクト',
+              collapsed: true,
               items: [
                 { text: 'プロジェクト編集', link: '/ja/docs/project-editing' },
                 { text: 'プロジェクトの MIDI', link: '/ja/docs/project-editing-midi' },
+                { text: 'プロジェクトの保存と読み込み', link: '/ja/docs/project-save-load' },
                 { text: '録音とテイク', link: '/ja/docs/recording-and-takes' },
                 { text: 'プロジェクトのバウンス', link: '/ja/docs/project-bounce' },
               ],
             },
             {
               text: 'リアルタイム',
+              collapsed: true,
               items: [
                 { text: 'リアルタイムとストリーミング', link: '/ja/docs/realtime-streaming' },
                 { text: 'リアルタイムエンジン', link: '/ja/docs/realtime-engine' },
@@ -1166,6 +1218,7 @@ export default defineConfig({
             },
             {
               text: '室内音響',
+              collapsed: true,
               items: [
                 { text: '音響解析', link: '/ja/docs/acoustic-analysis' },
                 { text: '逆変換特徴量', link: '/ja/docs/inverse-features' },
@@ -1173,6 +1226,7 @@ export default defineConfig({
             },
             {
               text: '再生',
+              collapsed: true,
               items: [
                 { text: '再生レンダラー', link: '/ja/docs/playback' },
                 { text: 'チャンネル形式', link: '/ja/docs/channel-formats' },
@@ -1180,6 +1234,7 @@ export default defineConfig({
             },
             {
               text: '利用環境別 API',
+              collapsed: true,
               items: [
                 {
                   text: 'ブラウザ / WASM',
@@ -1256,6 +1311,7 @@ export default defineConfig({
             },
             {
               text: '詳しく知る',
+              collapsed: true,
               items: [
                 { text: 'DSP 実装解説', link: '/ja/docs/dsp-implementation' },
                 { text: 'アルゴリズム根拠', link: '/ja/docs/algorithm-references' },

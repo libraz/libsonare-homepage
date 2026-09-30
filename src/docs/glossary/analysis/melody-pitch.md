@@ -38,7 +38,7 @@ These estimators assume **monophonic** input: one note at a time, such as a solo
 
 These estimators are also not chord transcribers. If you feed them a full mix or a chord, the single-F0 assumption breaks down.
 
-To track a melody inside a busy track, isolate the line first with a stem, [HPSS](./mel-mfcc-timbre.md) (harmonic/percussive separation), or source separation. Then run pitch tracking on the cleaner signal.
+To track a melody inside a busy track, use an isolated recording or an actual lead stem. [HPSS](../../source-separation.md) can suppress percussion but leaves overlapping harmonic instruments, so it does not make a full mix monophonic. Run pitch tracking on the cleaner signal.
 
 ## Voicing: when there is no pitch
 
@@ -58,7 +58,7 @@ Two consequences follow:
 <SonareDemo id="melody-contour" />
 
 ::: details How libsonare tracks pitch
-libsonare implements YIN and pYIN for F0 estimation on monophonic audio. `analyzeMelody` / `MelodyAnalyzer` uses frame-by-frame YIN frequency and confidence, then computes mean frequency, pitch range, stability, and a simple vibrato-rate estimate. Lower-level `pitchYin` / `pitchPyin` APIs expose YIN and pYIN tracks directly. Results can be converted to MIDI note numbers for tuning and editing workflows. Pitch tracking is most reliable on isolated, clearly pitched material and degrades on polyphonic or noisy mixes.
+libsonare implements YIN and pYIN for F0 estimation on monophonic audio. `analyzeMelody` / `MelodyAnalyzer` uses plain YIN by default; `usePyin: true` selects pYIN and its voicing output. It then computes mean frequency, pitch range, stability, and a simple vibrato-rate estimate. Lower-level `pitchYin` / `pitchPyin` APIs expose YIN and pYIN tracks directly. Results can be converted to MIDI note numbers for tuning and editing workflows. Pitch tracking is most reliable on isolated, clearly pitched material and degrades on polyphonic or noisy mixes.
 :::
 
 Related: [Chroma Features](./chroma-features.md), [Mel, MFCC, and Timbre](./mel-mfcc-timbre.md), [Editing Basics](../concepts/editing-basics.md), [MIR Overview](../concepts/mir-overview.md)

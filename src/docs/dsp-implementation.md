@@ -149,7 +149,7 @@ The fixed slot order is **repair → EQ → dynamics → saturation → spectral
 
 | Processor | Implementation | Main use | Real-time notes |
 |-----------|----------------|----------|-----------------|
-| `eq.apiStyle` | API-facing EQ adapter for common band definitions | Stable public entry point for UI-friendly EQ | Delegates to the underlying EQ design |
+| `eq.apiStyle` | Four-band stepped proportional-Q biquad EQ | Tonal shaping with stepped frequency/gain controls | In-place coefficient changes; gain snaps in 2 dB steps; Q narrows with larger gain magnitude |
 | `eq.bandPass` | Biquad band-pass filter | Isolate a frequency region | Low latency |
 | `eq.cutFilter` | High-pass/low-pass cut filters with slope control | Remove rumble, hiss, or band-limit a signal | Low latency IIR path |
 | `eq.dynamic` | EQ band controlled by an envelope detector | Frequency-selective compression/expansion | Detector timing must be smoothed |
@@ -225,6 +225,7 @@ The fixed slot order is **repair → EQ → dynamics → saturation → spectral
 | `spectral.presenceEnhancer` | Presence-band shaping with controlled harmonic/detail emphasis | Improve vocal or lead audibility | Avoid masking-sensitive overuse |
 | `spectral.spectralShaper` | Broad spectral tilt/shape correction | Match tonal contour or smooth harsh ranges | More transparent with moderate settings |
 | `stereo.autoPan` | LFO-driven pan movement | Creative movement | More creative than mastering-neutral |
+| `stereo.binaural` | Measured-HRTF virtual-speaker rendering with optional speaker crosstalk cancellation and azimuth motion | Place a stereo pair in headphone or speaker virtual space | Stereo-pair processor; use the full `PlaybackRenderer` when you also need layout conversion, room, or head tracking |
 | `stereo.haasEnhancer` | Short inter-channel delay for width | Perceived width increase | Can reduce mono compatibility |
 | `stereo.imager` | Mid/side width gain and optional band awareness | Widen or narrow stereo image | Check correlation and mono sum |
 | `stereo.monoMaker` | Low-frequency mono summing below a crossover | Stabilize bass in the center | Common before final limiting |
@@ -260,12 +261,12 @@ The fixed slot order is **repair → EQ → dynamics → saturation → spectral
 | Normalize | Peak or target-level gain adjustment | Utility level matching | File-level operation unless gain is known ahead |
 | Trim/split silence | Threshold segmentation | Batch cleanup and asset prep | File-level utility |
 | Reverb inserts | Plate/Dattorro, FDN, velvet, convolution, geometric room, and room-morph inserts | Space, ambience, and room-character morphing in mixer/mastering insert graphs | Build flags and IR requirements vary |
-| Modulation/delay inserts | Chorus, ensemble, flanger, phaser, wah, auto-wah, rotary, ring modulator, pitch shifter, and stereo delay DSP live in source modules | Building blocks for creative FX | Exposed through insert factories and scene inserts; not standalone top-level JS/Python helper functions |
+| Modulation/delay inserts | Chorus, ensemble, flanger, phaser, wah, auto-wah, rotary, ring modulator, pitch shifter, and stereo delay DSP live in source modules | Building blocks for creative FX | Exposed through insert factories and scene inserts; some IDs are also callable through the generic `masteringProcess` / `mastering_process` registry, but there are no dedicated top-level JS/Python helper functions |
 
 ::: info Reverb insert availability
 `effects.reverb.plate` / `effects.reverb.dattorro`, `effects.reverb.fdn`, `effects.reverb.velvet`, `effects.reverb.convolution`, and the modulation/delay inserts require `SONARE_HAVE_FX`. `effects.reverb.room` and `effects.acoustic.roomMorph` also require `BUILD_ACOUSTIC_SIM`.
 
-Algorithmic and geometric room reverb are streamable. Convolution needs an IR supplied through native insert creation paths.
+Algorithmic and geometric room reverb are streamable. Convolution accepts a base64 float32 IR through insert params, or synthesizes a decaying-noise IR from `decaySec` and `seed` when omitted.
 :::
 
 ## Mixing DSP
@@ -290,6 +291,8 @@ Realtime processing has to finish with the current block of audio before the nex
 
 - needs to see the whole file before deciding;
 - rebuilds a large buffer;
-- requires a long lookahead.
+- requires unbounded or unpreallocated lookahead.
+
+A bounded lookahead delay with preallocated storage can run in realtime; it still adds latency. The callback deadline and prepared state are the constraints.
 
 Conversely, EQ, simple gain, short delays, and stateful compressors are easy to host in realtime once they have been prepared.

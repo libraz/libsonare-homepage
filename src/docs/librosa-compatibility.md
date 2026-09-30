@@ -138,7 +138,7 @@ NMF (non-negative matrix factorization) breaks a spectrogram into a small set of
 :::
 
 ::: info NNDSVD seeding and reproducibility
-NNDSVD (`init='nndsvd'`) seeds from the leading singular vectors of the input, solved in double precision, so the same input produces the same factors on every platform. This is a reproducibility property, not an accuracy one: a magnitude spectrogram's trailing singular vectors sit at single precision's noise floor, so a float seed would depend on the order the target happens to sum in, and different targets would then answer with different components. Shapes, non-negativity, and reconstruction quality are unaffected — but a caller holding **stored factors**, or comparing a stem render against an older one, will see the components differ from what this produces now.
+NNDSVD (`init='nndsvd'`) seeds from the leading singular vectors of the input, solved in double precision, so the same input produces the same factors on every platform. This is a reproducibility property, not an accuracy one: a magnitude spectrogram's trailing singular vectors sit at single precision's noise floor, so a float seed would depend on the order the target happens to sum in, and different targets would then answer with different components. Shapes, non-negativity, and reconstruction quality are unaffected — but **stored factors**, or a stem render made with a single-precision seed, will not match the components this produces.
 :::
 
 #### Inverse reconstruction

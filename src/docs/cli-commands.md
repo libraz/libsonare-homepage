@@ -442,10 +442,11 @@ fields are `pitch_shift_semitones`, `gain_db`, `time_offset_samples`,
 `polyphonic-render` requires `-o`; `polyphonic-notes` prints to stdout and takes
 no output file.
 
-::: warning Inert defaults are now errors
-`--semitones` and `--rate` used to default to values that made the command a
-silent no-op. They are required, and an unknown `--algorithm` for pitch shift or
-an unknown `--mode` for pitch correction is rejected instead of falling back.
+::: warning No inert defaults
+`--semitones` and `--rate` have no default, because any default would make the
+command a silent no-op. They are required, and an unknown `--algorithm` for pitch
+shift or an unknown `--mode` for pitch correction is rejected instead of falling
+back.
 :::
 
 The native CLI includes the shared edit commands and adds lower-level processing commands:

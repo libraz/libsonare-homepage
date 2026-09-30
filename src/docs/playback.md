@@ -121,7 +121,7 @@ The renderer does not know about video. What it gives a host toward keeping audi
 
 - **Renderer delay**: `latencySamples() / sampleRate`.
 - **Host output delay adds to it.** In a browser, `AudioContext.baseLatency + outputLatency` (treat a missing `outputLatency` as 0); re-read it on `devicechange` / `sinkchange`, since it changes with the output device. On native, use the device's own reported latency.
-- **The combined delay changes only when the renderer itself is rebuilt** — a different target, sample rate, or distance compensation. A realtime key, or an input-layout switch, never moves it.
+- **Renderer delay changes only when the renderer is rebuilt.** Host output delay can change with the output device or backend, so re-read it when the host reports a device change. A realtime key or an input-layout switch does not move the renderer's delay.
 - **On a seek, call `reset()`** from the thread that calls `process*` (or stop the stream first), which discards whatever was still in the pipeline. In a worklet, send `{ type: 'reset' }` on the media element's `seeking` event — the port handler runs between render quanta, so it never races `process()`.
 - **Two integration patterns.** Letting a `<video>` element drive playback and only routing its audio through `MediaElementAudioSourceNode` → the renderer gives you no timestamp for the presented frame, so you can only express a *relative* delay: the audio comes out the renderer's own latency (plus up to one render quantum) later than playing the element directly, and there is no way to hold the video back to compensate. A `WebCodecs`-based pipeline that owns its own playback clock can instead delay each video frame's presentation by the renderer latency plus the host output delay, achieving real alignment.
 - For perspective: ITU-R BT.1359 puts the threshold at which viewers start noticing audio lagging video around 125 ms. The renderer's own contribution (27–29 ms) is a fraction of that; host output delay (commonly 10–50 ms, far more over a wireless audio link) is usually the larger term.
@@ -157,7 +157,7 @@ A headphones target can add a synthesized room around the direct, HRTF-convolved
 
 ## Loudness Alignment and Metering
 
-`loudness.program_lufs` and `loudness.target_lufs` apply a single static gain, clamped to ±12 dB above target and -40 dB below, so program material sits at a consistent level without live compression pumping under scene changes. `PlaybackLoudnessMeter` (1, 2, 6 or 8 channels, BS.1770 channel weights) measures a whole program's integrated loudness ahead of playback: feed it interleaved chunks with `pushInterleaved`/`push_interleaved` and read `integratedLufs()`/`integrated_lufs()` once the program has played through, then pass that value as `loudness.program_lufs`.
+`loudness.program_lufs` and `loudness.target_lufs` apply a single static gain of `clamp(target_lufs - program_lufs, -40, +12)` dB, so the bounded gain can leave the program short of its target without live compression pumping under scene changes. `PlaybackLoudnessMeter` (1, 2, 6 or 8 channels, BS.1770 channel weights) measures a whole program's integrated loudness ahead of playback: feed it interleaved chunks with `pushInterleaved`/`push_interleaved` and read `integratedLufs()`/`integrated_lufs()` once the program has played through, then pass that value as `loudness.program_lufs`.
 
 ## One Flow, Every Binding
 

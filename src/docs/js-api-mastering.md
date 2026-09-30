@@ -99,7 +99,7 @@ Each of the three has a stereo counterpart that measures the channel pair direct
 
 ```typescript
 function masteringAudioProfileStereo(request: MasteringStereoParamsRequest): string
-function masteringAssistantSuggestStereo(request: MasteringStereoParamsRequest): string
+function masteringAssistantSuggestStereo(request: MasteringAssistantStereoParamsRequest): string
 function masteringStreamingPreviewStereo(request: MasteringStreamingPreviewStereoRequest): string
 
 interface MasteringStereoParamsRequest {
@@ -109,6 +109,15 @@ interface MasteringStereoParamsRequest {
   params?: MasteringProcessorParams;
 }
 
+type MasteringAssistantParams = Record<string, number | boolean | string>;
+
+interface MasteringAssistantStereoParamsRequest {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate?: number;
+  params?: MasteringAssistantParams;
+}
+
 interface MasteringStreamingPreviewStereoRequest {
   left: Float32Array;
   right: Float32Array;
@@ -116,6 +125,8 @@ interface MasteringStreamingPreviewStereoRequest {
   platforms?: StreamingPlatform[];
 }
 ```
+
+`MasteringAssistantParams` accepts `number | boolean | string` values for assistant options such as a target platform or preset. `MasteringStereoParamsRequest` remains the profile request shape, whose `params` values are `number | boolean`.
 
 ```typescript
 const profile = JSON.parse(masteringAudioProfileStereo({ left, right, sampleRate }));

@@ -9,6 +9,8 @@ Repair runs before tonal shaping, dynamics, stereo processing, and limiting. It 
 
 In the demo this group is two controls, Input Gain and Denoise Amount. In the engine it is a chain of six stages behind the `repair.*` keys. Both views describe preparation, not the main source of tone or loudness; they make the later stages react to a healthier signal.
 
+For detection and processing workflows, see [Audio Repair](../../audio-repair.md).
+
 ## The Six Stages and Their Fixed Order
 
 The engine runs the repair stages in one order, and only the enabled ones run:
@@ -35,11 +37,11 @@ There is no reordering option because there is no order in which a later stage w
 
 The denoise stage has one main strength control, `repair.denoise.reductionDb`: the deepest attenuation the gain mask may apply to any frequency bin, in dB.
 
-- **Sign:** positive, and larger means more removal. 26 leaves the noise 26 dB down; 0 leaves the mask unable to attenuate at all.
+- **Sign:** non-negative; larger values permit deeper attenuation. At 26 the mask can attenuate a bin by at most 26 dB; 0 prevents mask attenuation.
 - **Range:** any finite value of 0 or more. There is no upper bound; a negative or non-finite value is rejected with `denoise reduction_db must be finite and non-negative`.
 - **Default:** 26 dB. Among the built-in presets only `shellac78` changes it, to 32 dB.
 
-The value is a residual-noise floor, not a switch. At 26 dB the noise is left 26 dB down rather than removed, which is what keeps a denoised result from sounding gated. The demo's Denoise Amount slider is scaled onto this depth.
+The value sets a lower bound on mask gain, not a guaranteed reduction of the noise itself. At 26 dB that bound is about 0.0501. Signal and noise estimates determine each bin’s actual gain, and audible artifacts remain possible. The demo's Denoise Amount slider is scaled onto this depth.
 
 The chain also accepts the older linear form of the same control. `repair.denoise.gainFloor` is a floor in (0, 1] and is converted on the way in (`reductionDb = -20 * log10(gainFloor)`), so a document written with it loads unchanged; a floor above 1 would become a negative depth and is refused. The shorthand keys `repair.reductionDb` and `repair.gainFloor` resolve to the same `repair.denoise.*` keys. The Node and WASM types declare `gainFloor` as deprecated with that conversion, and a config the engine writes out carries only `reductionDb`.
 

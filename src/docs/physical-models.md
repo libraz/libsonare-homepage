@@ -1,11 +1,11 @@
 ---
 title: Physical Models
-description: How libsonare's physical-model voices work — the waveguide loop they share, the acoustic quantity each of the nine acoustic models is built around, with the identifiers, defaults and ranges the engine uses, and how far to trust them today.
+description: How libsonare's physical-model voices work — the waveguide loop they share, the acoustic quantity each model is built around, with the identifiers, defaults and ranges the engine uses, and how far to trust them today.
 ---
 
 # Physical Models
 
-Most of the [built-in synthesizer](./native-synth.md)'s engines start from a waveform and shape it. Nine of them start from an instrument instead — a string under a hammer, a bore under a reed, a metal tongue swinging through a slot. There is no oscillator in those voices and no recording behind them. Each note is a small simulation running at the sample rate, and what you hear is whatever that simulation radiates.
+Most of the [built-in synthesizer](./native-synth.md)'s engines start from a waveform and shape it. The acoustic-style engines start from an instrument instead — a string under a hammer, a bore under a reed, a metal tongue swinging through a slot, or a glottal source through formants. They compute each note from a mechanism rather than from a recording. Each note is a small simulation running at the sample rate, and what you hear is whatever that simulation radiates.
 
 This page is about that family: what the model is actually computing, which acoustic quantity each voice is built around, what tuning work is complete, and what still awaits adjustment.
 
@@ -27,28 +27,28 @@ A vibrating string or an air column carries waves that travel, reflect at each e
 
 That is the whole trick, and it has two consequences worth knowing before you use one.
 
-**It costs almost no data.** A sampled grand piano is hundreds of megabytes because the only way to know what a particular note at a particular velocity sounds like is to have recorded it. A model has no such table — the whole acoustic piano is a few dozen numbers, and every note, every velocity and every interaction between them falls out of running it. That is why these voices can be the floor under a MIDI file that arrives with no SoundFont at all.
+**It needs no recorded data.** Sampled grand pianos can be large because they store many recorded notes, velocity layers, and articulations. A model keeps a compact parameter set and computes notes and performance values within its modeled range. That is why these voices can be the floor under a MIDI file that arrives with no SoundFont at all.
 
-**It costs a lot of CPU.** A sampler reads memory; a model solves its physics once per sample per voice, and each voice carries its own delay lines, loss filters and body resonators. Polyphony, not disk, is the budget you spend here. A dense arrangement of bowed strings is a heavier render than the same arrangement played from samples.
+**Each voice costs compute.** A sampler reads memory and advances a playback voice; a model solves its physics once per sample per voice, and each voice carries its own delay lines, loss filters and body resonators. Polyphony, not disk, is the budget you spend here. A dense arrangement of bowed strings is a heavier render than the same arrangement played from samples.
 
 **And it is a model, not a recording.** It reproduces the mechanism, so it gets the behaviour a sample cannot: a hard blow is brighter *because* the felt compresses further, not because a second sample was recorded. What it does not get for free is the specific voice of a specific instrument, which requires adjustment and calibration.
 
-## The loop, and the one stage that changes
+## The loop and model-specific stages
 
 <WaveguideLoopFigure
-  title="One loop, one interchangeable stage"
-  caption="Excitation, travel, loss, radiation. The round trip through the delay line is the pitch; the loss filter is why a note dies away; and the only stage that differs between a bow, a reed, a lip and a jet is the exciter. That is why brightness and damping mean the same thing on all four."
+  title="A shared abstraction with model-specific stages"
+  caption="Excitation, travel, loss, radiation. A delay line can represent propagation and a loss filter can represent decay, but each model may add its own topology, radiation, and control behavior. The bow, reed, lip, and jet therefore share an abstraction rather than one identical loop."
 />
 
-Reading it left to right: the **exciter** injects energy into the **delay line**, the wave travels, and at the far end it turns around and comes back through the **loss filter** to meet the exciter again. The length of that round trip — the sample rate divided by the fundamental — is the pitch, which is why these engines have no tuning oscillator to speak of. The **radiation** stage is a tap taken outside the loop, where the body or the bell turns the internal wave into something a microphone would hear.
+For a waveguide-style model, read it left to right: the **exciter** injects energy into the **delay line**, the wave travels, and at the far end it turns around and comes back through the **loss filter** to meet the exciter again. The length of that round trip — the sample rate divided by the fundamental — sets the pitch in this abstraction, so these voices do not need a separate tuning oscillator. The **radiation** stage is a tap taken outside the loop, where the body or the bell turns the internal wave into something a microphone would hear.
 
-Two knobs sit on the loss stage and mean the same thing on every sustained voice: `brightness` is how openly the far end reflects the upper partials, and `damping` is how much energy the round trip loses overall. Turn `brightness` down and the tone covers over; turn `damping` up and the note speaks faster and dies sooner. On a bowed or blown voice the exciter keeps replenishing the loss, so the note sustains either way.
+Where a model exposes them, `brightness` and `damping` describe the spectral openness and energy loss of its propagation or radiation stages. Their exact response is model-specific. On a bowed or blown voice the exciter can replenish losses, so the note can sustain while those controls still change its color and decay.
 
-What changes between instruments is the exciter, and only the exciter. A bow is stick-and-slip friction against the string. A reed is a valve that the mouth pressure blows shut and the bore's own pressure pulls back open. A lip is the same valve with a resonance of its own. A jet is a ribbon of air wobbling across an edge, with a second short delay for its own transit time. Swap one card for another and the rest of the diagram is untouched.
+The exciter is one important difference between instruments, but it is not the only one. A bow is stick-and-slip friction against the string. A reed is a valve that mouth pressure drives against the bore. A lip adds its own resonance, and a jet has its own transit behavior. The delay topology, losses, radiation, and body coupling also vary by engine.
 
-The struck and plucked voices — `piano`, `plucked-string`, `karplus-strong`, `harpsichord` — use the same loop with a one-shot exciter. The hammer or the quill acts once, over a couple of milliseconds, and everything after that is the loop ringing down. This is also why a control moved mid-note reaches a bowed string and does not reach a piano: on the piano there is nothing left to reach.
+The struck and plucked voices — `piano`, `plucked-string`, `karplus-strong`, `harpsichord` — use waveguide or delay-line structures with a brief exciter. After the hammer, pick, or quill transfers energy, the remaining state rings down. A control moved mid-note can therefore reach a sustained bowed voice while a struck voice may have no active exciter axis to receive it.
 
-## The nine acoustic models
+## The acoustic models
 
 | Engine mode | What it models | The quantity it is built around | Identifier |
 |---|---|---|---|
@@ -61,8 +61,9 @@ The struck and plucked voices — `piano`, `plucked-string`, `karplus-strong`, `
 | `plucked-string` | String grazing a curved bridge | Pluck point and bridge buzz | `plucked_string.pick_position` |
 | `vocal` | Glottal source through five vowel formants | Which vowel | `vocal.vowel` |
 | `free-reed` | Metal tongue swinging through a slot | Bellows pressure and tongue stiffness | `free_reed.breath_pressure` |
+| `harpsichord` | Quill-plucked string choirs with a short rear segment | Pluck position and rear coupling | `harpsichord.pluck_8a` |
 
-Seven of the nine are waveguides in the sense the figure above describes. Two are not, and their subsections say so: `vocal` is a source-filter model with no loop, and `free-reed` is a driven tongue with no coupled air column at all. They are in this family because they are still solved from a mechanism rather than drawn as a waveform.
+Most entries above use waveguides in the sense the figure describes. `vocal` is a source-filter model with no loop, and `free-reed` is a driven tongue with no coupled air column. `harpsichord` uses separate delay lines for its string choirs and a short segment behind the bridge. These voices belong together because they are solved from a mechanism rather than played from a recording.
 
 The identifiers below are the engine's own field names. They are how each model is voiced, and they are what the named presets set — but a caller cannot address them one by one; see [Reaching them from code](#reaching-them-from-code) for what is actually settable.
 
@@ -77,7 +78,7 @@ The identifiers below are the engine's own field names. They are how each model 
 | `piano.detune_cents` | `1.6` | `0 – 50` | Micro-detune across the unison. The strings fall out of step, and the prompt sound gives way to the long aftersound. |
 | `piano.dispersion` | `1.0` | `0 – 1` | Scale on the keyboard-graded stiffness stretch; `0` is a perfectly harmonic string. |
 
-Three things this model does that a knob-driven plucked string cannot. **Inharmonicity follows a U-shaped curve** with its minimum around C2, rather than climbing monotonically toward the treble: the wound bass strings turn it back upward, so the very bottom of the keyboard is more inharmonic than the notes just above it. **Longitudinal string modes are modelled** — a struck string stretches along its length as well as across it, and the tension change radiates the inharmonic growl that fills a low note's attack. Without them the bass is felt more than heard. The current piano tuning also gives the voice an explicit output level. A physical model has no output level of its own — the string, the hammer, and the board each contribute to a product whose loudness nobody chooses directly.
+Three things this model does that a knob-driven plucked string cannot. **Inharmonicity follows a U-shaped curve** with its minimum around C2, rather than climbing monotonically toward the treble: the wound bass strings turn it back upward, so the very bottom of the keyboard is more inharmonic than the notes just above it. **Longitudinal string modes are modelled** — a struck string stretches along its length as well as across it, and the tension change radiates the inharmonic growl that fills a low note's attack. Without them the bass is felt more than heard. The current piano tuning also gives the voice an explicit output gain, so its level can be set when it is mixed with other fallback voices.
 
 ### `pipe-organ` — a flue pipe on a shared wind chest
 
@@ -116,7 +117,7 @@ Bow position and bow force are the pair a player actually controls, and they are
 | `reed.brightness` | `0.5` | `0 – 1` | Bell reflection openness. |
 | `reed.chiff` | `0.4` | `0 – 1` | The brief bright noise as the reed starts to speak, so the note articulates rather than swelling in. |
 
-`conical` is the single field that separates a clarinet from a saxophone, and it does it by changing which harmonics the bore supports at all rather than by filtering them afterwards. That is the kind of difference a model gets for nothing and an EQ curve never quite reaches.
+`conical` changes which resonant modes the bore supports, rather than applying a post-EQ curve. That changes the instrument's resonance and harmonic balance at its source.
 
 ### `brass` — the lip is the valve
 
@@ -142,7 +143,7 @@ Unlike a reed, a brass lip has a resonance of its own, and the note is where the
 | `flute.damping` | `0.35` | `0 – 1` | Bore loss. Low is a flute; high is an ocarina or a blown bottle, which will not overblow. |
 | `flute.breath_noise` | `0.15` | `0 – 1` | Jet turbulence — a flute's signature texture. High for a shakuhachi, low for a tin whistle. |
 
-The flute is the one voice here whose defining quantity is a *ratio of two times* rather than a pressure or a position, and it is worth dwelling on: the jet takes a while to cross the mouth, the bore takes a while to complete a round trip, and which register the pipe speaks in is decided by how those two numbers compare.
+The defining quantity for the flute is a *ratio of two times*: the jet's travel time across the mouth divided by the bore's round-trip time. That ratio helps determine which register the pipe supports.
 
 ### `plucked-string` — the bridge the string grazes
 
@@ -208,21 +209,21 @@ This is the cleanly terminated plucked string, and it is what a great many GM pr
 | `harpsichord.velocity_range_db` | `5.0` | `0 – 24` | The whole dynamic range key speed buys. A real instrument gives three to six decibels, and not even monotonically — past a certain speed the plectrum slips off sooner and the note gets *quieter*. |
 | `harpsichord.rear_coupling` | `0.35` | `0 – 1` | How much of the short undamped segment behind the bridge reaches the output. This is where the instrument's inharmonic shimmer comes from; the speaking partials stay harmonic to within a couple of cents. |
 
-This model, like every physical model other than the piano, still awaits adjustment and calibration. Registration is genuinely separate string choirs: two 8′ unisons and a 4′ octave are three independent delay lines at three periods, not one string with a mix control.
+This model, like every physical model other than the piano, still awaits adjustment and calibration. Registration uses separate string choirs: two 8′ unisons and a 4′ octave are three independent delay lines at three periods, not one string with a mix control.
 
 ::: warning Trim the gain before you A/B it
-At an identical patch `gain` and the same note, `harpsichord` peaks about seven times higher than its nearest neighbour — measured peaks of `0.585` against `0.180` for `bowed-string`, `0.178` for `piano` and `0.081` for `subtractive`. Some spread between models is honest, since how loudly a body radiates is part of what the model computes. This much is not comfortable: drop the patch gain before putting a harpsichord next to anything else.
+Raw output levels are not matched across engines, so a harpsichord can sit substantially higher or lower than the voice beside it. Lower the patch `gain` before putting a harpsichord next to another engine, and audition the pair at a matched level.
 :::
 
 ## Hear the contrast
 
-The demo below plays one note through eight engine modes. Listen to the **onset** above all — that is where the models and the waveform part company hardest. Subtractive starts loud and gets carved; the plucked loops start with a burst and immediately begin losing energy; the bowed string takes a few periods to grip before the tone locks in; the wind voices ramp their pressure and speak with a chiff. The cutoff control acts on the shared filter, so it is the one thing that means the same on all eight. Levels differ between engines by design.
+The demo below plays one note through several engine modes. Listen to the **onset** above all — that is where the models and the waveform part company hardest. Subtractive starts loud and gets carved; the plucked loops start with a burst and immediately begin losing energy; the bowed string takes a few periods to grip before the tone locks in; the wind voices ramp their pressure and speak with a chiff. The cutoff control acts on the shared filter, so it has the same meaning across these voices. Raw levels are not matched between engines, so match `gain` before judging tone.
 
 <SonareDemo id="physical-voice-audition" />
 
 ## Where the family ends
 
-Three engines are physical in spirit and are not waveguides, and they are documented on [Built-in Synthesizer](./native-synth.md) rather than here. `modal` is a bank of tuned resonators struck at once — the right model for a bar or a bell, where the modes are known and none of them travels. `additive` sums drawbar partials and models nothing. `percussion` is a Rayleigh circular membrane with filtered noise and, for shakers and scrapers, a stochastic particle source; it is a modal model with a noise bed, not a loop.
+Two engines use physical ideas without being waveguides, and they are documented on [Built-in Synthesizer](./native-synth.md) rather than here. `modal` is a bank of tuned resonators struck at once — the right model for a bar or a bell, where the modes are known and none of them travels. `percussion` is a Rayleigh circular membrane with filtered noise and, for shakers and scrapers, a stochastic particle source; it is a modal model with a noise bed, not a loop. `additive` is additive synthesis: it sums drawbar partials rather than modelling a physical object.
 
 The percussion engine does carry one pair of fields worth stating here, because a kit tuned against an older build will need retrimming:
 
@@ -282,7 +283,7 @@ audio = project.bounce_with_synth_instrument(
 | `additive` | morph, at patch level rather than mid-note |
 | `piano`, `plucked-string`, `karplus-strong`, `harpsichord`, `percussion`, `subtractive`, `fm`, `modal`, `sample` | none |
 
-The struck and plucked voices decline every axis for the reason the figure showed: their exciter is finished before the second sample renders, so there is nothing left for a mid-note control to act on.
+The struck and plucked voices declare no mid-note excitation axes: their exciters are one-shot, so a live excitation route has no target after the note starts.
 
 Two ways to drive the axes. A **controller profile** maps a device gesture to an axis — the default `gm` profile sends CC2 (breath) to force and CC74 to brightness or position, whichever the engine reads — and you select or extend it with `setControllerProfile` and `bindController` on the realtime engine. A **mod-matrix routing** does the same thing from inside the patch: route the `breath`, `aftertouch`, `expressionCc` or `pitchBend` source to the `excitationForce`, `excitationPosition`, `excitationBrightness` or `spectrumMorph` destination, and it travels with the patch and needs no rebinding.
 

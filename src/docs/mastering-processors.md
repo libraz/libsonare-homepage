@@ -49,7 +49,7 @@ See [Choosing a Mastering Preset](./glossary/mastering/preset-selection.md) for 
 
 ### Restoration presets
 
-The last five names are restoration presets. They enable repair stages only and leave level alone: no loudness target, no ceiling, no tone or dynamics stage. Each one turns on the subset of the [repair chain](#the-repair-stages) its source material needs, and every stage it does not mention stays off.
+The last five names are restoration presets. They enable repair stages only, with no separate loudness normalization: no loudness target, no ceiling, no tone or dynamics stage. Each one turns on the subset of the [repair chain](#the-repair-stages) its source material needs, and every stage it does not mention stays off.
 
 | Preset | For | Stages it enables |
 |--------|-----|-------------------|
@@ -59,7 +59,7 @@ The last five names are restoration presets. They enable repair stages only and 
 | `voiceMemo` | Phone or laptop capture: clipped against its own AGC, a high mic floor, recorded in whatever room the speaker was in | `declip`, `denoise`, `dereverb` |
 | `shellac78` | A 78 rpm shellac transfer, whose coarser groove wears into wider pops and denser surface noise than an LP, over a higher noise floor | `declick` with `maxClickSamples` raised to 16 so a 78-length click still reaches the LPC reconstruction instead of the interpolation fallback; `decrackle` with `threshold` lowered to 0.25 so more of the surface counts as crackle; `denoise` with `reductionDb` deepened to 32 |
 
-Hear what one repair stage does on the kind of material these presets exist for. The clip is a piano turnaround carrying mains hum, surface noise, and sparse clicks; the stage applied is the classical dereverberator, so what comes out is the noise bed and the smeared tails, while the clicks and the hum stay for the declick and dehum stages to handle:
+Hear what one repair stage does on the kind of material these presets exist for. The clip is a piano turnaround carrying mains hum, surface noise, and sparse clicks; the stage applied is the classical dereverberator. It can change the tail and timbre, but this demo does not run the declick or dehum stages:
 
 <SonareDemo id="mastering-restoration" />
 
@@ -153,6 +153,8 @@ A full chain — `masterAudio`, `masteringChain`, and every preset — runs its 
 
 ### The repair stages
 
+For detection and processing workflows, start with [Audio Repair](./audio-repair.md), [Noise and Hum Removal](./repair-noise.md), [Clicks, Crackle, and Clipping](./repair-transients.md), or [Dereverberation](./repair-reverb.md).
+
 The repair family is the one people ask about, because six stages share one slot and their order matters. Whatever subset a configuration enables runs widest-damage-first, so each stage sees material the previous one has already made well-formed:
 
 1. `declip` — before `declick`, because a flat-topped region has no transient for a click detector to measure.
@@ -163,7 +165,7 @@ The repair family is the one people ask about, because six stages share one slot
 6. `dereverb` — last, because a broadband noise floor reads as a stationary late tail and would bias the reverb estimate toward it.
 
 ::: details `repair.denoise.reductionDb` — depth, not floor
-The denoise stage's depth is `repair.denoise.reductionDb`: the deepest attenuation the gain mask may apply to any bin, in dB. It must be finite and non-negative and has no upper bound; the default is `26`, and a larger number removes more. It acts as a residual-noise floor rather than a gate — at 26 dB the noise is left 26 dB down instead of removed, which is what keeps a denoised result from sounding gated. The report the standalone `masteringRepairDenoiseClassical` entry point returns says how often that floor bound: `maxReductionDb` saturating at `reductionDb` means the floor, not the estimator, set the depth, and `floorLimitedFraction` is the share of mask cells sitting on it.
+The denoise stage's depth is `repair.denoise.reductionDb`: the deepest attenuation the gain mask may apply to any bin, in dB. It must be finite and non-negative and has no upper bound; the default is `26`. A larger value permits deeper attenuation, but does not guarantee that amount of noise reduction. At 26 dB the mask gain cannot fall below about 0.0501; actual attenuation depends on the estimated noise and signal. This gain floor reduces abrupt gating but does not eliminate artifacts. The report the standalone `masteringRepairDenoiseClassical` entry point returns says how often that floor bound: `maxReductionDb` saturating at `reductionDb` means the floor, not the estimator, set the depth, and `floorLimitedFraction` is the share of mask cells sitting on it.
 
 The same knob is also accepted as a linear floor. A `repair.denoise.gainFloor` key is converted on read, `reductionDb = -20 * log10(gainFloor)`, and the conversion carries the old validity range with it: a floor above 1 becomes a negative depth and is refused. The shorthand keys `repair.reductionDb` and `repair.gainFloor` map to the same denoise slot. Flat overrides, the JSON chain document, and the nested `MasteringChainConfig` types in the browser and Node bindings all accept `gainFloor` this way, and the TypeScript types mark it deprecated in favour of `reductionDb`.
 :::
@@ -180,10 +182,10 @@ The same knob is also accepted as a linear floor. A `repair.denoise.gainFloor` k
 | Repair | `repair.declick`, `repair.declip`, `repair.decrackle`, `repair.dehum`, `repair.denoiseClassical`, `repair.dereverbClassical`, `repair.trimSilence` |
 | Saturation | `saturation.ampSim`, `saturation.bitcrusher`, `saturation.exciter`, `saturation.hardClipper`, `saturation.multibandExciter`, `saturation.softClipper`, `saturation.tape`, `saturation.transformer`, `saturation.tube`, `saturation.waveshaper` |
 | Spectral | `spectral.airBand`, `spectral.lowEndFocus`, `spectral.presenceEnhancer`, `spectral.spectralShaper` |
-| Stereo | `stereo.autoPan`, `stereo.haasEnhancer`, `stereo.imager`, `stereo.monoMaker`, `stereo.phaseAlign`, `stereo.stereoBalance` |
+| Stereo | `stereo.autoPan`, `stereo.binaural`, `stereo.haasEnhancer`, `stereo.imager`, `stereo.monoMaker`, `stereo.phaseAlign`, `stereo.stereoBalance` |
 
 ::: warning Stereo-family processors use a different entry point
-Most processors run through the single-array `masteringProcess()` (mono, or interleaved). The stereo-family processors (`stereo.imager`, `stereo.monoMaker`, `stereo.autoPan`, `stereo.haasEnhancer`, `stereo.phaseAlign`, `stereo.stereoBalance`) operate on true left/right channels, so call them through the separate stereo entry point `masteringProcessStereo()` / `mastering_process_stereo()`, which takes distinct `left` and `right` arrays. `stereo.monoMaker` uses `frequencyHz` as the crossover below which it collapses the signal toward mono; `amount` controls how strongly it does so. The same is true of `eq.midSide` and the `multiband.*` processors. Passing these to `masteringProcess()` cannot express independent channels — see [How to call them](#how-to-call-them) for the exact signatures.
+Most processors run through the single-array `masteringProcess()` (mono, or interleaved). The stereo-family processors (`stereo.imager`, `stereo.monoMaker`, `stereo.autoPan`, `stereo.binaural`, `stereo.haasEnhancer`, `stereo.phaseAlign`, `stereo.stereoBalance`) operate on true left/right channels, so call them through the separate stereo entry point `masteringProcessStereo()` / `mastering_process_stereo()`, which takes distinct `left` and `right` arrays. `stereo.monoMaker` uses `frequencyHz` as the crossover below which it collapses the signal toward mono; `amount` controls how strongly it does so. The same is true of `eq.midSide` and the `multiband.*` processors. Passing these to `masteringProcess()` cannot express independent channels — see [How to call them](#how-to-call-them) for the exact signatures.
 :::
 
 ::: details What is dither?

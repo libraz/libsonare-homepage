@@ -254,7 +254,7 @@ Precedence decides the **absorption** only, highest first: a non-zero `materialP
 :::
 
 ::: warning Out-of-range absorption is refused, not pulled into range
-A scalar `absorption` that is non-finite or outside `[0, 1]` fails with `InvalidParameter`. Only an accepted value is clamped, to `[0, 0.999]`, because a perfectly rigid wall has no finite decay. `bandAbsorption` and `bandScattering` are validated the same way, so every wall-treatment field answers a bad value identically instead of one of them quietly building a different room than you asked for.
+A scalar `absorption` that is non-finite or outside `[0, 1]` fails with `InvalidParameter`. An accepted value is clamped to `[0, 0.999]` so the perfectly absorbing endpoint does not make the Eyring term `-ln(1 - absorption)` singular. `bandAbsorption` and `bandScattering` are validated the same way, so every wall-treatment field answers a bad value identically instead of one of them quietly building a different room than you asked for.
 :::
 
 The material presets map to integer codes: `0` none, `1` concrete, `2` wood, `3` curtain, `4` carpet, `5` glass. Concrete and glass are reflective and keep more high-frequency tail; curtain and carpet are absorptive and shorten it.

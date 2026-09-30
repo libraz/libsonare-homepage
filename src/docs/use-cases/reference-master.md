@@ -5,7 +5,7 @@ description: Close the tonal and loudness gap between your mix and a commercial 
 
 # Match a Reference Track
 
-You have a mix and a commercial track you are aiming at. The job is not "make mine sound exactly like that one" — it is closing the specific, measurable gap between the two: how loud, and how bright or dark. This page measures that gap, applies the correction on the stereo pair rather than a mono downmix, and confirms the result converged. It also draws the line: a reference EQ curve moves tone, not arrangement, performance, or mix balance.
+This page compares a mix with a commercial reference, measures loudness and tonal balance, applies a stereo-safe correction, and measures again. Reference matching changes tone and gain; it does not change arrangement, performance, or mix balance.
 
 ## What You Will Learn
 

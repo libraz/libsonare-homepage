@@ -1,11 +1,19 @@
 ---
-title: Project MIDI, Compiling and Save/Load
-description: MIDI events and MIDI-FX baking on a Project, key/chord annotation write-back, assist sidecars, auto-tempo, compiling to a renderable timeline, deterministic JSON save/load, and SMF / MIDI 2.0 Clip File import-export.
+title: Project MIDI
+description: Project-level MIDI annotations, tempo, interchange, and links to clip editing, MIDI 2.0, transcription, and save/load.
 ---
 
-# Project MIDI, Compiling and Save/Load
+# Project MIDI
 
-This page continues [Project & Arrangement Editing](./project-editing.md): MIDI content on a `Project`, key/chord annotation write-back, assist sidecars, auto-tempo, compiling to a renderable timeline, deterministic JSON save/load, and SMF / MIDI 2.0 Clip File interchange.
+This page is the project-level MIDI hub. Use the task pages for detailed event editing, audio transcription, note editing, MIDI 2.0, and persistence; the anchors below remain on this page for links written against the earlier layout.
+
+| Task | Guide |
+|---|---|
+| Turn audio into note events | [Audio to MIDI](./audio-to-notes.md) |
+| Edit measured notes inside audio | [Note Editing in Audio](./note-editing.md) |
+| Edit a MIDI clip | [Edit MIDI Clips](./midi-editing.md) |
+| Keep MIDI 2.0 values and UMP words | [MIDI 2.0, UMP, and Clip Files](./midi2.md) |
+| Compile, save, load, and rebind a project | [Compile, Save, and Load Projects](./project-save-load.md) |
 
 ## Key and chord annotation write-back
 
@@ -75,136 +83,19 @@ The descriptor form above is the canonical **WASM and Node** JavaScript API; WAS
 
 ## MIDI content
 
-A MIDI clip holds a flat event list. Build events with the `Project.midi*` static packers (which produce the canonical MIDI 1.0 words) and replace the clip's list with `setMidiEvents`.
-
-::: warning `setMidiEvents` discards the clip's SysEx
-A clip's SysEx payloads (a GS Reset, a Roland DT1 setup block) live beside its event list, reached through a handle that `ProjectMidiEvent` does not carry. `importSmf()` keeps them, `exportSmf()` writes them back byte for byte, `toJson()` carries them, and an offline bounce realizes them: a GS insertion-effect type-select embedded in an imported SMF changes the rendered audio. `setMidiEvents()` replaces the list and leaves nothing referring to the payloads, so one call drops every frame, and there is no read-back entry point to save them through first. A caller that must preserve a GS setup block edits the exported file rather than the clip's event list.
-:::
-
-::: code-group
-
-```typescript [Browser / WASM]
-project.setMidiEvents(midiClip, [
-  Project.midiNoteOn(0, 0, 0, 60, 100),  // (ppq, group, channel, note, velocity)
-  Project.midiNoteOff(2, 0, 0, 60),
-  Project.midiNoteOn(2, 0, 0, 64, 100),
-  Project.midiNoteOff(4, 0, 0, 64),
-]);
-project.setProgram(midiClip, 4);          // GM program (e.g. 4 = electric piano)
-```
-
-```python [Python]
-project.set_midi_events(midi_clip, [
-    Project.midi_note_on(0.0, 0, 0, 60, 100),  # (ppq, group, channel, note, velocity)
-    Project.midi_note_off(2.0, 0, 0, 60),
-    Project.midi_note_on(2.0, 0, 0, 64, 100),
-    Project.midi_note_off(4.0, 0, 0, 64),
-])
-project.set_program(midi_clip, 4)          # GM program (e.g. 4 = electric piano)
-```
-
-:::
-
-In Python the static packers are `Project.midi_note_on(...)` / `Project.midi_note_off(...)`, each returning a `(ppq, data0, data1)` tuple, and the events list is any sequence of those tuples.
-
-`setProgram` takes an optional third `bank` argument — `setProgram(clipId, program, bank = -1)` — that defaults to `-1` (no Bank Select emitted); pass a value `>= 0` to emit a Bank Select ahead of the program change. To change the program on a specific UMP (Universal MIDI Packet) group and channel rather than the clip default, use `setProgramOnChannel(clipId, group, channel, program, bank?)`. Both take the same optional `bank` across the WASM, Node, and Python bindings (`set_program(clip_id, program, bank=-1)`, `set_program_on_channel(clip_id, group, channel, program, bank=-1)`).
-
-::: warning `ppq` is in quarter notes, not ticks
-The `ppq` argument is a **position in quarter notes** (a float), *not* a MIDI tick count. `Project.midiNoteOn(1, …)` is one quarter note in; `Project.midiNoteOn(0.5, …)` is an eighth note in. Despite the name, it is **not** 480-ticks-per-quarter — `Project.midiNoteOn(480, …)` schedules the note 480 quarter notes (120 bars) away, almost always far past your render window, so it silently never sounds. If you are converting from a tick-based source (an SMF at 480 PPQ, say), divide by the source's ticks-per-quarter first. The same unit applies to `addMidiClip(startPpq, lengthPpq)` and every clip/automation position on this page.
-:::
-
-Every shipped static packer returns one or more MIDI 1.0 UMP words ready to drop into a `setMidiEvents` list:
-
-| Packer | Signature | Event |
-|--------|-----------|-------|
-| Note on | `Project.midiNoteOn(ppq, group, channel, note, velocity)` | Note-on |
-| Note off | `Project.midiNoteOff(ppq, group, channel, note, velocity?=0)` | Note-off |
-| Control change | `Project.midiCc(ppq, group, channel, controller, value)` | CC |
-| Program change | `Project.midiProgram(ppq, group, channel, program)` | Program-change |
-| Bank + program | `Project.midiBankProgram(ppq, group, channel, bankMsb, bankLsb, program)` | Bank-select + program-change (returns multiple events) |
-| Poly pressure | `Project.midiPolyPressure(ppq, group, channel, note, pressure)` | Per-note aftertouch |
-| Channel pressure | `Project.midiChannelPressure(ppq, group, channel, pressure)` | Channel aftertouch |
-| Pitch bend | `Project.midiPitchBend(ppq, group, channel, bend)` | Pitch-bend; `bend` is unsigned 14-bit (`0`..`16383`, center `8192`) — out-of-range throws `RangeError` |
-
-The event-level `Project.midiProgram(...)` packer places a program-change word inside a clip's event list; it is distinct from the clip-level `project.setProgram(midiClip, program)` convenience shown above, which sets the clip's default program directly.
+MIDI clip construction, note-pair validation, captured-stream routing, and MIDI-FX baking now live in [Edit MIDI Clips](./midi-editing.md#midi-content).
 
 ### `validateMidiNotes`
 
-Before bouncing, check a MIDI clip for hanging notes — a note-on with no matching note-off (or vice versa) plays a stuck note. `validateMidiNotes` pairs note-ons and note-offs FIFO per channel + note and reports the result.
-
-```typescript
-const check = project.validateMidiNotes(midiClip);
-// { ok: true, unmatchedNoteOns: 0, unmatchedNoteOffs: 0 }
-if (!check.ok) {
-  console.warn(`hanging notes: ${check.unmatchedNoteOns} on / ${check.unmatchedNoteOffs} off`);
-}
-```
-
-To make a MIDI arrangement audible you bind an instrument at render time — see [Rendering audio](#rendering-audio), the [native synth](./native-synth.md), and the [SoundFont player](./soundfont-player.md). For driving a project live from a controller, see [MIDI input](./midi-input.md).
+See [`validateMidiNotes` in Edit MIDI Clips](./midi-editing.md#validatemidinotes).
 
 ### Route a captured MIDI stream
 
-`Project.midiRouteEvents(events, config?)` is a static helper that runs a captured `ProjectMidiEvent` stream through the native `MidiRouter` (filter / remap / channel-thru) — the same router the live runtime uses — and returns a `ProjectMidiRouteResult`. Use it to pre-filter or remap recorded input offline before building clips.
-
-```typescript
-const routed = Project.midiRouteEvents(capturedEvents, {
-  filterGroup: 0,        // keep group 0 only (omit / null = any)
-  filterChannel: 9,      // keep channel 9 (the drum channel)
-  remapChannel: 0,       // rewrite surviving events onto channel 0
-  thru: true,            // pass matching events through
-});
-// routed.events       -> ProjectMidiEvent[]
-// routed.overflowed   -> true if the router buffer dropped events
-// routed.overflowCount-> number of dropped events
-project.setMidiEvents(midiClip, routed.events);
-```
-
-Config fields are all optional and camelCase in JS/WASM (`filterGroup`, `filterChannel`, `remapChannel`, `thru`); a `null` or omitted filter field means "any", and an omitted `remapChannel` leaves the channel unchanged. Python uses snake_case (`filter_group`, `filter_channel`, `remap_channel`, `thru`). The helper ships across WASM, Node, and Python. Pair it with the offline MIDI-learn flow (`Project.midiCcLearn`, covered in [MIDI input](./midi-input.md)).
+See [Route a captured MIDI stream](./midi-editing.md#route-a-captured-midi-stream).
 
 ### Bake a MIDI-FX chain into a clip
 
-A MIDI-FX chain (transpose, velocity curve, humanize, and so on) normally sits as a **non-destructive** layer over a clip's events. `bakeMidiFx` does the opposite: it runs the chain once and **rewrites the clip's stored MIDI events** with the result, so the transformed notes become the clip's real content. Bake when you want to freeze an effect into the arrangement; keep it non-destructive when you still want to tweak it.
-
-```typescript
-const configJson = JSON.stringify({ transpose_semitones: 12 }); // up one octave
-project.bakeMidiFx(midiClip, configJson);                        // events are now transposed in place
-```
-
-When an editor needs to preserve a selection or annotation through the rewrite, use the request form. `sourceIndex` has one entry per transformed event in canonical order: it names the input event the output derives from, or `-1` when no input event produced it. A chord or arpeggiator can produce several events with the same source index.
-
-```typescript
-const count = project.previewMidiFxCount({ clipId: midiClip, configJson });
-const { sourceIndex } = project.bakeMidiFx({
-  clipId: midiClip,
-  configJson,
-  withSourceIndex: true,
-});
-```
-
-`previewMidiFxCount(...)` runs the same deterministic transform without changing the project, so its result is the exact number of events the following bake produces. The positional `bakeMidiFx(clipId, configJson)` form remains available and returns no provenance. Python uses `project.preview_midi_fx_count(clip_id, config_json)` and `project.bake_midi_fx(clip_id, config_json, with_source_index=True)`.
-
-The config is a JSON object whose **stages are keyed by their parameters** — include a stage's keys to enable it, omit them to skip it. Unknown keys are ignored, so a typo silently does nothing:
-
-| Stage | Keys |
-|-------|------|
-| Transpose | `transpose_semitones` |
-| Velocity curve | `velocity_scale`, `velocity_offset`, `velocity_gamma` (>0) |
-| Quantize | `quantize_ppq` (>0), `quantize_strength` (0–1, default 1) |
-| Chord | `chord_intervals` (array of semitone offsets, 1-8 entries) |
-| Arpeggiator | `arpeggiator_intervals` (array of semitone offsets, 1-16 entries), `arpeggiator_step_ppq` (>0), `arpeggiator_gate_ppq` (defaults to the step length, capped to it) |
-
-`chord_intervals` is capped at 8 entries and `arpeggiator_intervals` at 16 — an empty array, or one past either limit, makes `bakeMidiFx` throw `SONARE_ERROR_INVALID_PARAMETER` rather than silently truncating.
-
-```typescript
-// Turn each held note into a three-step up-arpeggio, one sixteenth per step.
-project.bakeMidiFx(midiClip, JSON.stringify({
-  arpeggiator_intervals: [0, 4, 7],
-  arpeggiator_step_ppq: 0.25,
-  arpeggiator_gate_ppq: 0.2,
-}));
-```
-
-Because the rewrite is destructive, it is an undoable edit like any other — `undo()` restores the original events.
+See [Bake a MIDI-FX chain into a clip](./midi-editing.md#bake-a-midi-fx-chain-into-a-clip).
 
 ## Auto-tempo and snap-to-grid
 
@@ -218,133 +109,29 @@ const bpm = project.autoTempo(monoMix, 48000); // detect + install tempo, return
 const snapped = project.snapToGrid(1.2, 1.0);  // 1.2 -> 1 (nearest beat)
 ```
 
+### Transcribe audio into a MIDI clip
+
+See [Audio to MIDI](./audio-to-notes.md#transcribe-audio-into-a-midi-clip).
+
 ## Compiling the arrangement
 
-`compile()` turns the edited project into a **renderable timeline** and reports structured **diagnostics**. Errors (severity `0`) mean the timeline could not be built; warnings (severity `1`) are non-fatal and the timeline is still renderable.
-
-```typescript
-const result = project.compile();
-// result.hasTimeline     -> true when a renderable timeline was produced (no errors)
-// result.diagnosticCount -> number of diagnostics
-// result.diagnostics     -> [{ code, severity, targetId, message }, …]
-// result.messages        -> newline-joined human-readable detail
-
-if (!result.hasTimeline) {
-  for (const d of result.diagnostics) {
-    if (d.severity === 0) console.error(`compile error (clip/track ${d.targetId}): ${d.message}`);
-  }
-}
-```
-
-A common **non-fatal** warning: a project with MIDI clips but no bound instrument compiles fine, but bounces silently. After a bounce you can read the warnings that render produced with `lastBounceCompileResult()`:
-
-```typescript
-project.bounce({ numChannels: 2 });
-const last = project.lastBounceCompileResult();
-// last.diagnostics[0].message ->
-//   "project contains MIDI clips; bounce is silent unless an instrument is bound"  (severity 1)
-```
-
-In Python, `project.compile()` returns the same shape (`has_timeline`, `diagnostic_count`, `diagnostics`, `messages`).
+See [Compile, Save, and Load Projects](./project-save-load.md#compiling-the-arrangement).
 
 ## Save and load: deterministic JSON
 
-`toJson()` serializes the whole project — tracks, clips, MIDI content, loop crossfades, tempo map, time signatures, markers, annotations, warp maps, and automation — to **deterministic JSON**: the same project always produces byte-identical text. `Project.fromJson(...)` restores it. Loop crossfade fields are omitted when they are zero, so older hard-loop projects keep the same JSON shape.
-
-```typescript
-const json = project.toJson();
-// … persist `json` to disk, a database, or postMessage …
-
-const restored = Project.fromJson(json);
-try {
-  // restored.toJson() === json
-} finally {
-  restored.delete();
-}
-```
-
-Use `Project.fromJsonWithDiagnostics(json)` when you want to recover non-fatal load warnings (for example dangling source references preserved for repair):
-
-```typescript
-const { project: loaded, diagnostics } = Project.fromJsonWithDiagnostics(json);
-try {
-  if (diagnostics) console.warn(diagnostics);
-} finally {
-  loaded.delete();
-}
-```
-
-Python mirrors this with `project.to_json()`, `Project.from_json(json)`, and `Project.from_json_with_diagnostics(json)`.
+See [Save and load: deterministic JSON](./project-save-load.md#save-and-load-deterministic-json).
 
 ### Reading the model back, and rebinding audio after a load
 
-Project JSON stores the *arrangement*, not the PCM. A loaded project therefore
-knows it has a source, but has no samples behind it. Three read-only descriptor
-families plus the PCM and source-metadata setters close that loop.
-
-```typescript
-const loaded = Project.fromJson(json);
-
-for (let i = 0; i < loaded.trackCount(); i++) {
-  const track = loaded.trackByIndex(i);      // { id, kind, midiDestinationId, gain, pan, mute, solo, name }
-  console.log(track.id, track.name);
-}
-for (let i = 0; i < loaded.clipCount(); i++) {
-  const clip = loaded.clipByIndex(i);        // { id, trackId, sourceId, startPpq, lengthPpq, … }
-  console.log(clip.id, clip.startPpq, clip.lengthPpq);
-}
-const unresolvedAudioIds = new Set(loaded.unresolvedAudioSourceIds());
-for (let i = 0; i < loaded.sourceCount(); i++) {
-  const source = loaded.sourceByIndex(i);    // { id, kind, channelCount, sampleRateHint,
-                                             //   nameOrUri, contentHash, externalStemRole }
-  if (source.kind !== 0 || !unresolvedAudioIds.has(source.id)) continue; // 0 = audio; skip MIDI
-  const pcm = await decodeFromYourStorage(source.nameOrUri);
-  loaded.setSourceAudio(source.id, pcm, source.channelCount, source.sampleRateHint);
-  loaded.setAudioSourceMetadata(source.id, 'sha256:...', 'lead-vocal');
-}
-
-const audio = loaded.bounce({ sampleRate: 48000 });
-```
-
-`trackByIndex` / `clipByIndex` / `sourceByIndex` are 0-based over the stored
-order, paired with `trackCount()` / `clipCount()` / `sourceCount()`. They are
-descriptors, not handles: mutating the returned object changes nothing. Use them
-to render a project the host loaded from disk, or to build a UI over a project
-your own code did not construct.
-
-`setSourceAudio(sourceId, samples, channels, sampleRate)` rebinds decoded PCM to
-a source before a bounce — the step that turns "loaded arrangement" into
-"renderable project".
-
-`unresolvedAudioSourceIds()` is the public list of source ids that still need decoded PCM after deserialization. The `kind !== 0` guard above is defensive when walking descriptors (`0` is audio, `1` is MIDI): MIDI sources have no PCM to bind and no source metadata to update. `contentHash` and `externalStemRole` are owning metadata on audio-source descriptors (they are empty for MIDI sources). `setAudioSourceMetadata(sourceId, contentHash, externalStemRole)` replaces both strings as one undoable edit; pass an empty string to clear either value. WASM uses that positional form, Node also accepts `{ contentHash, externalStemRole }` as its second argument, and Python uses `set_audio_source_metadata(source_id, content_hash, external_stem_role)` (the C ABI is `sonare_project_set_audio_source_metadata`). Python uses `unresolved_audio_source_ids()` and source descriptors named `content_hash` / `external_stem_role`; the C getter returns heap strings that the matching free function must release.
+See [Reading the model back, and rebinding audio after a load](./project-save-load.md#reading-the-model-back-and-rebinding-audio-after-a-load).
 
 ### Importing host-separated stems
 
-If your app already ran source separation (or simply has per-instrument WAVs),
-`importExternalStems` turns them into one audio track and clip each, in one
-transaction.
-
-```typescript
-const { trackIds, clipIds } = project.importExternalStems({
-  sampleRate: 48000,
-  stems: [
-    { name: 'vocals', layout: 'stereo', planarSamples: [vocalL, vocalR], startFrame: 0 },
-    { name: 'drums',  layout: 'stereo', planarSamples: [drumL, drumR],   startFrame: 0 },
-    { name: 'bass',   layout: 'mono',   planarSamples: [bassMono],       startFrame: 0, role: 'bass' },
-  ],
-});
-```
-
-The import is **all-or-nothing**: if any stem is rejected, the project is left
-untouched rather than half-populated. It performs no resampling, no retiming,
-and no gain compensation — every stem must already be at `sampleRate`, and
-`startFrame` places it on the project timeline as-is. The optional per-stem
-`role` is host metadata that round-trips through the serializer and does not
-change any DSP.
+See [Importing host-separated stems](./project-save-load.md#importing-host-separated-stems).
 
 ## MIDI interchange: SMF and MIDI 2.0 Clip File
 
-The project's tempo map and MIDI clips round-trip through two formats.
+The two interchange formats have different jobs. The [MIDI 2.0 guide](./midi2.md) covers full-resolution UMP and Clip File fidelity; this hub keeps the SMF compatibility facts that matter when choosing a file format.
 
 ### Standard MIDI File (SMF)
 
@@ -372,56 +159,11 @@ What an SMF round-trips is a *performance* — and engraved, that same note list
 
 ### MIDI 2.0 Clip File (`SMF2CLIP`)
 
-SMF predates MIDI 2.0, so it cannot carry 16-bit velocity, 32-bit CC, per-note controllers, or bank-valid Program Change without loss. The **MIDI 2.0 Clip File** (`SMF2CLIP`) preserves all of that. Prefer it when MIDI 2.0 fidelity matters.
-
-```typescript
-const clipFile = project.exportClipFile();   // Uint8Array<ArrayBuffer>, "SMF2CLIP" header
-const firstClip = otherProject.importClipFile(clipFile);
-```
-
-In Python these are `export_smf` / `import_smf` and `export_clip_file` / `import_clip_file`, returning and accepting `bytes`.
+See [MIDI 2.0 Clip File](./midi2.md#midi-2-0-clip-file-smf2clip) for the lossless MIDI 2.0 path.
 
 ### An SMF as a reference melody: note targets
 
-Besides round-tripping clips, an SMF can serve as the *written melody* a recorded take is corrected against. Two module-level functions (not `Project` methods) form that workflow: `noteTargetsFromSmf` reads the reference out of the file, and `assignNoteTargets` applies it to the notes `extractNotes` segmented from the take. Where `pitchCorrectToMidi` on [Editing DSP](./editing-dsp.md) moves a whole buffer by one stated interval, this pair gives every note its own target.
-
-A **note** (`NoteObject`) is what was sung: a span in samples plus its measured `medianHz`. A **note target** (`NoteTarget`) is what that stretch of the part is supposed to be: `{ startSec, endSec, targetMidi }`. They are separate types because they are lined up by the clock, not by index — the reference may have one note where the take has two, or none — and a target carries no measurement of its own. Target times are **seconds from the start of the audio the notes were extracted from**, not PPQ: an SMF times its events in quarter notes, and `noteTargetsFromSmf` converts each boundary through the file's own tempo map, so a tempo change or a ramp inside the file is followed rather than the initial tempo being scaled.
-
-`noteTargetsFromSmf({ data, trackIndex? })` reads one track of an in-memory SMF and returns `NoteTarget[]` sorted by `startSec`. Each note-on is paired with the next note-off of the same note number on the same channel (a note retriggered before its first note-off closes the newer sounding) and the pair becomes one target at the note's own pitch. Material that does not map cleanly is dropped rather than guessed at: a note-on the track never closes has no end — substituting the track's end would let one stuck note-on span the rest of the file and, as the longest overlap, win every assignment after it — and a zero-length note can overlap nothing. A track with no closed note returns an empty array, not an error. `trackIndex` (default `0`) counts **MIDI-bearing tracks only**, not the file's own track numbering: a track holding only meta events — the conductor track `exportSmf` writes as track 0 — produces no clip and is not counted, so a project's own export has its first clip at index `0`. Unreadable bytes throw `InvalidFormat`; an index with no MIDI-bearing track throws `InvalidParameter`.
-
-`assignNoteTargets({ notes, sampleRate, targets, unmatchedPolicy?, minOverlapRatio?, maxCorrectionSemitones? })` matches each note to the target it overlaps longest, provided that overlap covers at least `minOverlapRatio` (default `0.5`) of the note's own span; an exact tie goes to the target that starts first. A matched note gets `edit.pitchShiftSemitones` = `targetMidi` minus its `medianHz` as a MIDI number, saturated at `maxCorrectionSemitones` (default `12`) rather than refused — a reference an octave out is a wrong reference, and a bounded correction tells you more than a rejected call. `sampleRate` converts each note's `onsetSample` / `offsetSample` to seconds, so it must be the take's own rate. A note with a measured pitch and no target goes through `unmatchedPolicy`:
-
-| `unmatchedPolicy` | A pitched note with no target |
-|-------------------|-------------------------------|
-| `'leave'` (default) | Edit untouched; the note renders as recorded |
-| `'mute'` | `edit.muted` is set |
-| `'nearest'` | Takes the target nearest in time, however far away it is |
-
-A note whose `medianHz` is not finite and positive is never assigned and never edited, whatever the policy says: it has no measured pitch to correct from. The input notes are not modified. The result is `{ notes, assignedCount }` — a new array in which only `edit.pitchShiftSemitones` and `edit.muted` are rewritten, and the number of notes that received a target. Zero is a legitimate answer (a reference that does not line up with the take), which is why it is reported rather than left for you to infer from the edits.
-
-```typescript
-import { assignNoteTargets, extractNotes, noteTargetsFromSmf, pitchPyin, renderNotes } from '@libraz/libsonare';
-
-// 1. The reference: a project's own export, or any .mid file read into a Uint8Array.
-const targets = noteTargetsFromSmf({ data: project.exportSmf() }); // melody is at trackIndex 0
-
-// 2. The take: segment it into notes over an F0 track.
-const pitch = pitchPyin({ samples, sampleRate });
-const notes = extractNotes({
-  samples, sampleRate, f0Hz: pitch.f0, voiced: pitch.voicedFlag, frameRate: sampleRate / 512,
-});
-
-// 3. Line the two up; each matched note receives its pitch shift.
-const { notes: retuned, assignedCount } = assignNoteTargets({
-  notes, sampleRate, targets, unmatchedPolicy: 'mute',
-});
-if (assignedCount === 0) console.warn('the reference does not line up with the take');
-
-// 4. Render the edited set back over the take.
-const corrected = renderNotes({ samples, sampleRate, notes: retuned });
-```
-
-Node takes the same request objects. Python uses `note_targets_from_smf(data, *, track_index=0)`, returning `NoteTarget` dataclasses (`start_sec`, `end_sec`, `target_midi`), and `assign_note_targets(notes, sample_rate, targets, *, unmatched_policy="leave", min_overlap_ratio=None, max_correction_semitones=None)`, which returns a `(notes, assigned_count)` tuple. The C ABI is `sonare_note_targets_from_smf` / `sonare_assign_note_targets`. The SMF reader lives in the arrangement library, so a build without it reports `NotSupported` (in WASM, an `Error` from the wrapper) while `assignNoteTargets` stays available for targets built by hand.
+See [An SMF as a reference melody](./note-editing.md#an-smf-as-a-reference-melody-note-targets).
 
 ## Rendering audio
 
@@ -433,3 +175,13 @@ const audio = project.bounce({ numChannels: 2 });
 ```
 
 Once your arrangement compiles cleanly, the natural next step is turning it into audio — including making MIDI tracks audible. Continue with [Project Bounce & Rendering](./project-bounce.md).
+
+## Related
+
+- [Project Editing](./project-editing.md) — tracks, clips, tempo, markers, warp, and automation
+- [Edit MIDI Clips](./midi-editing.md) — event lists and MIDI-FX
+- [MIDI 2.0, UMP, and Clip Files](./midi2.md) — full-resolution MIDI messages and Clip Files
+- [Audio to MIDI](./audio-to-notes.md) — transcription onto a constant or project tempo map
+- [Compile, Save, and Load Projects](./project-save-load.md) — timeline compilation and persistence
+- [MIDI Input](./midi-input.md) — live controller input
+- [Bouncing Projects](./project-bounce.md) — render the timeline and bound instruments

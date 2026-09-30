@@ -88,7 +88,7 @@ The [Synth Playground](/synth) runs this synthesizer in the browser — a keyboa
 Every preset selects one `engineMode`. The shared sections (filter, envelopes, LFOs, mod matrix, body resonance, polyphony) apply on top of whichever engine is active. Mode-specific deep parameters — FM operator stacks, modal mode tables, drawbar registrations, kit pieces, piano strings, pipe ranks, bowed-string friction, reed/brass bores, and flute jet geometry — live **inside the named presets**, not in the patch.
 
 ::: warning Four engines sound only through a preset
-`fm`, `modal`, `percussion`, and `sample` render **silence** from a bare `engineMode`. Their sound is a table the patch does not carry — the FM operator levels, the modal mode list, the kit and its membrane modes, the sample bank — and a patch that only names the mode has none of it. Start from the preset instead: `{ preset: 'e-piano' }`, `'marimba'`, `'drum-kit'`, or a `'sample'` patch with a bound `SampleBank`. The other thirteen engines do sound from a bare mode, but not at a matched level: `engineMode: 'harpsichord'` on a default patch peaks several times above the rest, while the `harpsichord` preset sits level with its neighbours. Nothing normalizes an engine's raw output. What closes the gap is each patch's own `gain`, and it clusters by engine rather than by instrument — the harpsichord patches sit in the bank's lowest band and the plucked-string patches four to five times higher. So a GM file plays level-matched, while a patch you assemble through the API carries only the `gain` you give it.
+`fm`, `modal`, `percussion`, and `sample` render **silence** from a bare `engineMode`. Their sound is a table the patch does not carry — the FM operator levels, the modal mode list, the kit and its membrane modes, the sample bank — and a patch that only names the mode has none of it. Start from the preset instead: `{ preset: 'e-piano' }`, `'marimba'`, `'drum-kit'`, or a `'sample'` patch with a bound `SampleBank`. Other engines also render from a bare mode, but raw engine levels are not matched. Named presets carry their own `gain`; an API patch uses only the `gain` you provide. Set an explicit gain and audition the result when comparing bare modes or building your own patch.
 :::
 
 ### `subtractive` — virtual-analog
@@ -140,7 +140,7 @@ Three structural details shape what you hear beyond that outline:
 - **Inharmonicity follows a U-shaped curve**, not a monotonic climb. It grows toward the treble as stiffness would suggest, but below the bass break the wound strings turn it back upward, so the very bottom of the keyboard is more inharmonic than the notes just above it.
 - **Stretch tuning is an asymmetric Railsback curve** — two power-law branches meeting at the A4 anchor, about ten cents flat at the bottom against fifty sharp at the top, which is why one odd function about the middle cannot express it. The curve is held at the fitted keyboard bounds rather than extrapolated past them.
 
-The voice also carries **an explicit output level**. A physical model has no output level of its own — the string, the hammer, and the board each contribute to a product whose loudness nobody chooses directly — so the current tuning places the piano between the violin and the alto sax in the fallback bank.
+The voice also carries **an explicit output level**, so you can set its place in a mix directly instead of inferring it from the string, hammer, and soundboard contributions.
 
 This is still a provisional model intended for built-in preview, not a sampled-piano replacement. Good for **acoustic piano**. Preset: `acoustic-piano`. GM programs 0-3 use it, as do the five piano-derived [GS variations](./gm-gs.md#gs-variation-tones).
 
@@ -170,7 +170,7 @@ A plucked-string waveguide whose bridge model keeps grazing the string, spraying
 
 ### `vocal` — source-filter voice
 
-A two-stage voice: a glottal source (a naive sawtooth shaped by a one-pole spectral tilt, plus aspiration noise) feeding a bank of five resonant bandpass formants tuned to a sung vowel. The source oscillator is **not** band-limited; because the source-filter path is feed-forward, the raw sawtooth's aliasing is attenuated by the narrow formant bandpasses rather than prevented at the oscillator. The `vowel` field selects the formant table (/a/, /e/, /i/, /o/, /u/), `brightness` tilts the source and opens the upper formants, and a per-voice vibrato modulates the pitch. Good for **choir and solo-voice previews**. Presets: `choir-aah`, `choir-ooh`, `voice-eeh`.
+A two-stage source-filter voice: a glottal source shaped with spectral tilt and aspiration noise feeds five resonant formants tuned to a sung vowel. The `vowel` field selects the formant table (/a/, /e/, /i/, /o/, /u/), `brightness` tilts the source and opens the upper formants, and a per-voice vibrato modulates the pitch. Good for **choir and solo-voice previews**. Presets: `choir-aah`, `choir-ooh`, `voice-eeh`.
 
 ### `free-reed` — driven free reed
 
@@ -182,7 +182,7 @@ A quill-plucked string model built around the mechanism rather than around a ton
 
 ### `sample` — host-supplied PCM
 
-The one engine that synthesizes nothing. You build a `SampleBank` of mono float frames with key/velocity zones, bind it alongside the patch, and the engine resolves a zone at note-on and steps it. It sits in the *oscillator's* place in the subtractive chain, so your own audio arrives behind the same resonant multi-mode filter, envelopes, LFOs, and mod matrix as a synthesized tone — which is what separates it from the [SoundFont player](./soundfont-player.md), a separate instrument that parses a container and brings its own generator model. Good for **your own recordings and one-shot drum material**. **Bank-only.** It has no preset, and a bare `engineMode: 'sample'` with no `SampleBank` bound renders silence. See [Host PCM: the `sample` engine](#host-pcm-the-sample-engine) for the patch fields.
+The one engine that synthesizes nothing. You build a `SampleBank` of mono float frames with note-number and velocity ranges, bind it alongside the patch, and the engine resolves a range at note-on and steps it. It sits in the *oscillator's* place in the subtractive chain, so your own audio arrives behind the same resonant multi-mode filter, envelopes, LFOs, and mod matrix as a synthesized tone — which is what separates it from the [SoundFont player](./soundfont-player.md), a separate instrument that parses a container and brings its own generator model. Good for **your own recordings and one-shot drum material**. **Bank-only.** It has no preset, and a bare `engineMode: 'sample'` with no `SampleBank` bound renders silence. See [Host PCM: the `sample` engine](#host-pcm-the-sample-engine) for the patch fields.
 
 ## The named preset catalog
 
@@ -264,7 +264,7 @@ The most useful beginner workflow is small and reversible: choose a preset, chan
 ::: warning Absent and zero are different
 What decides whether a field overrides the base is **presence**, not value. Omit a numeric field and the base value stays; set one and it overrides the base, clamped to its audible range. That includes an explicit `0` — writing `ampSustain: 0` really does drop the sustain to zero, and `stereoSpread: 0` really does collapse the patch to the centre. Enum fields still use `'default'` to mean "keep".
 
-The patch carries a per-field "was this set?" record alongside a struct version, which is what keeps "absent" and "zero" apart. Earlier builds could not tell them apart and had to treat a zero as "untouched", so older code sometimes wrote a token value such as `ampSustain: 0.001` to approximate a real zero. That workaround is no longer needed — write the `0` you mean.
+The patch carries a per-field "was this set?" record alongside a struct version, which is what keeps "absent" and "zero" apart. A zero is therefore never treated as "untouched", and no token value such as `ampSustain: 0.001` is needed to approximate it — write the `0` you mean.
 
 One more rule: a non-empty `modRoutings` array **replaces** the base mod matrix entirely, rather than adding to it. An empty array clears it, while omitting the key keeps the base matrix.
 :::
@@ -355,7 +355,7 @@ Node and WASM expose this field as `SynthPatch.retrigger`, and Python uses the s
 
 ### Host PCM: the `sample` engine
 
-The `sample` engine reads its audio from a `SampleBank` you build yourself. Three steps: add mono float frames, map key/velocity rectangles onto them, then bind the bank alongside a patch whose `engineMode` is `'sample'`.
+The `sample` engine reads its audio from a `SampleBank` you build yourself. Three steps: add mono float frames, map note-number and velocity ranges onto them, then bind the bank alongside a patch whose `engineMode` is `'sample'`.
 
 ```typescript
 import { init, Project, SampleBank } from '@libraz/libsonare';
@@ -375,7 +375,7 @@ try {
 }
 ```
 
-A **zone** is a key/velocity rectangle pointing at one sample; every bound defaults on its own, so `{}` is the whole keyboard at every velocity and narrowing one axis leaves the other whole. Zones live in numbered **sets**, and a patch names the set it plays through `sampleSet`. Build the whole bank before the bounce that binds it starts — the sample pool is contiguous and moves as it grows, so adding to it while something sounds invalidates the voices reading it.
+A **zone** is a note-number and velocity range pointing at one sample; every bound defaults on its own, so `{}` is the whole keyboard at every velocity and narrowing one axis leaves the other whole. Zones live in numbered **sets**, and a patch names the set it plays through `sampleSet`. Build the whole bank before the bounce that binds it starts — the sample pool is contiguous and moves as it grows, so adding to it while something sounds invalidates the voices reading it.
 
 The patch fields the engine adds:
 
@@ -431,7 +431,7 @@ In a real app you would drive `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc
 
 **The tuned piano voice includes** an explicit output-level treatment, bass-register excitation, and longitudinal string modes.
 
-**Some advanced physics is implemented but not yet reachable.** The bowed string, reed, brass, and flute engines carry richer nonlinear refinements (elasto-plastic bow friction, tonehole scattering, a brass "cuivré" edge, flute overblow, and more). These exist in the core and default to off — no public binding exposes a switch to turn them on yet — so the sound you get today is the simpler linear model. Expect these to become reachable, and the voicing to keep improving, in future releases.
+**Deeper mode-specific fields stay inside named presets.** Public live control uses the excitation axes that each engine declares; the patch does not expose additional per-model switches. The physical voices will continue to be adjusted in future patch releases.
 
 **A couple of self-oscillating models have a small residual intonation error.** The air-jet flute and flue pipe-organ lock slightly off the naive tuning and are corrected by a calibrated factor; a small, note-dependent residual remains.
 

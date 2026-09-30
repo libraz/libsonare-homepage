@@ -11,7 +11,7 @@ description: libsonare のミキシング／リアルタイムエンジン向け
 このページが扱うのは**ミキサー／エンジンのインサート**です。名前付き [マスタリングプロセッサ](./mastering-processors.md) レジストリ — コンプレッサー、EQ、サチュレーション、ステレオ、リペア、ラウドネス／マキシマイザー段 — は別の範囲を持つ別トピックです。両者が重なるのは、一部の FX インサートが単発のマスタリングプロセッサ*としても*公開されている箇所だけです（後述）。マスタリングレジストリを探しているなら、そちらのページから始めてください。
 :::
 
-インサートはチャンネルの経路の中に入るので、その出力はフェーダーもセンドもバスも含めた下流すべてが見ることになります。この位置こそがインサートとセンドの違いであり、下のカタログを読む前に押さえておきたい点です。
+インサートはチャンネルの経路の中に入るので、その出力はフェーダー、センド、バスを含む下流のすべてに渡ります。この位置こそがインサートとセンドの違いであり、下のカタログを読む前に押さえておきたい点です。
 
 <SonareDemo id="pre-post-fader" />
 
@@ -57,18 +57,18 @@ Python の対応関数は `mastering_insert_names()`、`mastering_insert_param_n
 
 ## カタログからインサートの操作面へ
 
-ドキュメントそのもの — どのサーフェスが返すか、10 個のフィールド、スロットメタデータ、値域の実測方法 — は [機能カタログが返すもの](./api-surface.md#機能カタログが返すもの) が扱っています。この節はインサートに固有の部分です。ホストが自前の表を持たずに、プロセッサ id から並べ終えた操作面へどう辿り着くかを説明します。
+ドキュメントそのもの — どのサーフェスが返すか、10 個のフィールド、スロットメタデータ、値域の実測方法 — は [機能カタログが返すもの](./api-surface.md#機能カタログが返すもの) が扱っています。この節はインサートに固有の部分です。ホストが自前の表を持たずに、プロセッサ id からコントロールを並べた操作面をどう組み立てるかを説明します。
 
-経路はプロセッサごとの呼び出しではなく、1 つのドキュメントに対する 3 回の参照です。
+手順は、プロセッサごとに API を呼ぶのではなく、1 つのドキュメントを 3 回参照するだけです。
 
-1. **インサート集合を選ぶ。** `processors` を `realtimeInsertable` で絞ります。89 エントリ中 74 で、`masteringInsertNames()` が返す集合と同一です。残る 15（オフラインプロセッサ 11 とペアプロセッサ 4）は空の `params` 配列を持ちます。`category` はピッカーと同じ切り方で集合を分けます（`effects` がこのページの 17 個のクリエイティブ FX id、その他のカテゴリがマスタリングの各ファミリー）。`channelPolicy` は、ステレオより広いバスでミキサーがそのインサートをどう包むかを示します。リバーブ、モジュレーション、ディレイのインサートは `effects.modulation.ringModulator` を除いて `stereoPairOnly` で、ringModulator は `multichannel` です。
+1. **インサート集合を選ぶ。** `processors` を `realtimeInsertable` で絞ります。91 エントリ中 76 で、`masteringInsertNames()` が返す集合と同一です。残る 15（オフラインプロセッサ 11 とペアプロセッサ 4）は空の `params` 配列を持ちます。`category` はピッカーと同じ切り方で集合を分けます（`effects` がこのページの 18 個のクリエイティブ FX id、その他のカテゴリがマスタリングの各ファミリー）。`channelPolicy` は、ステレオより広いバスでミキサーがそのインサートをどう包むかを示します。リバーブ、モジュレーション、ディレイのインサートは `effects.modulation.ringModulator` を除いて `stereoPairOnly` で、ringModulator は `multichannel` です。
 2. **記述子を読む。** エントリの `params` は、その id に対して `masteringInsertParamInfo(id)` が返すリストと同一で、順序も同じです。カタログを持っているホストは、プロセッサごとの呼び出しを必要としません。`id: null` は構築時専用キーを示し、整数の id は Node／WASM の `Mixer.scheduleInsertAutomation(strip, insertIndex, paramId, samplePos, value)`、Python の `Mixer.schedule_insert_automation(...)`、C ABI の `sonare_strip_schedule_insert_automation` に渡すオートメーション id です。リアルタイムエンジンのセッターは代わりに `name` を取ります（`setTrackStripInsertParamByName` とそのマスター版、バス版）。
 3. **各コントロールを配置する。** `type`、`default`、`min`、`max`、`unit`、`choices` から組みます。構築時専用キーにも記述子があるため、フェイザーの `stages`、オートワウの `attackMs` / `releaseMs`、ロータリーの `stereoSpread`、ルームのジオメトリを構築時フィールドとして表現できます。`slot` で所属するスロット群を特定し、プロセッサの `slots` エントリにある `activation`（`anyKey` または `always`）、内側を包む `parent`、`minCrossoverCutoffs` を組み合わせて、その群の存在を表示・検証します。
 
 ```typescript
 const catalog = capabilityCatalog();
-const inserts = catalog.processors.filter((p) => p.realtimeInsertable);   // 89 中 74
-const fx = inserts.filter((p) => p.category === 'effects');               // 下の 17 id
+const inserts = catalog.processors.filter((p) => p.realtimeInsertable);   // 91 中 76
+const fx = inserts.filter((p) => p.category === 'effects');               // 下の 18 id
 const chorus = fx.find((p) => p.id === 'effects.modulation.chorus')!;
 for (const param of chorus.params) {
   // param.id は構築時専用キーでは null、param.name はシーン JSON のキー
@@ -84,17 +84,19 @@ for (const param of chorus.params) {
 - **`rtSafe: false` はオートメーションを止める。** ヒントではありません。そのパラメータにオートメーションをスケジュールすると `NotSupported`（コード 6）が返ります。構築時専用の行は `id: null` かつ `rtSafe: false` で、準備済みプロセッサで安全に変更できない id 付き対象もあります。記述子ごとにオートメーションレーンを描く UI は、`rtSafe` が false の行をすべて無効化する必要があります。
 - **カタログには数値以外の型もあります。** エフェクト系の記述子には `number`、`boolean`、`enum`、`string`、`array` があります。`choices` には enum 値や、間隔のある離散的な数値集合が載ります。名前からトグルを推測せず、`type` を使い、離散値の操作には `choices` を使ってください。
 - **レイテンシとテールはインサートごとで、リバーブでは 0 ではない。** `effects.reverb.convolution`、`effects.reverb.room`、`effects.acoustic.roomMorph` は 256 サンプルのレイテンシを報告します。リバーブのテールは 51,217 サンプル（`room`、`roomMorph`）から 264,000（`fdn`）まで、ステレオディレイは 59,795 で、いずれも代表構成の 48 kHz プローブでの値です。`realtimeCost` はリバーブでは `moderate`、`velvet` だけが `high`、モジュレーションとディレイはすべて `low` で、`null` になるのは非インサートの 15 個だけです。
-- **エフェクト系はパラメータ数が少ない。** 17 プロセッサ合わせて 131 記述子です。5,352 の大半はバンド単位の EQ プロセッサが占めます（`multiband.dynamicEq` だけで 1,019）。記述子の数で自身の大きさを決めるインサート UI は、2 つのファミリーが 1 桁違うことを前提にしてください。
+- **エフェクト系はパラメータ数が少ない。** 18 プロセッサ合わせて 136 記述子です。5,352 の大半はバンド単位の EQ プロセッサが占めます（`multiband.dynamicEq` だけで 1,019）。記述子の数で自身の大きさを決めるインサート UI は、2 つのファミリーが 1 桁違うことを前提にしてください。
 
 ### null と既定値が教えてくれないこと
 
-**`null` の境界は、構築が拒否しなかったことを意味し、どんな値でも意味を持つことを意味しません。** 境界がないことは JSON では文字通り `null`（Python では `None`）です。スキーマは `min` と `max` を `number | null` と定め、すべての記述子が両方のキーを持ちます。構築時専用の記述子にも、検証が公開する場合は境界が載ります。一方、string や array のキーは通常 `null` です。`effects.modulation.chorus` は `dryWet` に境界を公開せず、構築は `5` を受け入れ、プロセッサは内部でウェット比を `[0, 1]` にクランプするので、`dryWet: 5` は `dryWet: 1` と同じ音になります。カタログが測るのは構築が拒否する値であり、拒否せず折り畳むプロセッサは `null` を報告します。`null` に対する範囲チェックは、1 種類の誤りしか除外できません。`null` の境界は「頼れる検証がない」と読み、妥当な範囲はパラメータの意味と単位から決めてください。
+**`null` の境界が示すのは構築がその値を拒否しないということだけで、どんな値でも意味を持つわけではありません。** 境界がないことは JSON では文字通り `null`（Python では `None`）です。スキーマは `min` と `max` を `number | null` と定め、すべての記述子が両方のキーを持ちます。構築時専用の記述子にも、検証が公開する場合は境界が載ります。一方、string や array のキーは通常 `null` です。`effects.modulation.chorus` は `dryWet` に境界を公開せず、構築は `5` を受け入れ、プロセッサは内部でウェット比を `[0, 1]` にクランプするので、`dryWet: 5` は `dryWet: 1` と同じ音になります。カタログが測るのは構築が拒否する値であり、拒否せず折り畳むプロセッサは `null` を報告します。`null` に対する範囲チェックは、1 種類の誤りしか除外できません。`null` の境界は「頼れる検証がない」と読み、妥当な範囲はパラメータの意味と単位から決めてください。
 
-**既定値は設定構造体の初期化子であって、プリセットがそれを渡してくる保証はありません。** 構築時専用の記述子は、フォールバックがなければ `default: null` になりますが、プリセットやシーンはそのキーを明示できます。`default` だけで初期化する操作面は、読み込んだシーンに対して誤った値を表示することがあります。シーン自身の `params` から初期化し、シーンが持たないキーだけカタログの既定値に戻し、`null` の既定値にはシーンまたはユーザーの明示値が必要だと扱ってください。
+**既定値は設定構造体の初期化子の値にすぎず、プリセットがその値を使うとは限りません。** 構築時専用の記述子は、フォールバックがなければ `default: null` になりますが、プリセットやシーンはそのキーを明示できます。`default` だけで初期化する操作面は、読み込んだシーンに対して誤った値を表示することがあります。シーン自身の `params` から初期化し、シーンが持たないキーだけカタログの既定値に戻し、`null` の既定値にはシーンまたはユーザーの明示値が必要だと扱ってください。
 
 ## クリエイティブ FX インサートのカタログ
 
-マスタリングの[ソロプロセッサ](./mastering-processors.md#ソロプロセッサ)に加え、クリエイティブ FX 有効ビルドではリバーブ、モジュレーション、ディレイのインサート ID も使えます。
+マスタリングの[ソロプロセッサ](./mastering-processors.md#ソロプロセッサ)に加え、クリエイティブ FX 有効ビルドではリバーブ、モジュレーション、母音フィルター、ディレイ、ステレオのインサート ID も使えます。
+
+`effects` カテゴリは 18 件で、`stereo.binaural` はステレオカテゴリのインサートとして同じ表に載せています。
 
 | Insert ID | 意味 |
 |-----------|------|
@@ -105,6 +107,7 @@ for (const param of chorus.params) {
 | `effects.reverb.convolution` | Convolution リバーブ。params の `irF32Base64` でインパルス応答を受け取るか、`decaySec` と `seed` から合成します |
 | `effects.reverb.room` | ルームパラメータから合成する幾何ベースのルームリバーブ |
 | `effects.acoustic.roomMorph` | 目標の幾何ベースルームへ寄せるルームモーフィング |
+| `effects.filter.vowel` | 3 つの共鳴帯域とダイレクト経路を持つ母音フィルター |
 | `effects.modulation.ensemble` | Solina 系 BBD ストリングマシンアンサンブル |
 | `effects.modulation.chorus` | ステレオコーラス |
 | `effects.modulation.flanger` | フランジャー |
@@ -115,12 +118,19 @@ for (const param of chorus.params) {
 | `effects.modulation.ringModulator` | リングモジュレーター |
 | `effects.modulation.pitchShifter` | シンプルなピッチシフター |
 | `effects.delay.stereo` | ステレオディレイ |
+| `stereo.binaural` | 測定 HRTF でステレオペアを仮想スピーカーへ配置するプロセッサ |
 
 ::: warning ビルドフラグによる有効化
 これらの insert ID は、CMake オプション `BUILD_FX` を有効にしたビルドでのみ使えます（内部的にはこのオプションから `SONARE_HAVE_FX` マクロが導出されます）。幾何ベースのルーム系インサート（`effects.reverb.room`、`effects.acoustic.roomMorph`）は `BUILD_ACOUSTIC_SIM` も必要です。オプションを有効にしていないビルドでは、対応する ID は `masteringInsertNames()` に現れません。
 :::
 
 以下の表は代表的なキーと挙動を取り上げた要約です。完全なビルド別一覧 — chorus／flanger の `preFilterHz` と `preFilterMode`、phaser の `feedback` と `mixMode`、rotary のドラム制御、pitch-shifter の `windowMs`、ステレオディレイの `dampingHz` などの新しいキーを含む — は [`masteringInsertParamInfo(name)`](#パラメータ記述子) または `capabilityCatalog().processors[].params` から取得できます。
+
+### 母音フィルター
+
+<SonareDemo id="vowel-filter" />
+
+`effects.filter.vowel` は、3 つの共鳴帯域とダイレクト経路で入力信号を整形します。母音の色付けを行うフィルターであり、完全な音声合成器ではありません。独立した A/B マッチング段もないため、フィルター後とダイレクト経路を比べるときは dry/wet を使います。
 
 実用上の注意は次の通りです。
 
@@ -138,8 +148,10 @@ for (const param of chorus.params) {
 | `effects.modulation.ringModulator` の params | `carrierHz`、`dryWet` |
 | `effects.modulation.pitchShifter` の params | `semitones`、`dryWet` |
 | `effects.delay.stereo` の params | `delayTimeLMs`、`delayTimeRMs`、`feedback`、`pingPong`、`dryWet` |
-| `effects.reverb.convolution` の IR | インパルス応答（IR。実際の空間が短い衝撃音にどう応答するかを記録したもの）は、insert params の `irF32Base64` キーに base64 の float32 として渡す。シーン JSON でも他の経路でも同じ。ネイティブホストは構築時に直接注入することもできる |
-| IR のない convolution insert | prepare 時に `decaySec`（RT60 相当の長さ。12 秒にクランプ）と `seed` から減衰ノイズの IR を合成するので、パススルーにはならず、アルゴリズミックな兄弟と同様にテールを生成する |
+| `effects.filter.vowel` の params | `vowel`、`accelMs`、`drive`、`driveOn`、`dryWet` |
+| `stereo.binaural` の params | `azimuthDeg`、`autoTurn`、`turnRateHz`、`clockwise`、`output`（`0` = スピーカー、`1` = ヘッドホン）、`dryWet` |
+| `effects.reverb.convolution` の IR | インパルス応答（IR。実際の空間が短い衝撃音にどう応答するかを記録したもの）は、insert params の `irF32Base64` キーに base64 の float32 として渡す。シーン JSON でも他の経路でも同じ |
+| IR のない convolution insert | prepare 時に `decaySec`（RT60 相当の長さ。12 秒にクランプ）と `seed` から減衰ノイズの IR を合成するので、パススルーにはならず、他のアルゴリズミックリバーブと同様にテールを生成する |
 
 ::: warning 幾何ベースのルーム系インサートは `absorption` をクランプせず検証する
 `effects.reverb.room` と `effects.acoustic.roomMorph` は、`[0, 1]` に正規化した吸音係数 `absorption` を受け取ります。この区間から外れた値は**拒否**され、最も近い有効な値に丸めて構築されることはありません。
@@ -164,7 +176,7 @@ Solina 系の BBD ストリングマシンアンサンブルで、ビンテー�
 
 ## 単発マスタリングプロセッサでもあるインサート
 
-これらは [ミキシングシーン JSON](./mixing-scene-json.md) の `insert.processor` フィールドで使います。出荷される FX 有効の WASM ビルドでは、一部は単発マスタリングプロセッサでもあります。`effects.reverb.plate`、`effects.reverb.dattorro`、`effects.reverb.fdn`、`effects.reverb.velvet`、`effects.reverb.convolution`、`effects.modulation.chorus`、`effects.modulation.flanger`、`effects.modulation.phaser`、`effects.delay.stereo` は `masteringProcessorNames()` から返り、単発適用パスで動作します。一方、幾何ベースのインサートと新しいモジュレーションインサート — `effects.reverb.room`、`effects.acoustic.roomMorph`、`effects.modulation.ensemble`、`effects.modulation.wah`、`effects.modulation.autoWah`、`effects.modulation.rotary`、`effects.modulation.ringModulator`、`effects.modulation.pitchShifter` — はインサート専用で、`masteringProcessorNames()` には**現れません**。これらは `masteringInsertNames()` とシーンインサート経由で使ってください。
+これらは [ミキシングシーン JSON](./mixing-scene-json.md) の `insert.processor` フィールドで使います。出荷される FX 有効の WASM ビルドでは、一部は単発マスタリングプロセッサでもあります。`effects.reverb.plate`、`effects.reverb.dattorro`、`effects.reverb.fdn`、`effects.reverb.velvet`、`effects.reverb.convolution`、`effects.filter.vowel`、`effects.modulation.chorus`、`effects.modulation.flanger`、`effects.modulation.phaser`、`stereo.binaural`、`effects.delay.stereo` は `masteringProcessorNames()` から返り、単発適用パスで動作します。一方、幾何ベースのインサートと新しいモジュレーションインサート — `effects.reverb.room`、`effects.acoustic.roomMorph`、`effects.modulation.ensemble`、`effects.modulation.wah`、`effects.modulation.autoWah`、`effects.modulation.rotary`、`effects.modulation.ringModulator`、`effects.modulation.pitchShifter` — はインサート専用で、`masteringProcessorNames()` には**現れません**。これらは `masteringInsertNames()` とシーンインサート経由で使ってください。
 
 ## 関連
 

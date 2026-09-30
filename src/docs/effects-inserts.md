@@ -61,14 +61,14 @@ Keys outside an insert's list are ignored by the processor and reported through 
 
 The route is three lookups in the one document rather than a call per processor:
 
-1. **Pick the insert set.** Filter `processors` on `realtimeInsertable`. That is 74 of the 89 entries, and it is the same set `masteringInsertNames()` returns; the other 15 — the 11 offline processors and the 4 pair processors — carry an empty `params` array. `category` groups the set the way a picker does (`effects` is the 17 creative-FX ids on this page; the other categories are the mastering families), and `channelPolicy` says how the mixer wraps the insert on a bus wider than stereo — every reverb, modulation and delay insert is `stereoPairOnly` except `effects.modulation.ringModulator`, which is `multichannel`.
+1. **Pick the insert set.** Filter `processors` on `realtimeInsertable`. That is 76 of the 91 entries, and it is the same set `masteringInsertNames()` returns; the other 15 — the 11 offline processors and the 4 pair processors — carry an empty `params` array. `category` groups the set the way a picker does (`effects` is the 18 creative-FX ids on this page; the other categories are the mastering families), and `channelPolicy` says how the mixer wraps the insert on a bus wider than stereo — every reverb, modulation and delay insert is `stereoPairOnly` except `effects.modulation.ringModulator`, which is `multichannel`.
 2. **Read the descriptors.** An entry's `params` is exactly the list `masteringInsertParamInfo(id)` returns for that id, in the same order, so a host holding the catalog never needs the per-processor call. Entries with `id: null` are construction-only; non-null ids are the automation ids used by `Mixer.scheduleInsertAutomation(strip, insertIndex, paramId, samplePos, value)` on Node and WASM, `Mixer.schedule_insert_automation(...)` on Python, and `sonare_strip_schedule_insert_automation` on the C ABI. The realtime engine's setters take the `name` instead (`setTrackStripInsertParamByName` and its master and bus variants).
 3. **Lay out each control** from `type`, `default`, `min`, `max`, `unit`, and `choices`. Construction-only keys now have descriptors too, so `stages` on the phaser, `attackMs` / `releaseMs` on the auto-wah, `stereoSpread` on the rotary, and room geometry can be represented as build-time fields. Use `slot` to identify a slot group, then read the processor's `slots` entry: `activation` (`anyKey` or `always`), the enclosing `parent`, and `minCrossoverCutoffs` determine whether that group is present.
 
 ```typescript
 const catalog = capabilityCatalog();
-const inserts = catalog.processors.filter((p) => p.realtimeInsertable);   // 74 of 89
-const fx = inserts.filter((p) => p.category === 'effects');               // the 17 ids below
+const inserts = catalog.processors.filter((p) => p.realtimeInsertable);   // 76 of 91
+const fx = inserts.filter((p) => p.category === 'effects');               // the 18 ids below
 const chorus = fx.find((p) => p.id === 'effects.modulation.chorus')!;
 for (const param of chorus.params) {
   // param.id is null for construction-only keys; param.name is the scene JSON key
@@ -84,7 +84,7 @@ Four things the effects family reports that a general reading of the document wo
 - **`rtSafe: false` is a hard stop for automation, not a hint.** Scheduling automation on such a parameter returns `NotSupported` (code 6). Construction-only rows are marked with `id: null` and `rtSafe: false`; this page also contains id-bearing targets such as `modDepthSamples` whose prepared processor cannot change them safely. A UI that draws an automation lane per descriptor has to disable every row whose `rtSafe` is false.
 - **The catalog has more than numeric toggles.** Effects descriptors include `number`, `boolean`, `enum`, `string`, and `array` types. `choices` can describe enum values or a closed numeric set with gaps. Do not infer a toggle from a name; use `type`, and use `choices` for discrete controls.
 - **Latency and tail are per insert, and non-zero for the reverbs.** `effects.reverb.convolution`, `effects.reverb.room` and `effects.acoustic.roomMorph` report 256 samples of latency; the reverbs report tails from 51,217 samples (`room`, `roomMorph`) up to 264,000 (`fdn`), and the stereo delay 59,795, all at the representative 48 kHz probe. `realtimeCost` is `moderate` for every reverb except `velvet`, which is `high`, and `low` for every modulation and delay insert; it is `null` only on the 15 non-inserts.
-- **The effects family is small in parameters.** Its 17 processors publish 131 descriptors between them; the per-band EQ processors account for most of the 5,352 (`multiband.dynamicEq` alone has 1,019). An insert UI that sizes itself by descriptor count should expect the two families to differ by an order of magnitude.
+- **The effects family is small in parameters.** Its 18 processors publish 136 descriptors between them; the per-band EQ processors account for most of the 5,352 (`multiband.dynamicEq` alone has 1,019). An insert UI that sizes itself by descriptor count should expect the two families to differ by an order of magnitude.
 
 ### Two things a null and a default do not tell you
 
@@ -94,7 +94,9 @@ Four things the effects family reports that a general reading of the document wo
 
 ## Creative-FX insert catalog
 
-In addition to the mastering [solo processors](./mastering-processors.md#solo-processors), builds with creative FX enabled expose reverb, modulation, and delay insert IDs:
+In addition to the mastering [solo processors](./mastering-processors.md#solo-processors), builds with creative FX enabled expose reverb, modulation, vowel-filter, delay, and stereo insert IDs:
+
+The `effects` category contains 18 entries; `stereo.binaural` is listed alongside them as a stereo-category insert.
 
 | Insert ID | Meaning |
 |-----------|---------|
@@ -105,6 +107,7 @@ In addition to the mastering [solo processors](./mastering-processors.md#solo-pr
 | `effects.reverb.convolution` | Convolution reverb; takes an impulse response as `irF32Base64` in its params, or synthesizes one from `decaySec` and `seed` |
 | `effects.reverb.room` | Geometric room reverb synthesized from room parameters |
 | `effects.acoustic.roomMorph` | Room-character morph toward a target geometric room |
+| `effects.filter.vowel` | Three-band resonant vowel filter with a direct path |
 | `effects.modulation.ensemble` | Solina-style BBD string-machine ensemble |
 | `effects.modulation.chorus` | Stereo chorus |
 | `effects.modulation.flanger` | Flanger |
@@ -115,12 +118,19 @@ In addition to the mastering [solo processors](./mastering-processors.md#solo-pr
 | `effects.modulation.ringModulator` | Ring modulator |
 | `effects.modulation.pitchShifter` | Simple pitch shifter |
 | `effects.delay.stereo` | Stereo delay |
+| `stereo.binaural` | Measured-HRTF virtual-speaker renderer for a stereo pair |
 
 ::: warning Build-flag gating
 These insert IDs are available only in builds configured with the CMake option `BUILD_FX` (which derives the internal `SONARE_HAVE_FX` define). The geometric room inserts (`effects.reverb.room`, `effects.acoustic.roomMorph`) also require `BUILD_ACOUSTIC_SIM`. In a build without an option, the corresponding IDs simply do not appear in `masteringInsertNames()`.
 :::
 
 The table below highlights representative keys and behavior; it is intentionally abbreviated. The complete, build-specific list — including newer keys such as chorus/flanger `preFilterHz` and `preFilterMode`, phaser `feedback` and `mixMode`, rotary drum controls, pitch-shifter `windowMs`, and stereo-delay `dampingHz` — is available through [`masteringInsertParamInfo(name)`](#the-parameter-descriptor) or `capabilityCatalog().processors[].params`.
+
+### Vowel filter
+
+<SonareDemo id="vowel-filter" />
+
+`effects.filter.vowel` shapes an existing signal with three resonant bands and a direct path. It is a vowel-colored filter, not a full speech synthesizer, and it has no independent A/B matching stage; use its dry/wet control when you want to compare the filtered and direct paths.
 
 There are a few practical details to know:
 
@@ -138,7 +148,9 @@ There are a few practical details to know:
 | `effects.modulation.ringModulator` params | `carrierHz`, `dryWet` |
 | `effects.modulation.pitchShifter` params | `semitones`, `dryWet` |
 | `effects.delay.stereo` params | `delayTimeLMs`, `delayTimeRMs`, `feedback`, `pingPong`, `dryWet` |
-| `effects.reverb.convolution` IR | An impulse response (IR — a recording of how a real space responds to a single short burst) is supplied as base64 float32 under the `irF32Base64` key of the insert params, in scene JSON as anywhere else; a native host can also inject one directly at construction |
+| `effects.filter.vowel` params | `vowel`, `accelMs`, `drive`, `driveOn`, `dryWet` |
+| `stereo.binaural` params | `azimuthDeg`, `autoTurn`, `turnRateHz`, `clockwise`, `output` (`0` = speakers, `1` = phones), `dryWet` |
+| `effects.reverb.convolution` IR | An impulse response (IR — a recording of how a real space responds to a single short burst) is supplied as base64 float32 under the `irF32Base64` key of the insert params, in scene JSON as anywhere else |
 | Convolution insert without an IR | Synthesizes a decaying-noise IR from `decaySec` (an RT60-style length, clamped to 12 s) and `seed` when prepared, so it produces a tail like its algorithmic siblings rather than passing the signal through |
 
 ::: warning The geometric room inserts validate `absorption`, they do not clamp it
@@ -164,7 +176,7 @@ A Solina-style BBD string-machine ensemble — the lush, chorused tone of vintag
 
 ## Inserts that are also one-shot mastering processors
 
-Use these in [Mixing Scene JSON](./mixing-scene-json.md) `insert.processor` fields. In the shipped FX-enabled WASM build, some of them are also one-shot mastering processors: `effects.reverb.plate`, `effects.reverb.dattorro`, `effects.reverb.fdn`, `effects.reverb.velvet`, `effects.reverb.convolution`, `effects.modulation.chorus`, `effects.modulation.flanger`, `effects.modulation.phaser`, and `effects.delay.stereo` are returned by `masteringProcessorNames()` and run through the one-shot apply path. The geometry-driven inserts and the newer modulation inserts — `effects.reverb.room`, `effects.acoustic.roomMorph`, `effects.modulation.ensemble`, `effects.modulation.wah`, `effects.modulation.autoWah`, `effects.modulation.rotary`, `effects.modulation.ringModulator`, and `effects.modulation.pitchShifter` — are insert-only and do **not** appear in `masteringProcessorNames()`; reach them through `masteringInsertNames()` and scene inserts.
+Use these in [Mixing Scene JSON](./mixing-scene-json.md) `insert.processor` fields. In the shipped FX-enabled WASM build, some of them are also one-shot mastering processors: `effects.reverb.plate`, `effects.reverb.dattorro`, `effects.reverb.fdn`, `effects.reverb.velvet`, `effects.reverb.convolution`, `effects.filter.vowel`, `effects.modulation.chorus`, `effects.modulation.flanger`, `effects.modulation.phaser`, `stereo.binaural`, and `effects.delay.stereo` are returned by `masteringProcessorNames()` and run through the one-shot apply path. The geometry-driven insert and the newer modulation inserts — `effects.reverb.room`, `effects.acoustic.roomMorph`, `effects.modulation.ensemble`, `effects.modulation.wah`, `effects.modulation.autoWah`, `effects.modulation.rotary`, `effects.modulation.ringModulator`, and `effects.modulation.pitchShifter` — are insert-only and do **not** appear in `masteringProcessorNames()`; reach them through `masteringInsertNames()` and scene inserts.
 
 ## Related
 

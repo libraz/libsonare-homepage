@@ -273,6 +273,41 @@ const result = analyzeWithProgress(samples, sampleRate, (progress, stage) => {
 });
 ```
 
+### `transcribe(request)`
+
+`transcribe` turns mono audio into note-on/note-off `ProjectMidiEvent[]` on a constant-tempo PPQ grid. Pass `tempoBpm` to choose that grid, or omit it to detect the tempo. The result reports `noteCount` separately (always half `events.length`) and does not install a tempo map on a project.
+
+```typescript
+interface TranscribeRequest {
+  samples: Float32Array;
+  sampleRate: number;
+  tempoBpm?: number;  // omit to detect
+  polyphonic?: boolean;
+  // Other TranscribeOptions detector settings are optional.
+}
+
+interface TranscribeResult {
+  events: ProjectMidiEvent[];
+  noteCount: number;
+  tempoBpm: number;
+}
+
+function transcribe(request: TranscribeRequest): TranscribeResult
+```
+
+```typescript
+const { events, noteCount, tempoBpm } = transcribe({
+  samples,
+  sampleRate,
+  tempoBpm: 120,
+  polyphonic: true,
+});
+project.setMidiEvents(clipId, events);
+console.log(noteCount, tempoBpm);
+```
+
+When the PPQ grid should follow a project tempo map, use `Project.transcribeToClip(...)` instead; its request has no `tempoBpm` and it returns the number of notes written.
+
 ### Focused analysis helpers
 
 ::: tip One call is usually enough

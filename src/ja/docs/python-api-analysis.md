@@ -105,7 +105,7 @@ segments = sonare.note_segments(
 
 Python の `Audio` オブジェクトは、WASM の `Audio` オブジェクトより多くのメソッドを持ちます。
 
-共通の特徴量・編集・ラウドネス・マスタリング・リサンプリング系メソッドに加えて、`analyze_bpm(...)`、`analyze_impulse_response(...)`、`detect_acoustic(...)`、`analyze_rhythm(...)`、`analyze_dynamics(...)`、`analyze_timbre(...)`、positional な `detect_chords(...)` も使えます。
+共通の特徴量・編集・ラウドネス・マスタリング・リサンプリング系メソッドに加えて、`analyze_bpm(...)`、`analyze_impulse_response(...)`、`detect_acoustic(...)`、`analyze_rhythm(...)`、`analyze_dynamics(...)`、`analyze_timbre(...)`、位置引数形式の `detect_chords(...)` も使えます。
 
 コンテキストマネージャによる自動クリーンアップに対応:
 
@@ -127,6 +127,7 @@ with Audio.from_file("music.mp3") as audio:
 | `detect_chords(samples, sample_rate, ...)` | `ChordAnalysisResult` | 時系列のコードセグメント。検出しきい値未満のフレームは明示的な `N.C.` 区間になります |
 | `analyze(samples, sample_rate)` | `AnalysisResult` | 総合解析: BPM とその候補・キー・拍子とその候補・ビート・検出キーを基準にした `roman_numeral` 付きコード・セクション・音色・ダイナミクス・リズム・メロディ・フォーム |
 | `analyze_with_progress(samples, sample_rate, on_progress?)` | `AnalysisResult` | `analyze` と同じ結果・解析キーワードオプションに、任意の `(progress, stage)` コールバックとキーワード専用の `cancel` コールバックを加えたもの |
+| `transcribe(samples, sample_rate, ...)` | `TranscribeResult` | モノラル音声を一定テンポの PPQ グリッド上の MIDI イベントへ変換。`events`、`note_count`、`tempo_bpm` を返します |
 | `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | 上位候補付きの BPM 解析 |
 | `estimate_meter(beat_times, beat_strengths, ...)` | `MeterEstimate` | 手元にあるビート系列だけから拍子とアクセントのグルーピングをスコアリング。音声も再解析も不要 |
 | `chord_functional_analysis(samples, key_root, key_mode?, ...)` | `list[str]` | 検出したコードに対する、キーを基準としたローマ数字ラベル（`"I"`、`"IV"`、`"V"`、`"vi"` …） |
@@ -148,6 +149,23 @@ with Audio.from_file("music.mp3") as audio:
 | `engine_abi_version()` | `int` | リアルタイムエンジンインターフェースの ABI バージョン |
 | `project_abi_version()` | `int` | `Project` のシリアライズ、バウンス、リアルタイムクリップ交換で使うプロジェクト／編集 API の ABI バージョン |
 | `has_ffmpeg_support()` | `bool` | 読み込まれたネイティブライブラリが FFmpeg デコードに対応しているか |
+
+### `transcribe(...)`
+
+`sonare.transcribe` はモノラル音声を、一定テンポの PPQ グリッド上のノートイベントへ変換します。`tempo_bpm` を渡すとそのテンポでグリッドを作り、省略するとテンポを検出します。戻り値の `TranscribeResult` には `events`、`note_count`、使用した `tempo_bpm` が含まれ、プロジェクトのテンポマップは変更しません。
+
+```python
+result = sonare.transcribe(
+    samples,
+    sample_rate,
+    tempo_bpm=120.0,
+    polyphonic=True,
+)
+print(result.note_count, result.tempo_bpm)
+project.set_midi_events(clip_id, result.events)
+```
+
+プロジェクトのテンポマップに合わせる場合は `Project.transcribeToClip(...)`／`project.transcribe_to_clip(...)` を使います。
 
 コア解析、エフェクト、特徴量、ラウドネス、マスタリングの多くは
 `Audio` インスタンスメソッドとしても使えます（例: `audio.detect_bpm()`）。
@@ -196,7 +214,7 @@ sections = sonare.analyze_sections(audio.data, audio.sample_rate)
 
 #### 結果の読み方
 
-- `key.confidence` は、スコアリングされた全候補のプロファイル相関に対するソフトマックスです。値域は `[0, 1)` で、候補の confidence の総和は 1 になります。したがって 24 候補中の 1 つが 1 に達することはなく、証拠を分け合う平行調どうしはそれぞれおよそ半分を報告します。これはクロマがどれだけ明確に候補集合から 1 つを選び取ったかを示す値であり、**その選択がどれだけの頻度で正しいかではありません**。アノテーション付き録音に対して較正されたものは何もないため、この値で分岐するパイプラインは自前の素材に対して自前のしきい値を決める必要があります。
+- `key.confidence` は、スコアリングされた全候補のプロファイル相関に対するソフトマックスです。値域は `[0, 1)` で、候補の confidence の総和は 1 になります。したがって 24 候補中の 1 つが 1 に達することはなく、根拠が割れる平行調どうしはそれぞれおよそ半分を報告します。これはクロマがどれだけ明確に候補集合から 1 つを選び取ったかを示す値であり、**その選択がどれだけの頻度で正しいかではありません**。アノテーション付き録音に対して較正されたものは何もないため、この値で処理を分岐させる場合は、自分の素材で確かめてしきい値を決める必要があります。
 - `downbeat_indices` は `beat_times` のインデックスで、`beat_times[downbeat_indices[k]]` が k 番目のダウンビートです。`beat_times` より短く、あるビートがダウンビートかどうかの判定は、別の時系列との時刻比較ではなくこのリストへの所属判定になります。`downbeat_phase` は拍子推定器自身の位相なので、コードや低域の証拠からダウンビートが精緻化されると `downbeat_indices[0]` と食い違うことがあります。
 - `beat_strengths` と `beat_observations.onset_strength` は別の測定値です。`beat_strengths` はビート自身のフレームで取得したオンセットエンベロープの生の 1 フレームで、正規化されておらず上限もなく、素材によってスケールが変わり、ビート位置の揺れに敏感です。`beat_observations.onset_strength` はライブラリ自身のダウンビート判定がスコアリングに使う窓処理済みの値で、アクセントを扱うならこちらを使います。`beat_observations` は `low_frequency_energy` と `chord_change` も保持します。
 - `beat_local_bpm` は各ビート位置での平滑化された局所テンポで、`beat_times` と並行します。`compute_tempo_curve` を指定しないかぎり空で、ビートが 2 つ未満しか検出されなかった場合は指定しても空です（テンポは 2 つのビートの間隔の性質だからです）。最後の要素は、最終ビートへ至る間隔のテンポを繰り返したものです。設計上、テンポが動く素材では `bpm` から離れるので、ここから 1 つの値を取り出して全体テンポとして読まないでください。
@@ -329,7 +347,7 @@ print(linked["w"].shape, linked["h"].shape)
 このエントリポイントでは `n_components`、`n_fft`、`hop_length`、`n_iter` が実際の既定値を持つため、`0` は「既定値を使う」というセンチネル（C ABI と JavaScript 側の同じフィールドではそう解釈されます）ではなく、呼び出し側の誤りとして拒否されます。
 
 ::: warning NNDSVD のシードは倍精度で計算されます
-これは精度の改善ではなく**再現性**の確保です。そのため `decompose` と `decompose_stems` は、単精度でシードを計算していたビルドとは同じ入力に対して異なる係数を返します。振幅スペクトログラムの末尾側の特異ベクトルは単精度のノイズフロアに埋もれるため、float でのシードは総和の順序に依存し、ターゲットが違えば違うコンポーネントが返っていました。形状、非負性、再構成品質は影響を受けません。保存した係数を持っている場合や、以前のステム書き出しと比較する場合は、値が変わることを前提にしてください。
+これは精度の改善ではなく**再現性**の確保です。振幅スペクトログラムの末尾側の特異ベクトルは単精度のノイズフロアに埋もれるため、float でシードすると総和の順序に依存し、ターゲットが違えば違うコンポーネントが返ってしまいます。形状、非負性、再構成品質は影響を受けません。`decompose` と `decompose_stems` は、同じ入力でも単精度のシードとは異なる係数を返すため、単精度のシードで得た保存済みの係数やステム書き出しとは一致しません。
 :::
 
 ### 逆再構成関数
