@@ -370,8 +370,8 @@ export const instrumentsDemos: SonareDemoDef[] = [
       ja: '代表的なプリセット — 1 音で多彩なエンジンを',
     },
     caption: {
-      en: 'The same A3, auditioned through representative named presets from the current NativeSynth catalog. Each patch comes from `synthPresetPatch(name)` and keeps its actual engine character: subtractive, FM, buzzing-bridge plucked string, modal, drawbar organ, percussion, piano, pipe organ, bowed string, reed, brass, or flute. The drum kit is the exception: it plays the GM percussion map, where a key selects a kit piece instead of a pitch, so that key strikes a crash cymbal. Change the preset, watch the envelope and waveshape, then press play to compare them.',
-      ja: '同じ A3 を、現在の NativeSynth カタログにある代表的なプリセットで試聴します。各パッチは `synthPresetPatch(name)` から読み込み、減算、FM、バズブリッジ式の撥弦、モーダル、ドローバーオルガン、打楽器、ピアノ、パイプオルガン、擦弦、リード、金管、フルートという実際のエンジン特性を保ちます。例外はドラムキットで、GM のパーカッションマップを鳴らすためキーは音高ではなくキットの打楽器を選び、このキーはクラッシュシンバルになります。プリセットを切り替え、エンベロープと波形を見てから再生して比べてください。',
+      en: 'Physical models other than piano have not yet been tuned; their sound will be adjusted in future patch releases. The same A3, auditioned through representative named presets from the current NativeSynth catalog. Each patch comes from `synthPresetPatch(name)` and keeps its actual engine character: subtractive, FM, buzzing-bridge plucked string, modal, drawbar organ, percussion, piano, harpsichord, pipe organ, bowed string, reed, brass, or flute. The drum kit is the exception: it plays the GM percussion map, where a key selects a kit piece instead of a pitch, so that key strikes a crash cymbal. Change the preset, watch the envelope and waveshape, then press play to compare them.',
+      ja: 'ピアノ以外の物理モデルは未調整で、今後のパッチリリースで音を調整する予定です。同じ A3 を、現在の NativeSynth カタログにある代表的なプリセットで試聴します。各パッチは `synthPresetPatch(name)` から読み込み、減算、FM、バズブリッジ式の撥弦、モーダル、ドローバーオルガン、打楽器、ピアノ、チェンバロ、パイプオルガン、擦弦、リード、金管、フルートという実際のエンジン特性を保ちます。例外はドラムキットで、GM のパーカッションマップを鳴らすためキーは音高ではなくキットの打楽器を選び、このキーはクラッシュシンバルになります。プリセットを切り替え、エンベロープと波形を見てから再生して比べてください。',
     },
     params: [
       {
@@ -404,6 +404,10 @@ export const instrumentsDemos: SonareDemoDef[] = [
           {
             value: 'church-organ',
             label: { en: 'Church organ (pipe)', ja: '教会オルガン（パイプ）' },
+          },
+          {
+            value: 'harpsichord',
+            label: { en: 'Harpsichord (plucked string)', ja: 'チェンバロ（撥弦）' },
           },
           { value: 'violin', label: { en: 'Violin (bowed string)', ja: 'ヴァイオリン（擦弦）' } },
           { value: 'clarinet', label: { en: 'Clarinet (reed)', ja: 'クラリネット（リード）' } },
@@ -569,8 +573,8 @@ export const instrumentsDemos: SonareDemoDef[] = [
       ja: '同じ音を 8 つのエンジンで — 波形と物理モデル',
     },
     caption: {
-      en: 'The same A3 through eight of the synth engines. Subtractive starts from an oscillator and carves it with a filter; the rest solve a model of a vibrating thing — a plucked string decaying into its own losses, a bow gripping and slipping, a column of air driven by breath. There is no oscillator to choose on a model, so that control disappears when you leave subtractive. Levels differ between engines on purpose: how loudly a body radiates is part of what the model computes, not a mixing decision. Press play and listen for how each one begins, which is where the models and the waveform part company most.',
-      ja: '同じ A3 を 8 つのシンセエンジンで鳴らします。減算方式はオシレーターから出発してフィルターで削りますが、残りは振動する物体のモデルを解いています — 自らの損失で減衰する撥弦、食いついては滑る弓、息で駆動される気柱。モデルには選ぶべきオシレーターが無いので、減算方式から離れるとその操作子は消えます。エンジンによって音量が違うのは意図したもので、ボディがどれだけ大きく響くかはモデルが計算している内容そのものであり、ミックスの都合ではありません。再生して、それぞれの「鳴りはじめ」を聴いてください。モデルと波形の差が最も出るところです。',
+      en: 'The same A3 through eight of the synth engines. These physical models have not yet been tuned; their sound will be adjusted in future patch releases. Subtractive starts from an oscillator and carves it with a filter; the rest solve a model of a vibrating thing — a plucked string decaying into its own losses, a bow gripping and slipping, a column of air driven by breath. There is no oscillator to choose on a model, so that control disappears when you leave subtractive. Levels differ between engines and have not yet been matched. Press play and listen for how each one begins, which is where the models and the waveform part company most.',
+      ja: 'ピアノ以外の物理モデルは未調整で、今後のパッチリリースで音を調整する予定です。同じ A3 を 8 つのシンセエンジンで鳴らします。減算方式はオシレーターから出発してフィルターで削りますが、残りは振動する物体のモデルを解いています — 自らの損失で減衰する撥弦、食いついては滑る弓、息で駆動される気柱。モデルには選ぶべきオシレーターが無いので、減算方式から離れるとその操作子は消えます。エンジンごとに音量が異なり、まだ揃えていません。再生して、それぞれの「鳴りはじめ」を聴いてください。モデルと波形の差が最も出るところです。',
     },
     params: [
       {

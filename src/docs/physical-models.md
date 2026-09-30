@@ -7,7 +7,15 @@ description: How libsonare's physical-model voices work — the waveguide loop t
 
 Most of the [built-in synthesizer](./native-synth.md)'s engines start from a waveform and shape it. Nine of them start from an instrument instead — a string under a hammer, a bore under a reed, a metal tongue swinging through a slot. There is no oscillator in those voices and no recording behind them. Each note is a small simulation running at the sample rate, and what you hear is whatever that simulation radiates.
 
-This page is about that family: what the model is actually computing, which acoustic quantity each voice is built around, and how settled each one is today.
+This page is about that family: what the model is actually computing, which acoustic quantity each voice is built around, what tuning work is complete, and what still awaits adjustment.
+
+<MaturityNote
+  item="physical-model-maturity"
+  :labels="{
+    title: 'Current tuning status',
+    body: 'The piano has been tuned. Every other physical model still awaits adjustment and calibration, including the harpsichord, modal and membrane models. Further tuning is planned for future patch releases.'
+  }"
+/>
 
 ::: tip Which method for which job
 Whether a physical model is the right choice at all — against a SoundFont, against sampling, against subtractive synthesis — belongs to [Sound Sources](./sound-sources.md). This page assumes you have already landed on one. For the shared patch layer these voices sit inside, see [Built-in Synthesizer](./native-synth.md); for the terms, [Synthesis Basics](./glossary/instruments/synthesis-basics.md).
@@ -23,7 +31,7 @@ That is the whole trick, and it has two consequences worth knowing before you us
 
 **It costs a lot of CPU.** A sampler reads memory; a model solves its physics once per sample per voice, and each voice carries its own delay lines, loss filters and body resonators. Polyphony, not disk, is the budget you spend here. A dense arrangement of bowed strings is a heavier render than the same arrangement played from samples.
 
-**And it is a model, not a recording.** It reproduces the mechanism, so it gets the behaviour a sample cannot: a hard blow is brighter *because* the felt compresses further, not because a second sample was recorded. What it does not get for free is the specific voice of a specific instrument, which is what the calibration work described at the end of this page is for.
+**And it is a model, not a recording.** It reproduces the mechanism, so it gets the behaviour a sample cannot: a hard blow is brighter *because* the felt compresses further, not because a second sample was recorded. What it does not get for free is the specific voice of a specific instrument, which requires adjustment and calibration.
 
 ## The loop, and the one stage that changes
 
@@ -69,7 +77,7 @@ The identifiers below are the engine's own field names. They are how each model 
 | `piano.detune_cents` | `1.6` | `0 – 50` | Micro-detune across the unison. The strings fall out of step, and the prompt sound gives way to the long aftersound. |
 | `piano.dispersion` | `1.0` | `0 – 1` | Scale on the keyboard-graded stiffness stretch; `0` is a perfectly harmonic string. |
 
-Three things this model does that a knob-driven plucked string cannot. **Inharmonicity follows a U-shaped curve** with its minimum around C2, rather than climbing monotonically toward the treble: the wound bass strings turn it back upward, so the very bottom of the keyboard is more inharmonic than the notes just above it. **Longitudinal string modes are modelled** — a struck string stretches along its length as well as across it, and the tension change radiates the inharmonic growl that fills a low note's attack. Without them the bass is felt more than heard. And the voice **carries an output level measured against a captured concert grand**, because the product of three separately calibrated stages is a loudness nobody chose; it now sits between the violin and the alto sax, which is where a grand belongs among them.
+Three things this model does that a knob-driven plucked string cannot. **Inharmonicity follows a U-shaped curve** with its minimum around C2, rather than climbing monotonically toward the treble: the wound bass strings turn it back upward, so the very bottom of the keyboard is more inharmonic than the notes just above it. **Longitudinal string modes are modelled** — a struck string stretches along its length as well as across it, and the tension change radiates the inharmonic growl that fills a low note's attack. Without them the bass is felt more than heard. The current piano tuning also gives the voice an explicit output level. A physical model has no output level of its own — the string, the hammer, and the board each contribute to a product whose loudness nobody chooses directly.
 
 ### `pipe-organ` — a flue pipe on a shared wind chest
 
@@ -200,7 +208,7 @@ This is the cleanly terminated plucked string, and it is what a great many GM pr
 | `harpsichord.velocity_range_db` | `5.0` | `0 – 24` | The whole dynamic range key speed buys. A real instrument gives three to six decibels, and not even monotonically — past a certain speed the plectrum slips off sooner and the note gets *quieter*. |
 | `harpsichord.rear_coupling` | `0.35` | `0 – 1` | How much of the short undamped segment behind the bridge reaches the output. This is where the instrument's inharmonic shimmer comes from; the speaking partials stay harmonic to within a couple of cents. |
 
-This model is not a calibration target the way the nine above are — it is checked against captured references rather than being fitted toward them, and its voicing is settled. Registration is genuinely separate string choirs: two 8′ unisons and a 4′ octave are three independent delay lines at three periods, not one string with a mix control.
+This model, like every physical model other than the piano, still awaits adjustment and calibration. Registration is genuinely separate string choirs: two 8′ unisons and a 4′ octave are three independent delay lines at three periods, not one string with a mix control.
 
 ::: warning Trim the gain before you A/B it
 At an identical patch `gain` and the same note, `harpsichord` peaks about seven times higher than its nearest neighbour — measured peaks of `0.585` against `0.180` for `bowed-string`, `0.178` for `piano` and `0.081` for `subtractive`. Some spread between models is honest, since how loudly a body radiates is part of what the model computes. This much is not comfortable: drop the patch gain before putting a harpsichord next to anything else.
@@ -279,13 +287,5 @@ The struck and plucked voices decline every axis for the reason the figure showe
 Two ways to drive the axes. A **controller profile** maps a device gesture to an axis — the default `gm` profile sends CC2 (breath) to force and CC74 to brightness or position, whichever the engine reads — and you select or extend it with `setControllerProfile` and `bindController` on the realtime engine. A **mod-matrix routing** does the same thing from inside the patch: route the `breath`, `aftertouch`, `expressionCc` or `pitchBend` source to the `excitationForce`, `excitationPosition`, `excitationBrightness` or `spectrumMorph` destination, and it travels with the patch and needs no rebinding.
 
 One more thing to know before you audition: **not every engine mode plays from a bare patch.** Four of the seventeen — `fm`, `modal`, `percussion` and `sample` — need content a default patch does not supply, and render silence until you reach them through a preset or, for `sample`, bind a bank. See [Built-in Synthesizer](./native-synth.md) for the details.
-
-<MaturityNote
-  item="physical-model-maturity"
-  :labels="{
-    title: 'These models are moving',
-    body: 'Voicing here is actively worked on, and a change to a model changes what an existing patch sounds like. The acoustic piano was rebuilt and now carries a measured output level, bass-register excitation and longitudinal string modes; the snare wires read wire_threshold as a fraction of the head swing rather than as an absolute level, and wire_decay_ms gives the wire bed damping of its own. A patch or a kit trimmed against an older build is likely to need retrimming, and a stored render or hash of one will differ. Treat these voices as a data-free preview and a fallback floor rather than as finished instrument models.'
-  }"
-/>
 
 Related: [Built-in Synthesizer](./native-synth.md) · [Sound Sources](./sound-sources.md) · [GM and GS Fallback Bank](./gm-gs.md)

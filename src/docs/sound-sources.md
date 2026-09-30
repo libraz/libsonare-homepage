@@ -19,10 +19,12 @@ A digital instrument makes a note in one of four broad ways. They differ less in
 |---|---|---|---|---|
 | **sample playback** | grows without limit | low | crossfading between recordings made at different velocities and articulations | the SoundFont player, for samples you bring |
 | **FM** | near zero | moderate | operator ratios and the modulation index moving over time | several engine modes; the electric pianos, bells and clavinet of the fallback bank |
-| **physical modelling** | near zero | high | physical quantities — bow force, breath pressure, lip tension | the nine acoustic voices — piano, plucked and bowed string, reed, free reed, brass, flute, pipe organ, voice |
+| **physical modelling** | near zero | high | physical quantities — bow force, breath pressure, lip tension | the nine acoustic voices, plus the plucked-loop, harpsichord, modal and membrane models |
 | **subtractive (virtual analog)** | near zero | moderate | filter cutoff and resonance under an envelope | `SynthPatch`'s analog voice; leads, pads and the synth-effect programs |
 
 Only the first row has an appetite. A sample library grows with the product of three numbers — **how many timbres, how many recorded layers per timbre, and how good the capture is** — and every one of those three is something a designer wants more of. Nothing in that product ever gets smaller.
+
+The piano has been tuned. Every other physical model still awaits adjustment and calibration; use these voices as data-free previews, with further work planned for future patch releases.
 
 The other three rows store a handful of coefficients and spend processor time instead. A bowed string is not a recording of a bowed string; it is a loop that models the string, the bow's grip and slip, and the body the string is mounted on, evaluated once per sample. That is why expression works differently: you do not pick a louder recording, you push harder on the bow.
 

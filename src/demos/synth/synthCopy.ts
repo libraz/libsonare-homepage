@@ -78,7 +78,7 @@ export const enCopy = {
   },
   guide: {
     title: 'Native polyphonic synthesis, in the browser',
-    body: "Every key plays through libsonare's NativeSynth hosted in a SAB-free AudioWorklet: notes become live MIDI events, and the engine renders a stereo bus in the audio thread with its own WebAssembly heap. Hold several keys for full polyphony.",
+    body: "Every key plays through libsonare's NativeSynth hosted in a SAB-free AudioWorklet: notes become live MIDI events, and the engine renders a stereo bus in the audio thread with its own WebAssembly heap. Hold several keys for full polyphony. The piano has been tuned; every other physical-model voice still awaits adjustment and calibration, with further work planned for future patch releases.",
     docs: 'Realtime Engine docs',
   },
   terms: {
@@ -241,7 +241,7 @@ export const jaCopy: typeof enCopy = {
   },
   guide: {
     title: 'ブラウザで動く内蔵ポリフォニックシンセ',
-    body: '鍵盤を押すと、その入力が MIDI イベントとして NativeSynth に届き、AudioWorklet のオーディオスレッドで音声が生成されます。処理はブラウザ内の WebAssembly で完結し、音源はアップロードされません。複数の鍵盤を同時に押すと、和音としてポリフォニックに鳴ります。',
+    body: '鍵盤を押すと、その入力が MIDI イベントとして NativeSynth に届き、AudioWorklet のオーディオスレッドで音声が生成されます。処理はブラウザ内の WebAssembly で完結し、音源はアップロードされません。複数の鍵盤を同時に押すと、和音としてポリフォニックに鳴ります。ピアノは調整済みですが、その他の物理モデル音源はまだ調整・キャリブレーションを行っておらず、残りの作業は今後のパッチリリースで進めます。',
     docs: 'リアルタイムエンジンのドキュメント',
   },
   terms: {
