@@ -394,14 +394,34 @@ function onWheel(e: WheelEvent) {
   orbit.radius = Math.max(2, Math.min(220, orbit.radius * (1 + Math.sign(e.deltaY) * 0.08)));
 }
 
+function disposeRenderer() {
+  cancelAnimationFrame(frame);
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+  disposeGroup(roomGroup);
+  renderer?.dispose?.();
+  if (renderer?.domElement?.parentNode) {
+    renderer.domElement.parentNode.removeChild(renderer.domElement);
+  }
+  THREE = renderer = scene = camera = roomGroup = null;
+  wavefronts = [];
+}
+
 onMounted(async () => {
   if (typeof window === 'undefined' || !host.value) return;
-  const loadedThree = await import('three');
-  if (disposed || !host.value) return;
+  const loadedThree = await import('three').catch(() => null);
+  if (!loadedThree || disposed || !host.value) return;
   THREE = loadedThree;
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(50, 1, 0.1, 2000);
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  try {
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  } catch {
+    // WebGL is an optional visualization; the surrounding DSP and 2D UI remain
+    // usable when the browser cannot create a rendering context.
+    disposeRenderer();
+    return;
+  }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   host.value.appendChild(renderer.domElement);
   renderer.domElement.style.width = '100%';
@@ -418,13 +438,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   disposed = true;
-  cancelAnimationFrame(frame);
-  resizeObserver?.disconnect();
-  disposeGroup(roomGroup);
-  renderer?.dispose?.();
-  if (renderer?.domElement?.parentNode)
-    renderer.domElement.parentNode.removeChild(renderer.domElement);
-  THREE = renderer = scene = camera = roomGroup = null;
+  disposeRenderer();
 });
 
 watch(

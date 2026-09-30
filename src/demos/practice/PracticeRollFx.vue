@@ -319,17 +319,41 @@ function applyCamera(): void {
   camera.updateProjectionMatrix();
 }
 
+function disposeRenderer(): void {
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+  points?.geometry.dispose();
+  points?.material.dispose();
+  for (const b of beams) b.material.dispose();
+  beams[0]?.geometry.dispose();
+  strike?.material.dispose();
+  renderer?.dispose?.();
+  if (renderer?.domElement?.parentNode) {
+    renderer.domElement.parentNode.removeChild(renderer.domElement);
+  }
+  THREE = renderer = scene = camera = points = strike = null;
+  beams = [];
+  bursts = [];
+}
+
 onMounted(async () => {
   if (typeof window === 'undefined' || !host.value) return;
-  const loadedThree = await import('three');
-  if (disposed || !host.value) return;
+  const loadedThree = await import('three').catch(() => null);
+  if (!loadedThree || disposed || !host.value) return;
   THREE = loadedThree;
   rebuildKeyMap();
 
   scene = new THREE.Scene();
   camera = new THREE.OrthographicCamera(0, 1, 0, 1, -100, 100);
   camera.position.set(0, 0, 10);
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, premultipliedAlpha: false });
+  try {
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, premultipliedAlpha: false });
+  } catch {
+    // The glow layer is optional; the piano roll's 2D canvas remains usable
+    // when the browser cannot create a WebGL context.
+    disposeRenderer();
+    return;
+  }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setClearColor(0x000000, 0);
   host.value.appendChild(renderer.domElement);
@@ -406,19 +430,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   disposed = true;
-  resizeObserver?.disconnect();
-  points?.geometry.dispose();
-  points?.material.dispose();
-  for (const b of beams) b.material.dispose();
-  beams[0]?.geometry.dispose();
-  strike?.material.dispose();
-  renderer?.dispose?.();
-  if (renderer?.domElement?.parentNode) {
-    renderer.domElement.parentNode.removeChild(renderer.domElement);
-  }
-  THREE = renderer = scene = camera = points = strike = null;
-  beams = [];
-  bursts = [];
+  disposeRenderer();
 });
 
 watch(
