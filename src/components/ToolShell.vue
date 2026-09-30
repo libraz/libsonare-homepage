@@ -4,7 +4,7 @@ import DemoDisclaimer from '@/components/DemoDisclaimer.vue';
 import { CornerBrackets, GridOverlay, StatusIndicator } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { useTheme } from '@/composables/useTheme';
-import { type DemoId, demoSourceUrl, LISTED_DEMOS } from '@/demos/manifest';
+import { type DemoId, demoManifest, demoSourceUrl, LISTED_DEMOS } from '@/demos/manifest';
 
 const props = withDefaults(
   defineProps<{
@@ -36,7 +36,6 @@ const copy = computed(() =>
   localizedValue({
     en: {
       docsLabel: 'Docs',
-      sourceLabel: 'Source',
       sourceTitle: "Read this demo's source on GitHub",
       ctaLabel: 'Get Started',
       tabListLabel: 'Demo switcher',
@@ -58,7 +57,6 @@ const copy = computed(() =>
     },
     ja: {
       docsLabel: 'ドキュメント',
-      sourceLabel: 'ソース',
       sourceTitle: 'このデモのソースを GitHub で読む',
       ctaLabel: 'はじめる',
       tabListLabel: 'デモ切り替え',
@@ -91,6 +89,7 @@ const otherLocalePath = computed(
 );
 const otherLocaleLabel = computed(() => copy.value.otherLocaleLabel);
 const sourceUrl = computed(() => demoSourceUrl(props.demoId));
+const sourceDir = computed(() => demoManifest(props.demoId).dir);
 
 // Routes come from the demo manifest so the switcher cannot drift from the
 // directory layout; this file only owns the labels.
@@ -101,6 +100,22 @@ const demoTabs = computed(() =>
     path: localizedPath(demo.route),
   })),
 );
+
+const mainRef = ref<HTMLElement | null>(null);
+const sourceRowRef = ref<HTMLElement | null>(null);
+const sourceInset = ref(0);
+let demoResize: ResizeObserver | null = null;
+
+// Demos cap and centre their own width, so the source link measures the
+// demo's right edge instead of sitting at the viewport's.
+function syncSourceInset() {
+  const main = mainRef.value;
+  const demo = main?.firstElementChild;
+  if (!main || !demo || demo === sourceRowRef.value) return;
+  const mainBox = main.getBoundingClientRect();
+  const padRight = Number.parseFloat(getComputedStyle(main).paddingRight) || 0;
+  sourceInset.value = Math.max(0, mainBox.right - padRight - demo.getBoundingClientRect().right);
+}
 
 const tabsRef = ref<HTMLElement | null>(null);
 const tabsCanScrollLeft = ref(false);
@@ -114,6 +129,14 @@ function syncTabScroll() {
 }
 
 onMounted(() => {
+  const demo = mainRef.value?.firstElementChild;
+  if (demo && demo !== sourceRowRef.value && typeof ResizeObserver !== 'undefined') {
+    demoResize = new ResizeObserver(syncSourceInset);
+    demoResize.observe(demo);
+    if (mainRef.value) demoResize.observe(mainRef.value);
+  }
+  syncSourceInset();
+
   const nav = tabsRef.value;
   if (!nav) return;
   const active = nav.querySelector<HTMLElement>('.tool-page__tab--active');
@@ -126,6 +149,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  demoResize?.disconnect();
   tabsRef.value?.removeEventListener('scroll', syncTabScroll);
   window.removeEventListener('resize', syncTabScroll);
 });
@@ -160,18 +184,6 @@ function switchLocale(event: Event) {
       <div class="tool-page__header-right">
         <span class="tool-page__version">v{{ version || '-.-.--' }}</span>
         <a :href="docsPath" class="tool-page__docs-link">{{ docsLabel }}</a>
-        <a
-          :href="sourceUrl"
-          class="tool-page__docs-link tool-page__source-link"
-          target="_blank"
-          rel="noopener"
-          :title="copy.sourceTitle"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="m9 18-6-6 6-6M15 6l6 6-6 6" />
-          </svg>
-          {{ copy.sourceLabel }}
-        </a>
         <a
           :href="otherLocalePath"
           class="tool-page__lang-switch"
@@ -236,8 +248,30 @@ function switchLocale(event: Event) {
       </a>
     </div>
 
-    <main class="tool-page__main">
+    <main ref="mainRef" class="tool-page__main">
       <slot />
+      <div
+        ref="sourceRowRef"
+        class="tool-page__source-row"
+        :style="{ paddingRight: `${sourceInset}px` }"
+      >
+        <a
+          :href="sourceUrl"
+          class="tool-page__source"
+          target="_blank"
+          rel="noopener"
+          :title="copy.sourceTitle"
+          :aria-label="copy.sourceTitle"
+        >
+          <svg class="tool-page__source-mark" width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
+          </svg>
+          <span class="tool-page__source-path">{{ sourceDir }}</span>
+          <svg class="tool-page__source-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M7 17 17 7M8 7h9v9" />
+          </svg>
+        </a>
+      </div>
     </main>
   </div>
 </template>
@@ -416,23 +450,6 @@ html:not(.dark) .tool-page .tool-page__header {
 .tool-page__docs-link:hover {
   color: var(--demo-accent);
   background: var(--demo-accent-subtle);
-}
-
-/* Source link — same weight as Docs, marked by the code glyph rather than by a
-   louder colour, so the header keeps one level of emphasis. */
-.tool-page__source-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--demo-text-muted);
-}
-
-.tool-page__source-link svg {
-  opacity: 0.75;
-}
-
-.tool-page__source-link:hover svg {
-  opacity: 1;
 }
 
 .tool-page__lang-switch {
@@ -637,6 +654,47 @@ html:not(.dark) .tool-page .tool-page__header {
   padding: 16px;
 }
 
+/* Per-demo source link — sits under the demo it belongs to and names the
+   directory, so it cannot be read as a link to the whole project. */
+.tool-page__source-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.tool-page__source {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border: 1px solid var(--demo-border);
+  border-radius: 6px;
+  color: var(--demo-text-muted);
+  font-size: 11px;
+  text-decoration: none;
+  transition: color var(--transition-fast), background-color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.tool-page__source:hover {
+  color: var(--demo-accent);
+  background: var(--demo-accent-subtle);
+  border-color: color-mix(in srgb, var(--demo-accent) 28%, var(--demo-border));
+}
+
+.tool-page__source-path {
+  font-family: var(--font-mono);
+  letter-spacing: 0.01em;
+}
+
+.tool-page__source-arrow {
+  opacity: 0.6;
+}
+
+.tool-page__source:hover .tool-page__source-arrow {
+  opacity: 1;
+}
+
 @media (max-width: 900px) {
   .tool-page__subtitle,
   .tool-page__version {
@@ -658,8 +716,7 @@ html:not(.dark) .tool-page .tool-page__header {
     max-width: 160px;
   }
 
-  .tool-page__cta,
-  .tool-page__source-link {
+  .tool-page__cta {
     display: none;
   }
 

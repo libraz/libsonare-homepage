@@ -32,10 +32,12 @@ describe('ToolShell', () => {
     );
   });
 
-  it('links the active demo source directory', () => {
+  it('links the active demo source directory from inside the demo, not the header', () => {
     lang.value = 'en';
-    const link = mountShell({ demoId: 'spatial' }).find('.tool-page__source-link');
-    expect(link.text()).toBe('Source');
+    const shell = mountShell({ demoId: 'spatial' });
+    expect(shell.find('.tool-page__header a[href*="/tree/main/"]').exists()).toBe(false);
+    const link = shell.find('.tool-page__main .tool-page__source');
+    expect(link.text()).toBe('src/demos/spatial');
     expect(link.attributes('href')).toBe(
       'https://github.com/libraz/libsonare-homepage/tree/main/src/demos/spatial',
     );
