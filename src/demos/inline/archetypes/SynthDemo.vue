@@ -21,7 +21,7 @@ import DemoFrame from '../DemoFrame.vue';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
-const { ensureWasm, play, playingId, progress } = useSonareDemoAudio();
+const { ensureWasm, play, stop, playingId, progress } = useSonareDemoAudio();
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 const isPlaying = computed(() => playingId.value === props.def.id);
@@ -116,6 +116,7 @@ const dispScope = new Float32Array(SCOPE_N);
 const targetScope = new Float32Array(SCOPE_N);
 
 let lastAudio: { samples: Float32Array; sampleRate: number } | null = null;
+let renderRevision = 0;
 
 type WasmModule = Awaited<ReturnType<typeof ensureWasm>>;
 
@@ -242,15 +243,18 @@ function fillTargets(pcm: Float32Array): void {
 }
 
 async function compute(): Promise<void> {
+  const revision = renderRevision;
   try {
     if (status.value === 'idle') status.value = 'loading';
     const wasm = await ensureWasm();
     const pcm = renderNote(wasm);
+    if (revision !== renderRevision) return;
     lastAudio = { samples: pcm, sampleRate: SR };
     fillTargets(pcm);
     status.value = 'ready';
     startMorph();
   } catch (e) {
+    if (revision !== renderRevision) return;
     fail(e);
   }
 }
@@ -368,12 +372,19 @@ useCanvasRedraw(canvas, paint);
 
 // ---- audition --------------------------------------------------------------
 async function onPlay(): Promise<void> {
+  const revision = renderRevision;
   if (!lastAudio) {
     const wasm = await ensureWasm();
+    if (revision !== renderRevision) return;
     const pcm = renderNote(wasm);
+    if (revision !== renderRevision) return;
     lastAudio = { samples: pcm, sampleRate: SR };
   }
+  if (revision !== renderRevision || !lastAudio) return;
   await play(props.def.id, lastAudio);
+  // `play` may await AudioContext.resume(). If a control moved during that
+  // gesture, stop the buffer that was rendered for the old patch immediately.
+  if (revision !== renderRevision && isPlaying.value) stop();
 }
 
 // Coalesce rapid changes (slider drags) into one render per frame.
@@ -402,6 +413,9 @@ watch(
     preset.value,
   ],
   () => {
+    renderRevision += 1;
+    lastAudio = null;
+    if (isPlaying.value) stop();
     if (props.active) scheduleCompute();
   },
 );

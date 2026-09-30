@@ -220,6 +220,22 @@ describe('useSonareDemoAudio', () => {
     expect(audio.progress.value).toBe(0);
   });
 
+  it('plays stereo demo audio without downmixing the channels', async () => {
+    const { useSonareDemoAudio } = await import('@/demos/inline/useSonareDemoAudio');
+    const audio = useSonareDemoAudio();
+
+    await audio.play('stereo-demo', {
+      left: new Float32Array([0.1, 0.2]),
+      right: new Float32Array([-0.3, -0.4]),
+      sampleRate: 2,
+    });
+
+    const buffer = createdSources[0].buffer;
+    expect(buffer?.numberOfChannels).toBe(2);
+    expect(buffer?.getChannelData(0)).toEqual(new Float32Array([0.1, 0.2]));
+    expect(buffer?.getChannelData(1)).toEqual(new Float32Array([-0.3, -0.4]));
+  });
+
   it('rejects invalid audio before creating a source', async () => {
     const { useSonareDemoAudio } = await import('@/demos/inline/useSonareDemoAudio');
     const audio = useSonareDemoAudio();
@@ -230,6 +246,13 @@ describe('useSonareDemoAudio', () => {
     await expect(
       audio.play('bad-rate-demo', { samples: new Float32Array([0]), sampleRate: 0 }),
     ).rejects.toThrow('invalid sample rate');
+    await expect(
+      audio.play('mismatched-stereo-demo', {
+        left: new Float32Array([0]),
+        right: new Float32Array([0, 1]),
+        sampleRate: 48_000,
+      }),
+    ).rejects.toThrow('mismatched channel lengths');
     expect(createdSources).toHaveLength(0);
   });
 

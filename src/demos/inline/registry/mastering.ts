@@ -11,6 +11,43 @@ import type { SonareDemoDef } from '../types';
 
 export const masteringDemos: SonareDemoDef[] = [
   {
+    id: 'repair-clicks',
+    archetype: 'ab-process',
+    source: { kind: 'clip', clip: 'damaged-vinyl' },
+    viz: 'spectrogram',
+    title: {
+      en: 'Click repair — compare before and after',
+      ja: 'クリック修復 — 処理前後を比較する',
+    },
+    caption: {
+      en: 'The declicker detects short impulsive defects and reconstructs their samples from the surrounding signal. This clip also contains hum, hiss and crackle; this demo runs only declick, so those defects can remain. Compare the original and processed signal without extra loudness matching. Musical attacks can also be affected: inspect the result rather than assuming every detected impulse is damage.',
+      ja: 'デクリッカーは短い突発的な欠陥を検出し、周囲の信号から該当するサンプルを再構成します。このクリップにはハム・ヒスノイズ・クラックルも含まれますが、デモが適用するのはデクリックだけなので、ほかの欠陥は残ることがあります。追加の音量合わせをせずに処理前後を比較してください。楽器の立ち上がりにも影響する場合があるため、検出したすべての突発音を欠陥と決めつけず、結果を確認してください。',
+    },
+    config: {
+      processor: 'repair-clicks',
+      injectNoise: false,
+      showFloor: false,
+      eyebrow: 'A/B PROCESS · DECLICK',
+      legendBefore: { en: 'Before', ja: '処理前' },
+      legendAfter: { en: 'After', ja: '処理後' },
+      loadingLabel: { en: 'Repairing clicks', ja: 'クリック修復中' },
+      stateBefore: 'BEFORE',
+      stateAfter: 'AFTER',
+    },
+    params: [
+      {
+        key: 'view',
+        kind: 'select',
+        default: 'damaged',
+        label: { en: 'Compare', ja: '比較' },
+        options: [
+          { value: 'damaged', label: { en: 'Before', ja: '処理前' } },
+          { value: 'repaired', label: { en: 'After', ja: '処理後' } },
+        ],
+      },
+    ],
+  },
+  {
     id: 'loudness-meter',
     archetype: 'meters',
     // A dynamic multi-part phrase exercises the loudness contour and LRA.
@@ -21,8 +58,8 @@ export const masteringDemos: SonareDemoDef[] = [
       ja: 'ラウドネス計測 — LUFS・トゥルーピーク・レンジ',
     },
     caption: {
-      en: 'The bar tracks momentary loudness as the clip plays; the panel is the loudness over time. Integrated LUFS is the single overall number, true-peak is the real ceiling between samples, and LRA captures how much the loudness moves. Switch the window to compare the fast momentary meter with the smoother short-term one — each reports only once its window has filled, so the short-term contour starts three seconds into the clip.',
-      ja: 'バーは再生中の瞬時ラウドネスを追い、パネルは時間ごとのラウドネスです。インテグレーテッド LUFS は全体を表す一つの数値、トゥルーピークはサンプル間も含む本当の上限、LRA はラウドネスの動く幅を表します。ウィンドウを切り替えると、速い瞬時メーターと滑らかな短時間メーターを比べられます。どちらもウィンドウが埋まってから値を出すため、短時間の曲線はクリップの 3 秒後から始まります。',
+      en: 'The bar tracks momentary loudness as the clip plays; the panel is the loudness over time. Integrated LUFS is the single overall number, true-peak estimates peaks between samples, and LRA captures how much the loudness moves. Switch the window to compare the fast momentary meter with the smoother short-term one — each reports only once its window has filled, so the short-term contour starts three seconds into the clip.',
+      ja: 'バーは再生中の瞬時ラウドネスを追い、パネルは時間ごとのラウドネスです。インテグレーテッド LUFS は全体を表す一つの数値、トゥルーピークはサンプル間も含むピークの推定値、LRA はラウドネスの動く幅を表します。ウィンドウを切り替えると、速い瞬時メーターと滑らかな短時間メーターを比べられます。どちらもウィンドウが埋まってから値を出すため、短時間の曲線はクリップの 3 秒後から始まります。',
     },
     params: [
       {
@@ -48,8 +85,8 @@ export const masteringDemos: SonareDemoDef[] = [
       ja: 'デノイズ修復 — 修復前と修復後',
     },
     caption: {
-      en: 'The clean chord is given a layer of broadband hiss (Damaged); the repair stage removes it (Repaired). Both averaged spectra are drawn together — the raised high-frequency floor is the hiss, and it drops back onto the music once denoised. Flip Compare to audition each side — the gain is untouched, so the hiss is the only thing that moves — and switch the algorithm to see how much floor each one pulls down. FLOOR is the high-band reduction in dB.',
-      ja: 'きれいなコードに広帯域のヒスノイズを乗せたものが「修復前」、リペアステージで取り除いたものが「修復後」です。平均スペクトルを重ねて表示しており、持ち上がった高域のフロアがヒスノイズで、デノイズすると音楽の上に落ち着きます。Compare を切り替えると両者を聴き比べできます。ゲインには手を加えていないので、動くのはヒスノイズだけです。アルゴリズムを変えるとフロアの下がり方の違いが分かります。FLOOR は高域の低減量（dB）です。',
+      en: 'Broadband hiss is added to a clean chord. Compare the noisy and denoised signals and their spectra, then choose a denoising algorithm. Both retain their processed levels without extra loudness matching. Noise reduction can also change musical transients and timbre. FLOOR shows the average high-band reduction in dB.',
+      ja: 'きれいなコードに広帯域のヒスノイズを加えています。修復前後の音とスペクトルを比較し、デノイズの方式を切り替えてください。追加の音量合わせは行っていません。ノイズ低減は、音楽の立ち上がりや音色にも影響することがあります。FLOOR は高域の平均低減量（dB）です。',
     },
     params: [
       {
@@ -92,8 +129,8 @@ export const masteringDemos: SonareDemoDef[] = [
       ja: 'レストレーション — 傷んだレコードの修復前と修復後',
     },
     caption: {
-      en: 'A piano turnaround carrying the damage a restoration chain targets: mains hum, surface noise and hiss, and sparse clicks and crackle (Damaged). The repair stage applied here is the classical dereverberator — spectral subtraction of the diffuse, sustained energy — so what it strips is the noise bed and the smeared tails, not the clicks or the hum; those belong to the declick and hum-removal stages (Repaired). Both averaged spectra are drawn together, and FLOOR is how far the high band came down. Flip Compare to audition each side — the level is untouched, so only the bed moves.',
-      ja: 'レストレーションの処理対象となる傷みを乗せたピアノのターンアラウンドです。電源ハム、表面ノイズとヒスノイズ、まばらなクリックとクラックルが入っています（修復前）。ここで適用しているリペアステージは古典的なデリバーブで、拡散した持続成分をスペクトル減算します。取り除かれるのはノイズの土台と滲んだ余韻で、クリックやハムはデクリックやハム除去といった別のステージの担当です（修復後）。平均スペクトルは重ねて表示し、FLOOR は高域がどれだけ下がったかを示します。Compare を切り替えると両者を聴き比べできます。レベルは変えていないので、動くのは土台のノイズだけです。',
+      en: 'The piano clip contains hum, hiss, clicks and crackle. This example applies only the classical dereverberator, which attenuates diffuse sustained energy; it does not apply a dedicated declick or dehum stage. Compare the spectra and audition the result without added loudness matching. The processor can change musical tails and timbre as well as the noise bed. FLOOR shows the high-band reduction in dB.',
+      ja: 'ピアノのクリップには、ハム・ヒスノイズ・クリック・クラックルが入っています。このデモは古典的なデリバーブだけを適用し、拡散した持続成分を減衰させます。専用のデクリックやハム除去は適用していません。追加の音量合わせをせずに、スペクトルと音を比較してください。ノイズだけでなく、音楽の余韻や音色も変わることがあります。FLOOR は高域の低減量（dB）です。',
     },
     params: [
       {
@@ -188,8 +225,8 @@ export const masteringDemos: SonareDemoDef[] = [
       ja: 'サンプル間ピーク — マスターが再生時にクリップする理由',
     },
     caption: {
-      en: 'The dots are the stored samples; the curve is the continuous waveform a converter rebuilds from them. The middle pair straddles a crest, so there the true peak falls between two samples. The nearer the frequency sits to Nyquist, the fewer dots there are per cycle and the further the reconstruction can rise above every stored one — but the overshoot does not grow smoothly: at some frequencies a dot lands right on a crest and the gap closes to nothing. Push the sample peak to 0 dBFS and the true peak pokes above it: every stored number looks safe, yet the signal clips on playback. That gap is what a true-peak meter catches and a true-peak limiter tames.',
-      ja: 'ドットは保存されたサンプル、曲線はそこからコンバーターが再構成する連続波形です。中央の 2 つは山をまたいでいるので、そこでは真のピークがサンプルのあいだに落ちます。周波数がナイキストに近いほど 1 周期あたりのドットは減り、再構成はどのサンプルよりも高く伸びられます。ただし、はみ出し方は滑らかに増えるわけではありません。周波数によってはドットがちょうど山の頂点に乗り、差がゼロになります。サンプルピークを 0 dBFS まで上げると、真のピークがそれを超えます。保存された数値はどれも安全に見えるのに、再生すると信号はクリップします。この差こそ、トゥルーピークメーターが捉え、トゥルーピークリミッターが抑えるものです。',
+      en: 'The dots are samples of a sine wave; the curve shows its analytic waveform. A crest can fall between samples, above every stored value. The gap depends on frequency and phase, so it does not increase smoothly toward Nyquist. Compare the analytic peak with the oversampled meter reading. Raising the sample peak toward 0 dBFS can leave an inter-sample over that clips a converter or processor without sufficient headroom.',
+      ja: 'ドットは正弦波のサンプル、曲線はその解析的な波形です。山の頂点がサンプル間に来ると、保存された値より高いピークが生じます。その差は周波数と位相で変わり、ナイキスト周波数に近づくほど単調に増えるわけではありません。解析的なピークと、オーバーサンプリングしたメーターの推定値を比較してください。サンプルピークを 0 dBFS に近づけると、サンプル間の超過が生じ、ヘッドルームの足りないコンバーターや後段の処理でクリップする可能性があります。',
     },
     params: [
       {
@@ -205,7 +242,7 @@ export const masteringDemos: SonareDemoDef[] = [
       {
         key: 'nyquist',
         kind: 'range',
-        default: 0.48,
+        default: 0.4,
         min: 0.15,
         max: 0.48,
         step: 0.01,
@@ -262,8 +299,8 @@ export const masteringDemos: SonareDemoDef[] = [
       ja: 'パラレルコンプレッション — コピーを潰し、パンチは残す',
     },
     caption: {
-      en: 'Compression need not be all-or-nothing. Parallel ("New York") compression mixes a heavily compressed copy under the untouched dry signal: the dry copy keeps the transients and punch while the squashed copy lifts the quiet body. Set a low threshold and a high ratio to crush the copy, then drag Blend — at 100% you hear only the compressor (the transfer curve fully bent), and as you lower it the dry dynamics return and the curve straightens back toward 1:1. The envelope panel shows the transients surviving that a full compressor would have flattened.',
-      ja: 'コンプレッションは「全か無か」である必要はありません。パラレル（「ニューヨーク」）コンプレッションは、強く潰したコピーを、手を加えていないドライ信号の下に混ぜます。ドライのコピーが過渡音とパンチを保ち、潰したコピーが静かな胴体を持ち上げます。低いスレッショルドと高いレシオでコピーを潰し、ブレンドをドラッグしてください。100% ではコンプレッサーだけが聞こえ（伝達曲線は完全に曲がる）、下げるとドライのダイナミクスが戻って曲線は 1:1 に向かって戻ります。エンベロープのパネルでは、フルのコンプなら潰れていた過渡音が生き残るのが見えます。',
+      en: 'Blend the dry signal with a compressed copy. The dry path preserves more of the original transients than fully wet compression. This example applies no makeup gain, so blending does not boost quiet passages and output level changes with the mix. Compare the transfer curve and gain envelope, then audition the result.',
+      ja: 'ドライ音と圧縮した音を混ぜます。圧縮音だけの場合に比べ、ドライ音を混ぜると元の立ち上がりが残ります。このデモはメイクアップゲインを加えないため、小さい音を持ち上げる処理ではなく、混合比によって出力レベルも変わります。入出力特性とゲインの変化を見ながら試聴してください。',
     },
     params: [
       {
@@ -310,8 +347,8 @@ export const masteringDemos: SonareDemoDef[] = [
       ja: 'チルト EQ — スペクトル全体を一度に整える',
     },
     caption: {
-      en: 'Tilt EQ rotates the broad tonal balance around a fixed midrange pivot (the amber line). Positive tilt lifts the highs and trims the lows for a brighter master; negative tilt does the reverse for a warmer one. Every render is peak-normalized to the same ceiling, which keeps a positive tilt from clipping — but that matches peaks, not loudness, so a bright setting still measures a couple of LU under a dark one. Watch the averaged spectrum see-saw around the pivot as you drag. Use it for broad correction — reach for a narrow band, not tilt, to tame a single resonance.',
-      ja: 'チルト EQ は、固定したミッドレンジのピボット（橙色の線）を軸に、おおまかな音色バランスを回転させます。プラス方向は高域を持ち上げ低域を削って明るく、マイナス方向はその逆で温かくします。レンダーごとにピークを同じ高さへ揃えているためプラス方向でもクリップしませんが、揃えているのはピークであってラウドネスではないので、明るい設定は暗い設定より 2 LU ほど低く出ます。ドラッグすると、平均スペクトルがピボットを軸にシーソーのように傾くのが見えます。用途は広い範囲の補正です。特定の共鳴を抑えたいときは、チルトではなく狭いバンドを使ってください。',
+      en: 'Tilt EQ rotates the broad tonal balance around a fixed midrange pivot (the amber line). Positive tilt lifts the highs and trims the lows for a brighter master; negative tilt does the reverse for a warmer one. Every render is peak-normalized to the same ceiling, which keeps a positive tilt from clipping — but that matches peaks, not loudness, so perceived loudness can still differ. Watch the averaged spectrum see-saw around the pivot as you drag. Use it for broad correction — reach for a narrow band, not tilt, to tame a single resonance.',
+      ja: 'チルト EQ は、固定したミッドレンジのピボット（橙色の線）を軸に、おおまかな音色バランスを傾けます。プラス方向は高域を持ち上げ低域を削って明るく、マイナス方向はその逆で温かくします。レンダーごとにピークを同じ高さへ揃えているためプラス方向でもクリップしませんが、揃えているのはピークであってラウドネスではないので、知覚上の音量は設定によって変わります。ドラッグすると、平均スペクトルがピボットを軸にシーソーのように傾くのが見えます。用途は広い範囲の補正です。特定の共鳴を抑えたいときは、チルトではなく狭いバンドを使ってください。',
     },
     params: [
       {
@@ -323,6 +360,54 @@ export const masteringDemos: SonareDemoDef[] = [
         step: 0.5,
         unit: 'dB',
         label: { en: 'Tilt', ja: 'チルト' },
+      },
+    ],
+  },
+  {
+    id: 'vowel-filter',
+    archetype: 'ab-process',
+    source: { kind: 'clip', clip: 'pad' },
+    viz: 'spectrogram',
+    config: {
+      processor: 'vowel-filter',
+      injectNoise: false,
+      eyebrow: 'A/B PROCESS · VOWEL',
+      legendBefore: { en: 'Dry', ja: '原音' },
+      legendAfter: { en: 'Filtered', ja: 'フィルター音' },
+      loadingLabel: { en: 'Filtering', ja: 'フィルター処理中' },
+      showFloor: false,
+    },
+    title: {
+      en: 'Vowel filter — shaping formant bands',
+      ja: '母音フィルター — フォルマントの帯域を変える',
+    },
+    caption: {
+      en: 'Choose a, i, u, e or o and compare the pad with the filtered signal. The real vowel filter combines three resonant bands with a direct path, changing the spectral shape without transposing the notes. Both spectra share one reference scale, and neither A/B signal receives extra peak or loudness matching. This is a timbre effect, not speech synthesis; output level can differ between vowels.',
+      ja: 'あ・い・う・え・おを選び、パッドの原音とフィルター音を比較してください。母音フィルターは３つの共振帯域と直接音を組み合わせ、音程を移調せずにスペクトルの形を変えます。スペクトルは共通の基準で表示し、A/B の音には追加のピーク合わせやラウドネス合わせを行っていません。音声を生成する処理ではなく、音色を変えるエフェクトです。母音によって出力レベルも変わります。',
+    },
+    params: [
+      {
+        key: 'view',
+        kind: 'select',
+        default: 'repaired',
+        label: { en: 'Compare', ja: '比較' },
+        options: [
+          { value: 'damaged', label: { en: 'Dry', ja: '原音' } },
+          { value: 'repaired', label: { en: 'Filtered', ja: 'フィルター音' } },
+        ],
+      },
+      {
+        key: 'mode',
+        kind: 'select',
+        default: '0',
+        label: { en: 'Vowel', ja: '母音' },
+        options: [
+          { value: '0', label: { en: 'a', ja: 'あ' } },
+          { value: '1', label: { en: 'i', ja: 'い' } },
+          { value: '2', label: { en: 'u', ja: 'う' } },
+          { value: '3', label: { en: 'e', ja: 'え' } },
+          { value: '4', label: { en: 'o', ja: 'お' } },
+        ],
       },
     ],
   },

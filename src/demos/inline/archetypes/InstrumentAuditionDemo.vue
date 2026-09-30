@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * `instrument-audition` archetype: audition the data-free fallback for a chosen
- * variant, offline, and draw it as an amplitude envelope plus a zoomed scope.
+ * variant, offline, and draw it as an amplitude envelope plus a zoomed stereo scope.
  *
  * Four modes, selected by `def.config.mode`:
  * - `gm-program` — bounce one note through a GM program with NO SoundFont loaded,
@@ -28,12 +28,14 @@
  * `gs-efx` assembles a one-track SMF instead of an event list, and every mode
  * shares one render path.
  *
- * Every rendered buffer is peak-normalized so the A/B is about timbral character,
- * not loudness. Pressing play auditions the exact buffer on screen.
+ * Every rendered buffer uses one shared peak gain across both channels. This
+ * preserves stereo balance and leaves loudness differences between variants
+ * audible. Pressing play auditions the exact buffer on screen.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { deinterleaveStereo, peakNormalizeStereo } from '@/demos/inline/instrumentAuditionAudio';
 import { type SonareDemoDef } from '@/demos/inline/types';
-import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
+import { type StereoAudio, useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
 import { buildSmf, dt1, type SmfEvent } from '@/utils/gsSysex';
 import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
@@ -42,7 +44,7 @@ import DemoFrame from '../DemoFrame.vue';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
-const { ensureWasm, play, playingId, progress } = useSonareDemoAudio();
+const { ensureWasm, play, stop, playingId, progress } = useSonareDemoAudio();
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 const isPlaying = computed(() => playingId.value === props.def.id);
@@ -65,6 +67,9 @@ const { values, updateParams } = useDemoParams(props.def);
 // gs-variation: a Bank Select MSB (0 = capital tone). gs-drum-kit: the rhythm
 // part's program number. gs-efx: a GS EFX type number (0 = dry / Thru).
 const variant = computed<number>(() => Number(values.variant ?? 0));
+const realization = computed<'modern' | 'classic'>(() =>
+  values.realization === 'classic' ? 'classic' : 'modern',
+);
 const variantLabel = computed<string>(() => {
   const opt = (props.def.params?.[0]?.options ?? []).find((o) => Number(o.value) === variant.value);
   const text = opt?.label;
@@ -96,10 +101,14 @@ const SCOPE_HZ = 196; // nominal pitch used only to size the zoomed scope window
 
 const dispEnv = new Float32Array(ENV_COLS);
 const targetEnv = new Float32Array(ENV_COLS);
-const dispScope = new Float32Array(SCOPE_N);
-const targetScope = new Float32Array(SCOPE_N);
+const dispScopeLeft = new Float32Array(SCOPE_N);
+const dispScopeRight = new Float32Array(SCOPE_N);
+const targetScopeLeft = new Float32Array(SCOPE_N);
+const targetScopeRight = new Float32Array(SCOPE_N);
 
-let lastAudio: { samples: Float32Array; sampleRate: number } | null = null;
+let lastAudio: StereoAudio | null = null;
+let renderRevision = 0;
+let disposed = false;
 
 type WasmModule = Awaited<ReturnType<typeof ensureWasm>>;
 
@@ -114,7 +123,7 @@ interface ProjectLike {
   setMidiEvents(clipId: number, events: MidiEvent[]): void;
   importSmf(data: Uint8Array): number;
   bounceWithSf2Instrument(
-    instrument: Record<string, unknown>,
+    instrument: { gsEfxRealization?: 'modern' | 'classic' },
     options: { numChannels: number; sampleRate: number; totalFrames: number },
   ): Float32Array;
   delete(): void;
@@ -168,16 +177,19 @@ function bounceProject(
   wasm: WasmModule,
   populate: (project: ProjectLike, Project: ProjectCtor) => void,
   seconds: number,
-): Float32Array {
+  gsEfxRealization: 'modern' | 'classic' = 'modern',
+): StereoAudio {
   const Project = (wasm as unknown as { Project: ProjectCtor }).Project;
   const project = new Project();
   try {
     project.setSampleRate(SR);
     populate(project, Project);
-    return project.bounceWithSf2Instrument(
-      {},
-      { numChannels: 1, sampleRate: SR, totalFrames: Math.round(SR * seconds) },
+    const totalFrames = Math.round(SR * seconds);
+    const interleaved = project.bounceWithSf2Instrument(
+      { gsEfxRealization },
+      { numChannels: 2, sampleRate: SR, totalFrames },
     );
+    return deinterleaveStereo(interleaved, totalFrames, SR);
   } finally {
     project.delete();
   }
@@ -203,7 +215,7 @@ function fromEvents(
  * long and the note is released after one and a half — a 0.75 s note whose
  * release tail fits the 1.4 s render.
  */
-function renderGmProgram(wasm: WasmModule, program: number): Float32Array {
+function renderGmProgram(wasm: WasmModule, program: number): StereoAudio {
   return bounceProject(
     wasm,
     fromEvents(
@@ -224,7 +236,7 @@ function renderGmProgram(wasm: WasmModule, program: number): Float32Array {
  * picks the tone map (1 to 4, successive generations of the set), never the
  * variation.
  */
-function renderGsVariation(wasm: WasmModule, bankMsb: number, capital: number): Float32Array {
+function renderGsVariation(wasm: WasmModule, bankMsb: number, capital: number): StereoAudio {
   return bounceProject(
     wasm,
     fromEvents(
@@ -262,7 +274,7 @@ const DRUM_CHANNEL = 9; // MIDI channel 10, the GS rhythm part
  * by that part's Program Change. One bar is four beats (2 s); the render adds
  * the last hit's tail. Each strike gets a matching note-off a sixteenth later.
  */
-function renderGsDrumKit(wasm: WasmModule, kitProgram: number): Float32Array {
+function renderGsDrumKit(wasm: WasmModule, kitProgram: number): StereoAudio {
   return bounceProject(
     wasm,
     fromEvents(
@@ -286,7 +298,11 @@ function renderGsDrumKit(wasm: WasmModule, kitProgram: number): Float32Array {
  * where the others hand over an event list.
  */
 const EFX_CHORD = [52, 55, 59]; // a sustained triad on the default piano fallback
-function renderGsEfx(wasm: WasmModule, efxType: number): Float32Array {
+function renderGsEfx(
+  wasm: WasmModule,
+  efxType: number,
+  gsEfxRealization: 'modern' | 'classic',
+): StereoAudio {
   const events: SmfEvent[] = [];
   if (efxType > 0) {
     events.push({ beat: 0, sysex: efxTypeSysex(efxType) });
@@ -295,71 +311,73 @@ function renderGsEfx(wasm: WasmModule, efxType: number): Float32Array {
   for (const n of EFX_CHORD) events.push({ beat: 0, bytes: [0x90, n, 112] });
   for (const n of EFX_CHORD) events.push({ beat: 2.3, bytes: [0x80, n, 0] });
   const smf = buildSmf(events, 3.4);
-  return bounceProject(wasm, (project) => void project.importSmf(smf), 1.7);
+  return bounceProject(wasm, (project) => void project.importSmf(smf), 1.7, gsEfxRealization);
 }
 
-/** Peak-normalize so the A/B compares character, not loudness. */
-function normalize(pcm: Float32Array): Float32Array {
-  let peak = 1e-6;
-  for (let i = 0; i < pcm.length; i++) peak = Math.max(peak, Math.abs(pcm[i]));
-  const scale = 0.9 / peak;
-  for (let i = 0; i < pcm.length; i++) pcm[i] *= scale;
-  return pcm;
-}
-
-function renderVariant(wasm: WasmModule): Float32Array {
-  let pcm: Float32Array;
+function renderVariant(wasm: WasmModule): StereoAudio {
+  let audio: StereoAudio;
   switch (mode.value) {
     case 'gs-efx':
-      pcm = renderGsEfx(wasm, variant.value);
+      audio = renderGsEfx(wasm, variant.value, realization.value);
       break;
     case 'gs-variation':
-      pcm = renderGsVariation(wasm, variant.value, program.value);
+      audio = renderGsVariation(wasm, variant.value, program.value);
       break;
     case 'gs-drum-kit':
-      pcm = renderGsDrumKit(wasm, variant.value);
+      audio = renderGsDrumKit(wasm, variant.value);
       break;
     default:
-      pcm = renderGmProgram(wasm, variant.value);
+      audio = renderGmProgram(wasm, variant.value);
   }
-  return normalize(pcm);
+  return peakNormalizeStereo(audio);
 }
 
 // ---- envelope + scope (shared with the synth archetype) --------------------
-function fillTargets(pcm: Float32Array): void {
-  const n = pcm.length;
+function fillTargets(audio: StereoAudio): void {
+  const { left, right } = audio;
+  const n = left.length;
   let peak = 1e-6;
-  for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(pcm[i]));
+  for (let i = 0; i < n; i++) {
+    peak = Math.max(peak, Math.abs(left[i] ?? 0), Math.abs(right[i] ?? 0));
+  }
   const scale = 1 / peak;
   for (let c = 0; c < ENV_COLS; c++) {
     const a = Math.floor((c / ENV_COLS) * n);
     const b = Math.min(n, Math.floor(((c + 1) / ENV_COLS) * n));
     let m = 0;
-    for (let i = a; i < b; i++) m = Math.max(m, Math.abs(pcm[i]));
+    for (let i = a; i < b; i++) {
+      m = Math.max(m, Math.abs(left[i] ?? 0), Math.abs(right[i] ?? 0));
+    }
     targetEnv[c] = m * scale;
   }
   const period = SR / SCOPE_HZ;
   const span = Math.min(n - 1, Math.round(period * SCOPE_CYCLES));
   const start = Math.min(n - span - 1, Math.floor(n * 0.42));
   let lp = 1e-6;
-  for (let i = start; i < start + span; i++) lp = Math.max(lp, Math.abs(pcm[i]));
+  for (let i = start; i < start + span; i++) {
+    lp = Math.max(lp, Math.abs(left[i] ?? 0), Math.abs(right[i] ?? 0));
+  }
   const ls = 1 / lp;
   for (let i = 0; i < SCOPE_N; i++) {
     const idx = start + Math.floor((i / (SCOPE_N - 1)) * span);
-    targetScope[i] = Math.max(-1, Math.min(1, pcm[idx] * ls));
+    targetScopeLeft[i] = Math.max(-1, Math.min(1, (left[idx] ?? 0) * ls));
+    targetScopeRight[i] = Math.max(-1, Math.min(1, (right[idx] ?? 0) * ls));
   }
 }
 
 async function compute(): Promise<void> {
+  const revision = renderRevision;
   try {
     if (status.value === 'idle') status.value = 'loading';
     const wasm = await ensureWasm();
-    const pcm = renderVariant(wasm);
-    lastAudio = { samples: pcm, sampleRate: SR };
-    fillTargets(pcm);
+    if (disposed || revision !== renderRevision) return;
+    const audio = renderVariant(wasm);
+    lastAudio = audio;
+    fillTargets(audio);
     status.value = 'ready';
     startMorph();
   } catch (e) {
+    if (disposed || revision !== renderRevision) return;
     fail(e);
   }
 }
@@ -376,8 +394,11 @@ function startMorph(): void {
       delta = Math.max(delta, Math.abs(d));
     }
     for (let i = 0; i < SCOPE_N; i++) {
-      const d = targetScope[i] - dispScope[i];
-      dispScope[i] += d * 0.24;
+      const leftDelta = targetScopeLeft[i] - dispScopeLeft[i];
+      const rightDelta = targetScopeRight[i] - dispScopeRight[i];
+      dispScopeLeft[i] += leftDelta * 0.24;
+      dispScopeRight[i] += rightDelta * 0.24;
+      const d = Math.max(Math.abs(leftDelta), Math.abs(rightDelta));
       delta = Math.max(delta, Math.abs(d));
     }
     paint();
@@ -385,7 +406,8 @@ function startMorph(): void {
       rafId = requestAnimationFrame(step);
     } else {
       dispEnv.set(targetEnv);
-      dispScope.set(targetScope);
+      dispScopeLeft.set(targetScopeLeft);
+      dispScopeRight.set(targetScopeRight);
       paint();
       rafId = 0;
     }
@@ -441,25 +463,29 @@ function paint(): void {
   ctx.lineTo(padX + innerW, scopeMid + 0.5);
   ctx.stroke();
 
-  ctx.strokeStyle = '#2dd4bf';
-  ctx.lineWidth = 1.8;
-  ctx.lineJoin = 'round';
-  ctx.shadowColor = 'rgba(45, 212, 191, 0.6)';
-  ctx.shadowBlur = 6;
-  ctx.beginPath();
-  for (let i = 0; i < SCOPE_N; i++) {
-    const x = padX + (i / (SCOPE_N - 1)) * innerW;
-    const y = scopeMid - dispScope[i] * scopeAmp;
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  }
-  ctx.stroke();
-  ctx.shadowBlur = 0;
+  const drawScope = (samples: Float32Array, color: string, shadow: string) => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.8;
+    ctx.lineJoin = 'round';
+    ctx.shadowColor = shadow;
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    for (let i = 0; i < SCOPE_N; i++) {
+      const x = padX + (i / (SCOPE_N - 1)) * innerW;
+      const y = scopeMid - samples[i] * scopeAmp;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  };
+  drawScope(dispScopeLeft, '#2dd4bf', 'rgba(45, 212, 191, 0.6)');
+  drawScope(dispScopeRight, '#f59e0b', 'rgba(245, 158, 11, 0.55)');
 
   ctx.font = '9px "JetBrains Mono", ui-monospace, monospace';
   ctx.fillStyle = 'rgba(186, 230, 224, 0.5)';
   ctx.textBaseline = 'top';
   ctx.fillText('ENVELOPE', padX, envTop - 2);
-  ctx.fillText('WAVE ×5', padX, scopeTop - 2);
+  ctx.fillText('WAVE ×5  L/R', padX, scopeTop - 2);
   ctx.textAlign = 'right';
   ctx.fillText('TIME →', padX + innerW, envBot - 11);
   ctx.textAlign = 'left';
@@ -470,12 +496,15 @@ useCanvasRedraw(canvas, paint);
 
 // ---- audition --------------------------------------------------------------
 async function onPlay(): Promise<void> {
+  const revision = renderRevision;
   if (!lastAudio) {
     const wasm = await ensureWasm();
-    const pcm = renderVariant(wasm);
-    lastAudio = { samples: pcm, sampleRate: SR };
+    if (disposed || revision !== renderRevision) return;
+    lastAudio = renderVariant(wasm);
   }
+  if (disposed || revision !== renderRevision || !lastAudio) return;
   await play(props.def.id, lastAudio);
+  if ((disposed || revision !== renderRevision) && isPlaying.value) stop();
 }
 
 let pending = 0;
@@ -488,8 +517,11 @@ function scheduleCompute(): void {
 }
 
 watch(
-  () => variant.value,
+  () => [variant.value, realization.value],
   () => {
+    renderRevision += 1;
+    lastAudio = null;
+    if (isPlaying.value) stop();
     if (props.active) scheduleCompute();
   },
 );
@@ -501,6 +533,8 @@ watch(
   { immediate: true },
 );
 onBeforeUnmount(() => {
+  disposed = true;
+  renderRevision += 1;
   stopMorph();
   if (pending) cancelAnimationFrame(pending);
 });

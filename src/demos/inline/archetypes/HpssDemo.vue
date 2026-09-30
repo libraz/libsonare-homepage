@@ -7,9 +7,10 @@
  * uses median filtering on the spectrogram: sustained tones form **horizontal**
  * ridges, transient hits form **vertical** streaks, and the two are separated by
  * filtering along each axis. The view selects which layer to show as an STFT
- * spectrogram and to audition — Full has both, Harmonic keeps the horizontal ridges
- * (the tune, drums gone), Percussive keeps the vertical streaks (the drums, tune
- * gone). A playback-synced beam sweeps the spectrogram.
+ * spectrogram and to audition — Full has both, Harmonic emphasizes sustained
+ * pitched structure, and Percussive emphasizes transients. Median masks are not
+ * instrument-aware, so some leakage between the layers is expected. A
+ * playback-synced beam sweeps the spectrogram.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { SonareDemoDef } from '@/demos/inline/types';
@@ -17,6 +18,7 @@ import { type MonoAudio, useSonareDemoAudio } from '@/demos/inline/useSonareDemo
 import { useDemoChrome, useDemoParams, useDisposed } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
+import { magnitudePeak, normalizeMagnitudeRelativeDb } from './spectralDisplay';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
@@ -60,6 +62,7 @@ type WasmModule = Awaited<ReturnType<typeof ensureWasm>>;
 let full: MonoAudio | null = null;
 let harmonic: MonoAudio | null = null;
 let percussive: MonoAudio | null = null;
+let fullMixPeak = 0;
 
 function streamFor(v: View): MonoAudio | null {
   return v === 'harmonic' ? harmonic : v === 'percussive' ? percussive : full;
@@ -74,10 +77,11 @@ function ramp(val: number, out: Uint8ClampedArray, o: number): void {
   out[o + 3] = 255;
 }
 
-/** Paint an STFT magnitude spectrogram of one stream into the canvas. */
-function paintStream(wasm: WasmModule, a: MonoAudio): void {
+/** Paint an STFT magnitude spectrogram using the full mix as its dB reference. */
+function paintStream(wasm: WasmModule, a: MonoAudio, referencePeak: number): void {
   const r = wasm.stft(a.samples, a.sampleRate, 1024, 256);
   const { nBins, nFrames, magnitude } = r;
+  const norm = normalizeMagnitudeRelativeDb(magnitude, referencePeak);
   const el = canvas.value;
   if (!el) return;
   el.width = nFrames;
@@ -85,12 +89,10 @@ function paintStream(wasm: WasmModule, a: MonoAudio): void {
   const ctx = el.getContext('2d');
   if (!ctx) return;
   const img = ctx.createImageData(nFrames, nBins);
-  const floorDb = -90;
   for (let bin = 0; bin < nBins; bin++) {
     const y = nBins - 1 - bin; // row 0 = low freq at the bottom
     for (let frame = 0; frame < nFrames; frame++) {
-      const db = 20 * Math.log10(magnitude[bin * nFrames + frame] + 1e-9);
-      ramp((db - floorDb) / -floorDb, img.data, (y * nFrames + frame) * 4);
+      ramp(norm[bin * nFrames + frame], img.data, (y * nFrames + frame) * 4);
     }
   }
   ctx.putImageData(img, 0, 0);
@@ -111,9 +113,10 @@ async function compute(): Promise<void> {
       const r = wasm.hpss(clip.samples, clip.sampleRate);
       harmonic = { samples: r.harmonic, sampleRate: r.sampleRate };
       percussive = { samples: r.percussive, sampleRate: r.sampleRate };
+      fullMixPeak = magnitudePeak(wasm.stft(clip.samples, clip.sampleRate, 1024, 256).magnitude);
     }
     const stream = streamFor(view.value);
-    if (stream) paintStream(wasm, stream);
+    if (stream) paintStream(wasm, stream, fullMixPeak);
     status.value = 'ready';
   } catch (e) {
     if (disposed()) return;
@@ -165,7 +168,7 @@ onBeforeUnmount(() => {
     :disabled="status === 'loading'"
     :error="status === 'error' ? errorMsg : null"
     loading-label="SEPARATING…"
-    axis-freq="FREQ"
+    axis-freq="FREQ · REL dB"
     axis-time="TIME →"
     @toggle="onPlay"
   >

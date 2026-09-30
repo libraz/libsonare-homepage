@@ -6,8 +6,8 @@
  * time window (the Artifact source). One `spectralEdit` region op — the same
  * time x frequency rectangle the whistle occupies — then removes it (the Edited output).
  * Both averaged spectra are drawn at once: the whistle reads as a sharp spike in the
- * notch band; after the edit it drops back onto the music while everything outside the
- * band is untouched. The mode select switches how the masked bins are treated —
+ * notch band; the edit attenuates selected STFT bins. Overlapping analysis windows can spread
+ * changes near the region boundaries. The mode select switches how the masked bins are treated —
  * attenuate (gainDb), mute (silence the bins) or heal (interpolate from neighbour
  * frames). Flip Compare to audition each side at matched loudness; the NOTCH readout is
  * the in-band reduction in dB.

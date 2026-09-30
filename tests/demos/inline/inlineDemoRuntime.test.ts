@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { flushPromises, mount } from '@vue/test-utils';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h, ref } from 'vue';
+import { renderTranscription } from '@/demos/inline/archetypes/transcribePipeline';
 
 const lang = ref('en');
 vi.mock('vitepress', () => ({ useData: () => ({ lang }) }));
@@ -13,6 +14,10 @@ interface PlayedAudio {
   sampleRate: number;
   peak: number;
 }
+
+type PlayedAudioInput =
+  | { samples: Float32Array; sampleRate: number }
+  | { left: Float32Array; right: Float32Array; sampleRate: number };
 
 const audioRuntime = vi.hoisted(() => ({
   plays: [] as PlayedAudio[],
@@ -77,21 +82,26 @@ vi.mock('@/demos/inline/useSonareDemoAudio', async () => {
     return audio;
   }
 
-  async function play(
-    id: string,
-    audio: { samples: Float32Array; sampleRate: number },
-  ): Promise<void> {
-    if (audio.samples.length === 0 || !Number.isFinite(audio.sampleRate) || audio.sampleRate <= 0) {
+  async function play(id: string, audio: PlayedAudioInput): Promise<void> {
+    const channels = 'samples' in audio ? [audio.samples] : [audio.left, audio.right];
+    if (
+      channels.some((channel) => channel.length === 0) ||
+      ('left' in audio && audio.left.length !== audio.right.length) ||
+      !Number.isFinite(audio.sampleRate) ||
+      audio.sampleRate <= 0
+    ) {
       throw new Error(`invalid audition audio for ${id}`);
     }
     let peak = 0;
-    for (const sample of audio.samples) {
-      if (!Number.isFinite(sample)) throw new Error(`non-finite audition sample for ${id}`);
-      peak = Math.max(peak, Math.abs(sample));
+    for (const channel of channels) {
+      for (const sample of channel) {
+        if (!Number.isFinite(sample)) throw new Error(`non-finite audition sample for ${id}`);
+        peak = Math.max(peak, Math.abs(sample));
+      }
     }
     audioRuntime.plays.push({
       id,
-      length: audio.samples.length,
+      length: channels[0].length,
       sampleRate: audio.sampleRate,
       peak,
     });
@@ -121,6 +131,79 @@ import { demoArchetypeComponents } from '@/demos/inline/archetypes';
 import { allDemos } from '@/demos/inline/registry';
 import * as wasm from '@/wasm/index.js';
 
+/**
+ * jsdom has no native Worker. Keep the integration test's worker boundary
+ * explicit while running the same WASM adapters used by the browser workers.
+ */
+class InlineDemoWorkerMock {
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: ((event: ErrorEvent) => void) | null = null;
+  terminated = false;
+
+  postMessage(
+    message: {
+      type?: string;
+      id: number;
+      samples: Float32Array;
+      sampleRate: number;
+    },
+    _transfer?: Transferable[],
+  ): void {
+    queueMicrotask(() => {
+      if (this.terminated) return;
+      try {
+        if (message.type === 'decompose') {
+          const result = wasm.decomposeStems({
+            samples: message.samples,
+            sampleRate: message.sampleRate,
+            nComponents: 4,
+            nFft: 1024,
+            hopLength: 256,
+            nIter: 30,
+          });
+          this.onmessage?.({
+            data: {
+              type: 'done',
+              id: message.id,
+              components: result.components,
+              sampleRate: result.sampleRate,
+            },
+          } as MessageEvent);
+          return;
+        }
+
+        const result = renderTranscription(wasm, message.samples, message.sampleRate);
+        this.onmessage?.({
+          data: {
+            type: 'done',
+            id: message.id,
+            events: result.events,
+            notes: result.notes,
+            noteCount: result.noteCount,
+            tempoBpm: result.tempoBpm,
+            sampleRate: result.sampleRate,
+            sourceDurationSec: result.sourceDurationSec,
+            pianoDurationSec: result.pianoDurationSec,
+            piano: result.piano,
+          },
+        } as MessageEvent);
+      } catch (error) {
+        this.onmessage?.({
+          data: {
+            type: 'error',
+            id: message.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        } as MessageEvent);
+      }
+    });
+  }
+
+  terminate(): void {
+    this.terminated = true;
+  }
+}
+
 async function settle(wrapper: ReturnType<typeof mount>): Promise<'ready' | 'error' | 'timeout'> {
   for (let attempt = 0; attempt < 300; attempt++) {
     await flushPromises();
@@ -134,6 +217,10 @@ async function settle(wrapper: ReturnType<typeof mount>): Promise<'ready' | 'err
 beforeAll(async () => {
   await wasm.init({ wasmBinary: readFileSync(join(process.cwd(), 'src/wasm/sonare.wasm')) });
 }, 30_000);
+
+beforeEach(() => {
+  vi.stubGlobal('Worker', InlineDemoWorkerMock);
+});
 
 afterEach(() => {
   audioRuntime.playingId.value = '';

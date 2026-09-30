@@ -21,8 +21,8 @@ export const realtimeDemos: SonareDemoDef[] = [
       ja: 'エンジンのレーンミキサー — 再生エンジン内のフェーダーとミュート',
     },
     caption: {
-      en: 'Three MIDI clips loop through the realtime engine: each track occupies a lane with its own channel strip, and the lanes sum into a master strip carrying the engine’s true-peak limiter. The faders call the strip setters and the mutes call setSoloMute — every band below is the engine’s actual per-lane output, re-rendered through renderOffline as you move the controls.',
-      ja: '3 つの MIDI クリップがリアルタイムエンジンでループします。各トラックはレーンを 1 つ占有し、専用のチャンネルストリップを持ち、レーンの合計はエンジンのトゥルーピークリミッターを載せたマスターストリップへ送られます。フェーダーはストリップのセッターを、ミュートは setSoloMute を呼びます。下の各バンドはエンジンの実際のレーン別出力で、操作のたびに renderOffline で描き直されます。',
+      en: 'Three MIDI clips loop through the realtime engine: each track occupies a lane with its own channel strip, and the lanes sum into a master strip carrying the engine’s true-peak limiter. The faders call the strip setters and the mutes call setSoloMute — every band below is the engine’s separate solo previews through the master chain, re-rendered through renderOffline as you move the controls.',
+      ja: '3 つの MIDI クリップがリアルタイムエンジンでループします。各トラックはレーンを 1 つ占有し、専用のチャンネルストリップを持ち、レーンの合計はエンジンのトゥルーピークリミッターを載せたマスターストリップへ送られます。フェーダーはストリップのセッターを、ミュートは setSoloMute を呼びます。下の各バンドは各レーンをソロにしてマスターチェーンを通した個別の試聴結果で、操作のたびに renderOffline で描き直されます。',
     },
     // Fader defaults set the balance: the kit renders far hotter than the two
     // sustained voices and the sub-bass far quieter, so they start offset.
@@ -90,7 +90,7 @@ export const realtimeDemos: SonareDemoDef[] = [
     },
     caption: {
       en: 'One channel feeds two sends and the main output. Pull the channel fader down: the POST-fader send and the MAIN output follow it, because they are tapped after the fader; the PRE-fader send is tapped before it and stays put. Press play to hear it — the dry tone (post-fader) fades out while the pre-fader send (a stand-in for a reverb/aux return) keeps sounding even with the fader all the way down. That is why a vocal reverb fed pre-fader does not disappear when you ride the vocal down — the classic routing surprise.',
-      ja: '1 つのチャンネルが 2 つの送りとメイン出力に分かれます。チャンネルフェーダーを下げると、ポストフェーダー送りとメイン出力はそれに従います。フェーダーの後ろで分岐しているからです。プリフェーダー送りはフェーダーの前で分岐しているので、そのまま残ります。再生すると、ドライ音（ポストフェーダー）は消えていくのに、プリフェーダー送り（リバーブ／アックスのリターンの代役）はフェーダーを下げきっても鳴り続けます。プリフェーダーに送ったボーカルのリバーブが、ボーカルを下げても消えないのはこのためです。よくある送りの落とし穴です。',
+      ja: '1 つのチャンネルが 2 つの送りとメイン出力に分かれます。チャンネルフェーダーを下げると、ポストフェーダー送りとメイン出力はそれに従います。フェーダーの後ろで分岐しているからです。プリフェーダー送りはフェーダーの前で分岐しているので、そのまま残ります。再生すると、ドライ音（ポストフェーダー）は消えていくのに、プリフェーダー送り（リバーブ／AUXのリターンの代役）はフェーダーを下げきっても鳴り続けます。プリフェーダーに送ったボーカルのリバーブが、ボーカルを下げても消えないのはこのためです。よくある送りの落とし穴です。',
     },
     params: [
       {

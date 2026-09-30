@@ -6,8 +6,24 @@
  * by `id` via `<SonareDemo id="..." />`.
  */
 
+import { GS_EFX_TYPES as GS_EFX_NAMES } from '@/utils/gsEfxNames';
 import { RHYTHM_SET_KINDS } from '@/utils/modelNames';
 import type { SonareDemoDef } from '../types';
+
+/** The compact effect set used by the embedded audition, including both native 3D effects. */
+const EMBEDDED_EFX_TYPES = [
+  0x0000, 0x0110, 0x0111, 0x0120, 0x0121, 0x0122, 0x0142, 0x0150, 0x0170, 0x0171,
+] as const;
+
+function efxOption(type: number) {
+  const key = `${(type >> 8).toString(16).padStart(2, '0').toUpperCase()} ${(type & 0xff).toString(16).padStart(2, '0').toUpperCase()}`;
+  const name = GS_EFX_NAMES[key];
+  if (!name) throw new Error(`unnamed embedded GS EFX type: ${key}`);
+  const hex = `0x${type.toString(16).padStart(4, '0').toUpperCase()}`;
+  return { value: String(type), label: { en: `${hex} ${name.en}`, ja: `${hex} ${name.ja}` } };
+}
+
+const EMBEDDED_EFX_OPTIONS = EMBEDDED_EFX_TYPES.map(efxOption);
 
 /**
  * A rhythm set the standard names after a drum machine, offered by the kind of
@@ -141,7 +157,7 @@ export const instrumentsDemos: SonareDemoDef[] = [
     },
     caption: {
       en: 'An LFO (low-frequency oscillator) is too slow to hear as a pitch; instead it moves something else. Here LFO 1 is routed to amplitude — tremolo — so the envelope ripples instead of holding flat. Rate sets how fast it pulses; depth sets how far. Turn depth to zero and the ripple disappears, leaving the plain held note. Press play to hear the pulsing. This is one routing in the mod matrix; the same LFO aimed at pitch would be vibrato, at the cutoff a filter wobble.',
-      ja: 'LFO（低周波オシレーター）はピッチとして聴くには遅すぎ、代わりに別の何かを動かします。ここでは LFO 1 を振幅に接続 — トレモロ — しているので、エンベロープが平らに保たれず波打ちます。レートは脈打つ速さを、深さはその振れ幅を決めます。深さを 0 にすると波打ちが消え、ただの持続音になります。再生すると脈動が聴けます。これはモッドマトリクスの 1 接続で、同じ LFO をピッチに向ければビブラート、カットオフに向ければフィルターのうねりになります。',
+      ja: 'LFO（低周波オシレーター）はピッチとして聴くには遅すぎ、代わりに別の何かを動かします。ここでは LFO 1 を振幅に接続している（トレモロ）ので、エンベロープが平らに保たれず波打ちます。レートは脈打つ速さを、深さはその振れ幅を決めます。深さを 0 にすると波打ちが消え、ただの持続音になります。再生すると脈動が聴けます。これはモッドマトリクスの 1 接続で、同じ LFO をピッチに向ければビブラート、カットオフに向ければフィルターのうねりになります。',
     },
     params: [
       {
@@ -468,24 +484,28 @@ export const instrumentsDemos: SonareDemoDef[] = [
       ja: 'GS 挿入エフェクト（EFX） — 一つずつ聴く',
     },
     caption: {
-      en: "The same held chord, rendered through the GS-compatible player with one insertion effect (EFX) switched in. Pick an effect and hear how it reshapes the tone — overdrive adds grit, rotary swirls, a phaser sweeps, delay repeats. These are libsonare's own DSP algorithms, reconstructed from publicly documented information and mapped to the GS EFX numbering: they follow the same addressing, not the exact sound of any hardware, so treat them as an independent re-creation rather than a 1:1 match. Each buffer is level-matched so you compare character, not loudness. Switch to Dry for the untouched reference.",
-      ja: '同じ持続和音を、GS 互換プレーヤーで、挿入エフェクト（EFX）を1つ挿して鳴らします。エフェクトを選ぶと音色がどう変わるかを聴けます — オーバードライブは歪みを、ロータリーは回転する揺れを、フェイザーはうねりを、ディレイは繰り返しを加えます。これらは公開情報をもとに再構成した libsonare 独自の DSP アルゴリズムで、GS の EFX 番号体系に対応づけています。同じアドレス指定に従うだけで、特定ハードウェアの音そのものではありません。1:1 の再現ではなく独立した再構成として捉えてください。各バッファは音量を揃えてあるので、大きさではなく質感を比較できます。「ドライ」で元の音と比べられます。',
+      en: "The same held chord, rendered through the GS-compatible player with one insertion effect (EFX) switched in. Pick an effect and hear how it reshapes the tone — overdrive adds grit, rotary swirls, a phaser sweeps, and delay repeats. These are libsonare's own DSP algorithms, reconstructed from publicly documented information and mapped to the GS EFX numbering. They follow the same addressing, not the exact sound of any hardware. Each render uses one shared peak gain for both channels; loudness differences remain. Switch to Dry for the untouched reference. The 3D Auto and 3D Manual choices are real stereo binaural renders intended for headphones.",
+      ja: '同じ持続和音を、GS 互換プレーヤーで、挿入エフェクト（EFX）を1つ挿して鳴らします。エフェクトを選ぶと音色がどう変わるかを聴けます — オーバードライブは歪みを、ロータリーは回転する揺れを、フェイザーはうねりを、ディレイは繰り返しを加えます。これらは公開情報をもとに再構成した libsonare 独自の DSP アルゴリズムで、GS の EFX 番号体系に対応づけています。同じアドレス指定に従いますが、特定ハードウェアの音そのものではありません。各レンダーは左右共通のピークで揃え、エフェクトによるラウドネスの違いは残します。「ドライ」で元の音と比べられます。3D オートと 3D マニュアルは、ヘッドホン向けの実際のステレオ・バイノーラル出力です。',
     },
     params: [
       {
         key: 'variant',
         kind: 'select',
-        default: '272',
+        default: String(0x0110),
         label: { en: 'Effect', ja: 'エフェクト' },
+        options: EMBEDDED_EFX_OPTIONS,
+      },
+      {
+        key: 'realization',
+        kind: 'select',
+        default: 'modern',
+        label: { en: 'Realization', ja: '実装方式' },
         options: [
-          { value: '0', label: { en: 'Dry (no effect)', ja: 'ドライ（無効果）' } },
-          { value: '272', label: { en: 'Overdrive', ja: 'オーバードライブ' } },
-          { value: '273', label: { en: 'Distortion', ja: 'ディストーション' } },
-          { value: '288', label: { en: 'Phaser', ja: 'フェイザー' } },
-          { value: '289', label: { en: 'Auto Wah', ja: 'オートワウ' } },
-          { value: '290', label: { en: 'Rotary', ja: 'ロータリー' } },
-          { value: '322', label: { en: 'Stereo Chorus', ja: 'ステレオコーラス' } },
-          { value: '336', label: { en: 'Stereo Delay', ja: 'ステレオディレイ' } },
+          { value: 'modern', label: { en: 'Modern insert chain', ja: 'モダン（挿入チェーン）' } },
+          {
+            value: 'classic',
+            label: { en: 'Classic 32 kHz model', ja: 'クラシック（32 kHz モデル）' },
+          },
         ],
       },
     ],
@@ -503,8 +523,8 @@ export const instrumentsDemos: SonareDemoDef[] = [
       ja: 'GS ドラムキット — 同じグルーヴを 8 つのセットで',
     },
     caption: {
-      en: "The same one-bar rock beat on the rhythm part (MIDI channel 10), with the kit chosen by that part's Program Change — exactly how a GS file switches drum sets. No SoundFont is loaded, so each kit is the built-in fallback's own re-voicing of the standard pieces: Power drops and lengthens the shells, Analog Machine and Hybrid Machine swap them for decaying sines with a click on top, Jazz tightens and lifts them, Orchestra rings like concert bass drum and timpani, Asia turns them into gongs and taiko. Sets the fallback leaves unvoiced (the one-shot SFX and Rhythm FX banks) sound identical to Standard and are left out here. Each render is level-matched; press play to compare.",
-      ja: 'リズムパート（MIDI チャンネル 10）で同じ 1 小節のロックビートを鳴らし、そのパートのプログラムチェンジでキットを選びます。GS ファイルがドラムセットを切り替えるのと同じ手順です。SoundFont は読み込まないので、各キットは内蔵フォールバックが標準セットの各パーツを鳴らし分けたものです。Power は胴を低く長く、アナログマシンとハイブリッドマシンはクリックの乗った減衰する正弦波に、Jazz は締まって高めに、Orchestra はコンサートバスドラムとティンパニのように響き、Asia はゴングと太鼓になります。フォールバックが鳴らし分けていないセット（ワンショットの SFX や Rhythm FX バンク）は Standard とまったく同じ音になるため、ここには含めていません。各レンダーは音量を揃えてあります。再生して聴き比べてください。',
+      en: "The same one-bar rock beat on the rhythm part (MIDI channel 10), with the kit chosen by that part's Program Change — exactly how a GS file switches drum sets. No SoundFont is loaded, so each kit is the built-in fallback's own re-voicing of the standard pieces: Power drops and lengthens the shells, Analog Machine and Hybrid Machine swap them for decaying sines with a click on top, Jazz tightens and lifts them, Orchestra rings like concert bass drum and timpani, Asia turns them into gongs and taiko. Sets the fallback leaves unvoiced (the one-shot SFX and Rhythm FX banks) sound identical to Standard and are left out here. Each render uses one shared peak gain across both channels; loudness differences remain.",
+      ja: 'リズムパート（MIDI チャンネル 10）で同じ 1 小節のロックビートを鳴らし、そのパートのプログラムチェンジでキットを選びます。GS ファイルがドラムセットを切り替えるのと同じ手順です。SoundFont は読み込まないので、各キットは内蔵フォールバックが標準セットの各パーツを鳴らし分けたものです。Power は胴を低く長く、アナログマシンとハイブリッドマシンはクリックの乗った減衰する正弦波に、Jazz は締まって高めに、Orchestra はコンサートバスドラムとティンパニのように響き、Asia はゴングと太鼓になります。フォールバックが鳴らし分けていないセット（ワンショットの SFX や Rhythm FX バンク）は Standard とまったく同じ音になるため、ここには含めていません。各レンダーは左右共通のピークで揃え、キットごとのラウドネスの違いは残します。',
     },
     params: [
       {
@@ -538,8 +558,8 @@ export const instrumentsDemos: SonareDemoDef[] = [
       ja: 'GS バリエーション音色 — 1 台のオルガン、4 つのレジストレーション',
     },
     caption: {
-      en: "GS files a capital tone's variations behind Bank Select MSB: the same Program Change with a different MSB plays a sibling voice. Here the capital is program 16, Drawbar Organ, and the three variations the fallback voices apart are offered — Detuned Organ 1 (MSB 8) adds the chorus scanner's slow beating, 60's Organ 1 (MSB 16) pulls only the first three drawbars with a hard key click, Organ 4 (MSB 32) draws every bar for the full tutti. An MSB the fallback does not voice falls back to the capital, as GS specifies, so only the ones that actually change are listed. Level-matched; press play to compare the registrations.",
-      ja: "GS はキャピタル音色のバリエーションをバンクセレクト MSB の後ろに置きます。同じプログラムチェンジでも MSB を変えると兄弟音色が鳴ります。ここではキャピタルをプログラム 16 のドローバーオルガンにし、フォールバックが鳴らし分けている 3 つのバリエーションを並べました。Detuned Organ 1（MSB 8）はコーラススキャナーのゆっくりしたうねりを加え、60's Organ 1（MSB 16）は最初の 3 本のドローバーだけを引き出して強いキークリックを乗せ、Organ 4（MSB 32）は全バーを引き出した総奏になります。フォールバックが鳴らし分けていない MSB は GS の仕様どおりキャピタルに戻るため、実際に音が変わるものだけを載せています。音量は揃えてあります。再生してレジストレーションを聴き比べてください。",
+      en: "GS files a capital tone's variations behind Bank Select MSB: the same Program Change with a different MSB plays a sibling voice. Here the capital is program 16, Drawbar Organ, and the three variations the fallback voices apart are offered — Detuned Organ 1 (MSB 8) adds the chorus scanner's slow beating, 60's Organ 1 (MSB 16) pulls only the first three drawbars with a hard key click, Organ 4 (MSB 32) draws every bar for the full tutti. An MSB the fallback does not voice falls back to the capital, as GS specifies, so only the ones that actually change are listed. Each render uses one shared peak gain across both channels; loudness differences remain.",
+      ja: `GS ではキャピタル音色のバリエーションをバンクセレクト MSB で選びます。同じプログラムチェンジでも MSB を変えると兄弟音色が鳴ります。ここではキャピタルをプログラム 16 のドローバーオルガンにし、フォールバックが鳴らし分けている 3 つのバリエーションを並べました。Detuned Organ 1（MSB 8）はコーラススキャナーのゆっくりしたうねりを加え、60's Organ 1（MSB 16）は最初の 3 本のドローバーだけを引き出して強いキークリックを乗せ、Organ 4（MSB 32）は全バーを引き出した総奏になります。フォールバックが鳴らし分けていない MSB は GS の仕様どおりキャピタルに戻るため、実際に音が変わるものだけを載せています。各レンダーは左右共通のピークで揃え、音色ごとのラウドネスの違いは残します。`,
     },
     params: [
       {
@@ -574,7 +594,7 @@ export const instrumentsDemos: SonareDemoDef[] = [
     },
     caption: {
       en: 'The same A3 through eight of the synth engines. These physical models have not yet been tuned; their sound will be adjusted in future patch releases. Subtractive starts from an oscillator and carves it with a filter; the rest solve a model of a vibrating thing — a plucked string decaying into its own losses, a bow gripping and slipping, a column of air driven by breath. There is no oscillator to choose on a model, so that control disappears when you leave subtractive. Levels differ between engines and have not yet been matched. Press play and listen for how each one begins, which is where the models and the waveform part company most.',
-      ja: 'ピアノ以外の物理モデルは未調整で、今後のパッチリリースで音を調整する予定です。同じ A3 を 8 つのシンセエンジンで鳴らします。減算方式はオシレーターから出発してフィルターで削りますが、残りは振動する物体のモデルを解いています — 自らの損失で減衰する撥弦、食いついては滑る弓、息で駆動される気柱。モデルには選ぶべきオシレーターが無いので、減算方式から離れるとその操作子は消えます。エンジンごとに音量が異なり、まだ揃えていません。再生して、それぞれの「鳴りはじめ」を聴いてください。モデルと波形の差が最も出るところです。',
+      ja: 'ピアノ以外の物理モデルは未調整で、今後のパッチリリースで音を調整する予定です。同じ A3 を 8 つのシンセエンジンで鳴らします。減算方式はオシレーターから出発してフィルターで削りますが、残りは振動する物体のモデルを解いています — 自らの損失で減衰する撥弦、食いついては滑る弓、息で駆動される気柱。モデルには選ぶべきオシレーターが無いので、減算方式以外ではオシレーターの選択肢が消えます。エンジンごとに音量が異なり、まだ揃えていません。再生して、それぞれの「鳴りはじめ」を聴いてください。モデルと波形の差が最も出るところです。',
     },
     params: [
       {

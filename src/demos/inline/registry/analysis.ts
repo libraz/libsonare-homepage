@@ -94,7 +94,7 @@ export const analysisDemos: SonareDemoDef[] = [
     },
     caption: {
       en: 'Each block is a detected chord segment. With frame-level STFT chroma (beat synchronization off) and a 0.3 second minimum, both template sets read this clip as C–Am–F–G. Lower the minimum duration to keep brief extension readings near chord changes, then switch between all qualities and triads to compare the template vocabulary.',
-      ja: 'ブロック 1 つが検出されたコード区間です。拍同期を使わないフレーム単位の STFT クロマと最小長 0.3 秒では、どちらのテンプレート集合でもこのクリップを C–Am–F–G と読みます。最小長を下げるとコードの切り替わり付近にある短い拡張コードの読みが残り、「全品質」と「三和音のみ」を切り替えてテンプレート集合の違いを比べられます。',
+      ja: 'ブロック 1 つが検出されたコード区間です。拍同期を使わないフレーム単位の STFT クロマと最小長 0.3 秒では、どちらのテンプレート集合でもこのクリップを C–Am–F–G と読みます。最小長を下げるとコードの切り替わり付近にある短い拡張コードの読みが残り、「全コード種」と「三和音のみ」を切り替えてテンプレート集合の違いを比べられます。',
     },
     params: [
       {
@@ -103,7 +103,7 @@ export const analysisDemos: SonareDemoDef[] = [
         default: 'full',
         label: { en: 'Templates', ja: 'テンプレート' },
         options: [
-          { value: 'full', label: { en: 'All qualities', ja: '全品質' } },
+          { value: 'full', label: { en: 'All qualities', ja: '全コード種' } },
           { value: 'triads', label: { en: 'Triads only', ja: '三和音のみ' } },
         ],
       },
@@ -131,8 +131,8 @@ export const analysisDemos: SonareDemoDef[] = [
       ja: 'メルスペクトログラム — 人の聞こえ方の周波数',
     },
     caption: {
-      en: 'The same STFT, re-mapped onto the mel scale: fine resolution low down where the ear discriminates, coarser up high. The harmonic stack and formant bands of this vowel-like tone sit closer together than on a linear axis — the view our ears (and most ML front-ends) actually use.',
-      ja: '同じ STFT をメル尺度へ写し直したものです。耳が聞き分ける低域は細かく、高域は粗くなります。この母音的なトーンの倍音列とフォルマントの帯は、リニア軸より近くに並びます — 耳（そして多くの機械学習の前処理）が実際に使う見え方です。',
+      en: 'The mel spectrogram combines STFT power into perceptually spaced frequency bands: narrower at low frequencies and wider at high frequencies. Compare the harmonic and formant bands with the linear-frequency STFT. The mel scale approximates aspects of frequency perception; it is not a direct measurement of the ear.',
+      ja: 'STFT のパワーを、知覚に基づく周波数帯域へまとめたメルスペクトログラムです。低域の帯域は細かく、高域は広くなります。倍音とフォルマントの帯を、線形周波数軸の STFT と比較してください。メル尺度は周波数の知覚を近似するもので、耳の反応を直接測定した図ではありません。',
     },
   },
   {
@@ -147,8 +147,8 @@ export const analysisDemos: SonareDemoDef[] = [
       ja: 'MFCC マップ — コンパクトな音色の指紋',
     },
     caption: {
-      en: 'MFCCs compress the mel spectrogram into a handful of coefficients that capture the spectral envelope while discarding pitch detail. Each row is one coefficient over time (the 0th energy term is dropped); steady timbre reads as steady rows. This is the fingerprint instrument and voice classifiers actually compare.',
-      ja: 'MFCC はメルスペクトログラムを少数の係数へ圧縮し、ピッチの詳細を捨ててスペクトル包絡を捉えます。各行が時間に対する1係数（0次のエネルギー項は除外）で、音色が安定していれば行も安定します。これが楽器や声の分類器が実際に比較する指紋です。',
+      en: 'MFCCs summarize the log-mel spectrum with a small number of cepstral coefficients. Retaining low-order coefficients emphasizes the broad spectral envelope and reduces fine harmonic detail. Each row shows one coefficient over time. Coefficient 0, the average log-mel power term, is omitted here; it is not the same as waveform energy.',
+      ja: 'MFCC は、対数メルスペクトルを少数のケプストラム係数で表します。低次の係数を残すと、大まかなスペクトル包絡が強調され、細かな倍音構造が減ります。各行は、ひとつの係数の時間変化です。この図では、対数メルパワーの平均を表す 0 次係数を除いています。0 次係数は波形のエネルギーそのものではありません。',
     },
   },
   {
@@ -219,7 +219,7 @@ export const analysisDemos: SonareDemoDef[] = [
     },
     caption: {
       en: "Meter estimation scores candidate time signatures over the detected beats: each beat's accent is read from the onset envelope, and 3, 4 and 6 are tried as bar lengths. The result is a ranked list with a confidence for each, not a single verdict — the confidences are shares of the total support, so they read as a breakdown rather than as a probability of being right. Four bars of a plain 4/4 groove here, so 4 takes most of the support and 6 keeps the rest, since every other downbeat also starts a six-beat span. Switch to Beats to see the pulse the estimate was scored on. A clip with fewer than eight detected beats reports that no search ran at all, rather than guessing.",
-      ja: '拍子の推定は、検出したビートの上で候補となる拍子記号を採点します。各ビートのアクセントはオンセットエンベロープから読み取り、小節の長さとして 3・4・6 拍を試します。結果は一つの断定ではなく、候補ごとに信頼度を付けた順位表です。信頼度は全体の支持の割合なので、正解である確率ではなく内訳として読みます。ここでは素直な 4 拍子のグルーヴを 4 小節鳴らしているので、支持の大半を 4 が取り、残りを 6 が拾います。1 小節おきの強拍は 6 拍の区切りの開始点でもあるからです。「ビート」に切り替えると、採点の土台になった拍が見えます。ビートが 8 つに満たないクリップでは、推測せずに探索を行わなかったことを表示します。',
+      ja: '拍子の推定は、検出したビートの上で候補となる拍子記号を採点します。各ビートのアクセントはオンセットエンベロープから読み取り、小節の長さとして 3・4・6 拍を試します。結果は一つの断定ではなく、候補ごとに信頼度を付けた順位表です。信頼度は全体の支持の割合なので、正解である確率ではなく内訳として読みます。ここでは素直な 4 拍子のグルーヴを 4 小節鳴らしているので、支持の大半を 4 が取り、残りを 6 が拾います。1 小節おきの強拍は 6 拍の区切りの開始点でもあるからです。「ビート」に切り替えると、採点の土台になった拍が見えます。ビートが 8 つに満たないクリップでは、推測で埋めずに、推定を見送ったことを表示します。',
     },
     params: [
       {
@@ -247,7 +247,7 @@ export const analysisDemos: SonareDemoDef[] = [
     },
     caption: {
       en: 'The same estimator, the same controls, a groove in 3 instead of 4. The ranking is not close this time: nothing in the material supports a four-beat or six-beat bar, so 3 takes essentially all of the support and the others fall to zero. Comparing this with the 4/4 clip above is the point — a confident estimate and a divided one look different, and the breakdown is what tells them apart.',
-      ja: '推定器も操作子も同じで、グルーヴだけ 4 拍子から 3 拍子に変えたものです。今度は接戦になりません。素材に 4 拍や 6 拍の小節を支持する材料が無いため、支持のほぼ全部を 3 が取り、他はゼロに落ちます。上の 4 拍子のクリップと見比べるのがここの狙いです。自信のある推定と割れている推定は見え方が違い、その違いを教えてくれるのが内訳です。',
+      ja: '推定器も操作も同じで、グルーヴだけ 4 拍子から 3 拍子に変えたものです。今度は接戦になりません。素材に 4 拍や 6 拍の小節を支持する材料が無いため、支持のほぼ全部を 3 が取り、他はゼロに落ちます。上の 4 拍子のクリップと見比べるのがここの狙いです。自信のある推定と割れている推定は見え方が違い、その違いを示すのが内訳です。',
     },
     params: [
       {
@@ -298,8 +298,8 @@ export const analysisDemos: SonareDemoDef[] = [
       ja: 'Griffin-Lim — 反復で位相を取り戻す',
     },
     caption: {
-      en: 'A mel spectrogram keeps how much energy sits at each frequency but throws phase away, so reconstructing audio means inventing a plausible phase. Griffin-Lim does that by repetition: each pass nudges the phase toward something a real waveform could have produced. Drag the iteration count and press play — at one or two passes the result is hollow and "phasey"; by 30–40 it settles into a recognizable voice. The averaged spectrum barely changes because the magnitude is fixed throughout; it is the phase, and therefore the clarity, that improves.',
-      ja: 'メルスペクトログラムは各周波数のエネルギー量は残しますが位相を捨てるため、音声を再構成するにはもっともらしい位相を作り出す必要があります。Griffin-Lim はそれを反復で行い、各パスごとに、実際の波形が生み出しうる位相へと近づけていきます。反復回数をドラッグして再生してみてください — 1〜2 パスでは虚ろで「位相っぽい」音ですが、30〜40 パスでは聞き取れる声に落ち着きます。マグニチュードは終始固定されているため平均スペクトルはほとんど変わりません — 改善するのは位相、つまり明瞭さです。',
+      en: 'This example first estimates a linear-frequency magnitude spectrum from mel-band power, then uses Griffin–Lim iterations to estimate phase. The mel transform loses frequency detail and the phase is not unique, so this cannot recover the original waveform exactly. Compare iteration counts and listen for changes in smearing and hollow tone; more iterations do not guarantee a perceptual improvement.',
+      ja: 'このデモはメル帯域のパワーから線形周波数の振幅スペクトルを推定し、Griffin–Lim の反復で位相を推定します。メル変換で周波数の細部が失われ、位相も一意には決まらないため、元の波形を正確に復元することはできません。反復回数を変えて、にじみや空洞感を聴き比べてください。反復を増やしても、知覚上の改善が必ず得られるわけではありません。',
     },
     params: [
       {
@@ -326,8 +326,8 @@ export const analysisDemos: SonareDemoDef[] = [
       ja: 'HPSS — 旋律と打楽器を分ける',
     },
     caption: {
-      en: 'On a spectrogram, sustained pitched notes draw horizontal ridges while drum hits draw vertical streaks. HPSS exploits exactly that: median-filtering along time keeps the horizontal (harmonic) content, along frequency keeps the vertical (percussive) content. Switch the view — Full shows both, Harmonic keeps the ridges (the chords and bass, drums gone), Percussive keeps the streaks (the kit, tune gone) — and press play to hear each layer on its own. Separating them first often cleans up downstream beat or pitch tracking.',
-      ja: 'スペクトログラムでは、持続する音程の音は横方向のすじを、打楽器の打点は縦方向のすじを描きます。HPSS はまさにそれを利用します。時間方向のメディアンフィルタは横（倍音成分）を、周波数方向のメディアンフィルタは縦（打撃成分）を残します。表示を切り替えると、Full は両方、Harmonic はすじ（和音とベース、打楽器なし）、Percussive は縦すじ（ドラム、旋律なし）になります。再生すると各レイヤーを単独で聴けます。先に分離しておくと、後段のビート追跡やピッチ追跡がきれいになることがよくあります。',
+      en: 'Sustained harmonic sounds tend to form horizontal ridges in a spectrogram; transients tend to form vertical streaks. HPSS uses median filters and masks to separate these patterns. Switch between the full mix, harmonic and percussive layers and audition them. This separates spectral structure rather than instrument identities: pitched attacks can enter the percussive layer, and sustained cymbals can enter the harmonic layer.',
+      ja: 'スペクトログラムでは、持続する倍音成分は横方向の筋、立ち上がりの鋭い打撃成分は縦方向の筋になりやすくなります。HPSS はメディアンフィルタとマスクで、この構造を分けます。フルミックス・倍音成分・打撃成分を切り替えて試聴してください。楽器を個別に分離する処理ではないため、音程を持つ音の立ち上がりが打撃成分に入り、長く響くシンバルが倍音成分に入ることもあります。',
     },
     params: [
       {
@@ -365,7 +365,7 @@ export const analysisDemos: SonareDemoDef[] = [
     },
     caption: {
       en: "A sustained pad chord bed with sharp broadband hits on every beat (Full mix). The stage applied here is HPSS decomposition, and the B side is its percussive component alone: the hits survive as short vertical events while the pad's steady spectral lines are pushed out. That is one stem of a two-way split, not a full multi-stem separation (Percussive). Both averaged spectra are drawn together so you can see what the split kept. Flip Compare to audition the mix against the stem it was decomposed into.",
-      ja: '持続するパッドの和音の上に、拍ごとに鋭い広帯域の打点を重ねたクリップです（フルミックス）。ここで適用しているのは HPSS による分解で、B 側はその打撃成分だけです。打点は短い縦方向のイベントとして残り、パッドの安定したスペクトル線は押し出されます。つまり 2 分割のうち片方のステムであって、複数ステムへの完全な分離ではありません（打撃成分）。平均スペクトルを重ねて表示するので、分割で何が残ったかが分かります。Compare を切り替えて、ミックスと取り出したステムを聴き比べてください。',
+      ja: '持続するパッドの和音の上に、拍ごとに鋭い広帯域の打点を重ねたクリップです（フルミックス）。ここで適用しているのは HPSS による分解で、B 側はその打撃成分だけです。打点は短い縦方向のイベントとして残り、パッドの安定したスペクトル線は取り除かれます。つまり 2 分割のうち片方のステム（打撃成分）であって、複数ステムへの完全な分離ではありません。平均スペクトルを重ねて表示するので、分割で何が残ったかが分かります。Compare を切り替えて、ミックスと取り出したステムを聴き比べてください。',
     },
     params: [
       {
@@ -376,6 +376,53 @@ export const analysisDemos: SonareDemoDef[] = [
         options: [
           { value: 'damaged', label: { en: 'Full mix', ja: 'フルミックス' } },
           { value: 'repaired', label: { en: 'Percussive', ja: '打撃成分' } },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'nmf-stems',
+    archetype: 'ab-process',
+    source: { kind: 'clip', clip: 'mixed-stems' },
+    viz: 'spectrogram',
+    title: {
+      en: 'NMF decomposition — four learned components',
+      ja: 'NMF 分解 — 学習した4つの成分',
+    },
+    caption: {
+      en: 'NMF learns recurring spectral shapes from this mix and returns four unnamed components. Compare each component with the full mix. A component can contain several instruments; its number does not identify an instrument. The demo uses 30 iterations and retains the original phase and output levels without separate loudness matching.',
+      ja: 'NMF はミックス内で繰り返されるスペクトルの形を学習し、名前の付いていない4つの成分を返します。各成分とフルミックスを聴き比べてください。1つの成分に複数の楽器が含まれることがあり、成分番号は楽器名を表しません。このデモは30回反復し、元の位相と処理後のレベルを保ちます。成分ごとの音量合わせは行いません。',
+    },
+    config: {
+      processor: 'nmf-stems',
+      injectNoise: false,
+      eyebrow: 'A/B PROCESS · NMF',
+      legendBefore: { en: 'Full mix', ja: 'フルミックス' },
+      legendAfter: { en: 'Component', ja: '成分' },
+      loadingLabel: { en: 'Separating', ja: '分解中' },
+      showFloor: false,
+    },
+    params: [
+      {
+        key: 'view',
+        kind: 'select',
+        default: 'repaired',
+        label: { en: 'Compare', ja: '比較' },
+        options: [
+          { value: 'damaged', label: { en: 'Full mix', ja: 'フルミックス' } },
+          { value: 'repaired', label: { en: 'Component', ja: '成分' } },
+        ],
+      },
+      {
+        key: 'mode',
+        kind: 'select',
+        default: '0',
+        label: { en: 'Component', ja: '成分' },
+        options: [
+          { value: '0', label: { en: '1', ja: '1' } },
+          { value: '1', label: { en: '2', ja: '2' } },
+          { value: '2', label: { en: '3', ja: '3' } },
+          { value: '3', label: { en: '4', ja: '4' } },
         ],
       },
     ],

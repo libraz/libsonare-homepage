@@ -32,6 +32,7 @@ export type DemoLocale = string;
  * - `contour`     — clip → pitch tracking → melody f0 contour line over time
  * - `lane-mixer`  — MIDI clips → realtime-engine lane mixer (faders/mutes) → per-lane envelopes + audition
  * - `spectral-edit` — clip + injected artifact → region `spectralEdit` → A/B audition + before/after spectrum
+ * - `transcribe` — audio → estimated MIDI notes → piano roll and original/resynthesized audition
  * - `piano-roll`  — multi-voice MIDI passage → built-in instrument bounce → DAW-style piano roll + audition
  * - `score`       — MIDI passage → VexFlow staff engraving → built-in instrument bounce + per-note highlight
  * - `compressor`  — threshold/ratio/knee/attack/release → transfer curve + gain-reduction envelope + audition
@@ -68,7 +69,8 @@ export type DemoArchetype =
   | 'tempo-grid'
   | 'instrument-audition'
   | 'pitch-correct'
-  | 'chord-track';
+  | 'chord-track'
+  | 'transcribe';
 
 /** Waveform shapes that can be generated in-browser without WASM (cheap test signals). */
 export type GeneratedSignal = 'sine' | 'saw' | 'square' | 'triangle' | 'sweep' | 'noise';

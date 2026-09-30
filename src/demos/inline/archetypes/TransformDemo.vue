@@ -17,6 +17,7 @@ import type { SonareDemoDef } from '@/demos/inline/types';
 import { type MonoAudio, useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { useDemoChrome } from '../composables';
 import DemoFrame from '../DemoFrame.vue';
+import { normalizeMagnitudeRelativeDb } from './spectralDisplay';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
@@ -51,6 +52,10 @@ const axisFreq = computed(() => {
       return 'NOTE';
     case 'mfcc':
       return 'COEF';
+    case 'mel':
+      return 'MEL · REL dB';
+    case 'stft':
+      return 'FREQ · REL dB';
     default:
       return 'FREQ';
   }
@@ -95,14 +100,7 @@ type Grid = { rows: number; cols: number; norm: Float32Array };
 function gridFromStft(wasm: WasmModule, a: MonoAudio, nFft: number, hop: number): Grid {
   const r = wasm.stft(a.samples, a.sampleRate, nFft, hop);
   const { nBins, nFrames, magnitude } = r;
-  const norm = new Float32Array(nBins * nFrames);
-  const floorDb = -90;
-  for (let bin = 0; bin < nBins; bin++) {
-    for (let frame = 0; frame < nFrames; frame++) {
-      const db = 20 * Math.log10(magnitude[bin * nFrames + frame] + 1e-9);
-      norm[bin * nFrames + frame] = (db - floorDb) / -floorDb;
-    }
-  }
+  const norm = normalizeMagnitudeRelativeDb(magnitude);
   return { rows: nBins, cols: nFrames, norm };
 }
 

@@ -10,6 +10,32 @@ import type { SonareDemoDef } from '../types';
 
 export const editingDemos: SonareDemoDef[] = [
   {
+    id: 'audio-to-notes',
+    archetype: 'transcribe',
+    source: { kind: 'clip', clip: 'lead' },
+    viz: 'overlay',
+    title: {
+      en: 'Audio to notes — recognize a melody',
+      ja: '音声から音符へ — メロディを採譜する',
+    },
+    caption: {
+      en: 'The library detects notes from this synthesized lead phrase. The roll shows the detected pitches and timing. Compare the original audio with those MIDI events rendered through the piano: the piano is synthesized from MIDI and does not preserve the input timbre. Detection is an estimate; inspect missed, extra or shifted notes before editing or exporting.',
+      ja: '合成したリードの音声から、ライブラリが音符を検出します。ピアノロールには検出した音高と時刻を表示します。原音と、検出した MIDI イベントをピアノで再合成した音を比較してください。再合成の音色は入力の音色とは異なります。検出結果は推定なので、編集や書き出しの前に音符の抜け・余分な音符・位置のずれを確認してください。',
+    },
+    params: [
+      {
+        key: 'view',
+        kind: 'select',
+        default: 'original',
+        label: { en: 'Compare', ja: '比較' },
+        options: [
+          { value: 'original', label: { en: 'Original audio', ja: '原音' } },
+          { value: 'notes', label: { en: 'Detected notes → Piano', ja: '検出した音符 → ピアノ' } },
+        ],
+      },
+    ],
+  },
+  {
     id: 'pitch-shift',
     archetype: 'param-sweep',
     // A sustained vowel (clean 220 Hz fundamental) makes the harmonic comb legible.
@@ -48,8 +74,8 @@ export const editingDemos: SonareDemoDef[] = [
       ja: 'タイムストレッチ — 音程はそのまま、長さを変える',
     },
     caption: {
-      en: "Time stretching is pitch shift's exact opposite: it changes how long the audio lasts while leaving the pitch alone. Drag the rate and the drum hits spread out or bunch up — the waveform fills more or less of the panel — but the spectrum below barely moves. Below 1.0 the clip slows down and grows; above 1.0 it speeds up and shrinks. Every render is peak-normalized, so a fast rate does not simply arrive quieter than a slow one; the level you hear is set by the demo, not by the stretch. Press play to hear the groove change tempo with no chipmunk effect.",
-      ja: 'タイムストレッチはピッチシフトのちょうど逆で、音程はそのままに、音の長さを変えます。レート（rate）をドラッグするとドラムの打点が広がったり詰まったりして波形がパネルを占める幅も変わりますが、下のスペクトルはほとんど動きません。1.0 より下では遅く長く、1.0 より上では速く短くなります。レンダーごとにピークを揃えているので、速いレートがそのまま小さく聞こえることはありません。聞こえるレベルを決めているのはデモ側で、ストレッチではありません。再生すると、チップマンク効果なしにグルーヴのテンポだけが変わるのが聴けます。',
+      en: 'Time stretching changes duration while keeping pitch approximately unchanged. A rate below 1 slows and lengthens the clip; a rate above 1 speeds and shortens it. The waveform shows the duration change. Each render is peak-normalized for headroom, which does not equalize perceived loudness. Listen for changes in timing and transient clarity.',
+      ja: 'タイムストレッチは、音程をほぼ保ちながら長さを変えます。レートが 1 未満なら遅く長く、1 より大きければ速く短くなります。波形の幅で長さの変化を確認できます。各レンダーはピークを揃えていますが、知覚上の音量まで一致するわけではありません。タイミングと立ち上がりの明瞭さを聴き比べてください。',
     },
     params: [
       {
@@ -78,7 +104,7 @@ export const editingDemos: SonareDemoDef[] = [
     },
     caption: {
       en: "Formant shifting is pitch shift's counterpart: it moves the spectral envelope — the formant peaks that make a voice feel small and bright or large and dark — while leaving the note alone. Drag the factor and watch the harmonic comb and the fundamental marker hold their place as the envelope slides. Above 1.0 the voice brightens and shrinks; below 1.0 it darkens and enlarges; the pitch never changes. Press play to hear the character shift with no retuning.",
-      ja: 'フォルマントシフトはピッチシフトの相方で、音程はそのままに、スペクトル包絡 — 声を小さく明るく、あるいは大きく暗く感じさせるフォルマントの山 — を動かします。係数をドラッグすると、倍音の櫛と基音マーカーは位置を保ったまま、包絡だけがスライドします。1.0 より上では声が明るく小さく、1.0 より下では暗く大きくなりますが、音程は変わりません。再生すると、音程を変えずに声の質感だけが動くのが聴けます。',
+      ja: 'フォルマントシフトはピッチシフトと対になる処理で、音程はそのままに、スペクトル包絡 — 声を小さく明るく、あるいは大きく暗く感じさせるフォルマントの山 — を動かします。係数をドラッグすると、倍音の櫛と基音マーカーは位置を保ったまま、包絡だけがスライドします。1.0 より上では声が明るく小さく、1.0 より下では暗く大きくなりますが、音程は変わりません。再生すると、音程を変えずに声の質感だけが動くのが聴けます。',
     },
     params: [
       {
@@ -105,8 +131,8 @@ export const editingDemos: SonareDemoDef[] = [
       ja: 'スペクトル編集 — 一区画だけ消し、ほかは残す',
     },
     caption: {
-      en: 'A steady pad is given a narrow whistle over a middle time window (Artifact). One `spectralEdit` region op — the same time x frequency rectangle the whistle occupies — removes it (Edited), and the averaged spectra show the in-band spike collapse while everything outside the shaded band is untouched. Switch the mode to compare attenuate (turn the bins down by gainDb), mute (silence them) and heal (rebuild them from neighbouring frames), and flip Compare to audition each side. NOTCH is the in-band reduction in dB.',
-      ja: '安定したパッドの中間の時間帯に細い「ホイッスル」を乗せたものが「アーティファクト」です。`spectralEdit` の領域オペレーション一つ — ホイッスルが占める時間×周波数の矩形と同じ範囲 — でそれを取り除いたものが「編集後」で、平均スペクトルを見ると帯域内のスパイクだけが崩れ、網掛けの帯域の外はそのまま残ります。モードを切り替えると attenuate（gainDb 分だけビンを下げる）・mute（無音化する）・heal（隣接フレームから作り直す）を比べられ、Compare で両方を聴き比べできます。NOTCH は帯域内の低減量（dB）です。',
+      en: 'A narrow whistle is added to the middle of a pad. Edit its time–frequency region with spectralEdit and compare attenuate, mute and heal. The selected STFT bins change; overlapping analysis windows and reconstruction can spread changes near region boundaries. Heal estimates the content from neighbouring frames rather than recovering the original lost signal. NOTCH shows the in-band reduction in dB.',
+      ja: 'パッドの途中に細い笛のような音を加えています。spectralEdit で時間・周波数の領域を選び、attenuate（減衰）・mute（無音化）・heal（補間）を比較してください。選んだ STFT ビンを編集しますが、分析窓の重なりと再構成により、領域の境界付近にも影響が広がります。heal は隣接フレームから内容を推定する処理で、失われた元の音を復元するものではありません。NOTCH は帯域内の低減量（dB）です。',
     },
     params: [
       {
@@ -140,11 +166,11 @@ export const editingDemos: SonareDemoDef[] = [
     viz: 'overlay',
     title: {
       en: 'Tempo and the grid — how BPM maps musical time to seconds',
-      ja: 'テンポとグリッド — BPM が音楽的な時間を秒へ写す仕組み',
+      ja: 'テンポとグリッド — BPM で小節・拍を秒に換算する仕組み',
     },
     caption: {
       en: 'The seconds axis on top never moves; the bar-and-beat grid below is computed from the tempo. Drag BPM and the grid slides — a faster tempo packs more bars into the same six seconds, a slower one spreads them out. The readout turns the tempo into the durations the engine actually counts in: one bar, one beat, and one tick at PPQ 480, the resolution libsonare uses for MIDI timing. Change the beats per bar to reshape where the accented downbeats land. Press play for a metronome at the chosen tempo — the grid you see is the click you hear.',
-      ja: '上の秒の目盛りは動きません。下の小節・拍のグリッドはテンポから計算されます。BPM をドラッグするとグリッドが動き、速いテンポは同じ 6 秒により多くの小節を詰め込み、遅いテンポは広げます。読み出しは、テンポをエンジンが実際に数える単位へ変換します。1 小節・1 拍、そして PPQ 480（libsonare が MIDI のタイミングに使う分解能）での 1 ティックです。1 小節の拍数を変えると、アクセントの付く強拍の位置が変わります。再生すると選んだテンポのメトロノームが鳴ります — 見えているグリッドが、そのまま聞こえるクリックです。',
+      ja: '上の秒の目盛りは動きません。下の小節・拍のグリッドはテンポから計算されます。BPM をドラッグするとグリッドが動き、速いテンポは同じ 6 秒により多くの小節を詰め込み、遅いテンポは広げます。数値表示では、テンポをエンジンが実際に数える単位の長さに換算します。1 小節・1 拍、そして PPQ 480（libsonare が MIDI のタイミングに使う分解能）での 1 ティックです。1 小節の拍数を変えると、アクセントの付く強拍の位置が変わります。再生すると選んだテンポのメトロノームが鳴ります — 見えているグリッドが、そのまま聞こえるクリックです。',
     },
     params: [
       {

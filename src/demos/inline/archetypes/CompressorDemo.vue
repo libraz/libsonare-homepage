@@ -21,7 +21,7 @@ import DemoFrame from '../DemoFrame.vue';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
-const { play, playingId, progress } = useSonareDemoAudio();
+const { play, stop, playingId, progress } = useSonareDemoAudio();
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 const isPlaying = computed(() => playingId.value === props.def.id);
@@ -330,6 +330,9 @@ function scheduleCompute(): void {
 watch(
   () => [threshold.value, ratio.value, knee.value, attackMs.value, releaseMs.value, mix.value],
   () => {
+    // The audition is a rendered buffer. Stop it as soon as its controls move
+    // so the graph never describes a different compressor than the audio.
+    if (isPlaying.value) stop();
     if (props.active) scheduleCompute();
   },
 );

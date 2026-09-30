@@ -2,6 +2,7 @@ import { defineDemoAsync } from '@/components/defineDemoAsync';
 import type { DemoArchetype } from '@/demos/inline/types';
 
 export const demoArchetypeComponents = {
+  transcribe: defineDemoAsync(() => import('./TranscribeDemo.vue')),
   transform: defineDemoAsync(() => import('./TransformDemo.vue')),
   detector: defineDemoAsync(() => import('./DetectorDemo.vue')),
   'ab-process': defineDemoAsync(() => import('./AbProcessDemo.vue')),

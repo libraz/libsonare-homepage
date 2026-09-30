@@ -2,19 +2,17 @@
 /**
  * `ab-process` archetype: run a clip through one processor and A/B the result.
  *
- * The processor is picked from `def.config.processor` (see PROCESSORS below); a
+ * The processor is picked from `def.config.processor` (see `renderAbProcess`); a
  * definition that omits it gets the classical denoiser, which is what `repair-denoise`
- * relies on. The current instance documented here is that denoiser. Unless
+ * relies on. The same A/B frame also hosts measured repair outputs and the vowel
+ * formant filter and unnamed NMF components. Unless
  * `def.config.injectNoise` says otherwise, a deterministic layer of broadband hiss
- * (amount `def.config.noiseAmp`) is added to the source clip first (the "before"
- * source), then the repair stage removes it (the "after" output) — a decomposition or
- * dereverb definition that supplies its own already-flawed clip sets `injectNoise:
- * false` so the archetype doesn't add damage on top. Both averaged spectra are drawn at
- * once so the raised noise floor — and the gap it leaves when removed — is the whole
- * story: the before tail rides high across the highs, the after tail drops back onto
- * the music. Flip Compare to audition each side (loudness is untouched, so the hiss is
- * the only thing that moves) and switch the algorithm to see how much floor each one
- * pulls down. The FLOOR readout is the high-band reduction in dB. The eyebrow and the
+ * (amount `def.config.noiseAmp`) is added before the configured processor. Repair
+ * definitions use that as their damaged side; decomposition and effect definitions
+ * set `injectNoise: false` so their dry source stays intact. Both averaged spectra are
+ * drawn at once on one reference scale. Flip Compare to audition either side; no
+ * independent loudness matching is added, so processing can change both spectrum and
+ * level. The FLOOR readout is the high-band reduction in dB. The eyebrow and the
  * two legend labels are also definition-supplied (`def.config.eyebrow`,
  * `legendBefore`, `legendAfter`), defaulting to the denoiser's own copy.
  */
@@ -32,6 +30,8 @@ import { prepareCanvas2D } from '@/utils/canvas';
 import { useCanvasRedraw, useDemoChrome, useDemoParams, useDisposed } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
+import { DEFAULT_AB_PROCESSOR, renderAbProcess } from './abProcessPipeline';
+import { createNmfWorkerClient } from './nmfWorkerClient';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
@@ -56,6 +56,18 @@ const view = computed<string>(() => String(values.view ?? 'damaged'));
 const mode = computed<string>(() => String(values.mode ?? 'logMmse'));
 const repaired = computed(() => view.value === 'repaired');
 const clipName = computed(() => (props.def.source.kind === 'clip' ? props.def.source.clip : ''));
+const processorName = computed(() =>
+  typeof props.def.config?.processor === 'string'
+    ? props.def.config.processor
+    : DEFAULT_AB_PROCESSOR,
+);
+const isVowelFilter = computed(() => processorName.value === 'vowel-filter');
+const isNeutralProcess = computed(
+  () =>
+    isVowelFilter.value ||
+    processorName.value === 'hpss-decompose' ||
+    processorName.value === 'nmf-stems',
+);
 
 // ---- chrome text, definition-supplied with the denoiser's own copy as fallback ----
 const DEFAULT_EYEBROW = 'A/B PROCESS · DENOISE';
@@ -73,14 +85,43 @@ const legendBeforeText = computed<string>(() =>
 const legendAfterText = computed<string>(() =>
   localized((props.def.config?.legendAfter as I18nText) ?? DEFAULT_LEGEND_AFTER, loc.value),
 );
+const processingLabel = computed(() => {
+  const configured = props.def.config?.loadingLabel;
+  if (typeof configured === 'string') return configured;
+  if (configured && typeof configured === 'object') {
+    return localized(configured as I18nText, loc.value);
+  }
+  return isNeutralProcess.value ? 'PROCESSING…' : 'REPAIRING…';
+});
+const beforeStateLabel = computed(() => {
+  const configured = props.def.config?.stateBefore;
+  return typeof configured === 'string'
+    ? configured
+    : isVowelFilter.value
+      ? 'DRY'
+      : isNeutralProcess.value
+        ? 'FULL MIX'
+        : 'DAMAGED';
+});
+const afterStateLabel = computed(() => {
+  const configured = props.def.config?.stateAfter;
+  return typeof configured === 'string'
+    ? configured
+    : isVowelFilter.value
+      ? 'FILTERED'
+      : isNeutralProcess.value
+        ? 'COMPONENT'
+        : 'REPAIRED';
+});
 
 // ---- presentation state ----------------------------------------------------
 const floorDb = ref(0); // high-band reduction Repaired vs Damaged, in dB
 const stateLabel = computed(() => {
-  if (status.value === 'loading') return 'REPAIRING';
+  if (status.value === 'loading') return processingLabel.value.replace(/…$/, '');
   if (status.value === 'error') return 'ERROR';
   if (isPlaying.value) return `▸ ${Math.round(progress.value * 100)}%`;
-  if (status.value === 'ready') return repaired.value ? 'REPAIRED' : 'DAMAGED';
+  if (status.value === 'ready')
+    return repaired.value ? afterStateLabel.value : beforeStateLabel.value;
   return 'IDLE';
 });
 
@@ -92,6 +133,7 @@ const injectNoise = computed<boolean>(() => {
   const v = props.def.config?.injectNoise;
   return typeof v === 'boolean' ? v : true;
 });
+const showFloor = computed<boolean>(() => props.def.config?.showFloor !== false);
 const noiseAmp = computed<number>(() => {
   const v = props.def.config?.noiseAmp;
   return typeof v === 'number' ? v : DEFAULT_NOISE_AMP;
@@ -108,31 +150,8 @@ const dispEmph = ref(0); // 0 = damaged emphasized, 1 = repaired emphasized (eas
 let damaged: { samples: Float32Array; sampleRate: number } | null = null;
 let cleaned: { samples: Float32Array; sampleRate: number } | null = null;
 const reveal = ref(0);
-
-/** Runs a processor against the damaged samples and returns the "repaired" output. */
-type ProcessorFn = (
-  wasm: Awaited<ReturnType<typeof ensureWasm>>,
-  samples: Float32Array,
-  sampleRate: number,
-  mode: string,
-) => Float32Array;
-
-/**
- * Processors this archetype can drive, keyed by the name a demo definition passes via
- * `def.config.processor`. Each entry owns its own option shape, since a definition's
- * `mode` param means something different (or nothing) per processor.
- */
-const PROCESSORS: Record<string, ProcessorFn> = {
-  'denoise-classical': (wasm, samples, sampleRate, mode) =>
-    wasm.masteringRepairDenoiseClassical(samples, sampleRate, {
-      mode: mode as 'logMmse' | 'spectralSubtraction' | 'mmseStsa',
-      overSubtraction: 1.5,
-    }),
-  'dereverb-classical': (wasm, samples, sampleRate) =>
-    wasm.masteringRepairDereverbClassical(samples, sampleRate),
-  'hpss-decompose': (wasm, samples, sampleRate) => wasm.hpss(samples, sampleRate).percussive,
-};
-const DEFAULT_PROCESSOR = 'denoise-classical'; // keeps `repair-denoise` working with no config
+const nmfWorkerClient = createNmfWorkerClient();
+let computeGeneration = 0;
 
 /** Mean linear magnitude above FLOOR_HZ — the high-band noise-floor proxy. */
 function highBandMean(spec: Float32Array): number {
@@ -152,13 +171,13 @@ function highBandMean(spec: Float32Array): number {
 const disposed = useDisposed();
 
 async function compute(): Promise<void> {
+  const generation = ++computeGeneration;
   if (disposed()) return;
+  const isCurrent = () => !disposed() && generation === computeGeneration;
   try {
     if (status.value === 'idle') status.value = 'loading';
-    const wasm = await ensureWasm();
-    if (disposed()) return;
     const clip = await loadClip(clipName.value);
-    if (disposed()) return;
+    if (!isCurrent()) return;
     const sr = clip.sampleRate;
 
     // "Before" source: the clip, plus deterministic broadband hiss unless the
@@ -176,16 +195,31 @@ async function compute(): Promise<void> {
       }
     }
 
-    // Repaired output: the processor named by def.config.processor, at the selected mode.
-    const processorName =
-      typeof props.def.config?.processor === 'string'
-        ? props.def.config.processor
-        : DEFAULT_PROCESSOR;
-    const processor = PROCESSORS[processorName];
-    if (!processor) {
-      throw new Error(`ab-process: unknown processor "${processorName}"`);
+    if (!isCurrent() || !damaged) return;
+
+    // NMF is the one long-running processor in this archetype. Keep its
+    // synchronous WASM call off the document thread and cache all four outputs
+    // in the lifecycle-bound worker client so changing the component selector
+    // never factors the same source again.
+    let out: Float32Array;
+    if (processorName.value === 'nmf-stems') {
+      const components = await nmfWorkerClient.decompose(damaged.samples, sr);
+      if (!isCurrent()) return;
+      const index = Number(mode.value);
+      if (!Number.isInteger(index) || index < 0 || index >= components.length) {
+        throw new Error(
+          `ab-process: NMF component must be an integer from 0 to 3 (got ${mode.value})`,
+        );
+      }
+      out = components[index]!;
+    } else {
+      const wasm = await ensureWasm();
+      if (!isCurrent() || !damaged) return;
+      // Repaired output: the processor named by def.config.processor, at the selected mode.
+      out = renderAbProcess(wasm, processorName.value, damaged.samples, sr, mode.value);
     }
-    const out = processor(wasm, damaged.samples, sr, mode.value);
+    const wasm = await ensureWasm();
+    if (!isCurrent() || !damaged) return;
     cleaned = { samples: out, sampleRate: sr };
 
     // Both spectra share the damaged scale so the floor drop is read on one axis.
@@ -202,7 +236,7 @@ async function compute(): Promise<void> {
     status.value = 'ready';
     startMorph();
   } catch (e) {
-    if (disposed()) return;
+    if (!isCurrent()) return;
     fail(e);
   }
 }
@@ -284,16 +318,18 @@ function paint(): void {
 
   // --- noise-floor band shading above FLOOR_HZ (the scored region) ---
   const floorX = padX + (FLOOR_HZ / SPEC_MAX_HZ) * innerW;
-  ctx.fillStyle = 'rgba(148, 163, 184, 0.06)';
-  ctx.fillRect(floorX, specTop, padX + innerW - floorX, specH);
-  ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
-  ctx.lineWidth = 1;
-  ctx.setLineDash([2, 3]);
-  ctx.beginPath();
-  ctx.moveTo(floorX, specTop);
-  ctx.lineTo(floorX, specBot);
-  ctx.stroke();
-  ctx.setLineDash([]);
+  if (showFloor.value) {
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.06)';
+    ctx.fillRect(floorX, specTop, padX + innerW - floorX, specH);
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 3]);
+    ctx.beginPath();
+    ctx.moveTo(floorX, specTop);
+    ctx.lineTo(floorX, specBot);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
 
   // --- spectra: both drawn at once, the auditioned side emphasized ---
   const drawSpec = (spec: Float32Array, color: string, strong: boolean): void => {
@@ -336,13 +372,15 @@ function paint(): void {
   // FLOOR readout (high-band reduction).
   ctx.font = '9px "JetBrains Mono", ui-monospace, monospace';
   ctx.textBaseline = 'top';
-  ctx.textAlign = 'right';
-  ctx.fillStyle = 'rgba(45, 212, 191, 0.95)';
-  ctx.fillText(
-    `FLOOR ${floorDb.value <= 0 ? '' : '+'}${floorDb.value.toFixed(1)} dB`,
-    padX + innerW,
-    specTop + 2,
-  );
+  if (showFloor.value) {
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(45, 212, 191, 0.95)';
+    ctx.fillText(
+      `FLOOR ${floorDb.value <= 0 ? '' : '+'}${floorDb.value.toFixed(1)} dB`,
+      padX + innerW,
+      specTop + 2,
+    );
+  }
   ctx.textAlign = 'left';
 
   // Legend.
@@ -361,7 +399,7 @@ function paint(): void {
   ctx.fillStyle = 'rgba(186, 230, 224, 0.45)';
   ctx.textBaseline = 'bottom';
   ctx.fillText('0 Hz', padX, specBot + 14);
-  ctx.fillText(`${(FLOOR_HZ / 1000).toFixed(0)}k`, floorX + 3, specBot + 14);
+  if (showFloor.value) ctx.fillText(`${(FLOOR_HZ / 1000).toFixed(0)}k`, floorX + 3, specBot + 14);
   ctx.textAlign = 'right';
   ctx.fillText(`${(SPEC_MAX_HZ / 1000).toFixed(0)} kHz`, padX + innerW, specBot + 14);
   ctx.textAlign = 'left';
@@ -411,7 +449,10 @@ function scheduleCompute(): void {
 }
 
 watch(mode, () => {
-  if (props.active && status.value !== 'idle') scheduleCompute();
+  if (props.active && status.value !== 'idle') {
+    if (isPlaying.value) stop();
+    scheduleCompute();
+  }
 });
 
 watch(
@@ -423,6 +464,8 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  computeGeneration++;
+  nmfWorkerClient.dispose();
   if (rafId) cancelAnimationFrame(rafId);
   if (playRaf) cancelAnimationFrame(playRaf);
   if (pending) cancelAnimationFrame(pending);
@@ -440,7 +483,7 @@ onBeforeUnmount(() => {
     :progress="progress"
     :disabled="status === 'loading'"
     :error="status === 'error' ? errorMsg : null"
-    loading-label="REPAIRING…"
+    :loading-label="processingLabel"
     :show-playhead="isPlaying"
     @toggle="onPlay"
   >

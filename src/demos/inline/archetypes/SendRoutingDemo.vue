@@ -20,7 +20,7 @@ import DemoFrame from '../DemoFrame.vue';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
-const { play, playingId, progress } = useSonareDemoAudio();
+const { play, stop, playingId, progress } = useSonareDemoAudio();
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 const isPlaying = computed(() => playingId.value === props.def.id);
@@ -34,6 +34,10 @@ const faderLin = computed<number>(() => (faderDb.value <= -40 ? 0 : 10 ** (fader
 
 const SOURCE_LIN = 0.8; // the channel's pre-fader signal level (fixed)
 const PRE_LIN = SOURCE_LIN * 0.7; // pre-fader send: tapped before the fader → fixed
+// A fixed trim keeps the +6 dB endpoint below full scale. It is deliberately
+// common to both paths: per-render peak normalization would hide the send
+// level difference this demo is meant to show.
+const OUTPUT_HEADROOM = 0.8;
 
 // ---- bar-tag text -----------------------------------------------------
 const TAG_FIXED: I18nText = { en: 'fixed', ja: '固定' };
@@ -184,7 +188,7 @@ function buildAudio(): { samples: Float32Array; sampleRate: number } {
       (Math.sin(2 * Math.PI * 330 * t) + Math.sin(2 * Math.PI * 332.5 * t)) *
       0.12 *
       (PRE_LIN / 0.56);
-    out[i] = env * (dry + pre);
+    out[i] = OUTPUT_HEADROOM * env * (dry + pre);
   }
   return { samples: out, sampleRate };
 }
@@ -205,6 +209,10 @@ function scheduleCompute(): void {
 watch(
   () => faderDb.value,
   () => {
+    // The rendered buffer is parameter-dependent. Stop an audition before the
+    // control change can leave the graph and the sound describing different
+    // fader positions.
+    if (isPlaying.value) stop();
     if (props.active) scheduleCompute();
   },
 );

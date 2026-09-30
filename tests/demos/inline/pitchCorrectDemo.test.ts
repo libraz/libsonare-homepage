@@ -22,12 +22,12 @@ class StubAudioContext {
   destination = {};
   async resume(): Promise<void> {}
   createBuffer(_channels: number, length: number, sampleRate: number) {
+    const data = new Float32Array(length);
+    captured = data;
     return {
       length,
       duration: length / sampleRate,
-      copyToChannel: (src: Float32Array) => {
-        captured = src.slice();
-      },
+      getChannelData: () => data,
     };
   }
   createBufferSource() {

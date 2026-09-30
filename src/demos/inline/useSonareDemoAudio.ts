@@ -21,6 +21,15 @@ export interface MonoAudio {
   sampleRate: number;
 }
 
+/** Interleaved-bounce-compatible stereo PCM plus its sample rate. */
+export interface StereoAudio {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate: number;
+}
+
+export type DemoAudio = MonoAudio | StereoAudio;
+
 // ---- page-wide singletons -------------------------------------------------
 
 let wasmModule: WasmModule | null = null;
@@ -77,8 +86,21 @@ function clearPlaybackState(): void {
   playingId.value = '';
 }
 
-function assertPlayableAudio(audio: MonoAudio): void {
-  if (audio.samples.length === 0) {
+function isStereoAudio(audio: DemoAudio): audio is StereoAudio {
+  return 'left' in audio && 'right' in audio;
+}
+
+function assertPlayableAudio(audio: DemoAudio): void {
+  if (isStereoAudio(audio)) {
+    if (audio.left.length === 0 || audio.right.length === 0) {
+      throw new Error('demo audio is empty');
+    }
+    if (audio.left.length !== audio.right.length) {
+      throw new Error(
+        `demo stereo audio has mismatched channel lengths: ${audio.left.length} / ${audio.right.length}`,
+      );
+    }
+  } else if (audio.samples.length === 0) {
     throw new Error('demo audio is empty');
   }
   if (!Number.isFinite(audio.sampleRate) || audio.sampleRate <= 0) {
@@ -187,10 +209,10 @@ export function useSonareDemoAudio() {
   }
 
   /**
-   * Play mono PCM through the shared context. Stops any other sounding demo first.
+   * Play mono or stereo PCM through the shared context. Stops any other sounding demo first.
    * Resumes the context (autoplay policy) — must be called from a user gesture.
    */
-  async function play(id: string, audio: MonoAudio): Promise<void> {
+  async function play(id: string, audio: DemoAudio): Promise<void> {
     assertPlayableAudio(audio);
     const ctx = getAudioContext();
     if (ctx.state === 'suspended') await ctx.resume();
@@ -201,8 +223,15 @@ export function useSonareDemoAudio() {
     }
     stop();
 
-    const buffer = ctx.createBuffer(1, audio.samples.length, audio.sampleRate);
-    buffer.copyToChannel(audio.samples, 0);
+    const stereo = isStereoAudio(audio);
+    const frames = stereo ? audio.left.length : audio.samples.length;
+    const buffer = ctx.createBuffer(stereo ? 2 : 1, frames, audio.sampleRate);
+    if (stereo) {
+      buffer.getChannelData(0).set(audio.left);
+      buffer.getChannelData(1).set(audio.right);
+    } else {
+      buffer.getChannelData(0).set(audio.samples);
+    }
     const node = ctx.createBufferSource();
     node.buffer = buffer;
     node.connect(ctx.destination);
