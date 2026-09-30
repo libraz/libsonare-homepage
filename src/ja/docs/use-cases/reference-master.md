@@ -85,20 +85,19 @@ sonare mastering-profile reference.wav --json
 
 ```json
 {
+  "duration_sec": 183.20,
   "bpm": 119.88, "bpm_confidence": 0.70,
-  "genre_candidates": [
-    { "name": "edm", "score": 1.0 },
-    { "name": "pop", "score": 0.75 },
-    { "name": "classical", "score": 0.65 }
-  ],
   "loudness": { "integrated_lufs": -24.56, "true_peak_db": -7.62,
                 "crest_factor_db": 17.95, "lra_lu": 6.07 },
   "spectral": { "centroid_hz": 2555.14, "rolloff_hz": 5531.35,
-                "sub_rms_db": 11.07, "low_rms_db": 21.40, "air_rms_db": -14.28 }
+                "sub_rms_db": 11.07, "low_rms_db": 21.40, "air_rms_db": -14.28 },
+  "dynamics": { "short_term_lufs_std": 3.21, "attack_density": 4.15,
+                "sustain_ratio": 0.58 },
+  "defects": { "measured": false }
 }
 ```
 
-これ 1 回で、テンポとジャンルの推定、そして狙っているファイルのラウドネスとスペクトル形状が手に入ります。[マスタリングアシスタント](../mastering-assistant.md)が自分のミックスをプロファイリングするのと同じフィールドです。比較に入る前にここを読んでください。このリファレンスは統合ラウドネス -24.56 LUFS で、配信基準からすると控えめです。あとで「本当にこのラウドネスまで追うか、音色だけ追うか」を決めるときに効いてきます。
+CLI はバインディングの camelCase のプロファイルキーを snake_case で出力します。これ 1 回で、狙っているファイルのテンポ、ラウドネス、スペクトル形状、ダイナミクスが手に入ります。[マスタリングアシスタント](../mastering-assistant.md)が自分のミックスをプロファイリングするのと同じ計測フィールドです。比較に入る前にここを読んでください。このリファレンスは統合ラウドネス -24.56 LUFS で、配信基準からすると控えめです。あとで「本当にこのラウドネスまで追うか、音色だけ追うか」を決めるときに効いてきます。
 
 この `loudness` のフィールドのうち 3 つは、下のメーターが再生中のクリップに対して報告するものと同じです。統合ラウドネス（LUFS）は次のステップでミックスと比較する 1 つの数値、True Peak は上限、LRA はプログラム全体でラウドネスがどれだけ動くかです。LRA の広いリファレンスは、1 つの統合ラウドネス値の裏に大きな動きを隠しています。その値だけを合わせても、ミックスが同じように動くようにはなりません。
 

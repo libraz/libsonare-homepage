@@ -19,7 +19,7 @@ What lives here is the concrete side of GS — the addresses, the tables, the pe
 
 ## The GM fallback bank
 
-The GM fallback is not just a last-resort sine bank. When a SoundFont is absent or incomplete, NativeSynth chooses the closest built-in synthesis voice for the requested GM program. Some of those voices are provisional physical models whose calibration is still underway. The goal is useful, data-free preview and missing-program coverage, not final sampled-instrument realism.
+The GM fallback is not just a last-resort sine bank. When a SoundFont is absent or incomplete, NativeSynth chooses the closest built-in synthesis voice for the requested GM program. The piano has been tuned; every other physical fallback model still awaits adjustment and calibration. Further work is planned for future patch releases. The goal is useful, data-free preview and missing-program coverage, not final sampled-instrument realism.
 
 | GM area | Data-free fallback voice |
 |---------|--------------------------|
@@ -340,21 +340,11 @@ Because a unit's output is one signal, what sits downstream of it belongs to the
 
 The GS tone controls and equalizers use first-order low and high shelves. Their `slopeDbOct` is `6` dB/octave; each shelf's frequency is where it reaches half its gain change in dB, and its `q` setting does not affect that first-order section. This is also how a host selects a first-order shelf in the parametric EQ band API.
 
-<MaturityNote
-  item="gs-efx-state-slots"
-  :labels="{
-    title: 'Some EFX parameters are held rather than heard, and that is a fact about the effect',
-    body: 'A measurement archive of an individual unit prints a value for 770 (type, slot) pairs and gives 85 of them a conversion from the raw byte to the quantity it names; the rest are received and held with nothing downstream reading them. 56 of the 85 reach a control of the same physical kind on the insert their type maps to, and all 56 are translated and audible. The remaining 29 are received, held and readable, and nothing reads them — not because the translation is unwritten, but because the insert has no such control. Raising one means giving the insert the control first, not editing a table.'
-  }"
-/>
+::: info How parameter bytes reach the sound
+Every printed EFX parameter drives a control or a stage switch. A **translated** binding uses a measured conversion table or a step fixed by the printed range. A **designed** binding uses a chosen law where the archive does not establish one. An **enables** binding turns stages on and off, or selects between them. These describe how the re-creation responds; a designed law does not establish that the original unit used the same law.
 
-<MaturityNote
-  item="gs-efx-assigned-conversions"
-  :labels="{
-    title: 'A few conversion laws are assigned rather than read',
-    body: '73 of the 85 conversions come from the measurements themselves. The other twelve were assigned, six of those as a unit override, where no reading settled what the byte counts in and the unit was taken from what the control it drives expects. They convert and the effect responds, but the law behind them is a reasoned choice rather than an observation.'
-  }"
-/>
+The [GS module demo](/gs-module) shows each parameter's target and conversion basis. A byte may reach several controls or whichever stage a selector enables.
+:::
 
 <MaturityNote
   item="gs-efx-incomplete-defaults"
@@ -375,6 +365,7 @@ Each EFX type number selects one insertion effect. Type `0` is Thru (no effect).
 | 0x0100 | Stereo EQ | parametric EQ |
 | 0x0101 | Spectrum | graphic EQ |
 | 0x0102 | Enhancer | presence enhancer |
+| 0x0103 | Humanizer | vowel filter |
 | 0x0110 | Overdrive | amp-sim (crunch voicing) |
 | 0x0111 | Distortion | amp-sim (high-gain voicing) |
 | 0x0120 | Phaser | phaser |
@@ -399,9 +390,10 @@ Each EFX type number selects one insertion effect. Type `0` is Thru (no effect).
 | 0x0157 | 3D Delay | stereo delay |
 | 0x0160 | 2-voice Pitch Shifter | pitch shifter |
 | 0x0161 | Feedback Pitch Shifter | pitch shifter (feedback loop not modelled) |
+| 0x0170 / 0x0171 | 3D Auto / Manual | binaural positioning |
 | 0x0172 / 0x0173 | Lo-Fi 1 / 2 | bit-crusher |
 
-Three types pass through dry, each because nothing in the insert catalogue carries its identity. **Humanizer** (`0x0103`) *is* a vowel, and no parameter position for the vowel is transcribed, so a fixed one would be a strong resonant filter chosen at random. **3D Auto** and **3D Manual** (`0x0170`, `0x0171`) are binaural panners with no stock insert — 3D Chorus and 3D Delay map instead because there the 3D stage sits on an effect that does exist. Everywhere else, a raw EFX parameter byte is converted and applied wherever the measurement archive reaches it and the insert has a control of the same physical kind; a slot that fails either condition leaves the insert on its own default.
+Humanizer (`0x0103`) uses a vowel filter with drive and vowel controls. 3D Auto and 3D Manual (`0x0170`, `0x0171`) use binaural positioning. Their parameters reach the mapped controls through translated or designed laws, with separate switches where the effect has optional stages.
 
 ### Composite EFX types (multi-stage chains)
 
@@ -415,6 +407,15 @@ A composite EFX type realises as an ordered **chain** of the same DSP inserts ru
 | 0x0405 | Bass Multi | compressor → amp-sim (bass cab) → EQ → chorus |
 | 0x0406 | Rhodes Multi | enhancer → phaser → chorus → auto-pan |
 | 0x0500 | Keyboard Multi | ring-mod → EQ → pitch-shifter → phaser → delay |
+
+### Modern and classic EFX
+
+`gsEfxRealization` selects the EFX sound when binding or bouncing a SoundFont instrument, including its NativeSynth fallback:
+
+- `modern` (default) builds chains from the current insert processors. The mapping tables above describe this path.
+- `classic` uses dedicated models running at 32 kHz internally, with resampling to the project's rate. It receives the same EFX type and parameter bytes; the instrument voices and system reverb, chorus and delay stay separate from this choice.
+
+The [GS module demo](/gs-module) lets you choose either path before playback. Assign the selected part to EFX and select an effect to hear the comparison; Thru has no insertion effect to compare.
 
 ### Live vs. offline realisation
 
@@ -448,7 +449,7 @@ Because the GM fallback bank is always present, MIDI never renders silent for la
 
 ### GM fallback program routing
 
-The fallback bank uses the closest NativeSynth engine for each GM program family, with a few program-level overrides where the instrument behavior matters. Acoustic-style rows below are still provisional calibration targets, so read them as routing coverage, not as a claim of final sampled-instrument realism.
+The fallback bank uses the closest NativeSynth engine for each GM program family, with a few program-level overrides where the instrument behavior matters. The piano has been tuned, while every other physical fallback model still awaits adjustment and calibration. Read the acoustic-style rows below as routing coverage, not as a claim of final sampled-instrument realism.
 
 | GM program | Instrument | Fallback engine | Why |
 |------------|------------|-----------------|-----|

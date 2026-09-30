@@ -268,6 +268,10 @@ interface LufsSeriesResult {
 | ステレオ解析の一覧 | `masteringStereoAnalysisNames()` |
 | ステレオチャンネルを解析 | `masteringStereoAnalyze()` |
 
+### アンププリセットのカタログ
+
+`masteringAmpPresetCatalog()` は、内蔵アンプシミュレーターの設定を `{ index, name, params }` の配列で返します。`index` は `saturation.ampSim` の `presetIndex` に渡す番号、`params` は上書き前の数値・真偽値の設定です。プロジェクトには番号と明示的な上書きを保存すると、読み込み時にエンジンがプリセットの既定値を補えます。
+
 ### プリセットパラメータと構成済みインサートのタイミング
 
 `masteringPresetNames()` は簡潔な名前一覧です。`capabilityCatalog().masteringPresets` は名前ごとにメタデータを返します。`kind` は `mastering` または `restoration` で、レストレーション用の項目では `targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` が `null` です。

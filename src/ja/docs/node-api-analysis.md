@@ -32,7 +32,7 @@ description: '@libraz/libsonare-native パッケージの解析関数・エフ�
 | `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)` | `AcousticResult` | 測定済みインパルス応答（IR）からのルーム音響。`minDecayDb` は減衰フィットのしきい値（既定 `30`） |
 | `estimateRoom(samples, sampleRate?, options?)` | `RoomEstimateResult` | 体積、寸法、DRR（直接音と残響音のエネルギー比）、吸音率バンド、RT60 バンド、信頼度を含む等価ルーム推定 |
 | `synthesizeRir(options?)` | `RirResult` | シューボックス形状からのモノラル RIR（ルームインパルス応答） |
-| `roomMorph(samples, sampleRate, options?)` | `Float32Array` | 目標ルームへ寄せるオフラインのルームモーフィング |
+| `roomMorph(samples, sampleRate, options?)` | `RoomMorphResult` | 目標ルームへ寄せるオフラインのルームモーフィング。モーフィング後のサンプルは `.audio`、サンプルレートは `.sampleRate`、診断情報は `.diagnostics` から読み取ります |
 | `lufs(samples, sampleRate?)` | `LufsResult` | 統合値、最後のモーメンタリー／ショートターム窓、EBU R128 の最大値（Max-M / Max-S）、ラウドネスレンジ |
 | `lufsInterleaved(samples, channels, sampleRate?)` | `LufsResult` | インターリーブサンプルからチャンネル重み付きマルチチャンネルラウドネスを測定 |
 | `ebur128LoudnessRange(samples, sampleRate?)` | `number` | EBU R128 準拠のラウドネスレンジ（LRA、LU 単位） |

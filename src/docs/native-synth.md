@@ -13,7 +13,7 @@ For a first pass, you only need three ideas:
 2. route MIDI notes to the destination that uses that preset;
 3. optionally override simple fields such as `cutoffHz`, `ampAttackMs`, or `stereoSpread`.
 
-Under the hood, NativeSynth is one synthesizer with **seventeen swappable synthesis engines**. Each engine is a different way to create the raw tone. Several acoustic-style engines are still provisional physical models: they are useful for data-free preview and fallback, but their final voicing/calibration is still in progress.
+Under the hood, NativeSynth is one synthesizer with **seventeen swappable synthesis engines**. Each engine is a different way to create the raw tone. The physical-model voices are useful for data-free preview and fallback: the piano has been tuned, while every other physical model still awaits adjustment and calibration. Further work is planned for future patch releases.
 
 - a virtual-analog subtractive voice (classic synth leads and pads),
 - FM (electric pianos, bells, and clavinet),
@@ -116,7 +116,7 @@ A phase-modulation operator stack (one oscillator's output is added to another's
 
 ### `karplus-strong` — plucked string
 
-A fractional-delay waveguide loop (a short delay loop that models a plucked string) with phase-exact tuning, plus pick-position comb, velocity-driven brightness, decay stretching, and note-off loop damping (finger/palm mute). Guitar, harp, and bass presets add provisional physical details: pickup position, body coupling, steel-string dispersion, sympathetic open strings, tension bend, and dual-polarization decay. Treat the acoustic realism as **in calibration**, not as a finished instrument model. Good for **plucked and strummed strings** — guitar, bass, harp, and the plucked ethnic family. (The harpsichord is not a bright guitar and has its own engine; see below.) Presets: `classical-guitar`, `steel-guitar`, `electric-guitar`, `harp`, `bass-acoustic`, `bass-fingered`, `bass-picked`, `bass-fretless`, `bass-slap`.
+A fractional-delay waveguide loop (a short delay loop that models a plucked string) with phase-exact tuning, plus pick-position comb, velocity-driven brightness, decay stretching, and note-off loop damping (finger/palm mute). Guitar, harp, and bass presets add provisional physical details: pickup position, body coupling, steel-string dispersion, sympathetic open strings, tension bend, and dual-polarization decay. Its acoustic realism is **not yet calibrated**. Good for **plucked and strummed strings** — guitar, bass, harp, and the plucked ethnic family. (The harpsichord is not a bright guitar and has its own engine; see below.) Presets: `classical-guitar`, `steel-guitar`, `electric-guitar`, `harp`, `bass-acoustic`, `bass-fingered`, `bass-picked`, `bass-fretless`, `bass-slap`.
 
 ### `modal` — mallet percussion
 
@@ -140,7 +140,7 @@ Three structural details shape what you hear beyond that outline:
 - **Inharmonicity follows a U-shaped curve**, not a monotonic climb. It grows toward the treble as stiffness would suggest, but below the bass break the wound strings turn it back upward, so the very bottom of the keyboard is more inharmonic than the notes just above it.
 - **Stretch tuning is an asymmetric Railsback curve** — two power-law branches meeting at the A4 anchor, about ten cents flat at the bottom against fifty sharp at the top, which is why one odd function about the middle cannot express it. The curve is held at the fitted keyboard bounds rather than extrapolated past them.
 
-The voice also carries **an explicit output level calibrated against a captured concert grand**. A physical model has no output level of its own — the string, the hammer, and the board are each calibrated against something and the product of the three is a number nobody chose — so without that step a piano sat well under the rest of the fallback bank. It now sits between the violin and the alto sax, which is where a grand belongs among them.
+The voice also carries **an explicit output level**. A physical model has no output level of its own — the string, the hammer, and the board each contribute to a product whose loudness nobody chooses directly — so the current tuning places the piano between the violin and the alto sax in the fallback bank.
 
 This is still a provisional model intended for built-in preview, not a sampled-piano replacement. Good for **acoustic piano**. Preset: `acoustic-piano`. GM programs 0-3 use it, as do the five piano-derived [GS variations](./gm-gs.md#gs-variation-tones).
 
@@ -150,11 +150,11 @@ A provisional waveguide flue-pipe model with shared wind behavior, multi-rank re
 
 ### `bowed-string` — friction-excited string
 
-A sustained bowed-string waveguide with bow speed/force/position control, sympathetic resonance, second-polarization beating, and a violin-family body resonator. The model is provisional and still being tuned against references. Good for **violin-family previews**. Presets: `violin`, `viola`, `cello`, `contrabass`.
+A sustained bowed-string waveguide with bow speed/force/position control, sympathetic resonance, second-polarization beating, and a violin-family body resonator. The model is provisional and has not yet been tuned against references. Good for **violin-family previews**. Presets: `violin`, `viola`, `cello`, `contrabass`.
 
 ### `reed` — woodwind reed
 
-A reed-bore waveguide with cylindrical and conical variants, tonehole/growth-cone behavior, register-scaled voicing, and live breath/brightness control. This is a provisional GM fallback/preview voice while calibration continues. Good for **single- and double-reed woodwind previews** and saxophones. Presets: `clarinet`, `soprano-sax`, `alto-sax`, `tenor-sax`, `baritone-sax`, `oboe`, `english-horn`, `bassoon`.
+A reed-bore waveguide with cylindrical and conical variants, tonehole/growth-cone behavior, register-scaled voicing, and live breath/brightness control. This is a provisional GM fallback/preview voice that still awaits calibration. Good for **single- and double-reed woodwind previews** and saxophones. Presets: `clarinet`, `soprano-sax`, `alto-sax`, `tenor-sax`, `baritone-sax`, `oboe`, `english-horn`, `bassoon`.
 
 ### `brass` — lip-reed brass
 
@@ -308,10 +308,10 @@ The `body` field is NativeSynth's body/formant resonance layer — the resonant 
 
 `body: 'vocal'` is the vowel formant bank, and it is reachable on **any** patch rather than only on the `vocal` engine — a subtractive oscillator driven through it is a sung tone rather than a filtered saw. That is exactly how the GM fallback bank voices Lead 6 (voice) and Pad 4 (choir), which is why those two do not sound like the synth leads and pads around them.
 
-::: info Pitch bend, controller reset, and per-channel state
+::: info Pitch bend, controller reset, and expression state
 NativeSynth responds to **pitch-bend** messages, and the bend range follows **RPN 0** (the standard pitch-bend-range parameter, set with the **CC6 / CC38** Data Entry MSB/LSB fine-byte pair — default ±2 semitones). A MIDI **Reset All Controllers** message returns the performance controllers (mod wheel, expression, pitch-bend value, the pedals) and the RPN/NRPN selection to their defaults, but it deliberately leaves the bend range where you set it — send RPN 0 again if you want ±2 semitones back. You drive these with ordinary MIDI events: pitch-bend events (e.g. `Project.midiPitchBend(...)` offline) and the RPN 0 / data-entry / reset CCs in your stream.
 
-This state is tracked **per channel, not per note**: NativeSynth does not track polyphonic (per-note) or channel pressure at all, and MIDI 2.0 note velocity is quantized down to the ordinary 7-bit range rather than kept at full 16-bit resolution. If you need MPE-style (MIDI Polyphonic Expression) per-note pitch-bend and pressure, or full 16-bit velocity, reach for the simpler built-in waveform synth instead — see `setBuiltinInstrument` in [MIDI Input](./midi-input.md).
+NativeSynth keeps ordinary controller state per channel and note-addressed expression per active voice. MIDI 2.0 note velocity, controller, pressure, and pitch-bend inputs retain their full resolution; NativeSynth handles channel pressure, polyphonic key pressure, and per-note pitch bend. Configure an MPE zone for member-channel expression, or send MIDI 2.0 per-note messages directly. RPN 0 sets the bend range, while generic high-resolution parameter mappings remain in the engine's `bindMidiCcBinding(...)` layer.
 
 Piano-style pedal controls are decoded as ordinary MIDI CCs. Sustain pedal **CC64** supports half-pedal damping only on the `piano` engine — there, intermediate values 64-126 damp ringing key-up notes proportionally; on every other engine CC64 is a plain on/off sustain switching at the 64 threshold, so 64 and 126 sound the same as 127. **CC66** acts as sostenuto, and **CC67** applies una-corda / soft-pedal voicing where the active preset uses it.
 :::
@@ -427,15 +427,15 @@ In a real app you would drive `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc
 
 ## Current status and limitations
 
-**Most of the physical models are provisional and still being calibrated.** Ten engines are provisional physical models of acoustic instruments — piano, plucked string (Karplus-Strong), bowed string, reed woodwind, brass, air-jet flute, pipe organ, buzzing-bridge plucked string, source-filter vocal, and free reed. (The modal, membrane-percussion, and harpsichord engines are also physical models, but their voicing is settled — see below.) They are designed for data-free preview and as the GM fallback floor, not as finished sampled-instrument replacements. Their voicing is tuned by a developer-run A/B harness that compares the synth against a reference SoundFont; this is a manual, ongoing loop, not an automatic or verified-against-reference calibration, and the tuning is not finished. Work continues on the piano, organ, brass, reed, and violin-family voicing.
+**The piano has been tuned.** Every other physical model still awaits adjustment and calibration. These voices are designed for data-free preview and as the GM fallback floor, not as finished sampled-instrument replacements. Further work is planned for future patch releases.
 
-**The piano's balance against the rest of the bank has changed.** The acoustic piano now carries an output level measured against a captured concert grand rather than whatever its physics happened to produce. Anything built on the previous balance — a saved mix, a bounced render, a stored hash of one — will differ.
+**The tuned piano voice includes** an explicit output-level treatment, bass-register excitation, and longitudinal string modes.
 
 **Some advanced physics is implemented but not yet reachable.** The bowed string, reed, brass, and flute engines carry richer nonlinear refinements (elasto-plastic bow friction, tonehole scattering, a brass "cuivré" edge, flute overblow, and more). These exist in the core and default to off — no public binding exposes a switch to turn them on yet — so the sound you get today is the simpler linear model. Expect these to become reachable, and the voicing to keep improving, in future releases.
 
 **A couple of self-oscillating models have a small residual intonation error.** The air-jet flute and flue pipe-organ lock slightly off the naive tuning and are corrected by a calibrated factor; a small, note-dependent residual remains.
 
-**The remaining engines are settled.** Subtractive (virtual-analog), FM, and additive (drawbar organ) are signal-based (non-physical); modal (mallets/bells), membrane percussion, and the jack-and-plectrum harpsichord are physical models whose voicing is settled. The `sample` engine plays back what you give it and has no voicing of its own. None of these carry provisional caveats.
+**The non-physical engines have a different status.** Subtractive (virtual-analog), FM, and additive (drawbar organ) are signal-based and do not carry physical-model calibration status. Modal (mallets/bells), membrane percussion, and the jack-and-plectrum harpsichord are physical models and remain subject to the same pending adjustment and calibration as the other physical voices. The `sample` engine plays back what you give it and has no voicing of its own.
 
 **Where the sounds come from.** The synthesis engines are original implementations of published synthesis and physical-modelling algorithm families, and the GM/GS behavior follows the openly documented General MIDI / GS addressing — no sampled or captured instrument audio is bundled, and the result is an independent re-creation rather than a copy of any specific device. For the standards and papers behind each engine, see [Algorithm References](./algorithm-references.md).
 

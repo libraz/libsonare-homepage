@@ -140,7 +140,7 @@ with Audio.from_file("music.mp3") as audio:
 | `detect_acoustic(samples, sample_rate, ...)` | `AcousticResult` | Blind room-acoustic estimation |
 | `estimate_room(samples, sample_rate, ...)` | `RoomEstimate` | Equivalent-room estimate with volume, dimensions, DRR, absorption bands, RT60 bands, and confidence |
 | `synthesize_rir(length_m, width_m, height_m, ...)` | `RirResult` | Mono room impulse response from shoebox geometry |
-| `room_morph(samples, sample_rate, length_m, width_m, height_m, ...)` | `list[float]` | Offline creative morph toward a target room |
+| `room_morph(samples, sample_rate, length_m, width_m, height_m, ...)` | `RoomMorphResult` | Offline creative morph toward a target room; read morphed samples from `.audio`, with `.sample_rate` and `.diagnostics` alongside them |
 | `version()` | `str` | Library version |
 | `voice_changer_abi_version()` | `int` | ABI version of the realtime voice-changer POD config; separate from preset JSON `schemaVersion` |
 | `voice_character_preset_id(preset)` | `str \| None` | Canonical voice-character preset ID for an integer ordinal; unknown ordinals return `None` |

@@ -272,6 +272,10 @@ The named mastering API families are:
 | List stereo analyses | `masteringStereoAnalysisNames()` |
 | Analyze stereo channels | `masteringStereoAnalyze()` |
 
+### Amp preset catalog
+
+`masteringAmpPresetCatalog()` returns the built-in amp-sim rigs as `{ index, name, params }` objects. `index` selects the rig through `saturation.ampSim`'s `presetIndex`; `params` contains its resolved numeric and boolean controls before user overrides. Save the index and explicit overrides in a project so the engine can supply the rig's defaults when it is loaded.
+
 ### Preset parameters and configured insert timing
 
 `masteringPresetNames()` is the compact name list. `capabilityCatalog().masteringPresets` adds one metadata object per name: `kind` is `mastering` or `restoration`, and restoration entries have `null` for `targetLufs`, `truePeakCeilingDb`, and `maxLimiterGainReductionDb`.

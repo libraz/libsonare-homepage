@@ -79,8 +79,10 @@ libsonare の `RealtimeEngine` は、トランスポート・クリップ・オ�
 | `setSynthInstrument(patch, destinationId)` | パッチ駆動の内蔵シンセサイザー（NativeSynth） | [内蔵シンセサイザー](./native-synth.md) |
 | `setSf2Instrument(config, destinationId)` | GS 互換の SoundFont プレイヤー | [SoundFont プレイヤー](./soundfont-player.md) |
 
-::: tip MPE 表現は setBuiltinInstrument の機能
-真の MPE（MIDI Polyphonic Expression）スタイルの per-note 表現（per-note のピッチベンドと、チャンネル／ポリフォニックプレッシャー、フル 16 ビットの MIDI 2.0 ベロシティ）を持つのは、内蔵の波形シンセ（`setBuiltinInstrument`）だけです。その MPE ベンドレンジは ±2 半音に固定されています。内蔵シンセサイザー（`setSynthInstrument`）はチャンネル単位で動作します。ベンドレンジは RPN 0 で設定できますが、それ以外の RPN には反応せず、NRPN の値も読まず、汎用の 14 ビット CC ペアリングも持ちません。ベロシティと MIDI 2.0 の CC 値はどちらも 7 ビットへ量子化され、per-note プレッシャーは追跡しません。高分解能の RPN／NRPN・14 ビット CC を扱うのは、楽器側ではなく 1 段上、後述するエンジンの `bindMidiCcBinding(...)` パラメータ層です。チャンネル単位のベンド／CC の詳細は [内蔵シンセサイザー](./native-synth.md) を参照してください。
+::: tip MIDI 2.0 と MPE 表現
+内蔵の波形シンセ（`setBuiltinInstrument`）、NativeSynth（`setSynthInstrument`）、SoundFont プレイヤー（`setSf2Instrument`）は、MIDI 2.0 のチャンネルボイス UMP を値の幅を落とさずに受け取ります。ノートベロシティ、コントローラー、プレッシャー、ピッチベンドは MIDI 2.0 メッセージから渡された分解能を保ちます。内蔵シンセと NativeSynth はチャンネルプレッシャー、ポリフォニックキープレッシャー、ノート単位のピッチベンドを適用します。SoundFont プレイヤーもフル幅のノートベロシティ、チャンネルプレッシャー、ピッチベンド、MIDI 2.0 のノート単位ピッチを適用しますが、ポリフォニックキープレッシャーは意図的に無視します。そのため MPE スタイルのメンバーチャンネルで各プレイヤーへチャンネル表現を送れますが、SoundFont ではポリフォニックプレッシャー表現を使えません。
+
+NativeSynth と SoundFont プレイヤーのベンドレンジは RPN 0 で設定し、内蔵シンセは MPE ゾーンの設定を使います。汎用の高分解能 RPN／NRPN と 14 ビット CC のパラメータマッピングは、後述するエンジンの `bindMidiCcBinding(...)` 層にあります。NativeSynth のベンドと表現の詳細は [内蔵シンセサイザー](./native-synth.md) を参照してください。
 :::
 
 ```typescript
@@ -108,7 +110,7 @@ engine.setSf2Instrument({ destinationId: 1, gain: 1 }, 1);
 - **即時エンジンコマンド** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` はそれぞれ `destinationId` と `renderFrame`（または「できるだけ早く」を表す `-1`）を取ります。`pushMidiPanic(renderFrame)` は `renderFrame` のみを取り、すべてのデスティネーションの発音中ノートを一括で解放します。
 - **エンジン所有のライブ入力ソース** — `setMidiInputSource(destinationId)` で専用の入力レーンを開き、`pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` で `portTimeSamples` タイムスタンプ付きのイベントを送ります。Web MIDI ブリッジはこのレーンへイベントを流します。
 - **ライブ SysEx** — `pushMidiSysex(destinationId, data, renderFrame = -1)` は、デスティネーションへ完全な SysEx（System Exclusive。メーカー独自の自由形式メッセージ）フレームをキューイングします。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なメッセージ（1〜512 バイト）で、`renderFrame` はほかの `pushMidi*` 呼び出しと同じ即時／スケジュール規約に従います。主な用途は、再生を止めずに、ライブの SF2 バインド済みデスティネーションへ GS/GM リセットや GS インサーションエフェクト（EFX）の選択を届けることです。そのバイト列が何を選ぶかは [SoundFont プレイヤー](./soundfont-player.md) を参照してください。
-- **UMP ワード 1 つ** — `pushMidiUmp(destinationId, word0, renderFrame = -1)` は、32 ビットの UMP（Universal MIDI Packet。MIDI 2.0 のメッセージ形式）ワードにパックした MIDI 1.0 チャンネルボイスメッセージを 1 つキューイングし、即座にディスパッチします。トランスポートのシーク後にプログラム・ピッチベンド・プレッシャーの状態を復元するのに適した簡潔な方法です。メッセージ種別ごとに別々の `pushMidi*` を呼び分けるのではなく、それぞれをワードにパックして送ります。
+- **UMP メッセージ** — `pushMidiUmp(destinationId, words, renderFrame = -1)` は、1〜4 個の 32 ビットワードからなる配列または `Uint32Array` を最上位ワードから順に受け取ります。個数は先頭ワードのメッセージ種別と一致させます。MIDI 2.0 チャンネルボイス（MT `0x4`）は値の幅を保ったまま処理し、SysEx7／データメッセージ（MT `0x3`／`0x5`）は拒否するため `pushMidiSysex` を使います。`SonareEngine` の worklet ファサードは引き続き 1 ワード用の `pushMidiUmp(trackId, word0, renderFrame = -1)` を公開するため、複数ワード UMP は `RealtimeEngine` に送ります。
 
 同じ SysEx 呼び出しはどのバインディングにもあり、名前の付け方だけが変わります。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なフレーム（1〜512 バイト）で、最後の引数はほかの `pushMidi*` 呼び出しと同じく「即時」を表す `-1` のレンダーフレームです。
 

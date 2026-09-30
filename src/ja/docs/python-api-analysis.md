@@ -140,7 +140,7 @@ with Audio.from_file("music.mp3") as audio:
 | `detect_acoustic(samples, sample_rate, ...)` | `AcousticResult` | ブラインドなルーム音響推定 |
 | `estimate_room(samples, sample_rate, ...)` | `RoomEstimate` | 体積、寸法、DRR、吸音率バンド、RT60 バンド、信頼度を含む等価ルーム推定 |
 | `synthesize_rir(length_m, width_m, height_m, ...)` | `RirResult` | シューボックス形状からのモノラル RIR |
-| `room_morph(samples, sample_rate, length_m, width_m, height_m, ...)` | `list[float]` | 目標ルームへ寄せるオフラインのルームモーフィング |
+| `room_morph(samples, sample_rate, length_m, width_m, height_m, ...)` | `RoomMorphResult` | 目標ルームへ寄せるオフラインのルームモーフィング。モーフィング後のサンプルは `.audio`、サンプルレートは `.sample_rate`、診断情報は `.diagnostics` から読み取ります |
 | `version()` | `str` | ライブラリバージョン |
 | `voice_changer_abi_version()` | `int` | リアルタイムボイスチェンジャー POD 設定の ABI バージョン。プリセット JSON の `schemaVersion` とは別 |
 | `voice_character_preset_id(preset)` | `str \| None` | 整数の序数から正規の voice-character プリセット ID を返す。未知の序数は `None` |

@@ -32,7 +32,7 @@ This page covers the analysis, effects, and feature-extraction functions of the 
 | `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)` | `AcousticResult` | Room acoustics from a measured impulse response; `minDecayDb` controls the decay-fit threshold (default `30`) |
 | `estimateRoom(samples, sampleRate?, options?)` | `RoomEstimateResult` | Equivalent-room estimate with volume, dimensions, DRR (direct-to-reverberant ratio), absorption bands, RT60 bands, and confidence |
 | `synthesizeRir(options?)` | `RirResult` | Mono RIR (room impulse response) from shoebox geometry |
-| `roomMorph(samples, sampleRate, options?)` | `Float32Array` | Offline creative morph toward a target room |
+| `roomMorph(samples, sampleRate, options?)` | `RoomMorphResult` | Offline creative morph toward a target room; read morphed samples from `.audio`, with `.sampleRate` and `.diagnostics` alongside them |
 | `lufs(samples, sampleRate?)` | `LufsResult` | Integrated, final momentary/short-term windows, their EBU R128 maxima (Max-M / Max-S), and loudness range |
 | `lufsInterleaved(samples, channels, sampleRate?)` | `LufsResult` | Channel-weighted multichannel loudness from interleaved samples |
 | `ebur128LoudnessRange(samples, sampleRate?)` | `number` | Standards-compliant EBU R128 loudness range (LRA) in LU |

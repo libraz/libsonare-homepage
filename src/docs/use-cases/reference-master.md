@@ -85,20 +85,19 @@ sonare mastering-profile reference.wav --json
 
 ```json
 {
+  "duration_sec": 183.20,
   "bpm": 119.88, "bpm_confidence": 0.70,
-  "genre_candidates": [
-    { "name": "edm", "score": 1.0 },
-    { "name": "pop", "score": 0.75 },
-    { "name": "classical", "score": 0.65 }
-  ],
   "loudness": { "integrated_lufs": -24.56, "true_peak_db": -7.62,
                 "crest_factor_db": 17.95, "lra_lu": 6.07 },
   "spectral": { "centroid_hz": 2555.14, "rolloff_hz": 5531.35,
-                "sub_rms_db": 11.07, "low_rms_db": 21.40, "air_rms_db": -14.28 }
+                "sub_rms_db": 11.07, "low_rms_db": 21.40, "air_rms_db": -14.28 },
+  "dynamics": { "short_term_lufs_std": 3.21, "attack_density": 4.15,
+                "sustain_ratio": 0.58 },
+  "defects": { "measured": false }
 }
 ```
 
-One call gives you tempo, a genre guess, and the loudness and spectral shape of the file you are chasing — the same fields [Mastering Assistant](../mastering-assistant.md) profiles your own mix with. Read this before the comparison: a reference at -24.56 LUFS integrated is quiet by streaming standards, which matters later when you decide whether to actually chase its loudness or just its tone.
+The CLI renders the binding's camelCase profile keys as snake_case. One call gives you tempo, loudness, spectral shape, and dynamics for the file you are chasing — the same measured fields [Mastering Assistant](../mastering-assistant.md) profiles for your own mix. Read this before the comparison: a reference at -24.56 LUFS integrated is quiet by streaming standards, which matters later when you decide whether to actually chase its loudness or just its tone.
 
 Three of those `loudness` fields are what the meter below reports on a playing clip: integrated LUFS is the single number the next step will compare against your mix, true peak is the ceiling, and LRA is how far the loudness moves over the programme. A reference with a wide LRA hides a lot of motion behind its one integrated figure — matching that figure alone will not make your mix move the same way.
 
