@@ -97,4 +97,30 @@ describe('music analysis worker — posted result is structured-cloneable (real 
     expect(done.message.type).toBe('done');
     expect(() => structuredClone(done.message.result)).not.toThrow();
   }, 30_000);
+
+  it('keeps stereo loudness series audible when the channels cancel in a downmix', async () => {
+    const left = tone(4);
+    const right = Float32Array.from(left, (sample) => -sample);
+    const done = await analyze({
+      type: 'analyze',
+      id: 3,
+      samples: left,
+      sourceLeft: left,
+      sourceRight: right,
+      sampleRate: SR,
+    });
+    expect(done.message.type).toBe('done');
+    const result = done.message.result as {
+      summary: { integratedLufs: number };
+      loudness: { momentary: Array<{ value: number }>; shortTerm: Array<{ value: number }> };
+    };
+    const mono = wasm.lufs(left, SR);
+    expect(result.summary.integratedLufs - mono.integratedLufs).toBeCloseTo(3.0103, 2);
+    for (const series of [result.loudness.momentary, result.loudness.shortTerm]) {
+      const finite = series.filter((point) => Number.isFinite(point.value));
+      expect(finite.length).toBeGreaterThan(0);
+      expect(finite.at(-1)!.value).toBeGreaterThan(mono.integratedLufs + 2);
+    }
+    expect(() => structuredClone(result)).not.toThrow();
+  }, 30_000);
 });

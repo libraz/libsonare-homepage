@@ -59,6 +59,10 @@ const wasmMock = vi.hoisted(() => ({
     shortTermLufs: -14,
     loudnessRange: 5,
   })),
+  lufsSeriesInterleaved: vi.fn(() => ({
+    momentary: new Float32Array([-17, -12]),
+    shortTerm: new Float32Array([-15]),
+  })),
   momentaryLufs: vi.fn(() => new Float32Array([Number.NaN, -15, -13, -14])),
   shortTermLufs: vi.fn(() => new Float32Array([-16, -15])),
   chroma: vi.fn(() => ({
@@ -144,6 +148,10 @@ describe('music analysis worker protocol', () => {
 
     expect(wasmMock.init).toHaveBeenCalledTimes(1);
     expect(wasmMock.resample).not.toHaveBeenCalled();
+    expect(wasmMock.lufs).toHaveBeenCalledWith(samples, 48_000);
+    expect(wasmMock.momentaryLufs).toHaveBeenCalledWith(samples, 48_000);
+    expect(wasmMock.shortTermLufs).toHaveBeenCalledWith(samples, 48_000);
+    expect(wasmMock.lufsSeriesInterleaved).not.toHaveBeenCalled();
     expect(wasmMock.detectKeyCandidates).toHaveBeenCalledWith(samples, 48_000, {
       useHpss: true,
       loudnessWeighted: true,
@@ -198,12 +206,14 @@ describe('music analysis worker protocol', () => {
     expect(result.heatmaps.chroma).toMatchObject({ rows: 12, columns: 2, min: 0.5, max: 0.5 });
     expect(result.heatmaps.mel).toMatchObject({ rows: 96, columns: 2, min: -20, max: -20 });
     expect(result.heatmaps.cqt).toMatchObject({ rows: 72, columns: 2, min: 0.25, max: 0.25 });
-    expect(result.loudness.momentary).toEqual([
-      { time: 0, value: Number.NaN },
-      { time: 1 / 3, value: -15 },
-      { time: 2 / 3, value: -13 },
-      { time: 1, value: -14 },
-    ]);
+    expect(result.loudness.momentary.map((point: { time: number }) => point.time)).toHaveLength(4);
+    for (const [index, expected] of [0.4, 0.5, 0.6, 0.7].entries()) {
+      expect(result.loudness.momentary[index].time).toBeCloseTo(expected, 10);
+    }
+    expect(Number.isNaN(result.loudness.momentary[0].value)).toBe(true);
+    expect(
+      result.loudness.momentary.slice(1).map((point: { value: number }) => point.value),
+    ).toEqual([-15, -13, -14]);
     expect(done.transfer).toEqual([
       result.heatmaps.chroma.values.buffer,
       result.heatmaps.mel.values.buffer,
@@ -382,6 +392,10 @@ describe('music analysis worker protocol', () => {
     const interleaved = wasmMock.lufsInterleaved.mock.calls.at(-1)?.[0] as Float32Array;
     expect(Array.from(interleaved)).toEqual([1, -1, 0.5, -0.5, 0, 0, -0.25, 0.25]);
     expect(wasmMock.lufsInterleaved).toHaveBeenCalledWith(interleaved, 2, 48_000);
+    expect(wasmMock.lufsSeriesInterleaved).toHaveBeenCalledWith(interleaved, 2, 48_000);
+    expect(wasmMock.lufsSeriesInterleaved.mock.calls.at(-1)?.[0]).toBe(interleaved);
+    expect(wasmMock.momentaryLufs).not.toHaveBeenCalled();
+    expect(wasmMock.shortTermLufs).not.toHaveBeenCalled();
     expect((posted.at(-1)!.message as any).result).toMatchObject({
       summary: { integratedLufs: -12, loudnessRange: 5 },
       metering: {
@@ -396,6 +410,61 @@ describe('music analysis worker protocol', () => {
         stereo: { available: true },
       },
     });
+    const loudness = (posted.at(-1)!.message as any).result.loudness;
+    expect(loudness.momentary.map((point: { value: number }) => point.value)).toEqual([-17, -12]);
+    expect(loudness.shortTerm.map((point: { value: number }) => point.value)).toEqual([-15]);
+  });
+
+  it('anchors mono loudness blocks and keeps real bucket midpoints when downsampling', async () => {
+    const sampleRate = 48_000;
+    const samples = new Float32Array(sampleRate * 90);
+    const momentary = Float32Array.from({ length: 840 }, (_, index) => index);
+    const shortTerm = Float32Array.from({ length: 840 }, (_, index) => 1_000 + index);
+    wasmMock.momentaryLufs.mockReturnValueOnce(momentary);
+    wasmMock.shortTermLufs.mockReturnValueOnce(shortTerm);
+
+    await (self as any).onmessage({
+      data: { type: 'analyze', id: 8, samples, sampleRate },
+    });
+
+    const loudness = (posted.at(-1)!.message as any).result.loudness;
+    expect(loudness.momentary).toHaveLength(420);
+    expect(loudness.momentary[0]).toMatchObject({ time: 0.45, value: 0.5 });
+    expect(loudness.momentary.at(-1)).toMatchObject({ value: 838.5 });
+    expect(loudness.momentary.at(-1).time).toBeCloseTo(84.25, 10);
+    expect(loudness.shortTerm[0]).toMatchObject({ time: 3.05, value: 1_000.5 });
+    expect(loudness.shortTerm.at(-1)).toMatchObject({ value: 1_838.5 });
+    expect(loudness.shortTerm.at(-1).time).toBeCloseTo(86.85, 10);
+    expect(loudness.shortTerm[0].time - loudness.momentary[0].time).toBeCloseTo(2.6, 10);
+  }, 30_000);
+
+  it('anchors stereo loudness series at their complete-window origins', async () => {
+    const sampleRate = 48_000;
+    const left = new Float32Array(sampleRate * 5);
+    const right = new Float32Array(sampleRate * 5);
+    wasmMock.lufsSeriesInterleaved.mockReturnValueOnce({
+      momentary: new Float32Array([10, 11, 12]),
+      shortTerm: new Float32Array([20, 21, 22]),
+    });
+
+    await (self as any).onmessage({
+      data: { type: 'analyze', id: 9, sourceLeft: left, sourceRight: right, sampleRate },
+    });
+
+    const loudness = (posted.at(-1)!.message as any).result.loudness;
+    expect(loudness.momentary.map((point: { value: number }) => point.value)).toEqual([10, 11, 12]);
+    expect(loudness.shortTerm.map((point: { value: number }) => point.value)).toEqual([20, 21, 22]);
+    expect(loudness.momentary.map((point: { time: number }) => point.time)).toEqual([
+      expect.closeTo(0.4, 10),
+      expect.closeTo(0.5, 10),
+      expect.closeTo(0.6, 10),
+    ]);
+    expect(loudness.shortTerm.map((point: { time: number }) => point.time)).toEqual([
+      expect.closeTo(3, 10),
+      expect.closeTo(3.1, 10),
+      expect.closeTo(3.2, 10),
+    ]);
+    expect(loudness.shortTerm[0].time - loudness.momentary[0].time).toBeCloseTo(2.6, 10);
   });
 
   it('ignores unknown worker messages without posting responses', async () => {

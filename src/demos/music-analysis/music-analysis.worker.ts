@@ -5,6 +5,7 @@ import type {
   CqtResult,
   KeyCandidate,
   LufsResult,
+  LufsSeriesResult,
   MelodyResult,
   MelSpectrogramResult,
   Section,
@@ -32,6 +33,13 @@ type WorkerRequest =
       type: 'cancel';
       id: number;
     };
+
+// BS.1770 / EBU R128 loudness series use complete windows at a fixed 100 ms
+// hop. Keep these values beside the worker so this demo remains self-contained;
+// they match the engine defaults and the shared loudness contour helper.
+const LOUDNESS_HOP_SEC = 0.1;
+const MOMENTARY_WINDOW_SEC = 0.4;
+const SHORT_TERM_WINDOW_SEC = 3;
 
 type WasmModule = {
   init: () => Promise<void>;
@@ -79,6 +87,11 @@ type WasmModule = {
   };
   lufs: (samples: Float32Array, sampleRate?: number) => LufsResult;
   lufsInterleaved: (samples: Float32Array, channels: number, sampleRate?: number) => LufsResult;
+  lufsSeriesInterleaved: (
+    samples: Float32Array,
+    channels: number,
+    sampleRate?: number,
+  ) => LufsSeriesResult;
   momentaryLufs: (samples: Float32Array, sampleRate?: number) => Float32Array;
   shortTermLufs: (samples: Float32Array, sampleRate?: number) => Float32Array;
   meteringTruePeakDb: (
@@ -289,11 +302,18 @@ function runAnalysis(request: AnalyzeRequest): MusicAnalysisWorkerResult {
 
   ensureNotCancelled(request.id);
   postProgress(request.id, 0.58, 'Measuring loudness');
+  const interleavedStereo = hasStereoSource
+    ? interleaveStereo(sourceLeft!, sourceRight!)
+    : undefined;
   const loudness = hasStereoSource
-    ? wasmModule.lufsInterleaved(interleaveStereo(sourceLeft!, sourceRight!), 2, sourceSampleRate)
+    ? wasmModule.lufsInterleaved(interleavedStereo!, 2, sourceSampleRate)
     : wasmModule.lufs(samples, sampleRate);
-  const momentary = wasmModule.momentaryLufs(samples, sampleRate);
-  const shortTerm = wasmModule.shortTermLufs(samples, sampleRate);
+  const loudnessSeries = hasStereoSource
+    ? wasmModule.lufsSeriesInterleaved(interleavedStereo!, 2, sourceSampleRate)
+    : {
+        momentary: wasmModule.momentaryLufs(samples, sampleRate),
+        shortTerm: wasmModule.shortTermLufs(samples, sampleRate),
+      };
 
   ensureNotCancelled(request.id);
   postProgress(request.id, 0.64, 'Metering signal');
@@ -357,8 +377,8 @@ function runAnalysis(request: AnalyzeRequest): MusicAnalysisWorkerResult {
       cqt: downsampleMatrix(cqt.magnitude, cqt.nBins, cqt.nFrames, 72, 420),
     },
     loudness: {
-      momentary: downsampleSeries(momentary, duration, 420),
-      shortTerm: downsampleSeries(shortTerm, duration, 420),
+      momentary: downsampleSeries(loudnessSeries.momentary, MOMENTARY_WINDOW_SEC, 420),
+      shortTerm: downsampleSeries(loudnessSeries.shortTerm, SHORT_TERM_WINDOW_SEC, 420),
     },
     metering,
   };
@@ -521,10 +541,10 @@ function downsampleMelody(result: MelodyResult, targetPoints: number) {
   return output;
 }
 
-function downsampleSeries(values: Float32Array, duration: number, targetPoints: number) {
+function downsampleSeries(values: Float32Array, windowSec: number, targetPoints: number) {
   if (values.length <= targetPoints) {
     return Array.from(values, (value, index) => ({
-      time: duration * (index / Math.max(1, values.length - 1)),
+      time: windowSec + index * LOUDNESS_HOP_SEC,
       value,
     }));
   }
@@ -541,8 +561,9 @@ function downsampleSeries(values: Float32Array, duration: number, targetPoints: 
         count++;
       }
     }
+    const representativeIndex = start + (end - start - 1) / 2;
     output.push({
-      time: duration * (start / Math.max(1, values.length - 1)),
+      time: windowSec + representativeIndex * LOUDNESS_HOP_SEC,
       value: count ? sum / count : Number.NaN,
     });
   }
