@@ -56,7 +56,7 @@ export function buildSceneJson(
         {
           slot: 'post',
           processor: 'effects.reverb.plate',
-          params: JSON.stringify({ decaySec: reverb!.decaySec, preDelayMs: reverb!.preDelayMs }),
+          params: { decaySec: reverb!.decaySec, preDelayMs: reverb!.preDelayMs },
         },
       ],
     });
@@ -90,12 +90,12 @@ export function buildSceneJson(
 
 function buildStripInserts(strip: SceneStripInput) {
   if (!strip.eqEnabled) return [];
-  const inserts: Array<{ slot: string; processor: string; params: string }> = [];
+  const inserts: Array<{ slot: string; processor: string; params: Record<string, number> }> = [];
   if (strip.eqTiltDb) {
     inserts.push({
       slot: 'pre',
       processor: 'eq.tilt',
-      params: JSON.stringify({ tiltDb: strip.eqTiltDb }),
+      params: { tiltDb: strip.eqTiltDb },
     });
   }
   if (strip.eqAirDb && strip.eqAirDb > 0) {
@@ -104,7 +104,7 @@ function buildStripInserts(strip: SceneStripInput) {
     inserts.push({
       slot: 'pre',
       processor: 'spectral.airBand',
-      params: JSON.stringify({ amount: Math.min(1, strip.eqAirDb / 12) }),
+      params: { amount: Math.min(1, strip.eqAirDb / 12) },
     });
   }
   return inserts;

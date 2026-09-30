@@ -93,8 +93,8 @@ export const analysisDemos: SonareDemoDef[] = [
       ja: 'コードトラック — 認識が返す区間',
     },
     caption: {
-      en: 'Each block is a detected chord segment. With the default STFT chroma and a 0.3 second minimum, both template sets read this clip as C–Am–F–G. Lower the minimum duration to keep brief extension readings near chord changes, then switch between all qualities and triads to compare the template vocabulary.',
-      ja: 'ブロック 1 つが検出されたコード区間です。初期設定の STFT クロマと最小長 0.3 秒では、どちらのテンプレート集合でもこのクリップを C–Am–F–G と読みます。最小長を下げるとコードの切り替わり付近にある短い拡張コードの読みが残り、「全品質」と「三和音のみ」を切り替えてテンプレート集合の違いを比べられます。',
+      en: 'Each block is a detected chord segment. With frame-level STFT chroma (beat synchronization off) and a 0.3 second minimum, both template sets read this clip as C–Am–F–G. Lower the minimum duration to keep brief extension readings near chord changes, then switch between all qualities and triads to compare the template vocabulary.',
+      ja: 'ブロック 1 つが検出されたコード区間です。拍同期を使わないフレーム単位の STFT クロマと最小長 0.3 秒では、どちらのテンプレート集合でもこのクリップを C–Am–F–G と読みます。最小長を下げるとコードの切り替わり付近にある短い拡張コードの読みが残り、「全品質」と「三和音のみ」を切り替えてテンプレート集合の違いを比べられます。',
     },
     params: [
       {

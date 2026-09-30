@@ -1286,6 +1286,10 @@ function masteringInsertParamInfo(name) {
   const json = requireModule8().masteringInsertParamInfo(name);
   return JSON.parse(json);
 }
+function masteringAmpPresetCatalog() {
+  const json = requireModule8().masteringAmpPresetCatalog();
+  return JSON.parse(json);
+}
 function insertTimingParamsToJson(fnName, params) {
   const out = {};
   for (const [key, value] of Object.entries(params)) {
@@ -4840,6 +4844,171 @@ function mixSourceClassFromName(name) {
   return requireModule26().mixingAssistantSourceClassFromName(name);
 }
 
+// src/playback_renderer.ts
+function configJsonText(config) {
+  return typeof config === "string" ? config : JSON.stringify(config);
+}
+function nativeHrtf(hrtf) {
+  if (hrtf === void 0) {
+    return null;
+  }
+  if (!(hrtf instanceof HrtfSet)) {
+    throw new TypeError("hrtf must be an HrtfSet");
+  }
+  return hrtf.native;
+}
+var HrtfSet = class _HrtfSet {
+  constructor(native) {
+    this.released = false;
+    this.native = native;
+  }
+  /** Builds an HRTF set from SHRF v1 bytes; malformed data throws. */
+  static fromBytes(bytes) {
+    return new _HrtfSet(getSonareModule().createHrtfSet(bytes));
+  }
+  /** Releases the native handle. Idempotent, as the Node facade is. */
+  delete() {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
+    this.native.delete();
+  }
+  /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
+  destroy() {
+    this.delete();
+  }
+};
+var PlaybackRenderer = class {
+  constructor(options) {
+    this.released = false;
+    this.native = getSonareModule().createPlaybackRenderer(
+      configJsonText(options.config),
+      nativeHrtf(options.hrtf),
+      options.sampleRate ?? 48e3,
+      options.maxBlockSize ?? 1024
+    );
+  }
+  /**
+   * Renders one planar block; every plane must carry the same frame count, at
+   * most `maxBlockSize` (0 is a no-op). With a fixed input layout the plane
+   * count must equal {@link inputChannels}; with `input.layout: "auto"` it
+   * must be 1, 2, 6 or 8, and a change switches the input layout without
+   * changing the latency. Non-finite input samples are replaced with 0 and
+   * counted ({@link nonFiniteDiscardCount}).
+   */
+  processPlanar(planes) {
+    return this.native.processPlanar(planes);
+  }
+  /** Interleaved variant of {@link processPlanar}. Non-finite input samples are replaced with 0 and counted. */
+  processInterleaved(samples, inChannels) {
+    return this.native.processInterleaved(samples, inChannels);
+  }
+  /** Applies a complete configuration document; a changed prepare key throws. */
+  setConfig(config) {
+    this.native.setConfig(configJsonText(config));
+  }
+  /** The current complete configuration document. */
+  config() {
+    return JSON.parse(this.native.configJson());
+  }
+  /**
+   * Publishes the listener head orientation in degrees: right-handed,
+   * positive yaw turns the head right, positive pitch looks up, positive roll
+   * lowers the right ear. Ignored by a speakers target; a non-finite angle is
+   * ignored.
+   */
+  setHeadOrientation(yawDeg, pitchDeg = 0, rollDeg = 0) {
+    this.native.setHeadOrientation(yawDeg, pitchDeg, rollDeg);
+  }
+  /**
+   * Clears DSP state (filters, FIFOs, dynamics, convolution history, pending
+   * input-layout drains). Configuration and head pose are kept. Call it after
+   * a seek, from the thread that processes.
+   */
+  reset() {
+    this.native.reset();
+  }
+  /**
+   * Renderer latency in samples (headphones: near ear). Depends only on the
+   * target, the sample rate and distance compensation, never on realtime keys
+   * or the input layout.
+   */
+  latencySamples() {
+    return this.native.latencySamples();
+  }
+  /**
+   * Channel count of the active input layout. With `input.layout: "auto"`
+   * this follows the channel count of the most recent non-empty process call
+   * (2 before the first call).
+   */
+  inputChannels() {
+    return this.native.inputChannels();
+  }
+  /** Channel count of the output target. */
+  outputChannels() {
+    return this.native.outputChannels();
+  }
+  /**
+   * Inactive stages, per-stage latency, clamps, the active input layout, and
+   * the layout-switch / truncated-drain counters, as a plain object.
+   */
+  diagnostics() {
+    return JSON.parse(this.native.diagnosticsJson());
+  }
+  /** Non-finite input samples replaced with 0 since construction. */
+  nonFiniteDiscardCount() {
+    return this.native.nonFiniteDiscardCount();
+  }
+  /** Releases the native handle. Idempotent, as the Node facade is. */
+  delete() {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
+    this.native.delete();
+  }
+  /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
+  destroy() {
+    this.delete();
+  }
+};
+var PlaybackLoudnessMeter = class {
+  constructor(channels, sampleRate) {
+    this.released = false;
+    this.native = getSonareModule().createPlaybackLoudnessMeter(channels, sampleRate);
+  }
+  /** Feeds interleaved frames of any length. */
+  pushInterleaved(samples) {
+    this.native.pushInterleaved(samples);
+  }
+  /** Integrated loudness of everything pushed so far, in LUFS. */
+  integratedLufs() {
+    return this.native.integratedLufs();
+  }
+  /** Releases the native handle. Idempotent, as the Node facade is. */
+  delete() {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
+    this.native.delete();
+  }
+  /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
+  destroy() {
+    this.delete();
+  }
+};
+function renderPlayback(request) {
+  return getSonareModule().renderPlayback(
+    request.samples,
+    request.channels,
+    request.sampleRate,
+    configJsonText(request.config),
+    nativeHrtf(request.hrtf)
+  );
+}
+
 // src/polyphony.ts
 var PolyphonicAnalysis = class {
   /** Analyses the request's audio. {@link analyzePolyphonic} is the same call. */
@@ -5004,11 +5173,15 @@ var PolyphonicAnalysis = class {
     return this.handle().render(options);
   }
   /**
-   * Releases the underlying WASM object and everything it holds. A second call
-   * throws `InvalidState` rather than freeing twice.
+   * Releases the underlying WASM object and everything it holds. Idempotent,
+   * as the Node facade is; any other method called after this one still
+   * throws `InvalidState` rather than reaching a freed native object.
    */
   delete() {
-    const native = this.handle();
+    if (this.native === null) {
+      return;
+    }
+    const native = this.native;
     this.native = null;
     native.delete();
   }
@@ -5163,8 +5336,36 @@ function validateAssistSidecarModuleId(value) {
   }
   return value;
 }
+var MIDI2_U16_MAX = 65535;
+var MIDI2_U32_MAX = 4294967295;
+function midi2Event(fnName, ppq, group, opcode, channel, byte2, byte3, word1) {
+  if (!Number.isFinite(ppq) || ppq < 0) {
+    throw new RangeError(`${fnName}: ppq must be a non-negative finite number`);
+  }
+  const g = assertNibble(fnName, group, "group");
+  const ch = assertNibble(fnName, channel, "channel");
+  const word0 = (4 << 28 | g << 24 | opcode << 20 | ch << 16 | byte2 << 8 | byte3) >>> 0;
+  return { ppq, data0: word0, data1: word1 >>> 0 };
+}
+function midi2U32(fnName, value, argName) {
+  assertBoundedInteger(fnName, value, argName, 0, MIDI2_U32_MAX);
+  return value;
+}
+function midi2U16(fnName, value, argName) {
+  assertBoundedInteger(fnName, value, argName, 0, MIDI2_U16_MAX);
+  return value;
+}
+function midi2I32(fnName, value, argName) {
+  assertBoundedInteger(fnName, value, argName, -2147483648, 2147483647);
+  return value;
+}
+function midi2Byte(fnName, value, argName) {
+  assertBoundedInteger(fnName, value, argName, 0, 255);
+  return value;
+}
 var Project = class _Project {
   constructor() {
+    this.released = false;
     this.native = new (projectModule()).Project();
   }
   /** Create a new empty project. */
@@ -5190,6 +5391,119 @@ var Project = class _Project {
   /** Pack a MIDI 1.0 program-change event. */
   static midiProgram(ppq, group, channel, program) {
     return projectMidi1Event("Project.midiProgram", ppq, group, 12, channel, program, 0);
+  }
+  /**
+   * Pack a MIDI 2.0 note-on event accepted by {@link setMidiEvents}.
+   * `velocity16` is the full 16-bit velocity (0 is a sounding note-on);
+   * `attributeType` 0 is none, 3 is pitch 7.9.
+   */
+  static midi2NoteOn(ppq, group, channel, note, velocity16, attributeType = 0, attributeData = 0) {
+    const fn = "Project.midi2NoteOn";
+    const n = assertU7(fn, note, "note");
+    const vel = midi2U16(fn, velocity16, "velocity16");
+    const type = midi2Byte(fn, attributeType, "attributeType");
+    const data = midi2U16(fn, attributeData, "attributeData");
+    return midi2Event(fn, ppq, group, 9, channel, n, type, (vel << 16 | data) >>> 0);
+  }
+  /** Pack a MIDI 2.0 note-off event (`velocity16` is the full 16-bit release velocity). */
+  static midi2NoteOff(ppq, group, channel, note, velocity16 = 0) {
+    const fn = "Project.midi2NoteOff";
+    const n = assertU7(fn, note, "note");
+    const vel = midi2U16(fn, velocity16, "velocity16");
+    return midi2Event(fn, ppq, group, 8, channel, n, 0, vel << 16 >>> 0);
+  }
+  /** Pack a MIDI 2.0 control-change event (`value32` is the full 32-bit value). */
+  static midi2Cc(ppq, group, channel, controller, value32) {
+    const fn = "Project.midi2Cc";
+    const c = assertU7(fn, controller, "controller");
+    return midi2Event(fn, ppq, group, 11, channel, c, 0, midi2U32(fn, value32, "value32"));
+  }
+  /** Pack a MIDI 2.0 poly-pressure event (`pressure32` is the full 32-bit pressure). */
+  static midi2PolyPressure(ppq, group, channel, note, pressure32) {
+    const fn = "Project.midi2PolyPressure";
+    const n = assertU7(fn, note, "note");
+    return midi2Event(fn, ppq, group, 10, channel, n, 0, midi2U32(fn, pressure32, "pressure32"));
+  }
+  /** Pack a MIDI 2.0 channel-pressure event (`pressure32` is the full 32-bit pressure). */
+  static midi2ChannelPressure(ppq, group, channel, pressure32) {
+    const fn = "Project.midi2ChannelPressure";
+    return midi2Event(fn, ppq, group, 13, channel, 0, 0, midi2U32(fn, pressure32, "pressure32"));
+  }
+  /** Pack a MIDI 2.0 pitch-bend event (`bend32` is unsigned 32-bit, center = 0x80000000). */
+  static midi2PitchBend(ppq, group, channel, bend32) {
+    const fn = "Project.midi2PitchBend";
+    return midi2Event(fn, ppq, group, 14, channel, 0, 0, midi2U32(fn, bend32, "bend32"));
+  }
+  /**
+   * Pack a MIDI 2.0 program-change event. The bank travels in the same message
+   * and is applied only when `bankValid` is true.
+   */
+  static midi2Program(ppq, group, channel, program, bankValid = false, bankMsb = 0, bankLsb = 0) {
+    const fn = "Project.midi2Program";
+    const p = assertU7(fn, program, "program");
+    const msb = assertU7(fn, bankMsb, "bankMsb");
+    const lsb = assertU7(fn, bankLsb, "bankLsb");
+    const word1 = (p << 24 | msb << 8 | lsb) >>> 0;
+    return midi2Event(fn, ppq, group, 12, channel, 0, bankValid ? 1 : 0, word1);
+  }
+  /** Pack a MIDI 2.0 registered controller (RPN) event. */
+  static midi2RegisteredController(ppq, group, channel, bank, index, value32) {
+    const fn = "Project.midi2RegisteredController";
+    const b = assertU7(fn, bank, "bank");
+    const i = assertU7(fn, index, "index");
+    return midi2Event(fn, ppq, group, 2, channel, b, i, midi2U32(fn, value32, "value32"));
+  }
+  /** Pack a MIDI 2.0 assignable controller (NRPN) event. */
+  static midi2AssignableController(ppq, group, channel, bank, index, value32) {
+    const fn = "Project.midi2AssignableController";
+    const b = assertU7(fn, bank, "bank");
+    const i = assertU7(fn, index, "index");
+    return midi2Event(fn, ppq, group, 3, channel, b, i, midi2U32(fn, value32, "value32"));
+  }
+  /** Pack a MIDI 2.0 relative registered controller event (`delta32` is a signed change). */
+  static midi2RelativeRegisteredController(ppq, group, channel, bank, index, delta32) {
+    const fn = "Project.midi2RelativeRegisteredController";
+    const b = assertU7(fn, bank, "bank");
+    const i = assertU7(fn, index, "index");
+    return midi2Event(fn, ppq, group, 4, channel, b, i, midi2I32(fn, delta32, "delta32"));
+  }
+  /** Pack a MIDI 2.0 relative assignable controller event (`delta32` is a signed change). */
+  static midi2RelativeAssignableController(ppq, group, channel, bank, index, delta32) {
+    const fn = "Project.midi2RelativeAssignableController";
+    const b = assertU7(fn, bank, "bank");
+    const i = assertU7(fn, index, "index");
+    return midi2Event(fn, ppq, group, 5, channel, b, i, midi2I32(fn, delta32, "delta32"));
+  }
+  /** Pack a MIDI 2.0 registered per-note controller event (`index` is 0..255). */
+  static midi2RegisteredPerNoteController(ppq, group, channel, note, index, value32) {
+    const fn = "Project.midi2RegisteredPerNoteController";
+    const n = assertU7(fn, note, "note");
+    const i = midi2Byte(fn, index, "index");
+    return midi2Event(fn, ppq, group, 0, channel, n, i, midi2U32(fn, value32, "value32"));
+  }
+  /** Pack a MIDI 2.0 assignable per-note controller event (`index` is 0..255). */
+  static midi2AssignablePerNoteController(ppq, group, channel, note, index, value32) {
+    const fn = "Project.midi2AssignablePerNoteController";
+    const n = assertU7(fn, note, "note");
+    const i = midi2Byte(fn, index, "index");
+    return midi2Event(fn, ppq, group, 1, channel, n, i, midi2U32(fn, value32, "value32"));
+  }
+  /** Pack a MIDI 2.0 per-note pitch-bend event (`bend32` is unsigned 32-bit, center = 0x80000000). */
+  static midi2PerNotePitchBend(ppq, group, channel, note, bend32) {
+    const fn = "Project.midi2PerNotePitchBend";
+    const n = assertU7(fn, note, "note");
+    return midi2Event(fn, ppq, group, 6, channel, n, 0, midi2U32(fn, bend32, "bend32"));
+  }
+  /**
+   * Pack a MIDI 2.0 per-note management event. `detach` sets the D flag
+   * (detach per-note controllers from voices already sounding on `note`);
+   * `reset` sets the S flag (reset the note's per-note controllers).
+   */
+  static midi2PerNoteManagement(ppq, group, channel, note, detach = false, reset = false) {
+    const fn = "Project.midi2PerNoteManagement";
+    const n = assertU7(fn, note, "note");
+    const flags = (detach ? 2 : 0) | (reset ? 1 : 0);
+    return midi2Event(fn, ppq, group, 15, channel, n, flags, 0);
   }
   /** Return the General MIDI instrument name for `program`, or `null` when out of range. */
   static gmInstrumentName(program) {
@@ -5999,8 +6313,12 @@ var Project = class _Project {
   lastBounceCompileResult() {
     return this.native.lastBounceCompileResult();
   }
-  /** Release the underlying WASM object. Safe to call only once. */
+  /** Release the underlying WASM object. Idempotent, as the Node facade is. */
   delete() {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
     this.native.delete();
   }
   /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
@@ -6057,6 +6375,23 @@ var PROJECT_AUTOMATION_TARGET_TRACK_PAN = AutomationTargetKind.trackPan;
 
 // src/realtime_engine.ts
 var EXPECTED_ENGINE_ABI_VERSION = 3;
+var UMP_WORD_MIN = -2147483648;
+var UMP_WORD_MAX = 4294967295;
+function assertUmpWords(fnName, words) {
+  if (!(words instanceof Uint32Array) && !Array.isArray(words)) {
+    throw new TypeError(`${fnName}: words must be a Uint32Array or a number array`);
+  }
+  if (words.length < 1 || words.length > 4) {
+    throw new RangeError(`${fnName}: words must hold 1 to 4 words`);
+  }
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    if (typeof word !== "number" || !Number.isInteger(word) || word < UMP_WORD_MIN || word > UMP_WORD_MAX) {
+      throw new RangeError(`${fnName}: words[${i}] must be an integer 32-bit word`);
+    }
+  }
+  return words;
+}
 function normalizeRenderOfflineRequest(channelsOrRequest, blockSize) {
   const request = Array.isArray(channelsOrRequest) ? { channels: channelsOrRequest, blockSize } : channelsOrRequest;
   return {
@@ -6082,6 +6417,7 @@ function engineCapabilities() {
 }
 var RealtimeEngine = class _RealtimeEngine {
   constructor(sampleRate = 48e3, maxBlockSize = 128, commandCapacity = 1024, telemetryCapacity = 1024, maxChannels = 64) {
+    this.released = false;
     const module2 = getSonareModule();
     const capabilities2 = engineCapabilities();
     if (!capabilities2.abiCompatible) {
@@ -6364,9 +6700,11 @@ var RealtimeEngine = class _RealtimeEngine {
    * returned — the shared unit across every surface. Events past the cap stay
    * queued for the next call (lossless); call again to drain the rest.
    *
-   * One queued record lowers to at most 3 MIDI 1.0 messages, so a positive
-   * `maxRecords` below 3 could never consume a record and is rejected with an
-   * `InvalidParameter` `SonareError` instead of returning nothing forever.
+   * One queued record lowers to at most 4 MIDI 1.0 messages (a MIDI 2.0
+   * registered or assignable controller becomes CC 101/100 or 99/98 plus Data
+   * Entry 6/38), so a positive `maxRecords` below 4 could never consume a record
+   * and is rejected with an `InvalidParameter` `SonareError` instead of
+   * returning nothing forever.
    */
   drainExternalMidi(maxRecords = 1024) {
     return this.native.drainExternalMidi(maxRecords);
@@ -6465,9 +6803,27 @@ var RealtimeEngine = class _RealtimeEngine {
   pushMidiPolyPressure(destinationId, group, channel, note, pressure, renderFrame = -1) {
     this.native.pushMidiPolyPressure(destinationId, group, channel, note, pressure, renderFrame);
   }
-  /** Queue one immediate MIDI 1.0 channel-voice UMP word for a destination. */
-  pushMidiUmp(destinationId, word0, renderFrame = -1) {
-    this.native.pushMidiUmp(destinationId, word0, renderFrame);
+  /**
+   * Queue an immediate (live) raw UMP message to a MIDI destination. `words` is
+   * 1 to 4 words, most significant first, and its length must match the message
+   * type of `words[0]`. MIDI 2.0 channel-voice messages (MT 0x4) arrive at full
+   * width; SysEx7 / data messages (MT 0x3 / 0x5) are refused, use
+   * {@link pushMidiSysex}. Throws when the slot ring or command queue is full
+   * (retry after a process block). `renderFrame` is the render-frame time to
+   * apply, or -1 for immediate. A bare number is accepted as a one-word
+   * message.
+   */
+  pushMidiUmp(destinationId, words, renderFrame = -1) {
+    const list = typeof words === "number" ? [words] : words;
+    this.native.pushMidiUmp(destinationId, assertUmpWords("pushMidiUmp", list), renderFrame);
+  }
+  /**
+   * Push one raw UMP message (1 to 4 words) to the engine-owned MIDI input
+   * source. The message rules match {@link pushMidiUmp}. `portTimeSamples` is
+   * the port timestamp in samples.
+   */
+  pushMidiInputUmp(words, portTimeSamples = 0) {
+    this.native.pushMidiInputUmp(assertUmpWords("pushMidiInputUmp", words), portTimeSamples);
   }
   /**
    * Queue an immediate (live) MIDI SysEx frame to a MIDI destination. `data` is
@@ -6514,9 +6870,17 @@ var RealtimeEngine = class _RealtimeEngine {
   settleParameters() {
     this.native.settleParameters();
   }
+  /** Snap only insert automation slots after structural replay. */
+  settleInsertParameters() {
+    this.native.settleInsertParameters();
+  }
   /** Drains queued commands on an offline/control-only engine immediately. */
   flushControlCommands() {
     this.native.flushControlCommands();
+  }
+  /** Applies commands already due on a control-only mirror, retaining future commands. */
+  applyCommandsDueNowPreservingFuture() {
+    this.native.applyCommandsDueNowPreservingFuture();
   }
   seekPpq(ppq, renderFrame = -1) {
     this.native.seekPpq(ppq, renderFrame);
@@ -6741,13 +7105,48 @@ var RealtimeEngine = class _RealtimeEngine {
   setTrackStripInsertParamByName(trackId, insertIndex, paramName, value) {
     this.native.setTrackStripInsertParamByName(trackId, insertIndex, paramName, value);
   }
+  /** Apply a live insert edit on this engine's owning thread without draining its command queue. */
+  applyTrackStripInsertParamByNameNow(trackId, insertIndex, paramName, value) {
+    return this.native.applyTrackStripInsertParamByNameNow(trackId, insertIndex, paramName, value);
+  }
+  /** Restore a retained insert value exactly after a strip scene is replayed. */
+  restoreTrackStripInsertParamByName(trackId, insertIndex, paramName, value) {
+    this.native.restoreTrackStripInsertParamByName(trackId, insertIndex, paramName, value);
+  }
   /** Master-strip counterpart of {@link setTrackStripInsertParamByName}. */
   setMasterStripInsertParamByName(insertIndex, paramName, value) {
     this.native.setMasterStripInsertParamByName(insertIndex, paramName, value);
   }
+  applyMasterStripInsertParamByNameNow(insertIndex, paramName, value) {
+    return this.native.applyMasterStripInsertParamByNameNow(insertIndex, paramName, value);
+  }
+  restoreMasterStripInsertParamByName(insertIndex, paramName, value) {
+    this.native.restoreMasterStripInsertParamByName(insertIndex, paramName, value);
+  }
   /** Bus-strip counterpart of {@link setTrackStripInsertParamByName}. */
   setBusStripInsertParamByName(busId, insertIndex, paramName, value) {
     this.native.setBusStripInsertParamByName(busId, insertIndex, paramName, value);
+  }
+  applyBusStripInsertParamByNameNow(busId, insertIndex, paramName, value) {
+    return this.native.applyBusStripInsertParamByNameNow(busId, insertIndex, paramName, value);
+  }
+  restoreBusStripInsertParamByName(busId, insertIndex, paramName, value) {
+    this.native.restoreBusStripInsertParamByName(busId, insertIndex, paramName, value);
+  }
+  /**
+   * Forgets the remembered manual insert-parameter values of one track strip
+   * and discards its queued insert edits. Call before {@link setTrackStripJson}
+   * replaces the strip when its old values must not carry over; the setter
+   * never does this itself, since a queued edit may already target the new chain.
+   */
+  clearTrackInsertParameterBases(trackId) {
+    this.native.clearTrackInsertParameterBases(trackId);
+  }
+  clearBusInsertParameterBases(busId) {
+    this.native.clearBusInsertParameterBases(busId);
+  }
+  clearMasterInsertParameterBases() {
+    this.native.clearMasterInsertParameterBases();
   }
   /** Bus-strip counterpart of {@link setTrackStripInsertBypassed}. */
   setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass = false) {
@@ -7148,8 +7547,12 @@ var RealtimeEngine = class _RealtimeEngine {
   scopeScratchPointRight(index) {
     return this.native.scopeScratchPointRight(index);
   }
-  /** Release the underlying WASM object. Safe to call only once. */
+  /** Release the underlying WASM object. Idempotent, as the Node facade is. */
   destroy() {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
     this.native.delete();
   }
   /** Alias for {@link destroy}, matching embind's own release method name. */
@@ -7210,6 +7613,7 @@ var StreamAnalyzer = class {
    * @param config - Configuration options
    */
   constructor(config = {}) {
+    this.released = false;
     if (config.computeMagnitude) {
       throw new Error(
         "computeMagnitude is not supported because magnitude frames are not exposed by StreamAnalyzer read paths."
@@ -7441,8 +7845,12 @@ var StreamAnalyzer = class {
   setTuningRefHz(refHz) {
     this.analyzer.setTuningRefHz(refHz);
   }
-  /** Release the underlying WASM object. Safe to call only once. */
+  /** Release the underlying WASM object. Idempotent, as the Node facade is. */
   delete() {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
     this.analyzer.delete();
   }
   /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
@@ -7458,6 +7866,7 @@ var StreamAnalyzer = class {
 // src/mixer.ts
 var Mixer = class _Mixer {
   constructor(mixer, blockSize) {
+    this.released = false;
     this.mixer = mixer;
     this.blockSize = blockSize;
   }
@@ -8023,8 +8432,12 @@ var Mixer = class _Mixer {
     }
     return this.mixer.drainTailStereo(numSamples);
   }
-  /** Release the underlying WASM object. Safe to call only once. */
+  /** Release the underlying WASM object. Idempotent, as the Node facade is. */
   delete() {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
     this.mixer.delete();
   }
   /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
@@ -8041,6 +8454,7 @@ var RealtimeVoiceChanger = class {
    * explicit {@link prepare} lifecycle for callers that configure later.
    */
   constructor(config = "neutral-monitor", sampleRate, maxBlockSize = 128, channels = 1) {
+    this.released = false;
     const module2 = getSonareModule();
     this.changer = module2.createRealtimeVoiceChanger(config);
     if (sampleRate !== void 0) {
@@ -8273,7 +8687,12 @@ var RealtimeVoiceChanger = class {
       }
     };
   }
+  /** Releases the native handle. Idempotent, as the Node facade is. */
   delete() {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
     this.changer.delete();
   }
   /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
@@ -8312,6 +8731,7 @@ var EQ_PHASE_MODES = {
 };
 var StreamingMasteringChain = class {
   constructor(config) {
+    this.released = false;
     const module2 = getSonareModule();
     const { loudnessStaticGainDb, loudnessStaticGainPeakDb, ...chainConfig } = config;
     this.chain = module2.createStreamingMasteringChain({
@@ -8427,8 +8847,12 @@ var StreamingMasteringChain = class {
   nonFiniteDiscardCount() {
     return this.chain.nonFiniteDiscardCount();
   }
-  /** Release the underlying WASM object. Safe to call only once. */
+  /** Release the underlying WASM object. Idempotent, as the Node facade is. */
   delete() {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
     this.chain.delete();
   }
   /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
@@ -8438,6 +8862,7 @@ var StreamingMasteringChain = class {
 };
 var StreamingEqualizer = class {
   constructor(config = {}) {
+    this.released = false;
     const module2 = getSonareModule();
     this.eq = module2.createEqualizer(config);
   }
@@ -8592,8 +9017,12 @@ var StreamingEqualizer = class {
   match(source, reference, options = {}) {
     this.eq.match(source, reference, options);
   }
-  /** Release the underlying WASM object. Safe to call only once. */
+  /** Release the underlying WASM object. Idempotent, as the Node facade is. */
   delete() {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
     this.eq.delete();
   }
   /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
@@ -8603,6 +9032,7 @@ var StreamingEqualizer = class {
 };
 var StreamingRetune = class {
   constructor(config = {}) {
+    this.released = false;
     const module2 = getSonareModule();
     this.retune = module2.createStreamingRetune(config);
   }
@@ -8642,8 +9072,12 @@ var StreamingRetune = class {
   processMono(samples) {
     return this.retune.processMono(samples);
   }
-  /** Release the underlying WASM object. Safe to call only once. */
+  /** Release the underlying WASM object. Idempotent, as the Node facade is. */
   delete() {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
     this.retune.delete();
   }
   /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
@@ -9200,6 +9634,7 @@ export {
   EXPECTED_ENGINE_ABI_VERSION,
   EXPECTED_PROJECT_ABI_VERSION,
   ErrorCode,
+  HrtfSet,
   KeyProfile,
   MPE_DIMENSIONS,
   MarkerKind,
@@ -9213,6 +9648,8 @@ export {
   PROJECT_AUTOMATION_TARGET_TRACK_PAN,
   PitchClass as Pitch,
   PitchClass,
+  PlaybackLoudnessMeter,
+  PlaybackRenderer,
   PolyphonicAnalysis,
   Project,
   RealtimeEngine,
@@ -9319,6 +9756,7 @@ export {
   masterAudioWithProgress,
   mastering,
   masteringAbMatchLoudness,
+  masteringAmpPresetCatalog,
   masteringAssistantSuggest,
   masteringAssistantSuggestChain,
   masteringAssistantSuggestChainStereo,
@@ -9450,6 +9888,7 @@ export {
   remixAlignedIntervals,
   renderNotes,
   renderPercussiveEvents,
+  renderPlayback,
   resample,
   rmsEnergy,
   roomMorph,

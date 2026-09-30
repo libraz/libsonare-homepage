@@ -153,8 +153,9 @@ export declare class PolyphonicAnalysis {
      */
     render(options?: PolyphonicRenderOptions): Float32Array;
     /**
-     * Releases the underlying WASM object and everything it holds. A second call
-     * throws `InvalidState` rather than freeing twice.
+     * Releases the underlying WASM object and everything it holds. Idempotent,
+     * as the Node facade is; any other method called after this one still
+     * throws `InvalidState` rather than reaching a freed native object.
      */
     delete(): void;
     /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
@@ -179,7 +180,9 @@ export declare class PolyphonicAnalysis {
  *
  * @throws {RangeError} on empty samples, a non-finite sample, or a `sampleRate`
  *   outside `[8000, 384000]`
- * @throws {SonareError} `InvalidParameter` on a config value the chain rejects
+ * @throws {SonareError} `InvalidParameter` on a config value the chain rejects,
+ *   or on audio too short for two STFT frames at the configured `nFft`/`hopLength`
+ *   (roughly one `hopLength`, ~512 samples at the default)
  *
  * @example
  * ```typescript

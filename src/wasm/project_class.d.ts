@@ -28,6 +28,7 @@ import type { ExternalSeparatedStemImportRequest, ExternalSeparatedStemImportRes
  */
 export declare class Project {
     private native;
+    private released;
     constructor();
     /** Create a new empty project. */
     static create(): Project;
@@ -41,6 +42,47 @@ export declare class Project {
     static midiPolyPressure(ppq: number, group: number, channel: number, note: number, pressure: number): ProjectMidiEvent;
     /** Pack a MIDI 1.0 program-change event. */
     static midiProgram(ppq: number, group: number, channel: number, program: number): ProjectMidiEvent;
+    /**
+     * Pack a MIDI 2.0 note-on event accepted by {@link setMidiEvents}.
+     * `velocity16` is the full 16-bit velocity (0 is a sounding note-on);
+     * `attributeType` 0 is none, 3 is pitch 7.9.
+     */
+    static midi2NoteOn(ppq: number, group: number, channel: number, note: number, velocity16: number, attributeType?: number, attributeData?: number): ProjectMidiEvent;
+    /** Pack a MIDI 2.0 note-off event (`velocity16` is the full 16-bit release velocity). */
+    static midi2NoteOff(ppq: number, group: number, channel: number, note: number, velocity16?: number): ProjectMidiEvent;
+    /** Pack a MIDI 2.0 control-change event (`value32` is the full 32-bit value). */
+    static midi2Cc(ppq: number, group: number, channel: number, controller: number, value32: number): ProjectMidiEvent;
+    /** Pack a MIDI 2.0 poly-pressure event (`pressure32` is the full 32-bit pressure). */
+    static midi2PolyPressure(ppq: number, group: number, channel: number, note: number, pressure32: number): ProjectMidiEvent;
+    /** Pack a MIDI 2.0 channel-pressure event (`pressure32` is the full 32-bit pressure). */
+    static midi2ChannelPressure(ppq: number, group: number, channel: number, pressure32: number): ProjectMidiEvent;
+    /** Pack a MIDI 2.0 pitch-bend event (`bend32` is unsigned 32-bit, center = 0x80000000). */
+    static midi2PitchBend(ppq: number, group: number, channel: number, bend32: number): ProjectMidiEvent;
+    /**
+     * Pack a MIDI 2.0 program-change event. The bank travels in the same message
+     * and is applied only when `bankValid` is true.
+     */
+    static midi2Program(ppq: number, group: number, channel: number, program: number, bankValid?: boolean, bankMsb?: number, bankLsb?: number): ProjectMidiEvent;
+    /** Pack a MIDI 2.0 registered controller (RPN) event. */
+    static midi2RegisteredController(ppq: number, group: number, channel: number, bank: number, index: number, value32: number): ProjectMidiEvent;
+    /** Pack a MIDI 2.0 assignable controller (NRPN) event. */
+    static midi2AssignableController(ppq: number, group: number, channel: number, bank: number, index: number, value32: number): ProjectMidiEvent;
+    /** Pack a MIDI 2.0 relative registered controller event (`delta32` is a signed change). */
+    static midi2RelativeRegisteredController(ppq: number, group: number, channel: number, bank: number, index: number, delta32: number): ProjectMidiEvent;
+    /** Pack a MIDI 2.0 relative assignable controller event (`delta32` is a signed change). */
+    static midi2RelativeAssignableController(ppq: number, group: number, channel: number, bank: number, index: number, delta32: number): ProjectMidiEvent;
+    /** Pack a MIDI 2.0 registered per-note controller event (`index` is 0..255). */
+    static midi2RegisteredPerNoteController(ppq: number, group: number, channel: number, note: number, index: number, value32: number): ProjectMidiEvent;
+    /** Pack a MIDI 2.0 assignable per-note controller event (`index` is 0..255). */
+    static midi2AssignablePerNoteController(ppq: number, group: number, channel: number, note: number, index: number, value32: number): ProjectMidiEvent;
+    /** Pack a MIDI 2.0 per-note pitch-bend event (`bend32` is unsigned 32-bit, center = 0x80000000). */
+    static midi2PerNotePitchBend(ppq: number, group: number, channel: number, note: number, bend32: number): ProjectMidiEvent;
+    /**
+     * Pack a MIDI 2.0 per-note management event. `detach` sets the D flag
+     * (detach per-note controllers from voices already sounding on `note`);
+     * `reset` sets the S flag (reset the note's per-note controllers).
+     */
+    static midi2PerNoteManagement(ppq: number, group: number, channel: number, note: number, detach?: boolean, reset?: boolean): ProjectMidiEvent;
     /** Return the General MIDI instrument name for `program`, or `null` when out of range. */
     static gmInstrumentName(program: number): string | null;
     /** Return the General MIDI program number for a canonical instrument name, or `-1`. */
@@ -512,7 +554,7 @@ export declare class Project {
      * through an error diagnostic and so always reports at least one.
      */
     lastBounceCompileResult(): ProjectCompileResult;
-    /** Release the underlying WASM object. Safe to call only once. */
+    /** Release the underlying WASM object. Idempotent, as the Node facade is. */
     delete(): void;
     /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
     destroy(): void;

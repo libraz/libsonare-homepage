@@ -267,16 +267,19 @@ const MiB = 1024 * KiB;
 // Budgets sit just above the artifact they guard, so growth has to be noticed and
 // accepted rather than absorbed. Raising one is a decision about what the site is
 // willing to ship, not a formality.
+// libsonare 1.8: bindings/wasm/wasm-size-budget.json, sonare.wasm raw ceiling.
+// Use the core's accepted release budget, not the size of this site's current copy.
+const wasmMaxBytes = 6_691_222;
 const assetBudgets = [
   { pattern: /^assets\/chunks\/vexflow\./, maxBytes: 1.25 * MiB },
-  { pattern: /^assets\/.*\.wasm$/, maxBytes: 5.25 * MiB },
+  { pattern: /^assets\/.*\.wasm$/, maxBytes: wasmMaxBytes },
 ];
 
 function budgetForBuiltAsset(relativePath) {
   const matched = assetBudgets.find((budget) => budget.pattern.test(relativePath));
   if (matched) return matched.maxBytes;
   if (relativePath.endsWith('.js')) return 750 * KiB;
-  if (relativePath.endsWith('.wasm')) return 5.25 * MiB;
+  if (relativePath.endsWith('.wasm')) return wasmMaxBytes;
   return null;
 }
 

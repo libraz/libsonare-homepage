@@ -763,8 +763,155 @@ function flattenChainConfig(config) {
   return out;
 }
 
+// src/playback_renderer.ts
+function configJsonText(config) {
+  return typeof config === "string" ? config : JSON.stringify(config);
+}
+function nativeHrtf(hrtf) {
+  if (hrtf === void 0) {
+    return null;
+  }
+  if (!(hrtf instanceof HrtfSet)) {
+    throw new TypeError("hrtf must be an HrtfSet");
+  }
+  return hrtf.native;
+}
+var HrtfSet = class _HrtfSet {
+  constructor(native) {
+    this.released = false;
+    this.native = native;
+  }
+  /** Builds an HRTF set from SHRF v1 bytes; malformed data throws. */
+  static fromBytes(bytes) {
+    return new _HrtfSet(getSonareModule().createHrtfSet(bytes));
+  }
+  /** Releases the native handle. Idempotent, as the Node facade is. */
+  delete() {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
+    this.native.delete();
+  }
+  /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
+  destroy() {
+    this.delete();
+  }
+};
+var PlaybackRenderer = class {
+  constructor(options) {
+    this.released = false;
+    this.native = getSonareModule().createPlaybackRenderer(
+      configJsonText(options.config),
+      nativeHrtf(options.hrtf),
+      options.sampleRate ?? 48e3,
+      options.maxBlockSize ?? 1024
+    );
+  }
+  /**
+   * Renders one planar block; every plane must carry the same frame count, at
+   * most `maxBlockSize` (0 is a no-op). With a fixed input layout the plane
+   * count must equal {@link inputChannels}; with `input.layout: "auto"` it
+   * must be 1, 2, 6 or 8, and a change switches the input layout without
+   * changing the latency. Non-finite input samples are replaced with 0 and
+   * counted ({@link nonFiniteDiscardCount}).
+   */
+  processPlanar(planes) {
+    return this.native.processPlanar(planes);
+  }
+  /** Interleaved variant of {@link processPlanar}. Non-finite input samples are replaced with 0 and counted. */
+  processInterleaved(samples, inChannels) {
+    return this.native.processInterleaved(samples, inChannels);
+  }
+  /** Applies a complete configuration document; a changed prepare key throws. */
+  setConfig(config) {
+    this.native.setConfig(configJsonText(config));
+  }
+  /** The current complete configuration document. */
+  config() {
+    return JSON.parse(this.native.configJson());
+  }
+  /**
+   * Publishes the listener head orientation in degrees: right-handed,
+   * positive yaw turns the head right, positive pitch looks up, positive roll
+   * lowers the right ear. Ignored by a speakers target; a non-finite angle is
+   * ignored.
+   */
+  setHeadOrientation(yawDeg, pitchDeg = 0, rollDeg = 0) {
+    this.native.setHeadOrientation(yawDeg, pitchDeg, rollDeg);
+  }
+  /**
+   * Clears DSP state (filters, FIFOs, dynamics, convolution history, pending
+   * input-layout drains). Configuration and head pose are kept. Call it after
+   * a seek, from the thread that processes.
+   */
+  reset() {
+    this.native.reset();
+  }
+  /**
+   * Renderer latency in samples (headphones: near ear). Depends only on the
+   * target, the sample rate and distance compensation, never on realtime keys
+   * or the input layout.
+   */
+  latencySamples() {
+    return this.native.latencySamples();
+  }
+  /**
+   * Channel count of the active input layout. With `input.layout: "auto"`
+   * this follows the channel count of the most recent non-empty process call
+   * (2 before the first call).
+   */
+  inputChannels() {
+    return this.native.inputChannels();
+  }
+  /** Channel count of the output target. */
+  outputChannels() {
+    return this.native.outputChannels();
+  }
+  /**
+   * Inactive stages, per-stage latency, clamps, the active input layout, and
+   * the layout-switch / truncated-drain counters, as a plain object.
+   */
+  diagnostics() {
+    return JSON.parse(this.native.diagnosticsJson());
+  }
+  /** Non-finite input samples replaced with 0 since construction. */
+  nonFiniteDiscardCount() {
+    return this.native.nonFiniteDiscardCount();
+  }
+  /** Releases the native handle. Idempotent, as the Node facade is. */
+  delete() {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
+    this.native.delete();
+  }
+  /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
+  destroy() {
+    this.delete();
+  }
+};
+
 // src/realtime_engine.ts
 var EXPECTED_ENGINE_ABI_VERSION = 3;
+var UMP_WORD_MIN = -2147483648;
+var UMP_WORD_MAX = 4294967295;
+function assertUmpWords(fnName, words) {
+  if (!(words instanceof Uint32Array) && !Array.isArray(words)) {
+    throw new TypeError(`${fnName}: words must be a Uint32Array or a number array`);
+  }
+  if (words.length < 1 || words.length > 4) {
+    throw new RangeError(`${fnName}: words must hold 1 to 4 words`);
+  }
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    if (typeof word !== "number" || !Number.isInteger(word) || word < UMP_WORD_MIN || word > UMP_WORD_MAX) {
+      throw new RangeError(`${fnName}: words[${i}] must be an integer 32-bit word`);
+    }
+  }
+  return words;
+}
 function normalizeRenderOfflineRequest(channelsOrRequest, blockSize) {
   const request = Array.isArray(channelsOrRequest) ? { channels: channelsOrRequest, blockSize } : channelsOrRequest;
   return {
@@ -790,6 +937,7 @@ function engineCapabilities() {
 }
 var RealtimeEngine = class _RealtimeEngine {
   constructor(sampleRate = 48e3, maxBlockSize = 128, commandCapacity = 1024, telemetryCapacity = 1024, maxChannels = 64) {
+    this.released = false;
     const module2 = getSonareModule();
     const capabilities = engineCapabilities();
     if (!capabilities.abiCompatible) {
@@ -1072,9 +1220,11 @@ var RealtimeEngine = class _RealtimeEngine {
    * returned — the shared unit across every surface. Events past the cap stay
    * queued for the next call (lossless); call again to drain the rest.
    *
-   * One queued record lowers to at most 3 MIDI 1.0 messages, so a positive
-   * `maxRecords` below 3 could never consume a record and is rejected with an
-   * `InvalidParameter` `SonareError` instead of returning nothing forever.
+   * One queued record lowers to at most 4 MIDI 1.0 messages (a MIDI 2.0
+   * registered or assignable controller becomes CC 101/100 or 99/98 plus Data
+   * Entry 6/38), so a positive `maxRecords` below 4 could never consume a record
+   * and is rejected with an `InvalidParameter` `SonareError` instead of
+   * returning nothing forever.
    */
   drainExternalMidi(maxRecords = 1024) {
     return this.native.drainExternalMidi(maxRecords);
@@ -1173,9 +1323,27 @@ var RealtimeEngine = class _RealtimeEngine {
   pushMidiPolyPressure(destinationId, group, channel, note, pressure, renderFrame = -1) {
     this.native.pushMidiPolyPressure(destinationId, group, channel, note, pressure, renderFrame);
   }
-  /** Queue one immediate MIDI 1.0 channel-voice UMP word for a destination. */
-  pushMidiUmp(destinationId, word0, renderFrame = -1) {
-    this.native.pushMidiUmp(destinationId, word0, renderFrame);
+  /**
+   * Queue an immediate (live) raw UMP message to a MIDI destination. `words` is
+   * 1 to 4 words, most significant first, and its length must match the message
+   * type of `words[0]`. MIDI 2.0 channel-voice messages (MT 0x4) arrive at full
+   * width; SysEx7 / data messages (MT 0x3 / 0x5) are refused, use
+   * {@link pushMidiSysex}. Throws when the slot ring or command queue is full
+   * (retry after a process block). `renderFrame` is the render-frame time to
+   * apply, or -1 for immediate. A bare number is accepted as a one-word
+   * message.
+   */
+  pushMidiUmp(destinationId, words, renderFrame = -1) {
+    const list = typeof words === "number" ? [words] : words;
+    this.native.pushMidiUmp(destinationId, assertUmpWords("pushMidiUmp", list), renderFrame);
+  }
+  /**
+   * Push one raw UMP message (1 to 4 words) to the engine-owned MIDI input
+   * source. The message rules match {@link pushMidiUmp}. `portTimeSamples` is
+   * the port timestamp in samples.
+   */
+  pushMidiInputUmp(words, portTimeSamples = 0) {
+    this.native.pushMidiInputUmp(assertUmpWords("pushMidiInputUmp", words), portTimeSamples);
   }
   /**
    * Queue an immediate (live) MIDI SysEx frame to a MIDI destination. `data` is
@@ -1222,9 +1390,17 @@ var RealtimeEngine = class _RealtimeEngine {
   settleParameters() {
     this.native.settleParameters();
   }
+  /** Snap only insert automation slots after structural replay. */
+  settleInsertParameters() {
+    this.native.settleInsertParameters();
+  }
   /** Drains queued commands on an offline/control-only engine immediately. */
   flushControlCommands() {
     this.native.flushControlCommands();
+  }
+  /** Applies commands already due on a control-only mirror, retaining future commands. */
+  applyCommandsDueNowPreservingFuture() {
+    this.native.applyCommandsDueNowPreservingFuture();
   }
   seekPpq(ppq, renderFrame = -1) {
     this.native.seekPpq(ppq, renderFrame);
@@ -1449,13 +1625,48 @@ var RealtimeEngine = class _RealtimeEngine {
   setTrackStripInsertParamByName(trackId, insertIndex, paramName, value) {
     this.native.setTrackStripInsertParamByName(trackId, insertIndex, paramName, value);
   }
+  /** Apply a live insert edit on this engine's owning thread without draining its command queue. */
+  applyTrackStripInsertParamByNameNow(trackId, insertIndex, paramName, value) {
+    return this.native.applyTrackStripInsertParamByNameNow(trackId, insertIndex, paramName, value);
+  }
+  /** Restore a retained insert value exactly after a strip scene is replayed. */
+  restoreTrackStripInsertParamByName(trackId, insertIndex, paramName, value) {
+    this.native.restoreTrackStripInsertParamByName(trackId, insertIndex, paramName, value);
+  }
   /** Master-strip counterpart of {@link setTrackStripInsertParamByName}. */
   setMasterStripInsertParamByName(insertIndex, paramName, value) {
     this.native.setMasterStripInsertParamByName(insertIndex, paramName, value);
   }
+  applyMasterStripInsertParamByNameNow(insertIndex, paramName, value) {
+    return this.native.applyMasterStripInsertParamByNameNow(insertIndex, paramName, value);
+  }
+  restoreMasterStripInsertParamByName(insertIndex, paramName, value) {
+    this.native.restoreMasterStripInsertParamByName(insertIndex, paramName, value);
+  }
   /** Bus-strip counterpart of {@link setTrackStripInsertParamByName}. */
   setBusStripInsertParamByName(busId, insertIndex, paramName, value) {
     this.native.setBusStripInsertParamByName(busId, insertIndex, paramName, value);
+  }
+  applyBusStripInsertParamByNameNow(busId, insertIndex, paramName, value) {
+    return this.native.applyBusStripInsertParamByNameNow(busId, insertIndex, paramName, value);
+  }
+  restoreBusStripInsertParamByName(busId, insertIndex, paramName, value) {
+    this.native.restoreBusStripInsertParamByName(busId, insertIndex, paramName, value);
+  }
+  /**
+   * Forgets the remembered manual insert-parameter values of one track strip
+   * and discards its queued insert edits. Call before {@link setTrackStripJson}
+   * replaces the strip when its old values must not carry over; the setter
+   * never does this itself, since a queued edit may already target the new chain.
+   */
+  clearTrackInsertParameterBases(trackId) {
+    this.native.clearTrackInsertParameterBases(trackId);
+  }
+  clearBusInsertParameterBases(busId) {
+    this.native.clearBusInsertParameterBases(busId);
+  }
+  clearMasterInsertParameterBases() {
+    this.native.clearMasterInsertParameterBases();
   }
   /** Bus-strip counterpart of {@link setTrackStripInsertBypassed}. */
   setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass = false) {
@@ -1856,8 +2067,12 @@ var RealtimeEngine = class _RealtimeEngine {
   scopeScratchPointRight(index) {
     return this.native.scopeScratchPointRight(index);
   }
-  /** Release the underlying WASM object. Safe to call only once. */
+  /** Release the underlying WASM object. Idempotent, as the Node facade is. */
   destroy() {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
     this.native.delete();
   }
   /** Alias for {@link destroy}, matching embind's own release method name. */
@@ -1895,6 +2110,7 @@ var ClipPageProvider = class {
 // src/mixer.ts
 var Mixer = class _Mixer {
   constructor(mixer, blockSize) {
+    this.released = false;
     this.mixer = mixer;
     this.blockSize = blockSize;
   }
@@ -2460,8 +2676,12 @@ var Mixer = class _Mixer {
     }
     return this.mixer.drainTailStereo(numSamples);
   }
-  /** Release the underlying WASM object. Safe to call only once. */
+  /** Release the underlying WASM object. Idempotent, as the Node facade is. */
   delete() {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
     this.mixer.delete();
   }
   /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
@@ -2478,6 +2698,7 @@ var RealtimeVoiceChanger = class {
    * explicit {@link prepare} lifecycle for callers that configure later.
    */
   constructor(config = "neutral-monitor", sampleRate, maxBlockSize = 128, channels = 1) {
+    this.released = false;
     const module2 = getSonareModule();
     this.changer = module2.createRealtimeVoiceChanger(config);
     if (sampleRate !== void 0) {
@@ -2710,7 +2931,12 @@ var RealtimeVoiceChanger = class {
       }
     };
   }
+  /** Releases the native handle. Idempotent, as the Node facade is. */
   delete() {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
     this.changer.delete();
   }
   /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
@@ -2722,6 +2948,7 @@ var RealtimeVoiceChanger = class {
 // src/streaming_processors.ts
 var StreamingMasteringChain = class {
   constructor(config) {
+    this.released = false;
     const module2 = getSonareModule();
     const { loudnessStaticGainDb, loudnessStaticGainPeakDb, ...chainConfig } = config;
     this.chain = module2.createStreamingMasteringChain({
@@ -2837,8 +3064,12 @@ var StreamingMasteringChain = class {
   nonFiniteDiscardCount() {
     return this.chain.nonFiniteDiscardCount();
   }
-  /** Release the underlying WASM object. Safe to call only once. */
+  /** Release the underlying WASM object. Idempotent, as the Node facade is. */
   delete() {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
     this.chain.delete();
   }
   /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
@@ -3756,6 +3987,24 @@ function isRealtimeVoiceChangerMessage(value) {
   }
   return value.type === "setConfig" || value.type === "reset" || value.type === "destroy";
 }
+var isOptionalNumber = (value) => value === void 0 || typeof value === "number";
+function isPlaybackMessage(value) {
+  if (!isRecord(value) || typeof value.type !== "string") {
+    return false;
+  }
+  switch (value.type) {
+    case "config":
+      return typeof value.config === "string";
+    case "orientation":
+      return typeof value.yaw === "number" && isOptionalNumber(value.pitch) && isOptionalNumber(value.roll);
+    case "reset":
+    case "diagnostics":
+    case "destroy":
+      return true;
+    default:
+      return false;
+  }
+}
 function isEngineTelemetryRecord(value) {
   return isRecord(value) && typeof value.type === "number" && typeof value.error === "number" && typeof value.renderFrame === "number" && typeof value.timelineSample === "number" && typeof value.audibleTimelineSample === "number" && typeof value.graphLatencySamplesQ8 === "number" && typeof value.value === "number";
 }
@@ -4076,6 +4325,130 @@ function syncMarkers(ctx) {
 }
 
 // src/worklet/engine-mixer-facade.ts
+function emptyStripJson(target) {
+  switch (target.kind) {
+    case "track":
+      return `{"version":1,"strips":[{"id":"track-${target.trackId}"}],"buses":[],"connections":[]}`;
+    case "bus":
+      return `{"version":1,"strips":[],"buses":[{"id":"bus-${target.busId}"}],"connections":[]}`;
+    case "master":
+      return '{"version":1,"strips":[{"id":"master"}],"buses":[],"connections":[]}';
+  }
+}
+function pruneStripSidechains(ctx, target, sceneJson) {
+  const scene = JSON.parse(sceneJson);
+  const entry = target.kind === "bus" ? scene.buses?.[0] : scene.strips?.[0];
+  const insertCount = Array.isArray(entry?.inserts) ? entry.inserts.length : 0;
+  if (target.kind === "track") {
+    for (const [key, binding] of ctx.laneSidechains) {
+      if (binding.trackId === target.trackId && binding.insertIndex >= insertCount) {
+        ctx.laneSidechains.delete(key);
+      }
+    }
+  } else if (target.kind === "bus") {
+    for (const [key, binding] of ctx.busSidechains) {
+      if (binding.busId === target.busId && binding.insertIndex >= insertCount) {
+        ctx.busSidechains.delete(key);
+      }
+    }
+  } else {
+    for (const [key, binding] of ctx.masterSidechains) {
+      if (binding.insertIndex >= insertCount) {
+        ctx.masterSidechains.delete(key);
+      }
+    }
+  }
+}
+function hasInsertParamOverrides(overrides, target) {
+  for (const override of overrides.values()) {
+    if (sameStripTarget(override.target, target)) {
+      return true;
+    }
+  }
+  return false;
+}
+function applyFullStripJson(engine, target, sceneJson, resetInserts) {
+  const apply = (json) => {
+    switch (target.kind) {
+      case "track":
+        engine.setTrackStripJson(target.trackId, json);
+        break;
+      case "bus":
+        engine.setBusStripJson(target.busId, json);
+        break;
+      case "master":
+        engine.setMasterStripJson(json);
+        break;
+    }
+  };
+  engine.applyCommandsDueNowPreservingFuture();
+  apply(sceneJson);
+  if (resetInserts) {
+    switch (target.kind) {
+      case "track":
+        engine.clearTrackInsertParameterBases(target.trackId);
+        break;
+      case "bus":
+        engine.clearBusInsertParameterBases(target.busId);
+        break;
+      case "master":
+        engine.clearMasterInsertParameterBases();
+        break;
+    }
+    apply(emptyStripJson(target));
+    apply(sceneJson);
+  }
+}
+function insertParamOverrideKey(override) {
+  const targetId = override.target.kind === "track" ? override.target.trackId : override.target.kind === "bus" ? override.target.busId : "master";
+  return JSON.stringify([override.target.kind, targetId, override.insertIndex, override.paramName]);
+}
+function clearInsertParamOverrides(overrides, target) {
+  for (const [key, override] of overrides) {
+    if (sameStripTarget(override.target, target)) {
+      overrides.delete(key);
+    }
+  }
+}
+function sameStripTarget(left, right) {
+  if (left.kind !== right.kind) {
+    return false;
+  }
+  if (left.kind === "track" && right.kind === "track") {
+    return left.trackId === right.trackId;
+  }
+  if (left.kind === "bus" && right.kind === "bus") {
+    return left.busId === right.busId;
+  }
+  return left.kind === "master" && right.kind === "master";
+}
+function flattenInsertParamOverride(override) {
+  switch (override.target.kind) {
+    case "track":
+      return {
+        kind: "track",
+        trackId: override.target.trackId,
+        insertIndex: override.insertIndex,
+        paramName: override.paramName,
+        value: override.value
+      };
+    case "bus":
+      return {
+        kind: "bus",
+        busId: override.target.busId,
+        insertIndex: override.insertIndex,
+        paramName: override.paramName,
+        value: override.value
+      };
+    case "master":
+      return {
+        kind: "master",
+        insertIndex: override.insertIndex,
+        paramName: override.paramName,
+        value: override.value
+      };
+  }
+}
 function cachedStripJson(ctx, target) {
   switch (target.kind) {
     case "track":
@@ -4102,13 +4475,41 @@ function cacheStripJson(ctx, target, sceneJson) {
 function mixerLanes(ctx) {
   return buildMixerLanes(ctx.trackLaneIds, ctx.trackSends, ctx.trackOutputBus);
 }
-function syncMixer(ctx) {
+function syncMixer(ctx, busesAlreadyApplied = false, forceInsertResets = []) {
   const lanes = mixerLanes(ctx);
   const buses = ctx.buses.map((bus) => ({ ...bus }));
-  ctx.offlineEngine.setTrackBuses(buses);
+  if (!busesAlreadyApplied) {
+    ctx.offlineEngine.setTrackBuses(buses);
+  }
   if (lanes.length > 0) {
+    ctx.offlineEngine.settleInsertParameters();
     ctx.offlineEngine.setTrackLanes(lanes);
   }
+  if (forceInsertResets.length > 0) {
+    for (const binding of ctx.laneSidechains.values()) {
+      ctx.offlineEngine.setLaneSidechain(
+        binding.trackId,
+        binding.insertIndex,
+        binding.sourceTrackId
+      );
+    }
+    for (const binding of ctx.busSidechains.values()) {
+      ctx.offlineEngine.setBusSidechain(
+        binding.busId,
+        binding.insertIndex,
+        binding.sourceKind,
+        binding.sourceId
+      );
+    }
+    for (const binding of ctx.masterSidechains.values()) {
+      ctx.offlineEngine.setMasterSidechain(
+        binding.insertIndex,
+        binding.sourceKind,
+        binding.sourceId
+      );
+    }
+  }
+  replayInsertParamOverrides(ctx, lanes, buses);
   const trackStrips = Array.from(ctx.trackStripJson, ([trackId, sceneJson]) => ({
     trackId,
     sceneJson
@@ -4117,6 +4518,10 @@ function syncMixer(ctx) {
     busId,
     sceneJson
   }));
+  const insertParamOverrides = Array.from(
+    ctx.insertParamOverrides.values(),
+    flattenInsertParamOverride
+  );
   ctx.postSync({
     type: "syncMixer",
     lanes,
@@ -4126,8 +4531,46 @@ function syncMixer(ctx) {
     busStrips,
     masterStripJson: ctx.getMasterStripJson(),
     busSidechains: Array.from(ctx.busSidechains.values()),
-    masterSidechains: Array.from(ctx.masterSidechains.values())
+    masterSidechains: Array.from(ctx.masterSidechains.values()),
+    ...insertParamOverrides.length > 0 ? { insertParamOverrides } : {},
+    ...forceInsertResets.length > 0 ? { forceInsertResets } : {}
   });
+}
+function replayInsertParamOverrides(ctx, lanes = mixerLanes(ctx), buses = ctx.buses) {
+  const activeTrackIds = new Set(lanes.map((lane) => lane.trackId));
+  const activeBusIds = new Set(buses.map((bus) => bus.busId));
+  for (const [key, override] of ctx.insertParamOverrides) {
+    const active = override.target.kind === "track" ? activeTrackIds.has(override.target.trackId) : override.target.kind === "bus" ? activeBusIds.has(override.target.busId) : true;
+    if (!active) {
+      ctx.insertParamOverrides.delete(key);
+      continue;
+    }
+    switch (override.target.kind) {
+      case "track":
+        ctx.offlineEngine.restoreTrackStripInsertParamByName(
+          override.target.trackId,
+          override.insertIndex,
+          override.paramName,
+          override.value
+        );
+        break;
+      case "bus":
+        ctx.offlineEngine.restoreBusStripInsertParamByName(
+          override.target.busId,
+          override.insertIndex,
+          override.paramName,
+          override.value
+        );
+        break;
+      case "master":
+        ctx.offlineEngine.restoreMasterStripInsertParamByName(
+          override.insertIndex,
+          override.paramName,
+          override.value
+        );
+        break;
+    }
+  }
 }
 function setTrackLanes(ctx, lanes) {
   const { entries, ids } = normalizeTrackLanes(ctx.trackLaneIds, lanes);
@@ -4176,6 +4619,7 @@ function setLaneSidechain(ctx, target, insertIndex, sourceTarget) {
   }
   ctx.postSync({
     type: "syncMixer",
+    sidechainDelta: true,
     lanes: ctx.mixerLanes(),
     laneSidechains: [{ trackId, insertIndex, sourceTrackId }]
   });
@@ -4193,6 +4637,7 @@ function setBusSidechain(ctx, busId, insertIndex, kind, sourceId) {
   }
   ctx.postSync({
     type: "syncMixer",
+    sidechainDelta: true,
     lanes: ctx.mixerLanes(),
     busSidechains: [{ busId, insertIndex, sourceKind, sourceId }]
   });
@@ -4208,6 +4653,7 @@ function setMasterSidechain(ctx, insertIndex, kind, sourceId) {
   }
   ctx.postSync({
     type: "syncMixer",
+    sidechainDelta: true,
     lanes: ctx.mixerLanes(),
     masterSidechains: [{ insertIndex, sourceKind, sourceId }]
   });
@@ -4232,20 +4678,49 @@ function setSends(ctx, target, sends) {
   ctx.syncMixer();
 }
 function setTrackBuses(ctx, buses) {
+  ctx.offlineEngine.setTrackBuses(buses);
+  const retainedBusIds = new Set(buses.map((bus) => bus.busId));
+  for (const bus of ctx.buses) {
+    if (!retainedBusIds.has(bus.busId)) {
+      ctx.clearInsertAutomationLanes({ kind: "bus", busId: bus.busId }, true);
+    }
+  }
   ctx.buses.splice(0, ctx.buses.length, ...buses.map((bus) => ({ ...bus })));
-  ctx.syncMixer();
+  const activeBusIds = new Set(ctx.buses.map((bus) => bus.busId));
+  for (const busId of ctx.busStripJson.keys()) {
+    if (!activeBusIds.has(busId)) {
+      ctx.busStripJson.delete(busId);
+    }
+  }
+  for (const [key, binding] of ctx.busSidechains) {
+    if (!activeBusIds.has(binding.busId) || binding.sourceKind === 1 && !activeBusIds.has(binding.sourceId)) {
+      ctx.busSidechains.delete(key);
+    }
+  }
+  for (const [key, binding] of ctx.masterSidechains) {
+    if (binding.sourceKind === 1 && !activeBusIds.has(binding.sourceId)) {
+      ctx.masterSidechains.delete(key);
+    }
+  }
+  syncMixer(ctx, true);
 }
 function setBusGain(ctx, busId, db) {
   const busIndex = ctx.ensureBus(busId);
   ctx.buses[busIndex] = { ...ctx.buses[busIndex], busId, gainDb: db };
-  ctx.offlineEngine.setTrackBuses(ctx.buses);
   return ctx.sendSmoothedParam(engineMixerBusTarget(busIndex, ENGINE_MIXER_PARAM_FADER_DB), db);
 }
 function setBusStripJson(ctx, busId, sceneJson) {
   ctx.ensureBus(busId);
-  ctx.offlineEngine.setBusStripJson(busId, sceneJson);
+  const target = { kind: "bus", busId };
+  const resetInserts = ctx.busStripJson.has(busId) && ctx.busStripJson.get(busId) !== sceneJson || hasInsertParamOverrides(ctx.insertParamOverrides, target);
+  applyFullStripJson(ctx.offlineEngine, target, sceneJson, resetInserts);
+  if (resetInserts) {
+    ctx.clearInsertAutomationLanes(target);
+  }
+  pruneStripSidechains(ctx, target, sceneJson);
   ctx.busStripJson.set(busId, sceneJson);
-  ctx.syncMixer();
+  clearInsertParamOverrides(ctx.insertParamOverrides, target);
+  ctx.syncMixer(resetInserts ? [target] : []);
 }
 
 // src/worklet/engine-node.ts
@@ -4407,6 +4882,9 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
       "commandRingCapacity",
       1
     );
+    if (commandRingCapacity > 65536) {
+      throw new RangeError("commandRingCapacity must be at most 65536");
+    }
     const telemetryRingCapacity = requireIntegerOption(
       options.telemetryRingCapacity,
       128,
@@ -4895,18 +5373,8 @@ function clearParameters(ctx) {
 function trackIdFor(ctx, target) {
   return ctx.trackLaneIds[ctx.ensureTrackLane(target)];
 }
-function synthesizedStripJson(target) {
-  switch (target.kind) {
-    case "track":
-      return `{"version":1,"strips":[{"id":"track-${target.trackId}"}],"buses":[],"connections":[]}`;
-    case "bus":
-      return `{"version":1,"strips":[],"buses":[{"id":"bus-${target.busId}"}],"connections":[]}`;
-    case "master":
-      return '{"version":1,"strips":[{"id":"master"}],"buses":[],"connections":[]}';
-  }
-}
 function mergeStripJson(ctx, target, update) {
-  const scene = JSON.parse(ctx.readStripJson(target) ?? synthesizedStripJson(target));
+  const scene = JSON.parse(ctx.readStripJson(target) ?? emptyStripJson(target));
   update(target.kind === "bus" ? scene.buses[0] : scene.strips[0]);
   ctx.writeStripJson(target, JSON.stringify(scene));
 }
@@ -4921,9 +5389,19 @@ function mergeEqBand(ctx, target, bandIndex, bandJson) {
     entry.eq = { ...eq, bands };
   });
 }
+function setInsertParamByName(ctx, target, insertIndex, paramName, value, applyNative, message) {
+  applyNative();
+  const override = { target, insertIndex, paramName, value };
+  ctx.insertParamOverrides.set(insertParamOverrideKey(override), override);
+  ctx.postSync(message);
+}
 function setTrackStripJson(ctx, trackId, sceneJson, trackStripJson) {
-  ctx.offlineEngine.setTrackStripJson(trackId, sceneJson);
+  const target = { kind: "track", trackId };
+  const resetInserts = trackStripJson.has(trackId) && trackStripJson.get(trackId) !== sceneJson || hasInsertParamOverrides(ctx.insertParamOverrides, target);
+  applyFullStripJson(ctx.offlineEngine, target, sceneJson, resetInserts);
+  clearInsertParamOverrides(ctx.insertParamOverrides, target);
   trackStripJson.set(trackId, sceneJson);
+  return { resetInserts };
 }
 function setTrackStripEqBand(ctx, target, bandIndex, band) {
   const trackId = trackIdFor(ctx, target);
@@ -4945,8 +5423,15 @@ function setTrackStripInsertBypassed(ctx, target, insertIndex, bypassed, resetOn
 }
 function setTrackStripInsertParamByName(ctx, target, insertIndex, paramName, value) {
   const trackId = trackIdFor(ctx, target);
-  ctx.offlineEngine.setTrackStripInsertParamByName(trackId, insertIndex, paramName, value);
-  ctx.postSync({ type: "syncTrackStripInsertParamByName", trackId, insertIndex, paramName, value });
+  setInsertParamByName(
+    ctx,
+    { kind: "track", trackId },
+    insertIndex,
+    paramName,
+    value,
+    () => ctx.offlineEngine.restoreTrackStripInsertParamByName(trackId, insertIndex, paramName, value),
+    { type: "syncTrackStripInsertParamByName", trackId, insertIndex, paramName, value }
+  );
 }
 function setTrackStripPan(ctx, target, pan) {
   const trackId = trackIdFor(ctx, target);
@@ -5007,12 +5492,26 @@ function setMasterStripInsertBypassed(ctx, insertIndex, bypassed, resetOnBypass)
   ctx.postSync({ type: "syncMasterStripInsertBypassed", insertIndex, bypassed, resetOnBypass });
 }
 function setMasterStripInsertParamByName(ctx, insertIndex, paramName, value) {
-  ctx.offlineEngine.setMasterStripInsertParamByName(insertIndex, paramName, value);
-  ctx.postSync({ type: "syncMasterStripInsertParamByName", insertIndex, paramName, value });
+  setInsertParamByName(
+    ctx,
+    { kind: "master" },
+    insertIndex,
+    paramName,
+    value,
+    () => ctx.offlineEngine.restoreMasterStripInsertParamByName(insertIndex, paramName, value),
+    { type: "syncMasterStripInsertParamByName", insertIndex, paramName, value }
+  );
 }
 function setBusStripInsertParamByName(ctx, busId, insertIndex, paramName, value) {
-  ctx.offlineEngine.setBusStripInsertParamByName(busId, insertIndex, paramName, value);
-  ctx.postSync({ type: "syncBusStripInsertParamByName", busId, insertIndex, paramName, value });
+  setInsertParamByName(
+    ctx,
+    { kind: "bus", busId },
+    insertIndex,
+    paramName,
+    value,
+    () => ctx.offlineEngine.restoreBusStripInsertParamByName(busId, insertIndex, paramName, value),
+    { type: "syncBusStripInsertParamByName", busId, insertIndex, paramName, value }
+  );
 }
 function setBusStripInsertBypassed(ctx, busId, insertIndex, bypassed, resetOnBypass) {
   ctx.offlineEngine.setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass);
@@ -5142,7 +5641,7 @@ function pushMidiPolyPressure(ctx, trackId, group, channel, note, pressure, rend
 }
 function pushMidiUmp(ctx, trackId, word0, renderFrame) {
   const destinationId = ctx.resolveTargetId(trackId);
-  ctx.offlineEngine.pushMidiUmp(destinationId, word0, renderFrame);
+  ctx.offlineEngine.pushMidiUmp(destinationId, [word0], renderFrame);
   ctx.postSync({ type: "syncMidiUmp", destinationId, word0, renderFrame });
 }
 function setBuiltinInstrument(ctx, trackId, config) {
@@ -5268,6 +5767,7 @@ function transferableAudioBuffers(channels) {
 var SonareEngine = class _SonareEngine {
   constructor(context, realtimeNode, offlineEngine, sampleRate, offlineBlockSize, offlineChannelCount) {
     this.automationLanes = /* @__PURE__ */ new Map();
+    this.insertAutomationIdsByTarget = /* @__PURE__ */ new Map();
     this.clips = /* @__PURE__ */ new Map();
     this.midiClips = /* @__PURE__ */ new Map();
     this.markers = /* @__PURE__ */ new Map();
@@ -5280,6 +5780,7 @@ var SonareEngine = class _SonareEngine {
     this.buses = [];
     this.trackStripJson = /* @__PURE__ */ new Map();
     this.busStripJson = /* @__PURE__ */ new Map();
+    this.insertParamOverrides = /* @__PURE__ */ new Map();
     this.tempoBpm = 120;
     this.timeSignature = { numerator: 4, denominator: 4 };
     this.tempoSegments = [{ startPpq: 0, bpm: 120 }];
@@ -5438,12 +5939,17 @@ var SonareEngine = class _SonareEngine {
    * @returns Reserved insert-automation id, or -1 when strip/insert/key unknown.
    */
   resolveTrackInsertAutomationId(target, insertIndex, paramName) {
-    return resolveTrackInsertAutomationId(
+    const id = resolveTrackInsertAutomationId(
       this.parameterContext,
       target,
       insertIndex,
       paramName
     );
+    if (id >= 0) {
+      const trackId = this.trackLaneIds[this.ensureTrackLane(target)];
+      this.rememberInsertAutomationId({ kind: "track", trackId }, id);
+    }
+    return id;
   }
   /**
    * Resolves a master-strip insert parameter to its reserved insert-automation
@@ -5454,7 +5960,15 @@ var SonareEngine = class _SonareEngine {
    * @returns Reserved insert-automation id, or -1 when insert/key unknown.
    */
   resolveMasterInsertAutomationId(insertIndex, paramName) {
-    return resolveMasterInsertAutomationId(this.parameterContext, insertIndex, paramName);
+    const id = resolveMasterInsertAutomationId(
+      this.parameterContext,
+      insertIndex,
+      paramName
+    );
+    if (id >= 0) {
+      this.rememberInsertAutomationId({ kind: "master" }, id);
+    }
+    return id;
   }
   /**
    * Resolves a bus-strip insert parameter to its reserved insert-automation id.
@@ -5467,12 +5981,16 @@ var SonareEngine = class _SonareEngine {
    * @returns Reserved insert-automation id, or -1 when bus/insert/key unknown.
    */
   resolveBusInsertAutomationId(busId, insertIndex, paramName) {
-    return resolveBusInsertAutomationId(
+    const id = resolveBusInsertAutomationId(
       this.parameterContext,
       busId,
       insertIndex,
       paramName
     );
+    if (id >= 0) {
+      this.rememberInsertAutomationId({ kind: "bus", busId }, id);
+    }
+    return id;
   }
   /**
    * Resolves a hosted instrument's continuous parameter to its reserved
@@ -5583,8 +6101,17 @@ var SonareEngine = class _SonareEngine {
   setTrackStripJson(target, sceneJson) {
     const laneIndex = this.ensureTrackLane(target);
     const trackId = this.trackLaneIds[laneIndex];
-    setTrackStripJson(this.stripContext, trackId, sceneJson, this.trackStripJson);
-    this.syncMixer();
+    const { resetInserts } = setTrackStripJson(
+      this.stripContext,
+      trackId,
+      sceneJson,
+      this.trackStripJson
+    );
+    if (resetInserts) {
+      this.clearInsertAutomationLanes({ kind: "track", trackId });
+    }
+    pruneStripSidechains(this.mixerContext, { kind: "track", trackId }, sceneJson);
+    this.syncMixer(resetInserts ? [{ kind: "track", trackId }] : []);
   }
   setTrackStripEqBand(target, bandIndex, band) {
     setTrackStripEqBand(this.stripContext, target, bandIndex, band);
@@ -5641,9 +6168,16 @@ var SonareEngine = class _SonareEngine {
     setBusStripJson(this.mixerContext, busId, sceneJson);
   }
   setMasterStripJson(sceneJson) {
-    this.offlineEngine.setMasterStripJson(sceneJson);
+    const target = { kind: "master" };
+    const resetInserts = this.masterStripJson !== void 0 && this.masterStripJson !== sceneJson || hasInsertParamOverrides(this.insertParamOverrides, target);
+    applyFullStripJson(this.offlineEngine, target, sceneJson, resetInserts);
+    if (resetInserts) {
+      this.clearInsertAutomationLanes(target);
+    }
+    pruneStripSidechains(this.mixerContext, target, sceneJson);
+    clearInsertParamOverrides(this.insertParamOverrides, target);
     this.masterStripJson = sceneJson;
-    this.syncMixer();
+    this.syncMixer(resetInserts ? [target] : []);
   }
   setMasterStripEqBand(bandIndex, band) {
     setMasterStripEqBand(this.stripContext, bandIndex, band);
@@ -6190,8 +6724,32 @@ var SonareEngine = class _SonareEngine {
   mixerLanes() {
     return mixerLanes(this.mixerContext);
   }
-  syncMixer() {
-    syncMixer(this.mixerContext);
+  syncMixer(forceInsertResets = []) {
+    syncMixer(this.mixerContext, false, forceInsertResets);
+  }
+  insertAutomationTargetKey(target) {
+    return target.kind === "track" ? `track:${target.trackId}` : target.kind === "bus" ? `bus:${target.busId}` : "master";
+  }
+  rememberInsertAutomationId(target, id) {
+    const key = this.insertAutomationTargetKey(target);
+    const ids = this.insertAutomationIdsByTarget.get(key) ?? /* @__PURE__ */ new Set();
+    ids.add(id);
+    this.insertAutomationIdsByTarget.set(key, ids);
+  }
+  clearInsertAutomationLanes(target, forgetResolvedIds = false) {
+    const key = this.insertAutomationTargetKey(target);
+    const ids = this.insertAutomationIdsByTarget.get(key);
+    if (!ids) {
+      return;
+    }
+    for (const id of ids) {
+      if (this.automationLanes.has(id)) {
+        this.setAutomationLane(id, []);
+      }
+    }
+    if (forgetResolvedIds) {
+      this.insertAutomationIdsByTarget.delete(key);
+    }
   }
   postInstrumentSync(message) {
     if (this.destroyed) {
@@ -6219,21 +6777,16 @@ var SonareEngine = class _SonareEngine {
     if (this.destroyed) {
       return;
     }
-    try {
-      if (transfer && transfer.length > 0) {
-        this.realtimeNode.node.port.postMessage(message, transfer);
-      } else {
-        this.realtimeNode.node.port.postMessage(message);
-      }
-    } finally {
-      this.flushOfflineMirror();
+    if (transfer && transfer.length > 0) {
+      this.realtimeNode.node.port.postMessage(message, transfer);
+    } else {
+      this.realtimeNode.node.port.postMessage(message);
     }
   }
-  // The offline engine is a control-thread mirror. It has no render loop to
-  // drain its command ring, so drain it after each control operation. Never
-  // call this from the worklet/audio path: it is intentionally control-only.
+  // The control-only mirror applies due commands immediately while preserving
+  // scheduled ones for its next render block.
   flushOfflineMirror() {
-    this.offlineEngine.flushControlCommands();
+    this.offlineEngine.applyCommandsDueNowPreservingFuture();
   }
   sendMirroredCommand(command) {
     const accepted = this.realtimeNode.sendCommand(command);
@@ -6256,11 +6809,14 @@ var SonareEngine = class _SonareEngine {
       buses: this.buses,
       trackStripJson: this.trackStripJson,
       busStripJson: this.busStripJson,
+      insertParamOverrides: this.insertParamOverrides,
+      flushOfflineMirror: () => this.flushOfflineMirror(),
       postSync: (message) => this.postSync(message),
       ensureTrackLane: (target) => this.ensureTrackLane(target),
       ensureBus: (busId) => this.ensureBus(busId),
       mixerLanes: () => this.mixerLanes(),
-      syncMixer: () => this.syncMixer(),
+      syncMixer: (forceInsertResets) => this.syncMixer(forceInsertResets),
+      clearInsertAutomationLanes: (target, forgetResolvedIds) => this.clearInsertAutomationLanes(target, forgetResolvedIds),
       sendSmoothedParam: (paramId, value) => this.sendSmoothedParam(paramId, value),
       getMasterStripJson: () => this.masterStripJson,
       cacheMasterStripJson: (sceneJson) => {
@@ -6280,7 +6836,8 @@ var SonareEngine = class _SonareEngine {
       ensureTrackLane: (target) => this.ensureTrackLane(target),
       resolveTargetId: (target) => this.resolveTargetId(target),
       readStripJson: (target) => cachedStripJson(this.mixerContext, target),
-      writeStripJson: (target, sceneJson) => cacheStripJson(this.mixerContext, target, sceneJson)
+      writeStripJson: (target, sceneJson) => cacheStripJson(this.mixerContext, target, sceneJson),
+      insertParamOverrides: this.insertParamOverrides
     };
   }
   // Collaborator surface handed to the automation-lane free functions so they
@@ -6550,10 +7107,13 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
       options.externalMidiSharedBuffer,
       options.externalMidiRingCapacity
     ) : void 0;
+    if (this.commandRing && this.commandRing.capacity > 65536) {
+      throw new RangeError("commandRingCapacity must be at most 65536");
+    }
     this.engine = new RealtimeEngine(
       this.sampleRate,
       this.blockSize,
-      1024,
+      Math.max(1024, this.commandRing?.capacity ?? 0),
       1024,
       this.channelCount
     );
@@ -6806,11 +7366,60 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           );
         }
         break;
-      case "syncMixer":
+      case "syncMixer": {
+        if (message.sidechainDelta === true) {
+          for (const binding of message.laneSidechains ?? []) {
+            this.engine.setLaneSidechain(
+              binding.trackId,
+              binding.insertIndex,
+              binding.sourceTrackId
+            );
+          }
+          for (const binding of message.busSidechains ?? []) {
+            this.engine.setBusSidechain(
+              binding.busId,
+              binding.insertIndex,
+              binding.sourceKind,
+              binding.sourceId
+            );
+          }
+          for (const binding of message.masterSidechains ?? []) {
+            this.engine.setMasterSidechain(
+              binding.insertIndex,
+              binding.sourceKind,
+              binding.sourceId
+            );
+          }
+          break;
+        }
+        if (this.commandRing) {
+          const write = Atomics.load(this.commandRing.header, 0);
+          const read = Atomics.load(this.commandRing.header, 1);
+          this.drainCommands(Math.min(this.commandRing.capacity, Math.max(0, write - read)));
+        }
+        this.engine.applyCommandsDueNowPreservingFuture();
+        this.engine.settleInsertParameters();
         if (message.buses) {
           this.engine.setTrackBuses(message.buses);
         }
         this.engine.setTrackLanes(message.lanes);
+        for (const target of message.forceInsertResets ?? []) {
+          const emptyJson = emptyStripJson(target);
+          switch (target.kind) {
+            case "track":
+              this.engine.clearTrackInsertParameterBases(target.trackId);
+              this.engine.setTrackStripJson(target.trackId, emptyJson);
+              break;
+            case "bus":
+              this.engine.clearBusInsertParameterBases(target.busId);
+              this.engine.setBusStripJson(target.busId, emptyJson);
+              break;
+            case "master":
+              this.engine.clearMasterInsertParameterBases();
+              this.engine.setMasterStripJson(emptyJson);
+              break;
+          }
+        }
         for (const strip of message.trackStrips ?? []) {
           this.engine.setTrackStripJson(strip.trackId, strip.sceneJson);
         }
@@ -6834,7 +7443,35 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
         for (const binding of message.masterSidechains ?? []) {
           this.engine.setMasterSidechain(binding.insertIndex, binding.sourceKind, binding.sourceId);
         }
+        for (const override of message.insertParamOverrides ?? []) {
+          switch (override.kind) {
+            case "track":
+              this.engine.restoreTrackStripInsertParamByName(
+                override.trackId,
+                override.insertIndex,
+                override.paramName,
+                override.value
+              );
+              break;
+            case "bus":
+              this.engine.restoreBusStripInsertParamByName(
+                override.busId,
+                override.insertIndex,
+                override.paramName,
+                override.value
+              );
+              break;
+            case "master":
+              this.engine.restoreMasterStripInsertParamByName(
+                override.insertIndex,
+                override.paramName,
+                override.value
+              );
+              break;
+          }
+        }
         break;
+      }
       case "syncCapture":
         this.engine.setCaptureBuffer(message.channels, message.bufferFrames);
         this.engine.setCaptureSource(message.source);
@@ -6866,27 +7503,50 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
         );
         break;
       case "syncTrackStripInsertParamByName":
-        this.engine.setTrackStripInsertParamByName(
+        this.engine.applyCommandsDueNowPreservingFuture();
+        if (!this.engine.applyTrackStripInsertParamByNameNow(
           message.trackId,
           message.insertIndex,
           message.paramName,
           message.value
-        );
+        )) {
+          this.engine.restoreTrackStripInsertParamByName(
+            message.trackId,
+            message.insertIndex,
+            message.paramName,
+            message.value
+          );
+        }
         break;
       case "syncMasterStripInsertParamByName":
-        this.engine.setMasterStripInsertParamByName(
+        this.engine.applyCommandsDueNowPreservingFuture();
+        if (!this.engine.applyMasterStripInsertParamByNameNow(
           message.insertIndex,
           message.paramName,
           message.value
-        );
+        )) {
+          this.engine.restoreMasterStripInsertParamByName(
+            message.insertIndex,
+            message.paramName,
+            message.value
+          );
+        }
         break;
       case "syncBusStripInsertParamByName":
-        this.engine.setBusStripInsertParamByName(
+        this.engine.applyCommandsDueNowPreservingFuture();
+        if (!this.engine.applyBusStripInsertParamByNameNow(
           message.busId,
           message.insertIndex,
           message.paramName,
           message.value
-        );
+        )) {
+          this.engine.restoreBusStripInsertParamByName(
+            message.busId,
+            message.insertIndex,
+            message.paramName,
+            message.value
+          );
+        }
         break;
       case "syncBusStripInsertBypassed":
         this.engine.setBusStripInsertBypassed(
@@ -7000,7 +7660,7 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
         );
         break;
       case "syncMidiUmp":
-        this.engine.pushMidiUmp(message.destinationId, message.word0, message.renderFrame);
+        this.engine.pushMidiUmp(message.destinationId, [message.word0], message.renderFrame);
         break;
       case "syncMidiSysex":
         this.engine.pushMidiSysex(message.destinationId, message.data, message.renderFrame);
@@ -7158,11 +7818,11 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
       this.closed = true;
     }
   }
-  drainCommands() {
+  drainCommands(limit = 64) {
     if (!this.commandRing) {
       return;
     }
-    for (let i = 0; i < 64; i++) {
+    for (let i = 0; i < limit; i++) {
       const command = popSonareEngineCommandRingBuffer(this.commandRing);
       if (!command) {
         return;
@@ -7993,6 +8653,223 @@ function registerSonareWorkletProcessor(name = "sonare-worklet-processor") {
   scope.registerProcessor(name, RegisteredSonareWorkletProcessor);
 }
 
+// src/worklet/playback-processor.ts
+var MAX_INPUT_CHANNELS = 8;
+var SPEAKER_LAYOUT_CHANNELS = { stereo: 2, "5.1": 6, "7.1": 8 };
+function configObject(config) {
+  if (config === void 0) {
+    return {};
+  }
+  return typeof config === "string" ? JSON.parse(config) : config;
+}
+function outputChannelCount(config) {
+  if (config.target?.kind !== "speakers") {
+    return 2;
+  }
+  const count = SPEAKER_LAYOUT_CHANNELS[config.target.layout ?? ""];
+  if (count === void 0) {
+    throw new RangeError('target.layout must be "stereo", "5.1" or "7.1" for a speakers target');
+  }
+  return count;
+}
+var _SonarePlaybackWorkletProcessor = class _SonarePlaybackWorkletProcessor {
+  constructor(options = {}, port) {
+    this.inputPlanes = [];
+    this.outputPlanes = [];
+    this.unsupportedInputBlocks = 0;
+    this.destroyed = false;
+    this.port = port;
+    this.maxBlockSize = requireIntegerOption(options.maxBlockSize, 128, "maxBlockSize", 1);
+    const scopeRate = globalThis.sampleRate;
+    const sampleRate = options.sampleRate ?? (typeof scopeRate === "number" ? scopeRate : 48e3);
+    const hrtf = options.hrtf ? HrtfSet.fromBytes(new Uint8Array(options.hrtf)) : void 0;
+    try {
+      this.renderer = new PlaybackRenderer({
+        config: options.config ?? {},
+        hrtf,
+        sampleRate,
+        maxBlockSize: this.maxBlockSize
+      });
+    } finally {
+      hrtf?.delete();
+    }
+    this.native = this.renderer.native;
+    this.outputChannels = this.native.outputChannels();
+    this.acquirePlanes();
+  }
+  /**
+   * Handles a control-plane message. AudioWorklet port handlers run on the
+   * rendering thread between `process()` calls, which is what makes `reset`
+   * safe here. A refused message is answered with an `error` message.
+   */
+  receiveMessage(message) {
+    if (this.destroyed) {
+      return;
+    }
+    try {
+      switch (message.type) {
+        case "config":
+          this.renderer.setConfig(message.config);
+          break;
+        case "orientation":
+          this.renderer.setHeadOrientation(message.yaw, message.pitch ?? 0, message.roll ?? 0);
+          break;
+        case "reset":
+          this.renderer.reset();
+          break;
+        case "diagnostics":
+          this.port?.postMessage?.({
+            type: "diagnostics",
+            diagnostics: this.diagnostics()
+          });
+          break;
+        case "destroy":
+          this.destroy();
+          break;
+      }
+    } catch (error) {
+      this.port?.postMessage?.({
+        type: "error",
+        request: message.type,
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+  /** The renderer's diagnostics plus `unsupported_input_blocks`, as a plain object. */
+  diagnostics() {
+    return {
+      ...this.renderer.diagnostics(),
+      unsupported_input_blocks: this.unsupportedInputBlocks
+    };
+  }
+  process(inputs, outputs) {
+    if (this.destroyed) {
+      return false;
+    }
+    const output = outputs[0];
+    const requested = output?.[0]?.length ?? 0;
+    if (!output || requested === 0) {
+      return true;
+    }
+    const frames = this.clampFrames(requested);
+    if (this.inputPlanes[0]?.byteLength === 0 || this.outputPlanes[0]?.byteLength === 0) {
+      this.acquirePlanes();
+    }
+    const input = inputs[0];
+    const inChannels = input?.length ?? 0;
+    let code;
+    if (inChannels === 0) {
+      code = this.native.processPreparedSilence(frames);
+    } else if (inChannels > MAX_INPUT_CHANNELS) {
+      this.unsupportedInputBlocks++;
+      code = this.native.processPreparedSilence(frames);
+    } else {
+      for (let ch = 0; ch < inChannels; ch++) {
+        const source = input[ch];
+        const plane = this.inputPlanes[ch];
+        const copied = Math.min(frames, source.length);
+        plane.set(copied === source.length ? source : source.subarray(0, copied));
+        if (copied < frames) {
+          plane.fill(0, copied, frames);
+        }
+      }
+      code = this.native.processPrepared(inChannels, frames);
+      if (code !== 0) {
+        this.unsupportedInputBlocks++;
+        code = this.native.processPreparedSilence(frames);
+      }
+    }
+    if (code === 0) {
+      copyPlanesToOutput(output, this.outputPlanes, frames);
+    } else {
+      for (const channel of output) {
+        channel.fill(0);
+      }
+    }
+    return true;
+  }
+  destroy() {
+    if (this.destroyed) {
+      return;
+    }
+    this.destroyed = true;
+    this.renderer.delete();
+  }
+  acquirePlanes() {
+    this.inputPlanes = [];
+    for (let ch = 0; ch < MAX_INPUT_CHANNELS; ch++) {
+      this.inputPlanes.push(this.native.inputPlane(ch));
+    }
+    this.outputPlanes = [];
+    for (let ch = 0; ch < this.outputChannels; ch++) {
+      this.outputPlanes.push(this.native.outputPlane(ch));
+    }
+  }
+  // Frames past the construction-time capacity are left silent rather than
+  // reallocating on the audio thread.
+  clampFrames(frames) {
+    if (frames <= this.maxBlockSize) {
+      return frames;
+    }
+    if (!_SonarePlaybackWorkletProcessor.warnedBlockOverflow) {
+      _SonarePlaybackWorkletProcessor.warnedBlockOverflow = true;
+      console.warn(
+        `SonarePlaybackWorkletProcessor: requested ${frames} frames exceeds maxBlockSize ${this.maxBlockSize}; clamping.`
+      );
+    }
+    return this.maxBlockSize;
+  }
+};
+_SonarePlaybackWorkletProcessor.warnedBlockOverflow = false;
+var SonarePlaybackWorkletProcessor = _SonarePlaybackWorkletProcessor;
+function registerSonarePlaybackWorkletProcessor(name = "sonare-playback-processor") {
+  const scope = globalThis;
+  if (!scope.AudioWorkletProcessor || !scope.registerProcessor) {
+    throw new Error("AudioWorkletProcessor is not available in this context.");
+  }
+  const Base = scope.AudioWorkletProcessor;
+  class RegisteredSonarePlaybackWorkletProcessor extends Base {
+    constructor(options) {
+      super();
+      const port = this.port;
+      this.bridge = new SonarePlaybackWorkletProcessor(options?.processorOptions ?? {}, port);
+      const onMessage = (event) => {
+        if (isPlaybackMessage(event.data)) {
+          this.bridge.receiveMessage(event.data);
+        }
+      };
+      if (port?.addEventListener) {
+        port.addEventListener("message", onMessage);
+        port.start?.();
+      } else if (port) {
+        port.onmessage = onMessage;
+      }
+    }
+    process(inputs, outputs) {
+      return this.bridge.process(inputs, outputs);
+    }
+  }
+  scope.registerProcessor(name, RegisteredSonarePlaybackWorkletProcessor);
+}
+function createSonarePlaybackNode(context, options = {}) {
+  const config = configObject(options.config);
+  const factory = options.nodeFactory ?? ((ctx, name, nodeOptions) => new AudioWorkletNode(ctx, name, nodeOptions));
+  const processorOptions = {
+    config: JSON.stringify(config),
+    hrtf: options.hrtf,
+    maxBlockSize: options.maxBlockSize,
+    sampleRate: options.sampleRate ?? context.sampleRate
+  };
+  return factory(context, options.processorName ?? "sonare-playback-processor", {
+    numberOfInputs: 1,
+    numberOfOutputs: 1,
+    outputChannelCount: [outputChannelCount(config)],
+    channelCountMode: "max",
+    channelInterpretation: "discrete",
+    processorOptions
+  });
+}
+
 // src/worklet/voice-changer-processor.ts
 var _SonareRealtimeVoiceChangerWorkletProcessor = class _SonareRealtimeVoiceChangerWorkletProcessor {
   constructor(options = {}) {
@@ -8183,6 +9060,7 @@ export {
   SonareEngineCommandType,
   SonareEngineTelemetryError,
   SonareEngineTelemetryType,
+  SonarePlaybackWorkletProcessor,
   SonareRealtimeEngineNode,
   SonareRealtimeEngineWorkletProcessor,
   SonareRealtimeVoiceChangerWorkletProcessor,
@@ -8194,6 +9072,7 @@ export {
   createSonareEngineTelemetryRingBuffer,
   createSonareExternalMidiRingBuffer,
   createSonareMeterRingBuffer,
+  createSonarePlaybackNode,
   createSonareScopeRingBuffer,
   createSonareSpectrumRingBuffer,
   decodeFrame,
@@ -8211,6 +9090,7 @@ export {
   readSonareMeterRingBuffer,
   readSonareScopeRingBuffer,
   readSonareSpectrumRingBuffer,
+  registerSonarePlaybackWorkletProcessor,
   registerSonareRealtimeEngineWorkletProcessor,
   registerSonareRealtimeVoiceChangerWorkletProcessor,
   registerSonareWorkletProcessor,

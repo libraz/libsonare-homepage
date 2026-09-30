@@ -1365,7 +1365,9 @@ export interface WasmRealtimeEngine {
   stop: (renderFrame?: number) => void;
   seekSample: (timelineSample: number, renderFrame?: number) => void;
   settleParameters: () => void;
+  settleInsertParameters: () => void;
   flushControlCommands: () => void;
+  applyCommandsDueNowPreservingFuture: () => void;
   seekPpq: (ppq: number, renderFrame?: number) => void;
   setTempo: (bpm: number) => void;
   setTempoSegments: (segments: WasmEngineTempoSegment[]) => void;
@@ -1427,13 +1429,50 @@ export interface WasmRealtimeEngine {
     paramName: string,
     value: number,
   ) => void;
+  applyTrackStripInsertParamByNameNow: (
+    trackId: number,
+    insertIndex: number,
+    paramName: string,
+    value: number,
+  ) => boolean;
+  restoreTrackStripInsertParamByName: (
+    trackId: number,
+    insertIndex: number,
+    paramName: string,
+    value: number,
+  ) => void;
   setMasterStripInsertParamByName: (insertIndex: number, paramName: string, value: number) => void;
+  applyMasterStripInsertParamByNameNow: (
+    insertIndex: number,
+    paramName: string,
+    value: number,
+  ) => boolean;
+  restoreMasterStripInsertParamByName: (
+    insertIndex: number,
+    paramName: string,
+    value: number,
+  ) => void;
   setBusStripInsertParamByName: (
     busId: number,
     insertIndex: number,
     paramName: string,
     value: number,
   ) => void;
+  applyBusStripInsertParamByNameNow: (
+    busId: number,
+    insertIndex: number,
+    paramName: string,
+    value: number,
+  ) => boolean;
+  restoreBusStripInsertParamByName: (
+    busId: number,
+    insertIndex: number,
+    paramName: string,
+    value: number,
+  ) => void;
+  clearTrackInsertParameterBases: (trackId: number) => void;
+  clearBusInsertParameterBases: (busId: number) => void;
+  clearMasterInsertParameterBases: () => void;
   setBusStripInsertBypassed: (
     busId: number,
     insertIndex: number,
@@ -1616,7 +1655,12 @@ export interface WasmRealtimeEngine {
     pressure: number,
     renderFrame?: number,
   ) => void;
-  pushMidiUmp: (destinationId: number, word0: number, renderFrame?: number) => void;
+  pushMidiUmp: (
+    destinationId: number,
+    words: Uint32Array | readonly number[],
+    renderFrame?: number,
+  ) => void;
+  pushMidiInputUmp: (words: Uint32Array | readonly number[], portTimeSamples: number) => void;
   pushMidiSysex: (destinationId: number, data: Uint8Array, renderFrame?: number) => void;
   pushMidiPanic: (renderFrame?: number) => void;
   setMidiDestinationExternal: (destinationId: number, external: boolean) => void;
@@ -2413,9 +2457,10 @@ export interface SonareModule {
   masteringStereoAnalysisNames: () => string[];
   masteringInsertNames: () => string[];
   masteringInsertParamNames: (name: string) => string[];
-  // Both return JSON the facade parses; the raw module has no object shape here.
+  // These return JSON the facade parses; the raw module has no object shape here.
   masteringInsertParamInfo: (name: string) => string;
   masteringProcessorCatalog: () => string;
+  masteringAmpPresetCatalog: () => string;
   masteringInsertTiming: (
     name: string,
     paramsJson: string,
@@ -3426,6 +3471,23 @@ export interface SonareModule {
     error?: string;
   };
 
+  // Playback - renderer, HRTF set and program loudness meter
+  createHrtfSet: (bytes: Uint8Array) => WasmHrtfSet;
+  createPlaybackRenderer: (
+    configJson: string,
+    hrtf: WasmHrtfSet | null,
+    sampleRate: number,
+    maxBlockSize: number,
+  ) => WasmPlaybackRenderer;
+  createPlaybackLoudnessMeter: (channels: number, sampleRate: number) => WasmPlaybackLoudnessMeter;
+  renderPlayback: (
+    samples: Float32Array,
+    channels: number,
+    sampleRate: number,
+    configJson: string,
+    hrtf: WasmHrtfSet | null,
+  ) => { samples: Float32Array; channels: number };
+
   // Mixing - scene-based Mixer
   createMixerFromSceneJson: (json: string, sampleRate: number, blockSize: number) => WasmMixer;
 
@@ -3548,6 +3610,38 @@ export interface WasmRealtimeVoiceChanger {
   processPreparedInterleaved: (numFrames: number, numChannels: number) => void;
   getPlanarChannelBuffer: (channel: number, numFrames: number) => Float32Array;
   processPreparedPlanar: (numFrames: number) => void;
+  delete: () => void;
+}
+
+export interface WasmHrtfSet {
+  delete: () => void;
+}
+
+export interface WasmPlaybackRenderer {
+  processPlanar: (planes: Float32Array[]) => Float32Array[];
+  processInterleaved: (samples: Float32Array, inChannels: number) => Float32Array;
+  setConfig: (configJson: string) => void;
+  configJson: () => string;
+  setHeadOrientation: (yawDeg: number, pitchDeg: number, rollDeg: number) => void;
+  reset: () => void;
+  latencySamples: () => number;
+  inputChannels: () => number;
+  outputChannels: () => number;
+  diagnosticsJson: () => string;
+  nonFiniteDiscardCount: () => number;
+  // AudioWorklet path: heap views allocated once at construction (they detach
+  // on memory growth and are then re-acquired), and a SonareError code instead
+  // of a throw for a rejected block.
+  inputPlane: (channel: number) => Float32Array;
+  outputPlane: (channel: number) => Float32Array;
+  processPrepared: (inChannels: number, frames: number) => number;
+  processPreparedSilence: (frames: number) => number;
+  delete: () => void;
+}
+
+export interface WasmPlaybackLoudnessMeter {
+  pushInterleaved: (samples: Float32Array) => void;
+  integratedLufs: () => number;
   delete: () => void;
 }
 

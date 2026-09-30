@@ -14,6 +14,7 @@ const STEREO_ONLY_MASTERING_PROCESSORS = new Set([
   'multiband.limiter',
   'multiband.saturation',
   'stereo.autoPan',
+  'stereo.binaural',
   'stereo.haasEnhancer',
   'stereo.imager',
   'stereo.monoMaker',

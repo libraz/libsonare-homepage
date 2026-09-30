@@ -124,10 +124,12 @@ describe('chord recognition on the demo clip', () => {
     for (const rate of RATES) {
       const rateSamples = rate === sampleRate ? samples : wasm.resample(samples, sampleRate, rate);
       const full = wasm.detectChords(rateSamples, rate, {
+        useBeatSync: false,
         useTriadsOnly: false,
         minDuration: 0.3,
       });
       const triads = wasm.detectChords(rateSamples, rate, {
+        useBeatSync: false,
         useTriadsOnly: true,
         minDuration: 0.3,
       });
@@ -147,10 +149,12 @@ describe('chord recognition on the demo clip', () => {
     for (const rate of RATES) {
       const rateSamples = rate === sampleRate ? samples : wasm.resample(samples, sampleRate, rate);
       const raw = wasm.detectChords(rateSamples, rate, {
+        useBeatSync: false,
         useTriadsOnly: false,
         minDuration: 0,
       });
       const merged = wasm.detectChords(rateSamples, rate, {
+        useBeatSync: false,
         useTriadsOnly: false,
         minDuration: 0.3,
       });
@@ -189,6 +193,7 @@ describe('ChordTrackDemo', () => {
       expect(wrapper.find('figure.td--ready').exists()).toBe(true);
       expect(spy).toHaveBeenCalledTimes(1);
       expect(spy.mock.calls[0][2]).toEqual({
+        useBeatSync: false,
         useTriadsOnly: false,
         minDuration: 0.3,
       });

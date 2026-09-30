@@ -72,6 +72,7 @@ export interface MixerRealtimeBuffer {
  */
 export declare class Mixer {
     private mixer;
+    private released;
     private readonly blockSize;
     private constructor();
     /**
@@ -455,7 +456,7 @@ export declare class Mixer {
      * master (`left`, `right`, `sampleRate`).
      */
     drainTailStereo(numSamples: number): MixerProcessResult;
-    /** Release the underlying WASM object. Safe to call only once. */
+    /** Release the underlying WASM object. Idempotent, as the Node facade is. */
     delete(): void;
     /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
     destroy(): void;

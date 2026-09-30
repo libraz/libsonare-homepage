@@ -1,5 +1,5 @@
 import type { Articulation, ControllerBinding, MpeDimension, NoteTracking, ProjectMidiCcBinding, SynthPatch } from './project';
-import type { EqBand, PanLawInput, PanMode, SendTiming, SidechainSourceKind } from './public_types';
+import type { EqBand, PanLawInput, PanMode, SendTiming, SidechainSourceKind, UmpWords } from './public_types';
 import type { WasmClipPageRequest, WasmEngineAutomationPoint, WasmEngineBounceOptions, WasmEngineBounceResult, WasmEngineCaptureStatus, WasmEngineClip, WasmEngineFreezeOptions, WasmEngineFreezeResult, WasmEngineGraphSpec, WasmEngineMarker, WasmEngineMeterTelemetry, WasmEngineMeterTelemetryWide, WasmEngineMetronomeConfig, WasmEngineParameterInfo, WasmEngineProcessWithMonitorResult, WasmEngineScopeTelemetry, WasmEngineTelemetry, WasmEngineTempoSegment, WasmEngineTimeSignatureSegment, WasmEngineTransportState, WasmExternalMidiEvent } from './sonare.js';
 export type ExternalMidiEvent = WasmExternalMidiEvent;
 export type EngineClip = WasmEngineClip;
@@ -166,6 +166,7 @@ export interface EngineCapabilities {
 export declare function engineCapabilities(): EngineCapabilities;
 export declare class RealtimeEngine {
     private native;
+    private released;
     constructor(sampleRate?: number, maxBlockSize?: number, commandCapacity?: number, telemetryCapacity?: number, maxChannels?: number);
     /**
      * Size the engine's queues and scratch for a sample rate and block size.
@@ -230,6 +231,7 @@ export declare class RealtimeEngine {
         polyphony?: number;
         preferModelForModeledFamilies?: boolean;
         clearBankRig?: boolean;
+        gsEfxRealization?: 'modern' | 'classic';
     }, destinationId?: number): void;
     clearMidiInstrument(destinationId?: number): void;
     midiInstrumentCount(): number;
@@ -356,9 +358,11 @@ export declare class RealtimeEngine {
      * returned — the shared unit across every surface. Events past the cap stay
      * queued for the next call (lossless); call again to drain the rest.
      *
-     * One queued record lowers to at most 3 MIDI 1.0 messages, so a positive
-     * `maxRecords` below 3 could never consume a record and is rejected with an
-     * `InvalidParameter` `SonareError` instead of returning nothing forever.
+     * One queued record lowers to at most 4 MIDI 1.0 messages (a MIDI 2.0
+     * registered or assignable controller becomes CC 101/100 or 99/98 plus Data
+     * Entry 6/38), so a positive `maxRecords` below 4 could never consume a record
+     * and is rejected with an `InvalidParameter` `SonareError` instead of
+     * returning nothing forever.
      */
     drainExternalMidi(maxRecords?: number): WasmExternalMidiEvent[];
     /** Scalar, allocation-free external-MIDI drain for AudioWorklet SAB output. */
@@ -419,8 +423,23 @@ export declare class RealtimeEngine {
      * `pushMidiPolyPressure`.
      */
     pushMidiPolyPressure(destinationId: number, group: number, channel: number, note: number, pressure: number, renderFrame?: number): void;
-    /** Queue one immediate MIDI 1.0 channel-voice UMP word for a destination. */
-    pushMidiUmp(destinationId: number, word0: number, renderFrame?: number): void;
+    /**
+     * Queue an immediate (live) raw UMP message to a MIDI destination. `words` is
+     * 1 to 4 words, most significant first, and its length must match the message
+     * type of `words[0]`. MIDI 2.0 channel-voice messages (MT 0x4) arrive at full
+     * width; SysEx7 / data messages (MT 0x3 / 0x5) are refused, use
+     * {@link pushMidiSysex}. Throws when the slot ring or command queue is full
+     * (retry after a process block). `renderFrame` is the render-frame time to
+     * apply, or -1 for immediate. A bare number is accepted as a one-word
+     * message.
+     */
+    pushMidiUmp(destinationId: number, words: UmpWords | number, renderFrame?: number): void;
+    /**
+     * Push one raw UMP message (1 to 4 words) to the engine-owned MIDI input
+     * source. The message rules match {@link pushMidiUmp}. `portTimeSamples` is
+     * the port timestamp in samples.
+     */
+    pushMidiInputUmp(words: UmpWords, portTimeSamples?: number): void;
     /**
      * Queue an immediate (live) MIDI SysEx frame to a MIDI destination. `data` is
      * the full message including the leading 0xF0 and trailing 0xF7 (1..512
@@ -450,8 +469,12 @@ export declare class RealtimeEngine {
      * settled values instead of ramping in from defaults.
      */
     settleParameters(): void;
+    /** Snap only insert automation slots after structural replay. */
+    settleInsertParameters(): void;
     /** Drains queued commands on an offline/control-only engine immediately. */
     flushControlCommands(): void;
+    /** Applies commands already due on a control-only mirror, retaining future commands. */
+    applyCommandsDueNowPreservingFuture(): void;
     seekPpq(ppq: number, renderFrame?: number): void;
     /** Set a finite tempo in the range (0, 100000] BPM. */
     setTempo(bpm: number): void;
@@ -531,10 +554,27 @@ export declare class RealtimeEngine {
      * param is not realtime-safe, or the command queue is full.
      */
     setTrackStripInsertParamByName(trackId: number, insertIndex: number, paramName: string, value: number): void;
+    /** Apply a live insert edit on this engine's owning thread without draining its command queue. */
+    applyTrackStripInsertParamByNameNow(trackId: number, insertIndex: number, paramName: string, value: number): boolean;
+    /** Restore a retained insert value exactly after a strip scene is replayed. */
+    restoreTrackStripInsertParamByName(trackId: number, insertIndex: number, paramName: string, value: number): void;
     /** Master-strip counterpart of {@link setTrackStripInsertParamByName}. */
     setMasterStripInsertParamByName(insertIndex: number, paramName: string, value: number): void;
+    applyMasterStripInsertParamByNameNow(insertIndex: number, paramName: string, value: number): boolean;
+    restoreMasterStripInsertParamByName(insertIndex: number, paramName: string, value: number): void;
     /** Bus-strip counterpart of {@link setTrackStripInsertParamByName}. */
     setBusStripInsertParamByName(busId: number, insertIndex: number, paramName: string, value: number): void;
+    applyBusStripInsertParamByNameNow(busId: number, insertIndex: number, paramName: string, value: number): boolean;
+    restoreBusStripInsertParamByName(busId: number, insertIndex: number, paramName: string, value: number): void;
+    /**
+     * Forgets the remembered manual insert-parameter values of one track strip
+     * and discards its queued insert edits. Call before {@link setTrackStripJson}
+     * replaces the strip when its old values must not carry over; the setter
+     * never does this itself, since a queued edit may already target the new chain.
+     */
+    clearTrackInsertParameterBases(trackId: number): void;
+    clearBusInsertParameterBases(busId: number): void;
+    clearMasterInsertParameterBases(): void;
     /** Bus-strip counterpart of {@link setTrackStripInsertBypassed}. */
     setBusStripInsertBypassed(busId: number, insertIndex: number, bypassed: boolean, resetOnBypass?: boolean): void;
     /**
@@ -793,7 +833,7 @@ export declare class RealtimeEngine {
     scopeScratchPointCount(): number;
     scopeScratchPointLeft(index: number): number;
     scopeScratchPointRight(index: number): number;
-    /** Release the underlying WASM object. Safe to call only once. */
+    /** Release the underlying WASM object. Idempotent, as the Node facade is. */
     destroy(): void;
     /** Alias for {@link destroy}, matching embind's own release method name. */
     delete(): void;

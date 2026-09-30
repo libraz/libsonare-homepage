@@ -62,6 +62,7 @@ type EqPhaseMode = 'zero' | 'zero-latency' | 'zero_latency' | 'natural' | 'natur
  */
 export declare class StreamingMasteringChain {
     private chain;
+    private released;
     constructor(config: StreamingMasteringChainConfig);
     /**
      * Initialize processors for the given sample rate and block layout.
@@ -153,7 +154,7 @@ export declare class StreamingMasteringChain {
      * processor state without rebuilding.
      */
     nonFiniteDiscardCount(): number;
-    /** Release the underlying WASM object. Safe to call only once. */
+    /** Release the underlying WASM object. Idempotent, as the Node facade is. */
     delete(): void;
     /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
     destroy(): void;
@@ -181,6 +182,7 @@ export declare class StreamingMasteringChain {
  */
 export declare class StreamingEqualizer {
     private eq;
+    private released;
     constructor(config?: StreamingEqualizerConfig);
     /**
      * Configure the band at `index` (0..23). Omitted fields use C++ defaults.
@@ -286,7 +288,7 @@ export declare class StreamingEqualizer {
      * @param options - `sampleRate` (default 48000) and `maxBands` (default 8)
      */
     match(source: Float32Array, reference: Float32Array, options?: EqMatchOptions): void;
-    /** Release the underlying WASM object. Safe to call only once. */
+    /** Release the underlying WASM object. Idempotent, as the Node facade is. */
     delete(): void;
     /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
     destroy(): void;
@@ -300,6 +302,7 @@ export declare class StreamingEqualizer {
  */
 export declare class StreamingRetune {
     private retune;
+    private released;
     constructor(config?: StreamingRetuneConfig);
     /**
      * Allocate and initialize native state for the given sample rate and maximum
@@ -323,7 +326,7 @@ export declare class StreamingRetune {
     latencySamples(): number;
     /** Process one mono block, returning the shifted samples (same length). */
     processMono(samples: Float32Array): Float32Array;
-    /** Release the underlying WASM object. Safe to call only once. */
+    /** Release the underlying WASM object. Idempotent, as the Node facade is. */
     delete(): void;
     /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
     destroy(): void;

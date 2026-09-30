@@ -84,6 +84,7 @@ const reveal = ref(0); // 0..1 lane and waveform fade-in
 /** Run recognition with the current controls and keep the spans inside the clip. */
 function detect(wasm: WasmModule, samples: Float32Array, sr: number): void {
   const { chords } = wasm.detectChords(samples, sr, {
+    useBeatSync: false,
     useTriadsOnly: triadsOnly.value,
     minDuration: minDuration.value,
   });

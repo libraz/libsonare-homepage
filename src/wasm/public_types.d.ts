@@ -2,6 +2,7 @@ export * from './public_types_acoustic';
 export * from './public_types_mastering';
 export * from './public_types_mixing';
 export * from './public_types_music';
+export * from './public_types_playback';
 export * from './public_types_realtime';
 export * from './public_types_repair';
 export * from './public_types_spectral';
@@ -40,6 +41,8 @@ export interface SonareCapabilities {
         acousticSim: boolean;
         pitchEditor: boolean;
         voiceChanger: boolean;
+        /** True when the playback renderer (upmix, binaural, speaker output) is compiled in. */
+        playback: boolean;
     };
     decode: {
         builtin: string[];
@@ -155,6 +158,7 @@ export interface CapabilityCatalogPresets {
     synth: string[];
     mixingScene: string[];
     voiceChanger: string[];
+    playbackRoom: string[];
 }
 /**
  * One entry of {@link CapabilityCatalog.masteringPresets}. The restoration

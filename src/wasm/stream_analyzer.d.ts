@@ -33,6 +33,7 @@ export declare function streamAnalyzerConfigDefaults(): StreamConfigDefaults;
  */
 export declare class StreamAnalyzer {
     private analyzer;
+    private released;
     /**
      * Create a new StreamAnalyzer.
      *
@@ -152,7 +153,7 @@ export declare class StreamAnalyzer {
      * analyzer.setTuningRefHz(415.30);
      */
     setTuningRefHz(refHz: number): void;
-    /** Release the underlying WASM object. Safe to call only once. */
+    /** Release the underlying WASM object. Idempotent, as the Node facade is. */
     delete(): void;
     /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
     destroy(): void;

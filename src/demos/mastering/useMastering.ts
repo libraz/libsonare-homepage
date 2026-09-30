@@ -749,7 +749,7 @@ export function buildMasteringConfig(options: MasteringRenderOptions): Mastering
       nFft: 2048,
       hopLength: 512,
       ddAlpha: preset === 'speech' ? 0.96 : 0.98,
-      gainFloor: Math.max(0.04, 0.16 - settings.denoiseAmount * 0.12),
+      reductionDb: -20 * Math.log10(Math.max(0.04, 0.16 - settings.denoiseAmount * 0.12)),
     };
     if (settings.declickAmount > 0) {
       config.repair.declick = {

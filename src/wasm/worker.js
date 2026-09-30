@@ -691,7 +691,9 @@ function cancelledError() {
 }
 function installOfflineWorkerEndpoint(endpoint2) {
   const cancelled = /* @__PURE__ */ new Set();
+  const inFlight = /* @__PURE__ */ new Set();
   const run = async (message) => {
+    inFlight.add(message.id);
     const cancelFlag = message.cancelBuffer ? new Int32Array(message.cancelBuffer) : void 0;
     const isCancelled = () => cancelled.has(message.id) || cancelFlag !== void 0 && Atomics.load(cancelFlag, 0) !== 0;
     const onProgress = (progress, stage) => {
@@ -751,12 +753,15 @@ function installOfflineWorkerEndpoint(endpoint2) {
       });
     } finally {
       cancelled.delete(message.id);
+      inFlight.delete(message.id);
     }
   };
   endpoint2.addEventListener("message", (event) => {
     const message = event.data;
     if (message.type === "sonare:offline-cancel") {
-      cancelled.add(message.id);
+      if (inFlight.has(message.id)) {
+        cancelled.add(message.id);
+      }
       return;
     }
     void run(message);

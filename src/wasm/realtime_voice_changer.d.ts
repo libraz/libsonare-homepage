@@ -35,6 +35,7 @@ export interface RealtimeVoiceChangerPlanarBuffer {
 }
 export declare class RealtimeVoiceChanger {
     private changer;
+    private released;
     /**
      * Creates a voice changer. Supplying `sampleRate` prepares it immediately,
      * matching the Node and Python constructors; omitting it preserves the
@@ -142,6 +143,7 @@ export declare class RealtimeVoiceChanger {
      * become invalid after {@link delete}.
      */
     createRealtimePlanarBuffer(numFrames: number, numChannels: number): RealtimeVoiceChangerPlanarBuffer;
+    /** Releases the native handle. Idempotent, as the Node facade is. */
     delete(): void;
     /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
     destroy(): void;
