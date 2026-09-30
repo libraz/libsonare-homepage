@@ -331,8 +331,9 @@ async function analyzeCurrent(requestedGeneration?: number | Event) {
 
   const id = ++requestId;
   const sourceLeft = new Float32Array(audio.left);
-  const sourceRight = new Float32Array(audio.right);
-  const meter = decimateStereo(audio.left, audio.right, METER_STEREO_FRAMES);
+  const sourceRight = audio.channels > 1 ? new Float32Array(audio.right) : undefined;
+  const meter =
+    audio.channels > 1 ? decimateStereo(audio.left, audio.right, METER_STEREO_FRAMES) : undefined;
   isAnalyzing.value = true;
   localError.value = null;
   progress.value = 0.01;
@@ -376,18 +377,19 @@ async function analyzeCurrent(requestedGeneration?: number | Event) {
 
     analysisWorker.addEventListener('message', onMessage);
     analysisWorker.addEventListener('error', onError);
-    analysisWorker.postMessage(
-      {
-        type: 'analyze',
-        id,
-        sourceLeft,
-        sourceRight,
-        sampleRate: audio.sampleRate,
-        meterLeft: meter.left,
-        meterRight: meter.right,
-      },
-      [sourceLeft.buffer, sourceRight.buffer, meter.left.buffer, meter.right.buffer],
-    );
+    const message = {
+      type: 'analyze' as const,
+      id,
+      sourceLeft,
+      sampleRate: audio.sampleRate,
+      ...(sourceRight ? { sourceRight } : {}),
+      ...(meter ? { meterLeft: meter.left, meterRight: meter.right } : {}),
+    };
+    const transfer: Transferable[] = [sourceLeft.buffer];
+    if (sourceRight && meter) {
+      transfer.push(sourceRight.buffer, meter.left.buffer, meter.right.buffer);
+    }
+    analysisWorker.postMessage(message, transfer);
   })
     .catch((error) => {
       if (generation === loadGeneration && String(error?.message || error) !== 'cancelled') {
@@ -629,6 +631,7 @@ function formatLu(value: number): string {
               <template #label><TermLabel v-bind="term('stereoWidth')">{{ copy.metrics.stereoWidth }}</TermLabel></template>
             </MetricItem>
           </div>
+          <p v-if="meteringSummary" class="panel-note">{{ copy.notes.metering }}</p>
           <div v-if="vectorscope" class="vectorscope">
             <svg class="vectorscope__svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" :aria-label="copy.terms.items.vectorscope.title">
               <g class="vectorscope__grid">
@@ -879,6 +882,7 @@ function formatLu(value: number): string {
               <template #label><TermLabel v-bind="term('vibrato')">{{ copy.metrics.vibrato }}</TermLabel></template>
             </MetricItem>
           </div>
+          <p v-if="result" class="panel-note">{{ copy.notes.melody }}</p>
           <div
             v-if="result"
             class="melody-cloud"

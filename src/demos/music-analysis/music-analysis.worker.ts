@@ -307,12 +307,12 @@ function runAnalysis(request: AnalyzeRequest): MusicAnalysisWorkerResult {
     : undefined;
   const loudness = hasStereoSource
     ? wasmModule.lufsInterleaved(interleavedStereo!, 2, sourceSampleRate)
-    : wasmModule.lufs(samples, sampleRate);
+    : wasmModule.lufs(sourceSamples, sourceSampleRate);
   const loudnessSeries = hasStereoSource
     ? wasmModule.lufsSeriesInterleaved(interleavedStereo!, 2, sourceSampleRate)
     : {
-        momentary: wasmModule.momentaryLufs(samples, sampleRate),
-        shortTerm: wasmModule.shortTermLufs(samples, sampleRate),
+        momentary: wasmModule.momentaryLufs(sourceSamples, sourceSampleRate),
+        shortTerm: wasmModule.shortTermLufs(sourceSamples, sourceSampleRate),
       };
 
   ensureNotCancelled(request.id);

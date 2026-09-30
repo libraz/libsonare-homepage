@@ -75,10 +75,12 @@ watch(() => [props.rows, props.columns, props.values, props.min, props.max, isDa
 </template>
 
 <style scoped>
+/* A fixed box with the canvas pinned inside it: a percentage height here would
+   resolve against the panel body, which also holds the caption, so every redraw
+   would grow the canvas by the caption's height. */
 .heatmap {
   position: relative;
-  min-height: 220px;
-  height: 100%;
+  height: 280px;
   border: 1px solid var(--demo-border, rgba(139, 92, 246, 0.12));
   border-radius: 8px;
   overflow: hidden;
@@ -90,10 +92,11 @@ html:not(.dark) .heatmap {
 }
 
 .heatmap__canvas {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
-  min-height: 220px;
 }
 </style>
 

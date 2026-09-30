@@ -283,6 +283,48 @@ describe('music analysis worker protocol', () => {
     });
   }, 30_000);
 
+  it('keeps original high-rate mono samples for delivery loudness after analysis resampling', async () => {
+    const sourceRate = 48_000;
+    const samples = new Float32Array(sourceRate * 121);
+    for (let i = 0; i < samples.length; i++) {
+      samples[i] = 0.4 * Math.sin((2 * Math.PI * 16_000 * i) / sourceRate);
+    }
+
+    await (self as any).onmessage({
+      data: {
+        type: 'analyze',
+        id: 10,
+        sourceLeft: samples,
+        sampleRate: sourceRate,
+      },
+    });
+
+    const analyzedSamples = wasmMock.analyzeWithProgress.mock.calls[0][0] as Float32Array;
+    const originalMonoSamples = wasmMock.resample.mock.calls[0][0] as Float32Array;
+    const loudnessSamples = wasmMock.lufs.mock.calls.at(-1)?.[0] as Float32Array;
+    expect(wasmMock.resample).toHaveBeenCalledTimes(1);
+    expect(wasmMock.resample.mock.calls[0][1]).toBe(sourceRate);
+    expect(wasmMock.resample.mock.calls[0][2]).toBe(22_050);
+    expect(originalMonoSamples).toHaveLength(samples.length);
+    for (const index of [0, 1, 12_345, samples.length - 1]) {
+      expect(originalMonoSamples[index]).toBeCloseTo(samples[index], 6);
+    }
+    expect(analyzedSamples).not.toBe(loudnessSamples);
+    expect(loudnessSamples).toHaveLength(samples.length);
+    expect(loudnessSamples[12_345]).toBeCloseTo(samples[12_345], 6);
+    const lufsCall = wasmMock.lufs.mock.calls.at(-1)!;
+    const momentaryCall = wasmMock.momentaryLufs.mock.calls.at(-1)!;
+    const shortTermCall = wasmMock.shortTermLufs.mock.calls.at(-1)!;
+    expect(lufsCall[0]).toBe(loudnessSamples);
+    expect(lufsCall[1]).toBe(sourceRate);
+    expect(momentaryCall[0]).toBe(loudnessSamples);
+    expect(momentaryCall[1]).toBe(sourceRate);
+    expect(shortTermCall[0]).toBe(loudnessSamples);
+    expect(shortTermCall[1]).toBe(sourceRate);
+    expect(wasmMock.lufsInterleaved).not.toHaveBeenCalled();
+    expect(wasmMock.lufsSeriesInterleaved).not.toHaveBeenCalled();
+  }, 30_000);
+
   it('the shipped WASM resampler rejects content above the target Nyquist', async () => {
     const realSonare = await vi.importActual<typeof import('@/wasm/sonare.js')>('@/wasm/sonare.js');
     const realModule = await realSonare.default({

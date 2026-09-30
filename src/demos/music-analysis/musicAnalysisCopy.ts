@@ -40,6 +40,12 @@ export const enCopy = {
   metering: {
     clean: 'Clean',
   },
+  notes: {
+    metering:
+      'Peak, true peak and clipping measure the decoded waveform. A lossy file (MP3, AAC, Ogg) can decode above full scale, so those overs may come from the codec rather than the master.',
+    melody:
+      'The tracer follows one pitch at a time. On a full mix it can follow whichever tone dominates, often the bass, rather than the vocal line.',
+  },
   sections: {
     Intro: 'Intro',
     Verse: 'Verse',
@@ -186,7 +192,7 @@ export const enCopy = {
       momentary: {
         title: 'Momentary LUFS',
         body: 'Loudness over a 400 ms sliding window, tracked across the whole track.',
-        tip: 'The spiky line — watch it peak during the loudest hits to spot where a limiter will work hardest.',
+        tip: 'Use it to track short-window loudness changes. Check sample peak and true peak separately for brief transients.',
       },
       shortTerm: {
         title: 'Short-term LUFS',
@@ -205,12 +211,12 @@ export const enCopy = {
       },
       correlation: {
         title: 'Stereo Correlation',
-        body: 'How alike the left and right channels are, from −1 to +1. +1 is mono, 0 is wide, negative risks phase problems.',
+        body: 'How alike the left and right channels are, from −1 to +1. +1 means proportional waveforms, 0 means no correlation, and negative values can indicate cancellation when folded to mono.',
         tip: 'If it sits negative, check mono compatibility before any mastering decision.',
       },
       truePeak: {
         title: 'True Peak (dBTP)',
-        body: 'The inter-sample peak a DAC actually reconstructs, measured with 4× oversampling. It can sit above the sample peak.',
+        body: 'An estimate of reconstructed inter-sample peaks using 4× oversampling. It can sit above the sample peak.',
         tip: 'Keep it under about −1 dBTP so lossy codecs do not clip on playback.',
       },
       dcOffset: {
@@ -313,6 +319,12 @@ export const jaCopy: typeof enCopy = {
   },
   metering: {
     clean: 'クリーン',
+  },
+  notes: {
+    metering:
+      'ピーク、トゥルーピーク、クリッピングはデコード後の波形を測った値です。MP3・AAC・Ogg などの非可逆圧縮はデコード時にフルスケールを超えることがあり、その分はマスターではなくコーデックに由来する場合があります。',
+    melody:
+      'メロディの追跡は一度に 1 つの音高だけを追います。全体ミックスでは歌ではなく、その時点で最も強い音（多くはベース）を追うことがあります。',
   },
   sections: {
     Intro: 'イントロ',
@@ -454,12 +466,12 @@ export const jaCopy: typeof enCopy = {
       warmth: {
         title: '温かさ',
         body: '音色に占める中低域エネルギーの相対量を 0〜1 で表します。高いほど太く、丸い印象になります。',
-        tip: '明るさと並べて見ると、EQ に手を伸ばす前に音色バランスを把握できます。',
+        tip: '明るさと並べて見ると、EQ で調整する前に音色バランスを把握できます。',
       },
       momentary: {
         title: 'モーメンタリ LUFS',
         body: '400 ms のスライディング窓によるラウドネスを、曲全体にわたって追跡します。',
-        tip: 'とがった線です。最も大きい打撃でどこまで跳ねるかを見ると、リミッターが最も働く箇所が分かります。',
+        tip: '短い区間のラウドネス変化を確認できます。瞬間的なピークは、ピークレベルとトゥルーピークも併せて確認してください。',
       },
       shortTerm: {
         title: 'ショートターム LUFS',
@@ -478,12 +490,12 @@ export const jaCopy: typeof enCopy = {
       },
       correlation: {
         title: 'ステレオ相関',
-        body: '左右チャンネルの類似度を −1〜+1 で表します。+1 はモノラル、0 は広がり、負の値は位相の問題を招きます。',
+        body: '左右チャンネルの類似度を −1〜+1 で表します。+1 は左右の波形が同じ形、0 は相関なしです。負の値はモノラル化で打ち消しが生じる可能性を示します。',
         tip: '負の値のときは、マスタリングの判断前にモノラル互換性を確認してください。',
       },
       truePeak: {
         title: 'トゥルーピーク（dBTP）',
-        body: 'DAC が実際に再構成するサンプル間ピークを 4 倍オーバーサンプリングで測定した値です。サンプルピークより高くなることがあります。',
+        body: '4 倍オーバーサンプリングで、再構成されるサンプル間ピークを推定した値です。サンプルピークより高くなることがあります。',
         tip: '非可逆コーデックの再生でクリップしないよう、概ね −1 dBTP 未満に抑えてください。',
       },
       dcOffset: {
@@ -494,7 +506,7 @@ export const jaCopy: typeof enCopy = {
       clipping: {
         title: 'クリッピング',
         body: 'フルスケールに張り付いた連続区間を走査し、クリップしたサンプル数とファイルに占める割合を示します。',
-        tip: '「クリーン」は検出なしです。クリップ区間は音源に焼き付いた可聴の歪みです。',
+        tip: '「クリーン」は検出なしです。クリップ区間は音源に記録された、耳で聞き取れる歪みです。',
       },
       stereoWidth: {
         title: 'ステレオ幅',
