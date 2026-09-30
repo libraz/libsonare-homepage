@@ -173,6 +173,23 @@ html.dark .gs-lcd__part {
   gap: 8px;
 }
 
+.gs-realization {
+  display: grid;
+  gap: 4px;
+  color: var(--demo-text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.gs-realization select {
+  padding: 5px 8px;
+  border: 1px solid var(--demo-accent-border);
+  border-radius: 4px;
+  background: var(--demo-control-bg-strong);
+  color: var(--demo-text);
+}
+
+
 .gs-play {
   display: inline-flex;
   align-items: center;

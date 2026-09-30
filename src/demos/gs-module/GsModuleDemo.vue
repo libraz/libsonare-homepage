@@ -36,6 +36,7 @@ import { useGsModule } from './useGsModule';
 
 const {
   state,
+  efxRealization,
   selectedChannel,
   selectedPart,
   droppedFile,
@@ -72,7 +73,7 @@ const copy = computed(() =>
       localOnly: 'LOCAL',
       guideTitle: 'No SoundFont, no sample data',
       guideBody:
-        'Every note here plays a built-in fallback voice, so the page ships no samples and nothing leaves the browser. Each audition assembles a Standard MIDI File from the panels, imports it and bounces it offline.',
+        'Every note here plays a built-in fallback voice, so the page ships no samples and nothing leaves the browser. Physical models other than piano have not yet been tuned; future patch releases will adjust their sound. Each audition assembles a Standard MIDI File from the panels, imports it and bounces it offline.',
       guideLink: 'Read about the instruments',
       maker: 'LIBSONARE',
       model: 'GS MODULE',
@@ -80,6 +81,9 @@ const copy = computed(() =>
       play: 'Play',
       stop: 'Stop',
       reset: 'Reset module',
+      realization: 'EFX sound',
+      modern: 'Modern',
+      classic: 'Classic (32 kHz)',
       part: 'PART',
     },
     ja: {
@@ -88,7 +92,7 @@ const copy = computed(() =>
       localOnly: 'ローカル',
       guideTitle: 'SoundFont もサンプルデータもありません',
       guideBody:
-        'ここで鳴る音はすべて内蔵のフォールバック音源です。ページはサンプルを一切同梱せず、データはブラウザの外に出ません。試聴のたびにパネルの設定から標準 MIDI ファイルを組み立て、読み込んでオフラインでバウンスしています。',
+        'ここで鳴る音はすべて内蔵のフォールバック音源です。ページはサンプルを一切同梱せず、データはブラウザの外に出ません。ピアノ以外の物理モデルは未調整で、今後のパッチリリースで音を調整する予定です。試聴のたびにパネルの設定から標準 MIDI ファイルを組み立て、読み込んでオフラインでバウンスしています。',
       guideLink: '内蔵音源について読む',
       maker: 'LIBSONARE',
       model: 'GS MODULE',
@@ -96,6 +100,9 @@ const copy = computed(() =>
       play: '再生',
       stop: '停止',
       reset: 'モジュールをリセット',
+      realization: 'EFX の音作り',
+      modern: 'モダン',
+      classic: 'クラシック（32 kHz）',
       part: 'パート',
     },
   }),
@@ -217,6 +224,12 @@ const url = useUrlState([
     },
   },
   { key: 'efx', state: efxParam, defaultValue: '0000', parse: (raw: string) => raw },
+  {
+    key: 'efx-mode',
+    state: efxRealization,
+    defaultValue: 'modern',
+    parse: (raw: string) => (raw === 'modern' || raw === 'classic' ? raw : null),
+  },
   { key: 'sounds', state: soundsParam, defaultValue: '', parse: (raw: string) => raw },
 ]);
 
@@ -286,6 +299,13 @@ function clearFile() {
         />
 
         <div class="gs-transport">
+          <label class="gs-realization">
+            {{ copy.realization }}
+            <select v-model="efxRealization" :disabled="status === 'rendering'">
+              <option value="modern">{{ copy.modern }}</option>
+              <option value="classic">{{ copy.classic }}</option>
+            </select>
+          </label>
           <button
             type="button"
             class="gs-play"

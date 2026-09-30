@@ -1,29 +1,24 @@
 <script setup lang="ts">
 /**
- * The shared insertion effect: which type is selected, what that type does in
- * this build, and what each of its parameter slots is.
+ * The modern insertion-effect mapping for the selected GS type.
  *
- * A slot is three claims from three sources, and they are worth showing apart
- * rather than reconciling. The binding tree says which control the byte
- * reaches — `Chorus · Rate`, not "slot 3". The conversion archive says the law
- * it follows and the values the machine printed for it. The audibility pass
- * says whether this build's render actually moves when the byte moves, found
- * by rendering rather than declared.
- *
- * Where the first two disagree with the third, the slot is named and marked as
- * one this build does not act on. That is the honest reading: the byte has a
- * meaning, and this engine does not carry it yet.
+ * Each row keeps the binding form and law beside its localized target. A
+ * translated row carries a measured class/table, a designed row carries the
+ * law chosen for that target, and an enables row shows the stages it switches.
+ * Classic realization uses the same wire bytes but a separate whole-type
+ * model; this panel describes the modern mapping only.
  */
 import { computed } from 'vue';
 import { useI18n } from '@/composables/useI18n';
-import { bindingLabel, bindingReason } from './gsBindingText';
+import { bindingLabels, localizedOrdinalName, localizedStageName } from './gsBindingText';
 import {
+  bindingTargets,
   EFX_ARCHIVE_LIMITS,
   GS_EFX_TYPES as EFX_ENTRIES,
   efxStanding,
   efxStandingCounts,
   efxType,
-  type GsEfxSlot,
+  type GsEfxBinding,
   type GsEfxStanding,
 } from './gsEfx';
 import { GS_EFX_TYPES as EFX_NAMES, GS_EFX_STANDINGS } from './gsNames';
@@ -33,8 +28,10 @@ import type { GsEfxState } from './gsState';
 
 const props = defineProps<{
   efx: GsEfxState;
-  /** What the engine says about each control a slot can reach. */
+  /** What the engine says about each modern control a slot can reach. */
   paramMeta: Map<string, GsParamMeta>;
+  /** The selected realization; both modes share the modern mapping display. */
+  realization?: 'modern' | 'classic';
 }>();
 
 const emit = defineEmits<{
@@ -48,39 +45,67 @@ const copy = computed(() =>
   localizedValue({
     en: {
       title: 'Insertion effect',
+      modernMapping:
+        'Modern mapping: targets below name the controls in the modern insert chain. Classic uses a dedicated whole-type model.',
       explain: {
         adjustable: 'This type changes the sound, and the slots below change it further.',
         fixed:
-          'This type changes the sound, but none of its parameter slots does. The bytes are received and held.',
+          'This type changes the sound, but no parameter slot changed the default-state probe. Other settings may make controls active.',
         inert:
-          'This build does not act on this type. Its bytes are received and held, and the render is the same as Thru.',
+          'This build does not change this type in the default-state probe. Other settings may make controls active.',
       } as Record<GsEfxStanding, string>,
-      summary: (a: number, f: number, i: number) => `${a} adjustable · ${f} inert · ${i} silent`,
+      summary: (a: number, f: number, i: number) =>
+        `${a} adjustable · ${f} fixed · ${i} unchanged at defaults`,
       slots: 'Parameters',
       slotCount: (named: number, live: number) => `${named} named · ${live} move the sound`,
       distance: 'Distance from Thru',
       level: 'Level against Thru',
-      held: 'Received and held — this build does not move with it',
+      held: 'No audible difference in the default-state probe; other settings may make this control active.',
       limits: 'What the derivation cannot see',
       none: 'This type prints no parameters.',
+      measured: 'Measured',
+      translated: 'Translated',
+      rangeDerived: 'range-derived',
+      designed: 'Designed',
+      carried: 'carried',
+      invented: 'invented',
+      switch: 'Switch',
+      enabled: 'Enabled',
+      disabled: 'Off',
+      switched: 'Switched to',
+      noSelection: 'No stage for this value',
     },
     ja: {
       title: 'インサーションエフェクト',
+      modernMapping:
+        'モダンのマッピング：下のターゲットはモダンのインサートチェーンの制御先です。クラシックはタイプ全体を専用モデルで処理します。',
       explain: {
         adjustable: 'このタイプは音を変えます。下のスロットを動かすとさらに変わります。',
         fixed:
-          'このタイプは音を変えますが、パラメータスロットはどれも効きません。バイトは受け取られ、保持されます。',
+          'このタイプは音を変えますが、既定状態の試聴ではどのスロットも差を生みませんでした。ほかの設定で音に反映される場合があります。',
         inert:
-          'このビルドはこのタイプを処理しません。バイトは受け取られて保持されますが、出音はスルーと同じです。',
+          'このビルドは既定状態の試聴でこのタイプの差を検出しませんでした。ほかの設定で音に反映される場合があります。',
       } as Record<GsEfxStanding, string>,
-      summary: (a: number, f: number, i: number) => `調整できる ${a} · 効かない ${f} · 無音 ${i}`,
+      summary: (a: number, f: number, i: number) =>
+        `調整できる ${a} · 固定 ${f} · 既定値では変化なし ${i}`,
       slots: 'パラメータ',
       slotCount: (named: number, live: number) => `名前あり ${named} · 音が変わる ${live}`,
       distance: 'スルーとの距離',
       level: 'スルーに対する音量比',
-      held: '受け取られますが、このビルドの出音は動きません',
+      held: '既定状態の試聴では差が出ませんでした。ほかの設定で音に反映される場合があります。',
       limits: '導出できていないこと',
       none: 'このタイプにはパラメータが印字されていません。',
+      measured: '測定',
+      translated: '変換',
+      rangeDerived: '範囲から導出',
+      designed: '設計',
+      carried: '引き継ぎ',
+      invented: '新規',
+      switch: 'スイッチ',
+      enabled: '有効',
+      disabled: 'オフ',
+      switched: '切り替え先',
+      noSelection: 'この値に対応する段はありません',
     },
   }),
 );
@@ -103,45 +128,93 @@ const standingLabel = computed(() => {
   return ja.value ? name.ja : name.en;
 });
 
-/** One slot as the panel prints it, with every side of it already resolved. */
+function formLabel(binding: GsEfxBinding): string {
+  if (binding.form === 'translated') {
+    const basis = binding.range ? copy.value.rangeDerived : copy.value.measured;
+    return `${copy.value.translated} · ${basis}`;
+  }
+  if (binding.form === 'enables') return copy.value.switch;
+  return copy.value.designed;
+}
+
+function lawLabel(binding: GsEfxBinding, law: string | null): string | null {
+  if (binding.form === 'enables' || law === null) return null;
+  if (binding.form === 'translated') {
+    const basis = binding.range ? copy.value.rangeDerived : copy.value.measured;
+    return `${copy.value.translated} · ${basis} · ${law}`;
+  }
+  const basis = binding.basis === 'carried' ? copy.value.carried : copy.value.invented;
+  return `${copy.value.designed} · ${basis} · ${law}`;
+}
+
+function unitOf(target: { stage: string; keys: readonly string[] }): string | null {
+  if (target.keys.length === 0) return null;
+  return props.paramMeta.get(paramMetaKey(target.stage, target.keys[0]))?.unit ?? null;
+}
+
+function enableStageName(stage: { stage: string; ordinal: number }): string {
+  return localizedOrdinalName(localizedStageName(stage.stage, ja.value), stage.ordinal, ja.value);
+}
+
+interface TargetRow {
+  stage: string;
+  param: string;
+  unit: string | null;
+  law: string | null;
+}
+
 interface SlotRow {
   slot: number;
   live: boolean;
-  stage: string | null;
-  param: string | null;
-  unit: string | null;
-  reason: string | null;
+  binding: GsEfxBinding;
+  form: string;
+  targets: TargetRow[];
+  enableStages: string[];
+  enableState: string | null;
 }
 
-/** The unit the engine gives the control this slot reaches, if it carries one. */
-function unitOf(slot: GsEfxSlot): string | null {
-  const binding = slot.binding;
-  if (!binding?.stage || binding.keys.length === 0) return null;
-  return props.paramMeta.get(paramMetaKey(binding.stage, binding.keys[0]))?.unit ?? null;
+function enableState(binding: GsEfxBinding, value: number): string | null {
+  const enables = binding.enables;
+  if (!enables) return null;
+  if (enables.mode === 'select') {
+    const selected = enables.stages[value];
+    return selected
+      ? `${copy.value.switched}: ${enableStageName(selected)}`
+      : `${copy.value.switched}: ${copy.value.noSelection}`;
+  }
+  return enables.onStates.includes(value) ? copy.value.enabled : copy.value.disabled;
 }
 
-/**
- * Every slot the machine prints on this type, adjudicated or not. A slot with
- * no row at all is one the machine does not have, so it is not a control that
- * is missing — there is nothing there to show.
- */
+/** One slot as the panel prints it, with form, targets and current switch state. */
 const rows = computed<SlotRow[]>(() =>
   (current.value?.slots ?? [])
     .filter((slot) => slot.binding !== null)
     .map((slot) => {
-      const label = slot.binding ? bindingLabel(slot.binding, ja.value) : null;
+      const binding = slot.binding!;
+      const targets = bindingTargets(binding);
+      const labels = bindingLabels(binding, ja.value);
+      const targetRows = targets.map((target, index) => ({
+        stage: labels[index]?.stage ?? target.stage,
+        param: labels[index]?.param ?? '',
+        unit: unitOf(target),
+        law: lawLabel(binding, target.law),
+      }));
+      const enableStages = binding.enables?.stages.map(enableStageName) ?? [];
       return {
         slot: slot.slot,
         live: slot.live,
-        stage: label?.stage ?? null,
-        param: label?.param ?? null,
-        unit: unitOf(slot),
-        reason: slot.binding ? bindingReason(slot.binding, ja.value) : null,
+        binding,
+        form: formLabel(binding),
+        targets: targetRows,
+        enableStages,
+        enableState: enableState(binding, props.efx.params[slot.slot]),
       };
     }),
 );
 
-const namedCount = computed(() => rows.value.filter((row) => row.param !== null).length);
+const namedCount = computed(
+  () => rows.value.filter((row) => row.targets.length > 0 || row.enableStages.length > 0).length,
+);
 const liveCount = computed(() => rows.value.filter((row) => row.live).length);
 
 /** Two decimals is the resolution a reader can act on; the raw figure is exact. */
@@ -170,6 +243,8 @@ function ratio(value: number): string {
       </option>
     </select>
 
+    <p class="gs-efx__mapping">{{ copy.modernMapping }}</p>
+
     <div v-if="current" class="gs-efx__standing">
       <span class="gs-badge" :class="standing === 'adjustable' ? 'gs-badge--on' : 'gs-badge--inert'">
         {{ standingLabel }}
@@ -196,32 +271,36 @@ function ratio(value: number): string {
     <p v-if="!rows.length" class="gs-note">{{ copy.none }}</p>
 
     <ul v-else class="gs-efx__slots">
-      <li v-for="row in rows" :key="row.slot" class="gs-efx__slot" :class="{ 'gs-efx__slot--held': !row.live }">
+      <li v-for="row in rows" :key="row.slot" class="gs-efx__slot" :class="{ 'gs-efx__slot--probe-inert': !row.live }">
         <span class="gs-efx__slot-index gs-value">{{ row.slot }}</span>
 
         <span class="gs-efx__slot-name">
-          <template v-if="row.param">
-            <span class="gs-efx__slot-stage">{{ row.stage }}</span>
-            <span class="gs-efx__slot-param">
-              {{ row.param }}
-              <small v-if="row.unit">{{ row.unit }}</small>
+          <template v-if="row.targets.length">
+            <span v-for="(target, targetIndex) in row.targets" :key="`${row.slot}/${targetIndex}`" class="gs-efx__target">
+              <span class="gs-efx__slot-stage">{{ target.stage }}</span>
+              <span class="gs-efx__slot-param">
+                {{ target.param }}
+                <small v-if="target.unit">{{ target.unit }}</small>
+              </span>
+              <small v-if="target.law" class="gs-efx__law">{{ target.law }}</small>
             </span>
           </template>
-          <span v-else class="gs-efx__slot-reason" :title="row.reason ?? undefined">
-            {{ row.reason }}
-          </span>
+          <template v-else>
+            <span class="gs-efx__slot-stage">{{ row.enableStages.join(' / ') }}</span>
+            <span class="gs-efx__slot-param">{{ row.enableState }}</span>
+          </template>
+          <small class="gs-efx__form">{{ row.form }}</small>
         </span>
 
         <input
-          v-if="row.live"
           type="range"
           min="0"
           max="127"
           :value="props.efx.params[row.slot]"
-          :aria-label="row.param ? `${row.stage} ${row.param}` : `${copy.slots} ${row.slot}`"
+          :title="row.live ? undefined : copy.held"
+          :aria-label="row.targets.length ? row.targets.map((target) => `${target.stage} ${target.param}`).join(' / ') : `${copy.slots} ${row.slot}`"
           @input="emit('updateSlot', row.slot, Number(($event.target as HTMLInputElement).value))"
         />
-        <span v-else class="gs-efx__slot-held" :title="copy.held">—</span>
 
         <span class="gs-value gs-efx__slot-value">{{ props.efx.params[row.slot] }}</span>
       </li>
@@ -246,6 +325,13 @@ function ratio(value: number): string {
   color: var(--demo-text-strong);
   font-family: var(--font-mono);
   font-size: 12px;
+}
+
+.gs-efx__mapping {
+  margin: 8px 0 0;
+  color: var(--demo-text-muted);
+  font-size: 10px;
+  line-height: 1.35;
 }
 
 .gs-efx__standing {
@@ -303,8 +389,8 @@ function ratio(value: number): string {
   border-radius: 4px;
 }
 
-.gs-efx__slot--held {
-  opacity: 0.66;
+.gs-efx__slot--probe-inert {
+  opacity: 0.82;
 }
 
 .gs-efx__slot-index {
@@ -314,11 +400,19 @@ function ratio(value: number): string {
 
 .gs-efx__slot-name {
   display: grid;
-  gap: 0;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.gs-efx__target {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 1px;
   min-inline-size: 0;
 }
 
 .gs-efx__slot-stage {
+  grid-column: 1;
   color: var(--demo-text-faint);
   font-family: var(--font-mono);
   font-size: 8px;
@@ -331,6 +425,7 @@ function ratio(value: number): string {
 }
 
 .gs-efx__slot-param {
+  grid-column: 1;
   color: var(--demo-text);
   font-size: 11.5px;
   overflow: hidden;
@@ -345,23 +440,19 @@ function ratio(value: number): string {
   font-size: 8.5px;
 }
 
-/* A reason runs to a sentence, and a sentence per row would set the rhythm of
-   the list by its longest entry. Two lines, with the whole of it on hover. */
-.gs-efx__slot-reason {
-  display: -webkit-box;
-  overflow: hidden;
+.gs-efx__law {
+  grid-column: 1;
+  grid-row: auto;
   color: var(--demo-text-muted);
-  font-size: 10px;
-  line-height: 1.3;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  overflow-wrap: anywhere;
 }
 
-.gs-efx__slot-held {
+.gs-efx__form {
   color: var(--demo-text-faint);
   font-family: var(--font-mono);
-  font-size: 11px;
-  text-align: center;
+  font-size: 8px;
 }
 
 .gs-efx__slot-value {

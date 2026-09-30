@@ -1,16 +1,17 @@
 /**
- * Turning a joined {@link GsEfxBinding} into what a reader sees: which insert
- * a bound slot reaches and which control on it, or the engine's own reason a
- * slot reaches nothing.
+ * Localized labels for the modern insertion-chain targets in a binding row.
+ * The raw stage and key names are engine identifiers; this module is the only
+ * place the inspector turns them into reader-facing text.
  */
-import type { GsEfxBinding } from './gsEfx';
-import { GS_BINDING_REASONS, GS_EFX_PARAMS, GS_EFX_STAGES } from './gsNames';
+import type { GsEfxBinding, GsEfxTarget } from './gsEfx';
+import { bindingTargets } from './gsEfx';
+import { GS_EFX_PARAMS, GS_EFX_STAGES } from './gsNames';
 
-/** A bound slot as a reader sees it: which insert, and which control on it. */
+/** A target as the inspector prints it. */
 export interface GsBindingLabel {
-  /** The insert's name, localized. */
+  /** The insert's localized name, including an ordinal where needed. */
   stage: string;
-  /** The control's name, localized, including a band number where the key carries one. */
+  /** The localized control names, including band numbers where present. */
   param: string;
 }
 
@@ -28,7 +29,7 @@ function paramName(leaf: string, ja: boolean): string {
   return name ? (ja ? name.ja : name.en) : leaf;
 }
 
-/** The display name for one binding key, band number kept as the key spells it. */
+/** The display name for one binding key, keeping the band number it carries. */
 function keyLabel(key: string, ja: boolean): string {
   const dotted = BAND_DOTTED_KEY.exec(key);
   if (dotted) {
@@ -43,19 +44,34 @@ function keyLabel(key: string, ja: boolean): string {
   return paramName(key, ja);
 }
 
-/** The label for a slot that reaches a control, or null for every other form. */
-export function bindingLabel(binding: GsEfxBinding, ja: boolean): GsBindingLabel | null {
-  if (binding.form !== 'stage' || binding.stage === null) return null;
-  const stageName = GS_EFX_STAGES[binding.stage];
+export function localizedStageName(stage: string, ja: boolean): string {
+  const name = GS_EFX_STAGES[stage];
+  return name ? (ja ? name.ja : name.en) : stage;
+}
+
+export function localizedOrdinalName(stage: string, ordinal: number, ja: boolean): string {
+  if (ordinal === 0) return stage;
+  return ja ? `${stage} ${ordinal + 1}系統目` : `${stage} ${ordinal + 1}`;
+}
+
+function targetLabel(target: GsEfxTarget, ja: boolean): GsBindingLabel {
   return {
-    stage: stageName ? (ja ? stageName.ja : stageName.en) : binding.stage,
-    param: binding.keys.map((key) => keyLabel(key, ja)).join(' / '),
+    stage: localizedOrdinalName(localizedStageName(target.stage, ja), target.ordinal, ja),
+    param: target.keys.map((key) => keyLabel(key, ja)).join(' / '),
   };
 }
 
-/** The engine's reason a byte reaches nothing, localized, falling back to its own wording. */
-export function bindingReason(binding: GsEfxBinding, ja: boolean): string | null {
-  if (binding.reason === null) return null;
-  if (!ja) return binding.reason;
-  return GS_BINDING_REASONS[binding.reason] ?? binding.reason;
+/** Every primary and alternative target, with ordinal lists expanded. */
+export function bindingLabels(binding: GsEfxBinding, ja: boolean): GsBindingLabel[] {
+  return bindingTargets(binding).map((target) => targetLabel(target, ja));
+}
+
+/** The combined label for a row, retained for callers that need one string pair. */
+export function bindingLabel(binding: GsEfxBinding, ja: boolean): GsBindingLabel | null {
+  const labels = bindingLabels(binding, ja);
+  if (labels.length === 0) return null;
+  return {
+    stage: labels.map((label) => label.stage).join(' / '),
+    param: labels.map((label) => label.param).join(' / '),
+  };
 }

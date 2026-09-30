@@ -92,6 +92,19 @@ describe('the audition renders', () => {
     expect(maxDeviation(routed, base)).toBeLessThanOrEqual(ULP);
   });
 
+  it('renders distinct modern and classic insertion effects from the same MIDI', () => {
+    const state = defaultModuleState();
+    state.efx = withEfxType(state.efx, 0x0110);
+    state.parts[0].efxAssigned = true;
+    const file = auditionSmf(state, 0);
+    const modern = bounceFiles(wasm, [file], SECONDS, 'modern');
+    const classic = bounceFiles(wasm, [file], SECONDS, 'classic');
+    expect(classic.length).toBe(modern.length);
+    expect(rms(modern)).toBeGreaterThan(1e-5);
+    expect(rms(classic)).toBeGreaterThan(1e-5);
+    expect(maxDeviation(classic, modern)).toBeGreaterThan(1e-4);
+  });
+
   it('sounds the rhythm part on its own channel', () => {
     const drums = render(() => {}, RHYTHM_CHANNEL);
     expect(rms(drums)).toBeGreaterThan(1e-3);
@@ -121,7 +134,10 @@ describe('the audition renders', () => {
 
     bounceFiles(importedWasm, [new Uint8Array([0x4d, 0x49, 0x44, 0x49])]);
 
-    expect(bounce).toHaveBeenCalledWith({}, { numChannels: 1, sampleRate: 44100 });
+    expect(bounce).toHaveBeenCalledWith(
+      { gsEfxRealization: 'modern' },
+      { numChannels: 1, sampleRate: 44100 },
+    );
   });
 
   it('rejects an imported file with no notes before Web Audio playback', () => {

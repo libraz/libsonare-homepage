@@ -115,14 +115,32 @@ export function validateEfxTables(tables) {
 }
 
 /**
- * The five forms a binding row takes. A row carries exactly one of them, which
- * is what makes "every printed parameter has been adjudicated" checkable rather
- * than asserted.
+ * A binding row is translated when it carries a stage and measured class/table,
+ * designed when it carries the designed-law object, or enables when it carries
+ * the stage-switch description. The old state/unmapped/builder/unreadable
+ * vocabulary is deliberately rejected: every printed slot now has one of the
+ * three adjudicated forms.
  */
-const BINDING_FORMS = ['stage', 'state', 'unmapped', 'builder', 'unreadable'];
+const BINDING_FORMS = ['translated', 'designed', 'enables'];
+const OBSOLETE_BINDING_FIELDS = ['state', 'unmapped', 'builder', 'unreadable'];
 
-/** Fields a row may carry beside its form, all of them read by the inspector. */
-const BINDING_EXTRAS = ['class', 'table', 'key', 'keys', 'via', 'range', 'printed_mark'];
+/** Fields the inspector reads; authoring notes never cross into the site data. */
+const BINDING_FIELDS = [
+  'stage',
+  'class',
+  'table',
+  'key',
+  'keys',
+  'via',
+  'range',
+  'printed_values',
+  'printed_mark',
+  'printed_name',
+  'ordinal',
+  'alternatives',
+  'designed',
+  'enables',
+];
 
 /**
  * Join every binding file into one list.
@@ -160,17 +178,104 @@ export function validateEfxBindings(rows, slotCount) {
     if (!Number.isInteger(row.slot) || row.slot < 0 || row.slot >= slotCount) {
       throw new Error(`binding row ${row.type} has a slot outside the block: ${row.slot}`);
     }
-    const forms = BINDING_FORMS.filter((form) => row[form] !== undefined);
-    if (forms.length !== 1) {
+    const id = `${row.type}/${row.slot}`;
+    const obsolete = OBSOLETE_BINDING_FIELDS.filter((field) => row[field] !== undefined);
+    if (obsolete.length > 0) {
+      throw new Error(`binding row ${id} uses obsolete form field(s): ${obsolete.join(', ')}`);
+    }
+    if (row.printed_name === undefined || typeof row.printed_name !== 'string') {
+      throw new Error(`binding row ${id} has no printed_name`);
+    }
+    const explicitForms = ['designed', 'enables'].filter((form) => row[form] !== undefined);
+    const form = explicitForms.length > 0 ? explicitForms[0] : 'translated';
+    if (row.form !== undefined && !BINDING_FORMS.includes(row.form)) {
+      throw new Error(`binding row ${id} uses an unknown form: ${row.form}`);
+    }
+    if (row.form !== undefined && row.form !== form) {
+      throw new Error(`binding row ${id} declares ${row.form} but carries ${form} fields`);
+    }
+    if (explicitForms.length > 1 || (form === 'translated' && row.stage === undefined)) {
       throw new Error(
-        `binding row ${row.type}/${row.slot} carries ${forms.length} forms (${forms.join(', ')}), expected one`,
+        `binding row ${id} carries conflicting or no forms ` +
+          `(${[...explicitForms, row.stage !== undefined ? 'translated' : ''].filter(Boolean).join(', ')})`,
       );
     }
-    const id = `${row.type}/${row.slot}`;
     if (seen.has(id)) throw new Error(`binding row ${id} appears twice`);
     seen.add(id);
-    if (row.stage !== undefined && row.key === undefined && row.keys === undefined) {
-      throw new Error(`binding row ${id} names a stage with no key`);
+
+    const keys = row.keys ?? (row.key === undefined ? [] : [row.key]);
+    if (form !== 'enables') {
+      if (typeof row.stage !== 'string' || row.stage.length === 0) {
+        throw new Error(`binding row ${id} names no stage`);
+      }
+      if (
+        !Array.isArray(keys) ||
+        keys.length === 0 ||
+        keys.some((key) => typeof key !== 'string')
+      ) {
+        throw new Error(`binding row ${id} names no key`);
+      }
+    }
+    if (form === 'translated' && (typeof row.class !== 'string' || typeof row.table !== 'string')) {
+      throw new Error(`binding row ${id} is translated but has no class/table`);
+    }
+    if (form === 'designed') {
+      if (!row.designed || typeof row.designed !== 'object') {
+        throw new Error(`binding row ${id} has no designed law`);
+      }
+      if (
+        !['carried', 'invented'].includes(row.designed.basis) ||
+        typeof row.designed.law !== 'string' ||
+        !row.designed.replaced_when ||
+        typeof row.designed.replaced_when !== 'object' ||
+        typeof row.printed_values !== 'string'
+      ) {
+        throw new Error(`binding row ${id} has incomplete designed-law metadata`);
+      }
+      if (row.class !== undefined || row.table !== undefined || row.range !== undefined) {
+        throw new Error(`binding row ${id} carries designed and measured-law fields`);
+      }
+    }
+    if (form === 'enables') {
+      if (!row.enables || typeof row.enables !== 'object') {
+        throw new Error(`binding row ${id} has no enables description`);
+      }
+      const hasStages = Array.isArray(row.enables.stages);
+      const hasSelect = Array.isArray(row.enables.select);
+      if (
+        hasStages === hasSelect ||
+        row.enables.basis !== 'invented' ||
+        !row.enables.replaced_when
+      ) {
+        throw new Error(`binding row ${id} has incomplete enables metadata`);
+      }
+      const stages = hasStages ? row.enables.stages : row.enables.select;
+      if (
+        stages.some(
+          (stage) =>
+            !stage ||
+            typeof stage.stage !== 'string' ||
+            (stage.ordinal !== undefined && !Number.isInteger(stage.ordinal)),
+        )
+      ) {
+        throw new Error(`binding row ${id} has an unreadable enables stage`);
+      }
+      if (hasStages && !Array.isArray(row.enables.on_states)) {
+        throw new Error(`binding row ${id} has stages but no on_states`);
+      }
+      const ownFields = [
+        'stage',
+        'class',
+        'table',
+        'key',
+        'keys',
+        'via',
+        'range',
+        'alternatives',
+        'ordinal',
+      ];
+      const conflict = ownFields.find((field) => row[field] !== undefined);
+      if (conflict) throw new Error(`binding row ${id} enables row carries ${conflict}`);
     }
   }
   return rows;
@@ -186,12 +291,16 @@ export function validateEfxBindings(rows, slotCount) {
 function selectBindingFields(rows) {
   return rows.map((row) => {
     const picked = { type: row.type, slot: row.slot };
-    for (const form of BINDING_FORMS) {
-      if (row[form] !== undefined) picked[form] = row[form];
+    const form =
+      row.enables !== undefined
+        ? 'enables'
+        : row.designed !== undefined
+          ? 'designed'
+          : 'translated';
+    for (const field of BINDING_FIELDS) {
+      if (row[field] !== undefined) picked[field] = row[field];
     }
-    for (const extra of BINDING_EXTRAS) {
-      if (row[extra] !== undefined) picked[extra] = row[extra];
-    }
+    picked.form = form;
     return picked;
   });
 }
@@ -477,9 +586,17 @@ async function main() {
   );
 
   const slotCount = addressTable.rows.find((row) => row.param === 'kEfxParameter').size;
-  const bindings = selectBindingFields(validateEfxBindings(readEfxBindings(ENGINE_DIR), slotCount));
+  const bindingRows = validateEfxBindings(readEfxBindings(ENGINE_DIR), slotCount);
+  const bindings = selectBindingFields(bindingRows);
   const counts = Object.fromEntries(
-    BINDING_FORMS.map((form) => [form, bindings.filter((row) => row[form] !== undefined).length]),
+    BINDING_FORMS.map((form) => [
+      form,
+      bindingRows.filter((row) => {
+        if (form === 'translated')
+          return row.stage !== undefined && row.designed === undefined && row.enables === undefined;
+        return row[form] !== undefined;
+      }).length,
+    ]),
   );
   const bindingsOut = write(
     BINDINGS_ARTIFACT,
@@ -497,7 +614,8 @@ async function main() {
   );
   console.log(
     `✓ ${BINDINGS_ARTIFACT} — ${bindings.length} adjudicated slots ` +
-      `(${counts.stage} reach a control), ${bindingsOut.bytes} B`,
+      `(${counts.translated} translated, ${counts.designed} designed, ${counts.enables} enables), ` +
+      `${bindingsOut.bytes} B`,
   );
 
   const wasm = await import(path.join(ROOT, 'src/wasm/index.js'));

@@ -1,21 +1,11 @@
 /**
- * What is known about each insertion-effect type, joined from the four things
- * that know different parts of it.
+ * The GS insertion-effect data joined for the inspector.
  *
- * - The address table says what the parameter block is, per block rather than
- *   per slot: twenty bytes at one address, all of them AUDIBLE as a group.
- * - The derivation file says which (type, slot) pairs a hardware measurement
- *   archive found a conversion for, and carries each entry's provenance. That
- *   describes the unit it measured, not this build.
- * - The audibility file says what this build actually does, found by rendering:
- *   whether a type moves the signal at its power-on bytes, and which of its
- *   slots move it at all.
- * - The bindings file says which insert control a slot reaches, or the reason
- *   it reaches none, in the engine's own words.
- *
- * The four disagree in a way worth showing rather than reconciling. A slot the
- * archive has a conversion for but this build does not act on is the difference
- * between the hardware and the re-creation, stated exactly.
+ * The archive measures conversion laws; the binding tree names the control a
+ * printed byte reaches. A row is translated when it uses a measured class and
+ * table, designed when it carries a carried or invented law, and enables when
+ * it switches stages. The generated data keeps those three forms explicit so
+ * the panel does not infer a meaning from a missing field.
  */
 import audibility from './data/efx-audibility.json';
 import bindings from './data/efx-bindings.json';
@@ -32,7 +22,7 @@ interface AudibilityRow {
   live_slots: number[];
 }
 
-interface ConversionRow {
+export interface ConversionRow {
   type: GsEfxTypeKey;
   parameter: number;
   conversion_class: string;
@@ -41,6 +31,8 @@ interface ConversionRow {
   inference_state: string;
   approximate: boolean;
   unit_specific: boolean;
+  source?: string;
+  printed_values?: string;
 }
 
 const AUDIBILITY = audibility as unknown as {
@@ -59,38 +51,119 @@ const TABLES = tables as unknown as {
 
 /** The engine build the audibility figures were measured against. */
 export const EFX_MEASURED_AGAINST = AUDIBILITY.measured_against;
-/** The derivation's own statement of what it cannot see. Shown, not hidden. */
+/** The derivation's statement of what it cannot see. */
 export const EFX_ARCHIVE_LIMITS = TABLES.what_this_cannot_see;
 
-/** How a bound slot reaches (or fails to reach) a control on an insert. */
-export type GsBindingForm = 'stage' | 'state' | 'unmapped' | 'builder' | 'unreadable';
+/** The three forms in the 1.8 binding schema. */
+export type GsBindingForm = 'translated' | 'designed' | 'enables';
+export type GsBindingBasis = 'measured' | 'carried' | 'invented';
+export type GsOrdinal = number | readonly number[];
 
-/** How one parameter slot binds to an insert's control surface. */
+interface RawDesigned {
+  basis: 'carried' | 'invented';
+  law: string;
+  from?: string;
+  replaced_when?: Record<string, unknown>;
+}
+
+/** One stage the byte may switch on, with the same-stage ordinal retained. */
+export interface GsEnableStage {
+  stage: string;
+  ordinal: number;
+}
+
+/** A byte's stage switch, either a list of on states or a state selector. */
+export interface GsEfxEnables {
+  mode: 'stages' | 'select';
+  stages: readonly GsEnableStage[];
+  onStates: readonly number[];
+  basis: 'invented';
+  replacedWhen: Record<string, unknown> | null;
+}
+
+/** A secondary target selected by an enables row, such as chorus or flanger. */
+export interface GsEfxAlternative {
+  stage: string;
+  keys: readonly string[];
+  ordinal: GsOrdinal;
+  /** Designed rows may use a stage-specific law for this target. */
+  law: string | null;
+}
+
+/** One concrete target after expanding a row's ordinal list. */
+export interface GsEfxTarget {
+  stage: string;
+  keys: readonly string[];
+  ordinal: number;
+  law: string | null;
+  basis: GsBindingBasis;
+}
+
+/** How one printed parameter slot binds to the modern insert chain. */
 export interface GsEfxBinding {
+  /** The explicit schema form. */
   form: GsBindingForm;
-  /** The insert the byte reaches, e.g. `effects.modulation.chorus`; null unless the form is `stage`. */
+  /** The primary insert target; null for an enables row. */
   stage: string | null;
-  /** The parameter(s) on that insert; a row driving several keys lists them all. */
-  keys: string[];
-  /** The measured law, as the `class`/`table` pair, or null. */
+  /** The primary insert control(s). */
+  keys: readonly string[];
+  /** The primary same-stage ordinal, or all ordinals the slot reaches. */
+  ordinal: GsOrdinal;
+  /** Alternative stage targets selected by the same type's enables row. */
+  alternatives: readonly GsEfxAlternative[];
+  /** Measured class/table for translated rows, null for designed/enables. */
   conversionClass: string | null;
   table: string | null;
-  /** The engine's own wording for why the byte reaches nothing; null when the form is `stage`. */
-  reason: string | null;
+  via: string | null;
+  range: readonly [number, number] | null;
+  /** The effective law id: `class.table` or the designed law id. */
+  law: string | null;
+  /** Where that law came from. */
+  basis: GsBindingBasis | null;
+  designed: RawDesigned | null;
+  enables: GsEfxEnables | null;
+  printedName: string | null;
+  printedValues: string | null;
+  printedMark: '+' | '#' | null;
+}
+
+interface RawAlternative {
+  stage: string;
+  key?: string;
+  keys?: string[];
+  ordinal?: GsOrdinal;
+  law?: string;
+}
+
+interface RawEnableStage {
+  stage: string;
+  ordinal?: number;
 }
 
 interface BindingRow {
   type: GsEfxTypeKey;
   slot: number;
+  form?: GsBindingForm;
   stage?: string;
   class?: string;
   table?: string;
   key?: string;
   keys?: string[];
-  state?: string;
-  unmapped?: string;
-  builder?: string;
-  unreadable?: string;
+  via?: string;
+  range?: [number, number];
+  printed_values?: string;
+  printed_mark?: '+' | '#';
+  printed_name?: string;
+  ordinal?: GsOrdinal;
+  alternatives?: RawAlternative[];
+  designed?: RawDesigned;
+  enables?: {
+    stages?: RawEnableStage[];
+    select?: RawEnableStage[];
+    on_states?: number[];
+    basis?: 'invented';
+    replaced_when?: Record<string, unknown>;
+  };
 }
 
 const BINDINGS_DATA = bindings as unknown as {
@@ -101,59 +174,128 @@ const BINDINGS_DATA = bindings as unknown as {
   rows: BindingRow[];
 };
 
-/** Counts for a summary line, carried by the data file rather than recomputed. */
+/** Counts for the summary line, carried by the generated data. */
 export const EFX_BINDING_COUNTS: Record<GsBindingForm, number> = BINDINGS_DATA.counts;
 
-const BINDING_FORMS: readonly GsBindingForm[] = [
-  'stage',
-  'state',
-  'unmapped',
-  'builder',
-  'unreadable',
-];
+function rowForm(row: BindingRow): GsBindingForm {
+  if (row.form) return row.form;
+  if (row.enables !== undefined) return 'enables';
+  if (row.designed !== undefined) return 'designed';
+  return 'translated';
+}
+
+function keysOf(row: { key?: string; keys?: string[] }): string[] {
+  return row.keys ?? (row.key === undefined ? [] : [row.key]);
+}
+
+function normalizeOrdinal(ordinal: GsOrdinal | undefined): number[] {
+  const values = Array.isArray(ordinal) ? ordinal : [ordinal ?? 0];
+  return values.filter((value): value is number => Number.isInteger(value));
+}
+
+function parseEnables(raw: BindingRow['enables']): GsEfxEnables | null {
+  if (!raw) return null;
+  const mode = raw.select !== undefined ? 'select' : 'stages';
+  const stages = (raw[mode] ?? []).map((stage) => ({
+    stage: stage.stage,
+    ordinal: stage.ordinal ?? 0,
+  }));
+  return {
+    mode,
+    stages,
+    onStates: raw.on_states ?? [],
+    basis: 'invented',
+    replacedWhen: raw.replaced_when ?? null,
+  };
+}
+
+function parseAlternative(raw: RawAlternative): GsEfxAlternative {
+  return {
+    stage: raw.stage,
+    keys: keysOf(raw),
+    ordinal: raw.ordinal ?? 0,
+    law: raw.law ?? null,
+  };
+}
 
 function parseBinding(row: BindingRow): GsEfxBinding {
-  const form = BINDING_FORMS.find((candidate) => row[candidate] !== undefined);
-  if (!form)
-    throw new Error(`efx-bindings row for ${row.type}/${row.slot} carries no recognised form`);
-  if (form === 'stage') {
-    return {
-      form,
-      stage: row.stage ?? null,
-      keys: row.keys ?? (row.key ? [row.key] : []),
-      conversionClass: row.class ?? null,
-      table: row.table ?? null,
-      reason: null,
-    };
-  }
+  const form = rowForm(row);
+  const designed = row.designed ?? null;
+  const enables = parseEnables(row.enables);
+  const conversionClass = row.class ?? null;
+  const table = row.table ?? null;
+  const law =
+    form === 'designed'
+      ? (designed?.law ?? null)
+      : form === 'translated' && conversionClass && table
+        ? `${conversionClass}.${table}`
+        : null;
+  const basis: GsBindingBasis | null =
+    form === 'translated'
+      ? 'measured'
+      : form === 'designed'
+        ? (designed?.basis ?? null)
+        : 'invented';
   return {
     form,
-    stage: null,
-    keys: [],
-    conversionClass: null,
-    table: null,
-    reason: row[form] ?? null,
+    stage: row.stage ?? null,
+    keys: keysOf(row),
+    ordinal: row.ordinal ?? 0,
+    alternatives: (row.alternatives ?? []).map(parseAlternative),
+    conversionClass,
+    table,
+    via: row.via ?? null,
+    range: row.range ?? null,
+    law,
+    basis,
+    designed,
+    enables,
+    printedName: row.printed_name ?? null,
+    printedValues: row.printed_values ?? null,
+    printedMark: row.printed_mark ?? null,
   };
 }
 
 const BINDINGS = new Map<string, GsEfxBinding>();
 for (const row of BINDINGS_DATA.rows) BINDINGS.set(`${row.type}/${row.slot}`, parseBinding(row));
 
-/**
- * The two sides spell one effect differently. The machine prints Rotary Multi
- * under two type numbers and the engine gives both one handler; the binding
- * tree files its slots under the number it treats as canonical, and the
- * conversion tables key the same effect by the other. Resolving it here lets
- * each file keep the spelling its own source uses.
- */
+/** The canonical spelling of Rotary Multi in the binding tree. */
 const BINDING_TYPE_ALIASES: Readonly<Record<string, GsEfxTypeKey>> = { '03 00': '02 0C' };
 
-/** What a `(type, slot)` binds to, following the alias where the two disagree. */
+/** What a `(type, slot)` binds to, following the 03 00 → 02 0C alias. */
 export function slotBinding(type: GsEfxTypeKey, slot: number): GsEfxBinding | null {
   return BINDINGS.get(`${BINDING_TYPE_ALIASES[type] ?? type}/${slot}`) ?? null;
 }
 
-/** How one parameter slot behaves, from all sides. */
+/** Expand primary and alternative ordinal lists into displayable targets. */
+export function bindingTargets(binding: GsEfxBinding): readonly GsEfxTarget[] {
+  const targets: GsEfxTarget[] = [];
+  if (binding.stage !== null) {
+    for (const ordinal of normalizeOrdinal(binding.ordinal)) {
+      targets.push({
+        stage: binding.stage,
+        keys: binding.keys,
+        ordinal,
+        law: binding.law,
+        basis: binding.basis ?? 'measured',
+      });
+    }
+  }
+  for (const alternative of binding.alternatives ?? []) {
+    for (const ordinal of normalizeOrdinal(alternative.ordinal)) {
+      targets.push({
+        stage: alternative.stage,
+        keys: alternative.keys,
+        ordinal,
+        law: alternative.law ?? binding.law,
+        basis: binding.basis ?? 'measured',
+      });
+    }
+  }
+  return targets;
+}
+
+/** How one parameter slot behaves, from the measured render and binding tree. */
 export interface GsEfxSlot {
   slot: number;
   /** This build's render changes when the byte changes. */
@@ -177,11 +319,6 @@ export interface GsEfxType {
   slots: GsEfxSlot[];
   /** Slots whose byte moves the render. */
   liveSlots: number[];
-  /**
-   * False when the type has at least one bound slot and every bound slot is
-   * `unmapped` — the whole type realises no chain at all, not just this slot.
-   */
-  realised: boolean;
 }
 
 function parseKey(key: GsEfxTypeKey): number {
@@ -199,7 +336,6 @@ export const GS_EFX_TYPES: readonly GsEfxType[] = AUDIBILITY.types.map((row) => 
     conversion: CONVERSIONS.get(`${row.type}/${slot}`) ?? null,
     binding: slotBinding(row.type, slot),
   }));
-  const bound = slots.filter((slot) => slot.binding !== null);
   return {
     key: row.type,
     type: parseKey(row.type),
@@ -208,7 +344,6 @@ export const GS_EFX_TYPES: readonly GsEfxType[] = AUDIBILITY.types.map((row) => 
     levelRatio: row.level_ratio,
     liveSlots: row.live_slots,
     slots,
-    realised: bound.length === 0 || bound.some((slot) => slot.binding?.form !== 'unmapped'),
   };
 });
 
@@ -218,13 +353,7 @@ export function efxType(type: number): GsEfxType | null {
   return BY_TYPE.get(type) ?? null;
 }
 
-/**
- * How a type stands in this build, as one of three answers a panel can label.
- *
- * `inert` is not a synonym for "no effect implemented": the measurement cannot
- * see why, only that neither the type's own bytes nor any of its twenty slots
- * move the render here.
- */
+/** How a type stands in this build, as measured by the audibility pass. */
 export type GsEfxStanding = 'adjustable' | 'fixed' | 'inert';
 
 export function efxStanding(entry: GsEfxType): GsEfxStanding {
@@ -239,12 +368,7 @@ export function efxStandingCounts(): Record<GsEfxStanding, number> {
   return counts;
 }
 
-/**
- * A slot the archive measured but this build does not act on — the one case
- * where the sources visibly disagree, which is information rather than a
- * defect in either. The inspector draws that per slot now, so this survives as
- * the way the disagreement is asserted rather than as something a panel calls.
- */
+/** A measured conversion the current build does not move. */
 export function unusedConversions(entry: GsEfxType): GsEfxSlot[] {
   return entry.slots.filter((slot) => slot.conversion !== null && !slot.live);
 }

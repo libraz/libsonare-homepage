@@ -39,20 +39,11 @@ change the render at their power-on bytes, and which of their twenty parameter
 slots the engine acts on, both found by bouncing. It follows the bundled engine
 build, so refreshing the WASM turns that gate red.
 
-## A parameter slot is named, not numbered
+## A parameter slot carries a form and a target
 
-A slot number says nothing, so the inspector does not print one on its own.
-`efx-bindings.json` adjudicates every parameter the machine prints: either the
-byte reaches a named control on a named insert — `Chorus · Rate` — or it
-carries a reason it reaches nothing. The unit beside the name is asked of the
-engine at runtime through `capabilityCatalog()`, because a stage in that file
-is a processor id and a key is a parameter name, so the two join directly.
+A slot number says nothing, so the inspector prints the target beside the number. `efx-bindings.json` covers all 770 printed parameters with three forms: translated rows use a measured class and table or a range-derived law, designed rows use a carried or invented law, and enables rows switch one or more stages. The panel shows the form and law for each target, including alternative targets and same-stage ordinals. Enable rows show the localized stages and whether the current byte turns them on or selects one.
 
-The three sources disagree, and the panel shows the disagreement rather than
-resolving it. A slot can be named, have a measured conversion behind it, and
-still not move this build's render — which means the byte has a meaning the
-bundled engine does not carry yet. It is drawn as a named slot this build does
-not act on, and refreshing the WASM is what turns it into a working control.
+The unit beside a target is asked of the engine at runtime through `capabilityCatalog()`. A stage in the binding data is a processor id and a key is a parameter name, so the two join directly. The demo offers modern and classic EFX realization modes; these target and law labels describe the modern insert mapping, while classic uses a dedicated whole-type model with the same wire bytes.
 
 ## Files
 

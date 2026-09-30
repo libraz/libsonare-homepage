@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -80,5 +81,99 @@ describe('ARTIFACTS', () => {
     for (const a of ARTIFACTS as { file: string; engineRelative: string[]; wasmMd5?: boolean }[]) {
       expect(a.engineRelative.length > 0 || a.wasmMd5 === true).toBe(true);
     }
+  });
+});
+
+function translatedRow(overrides: Record<string, unknown> = {}) {
+  return {
+    type: '01 00',
+    slot: 0,
+    stage: 'utility.gain',
+    class: 'gain',
+    table: 'tone',
+    key: 'levelDb',
+    printed_name: 'Level',
+    ...overrides,
+  };
+}
+
+function designedRow(overrides: Record<string, unknown> = {}) {
+  return translatedRow({
+    slot: 1,
+    class: undefined,
+    table: undefined,
+    designed: {
+      basis: 'invented',
+      law: 'd.unit',
+      replaced_when: { stage_passed: '01 00' },
+    },
+    printed_values: '00–7F',
+    ...overrides,
+  });
+}
+
+function enablesRow(overrides: Record<string, unknown> = {}) {
+  return {
+    type: '01 00',
+    slot: 2,
+    printed_name: 'Effect Sw',
+    enables: {
+      stages: [{ stage: 'effects.modulation.chorus' }],
+      on_states: [1],
+      basis: 'invented',
+      replaced_when: { model_binding: ['01 00', '40 03 05'] },
+    },
+    ...overrides,
+  };
+}
+
+/** Run the shebang-bearing generator through Node, where its TS import works unchanged. */
+function generatorValidationMessage(rows: unknown[]): string {
+  const script = `
+    import { validateEfxBindings } from './scripts/generate-gs-data.mjs';
+    try {
+      validateEfxBindings(JSON.parse(process.env.GS_BINDING_ROWS), 20);
+      console.log('accepted');
+    } catch (error) {
+      console.log(error instanceof Error ? error.message : String(error));
+    }
+  `;
+  return execFileSync(
+    process.execPath,
+    ['--experimental-strip-types', '--input-type=module', '-e', script],
+    {
+      cwd: process.cwd(),
+      env: { ...process.env, GS_BINDING_ROWS: JSON.stringify(rows) },
+      encoding: 'utf8',
+    },
+  ).trim();
+}
+
+describe('validateEfxBindings', () => {
+  it('accepts the three 1.8 forms and keeps their explicit classification available', () => {
+    expect(generatorValidationMessage([translatedRow(), designedRow(), enablesRow()])).toBe(
+      'accepted',
+    );
+  });
+
+  it('refuses obsolete form fields', () => {
+    for (const field of ['state', 'unmapped', 'builder', 'unreadable']) {
+      expect(generatorValidationMessage([translatedRow({ [field]: 'old' })])).toMatch(
+        /obsolete form field/,
+      );
+    }
+  });
+
+  it('refuses conflicting, unknown, and mismatched forms', () => {
+    expect(generatorValidationMessage([designedRow({ class: 'gain', table: 'tone' })])).toMatch(
+      /designed and measured-law fields|conflicting/,
+    );
+    expect(
+      generatorValidationMessage([enablesRow({ stage: 'effects.modulation.chorus' })]),
+    ).toMatch(/enables row carries stage/);
+    expect(generatorValidationMessage([translatedRow({ form: 'state' })])).toMatch(/unknown form/);
+    expect(generatorValidationMessage([translatedRow({ form: 'designed' })])).toMatch(
+      /declares designed/,
+    );
   });
 });

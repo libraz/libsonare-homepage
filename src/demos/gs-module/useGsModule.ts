@@ -51,6 +51,7 @@ const AUDITION_DRUMS: { note: number; beat: number }[] = [
 ];
 
 export type GsRenderStatus = 'idle' | 'rendering' | 'ready' | 'error';
+export type GsEfxRealization = 'modern' | 'classic';
 
 export class EmptyMidiError extends Error {
   constructor() {
@@ -84,6 +85,7 @@ export function bounceFiles(
   wasm: SonareWasmModule,
   files: readonly Uint8Array[],
   seconds?: number,
+  gsEfxRealization: GsEfxRealization = 'modern',
 ): Float32Array {
   const Project = (wasm as unknown as { Project: new () => GsProject }).Project;
   const project = new Project();
@@ -95,7 +97,7 @@ export function bounceFiles(
       sampleRate: SAMPLE_RATE,
     };
     if (seconds !== undefined) options.totalFrames = Math.round(SAMPLE_RATE * seconds);
-    const audio = project.bounceWithSf2Instrument({}, options);
+    const audio = project.bounceWithSf2Instrument({ gsEfxRealization }, options);
     if (audio.length === 0) throw new EmptyMidiError();
     return audio;
   } finally {
@@ -199,7 +201,7 @@ interface GsProject {
   setSampleRate(rate: number): void;
   importSmf(data: Uint8Array): number;
   bounceWithSf2Instrument(
-    instrument: Record<string, never>,
+    instrument: { gsEfxRealization: GsEfxRealization },
     options: { numChannels: number; sampleRate: number; totalFrames?: number },
   ): Float32Array;
   delete(): void;
@@ -207,6 +209,7 @@ interface GsProject {
 
 export function useGsModule() {
   const state = reactive<GsModuleState>(defaultModuleState());
+  const efxRealization = ref<GsEfxRealization>('modern');
   /** Which part the panels are editing and auditioning. */
   const selectedChannel = ref(0);
   /** A dropped file, kept as bytes and imported beside the setup. */
@@ -331,8 +334,8 @@ export function useGsModule() {
         ? [setup, imported.bytes]
         : [auditionSmf(state as GsModuleState, selectedChannel.value)];
       const buffer = imported
-        ? bounceFiles(wasm, files)
-        : bounceFiles(wasm, files, AUDITION_SECONDS);
+        ? bounceFiles(wasm, files, undefined, efxRealization.value)
+        : bounceFiles(wasm, files, AUDITION_SECONDS, efxRealization.value);
       if (disposed || mine !== generation) return null;
       rendered.value = buffer;
       status.value = 'ready';
@@ -378,13 +381,19 @@ export function useGsModule() {
    * panels no longer describe.
    */
   function invalidate() {
+    generation += 1;
     stop();
     rendered.value = null;
-    if (status.value === 'ready') status.value = 'idle';
+    error.value = null;
+    status.value = 'idle';
   }
+
+  watch(selectedChannel, invalidate);
+  watch(efxRealization, invalidate);
 
   function reset() {
     Object.assign(state, defaultModuleState());
+    efxRealization.value = 'modern';
     droppedFile.value = null;
     invalidate();
   }
@@ -398,6 +407,7 @@ export function useGsModule() {
 
   return {
     state,
+    efxRealization,
     selectedChannel,
     selectedPart,
     droppedFile,

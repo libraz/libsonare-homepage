@@ -59,7 +59,7 @@ describe('efxStanding', () => {
 
   it('matches the current render-probe standing counts', () => {
     const counts = efxStandingCounts();
-    expect(counts).toEqual({ adjustable: 52, fixed: 0, inert: 13 });
+    expect(counts).toEqual({ adjustable: 64, fixed: 0, inert: 1 });
   });
 });
 
