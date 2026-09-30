@@ -78,20 +78,6 @@
   pointer-events: none;
   z-index: 2;
 }
-.practice__spinner {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: 2px solid var(--demo-accent-dim);
-  border-top-color: var(--demo-accent);
-  animation: practice-spin 0.8s linear infinite;
-}
-.practice__overlay-label {
-  font-family: var(--font-mono);
-  font-size: 0.82rem;
-  letter-spacing: 0.06em;
-  color: var(--demo-text-strong);
-}
 .practice__overlay-note {
   font-family: var(--font-mono);
   font-size: 0.68rem;
@@ -169,7 +155,6 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .practice__spinner,
   .practice__play-spinner {
     animation-duration: 2.4s;
   }

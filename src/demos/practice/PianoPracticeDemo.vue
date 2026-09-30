@@ -15,7 +15,7 @@
  */
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue';
 import ToolShell from '@/components/ToolShell.vue';
-import { StatusIndicator } from '@/components/ui';
+import { SignalLoader, StatusIndicator } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { useMidiInput } from '@/composables/useMidiInput';
 import { useUrlState } from '@/composables/useUrlState';
@@ -821,9 +821,9 @@ const otherLocalePath = computed(() => alternateLocalePath('/practice'));
             {{ clockLabel }}
           </div>
           <div v-if="status === 'loading' || status === 'rendering'" class="practice__overlay">
-            <span class="practice__spinner" aria-hidden="true"></span>
-            <span class="practice__overlay-label">{{ copy.preparing }}</span>
-            <span class="practice__overlay-note">{{ copy.preparingNote }}</span>
+            <SignalLoader compact :stage="copy.preparing">
+              <span class="practice__overlay-note">{{ copy.preparingNote }}</span>
+            </SignalLoader>
           </div>
         </div>
         <PracticeKeyboard

@@ -1,7 +1,11 @@
+<script setup lang="ts">
+import SignalLoader from '@/components/ui/SignalLoader.vue';
+</script>
+
 <template>
-  <div class="demo-load-pending" role="status" aria-live="polite">Loading demo…</div>
+  <SignalLoader class="demo-load-pending" compact stage="Loading demo…" />
 </template>
 
 <style scoped>
-.demo-load-pending { display: grid; place-items: center; min-height: 8rem; color: var(--vp-c-text-2); font: 12px var(--font-mono); }
+.demo-load-pending { min-height: 8rem; }
 </style>

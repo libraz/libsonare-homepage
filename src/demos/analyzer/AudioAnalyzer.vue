@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { MetricItem, TechPanel, TermLabel, Tooltip, TransportButton } from '@/components/ui';
+import {
+  MetricItem,
+  SignalLoader,
+  TechPanel,
+  TermLabel,
+  Tooltip,
+  TransportButton,
+} from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import {
   ANALYZER_TERM_SLUGS,
@@ -445,42 +452,12 @@ onUnmounted(() => {
 
 <template>
   <div class="analyzer">
-    <!-- Loading State -->
-    <div v-if="isLoadingDemo || isLoadingFile" class="analyzer__loading">
-      <!-- Audio waveform bars with center icon -->
-      <div class="analyzer__loading-bars">
-        <div class="analyzer__loading-bar" v-for="i in 12" :key="i" :style="{ animationDelay: `${(i - 1) * 0.08}s` }"></div>
-        <!-- Center icon (inside bars for proper positioning) -->
-        <div class="analyzer__loading-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M9 18V5l12-2v13" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="6" cy="18" r="3"/>
-            <circle cx="18" cy="16" r="3"/>
-          </svg>
-        </div>
-      </div>
-
-      <!-- Loading text -->
-      <div class="analyzer__loading-text-container">
-        <span class="analyzer__loading-label">LIBSONARE</span>
-        <span class="analyzer__loading-text">
-          {{ isLoadingFile ? fileProgressStage : 'INITIALIZING SIGNAL PROCESSOR...' }}
-        </span>
-      </div>
-
-      <!-- File progress bar (when loading file) -->
-      <div v-if="isLoadingFile" class="analyzer__loading-progress">
-        <div class="analyzer__loading-progress-bar">
-          <div class="analyzer__loading-progress-fill" :style="{ width: `${fileProgress}%` }"></div>
-        </div>
-        <span class="analyzer__loading-progress-text">{{ fileProgress }}%</span>
-      </div>
-
-      <!-- Progress dots (when loading demo) -->
-      <div v-else class="analyzer__loading-dots">
-        <span class="analyzer__loading-dot" v-for="i in 3" :key="i" :style="{ animationDelay: `${(i - 1) * 0.2}s` }"></span>
-      </div>
-    </div>
+    <SignalLoader
+      v-if="isLoadingDemo || isLoadingFile"
+      class="analyzer__loading"
+      :stage="isLoadingFile ? fileProgressStage : 'INITIALIZING SIGNAL PROCESSOR...'"
+      :progress="isLoadingFile ? fileProgress : undefined"
+    />
 
     <!-- Drop Zone (no file) -->
     <DropZone v-else-if="!audioBuffer" @file="handleFile" />
