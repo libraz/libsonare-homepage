@@ -84,6 +84,25 @@ describe('mastering metrics and report helpers', () => {
     expect(analyzeMasteringSignal(left, right).peakDb).toBeCloseTo(0, 6);
   });
 
+  it('computes full-resolution RMS and correlation for long periodic material', () => {
+    const sampleCount = 1_800_000;
+    const amplitude = 0.2;
+    const left = new Float32Array(sampleCount);
+    const right = new Float32Array(sampleCount);
+    for (let i = 0; i < sampleCount; i++) {
+      const sample = amplitude * Math.sin((Math.PI * i) / 9);
+      left[i] = sample;
+      right[i] = sample;
+    }
+
+    const stats = analyzeMasteringSignal(left, right);
+    expect(stats.rmsDb).toBeCloseTo(20 * Math.log10(amplitude / Math.sqrt(2)), 2);
+    expect(stats.correlation).toBeCloseTo(1, 12);
+
+    const lowLevel = new Float32Array([1e-8, -2e-8, 3e-8, -4e-8]);
+    expect(analyzeMasteringSignal(lowLevel, lowLevel).correlation).toBeCloseTo(1, 12);
+  });
+
   it('flattens nested report values and creates json blob urls', () => {
     const items = reportItems(
       {
@@ -225,7 +244,7 @@ describe('useMasteringMetering', () => {
     expect(metering.stereoImage.value.label).toMatch(/^master\.meters\.stereo/);
   });
 
-  it('falls back to source metrics and target lufs when no render exists', () => {
+  it('keeps output LUFS unavailable until a render exists', () => {
     const mastering = {
       source: shallowRef(
         decodedAudio({ channels: 1, right: new Float32Array([0.5, -0.5, 0.25, -0.25]) }),
@@ -242,7 +261,7 @@ describe('useMasteringMetering', () => {
     expect(metering.sourceMetrics.value?.channels).toBe('Mono');
     expect(metering.masterMetrics.value).toBeNull();
     expect(metering.referenceMetrics.value).toBeNull();
-    expect(metering.meterReadings.value[0].value).toBe('-16.0 LUFS');
+    expect(metering.meterReadings.value[0]).toMatchObject({ value: '-', percent: 0 });
     expect(metering.phasePoints.value.length).toBeGreaterThan(0);
   });
 });

@@ -59,6 +59,13 @@ function docHref(slug: string | null | undefined): string | undefined {
 function jumpTo(moduleId: string | undefined) {
   if (moduleId) emit('jump', moduleId);
 }
+
+function outputLufsLabel(): string {
+  const outputLufs = props.rendered?.outputLufs;
+  return typeof outputLufs === 'number' && Number.isFinite(outputLufs)
+    ? outputLufs.toFixed(1)
+    : '-';
+}
 </script>
 
 <template>
@@ -101,13 +108,13 @@ function jumpTo(moduleId: string | undefined) {
       <MetricItem :label="t('master.meters.inputLufs')" :value="rendered ? rendered.inputLufs.toFixed(1) : '-'" />
     </button>
     <button type="button" class="meter-jump" :title="`Open ${t('master.modules.loudness.name')} stage`" @click="jumpTo('loudness')">
-      <MetricItem :label="t('master.meters.outputLufs')" :value="rendered ? rendered.outputLufs.toFixed(1) : `${targetLufs}`" variant="success" />
+      <MetricItem :label="t('master.meters.outputLufs')" :value="outputLufsLabel()" variant="success" />
     </button>
     <button type="button" class="meter-jump" :title="`Open ${t('master.modules.loudness.name')} stage`" @click="jumpTo('loudness')">
       <MetricItem :label="t('master.meters.gain')" :value="rendered ? `${rendered.appliedGainDb.toFixed(1)} dB` : '-'" />
     </button>
     <button type="button" class="meter-jump" :title="`Open ${t('master.modules.limiter.name')} stage`" @click="jumpTo('limiter')">
-      <MetricItem :label="t('master.meters.peak')" :value="sourceMetrics?.peak || '-'" />
+      <MetricItem :label="t('master.meters.peak')" :value="masterMetrics?.peak || sourceMetrics?.peak || '-'" />
     </button>
     <button type="button" class="meter-jump" :title="`Open ${t('master.modules.dynamics.name')} stage`" @click="jumpTo('dynamics')">
       <MetricItem :label="t('master.meters.crest')" :value="masterMetrics?.crest || sourceMetrics?.crest || '-'" />

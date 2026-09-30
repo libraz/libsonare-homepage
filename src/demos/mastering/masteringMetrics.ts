@@ -17,18 +17,13 @@ export function analyzeMasteringSignal(
   let sumRightSquares = 0;
   let sumProduct = 0;
   let count = 0;
-  const stride = Math.max(1, Math.floor(left.length / 200000));
 
-  // Peak is a safety/readout metric: never stride over a single-sample clip.
+  // Keep every metric on the same full-resolution pass. Peak is a safety/readout
+  // metric, and striding the energy terms can alias coherent material into silence.
   for (let i = 0; i < left.length; i++) {
     const leftSample = left[i];
     const rightSample = right[i] ?? leftSample;
     peak = Math.max(peak, Math.abs(leftSample), Math.abs(rightSample));
-  }
-
-  for (let i = 0; i < left.length; i += stride) {
-    const leftSample = left[i];
-    const rightSample = right[i] ?? leftSample;
     sumSquares += (leftSample * leftSample + rightSample * rightSample) / 2;
     sumLeftSquares += leftSample * leftSample;
     sumRightSquares += rightSample * rightSample;
@@ -39,7 +34,8 @@ export function analyzeMasteringSignal(
   const rms = Math.sqrt(sumSquares / Math.max(1, count));
   const peakDb = 20 * Math.log10(Math.max(peak, 0.000001));
   const rmsDb = 20 * Math.log10(Math.max(rms, 0.000001));
-  const correlation = sumProduct / Math.sqrt(Math.max(0.000001, sumLeftSquares * sumRightSquares));
+  const denominator = Math.sqrt(sumLeftSquares * sumRightSquares);
+  const correlation = denominator > 0 ? sumProduct / denominator : 0;
 
   return {
     peakDb,

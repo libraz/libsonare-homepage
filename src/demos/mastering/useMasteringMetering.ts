@@ -56,7 +56,8 @@ export function useMasteringMetering(options: MasteringMeteringOptions) {
 
   const meterReadings = computed(() => {
     const rendered = options.mastering.rendered.value;
-    const outputLufs = rendered?.outputLufs ?? options.targetLufs.value;
+    const outputLufs =
+      rendered && Number.isFinite(rendered.outputLufs) ? rendered.outputLufs : null;
     const peakValue = Number.parseFloat(
       (masterMetrics.value?.peak || sourceMetrics.value?.peak || '-60').replace(' dBFS', ''),
     );
@@ -71,8 +72,8 @@ export function useMasteringMetering(options: MasteringMeteringOptions) {
       {
         id: 'lufs',
         label: options.t('master.meters.outputLufs'),
-        value: `${outputLufs.toFixed(1)} LUFS`,
-        percent: normalizeRange(outputLufs, -24, -8),
+        value: outputLufs === null ? '-' : `${outputLufs.toFixed(1)} LUFS`,
+        percent: outputLufs === null ? 0 : normalizeRange(outputLufs, -24, -8),
       },
       {
         id: 'peak',
