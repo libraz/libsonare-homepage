@@ -340,7 +340,10 @@ export declare class RealtimeEngine {
     /**
      * Route a destination's (track lane's) MIDI to the external output queue
      * instead of the internal instrument rack, so the track plays an external
-     * device. Clearing it restores internal-synth playback.
+     * device. Clearing it restores internal-synth playback. Control-thread only.
+     * The change takes effect at the next processed block; switching a
+     * destination's route first releases its notes and resets its controllers
+     * through the old route, and drops its pending MIDI-FX events. Single writer.
      */
     setMidiDestinationExternal(destinationId: number, external: boolean): void;
     /**
@@ -443,8 +446,11 @@ export declare class RealtimeEngine {
     /**
      * Queue an immediate (live) MIDI SysEx frame to a MIDI destination. `data` is
      * the full message including the leading 0xF0 and trailing 0xF7 (1..512
-     * bytes). `renderFrame` is the frame to fire at, or -1 for immediate. Mirrors
-     * the Node/Python/C-ABI `pushMidiSysex`.
+     * bytes). `renderFrame` is the frame to fire at, or -1 for immediate. Throws
+     * `InvalidParameter` when the destination instrument cannot prepare
+     * the SysEx (retrying cannot help), and `OutOfMemory` when the payload
+     * slots or the command queue are full (retry after a processed block).
+     * Mirrors the Node/Python/C-ABI `pushMidiSysex`.
      */
     pushMidiSysex(destinationId: number, data: Uint8Array, renderFrame?: number): void;
     /**

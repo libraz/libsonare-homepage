@@ -1194,7 +1194,10 @@ var RealtimeEngine = class _RealtimeEngine {
   /**
    * Route a destination's (track lane's) MIDI to the external output queue
    * instead of the internal instrument rack, so the track plays an external
-   * device. Clearing it restores internal-synth playback.
+   * device. Clearing it restores internal-synth playback. Control-thread only.
+   * The change takes effect at the next processed block; switching a
+   * destination's route first releases its notes and resets its controllers
+   * through the old route, and drops its pending MIDI-FX events. Single writer.
    */
   setMidiDestinationExternal(destinationId, external) {
     this.native.setMidiDestinationExternal(destinationId, external);
@@ -1348,8 +1351,11 @@ var RealtimeEngine = class _RealtimeEngine {
   /**
    * Queue an immediate (live) MIDI SysEx frame to a MIDI destination. `data` is
    * the full message including the leading 0xF0 and trailing 0xF7 (1..512
-   * bytes). `renderFrame` is the frame to fire at, or -1 for immediate. Mirrors
-   * the Node/Python/C-ABI `pushMidiSysex`.
+   * bytes). `renderFrame` is the frame to fire at, or -1 for immediate. Throws
+   * `InvalidParameter` when the destination instrument cannot prepare
+   * the SysEx (retrying cannot help), and `OutOfMemory` when the payload
+   * slots or the command queue are full (retry after a processed block).
+   * Mirrors the Node/Python/C-ABI `pushMidiSysex`.
    */
   pushMidiSysex(destinationId, data, renderFrame = -1) {
     this.native.pushMidiSysex(destinationId, data, renderFrame);
@@ -3105,14 +3111,16 @@ function isInitialized() {
 }
 
 // src/worklet/engine-sync.ts
-function buildMixerLanes(trackLaneIds, trackSends, trackOutputBus) {
+function buildMixerLanes(trackLaneIds, trackSends, trackOutputBus, trackSourceChannelLayout) {
   return trackLaneIds.map((trackId) => {
     const sends = trackSends.get(trackId);
     const outputBusId = trackOutputBus.get(trackId);
+    const sourceChannelLayout = trackSourceChannelLayout.get(trackId);
     return {
       trackId,
       ...sends && sends.length > 0 ? { sends: sends.map((send) => ({ ...send })) } : {},
-      ...outputBusId !== void 0 ? { outputBusId } : {}
+      ...outputBusId !== void 0 ? { outputBusId } : {},
+      ...sourceChannelLayout !== void 0 ? { sourceChannelLayout } : {}
     };
   });
 }
@@ -4473,18 +4481,65 @@ function cacheStripJson(ctx, target, sceneJson) {
   }
 }
 function mixerLanes(ctx) {
-  return buildMixerLanes(ctx.trackLaneIds, ctx.trackSends, ctx.trackOutputBus);
+  return buildMixerLanes(
+    ctx.trackLaneIds,
+    ctx.trackSends,
+    ctx.trackOutputBus,
+    ctx.trackSourceChannelLayout
+  );
 }
-function syncMixer(ctx, busesAlreadyApplied = false, forceInsertResets = []) {
-  const lanes = mixerLanes(ctx);
+function cloneMixerRouting(ctx) {
+  return {
+    trackLaneIds: [...ctx.trackLaneIds],
+    trackSends: new Map(
+      Array.from(ctx.trackSends, ([trackId, sends]) => [
+        trackId,
+        sends.map((send) => ({ ...send }))
+      ])
+    ),
+    trackOutputBus: new Map(ctx.trackOutputBus),
+    trackSourceChannelLayout: new Map(ctx.trackSourceChannelLayout)
+  };
+}
+function commitMixerRouting(ctx, draft) {
+  ctx.trackLaneIds.splice(0, ctx.trackLaneIds.length, ...draft.trackLaneIds);
+  ctx.trackSends.clear();
+  for (const [trackId, sends] of draft.trackSends) {
+    ctx.trackSends.set(
+      trackId,
+      sends.map((send) => ({ ...send }))
+    );
+  }
+  ctx.trackOutputBus.clear();
+  for (const [trackId, busId] of draft.trackOutputBus) {
+    ctx.trackOutputBus.set(trackId, busId);
+  }
+  ctx.trackSourceChannelLayout.clear();
+  for (const [trackId, layout] of draft.trackSourceChannelLayout) {
+    ctx.trackSourceChannelLayout.set(trackId, layout);
+  }
+}
+function buildDraftMixerLanes(draft) {
+  return buildMixerLanes(
+    draft.trackLaneIds,
+    draft.trackSends,
+    draft.trackOutputBus,
+    draft.trackSourceChannelLayout
+  );
+}
+function applyMixerRouting(ctx, draft, busesAlreadyApplied) {
+  const lanes = buildDraftMixerLanes(draft);
   const buses = ctx.buses.map((bus) => ({ ...bus }));
   if (!busesAlreadyApplied) {
     ctx.offlineEngine.setTrackBuses(buses);
   }
   if (lanes.length > 0) {
-    ctx.offlineEngine.settleInsertParameters();
     ctx.offlineEngine.setTrackLanes(lanes);
+    ctx.offlineEngine.settleInsertParameters();
   }
+  return { lanes, buses };
+}
+function postMixerSync(ctx, lanes, buses, forceInsertResets) {
   if (forceInsertResets.length > 0) {
     for (const binding of ctx.laneSidechains.values()) {
       ctx.offlineEngine.setLaneSidechain(
@@ -4536,6 +4591,14 @@ function syncMixer(ctx, busesAlreadyApplied = false, forceInsertResets = []) {
     ...forceInsertResets.length > 0 ? { forceInsertResets } : {}
   });
 }
+function syncMixerDraft(ctx, draft, busesAlreadyApplied = false, forceInsertResets = []) {
+  const { lanes, buses } = applyMixerRouting(ctx, draft, busesAlreadyApplied);
+  commitMixerRouting(ctx, draft);
+  postMixerSync(ctx, lanes, buses, forceInsertResets);
+}
+function syncMixer(ctx, busesAlreadyApplied = false, forceInsertResets = []) {
+  syncMixerDraft(ctx, cloneMixerRouting(ctx), busesAlreadyApplied, forceInsertResets);
+}
 function replayInsertParamOverrides(ctx, lanes = mixerLanes(ctx), buses = ctx.buses) {
   const activeTrackIds = new Set(lanes.map((lane) => lane.trackId));
   const activeBusIds = new Set(buses.map((bus) => bus.busId));
@@ -4573,34 +4636,59 @@ function replayInsertParamOverrides(ctx, lanes = mixerLanes(ctx), buses = ctx.bu
   }
 }
 function setTrackLanes(ctx, lanes) {
-  const { entries, ids } = normalizeTrackLanes(ctx.trackLaneIds, lanes);
+  const draft = cloneMixerRouting(ctx);
+  const { entries, ids } = normalizeTrackLanes(draft.trackLaneIds, lanes);
   for (const entry of entries) {
     if (entry.sends) {
-      ctx.trackSends.set(
+      draft.trackSends.set(
         entry.trackId,
         entry.sends.map((send) => ({ ...send }))
       );
     }
     if (entry.outputBusId !== void 0) {
       if (entry.outputBusId === 0) {
-        ctx.trackOutputBus.delete(entry.trackId);
+        draft.trackOutputBus.delete(entry.trackId);
       } else {
-        ctx.trackOutputBus.set(entry.trackId, entry.outputBusId);
+        draft.trackOutputBus.set(entry.trackId, entry.outputBusId);
       }
     }
+    if (entry.sourceChannelLayout !== void 0) {
+      draft.trackSourceChannelLayout.set(entry.trackId, entry.sourceChannelLayout);
+    }
   }
-  ctx.trackLaneIds.splice(0, ctx.trackLaneIds.length, ...ids);
-  ctx.syncMixer();
+  draft.trackLaneIds = ids;
+  syncMixerDraft(ctx, draft, true);
+}
+function ensureTrackLaneInDraft(draft, target) {
+  const trackId = resolveTargetId(target);
+  if (!Number.isInteger(trackId) || trackId <= 0) {
+    throw new RangeError(`Invalid track id for mixer lane: ${String(target)}`);
+  }
+  const existing = draft.trackLaneIds.indexOf(trackId);
+  if (existing >= 0) {
+    return existing;
+  }
+  draft.trackLaneIds.push(trackId);
+  return draft.trackLaneIds.length - 1;
+}
+function ensureTrackLane(ctx, target) {
+  const draft = cloneMixerRouting(ctx);
+  const laneIndex = ensureTrackLaneInDraft(draft, target);
+  if (draft.trackLaneIds.length !== ctx.trackLaneIds.length) {
+    syncMixerDraft(ctx, draft, true);
+  }
+  return laneIndex;
 }
 function setTrackOutputBus(ctx, target, busId) {
-  const laneIndex = ctx.ensureTrackLane(target);
-  const trackId = ctx.trackLaneIds[laneIndex];
+  const draft = cloneMixerRouting(ctx);
+  const laneIndex = ensureTrackLaneInDraft(draft, target);
+  const trackId = draft.trackLaneIds[laneIndex];
   if (busId === 0) {
-    ctx.trackOutputBus.delete(trackId);
+    draft.trackOutputBus.delete(trackId);
   } else {
-    ctx.trackOutputBus.set(trackId, busId);
+    draft.trackOutputBus.set(trackId, busId);
   }
-  ctx.syncMixer();
+  syncMixerDraft(ctx, draft, true);
 }
 function setLaneSidechain(ctx, target, insertIndex, sourceTarget) {
   const laneIndex = ctx.ensureTrackLane(target);
@@ -4669,13 +4757,14 @@ function ensureSidechainSource(ctx, sourceKind, sourceId) {
   }
 }
 function setSends(ctx, target, sends) {
-  const laneIndex = ctx.ensureTrackLane(target);
-  const trackId = ctx.trackLaneIds[laneIndex];
-  ctx.trackSends.set(
+  const draft = cloneMixerRouting(ctx);
+  const laneIndex = ensureTrackLaneInDraft(draft, target);
+  const trackId = draft.trackLaneIds[laneIndex];
+  draft.trackSends.set(
     trackId,
     sends.map((send) => ({ ...send }))
   );
-  ctx.syncMixer();
+  syncMixerDraft(ctx, draft, true);
 }
 function setTrackBuses(ctx, buses) {
   ctx.offlineEngine.setTrackBuses(buses);
@@ -5774,6 +5863,7 @@ var SonareEngine = class _SonareEngine {
     this.trackLaneIds = [];
     this.trackSends = /* @__PURE__ */ new Map();
     this.trackOutputBus = /* @__PURE__ */ new Map();
+    this.trackSourceChannelLayout = /* @__PURE__ */ new Map();
     this.laneSidechains = /* @__PURE__ */ new Map();
     this.busSidechains = /* @__PURE__ */ new Map();
     this.masterSidechains = /* @__PURE__ */ new Map();
@@ -6380,7 +6470,10 @@ var SonareEngine = class _SonareEngine {
   /**
    * Route a track's MIDI to the external output (drained via {@link onMidiOut})
    * instead of an internal instrument, so the track plays an external device.
-   * Pass `external=false` to restore internal-synth playback.
+   * Pass `external=false` to restore internal-synth playback. The change takes
+   * effect at the next processed block; switching a destination's route first
+   * releases its notes and resets its controllers through the old route, and
+   * drops its pending MIDI-FX events.
    */
   setMidiDestinationExternal(trackId, external) {
     setMidiDestinationExternal(this.stripContext, trackId, external);
@@ -6803,6 +6896,7 @@ var SonareEngine = class _SonareEngine {
       trackLaneIds: this.trackLaneIds,
       trackSends: this.trackSends,
       trackOutputBus: this.trackOutputBus,
+      trackSourceChannelLayout: this.trackSourceChannelLayout,
       laneSidechains: this.laneSidechains,
       busSidechains: this.busSidechains,
       masterSidechains: this.masterSidechains,
@@ -6977,17 +7071,7 @@ var SonareEngine = class _SonareEngine {
     return resolveTargetId(target);
   }
   ensureTrackLane(target) {
-    const trackId = this.resolveTargetId(target);
-    if (!Number.isInteger(trackId) || trackId <= 0) {
-      throw new RangeError(`Invalid track id for mixer lane: ${String(target)}`);
-    }
-    const existing = this.trackLaneIds.indexOf(trackId);
-    if (existing >= 0) {
-      return existing;
-    }
-    this.trackLaneIds.push(trackId);
-    this.syncMixer();
-    return this.trackLaneIds.length - 1;
+    return ensureTrackLane(this.mixerContext, target);
   }
   ensureBus(busId) {
     if (!Number.isInteger(busId) || busId <= 0) {

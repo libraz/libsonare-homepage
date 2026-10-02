@@ -1,8 +1,8 @@
 {
   "_sources": {
-    "tools/gs/efx-tables.json": "037512836053ae9db8748e72046dd59b9b314123b86779c9919f997a52a073b7"
+    "tools/gs/efx-tables.json": "b34c428bfb1405d557d7d9235959b0a4078626e46e3ac447d53a0a08ee552357"
   },
-  "archive_revision": "0860b74681d4e6f4f0f8ab2fe84d0abf69e9edb0",
+  "archive_revision": "bda68ccb3463361a64dd9783ffb8dd8adc8a203f",
   "what_this_is": "The byte-to-physical-quantity conversions the GS insertion-effect parameter block uses, and which (type, slot) pairs an archive of what one individual unit answered gives one to. Committed so that a clone reads them without the archive.",
   "what_this_cannot_see": [
     "One unit is one unit. Every number here is what one individual machine answered, and no second one has been measured. Entries flagged unit_specific are the ones a second machine is most likely to disagree with; that a entry is not flagged is not a claim that it would agree.",

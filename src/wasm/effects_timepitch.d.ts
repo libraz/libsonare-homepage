@@ -30,8 +30,8 @@ export interface PitchCorrectToMidiTimevaryingRequest extends ValidateOptions {
     targetMidi: number;
     sampleRate?: number;
     hopLength?: number;
-    voiced?: VoicedFlags;
-    voicedProb?: Float32Array;
+    voiced?: VoicedFlags | null;
+    voicedProb?: Float32Array | null;
 }
 export interface PitchCorrectTimevaryingRequest extends PitchCorrectOptions {
     samples: Float32Array;
@@ -90,23 +90,27 @@ export declare function pitchCorrectToMidi(samples: Float32Array, sampleRate?: n
  * Unlike {@link pitchCorrectToMidi} (a single constant transpose), this follows
  * the caller-supplied per-frame `f0Hz` contour and retunes every voiced frame
  * toward `targetMidi`, so vibrato/drift in the source is tracked rather than
- * flattened. `voiced` (truthy = voiced) and `voicedProb` ([0,1]) are optional;
- * omitting them treats every frame as voiced. An `f0Hz` NaN is accepted only
- * when the corresponding `voiced` entry is falsy, matching pYIN output. The
- * `voicedFlag` / `voicedProb` arrays of a {@link PitchResult} can be passed
- * through directly.
+ * flattened. When `voiced` is supplied (truthy = voiced), it takes precedence
+ * over `voicedProb`; omitting it or passing `null` uses the probability array.
+ * When both are omitted, every frame is treated as voiced. An `f0Hz` NaN is
+ * accepted only for a frame marked unvoiced, matching pYIN output. The
+ * `voicedFlag` / `voicedProb` arrays of a {@link PitchResult} can
+ * be passed through directly.
  *
  * @param samples - Audio samples (mono, float32)
  * @param f0Hz - Per-frame measured F0 in Hz (one entry per analysis frame)
  * @param targetMidi - Desired MIDI note number
  * @param sampleRate - Sample rate in Hz
- * @param hopLength - F0 hop in samples (frame i covers sample i*hopLength)
- * @param voiced - Optional per-frame voiced flags (truthy = voiced)
- * @param voicedProb - Optional per-frame voicing probability in [0, 1]
+ * @param hopLength - F0 frame-center spacing in samples. Frame i is centered at
+ *   sample i*hopLength; nearest-frame voicing switches halfway between centers.
+ * @param voiced - Optional per-frame voiced flags (truthy = voiced); takes
+ *   precedence over `voicedProb`.
+ * @param voicedProb - Optional per-frame voicing probability in [0, 1]; used
+ *   when `voiced` is omitted or `null`.
  * @returns Pitch-corrected audio
  */
 export declare function pitchCorrectToMidiTimevarying(request: PitchCorrectToMidiTimevaryingRequest): Float32Array;
-export declare function pitchCorrectToMidiTimevarying(samples: Float32Array, f0Hz: Float32Array, targetMidi: number, sampleRate?: number, hopLength?: number, voiced?: VoicedFlags, voicedProb?: Float32Array, options?: ValidateOptions): Float32Array;
+export declare function pitchCorrectToMidiTimevarying(samples: Float32Array, f0Hz: Float32Array, targetMidi: number, sampleRate?: number, hopLength?: number, voiced?: VoicedFlags | null, voicedProb?: Float32Array | null, options?: ValidateOptions): Float32Array;
 /**
  * Contour-following pitch correction toward a fixed MIDI note OR a musical
  * scale, with tunable retune strength and vibrato preservation.
@@ -120,7 +124,8 @@ export declare function pitchCorrectToMidiTimevarying(samples: Float32Array, f0H
  * @param samples - Audio samples (mono, float32)
  * @param f0Hz - Per-frame measured F0 in Hz (one entry per analysis frame)
  * @param sampleRate - Sample rate in Hz
- * @param hopLength - F0 hop in samples (frame i covers sample i*hopLength)
+ * @param hopLength - F0 frame-center spacing in samples. Frame i is centered at
+ *   sample i*hopLength; nearest-frame voicing switches halfway between centers.
  * @param options - Target mode + retune knobs + optional voiced/voicedProb arrays
  * @returns Pitch-corrected audio
  */

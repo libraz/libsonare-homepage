@@ -624,12 +624,29 @@ function alignTakeToReference(request) {
 }
 
 // src/_effects_common.ts
-function toVoicedFloat32(voiced) {
+function toVoicedFloat32(fnName, voiced) {
+  if (!(voiced instanceof Int32Array || voiced instanceof Uint8Array || voiced instanceof Float32Array || Array.isArray(voiced))) {
+    throw new TypeError(
+      `${fnName}: voiced must be an Int32Array, Uint8Array, Float32Array, number[], or boolean[]`
+    );
+  }
   const out = new Float32Array(voiced.length);
   for (let index = 0; index < voiced.length; index += 1) {
-    out[index] = voiced[index] ? 1 : 0;
+    const value = voiced[index];
+    if (typeof value !== "number" && typeof value !== "boolean") {
+      throw new TypeError(`${fnName}: voiced array entries must be numbers or booleans`);
+    }
+    out[index] = value ? 1 : 0;
   }
   return out;
+}
+function assertPitchTrackLengths(fnName, f0Hz, voiced, voicedProb) {
+  if (voiced != null && voiced.length !== f0Hz.length) {
+    throw new RangeError(`${fnName}: voiced must have the same length as f0Hz`);
+  }
+  if (voiced == null && voicedProb != null && voicedProb.length !== f0Hz.length) {
+    throw new RangeError(`${fnName}: voicedProb must have the same length as f0Hz`);
+  }
 }
 
 // src/effects_note_ops.ts
@@ -639,13 +656,9 @@ function requireModule() {
 function assertNoteTrack(fnName, request) {
   assertSamples(fnName, request.samples, request.validate !== false);
   assertSampleRate(fnName, request.sampleRate);
-  if (request.voiced && request.voiced.length !== request.f0Hz.length) {
-    throw new RangeError(`${fnName}: voiced length must match f0Hz length`);
-  }
-  if (request.voicedProb && request.voicedProb.length !== request.f0Hz.length) {
-    throw new RangeError(`${fnName}: voicedProb length must match f0Hz length`);
-  }
-  return request.voiced ? toVoicedFloat32(request.voiced) : void 0;
+  const voicedF32 = request.voiced == null ? void 0 : toVoicedFloat32(fnName, request.voiced);
+  assertPitchTrackLengths(fnName, request.f0Hz, request.voiced, request.voicedProb);
+  return voicedF32;
 }
 function noteStretch(samples, sampleRate = 22050, options = {}) {
   const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
@@ -675,20 +688,46 @@ function extractNotes(request) {
     request.samples,
     request.sampleRate,
     request.f0Hz,
-    request.voicedProb,
+    request.voiced == null ? request.voicedProb ?? void 0 : void 0,
     voicedF32,
     request.frameRate,
     request
   );
 }
 function renderNotes(request) {
-  assertSamples("renderNotes", request.samples, request.validate !== false);
   assertSampleRate("renderNotes", request.sampleRate);
-  return requireModule().renderNotes(request.samples, request.sampleRate, request.notes, request);
+  if (!Array.isArray(request.notes)) {
+    throw new TypeError("renderNotes: notes must be an array");
+  }
+  const f0Hz = request.f0Hz;
+  if (f0Hz !== void 0 && !(f0Hz instanceof Float32Array)) {
+    throw new TypeError("renderNotes: f0Hz must be a Float32Array");
+  }
+  if (f0Hz !== void 0) {
+    assertFiniteScalar("renderNotes", request.frameRate, "frameRate");
+  }
+  const { voiced: publicVoiced, ...withoutVoiced } = request;
+  const voiced = publicVoiced == null ? void 0 : toVoicedFloat32("renderNotes", publicVoiced);
+  if (publicVoiced != null && f0Hz === void 0) {
+    throw new RangeError("renderNotes: voiced requires f0Hz");
+  }
+  if (f0Hz !== void 0) {
+    assertPitchTrackLengths("renderNotes", f0Hz, publicVoiced);
+  }
+  assertSamples("renderNotes", request.samples, request.validate !== false);
+  const options = { ...withoutVoiced, voiced };
+  return requireModule().renderNotes(request.samples, request.sampleRate, request.notes, options);
 }
 function decomposeNotePitch(request) {
+  if (!(request.f0Hz instanceof Float32Array)) {
+    throw new TypeError("decomposeNotePitch: f0Hz must be a Float32Array");
+  }
+  assertFiniteScalar("decomposeNotePitch", request.frameRate, "frameRate");
+  const voiced = request.voiced == null ? void 0 : toVoicedFloat32("decomposeNotePitch", request.voiced);
+  assertPitchTrackLengths("decomposeNotePitch", request.f0Hz, request.voiced);
   return requireModule().decomposeNotePitch(
     request.f0Hz,
+    voiced,
     request.frameRate,
     request.medianHz,
     request.vibratoCutoffHz ?? 0
@@ -700,7 +739,7 @@ function splitNote(request) {
     request.samples,
     request.sampleRate,
     request.f0Hz,
-    request.voicedProb,
+    request.voiced == null ? request.voicedProb ?? void 0 : void 0,
     voicedF32,
     request.frameRate,
     request.notes,
@@ -715,7 +754,7 @@ function mergeNotes(request) {
     request.samples,
     request.sampleRate,
     request.f0Hz,
-    request.voicedProb,
+    request.voiced == null ? request.voicedProb ?? void 0 : void 0,
     voicedF32,
     request.frameRate,
     request.notes,
@@ -912,13 +951,13 @@ function pitchCorrectToMidiTimevarying(samples, f0Hz, targetMidi, sampleRate = 2
     ...options
   } : samples;
   assertSamples("pitchCorrectToMidiTimevarying", request.samples, request.validate !== false);
-  if (request.voiced && request.voiced.length !== request.f0Hz.length) {
-    throw new RangeError("pitchCorrectToMidiTimevarying: voiced length must match f0Hz length");
-  }
-  if (request.voicedProb && request.voicedProb.length !== request.f0Hz.length) {
-    throw new RangeError("pitchCorrectToMidiTimevarying: voicedProb length must match f0Hz length");
-  }
-  const voicedF32 = request.voiced ? toVoicedFloat32(request.voiced) : void 0;
+  const voicedF32 = request.voiced == null ? void 0 : toVoicedFloat32("pitchCorrectToMidiTimevarying", request.voiced);
+  assertPitchTrackLengths(
+    "pitchCorrectToMidiTimevarying",
+    request.f0Hz,
+    request.voiced,
+    request.voicedProb
+  );
   return requireModule5().pitchCorrectToMidiTimevarying(
     request.samples,
     request.sampleRate ?? 22050,
@@ -926,21 +965,23 @@ function pitchCorrectToMidiTimevarying(samples, f0Hz, targetMidi, sampleRate = 2
     request.targetMidi,
     request.hopLength ?? 512,
     voicedF32,
-    request.voicedProb
+    request.voiced == null ? request.voicedProb ?? void 0 : void 0
   );
 }
 function pitchCorrectTimevarying(samples, f0Hz, sampleRate = 22050, hopLength = 512, options = {}) {
   const request = samples instanceof Float32Array ? { samples, f0Hz, sampleRate, hopLength, ...options } : samples;
   assertSamples("pitchCorrectTimevarying", request.samples, request.validate !== false);
-  if (request.voiced && request.voiced.length !== request.f0Hz.length) {
-    throw new RangeError("pitchCorrectTimevarying: voiced length must match f0Hz length");
-  }
-  if (request.voicedProb && request.voicedProb.length !== request.f0Hz.length) {
-    throw new RangeError("pitchCorrectTimevarying: voicedProb length must match f0Hz length");
-  }
+  const voicedF32 = request.voiced == null ? void 0 : toVoicedFloat32("pitchCorrectTimevarying", request.voiced);
+  assertPitchTrackLengths(
+    "pitchCorrectTimevarying",
+    request.f0Hz,
+    request.voiced,
+    request.voicedProb
+  );
   const nativeOptions = {
     ...request,
-    voiced: request.voiced ? toVoicedFloat32(request.voiced) : void 0
+    voiced: voicedF32,
+    voicedProb: request.voiced == null ? request.voicedProb ?? void 0 : void 0
   };
   return requireModule5().pitchCorrectTimevarying(
     request.samples,
@@ -2029,7 +2070,7 @@ function decomposeWithInit(s, nFeatures = 0, nFrames = 0, nComponents = 0, nIter
   return requireModule16().decomposeWithInit(s, nFeatures, nFrames, nComponents, nIter, beta, init2);
 }
 function decomposeStems(request) {
-  return requireModule16().decomposeStems(request.samples, request.sampleRate, {
+  return requireModule16().decomposeStems(request.samples, request.sampleRate ?? 22050, {
     nComponents: request.nComponents,
     nFft: request.nFft,
     hopLength: request.hopLength,
@@ -6674,7 +6715,10 @@ var RealtimeEngine = class _RealtimeEngine {
   /**
    * Route a destination's (track lane's) MIDI to the external output queue
    * instead of the internal instrument rack, so the track plays an external
-   * device. Clearing it restores internal-synth playback.
+   * device. Clearing it restores internal-synth playback. Control-thread only.
+   * The change takes effect at the next processed block; switching a
+   * destination's route first releases its notes and resets its controllers
+   * through the old route, and drops its pending MIDI-FX events. Single writer.
    */
   setMidiDestinationExternal(destinationId, external) {
     this.native.setMidiDestinationExternal(destinationId, external);
@@ -6828,8 +6872,11 @@ var RealtimeEngine = class _RealtimeEngine {
   /**
    * Queue an immediate (live) MIDI SysEx frame to a MIDI destination. `data` is
    * the full message including the leading 0xF0 and trailing 0xF7 (1..512
-   * bytes). `renderFrame` is the frame to fire at, or -1 for immediate. Mirrors
-   * the Node/Python/C-ABI `pushMidiSysex`.
+   * bytes). `renderFrame` is the frame to fire at, or -1 for immediate. Throws
+   * `InvalidParameter` when the destination instrument cannot prepare
+   * the SysEx (retrying cannot help), and `OutOfMemory` when the payload
+   * slots or the command queue are full (retry after a processed block).
+   * Mirrors the Node/Python/C-ABI `pushMidiSysex`.
    */
   pushMidiSysex(destinationId, data, renderFrame = -1) {
     this.native.pushMidiSysex(destinationId, data, renderFrame);

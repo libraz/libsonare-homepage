@@ -115,7 +115,7 @@ export declare function decomposeWithInit(s: Float32Array, nFeatures: number, nF
 /** Options for {@link decomposeStems}. */
 export interface DecomposeStemsRequest {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
     /** Number of NMF components (default 4). */
     nComponents?: number;
     /** STFT size (default 2048). */

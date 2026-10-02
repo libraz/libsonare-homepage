@@ -31,10 +31,10 @@ export interface ExtractNotesRequest extends NoteExtractorOptions, ValidateOptio
     f0Hz: Float32Array;
     /** F0 frames per second. */
     frameRate: number;
-    /** Per-frame voiced flags (truthy = voiced). Takes precedence over `voicedProb`. */
-    voiced?: VoicedFlags;
-    /** Per-frame voicing probability in `[0, 1]`; read only when `voiced` is omitted. */
-    voicedProb?: Float32Array;
+    /** Per-frame voiced flags (truthy = voiced); takes precedence over `voicedProb` when supplied. Omit or pass `null` to use the probability array. */
+    voiced?: VoicedFlags | null;
+    /** Per-frame voicing probability in `[0, 1]`; read only when `voiced` is omitted or `null`. */
+    voicedProb?: Float32Array | null;
 }
 /** Canonical request form for {@link renderNotes}. */
 export interface RenderNotesRequest extends ValidateOptions {
@@ -54,12 +54,16 @@ export interface RenderNotesRequest extends ValidateOptions {
     /**
      * The F0 track the notes were extracted from. Required only by
      * `vibratoDepthChange` and `driftChange`, which act on the note's own pitch
-     * curve; every other edit ignores it. The curve is not carried on a
+     * curve, or when `voiced` is supplied; every other edit ignores it. The curve is not carried on a
      * {@link NoteObject} for the same reason it is not returned by
      * {@link extractNotes} — it is this array sliced by
      * `[frameStart, frameEnd)`, which the caller already holds.
+     * Positive finite values are candidates for pitch. Zero, negative and
+     * non-finite values carry no measurement.
      */
     f0Hz?: Float32Array;
+    /** Per-frame voiced flags for `f0Hz`; false suppresses a candidate and true cannot make an unusable F0 valid. */
+    voiced?: VoicedFlags | null;
     /** F0 frames per second. Required when `f0Hz` is given. */
     frameRate?: number;
     /**
@@ -76,9 +80,11 @@ export interface RenderNotesRequest extends ValidateOptions {
 export interface DecomposeNotePitchRequest {
     /**
      * The note's slice of the F0 track — `f0Hz.subarray(frameStart, frameEnd)`.
-     * Every value must be finite and non-negative; zero denotes an unvoiced frame.
+     * Positive finite values carry pitch; other values carry no measurement.
      */
     f0Hz: Float32Array;
+    /** Per-frame voiced flags matching `f0Hz`; false suppresses a candidate and true cannot make an unusable F0 valid. */
+    voiced?: VoicedFlags | null;
     /** F0 frames per second. */
     frameRate: number;
     /**
@@ -107,10 +113,10 @@ export interface NoteSetRequest extends NoteExtractorOptions, ValidateOptions {
     f0Hz: Float32Array;
     /** F0 frames per second. */
     frameRate: number;
-    /** Per-frame voiced flags (truthy = voiced). Takes precedence over `voicedProb`. */
-    voiced?: VoicedFlags;
-    /** Per-frame voicing probability in `[0, 1]`; read only when `voiced` is omitted. */
-    voicedProb?: Float32Array;
+    /** Per-frame voiced flags (truthy = voiced); takes precedence over `voicedProb` when supplied. Omit or pass `null` to use the probability array. */
+    voiced?: VoicedFlags | null;
+    /** Per-frame voicing probability in `[0, 1]`; read only when `voiced` is omitted or `null`. */
+    voicedProb?: Float32Array | null;
     /** The current note set. Each note's `[frameStart, frameEnd)` must be non-empty and inside the track. */
     notes: readonly NoteSetEntry[];
 }
@@ -195,8 +201,8 @@ export declare function noteMove(samples: Float32Array, sampleRate?: number, opt
  * `f0Hz` sliced by `[frameStart, frameEnd)`. The amplitude curve is measured
  * here, so it is, one entry per F0 frame over that note's span.
  *
- * Voicing comes from `voiced` (truthy = voiced). `voicedProb` is read only when
- * `voiced` is absent, and then a frame counts as voiced at or above
+ * Voicing comes from `voiced` (truthy = voiced) when it is supplied. `voicedProb`
+ * is read only when `voiced` is absent or `null`, and then a frame counts as voiced at or above
  * `voicedThreshold` (default 0.5). At least one of the two is required. Because
  * `voicedProb` from pYIN rises with F0 for a fixed frame length, prefer passing
  * a {@link PitchResult}'s `voicedFlag` through `voiced`.
@@ -204,10 +210,11 @@ export declare function noteMove(samples: Float32Array, sampleRate?: number, opt
  * @param request - Audio, F0 track, frame cadence and segmenter options
  * @returns One {@link NoteObject} per segmented note, in time order; an empty
  *   array when the track segments to nothing
- * @throws RangeError when `voiced` / `voicedProb` do not match `f0Hz` in length,
- *   or the samples/sample rate fail the shared input checks
+ * @throws RangeError when the selected voicing array differs from `f0Hz` in
+ *   length (`voiced`, or `voicedProb` when `voiced` is omitted or `null`), or the
+ *   samples/sample rate fail the shared input checks
  * @throws SonareError (`InvalidParameter`) on an empty `f0Hz`, a non-positive
- *   `frameRate`, a negative or non-finite `f0Hz` value, a `voicedProb` outside
+ *   `frameRate`, a `voicedProb` outside
  *   `[0, 1]`, or a negative option value
  *
  * @example
@@ -252,7 +259,11 @@ export declare function extractNotes(request: ExtractNotesRequest): NoteObject[]
  * @param request - Source audio, the notes to render, the cross-fade length, and
  *   the F0 track a vibrato or drift edit reads
  * @returns The rendered audio, the same length and sample rate as the input
- * @throws RangeError when the samples or sample rate fail the shared input checks
+ * @throws TypeError when `notes` is not an array, `f0Hz` is not a
+ *   `Float32Array`, or `voiced` is not a supported flag array
+ * @throws RangeError when `frameRate` is non-finite, `voiced` is supplied
+ *   without `f0Hz`, when its length differs from `f0Hz`, or when the samples or
+ *   sample rate fail shared checks
  * @throws SonareError (`InvalidParameter`) on a note whose span is empty,
  *   reversed or missing, overlapping source spans, a non-finite or non-positive
  *   edit field, a negative or non-finite envelope value, a negative `fadeMs` or
@@ -294,7 +305,10 @@ export declare function renderNotes(request: RenderNotesRequest): Float32Array;
  *
  * Frames whose F0 is unusable carry no measurement, so the curve is held at the
  * nearest usable neighbour across them. Both curves therefore have an entry
- * everywhere; a host marking the held ones reads them off `f0Hz`, which is exact.
+ * everywhere; when `voiced` is supplied, a host marking held frames should
+ * retain both the `f0Hz` and `voiced` arrays because a positive F0 can be
+ * explicitly suppressed. A false flag suppresses that frame and a true flag
+ * cannot make an unusable F0 valid.
  *
  * A note with no usable pitch is reported as a zero `centreHz` and two empty
  * curves rather than as an error — that is a measurement which came up empty,
@@ -303,9 +317,12 @@ export declare function renderNotes(request: RenderNotesRequest): Float32Array;
  * @param request - The note's slice of the F0 track, its cadence, its centre, and
  *   the cutoff
  * @returns The centre and the two curves, each one entry per frame of `f0Hz`
- * @throws SonareError (`InvalidParameter`) on an empty `f0Hz`, a negative or
- *   non-finite `f0Hz` value, a non-positive `frameRate`, a negative `medianHz`,
- *   or a negative `vibratoCutoffHz`
+ * @throws TypeError when `f0Hz` is not a `Float32Array` or `voiced` is not a
+ *   supported flag array
+ * @throws RangeError when `frameRate` is not finite or `voiced` differs in
+ *   length from `f0Hz`
+ * @throws SonareError (`InvalidParameter`) on an empty `f0Hz`, a non-positive
+ *   `frameRate`, a negative `medianHz`, or a negative `vibratoCutoffHz`
  *
  * @example
  * ```ts
@@ -337,8 +354,9 @@ export declare function decomposeNotePitch(request: DecomposeNotePitchRequest): 
  *
  * @param request - The source, the current note set, and where to cut
  * @returns The whole new note set, one note longer than the one handed in
- * @throws RangeError when `voiced` / `voicedProb` do not match `f0Hz` in length,
- *   or the samples/sample rate fail the shared input checks
+ * @throws RangeError when the selected voicing array differs from `f0Hz` in
+ *   length (`voiced`, or `voicedProb` when `voiced` is omitted or `null`), or the
+ *   samples/sample rate fail the shared input checks
  * @throws SonareError (`InvalidParameter`) on an out-of-range `index`, a `frame`
  *   that is not strictly inside that note's own span, a note whose frame span is
  *   empty or runs past the track, or the track arguments {@link extractNotes}
@@ -377,8 +395,9 @@ export declare function splitNote(request: SplitNoteRequest): NoteObject[];
  * @param request - The source, the current note set, and the run to join
  * @returns The whole new note set, `last - first` notes shorter than the one
  *   handed in
- * @throws RangeError when `voiced` / `voicedProb` do not match `f0Hz` in length,
- *   or the samples/sample rate fail the shared input checks
+ * @throws RangeError when the selected voicing array differs from `f0Hz` in
+ *   length (`voiced`, or `voicedProb` when `voiced` is omitted or `null`), or the
+ *   samples/sample rate fail the shared input checks
  * @throws SonareError (`InvalidParameter`) unless `first < last < notes.length`,
  *   on a note whose frame span is empty or runs past the track, or on the track
  *   arguments {@link extractNotes} itself rejects
