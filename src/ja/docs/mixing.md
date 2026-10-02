@@ -39,11 +39,12 @@ libsonare には、[マスタリングプロセッサ](./mastering-processors.md
 
 ## 正しい入口を選ぶ
 
-エンジンは意図的に 2 段階に分かれています。まず上の行から検討し、追加の制御が本当に必要になったときだけ下の行へ進んでください。
+一括レンダリング、独自のブロック処理、再生と書き出しの同期という用途に合わせて選びます。
 
 | 状況 | 使う API | 理由 |
 |--------------|----------|------|
 | 少数のステレオステムを 1 ファイルにまとめたい | [`mixStereo(...)`](#一括ミックス-mixstereo) | 1 回の呼び出し、配列だけ、後始末も不要 |
+| 再生と書き出しを備えたブラウザミキサーを作る | [`SonareEngine`](./use-cases/browser-mixer.md) | 操作値をリアルタイム再生とオフライン処理に反映 |
 | センド・バス・インサート・オートメーション・メーター・保存可能なプロジェクトが必要 | [`Mixer.fromSceneJson(...)`](#シーンベースのミックス-mixer) | ミキサー状態を保持し、シリアライズできる |
 | ブラウザの `AudioWorklet` や音声コールバック内で使う | WASM [`Mixer.createRealtimeBuffer()`](#リアルタイムと-audioworklet-ブリッジ) | バッファを再利用し、ブロックごとに確保しない |
 
@@ -565,6 +566,7 @@ const mixer = Mixer.fromSceneJson(mixingScenePresetJson('commentaryDucking'), sa
 
 ## 関連
 
+- [ブラウザでミキシングアプリを作る](./use-cases/browser-mixer.md) — 動作するデモ、参考にするファイル、試聴と書き出しの範囲
 - [ミキシングの基礎](./glossary/concepts/mixing-basics.md) — 初学者向けの用語
 - [ミキシングシーン JSON](./mixing-scene-json.md) — シーンスキーマ全体と注釈つきプリセット
 - [ミキシングアシスタント](./mixing-assistant.md) — 複数トラックを計測し、理由つきでシーンを提案する

@@ -1,11 +1,11 @@
 ---
 title: Use Cases
-description: End-to-end walkthroughs of real production jobs — each one a script you can run, with the reasoning behind every step.
+description: End-to-end guides to production tasks and browser app development, with runnable CLI workflows and a mixing app reference implementation.
 ---
 
 # Use Cases
 
-The guides elsewhere in this site are organized by subsystem: one page per mixer, per assistant, per processor family. This section is organized the other way round — by the **job you actually showed up with**. Each page takes one real production task from raw files to a deliverable, as a script you can copy and run, and explains why each step is there and what its output means.
+These guides follow a complete task: producing an audio deliverable or building an app. The production walkthroughs provide CLI scripts; the browser mixer guide explains the working demo and the APIs needed to build a mixing interface.
 
 Every command on these pages was run against the current engine, and the numbers shown are the numbers it printed.
 
@@ -13,6 +13,7 @@ Every command on these pages was run against the current engine, and the numbers
 
 | You have | You want | Page |
 |----------|----------|------|
+| Local stems and a web app interface | Interactive mixing and a WAV download | [Build a Browser Mixer](./use-cases/browser-mixer.md) |
 | A folder of stems | A finished, platform-ready master | [Mix and Master a Song in the CLI](./use-cases/cli-mix-and-master.md) |
 | A mix and a commercial track you admire | Your mix sitting in the same tonal and loudness territory | [Match a Reference Track](./use-cases/reference-master.md) |
 | A master about to be delivered | A pass/fail gate that runs in CI | [Gate a Delivery in CI](./use-cases/delivery-check.md) |
@@ -22,7 +23,7 @@ Every command on these pages was run against the current engine, and the numbers
 
 ## What these pages assume
 
-The walkthroughs use the **Python CLI** (`pip install libsonare`), because it is the surface where a whole job fits in a shell script. Two of its properties shape every page here, and both are covered in full in the [CLI Reference](./cli.md):
+The browser mixer guide uses the WASM/JavaScript APIs. The production walkthroughs use the **Python CLI** (`pip install libsonare`). Two CLI properties shape those workflows and are covered in full in the [CLI Reference](./cli.md):
 
 - **Not every command is on both CLIs.** The scene mixer (`mix`), the preset-driven `master` and `mastering-chain`, and `declip` are Python-CLI only; the low-level metering commands (`meter`, `clipping`, `phase`, `stereo`, `dynamic-range`) are native-CLI only. See [Which CLI Are You Using?](./cli.md#which-cli-are-you-using).
 - **Most commands are mono by nature.** Mixing and mastering keep a stereo pair end to end; most *measurement* commands downmix and say so on stderr. This is why these pages read loudness out of a mastering report rather than off a separate `lufs` call. See [Stereo and Mono Handling](./cli.md#stereo-and-mono-handling).

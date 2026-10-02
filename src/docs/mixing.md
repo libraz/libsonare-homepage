@@ -39,11 +39,12 @@ By the end of this page you should be able to:
 
 ## Pick the right entry point
 
-The engine is deliberately split into two levels. Start at the top row and only move down when you actually need the extra control.
+Choose by whether the app renders once, owns a block-processing loop, or needs synchronized playback and export.
 
 | Your situation | Use | Why |
 |----------------|-----|-----|
 | You have a handful of stereo stems and want one rendered file | [`mixStereo(...)`](#one-shot-mixing-mixstereo) | One call, plain arrays, nothing to clean up |
+| You are building a browser mixer with playback and export | [`SonareEngine`](./use-cases/browser-mixer.md) | Mirrors controls to realtime playback and offline rendering |
 | You need sends, buses, inserts, automation, meters, or a saved project | [`Mixer.fromSceneJson(...)`](#scene-based-mixing-mixer) | Persistent, serializable mixer state |
 | You are inside a browser `AudioWorklet` or audio callback | WASM [`Mixer.createRealtimeBuffer()`](#realtime-and-the-audioworklet-bridge) | Reuses buffers, never allocates per block |
 
@@ -555,6 +556,7 @@ const mixer = Mixer.fromSceneJson(mixingScenePresetJson('commentaryDucking'), sa
 
 ## Related
 
+- [Build a Browser Mixer](./use-cases/browser-mixer.md) — a working demo, implementation map, and playback/export boundaries
 - [Mixing Basics](./glossary/concepts/mixing-basics.md) — the vocabulary, for newcomers
 - [Mixing Scene JSON](./mixing-scene-json.md) — the full scene schema and annotated presets
 - [Mixing Assistant](./mixing-assistant.md) — measures a set of tracks and suggests a scene, with reasons

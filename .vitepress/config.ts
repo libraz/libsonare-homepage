@@ -575,6 +575,7 @@ const enDocsSidebar = [
     collapsed: true,
     items: [
       { text: 'Overview', link: '/docs/use-cases' },
+      { text: 'Build a Browser Mixer', link: '/docs/use-cases/browser-mixer' },
       { text: 'Mix and Master in the CLI', link: '/docs/use-cases/cli-mix-and-master' },
       { text: 'Match a Reference Track', link: '/docs/use-cases/reference-master' },
       { text: 'Gate a Delivery in CI', link: '/docs/use-cases/delivery-check' },
@@ -1112,6 +1113,10 @@ export default defineConfig({
               collapsed: true,
               items: [
                 { text: '概要', link: '/ja/docs/use-cases' },
+                {
+                  text: 'ブラウザでミキシングアプリを作る',
+                  link: '/ja/docs/use-cases/browser-mixer',
+                },
                 {
                   text: 'CLI でミックスからマスタリング',
                   link: '/ja/docs/use-cases/cli-mix-and-master',
