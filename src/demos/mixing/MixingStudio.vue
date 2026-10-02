@@ -578,6 +578,7 @@ const {
               {{ copy.controls.importScene }}
             </button>
             <input ref="sceneInput" class="mix-drop__input" type="file" accept="application/json,.json" @change="importScene">
+            <small class="mix-actions__note">{{ copy.controls.projectSettingsNote }}</small>
           </div>
         </TechPanel>
       </aside>

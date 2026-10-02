@@ -11,23 +11,23 @@ import {
   VCA_GROUP_IDS,
 } from '@/demos/mixing/mixingConstants';
 import { buildSceneJson, type SceneStripInput } from '@/demos/mixing/mixingScene';
-import type { MixTrack, SceneTrackSettings } from '@/demos/mixing/mixingTypes';
+import type {
+  MixingProjectTrackSettings,
+  MixTrack,
+  SceneTrackSettings,
+} from '@/demos/mixing/mixingTypes';
 import type { DecodedStereoAudio } from '@/utils/audio';
 import { downsampleWaveform } from '@/utils/audio';
 import { clamp } from '@/utils/scale';
 
-export function createMixTrack(
-  fileName: string,
-  audio: DecodedStereoAudio,
-  index: number,
-): MixTrack {
+export function createMixTrack(fileName: string, audio: DecodedStereoAudio): MixTrack {
   const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   return {
     id,
     name: fileName.replace(/\.[^.]+$/, ''),
     audio,
     waveform: downsampleWaveform(audio.left, audio.right, 220),
-    offsetSeconds: index ? Math.min(MAX_DURATION_SECONDS - audio.duration, index * 2) : 0,
+    offsetSeconds: 0,
     inputTrimDb: 0,
     faderDb: 0,
     pan: 0,
@@ -103,7 +103,7 @@ export function toSceneTrack(track: MixTrack): SceneTrackSettings {
   };
 }
 
-export function applySceneTrack(track: MixTrack, setting: SceneTrackSettings) {
+export function applySceneTrack(track: MixTrack, setting: MixingProjectTrackSettings) {
   track.name = setting.name || track.name;
   track.inputTrimDb = clamp(setting.inputTrimDb ?? 0, -24, 24);
   track.faderDb = clamp(setting.faderDb ?? 0, -60, 12);

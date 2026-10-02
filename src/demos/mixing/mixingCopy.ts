@@ -35,8 +35,10 @@ export const enCopy = {
     remove: 'Remove',
     bounce: 'Bounce Mix',
     download: 'Download WAV',
-    exportScene: 'Export Scene',
-    importScene: 'Import Scene',
+    exportScene: 'Export project settings',
+    importScene: 'Import project settings',
+    projectSettingsNote:
+      'Project settings include no audio. Load the matching audio before importing.',
     play: 'Play',
     stop: 'Stop',
     zoom: 'Zoom',
@@ -101,8 +103,9 @@ export const enCopy = {
   errors: {
     loadFailed: 'Failed to decode one of the audio files.',
     bounceFailed: 'Mix bounce failed. Try fewer or shorter tracks.',
-    sceneFailed: 'Could not import this scene JSON.',
-    sceneNoMatch: 'No track settings matched the loaded tracks. Load the matching audio first.',
+    projectSettingsFailed: 'Could not import project settings JSON.',
+    projectSettingsNoMatch:
+      'No track settings matched the loaded audio. Load the matching audio first.',
   },
   stages: {
     'Preparing mix': 'Preparing mix',
@@ -343,8 +346,10 @@ export const jaCopy: typeof enCopy = {
     remove: '削除',
     bounce: 'ミックスをバウンス',
     download: 'WAV を保存',
-    exportScene: 'シーンを書き出し',
-    importScene: 'シーンを読み込み',
+    exportScene: 'プロジェクト設定を書き出し',
+    importScene: 'プロジェクト設定を読み込み',
+    projectSettingsNote:
+      'プロジェクト設定に音声は含まれません。読み込み前に対応する音声を読み込んでください。',
     play: '再生',
     stop: '停止',
     zoom: 'ズーム',
@@ -409,9 +414,9 @@ export const jaCopy: typeof enCopy = {
   errors: {
     loadFailed: '音声ファイルのデコードに失敗しました。',
     bounceFailed: 'ミックスのバウンスに失敗しました。トラック数や長さを減らしてください。',
-    sceneFailed: 'このシーン JSON を読み込めませんでした。',
-    sceneNoMatch:
-      '読み込み済みのトラックに一致する設定がありませんでした。先に対応する音源を読み込んでください。',
+    projectSettingsFailed: 'プロジェクト設定 JSON を読み込めませんでした。',
+    projectSettingsNoMatch:
+      '読み込み済みの音声に一致するトラック設定がありません。先に対応する音声を読み込んでください。',
   },
   stages: {
     'Preparing mix': 'ミックスを準備中',

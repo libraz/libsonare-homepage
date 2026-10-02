@@ -168,6 +168,15 @@ describe('MixingStudio', () => {
     expect(wrapper.text()).toContain('Dual L');
     expect(wrapper.text()).toContain('Dual R');
 
+    await wrapper.find('.mix-studio').trigger('drop', {
+      dataTransfer: { files: [dropFile('Bass.wav')] },
+    });
+    await flushPromises();
+    expect(wrapper.findAll('.mix-lane__header small').map((node) => node.text())).toEqual([
+      '0:00',
+      '0:00',
+    ]);
+
     wrapper.unmount();
   });
 
@@ -250,15 +259,19 @@ describe('MixingStudio', () => {
       y: 0,
       toJSON: () => ({}),
     });
-    const click = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(() => undefined);
+    let downloadedFilename = '';
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
+      downloadedFilename = this.download;
+    });
     const wrapper = mount(MixingStudio);
 
     try {
       await loadTrack(wrapper);
 
       expect(wrapper.text()).toContain('Applied to Bounce Mix; Play uses current controls.');
+      expect(wrapper.text()).toContain(
+        'Project settings include no audio. Load the matching audio before importing.',
+      );
 
       await wrapper.find('.mix-autolane__plot').trigger('click', { clientX: 100, clientY: 25 });
       expect(wrapper.findAll('.mix-autolane__node')).toHaveLength(1);
@@ -266,10 +279,11 @@ describe('MixingStudio', () => {
 
       await wrapper
         .findAll('button')
-        .find((button) => button.text() === 'Export Scene')!
+        .find((button) => button.text() === 'Export project settings')!
         .trigger('click');
       expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
       expect(click).toHaveBeenCalled();
+      expect(downloadedFilename).toBe('libsonare-mix-project.json');
 
       await wrapper
         .findAll('button')
@@ -317,7 +331,7 @@ describe('MixingStudio', () => {
     }
   });
 
-  it('imports scene JSON onto matching tracks and reports invalid scene files', async () => {
+  it('imports project settings onto matching tracks and reports invalid files', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const wrapper = mount(MixingStudio);
 
@@ -347,15 +361,73 @@ describe('MixingStudio', () => {
       expect(wrapper.text()).toContain('-9.0');
       expect(wrapper.text()).toContain('Reverb Bus');
       expect(wrapper.findAll('.mix-flag--vca').map((node) => node.text())).toContain('A');
+      expect(wrapper.find('input[type="range"][min="-24"][max="12"]').element).toHaveProperty(
+        'value',
+        '-6',
+      );
+      expect(wrapper.find('.mix-strip__control input[type="range"]').element).toHaveProperty(
+        'value',
+        '-9',
+      );
 
-      const invalidScene = new MockFile(['not-json'], 'broken.json', { type: 'application/json' });
+      const invalidProjects = [
+        ['broken.json', 'not-json'],
+        [
+          'engine-scene.json',
+          JSON.stringify({ version: 1, strips: [], buses: [], connections: [] }),
+        ],
+        ['arbitrary.json', JSON.stringify({ hello: 'world' })],
+        ['malformed.json', JSON.stringify({ version: 1, tracks: [{}] })],
+        ['numeric-leaf.json', JSON.stringify({ tracks: [{ name: trackName, faderDb: 'loud' }] })],
+        ['reverb-leaf.json', JSON.stringify({ reverb: { decaySec: 'bad' } })],
+        [
+          'automation-leaf.json',
+          JSON.stringify({
+            tracks: [{ name: trackName, automation: [{ param: 'fader', value: 'bad' }] }],
+          }),
+        ],
+      ];
+      for (const [fileName, body] of invalidProjects) {
+        const invalidProject = new MockFile([body], fileName, { type: 'application/json' });
+        Object.defineProperty(sceneInput.element, 'files', {
+          configurable: true,
+          value: [invalidProject],
+        });
+        await sceneInput.trigger('change');
+        await flushPromises();
+        expect(wrapper.text()).toContain('Could not import project settings JSON.');
+        expect(wrapper.text()).toContain('-6.0 dB');
+        expect(wrapper.text()).toContain('-9.0');
+        expect(wrapper.find('input[type="range"][min="-24"][max="12"]').element).toHaveProperty(
+          'value',
+          '-6',
+        );
+        expect(wrapper.find('.mix-strip__control input[type="range"]').element).toHaveProperty(
+          'value',
+          '-9',
+        );
+      }
+
+      const recoveredProject = new MockFile(
+        [JSON.stringify({ masterFaderDb: -3, tracks: [{ name: trackName, faderDb: -4 }] })],
+        'recovered.json',
+        { type: 'application/json' },
+      );
       Object.defineProperty(sceneInput.element, 'files', {
         configurable: true,
-        value: [invalidScene],
+        value: [recoveredProject],
       });
       await sceneInput.trigger('change');
       await flushPromises();
-      expect(wrapper.text()).toContain('Could not import this scene JSON.');
+      expect(wrapper.text()).not.toContain('Could not import project settings JSON.');
+      expect(wrapper.find('input[type="range"][min="-24"][max="12"]').element).toHaveProperty(
+        'value',
+        '-3',
+      );
+      expect(wrapper.find('.mix-strip__control input[type="range"]').element).toHaveProperty(
+        'value',
+        '-4',
+      );
     } finally {
       consoleError.mockRestore();
       wrapper.unmount();

@@ -10,6 +10,7 @@ import {
   toSceneStrip,
   toSceneTrack,
 } from '@/demos/mixing/mixingTrackState';
+import { parseMixingProjectSettings } from '@/demos/mixing/mixingTypes';
 import type { DecodedStereoAudio } from '@/utils/audio';
 
 function audio(duration = 2, sampleRate = 48_000): DecodedStereoAudio {
@@ -25,12 +26,12 @@ function audio(duration = 2, sampleRate = 48_000): DecodedStereoAudio {
 }
 
 describe('mixing track state helpers', () => {
-  it('creates default tracks with derived names, staggered offsets and waveform data', () => {
+  it('creates default tracks with derived names, shared-origin offsets and waveform data', () => {
     vi.spyOn(Date, 'now').mockReturnValue(123);
     vi.spyOn(Math, 'random').mockReturnValue(0.5);
 
-    const first = createMixTrack('Lead Vocal.wav', audio(1), 0);
-    const second = createMixTrack('Guitar.aiff', audio(1), 2);
+    const first = createMixTrack('Lead Vocal.wav', audio(1));
+    const second = createMixTrack('Guitar.aiff', audio(1));
 
     expect(first.id).toBe('123-8');
     expect(first.name).toBe('Lead Vocal');
@@ -38,13 +39,42 @@ describe('mixing track state helpers', () => {
     expect(first.reverbSendDb).toBe(REVERB_SEND_FLOOR);
     expect(first.waveform.length).toBeGreaterThan(0);
     expect(second.name).toBe('Guitar');
-    expect(second.offsetSeconds).toBe(4);
+    expect(second.offsetSeconds).toBe(0);
 
     vi.restoreAllMocks();
   });
 
+  it('accepts partial project settings and rejects engine-shaped or malformed roots', () => {
+    expect(
+      parseMixingProjectSettings({
+        masterFaderDb: -6,
+        tracks: [{ name: 'Lead', faderDb: -3 }],
+      }),
+    ).toMatchObject({ masterFaderDb: -6, tracks: [{ name: 'Lead' }] });
+    expect(
+      parseMixingProjectSettings({ version: 1, strips: [], buses: [], connections: [] }),
+    ).toBeNull();
+    expect(parseMixingProjectSettings({ version: 2, tracks: [] })).toBeNull();
+    expect(parseMixingProjectSettings([])).toBeNull();
+    expect(parseMixingProjectSettings({ tracks: [null] })).toBeNull();
+    expect(parseMixingProjectSettings({ reverb: [] })).toBeNull();
+    expect(parseMixingProjectSettings({ tracks: [{ name: 'Lead', faderDb: 'loud' }] })).toBeNull();
+    expect(parseMixingProjectSettings({ reverb: { decaySec: 'bad' } })).toBeNull();
+    expect(parseMixingProjectSettings({ vcaGains: { A: 'bad' } })).toBeNull();
+    expect(
+      parseMixingProjectSettings({
+        tracks: [{ name: 'Lead', automation: [{ param: 'unknown', value: 0 }] }],
+      }),
+    ).toBeNull();
+    expect(
+      parseMixingProjectSettings({
+        tracks: [{ name: 'Lead', automation: [{ param: 'fader', value: 'bad' }] }],
+      }),
+    ).toBeNull();
+  });
+
   it('resets all editable mix track controls to defaults', () => {
-    const track = createMixTrack('Track.wav', audio(), 0);
+    const track = createMixTrack('Track.wav', audio());
     Object.assign(track, {
       inputTrimDb: 4,
       faderDb: -8,
@@ -99,7 +129,7 @@ describe('mixing track state helpers', () => {
   it('applies scene settings with clamps and sanitized automation', () => {
     vi.spyOn(Date, 'now').mockReturnValue(456);
     vi.spyOn(Math, 'random').mockReturnValue(0.25);
-    const track = createMixTrack('Scene.wav', audio(10), 0);
+    const track = createMixTrack('Scene.wav', audio(10));
 
     applySceneTrack(track, {
       id: track.id,
@@ -173,7 +203,7 @@ describe('mixing track state helpers', () => {
   });
 
   it('serializes scene tracks and render tracks without sharing audio buffers', () => {
-    const track = createMixTrack('Render.wav', audio(1, 1_000), 0);
+    const track = createMixTrack('Render.wav', audio(1, 1_000));
     track.channelDelayMs = 12.4;
     track.automation = [
       { id: 'late', param: 'pan', timeSec: 3, value: 0.5, curve: 'hold' },
@@ -199,8 +229,8 @@ describe('mixing track state helpers', () => {
   });
 
   it('builds current scene json with VCA groups and computes gates from mute/solo state', () => {
-    const a = createMixTrack('A.wav', audio(), 0);
-    const b = createMixTrack('B.wav', audio(), 1);
+    const a = createMixTrack('A.wav', audio());
+    const b = createMixTrack('B.wav', audio());
     a.vcaGroup = 'A';
     b.vcaGroup = 'B';
     b.muted = true;

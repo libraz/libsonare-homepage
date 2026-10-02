@@ -27,7 +27,11 @@ import {
   toRenderTrack,
   toSceneTrack,
 } from '@/demos/mixing/mixingTrackState';
-import type { AutomationNode, MixTrack, SceneTrackSettings } from '@/demos/mixing/mixingTypes';
+import {
+  type AutomationNode,
+  type MixTrack,
+  parseMixingProjectSettings,
+} from '@/demos/mixing/mixingTypes';
 import { goniometerPoints, meterHeight, waveformPath } from '@/demos/mixing/mixingVisuals';
 import { useRealtimeMixer } from '@/demos/mixing/useRealtimeMixer';
 import {
@@ -83,7 +87,7 @@ export function useMixingStudio() {
   let playheadRaf = 0;
   let activeDrag: { trackId: string; startX: number; startOffset: number } | null = null;
 
-  const docsPath = computed(() => localizedPath('/docs/mixing'));
+  const docsPath = computed(() => localizedPath('/docs/use-cases/browser-mixer'));
   const oppositeLocalePath = computed(() => alternateLocalePath('/mixing'));
   const glossaryBase = computed(() => localizedPath('/docs/glossary'));
 
@@ -257,7 +261,7 @@ export function useMixingStudio() {
           continue;
         }
 
-        const track = createMixTrack(file.name, audio, tracks.value.length);
+        const track = createMixTrack(file.name, audio);
         tracks.value.push(track);
         selectedTrackId.value = track.id;
       }
@@ -319,8 +323,8 @@ export function useMixingStudio() {
         left: leftBands.high,
         right: rightBands.high,
       };
-      tracks.value.push(createMixTrack(copy.value.import.demoLow, lowAudio, 0));
-      tracks.value.push(createMixTrack(copy.value.import.demoHigh, highAudio, 0));
+      tracks.value.push(createMixTrack(copy.value.import.demoLow, lowAudio));
+      tracks.value.push(createMixTrack(copy.value.import.demoHigh, highAudio));
       selectedTrackId.value = tracks.value[0]?.id || null;
     } catch (error) {
       console.error(error);
@@ -396,7 +400,7 @@ export function useMixingStudio() {
     };
     // The URL is kept so a repeated export can revoke the previous one.
     sceneUrl = URL.createObjectURL(jsonBlob(scene));
-    triggerDownload(sceneUrl, 'libsonare-mix-scene.json');
+    triggerDownload(sceneUrl, 'libsonare-mix-project.json');
   }
 
   function chooseScene() {
@@ -410,13 +414,13 @@ export function useMixingStudio() {
     if (!file) return;
 
     try {
-      const scene = JSON.parse(await file.text()) as {
-        masterFaderDb?: number;
-        reverb?: { enabled?: boolean; decaySec?: number; preDelayMs?: number };
-        vcaGains?: Record<string, number>;
-        tracks?: SceneTrackSettings[];
-      };
-      masterFaderDb.value = clamp(scene.masterFaderDb ?? 0, -24, 12);
+      const scene = parseMixingProjectSettings(JSON.parse(await file.text()));
+      if (!scene) throw new Error('Invalid mixing project settings');
+      localError.value = null;
+
+      if (scene.masterFaderDb !== undefined) {
+        masterFaderDb.value = clamp(scene.masterFaderDb, -24, 12);
+      }
       if (scene.reverb) {
         reverb.value = {
           enabled: Boolean(scene.reverb.enabled),
@@ -426,8 +430,9 @@ export function useMixingStudio() {
       }
       if (scene.vcaGains) {
         for (const id of VCA_GROUP_IDS) {
-          if (typeof scene.vcaGains[id] === 'number')
-            vcaGains.value[id] = clamp(scene.vcaGains[id], -24, 12);
+          const gain = scene.vcaGains[id];
+          if (typeof gain === 'number' && Number.isFinite(gain))
+            vcaGains.value[id] = clamp(gain, -24, 12);
         }
       }
       // A scene exported from a different session references tracks by id/name; when
@@ -444,12 +449,14 @@ export function useMixingStudio() {
         applied++;
       }
       if (sceneTracks.length > 0 && applied === 0) {
-        console.warn(`[mixing] scene import matched no tracks (${sceneTracks.length} skipped)`);
-        localError.value = copy.value.errors.sceneNoMatch;
+        console.warn(
+          `[mixing] project settings import matched no tracks (${sceneTracks.length} skipped)`,
+        );
+        localError.value = copy.value.errors.projectSettingsNoMatch;
       }
     } catch (error) {
       console.error(error);
-      localError.value = copy.value.errors.sceneFailed;
+      localError.value = copy.value.errors.projectSettingsFailed;
     }
   }
 
