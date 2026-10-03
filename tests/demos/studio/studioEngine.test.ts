@@ -1,9 +1,13 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_METER_INTERVAL_FRAMES } from '@/composables/useSonareEngine';
 import { exportFrames } from '@/demos/studio/studioBounce';
 import { BAR_PPQ, defaultPattern, STUDIO_TRACKS } from '@/demos/studio/studioCopy';
 import { MASTER_LIMITER_PROCESSOR, masterLimiterStripJson } from '@/utils/masterLimiter';
 
 const BUCKET_COUNT = 24;
+const studioDir = resolve(process.cwd(), 'src/demos/studio');
 
 const wasmMock = vi.hoisted(() => {
   class ProjectMock {
@@ -92,6 +96,7 @@ const facadeMock = vi.hoisted(() => {
       state.meterCb = cb;
       return () => undefined;
     }),
+    onTelemetry: vi.fn(() => () => undefined),
     destroy: vi.fn(),
   };
   return {
@@ -150,7 +155,7 @@ describe('useStudioEngine', () => {
 
   async function loadEngine() {
     const { useStudioEngine } = await import('@/demos/studio/useStudioEngine');
-    return useStudioEngine('/wasm/sonare.js', '/wasm/sonare.wasm');
+    return useStudioEngine();
   }
 
   it('boots the WASM module and the engine worklet facade', async () => {
@@ -168,6 +173,8 @@ describe('useStudioEngine', () => {
     expect(options.engineAbiVersion).toBe(3);
     expect(options.expectedEngineAbiVersion).toBe(3);
     expect(options.offlineEngine).toBeInstanceOf(wasmMock.RealtimeEngine);
+    // The shared boot owns the meter cadence, so it takes effect.
+    expect(options.meterIntervalFrames).toBe(DEFAULT_METER_INTERVAL_FRAMES);
 
     // Lanes are declared 1-based and each track binds its synth preset.
     expect(facadeMock.facade.setTrackLanes).toHaveBeenCalledWith([1, 2, 3]);
@@ -183,6 +190,16 @@ describe('useStudioEngine', () => {
     // The master strip carries the engine's limiter, installed at boot.
     expect(facadeMock.facade.setMasterStripJson).toHaveBeenCalledWith(masterLimiterStripJson());
     expect(masterLimiterStripJson()).toContain(MASTER_LIMITER_PROCESSOR);
+  });
+
+  it('boots through the shared engine composable, not a local worklet source', () => {
+    const source = readFileSync(resolve(studioDir, 'useStudioEngine.ts'), 'utf8');
+    expect(source).toContain("from '@/composables/useSonareEngine'");
+    for (const file of readdirSync(studioDir).filter((name) => /\.(ts|vue)$/.test(name))) {
+      const text = readFileSync(resolve(studioDir, file), 'utf8');
+      expect(text, file).not.toContain('buildEngineWorkletSource');
+      expect(text, file).not.toContain('WORKLET_BRIDGE_PATH');
+    }
   });
 
   it('compiles the pattern into looping MIDI clips and refreshes stem views', async () => {
@@ -319,7 +336,7 @@ describe('useStudioEngine', () => {
     expect(master.strips[0].faderDb).toBeCloseTo(20 * Math.log10(0.5), 6);
     // The encoded samples are the engine's render, untouched by JS gain.
     const view = new DataView(await (blob as Blob).arrayBuffer());
-    expect(view.getInt16(44, true)).toBe(Math.trunc(0.5 * 0x7fff));
+    expect(view.getInt16(44, true)).toBe(0x4000); // 0.5 at the PCM16 quantization step
   });
 
   it('exports nothing when every track is muted', async () => {

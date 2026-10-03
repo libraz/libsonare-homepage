@@ -1,5 +1,6 @@
 import { ref, shallowRef } from 'vue';
 import { useAudioExport } from '@/composables/useAudioExport';
+import { useSonareEngine } from '@/composables/useSonareEngine';
 import {
   barFrames,
   buildLaneClips,
@@ -18,12 +19,6 @@ import {
 import { masterLimiterStripJson } from '@/utils/masterLimiter';
 
 type WasmModule = typeof import('@/wasm/index.js');
-type WorkletModule = typeof import('@/wasm/worklet.js');
-type StudioFacade = Awaited<ReturnType<WorkletModule['SonareEngine']['create']>>;
-type FacadeOptions = NonNullable<Parameters<WorkletModule['SonareEngine']['create']>[1]>;
-
-/** Engine meter cadence in frames (~21 ms at 48 kHz). */
-const METER_INTERVAL_FRAMES = 1024;
 /** Per-tick meter decay factor, matching the previous analyser-based meters. */
 const METER_DECAY = 0.86;
 
@@ -39,30 +34,6 @@ function dbToLinear(db: number): number {
 }
 
 /**
- * Untransformed copy of the worklet bridge, kept in `src/public/` by
- * `yarn copy:wasm`. The bundled `@/wasm/worklet.js` cannot be imported inside
- * the AudioWorklet in dev: Vite injects an `/@vite/client` import into it,
- * which references `window` and fails silently in AudioWorkletGlobalScope
- * (Chrome resolves `addModule` even when module evaluation throws). Public
- * assets are served raw in both dev and build, so this path always works.
- */
-const WORKLET_BRIDGE_PATH = '/sonare-worklet.js';
-
-/**
- * The worklet module: registers the realtime-engine processor with the embind
- * module factory. Loaded from a blob: URL, so static import specifiers must be
- * absolute — a root-relative path cannot resolve against the opaque blob base.
- */
-function buildEngineWorkletSource(sonareUrl: string, workletUrl: string): string {
-  return `
-import createModule from '${sonareUrl}';
-import { registerSonareRealtimeEngineWorkletProcessor } from '${workletUrl}';
-globalThis.SonareEmbindModuleFactory = createModule;
-registerSonareRealtimeEngineWorkletProcessor();
-`;
-}
-
-/**
  * The Studio Mini engine: the step pattern is compiled into looping MIDI clips
  * on libsonare's realtime engine (`setMidiClips`), one clip per track, each
  * routed to its own NativeSynth destination through the engine's per-track
@@ -73,7 +44,8 @@ registerSonareRealtimeEngineWorkletProcessor();
  * rendered deterministically offline, and the stem waveforms are display-only
  * offline Project renders.
  */
-export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
+export function useStudioEngine() {
+  const sonare = useSonareEngine();
   const ready = ref(false);
   const starting = ref(false);
   const error = ref<string | null>(null);
@@ -89,10 +61,6 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
   const audioExport = useAudioExport();
 
   let wasm: WasmModule | null = null;
-  let engine: StudioFacade | null = null;
-  let context: AudioContext | null = null;
-  let moduleUrl: string | null = null;
-  let offMeter: (() => void) | null = null;
   const gains: number[] = STUDIO_TRACKS.map((track) => track.gain);
   const mutes: boolean[] = STUDIO_TRACKS.map(() => false);
   let masterGainValue = STUDIO_MASTER_GAIN;
@@ -109,6 +77,15 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
   let auditionRaf = 0;
   const stemCache = new Map<string, Float32Array>();
   const trackId = laneTrackId;
+  sonare.onMeter((meter) => {
+    const linear = Math.max(dbToLinear(meter.peakDbL), dbToLinear(meter.peakDbR));
+    if (meter.targetId === 0) {
+      masterPeak = Math.max(masterPeak, linear);
+    } else if (meter.targetId >= 1 && meter.targetId <= STUDIO_TRACKS.length) {
+      const lane = meter.targetId - 1;
+      lanePeaks[lane] = Math.max(lanePeaks[lane], linear);
+    }
+  });
 
   /**
    * Boot the WASM module, the AudioContext, and the engine worklet. Safe to
@@ -124,64 +101,17 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
     starting.value = true;
     error.value = null;
     try {
-      // index.js carries the main-thread surface (Project bounces, version,
-      // waveform peaks, the offline mirror engine); worklet.js carries only
-      // the AudioWorklet bridge, so it needs no main-thread init of its own.
+      if (!(await sonare.start())) {
+        error.value = sonare.error.value;
+        return false;
+      }
+      // The shared boot has initialised index.js, which carries the main-thread
+      // surface (Project bounces, version, waveform peaks).
       const mod = await import('@/wasm/index.js');
-      await mod.init();
-      if (disposed) return false;
+      const engine = sonare.engine.value;
+      if (disposed || !engine) return false;
       wasm = mod;
       libVersion.value = mod.version();
-      const wmod = await import('@/wasm/worklet.js');
-      if (disposed) return false;
-
-      const ctx = new AudioContext({ latencyHint: 'interactive' });
-      context = ctx;
-      if (!moduleUrl) {
-        const absSonare = new URL(sonareJsUrl, location.href).href;
-        const absWorklet = new URL(WORKLET_BRIDGE_PATH, location.href).href;
-        moduleUrl = URL.createObjectURL(
-          new Blob([buildEngineWorkletSource(absSonare, absWorklet)], {
-            type: 'text/javascript',
-          }),
-        );
-      }
-      const wasmBinary = await (await fetch(wasmUrl)).arrayBuffer();
-      if (disposed) {
-        await closeContext();
-        return false;
-      }
-
-      // Ownership transfers to SonareEngine only after create() succeeds. If
-      // worklet construction rejects, explicitly destroy this native mirror.
-      const offlineEngine = new mod.RealtimeEngine(ctx.sampleRate, 128) as unknown as NonNullable<
-        FacadeOptions['offlineEngine']
-      >;
-      let created: Awaited<ReturnType<typeof wmod.SonareEngine.create>>;
-      try {
-        created = await wmod.SonareEngine.create(ctx, {
-          moduleUrl,
-          wasmBinary,
-          mode: 'auto', // the site is SAB-free, so this falls back to postMessage
-          channelCount: 2,
-          meterIntervalFrames: METER_INTERVAL_FRAMES,
-          // The ABI numbers come from the already-initialized index.js module;
-          // passing them lets the bridge skip its own (uninitialized) lookup.
-          engineAbiVersion: mod.engineAbiVersion(),
-          expectedEngineAbiVersion: mod.EXPECTED_ENGINE_ABI_VERSION,
-          offlineEngine,
-        });
-      } catch (cause) {
-        offlineEngine.destroy();
-        throw cause;
-      }
-      if (disposed) {
-        created.destroy();
-        await closeContext();
-        return false;
-      }
-      engine = created;
-      engine.node.connect(ctx.destination);
 
       engine.setTrackLanes(STUDIO_TRACKS.map((_, i) => trackId(i)));
       for (let i = 0; i < STUDIO_TRACKS.length; i++) {
@@ -191,50 +121,23 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
       // installs the limiter, so it goes in before any fader value.
       engine.setMasterStripJson(masterLimiterStripJson());
       engine.transport.setLoop(0, BAR_PPQ, true);
-      offMeter = engine.onMeter((meter) => {
-        const linear = Math.max(dbToLinear(meter.peakDbL), dbToLinear(meter.peakDbR));
-        if (meter.targetId === 0) {
-          masterPeak = Math.max(masterPeak, linear);
-        } else if (meter.targetId >= 1 && meter.targetId <= STUDIO_TRACKS.length) {
-          const lane = meter.targetId - 1;
-          lanePeaks[lane] = Math.max(lanePeaks[lane], linear);
-        }
-      });
 
-      // Outside a gesture this stays pending until the user interacts.
-      void ctx.resume().catch(() => {
-        /* resume re-attempted on the first gesture */
-      });
       ready.value = true;
       return true;
     } catch (err) {
       console.error('studio engine start failed:', err);
       error.value = err instanceof Error ? err.message : String(err);
-      engine?.destroy();
-      engine = null;
-      // The engine never came up — don't leave a dangling AudioContext.
-      await closeContext();
+      // The engine never came up — release it and its AudioContext.
+      await sonare.dispose();
       return false;
     } finally {
       starting.value = false;
     }
   }
 
-  /** Close and forget the AudioContext (idempotent). */
-  async function closeContext(): Promise<void> {
-    const ctx = context;
-    context = null;
-    if (!ctx) return;
-    try {
-      await ctx.close();
-    } catch {
-      /* already closed */
-    }
-  }
-
   /** The one-bar clip schedule for the live engine, at the context's rate. */
   function buildMidiClips(pattern: StudioPattern, bpm: number) {
-    return buildLaneClips(pattern, bpm, context?.sampleRate ?? EXPORT_SAMPLE_RATE, 1);
+    return buildLaneClips(pattern, bpm, sonare.context.value?.sampleRate ?? EXPORT_SAMPLE_RATE, 1);
   }
 
   /**
@@ -244,6 +147,8 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
    */
   function rebuild(pattern: StudioPattern, bpm: number): void {
     const mod = wasm;
+    const engine = sonare.engine.value;
+    const context = sonare.context.value;
     if (!mod || !engine) return;
     if (bpm !== currentBpm) {
       const phase = playing.value ? currentPhase() : 0;
@@ -349,12 +254,15 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
   }
 
   function currentPhase(): number {
+    const context = sonare.context.value;
     if (!context || loopDuration <= 0) return 0;
     const elapsed = context.currentTime - loopStart;
     return (((elapsed % loopDuration) + loopDuration) % loopDuration) / loopDuration;
   }
 
   function play(): void {
+    const engine = sonare.engine.value;
+    const context = sonare.context.value;
     if (!ready.value || playing.value || !engine || !context) return;
     // Called from a click — this is the gesture that unlocks the context.
     if (context.state !== 'running') {
@@ -373,6 +281,7 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
 
   function stop(): void {
     playing.value = false;
+    const engine = sonare.engine.value;
     if (engine) {
       engine.transport.stop();
       engine.pushMidiPanic();
@@ -422,6 +331,8 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
    * the gesture that may resume the context.
    */
   function audition(trackIndex: number, rowIndex: number): void {
+    const engine = sonare.engine.value;
+    const context = sonare.context.value;
     if (!engine || !context || !ready.value) return;
     if (context.state !== 'running') void context.resume();
     const def = STUDIO_TRACKS[trackIndex];
@@ -432,7 +343,7 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
     window.setTimeout(
       () => {
         auditioning--;
-        engine?.pushMidiNoteOff(trackId(trackIndex), 0, 0, note, 0);
+        sonare.engine.value?.pushMidiNoteOff(trackId(trackIndex), 0, 0, note, 0);
       },
       Math.max(90, gateMs),
     );
@@ -442,17 +353,17 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
 
   function setTrackGain(index: number, value: number): void {
     gains[index] = value;
-    engine?.setStripGain(trackId(index), linearToDb(value));
+    sonare.engine.value?.setStripGain(trackId(index), linearToDb(value));
   }
 
   function setTrackMute(index: number, muted: boolean): void {
     mutes[index] = muted;
-    engine?.setSoloMute(trackId(index), false, muted);
+    sonare.engine.value?.setSoloMute(trackId(index), false, muted);
   }
 
   function setMasterGain(value: number): void {
     masterGainValue = value;
-    engine?.setStripGain('master', linearToDb(value));
+    sonare.engine.value?.setStripGain('master', linearToDb(value));
   }
 
   /**
@@ -527,20 +438,10 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
     cancelAnimationFrame(auditionRaf);
     auditioning = 0;
     ready.value = false;
-    offMeter?.();
-    offMeter = null;
-    if (engine) {
-      engine.destroy();
-      engine = null;
-    }
-    if (moduleUrl) {
-      URL.revokeObjectURL(moduleUrl);
-      moduleUrl = null;
-    }
     masterLevel.value = 0;
     stemViews.value = [];
     stemCache.clear();
-    await closeContext();
+    await sonare.dispose();
   }
 
   return {

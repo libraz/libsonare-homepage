@@ -20,12 +20,10 @@ import { drawStudioWaveforms, type StudioStemView } from '@/demos/studio/studioW
 import { useStudioEngine } from '@/demos/studio/useStudioEngine';
 import { downloadBlob } from '@/utils/audio';
 import { meterFillPercent } from '@/utils/scale';
-import sonareJsUrl from '@/wasm/sonare.js?url';
-import sonareWasmUrl from '@/wasm/sonare.wasm?url';
 
 const { locale, localizedPath, alternateLocalePath, localizedValue } = useI18n();
 const copy = computed(() => localizedValue({ en: enCopy, ja: jaCopy }));
-const engine = useStudioEngine(sonareJsUrl, sonareWasmUrl);
+const engine = useStudioEngine();
 
 const pattern = ref(defaultPattern());
 const bpm = ref(120);
