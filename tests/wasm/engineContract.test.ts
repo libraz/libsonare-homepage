@@ -15,7 +15,6 @@ import {
   DEFAULT_SAMPLE_RATE,
   distinctFramesByTarget,
   type FacadeLoopback,
-  fromDb,
   laneMeterTarget,
   loadIndexModule,
   MASTER_METER_TARGET,
