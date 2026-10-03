@@ -97,6 +97,11 @@ export declare class StreamingMasteringChain {
     };
     /** Reset all processor state without rebuilding. */
     reset(): void;
+    /**
+     * Set one realtime-safe full-chain parameter at a serialized block boundary.
+     * Structural, disabled-stage and unknown parameters are rejected.
+     */
+    setParameter(key: string, value: number): void;
     /** Total reported latency in samples across all active processors. */
     latencySamples(): number;
     /** Ordered stage names that will run (e.g. `"eq.tilt"`). */

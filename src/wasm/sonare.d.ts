@@ -829,6 +829,11 @@ export interface WasmLoudnessMatchResult {
   matchedTruePeakDbtp: number;
 }
 
+export interface WasmLoudnessMatchStereoResult extends Omit<WasmLoudnessMatchResult, 'samples'> {
+  left: Float32Array;
+  right: Float32Array;
+}
+
 export interface WasmStageGainReduction {
   stage: string;
   gainReductionDb: number;
@@ -965,6 +970,8 @@ export interface WasmEngineTrackSend {
   busId: number;
   levelDb?: number;
   enabled?: boolean;
+  /** Native send tap: 0 post-fader (default), 1 pre-fader. */
+  sendTiming?: number;
 }
 
 export interface WasmEngineTrackLane {
@@ -1165,6 +1172,10 @@ export interface WasmEngineMeterTelemetry {
   shortTermLufs: number;
   integratedLufs: number;
   gainReductionDb: number;
+  /** Maximum pre-trim input peak for the left channel, in dBFS. */
+  inputPeakDbL: number;
+  /** Maximum pre-trim input peak for the right channel, in dBFS. */
+  inputPeakDbR: number;
   droppedRecords: number;
 }
 
@@ -1199,6 +1210,8 @@ export interface WasmEngineMeterTelemetryWide {
   shortTermLufs: number;
   integratedLufs: number;
   gainReductionDb: number;
+  /** Pre-trim input peak for each valid plane, in dBFS. */
+  inputPeakDb: number[];
   droppedRecords: number;
 }
 
@@ -1363,6 +1376,8 @@ export interface WasmRealtimeEngine {
   getTransportState: () => WasmEngineTransportState;
   play: (renderFrame?: number) => void;
   stop: (renderFrame?: number) => void;
+  resetMasterLoudnessMeter: (renderFrame?: number) => void;
+  insertParameterConstructedValue: (paramId: number) => number;
   seekSample: (timelineSample: number, renderFrame?: number) => void;
   settleParameters: () => void;
   settleInsertParameters: () => void;
@@ -1707,6 +1722,8 @@ export interface WasmRealtimeEngine {
   meterScratchTargetId: () => number;
   meterScratchRenderFrame: () => number;
   meterScratchValue: (field: number) => number;
+  meterScratchInputPeakDbL: () => number;
+  meterScratchInputPeakDbR: () => number;
   drainMeterTelemetry: (maxRecords: number) => WasmEngineMeterTelemetry[];
   drainMeterTelemetryWide: (maxRecords: number) => WasmEngineMeterTelemetryWide[];
   configureScopeTelemetry: (intervalFrames: number, bandCount: number) => number;
@@ -2495,11 +2512,27 @@ export interface SonareModule {
     sampleRate: number,
     params: Record<string, number | boolean>,
   ) => string;
+  masteringPairProcessStereo: (
+    processorName: string,
+    sourceLeft: Float32Array,
+    sourceRight: Float32Array,
+    referenceLeft: Float32Array,
+    referenceRight: Float32Array,
+    sampleRate: number,
+    params: Record<string, number | boolean>,
+  ) => WasmMasteringStereoResult;
   masteringAbMatchLoudness: (
     source: Float32Array,
     reference: Float32Array,
     sampleRate: number,
   ) => WasmLoudnessMatchResult;
+  masteringAbMatchLoudnessStereo: (
+    sourceLeft: Float32Array,
+    sourceRight: Float32Array,
+    referenceLeft: Float32Array,
+    referenceRight: Float32Array,
+    sampleRate: number,
+  ) => WasmLoudnessMatchStereoResult;
   masteringStereoAnalyze: (
     analysisName: string,
     left: Float32Array,
@@ -3523,6 +3556,7 @@ export interface WasmPolyphonicAnalysis {
 
 export interface WasmStreamingMasteringChain {
   prepare: (sampleRate: number, maxBlockSize: number, numChannels: number) => void;
+  setParameter: (key: string, value: number) => void;
   processMono: (samples: Float32Array) => Float32Array;
   processStereo: (
     left: Float32Array,

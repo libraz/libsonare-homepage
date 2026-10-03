@@ -223,9 +223,9 @@ WASM パッケージは、ブラウザデモと同じ camelCase のマスタリ�
 | オフラインのリペア — ステレオペア | `masteringRepairDeclickStereo()`、`masteringRepairDeclipStereo()`、`masteringRepairDecrackleStereo()`、`masteringRepairDehumStereo()`、`masteringRepairDenoiseClassicalStereo()`、`masteringRepairDereverbClassicalStereo()`、`masteringRepairTrimSilenceStereo()` |
 | オフラインのリペア — チャンネルリンク（任意のチャンネル数） | `masteringRepairDenoiseClassicalLinked()`、`masteringRepairDereverbClassicalLinked()` |
 | リペアの計測（音声を返さない） | `masteringRepairDetectClicks()`、`masteringRepairDetectClipping()`、`masteringRepairDetectCrackle()`、`masteringRepairDetectHum()`、`masteringRepairDetectNoiseFloor()`、`masteringRepairDetectReverb()`、`masteringRepairDetectTrimRange()`、`masteringRepairDetectTrimRangeStereo()`、`masteringRepairNoiseBandBins()`、`masteringRepairDereverbConfigForRoom()` |
-| アシスタントとプロファイル | `masteringAudioProfile()`、`masteringAssistantSuggest()`、`masteringAssistantSuggestChain()`、`masteringStreamingPreview()`、`masteringAudioProfileStereo()`、`masteringAssistantSuggestStereo()`、`masteringAssistantSuggestChainStereo()`、`masteringStreamingPreviewStereo()`、`masteringAbMatchLoudness()` |
+| アシスタントとプロファイル | `masteringAudioProfile()`、`masteringAssistantSuggest()`、`masteringAssistantSuggestChain()`、`masteringStreamingPreview()`、`masteringAudioProfileStereo()`、`masteringAssistantSuggestStereo()`、`masteringAssistantSuggestChainStereo()`、`masteringStreamingPreviewStereo()`、`masteringAbMatchLoudness()`、`masteringAbMatchLoudnessStereo()` |
 | 名前付きプロセッサ | `masteringProcessorNames()`、`masteringProcessorCatalog()`、`masteringAmpPresetCatalog()`、`masteringInsertNames()`、`masteringInsertParamNames(name)`、`masteringInsertParamInfo(name)`、`masteringInsertTiming(name, params, sampleRate)`、`masteringProcess()`、`masteringProcessStereo()` |
-| ペア処理とステレオ解析 | `masteringPairProcessorNames()`、`masteringPairProcess()`、`masteringPairAnalysisNames()`、`masteringPairAnalyze()`、`masteringStereoAnalysisNames()`、`masteringStereoAnalyze()` |
+| ペア処理とステレオ解析 | `masteringPairProcessorNames()`、`masteringPairProcess()`、`masteringPairProcessStereo()`、`masteringPairAnalysisNames()`、`masteringPairAnalyze()`、`masteringStereoAnalysisNames()`、`masteringStereoAnalyze()` |
 | ストリーミングレンダー | `StreamingMasteringChain` |
 
 Node ネイティブは同じ基本名を使いますが、進捗は個別の `*WithProgress` ヘルパー関数ではなく、最後のオプション引数に渡すコールバックとして受け取ります。
@@ -258,7 +258,7 @@ Node ネイティブは同じ基本名を使いますが、進捗は個別の `*
 - `masteringRepairNoiseBandBins(nFft?, sampleRate?)` は、`masteringRepairDetectNoiseFloor()` が `bandFloorDbfs` を報告するときのバンド分割を表す 33 個のビン番号を `Int32Array` で返します。32 バンドそれぞれの先頭ビンと、最後のバンドの終端の次のビンです。分割を決めるのは解析のジオメトリだけなので、ノイズ低減の設定は取りません。連続する 2 つの値が等しいところはバンドが空で、そのレベルは計測値ではなくセンチネルです。
 - `masteringRepairDereverbConfigForRoom(estimate, config?)` は、`estimateRoom(...)` の結果からディリバーブ設定一式を埋めます。手で調整した数値ではなく、実測した部屋の特性でリペアを駆動できます。
 
-残る 2 つは、リペアではなくアシスタント側の入口です。`masteringPlatformNames()` は、アシスタントが `targetPlatform` として受け付ける配信先の一覧を返します。バインディング側に持った一覧ではなくライブラリから読むため、コアに配信先が増えてもバインディングを変更せずに見つけられます。`masteringAbMatchLoudness({ source, reference, sampleRate })` は A/B 試聴のために `source` を `reference` のラウドネスへ合わせ、合わせた後のサンプルとあわせて `referenceLufs`、`sourceLufs`、`appliedGainDb`、`matchedTruePeakDbtp` を返します。リファレンス側は計測するだけで、そのまま返ります。ゲインには意図的に上限を設けていないため、`matchedTruePeakDbtp` が 0 dBTP を超えることがあります。ヘッドルームに合わせてクランプすると、フルスケール近くの音源だけが自分のラウドネスのまま取り残されることになり、それはラウドネスマッチが最もやってはいけないことだからです。マッチよりピークのほうが重要な場面では、後段でリミットしてください。
+残る 2 つは、リペアではなくアシスタント側の入口です。`masteringPlatformNames()` は、アシスタントが `targetPlatform` として受け付ける配信先の一覧を返します。バインディング側に持った一覧ではなくライブラリから読むため、コアに配信先が増えてもバインディングを変更せずに見つけられます。`masteringAbMatchLoudness({ source, reference, sampleRate })` は A/B 試聴のために `source` を `reference` のラウドネスへ合わせ、合わせた後のサンプルとあわせて `referenceLufs`、`sourceLufs`、`appliedGainDb`、`matchedTruePeakDbtp` を返します。リファレンス側は計測するだけで、そのまま返ります。ゲインには意図的に上限を設けていないため、`matchedTruePeakDbtp` が 0 dBTP を超えることがあります。ヘッドルームに合わせてクランプすると、フルスケール近くの音源だけが自分のラウドネスのまま取り残されることになり、それはラウドネスマッチが最もやってはいけないことだからです。マッチよりピークのほうが重要な場面では、後段でリミットしてください。ステレオ版の `masteringAbMatchLoudnessStereo()` は、ステレオプログラムで計測した 1 つのゲインを両チャンネルに適用します。
 
 ## ミキシング API
 

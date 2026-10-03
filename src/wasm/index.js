@@ -1410,6 +1410,32 @@ function masteringPairProcess(processorName, source, reference, sampleRate = 220
     request.params ?? {}
   );
 }
+function masteringPairProcessStereo(processorName, sourceLeft, sourceRight, referenceLeft, referenceRight, sampleRate = 22050, params = {}) {
+  const request = typeof processorName === "string" ? {
+    processorName,
+    sourceLeft,
+    sourceRight,
+    referenceLeft,
+    referenceRight,
+    sampleRate,
+    params
+  } : processorName;
+  if (request.sourceLeft.length !== request.sourceRight.length) {
+    throw new Error("Source left and right channel lengths must match.");
+  }
+  if (request.referenceLeft.length !== request.referenceRight.length) {
+    throw new Error("Reference left and right channel lengths must match.");
+  }
+  return requireModule8().masteringPairProcessStereo(
+    request.processorName,
+    request.sourceLeft,
+    request.sourceRight,
+    request.referenceLeft,
+    request.referenceRight,
+    request.sampleRate ?? 22050,
+    request.params ?? {}
+  );
+}
 function masteringPairAnalyze(analysisName, source, reference, sampleRate = 22050, params = {}) {
   const request = typeof analysisName === "string" ? {
     analysisName,
@@ -1430,6 +1456,21 @@ function masteringAbMatchLoudness(request) {
   return requireModule8().masteringAbMatchLoudness(
     request.source,
     request.reference,
+    request.sampleRate ?? 22050
+  );
+}
+function masteringAbMatchLoudnessStereo(request) {
+  if (request.sourceLeft.length !== request.sourceRight.length) {
+    throw new Error("Source left and right channel lengths must match.");
+  }
+  if (request.referenceLeft.length !== request.referenceRight.length) {
+    throw new Error("Reference left and right channel lengths must match.");
+  }
+  return requireModule8().masteringAbMatchLoudnessStereo(
+    request.sourceLeft,
+    request.sourceRight,
+    request.referenceLeft,
+    request.referenceRight,
     request.sampleRate ?? 22050
   );
 }
@@ -6899,12 +6940,30 @@ var RealtimeEngine = class _RealtimeEngine {
   getTransportState() {
     return this.native.getTransportState();
   }
+  /** Queues an integrated-loudness reset; short-term and momentary windows are retained. */
+  resetMasterLoudnessMeter(renderFrame = -1) {
+    this.native.resetMasterLoudnessMeter(renderFrame);
+  }
+  /** Reads the immutable factory value for a resolved insert parameter id. */
+  insertParameterConstructedValue(paramId) {
+    return this.native.insertParameterConstructedValue(paramId);
+  }
   play(renderFrame = -1) {
     this.native.play(renderFrame);
   }
+  /**
+   * A loop wrap, seek or stop sends note-offs plus CC64=0, CC121, CC123 and a
+   * centred pitch bend on every channel played since the last reset, so
+   * controller values set before a loop region are not restored at the wrap.
+   */
   stop(renderFrame = -1) {
     this.native.stop(renderFrame);
   }
+  /**
+   * A loop wrap, seek or stop sends note-offs plus CC64=0, CC121, CC123 and a
+   * centred pitch bend on every channel played since the last reset, so
+   * controller values set before a loop region are not restored at the wrap.
+   */
   seekSample(timelineSample, renderFrame = -1) {
     this.native.seekSample(timelineSample, renderFrame);
   }
@@ -6929,6 +6988,11 @@ var RealtimeEngine = class _RealtimeEngine {
   applyCommandsDueNowPreservingFuture() {
     this.native.applyCommandsDueNowPreservingFuture();
   }
+  /**
+   * A loop wrap, seek or stop sends note-offs plus CC64=0, CC121, CC123 and a
+   * centred pitch bend on every channel played since the last reset, so
+   * controller values set before a loop region are not restored at the wrap.
+   */
   seekPpq(ppq, renderFrame = -1) {
     this.native.seekPpq(ppq, renderFrame);
   }
@@ -6948,6 +7012,11 @@ var RealtimeEngine = class _RealtimeEngine {
   sampleAtPpq(ppq) {
     return Number(this.native.sampleAtPpq(ppq));
   }
+  /**
+   * A loop wrap, seek or stop sends note-offs plus CC64=0, CC121, CC123 and a
+   * centred pitch bend on every channel played since the last reset, so
+   * controller values set before a loop region are not restored at the wrap.
+   */
   setLoop(startPpq, endPpq, enabled = true) {
     this.native.setLoop(startPpq, endPpq, enabled);
   }
@@ -7042,10 +7111,10 @@ var RealtimeEngine = class _RealtimeEngine {
         if (typeof lane === "number") {
           return { trackId: lane };
         }
-        if (!lane.sends) {
-          return lane;
-        }
-        return { ...lane, sends: _RealtimeEngine.normalizeSends(lane.sends) };
+        return {
+          ...lane,
+          sends: lane.sends ? _RealtimeEngine.normalizeSends(lane.sends) : void 0
+        };
       })
     );
   }
@@ -7058,9 +7127,10 @@ var RealtimeEngine = class _RealtimeEngine {
   }
   setTrackBuses(buses) {
     this.native.setTrackBuses(
-      Array.isArray(buses) ? buses.map(
-        (bus) => bus.sends ? { ...bus, sends: _RealtimeEngine.normalizeSends(bus.sends) } : bus
-      ) : buses
+      Array.isArray(buses) ? buses.map((bus) => ({
+        ...bus,
+        sends: bus.sends ? _RealtimeEngine.normalizeSends(bus.sends) : void 0
+      })) : buses
     );
   }
   /**
@@ -7214,6 +7284,16 @@ var RealtimeEngine = class _RealtimeEngine {
    * stages of the offline mastering chain (`repair.*`, `loudness`, and the
    * match stages) have no insert form and no automation id: they buffer the
    * entire signal by construction and do not run on the realtime path.
+   *
+   * The returned id uses the track's current positional lane selector. When
+   * `setTrackLanes` successfully changes lane order or membership, the engine
+   * remaps already queued and published track automation by track id, but it
+   * cannot update a numeric id retained by the caller. Re-resolve every track
+   * insert id after such a topology change before passing it to
+   * `setAutomationLane`, `setParameter`, or `setParameterSmoothed`. Use
+   * `setTrackStripInsertParamByName` when the operation needs a stable track
+   * identity. Master and bus insert ids are separate and are not invalidated by
+   * track-lane changes.
    */
   resolveTrackInsertAutomationId(trackId, insertIndex, paramName) {
     return this.native.resolveTrackInsertAutomationId(trackId, insertIndex, paramName);
@@ -7540,6 +7620,12 @@ var RealtimeEngine = class _RealtimeEngine {
   meterScratchRenderFrame() {
     return Number(this.native.meterScratchRenderFrame());
   }
+  meterScratchInputPeakDbL() {
+    return this.native.meterScratchInputPeakDbL();
+  }
+  meterScratchInputPeakDbR() {
+    return this.native.meterScratchInputPeakDbR();
+  }
   meterScratchValue(field) {
     return this.native.meterScratchValue(field);
   }
@@ -7549,9 +7635,10 @@ var RealtimeEngine = class _RealtimeEngine {
   /**
    * Drains pending meter telemetry as per-plane (wide) records for a surround
    * target. Use this for a surround mix target; {@link drainMeterTelemetry}
-   * stays the stereo fast path. The two share one queue — call only one per
-   * target. The live AudioWorklet path owns the queue via the stereo drain, so
-   * this wide drain is for an offline (non-worklet) engine instance; per-plane
+   * stays the stereo fast path. The two share one queue and each consumes every
+   * target's records, so an engine uses only one of them. The live AudioWorklet
+   * path owns the queue via the stereo drain, so this wide drain is for an
+   * offline (non-worklet) engine instance; per-plane
    * surround meters are not delivered over the live worklet meter ring.
    */
   drainMeterTelemetryWide(maxRecords = 1024) {
@@ -7989,47 +8076,60 @@ var Mixer = class _Mixer {
    * after {@link delete}.
    */
   createRealtimeBuffer() {
-    const stripCount = this.stripCount();
-    let leftInputs = [];
-    let rightInputs = [];
+    const leftInputs = [];
+    const rightInputs = [];
     let outLeft = this.mixer.outputLeftView();
     let outRight = this.mixer.outputRightView();
+    let acquiredStripCount = -1;
+    const viewsDetached = () => outLeft.byteLength === 0 || outRight.byteLength === 0;
     const acquire = () => {
-      leftInputs = [];
-      rightInputs = [];
-      for (let index = 0; index < stripCount; index++) {
+      const stripCount = this.stripCount();
+      const detached = viewsDetached();
+      if (detached) {
+        leftInputs.length = 0;
+        rightInputs.length = 0;
+      } else {
+        leftInputs.length = Math.min(leftInputs.length, stripCount);
+        rightInputs.length = Math.min(rightInputs.length, stripCount);
+      }
+      for (let index = leftInputs.length; index < stripCount; index++) {
         leftInputs.push(this.mixer.inputLeftView(index));
+      }
+      for (let index = rightInputs.length; index < stripCount; index++) {
         rightInputs.push(this.mixer.inputRightView(index));
       }
-      outLeft = this.mixer.outputLeftView();
-      outRight = this.mixer.outputRightView();
+      if (detached) {
+        outLeft = this.mixer.outputLeftView();
+        outRight = this.mixer.outputRightView();
+      }
+      acquiredStripCount = stripCount;
     };
     acquire();
-    const reacquireIfDetached = () => {
-      if (outLeft.byteLength === 0 || (leftInputs[0]?.byteLength ?? 1) === 0) {
+    const acquireIfNeeded = () => {
+      if (acquiredStripCount !== this.stripCount() || viewsDetached()) {
         acquire();
       }
     };
     return {
       get leftInputs() {
-        reacquireIfDetached();
+        acquireIfNeeded();
         return leftInputs;
       },
       get rightInputs() {
-        reacquireIfDetached();
+        acquireIfNeeded();
         return rightInputs;
       },
       get outLeft() {
-        reacquireIfDetached();
+        acquireIfNeeded();
         return outLeft;
       },
       get outRight() {
-        reacquireIfDetached();
+        acquireIfNeeded();
         return outRight;
       },
-      process: (numSamples = outLeft.length) => {
-        reacquireIfDetached();
-        this.mixer.processPreparedStereo(numSamples);
+      process: (numSamples) => {
+        acquireIfNeeded();
+        this.mixer.processPreparedStereo(numSamples ?? outLeft.length);
       }
     };
   }
@@ -8828,6 +8928,13 @@ var StreamingMasteringChain = class {
   /** Reset all processor state without rebuilding. */
   reset() {
     this.chain.reset();
+  }
+  /**
+   * Set one realtime-safe full-chain parameter at a serialized block boundary.
+   * Structural, disabled-stage and unknown parameters are rejected.
+   */
+  setParameter(key, value) {
+    this.chain.setParameter(key, value);
   }
   /** Total reported latency in samples across all active processors. */
   latencySamples() {
@@ -9803,6 +9910,7 @@ export {
   masterAudioWithProgress,
   mastering,
   masteringAbMatchLoudness,
+  masteringAbMatchLoudnessStereo,
   masteringAmpPresetCatalog,
   masteringAssistantSuggest,
   masteringAssistantSuggestChain,
@@ -9824,6 +9932,7 @@ export {
   masteringPairAnalysisNames,
   masteringPairAnalyze,
   masteringPairProcess,
+  masteringPairProcessStereo,
   masteringPairProcessorNames,
   masteringPlatformNames,
   masteringPresetNames,

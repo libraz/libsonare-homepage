@@ -89,7 +89,7 @@ drawTiltCurve(report.bandEnergyDeltaDb);   // 32 バンド。正なら処理後�
 同じオブジェクトが C ABI・ctypes・Node・Python・両 CLI のレポートファイルにも同じ形で
 含まれるため、CLI から書き出したレポートとブラウザで読むレポートは同じ形になります。
 
-説明可能なマスタリングのヘルパー（`masteringAudioProfile(...)`、`masteringAssistantSuggest(...)`、`masteringStreamingPreview(...)`）は JSON 文字列を返します。正確な形、受け付けるオプション、提案をレンダー済みマスターに変換する方法は [マスタリングアシスタント](./mastering-assistant.md) を参照してください。リファレンストラック用途では `masteringPairProcessorNames()` と `masteringPairAnalyze()` を使います（サンプルレートを揃え、長さも近づける）。
+説明可能なマスタリングのヘルパー（`masteringAudioProfile(...)`、`masteringAssistantSuggest(...)`、`masteringStreamingPreview(...)`）は JSON 文字列を返します。正確な形、受け付けるオプション、提案をレンダー済みマスターに変換する方法は [マスタリングアシスタント](./mastering-assistant.md) を参照してください。リファレンストラック用途では `masteringPairProcessorNames()` と `masteringPairAnalyze()` を使います（サンプルレートを揃え、長さも近づける）。`masteringPairProcess()` はモノラルの 2 入力 `match.*` プロセッサを実行し、そのステレオ版である `masteringPairProcessStereo()` は後述します。
 
 #### 説明可能なヘルパーのステレオ版
 
@@ -213,6 +213,24 @@ interface LoudnessMatchResult {
 
 `masteringStreamingPreviewStereo` の `platforms` の扱いはモノラル版と同じです。省略するか空配列を渡すと、組み込みの Spotify / Apple Music / YouTube のセットにフォールバックし、例外ではなく 3 行分の結果を返します。
 
+#### `masteringAbMatchLoudnessStereo(request)`
+
+```typescript
+function masteringAbMatchLoudnessStereo(request: MasteringAbMatchLoudnessStereoRequest): LoudnessMatchStereoResult
+// request: { sourceLeft, sourceRight, referenceLeft, referenceRight: Float32Array; sampleRate?: number } -> { left, right, sampleRate, referenceLufs, sourceLufs, appliedGainDb, matchedTruePeakDbtp }
+```
+
+`masteringAbMatchLoudness` のステレオ版です。ステレオプログラムで計測した 1 つのゲインを両方のソースチャンネルに適用するため、左右のバランスは変わりません。受け取るのはリクエストオブジェクトのみです。同じペアの 2 チャンネルは同じ長さでなければ例外になり、ソースのペアとリファレンスのペアは互いに長さが異なっていても構いません。実測では、-22.64 LUFS を -10.60 LUFS に合わせると 12.04 dB が適用され、両チャンネルとも入力の RMS のちょうど 4.0000 倍で返りました。`matchedTruePeakDbtp` は両チャンネルの最大値です。ゲインに上限がないことと、無音のテイクで LUFS が非有限値になることはモノラル版と同じで、無音のソースでは `sourceLufs` が `-Infinity`、`appliedGainDb` が `0` になり、サンプルは変わりません。
+
+#### `masteringPairProcessStereo(request)`
+
+```typescript
+function masteringPairProcessStereo(request: MasteringPairProcessStereoRequest): MasteringStereoResult
+// request: { processorName: 'match.abCrossfade', sourceLeft, sourceRight, referenceLeft, referenceRight, sampleRate?, params? }; 同じ順の位置引数も可
+```
+
+`StereoPairProcessor` は `match.abCrossfade` のみで、ほかの名前は `unsupported stereo pair processor` で例外になります。結果は静的なリニアブレンド `(1 - mix) * source + mix * reference` で、長さは短いほうのペアに揃います。`mix` の既定値は `0.5` で、範囲は `[0, 1]` です（範囲外は例外）。`0` なら source、`1` なら reference が返ります。同位相のトーンでの実測（source の RMS 0.0707、reference の RMS 0.2828）では、既定値で 0.1768、`mix: 0.25` で 0.1237、4 秒の source と 2 秒の reference では 2 秒分が返り、`latencySamples` は 0 でした。
+
 #### `lufsSeriesInterleaved(...)`
 
 マルチチャンネルのプログラムに対するモーメンタリー（400 ms）とショートターム（3 s）の LUFS 系列を、BS.1770-4 のチャンネル合算で求めます。[特徴抽出](./js-api-features.md)のモノラル版 `momentaryLufs`／`shortTermLufs` は 1 チャンネルずつを計測するもので、これはそのマルチチャンネル版です。
@@ -273,7 +291,7 @@ interface LufsSeriesResult {
 | モノラル音声を処理 | `masteringProcess()` |
 | ステレオ音声を処理 | `masteringProcessStereo()` |
 | ペアプロセッサ一覧 | `masteringPairProcessorNames()` |
-| ソース／リファレンスのペアを処理 | `masteringPairProcess()` |
+| ソース／リファレンスのペアを処理 | `masteringPairProcess()` / `masteringPairProcessStereo()` |
 | ペア解析の一覧 | `masteringPairAnalysisNames()` |
 | ソース／リファレンスのペアを解析 | `masteringPairAnalyze()` |
 | ステレオ解析の一覧 | `masteringStereoAnalysisNames()` |

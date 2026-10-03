@@ -91,7 +91,7 @@ The same object is mirrored on the C ABI, ctypes, Node, Python, and both CLI
 report files, so a report exported from the CLI and one read in the browser have
 the same shape.
 
-The explainable-mastering helpers — `masteringAudioProfile(...)`, `masteringAssistantSuggest(...)`, and `masteringStreamingPreview(...)` — return JSON strings; see [Mastering Assistant](./mastering-assistant.md) for their exact shapes, accepted options, and how to turn a suggestion into a rendered master. Reference-track workflows use `masteringPairProcessorNames()` and `masteringPairAnalyze()` (matched sample rate and comparable duration).
+The explainable-mastering helpers — `masteringAudioProfile(...)`, `masteringAssistantSuggest(...)`, and `masteringStreamingPreview(...)` — return JSON strings; see [Mastering Assistant](./mastering-assistant.md) for their exact shapes, accepted options, and how to turn a suggestion into a rendered master. Reference-track workflows use `masteringPairProcessorNames()` and `masteringPairAnalyze()` (matched sample rate and comparable duration). `masteringPairProcess()` runs a mono two-input `match.*` processor; its stereo counterpart `masteringPairProcessStereo()` is described below.
 
 #### Stereo entry points for the explainable helpers
 
@@ -217,6 +217,24 @@ When either take is silent or sits below the measurement gate, its LUFS field is
 
 `masteringStreamingPreviewStereo` treats `platforms` exactly as the mono helper does: omit it or pass an empty array and the preview falls back to the built-in Spotify / Apple Music / YouTube set, returning three rows rather than throwing.
 
+#### `masteringAbMatchLoudnessStereo(request)`
+
+```typescript
+function masteringAbMatchLoudnessStereo(request: MasteringAbMatchLoudnessStereoRequest): LoudnessMatchStereoResult
+// request: { sourceLeft, sourceRight, referenceLeft, referenceRight: Float32Array; sampleRate?: number } -> { left, right, sampleRate, referenceLufs, sourceLufs, appliedGainDb, matchedTruePeakDbtp }
+```
+
+The stereo form of `masteringAbMatchLoudness`: one gain, measured on the stereo program, goes to both source channels, so the left/right balance is unchanged. Request-object only; each pair's two channels must be equal in length or the call throws, and the source and reference pairs may differ. Measured: -22.64 LUFS matched to -10.60 LUFS applied 12.04 dB, and both channels came back at exactly 4.0000 times their input RMS. `matchedTruePeakDbtp` is the maximum over both channels. The uncapped gain and the non-finite LUFS of a silent take behave as in the mono call: a silent source gave `sourceLufs` of `-Infinity`, `appliedGainDb` of `0`, and unchanged samples.
+
+#### `masteringPairProcessStereo(request)`
+
+```typescript
+function masteringPairProcessStereo(request: MasteringPairProcessStereoRequest): MasteringStereoResult
+// request: { processorName: 'match.abCrossfade', sourceLeft, sourceRight, referenceLeft, referenceRight, sampleRate?, params? }; also positional in that order
+```
+
+`match.abCrossfade` is the only `StereoPairProcessor`; any other name throws `unsupported stereo pair processor`. The result is a static linear blend, `(1 - mix) * source + mix * reference`, as long as the shorter pair. `mix` defaults to `0.5` and must lie in `[0, 1]` (outside it the call throws); `0` returns the source and `1` the reference. Measured on in-phase tones (source RMS 0.0707, reference RMS 0.2828): the default gave 0.1768, `mix: 0.25` gave 0.1237, a 4 s source against a 2 s reference returned 2 s, and `latencySamples` was 0.
+
 #### `lufsSeriesInterleaved(...)`
 
 Momentary (400 ms) and short-term (3 s) LUFS series over a multichannel program, with the BS.1770-4 channel sum. The mono `momentaryLufs` / `shortTermLufs` on [Features](./js-api-features.md) measure one channel each; this is their multichannel counterpart.
@@ -277,7 +295,7 @@ The named mastering API families are:
 | Process mono audio | `masteringProcess()` |
 | Process stereo audio | `masteringProcessStereo()` |
 | List pair processors | `masteringPairProcessorNames()` |
-| Process source/reference pair | `masteringPairProcess()` |
+| Process source/reference pair | `masteringPairProcess()` / `masteringPairProcessStereo()` |
 | List pair analyses | `masteringPairAnalysisNames()` |
 | Analyze source/reference pair | `masteringPairAnalyze()` |
 | List stereo analyses | `masteringStereoAnalysisNames()` |

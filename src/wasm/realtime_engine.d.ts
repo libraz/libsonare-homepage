@@ -465,8 +465,22 @@ export declare class RealtimeEngine {
     clearParameters(): void;
     /** Read back the current transport state snapshot. */
     getTransportState(): EngineTransportState;
+    /** Queues an integrated-loudness reset; short-term and momentary windows are retained. */
+    resetMasterLoudnessMeter(renderFrame?: number): void;
+    /** Reads the immutable factory value for a resolved insert parameter id. */
+    insertParameterConstructedValue(paramId: number): number;
     play(renderFrame?: number): void;
+    /**
+     * A loop wrap, seek or stop sends note-offs plus CC64=0, CC121, CC123 and a
+     * centred pitch bend on every channel played since the last reset, so
+     * controller values set before a loop region are not restored at the wrap.
+     */
     stop(renderFrame?: number): void;
+    /**
+     * A loop wrap, seek or stop sends note-offs plus CC64=0, CC121, CC123 and a
+     * centred pitch bend on every channel played since the last reset, so
+     * controller values set before a loop region are not restored at the wrap.
+     */
     seekSample(timelineSample: number, renderFrame?: number): void;
     /**
      * Snaps every in-flight parameter ramp (engine-level smoothed params, mixer
@@ -481,6 +495,11 @@ export declare class RealtimeEngine {
     flushControlCommands(): void;
     /** Applies commands already due on a control-only mirror, retaining future commands. */
     applyCommandsDueNowPreservingFuture(): void;
+    /**
+     * A loop wrap, seek or stop sends note-offs plus CC64=0, CC121, CC123 and a
+     * centred pitch bend on every channel played since the last reset, so
+     * controller values set before a loop region are not restored at the wrap.
+     */
     seekPpq(ppq: number, renderFrame?: number): void;
     /** Set a finite tempo in the range (0, 100000] BPM. */
     setTempo(bpm: number): void;
@@ -488,6 +507,11 @@ export declare class RealtimeEngine {
     setTimeSignature(numerator: number, denominator: number): void;
     setTimeSignatureSegments(segments: readonly EngineTimeSignatureSegment[]): void;
     sampleAtPpq(ppq: number): number;
+    /**
+     * A loop wrap, seek or stop sends note-offs plus CC64=0, CC121, CC123 and a
+     * centred pitch bend on every channel played since the last reset, so
+     * controller values set before a loop region are not restored at the wrap.
+     */
     setLoop(startPpq: number, endPpq: number, enabled?: boolean): void;
     addParameter(info: EngineParameterInfo): void;
     parameterCount(): number;
@@ -598,6 +622,16 @@ export declare class RealtimeEngine {
      * stages of the offline mastering chain (`repair.*`, `loudness`, and the
      * match stages) have no insert form and no automation id: they buffer the
      * entire signal by construction and do not run on the realtime path.
+     *
+     * The returned id uses the track's current positional lane selector. When
+     * `setTrackLanes` successfully changes lane order or membership, the engine
+     * remaps already queued and published track automation by track id, but it
+     * cannot update a numeric id retained by the caller. Re-resolve every track
+     * insert id after such a topology change before passing it to
+     * `setAutomationLane`, `setParameter`, or `setParameterSmoothed`. Use
+     * `setTrackStripInsertParamByName` when the operation needs a stable track
+     * identity. Master and bus insert ids are separate and are not invalidated by
+     * track-lane changes.
      */
     resolveTrackInsertAutomationId(trackId: number, insertIndex: number, paramName: string): number;
     resolveMasterInsertAutomationId(insertIndex: number, paramName: string): number;
@@ -811,14 +845,17 @@ export declare class RealtimeEngine {
     popMeterTelemetryToScratch(): boolean;
     meterScratchTargetId(): number;
     meterScratchRenderFrame(): number;
+    meterScratchInputPeakDbL(): number;
+    meterScratchInputPeakDbR(): number;
     meterScratchValue(field: number): number;
     drainMeterTelemetry(maxRecords?: number): EngineMeterTelemetry[];
     /**
      * Drains pending meter telemetry as per-plane (wide) records for a surround
      * target. Use this for a surround mix target; {@link drainMeterTelemetry}
-     * stays the stereo fast path. The two share one queue — call only one per
-     * target. The live AudioWorklet path owns the queue via the stereo drain, so
-     * this wide drain is for an offline (non-worklet) engine instance; per-plane
+     * stays the stereo fast path. The two share one queue and each consumes every
+     * target's records, so an engine uses only one of them. The live AudioWorklet
+     * path owns the queue via the stereo drain, so this wide drain is for an
+     * offline (non-worklet) engine instance; per-plane
      * surround meters are not delivered over the live worklet meter ring.
      */
     drainMeterTelemetryWide(maxRecords?: number): EngineMeterTelemetryWide[];

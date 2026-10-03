@@ -33,6 +33,8 @@ export interface StreamingPlatform {
 export declare const SOLO_PROCESSORS: readonly ["dynamics.brickwallLimiter", "dynamics.compressor", "dynamics.deesser", "dynamics.duckingProcessor", "dynamics.expander", "dynamics.gate", "dynamics.limiter", "dynamics.parallelComp", "dynamics.sidechainRouter", "dynamics.transientShaper", "dynamics.upwardCompressor", "dynamics.upwardExpander", "dynamics.vocalRider", "effects.acoustic.roomMorph", "effects.delay.stereo", "effects.filter.vowel", "effects.gsEfx", "effects.modulation.autoWah", "effects.modulation.chorus", "effects.modulation.ensemble", "effects.modulation.flanger", "effects.modulation.phaser", "effects.modulation.pitchShifter", "effects.modulation.ringModulator", "effects.modulation.rotary", "effects.modulation.wah", "effects.reverb.convolution", "effects.reverb.dattorro", "effects.reverb.fdn", "effects.reverb.plate", "effects.reverb.room", "effects.reverb.velvet", "eq.apiStyle", "eq.bandPass", "eq.cutFilter", "eq.dynamic", "eq.equalizer", "eq.graphic", "eq.linearPhase", "eq.midSide", "eq.minimumPhase", "eq.parametric", "eq.pultec", "eq.shelving", "eq.tilt", "final.bitDepth", "final.dither", "final.outputChain", "maximizer.adaptiveRelease", "maximizer.loudnessOptimize", "maximizer.maximizer", "maximizer.softKneeMax", "maximizer.truePeakLimiter", "multiband.compressor", "multiband.dynamicEq", "multiband.expander", "multiband.imager", "multiband.limiter", "multiband.saturation", "repair.declick", "repair.declip", "repair.decrackle", "repair.dehum", "repair.denoiseClassical", "repair.dereverbClassical", "repair.trimSilence", "saturation.ampSim", "saturation.bitcrusher", "saturation.exciter", "saturation.hardClipper", "saturation.multibandExciter", "saturation.softClipper", "saturation.tape", "saturation.transformer", "saturation.tube", "saturation.waveshaper", "spectral.airBand", "spectral.lowEndFocus", "spectral.presenceEnhancer", "spectral.spectralShaper", "stereo.autoPan", "stereo.binaural", "stereo.haasEnhancer", "stereo.imager", "stereo.monoMaker", "stereo.phaseAlign", "stereo.stereoBalance", "utility.gain"];
 export type SoloProcessor = (typeof SOLO_PROCESSORS)[number];
 export type PairProcessor = 'match.applyMatchEq' | 'match.alignReferenceToSource' | 'match.abSwitch' | 'match.abCrossfade';
+/** Pair processors with a stereo entry point. */
+export type StereoPairProcessor = 'match.abCrossfade';
 export type PairAnalysis = 'match.referenceLoudness' | 'match.tonalBalance' | 'match.tonalBalanceLogBands' | 'match.matchEqCurve' | 'match.estimateReferenceDelaySamples';
 export type StereoAnalysis = 'stereo.monoCompatCheck' | 'stereo.monoCompatCheckLogBands';
 /** Options for `mastering`. All fields are optional. */
@@ -73,6 +75,22 @@ export interface LoudnessMatchResult {
      * the one thing a loudness match must not do. Limit downstream if the peak
      * matters more than the match.
      */
+    matchedTruePeakDbtp: number;
+}
+/** Stereo counterpart of {@link LoudnessMatchResult}. */
+export interface LoudnessMatchStereoResult {
+    /** The left source channel, gain-matched to the reference loudness. */
+    left: Float32Array;
+    /** The right source channel, gain-matched with the same gain as `left`. */
+    right: Float32Array;
+    sampleRate: number;
+    /** The reference program's BS.1770 integrated loudness. */
+    referenceLufs: number;
+    /** The stereo source program's loudness before the gain. */
+    sourceLufs: number;
+    /** One gain applied to both source channels, in dB. */
+    appliedGainDb: number;
+    /** Maximum true peak across the matched left and right channels, in dBTP. */
     matchedTruePeakDbtp: number;
 }
 /**

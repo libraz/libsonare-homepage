@@ -1,4 +1,4 @@
-import type { LoudnessMatchResult, MasteringAssistantParams, MasteringInsertParamChoice, MasteringInsertSlot, MasteringOptions, MasteringProcessorParams, MasteringResult, MasteringStereoResult, PairAnalysis, PairProcessor, SoloProcessor, StereoAnalysis, StreamingPlatform } from './public_types';
+import type { LoudnessMatchResult, LoudnessMatchStereoResult, MasteringAssistantParams, MasteringInsertParamChoice, MasteringInsertSlot, MasteringOptions, MasteringProcessorParams, MasteringResult, MasteringStereoResult, PairAnalysis, PairProcessor, SoloProcessor, StereoAnalysis, StereoPairProcessor, StreamingPlatform } from './public_types';
 export type { MasteringInsertParamChoice, MasteringInsertSlot };
 /** Canonical request form for loudness/true-peak mastering. */
 export interface MasteringRequest extends MasteringOptions {
@@ -26,12 +26,30 @@ export interface MasteringPairProcessRequest {
     sampleRate?: number;
     params?: MasteringProcessorParams;
 }
+/** Canonical request form for a stereo two-input match processor. */
+export interface MasteringPairProcessStereoRequest {
+    processorName: StereoPairProcessor;
+    sourceLeft: Float32Array;
+    sourceRight: Float32Array;
+    referenceLeft: Float32Array;
+    referenceRight: Float32Array;
+    sampleRate?: number;
+    params?: MasteringProcessorParams;
+}
 /** Canonical request form for {@link masteringAbMatchLoudness}. */
 export interface MasteringAbMatchLoudnessRequest {
     /** The take to gain-match. */
     source: Float32Array;
     /** The take whose loudness `source` is matched to; returned untouched. */
     reference: Float32Array;
+    sampleRate?: number;
+}
+/** Canonical request form for stereo AB loudness matching. */
+export interface MasteringAbMatchLoudnessStereoRequest {
+    sourceLeft: Float32Array;
+    sourceRight: Float32Array;
+    referenceLeft: Float32Array;
+    referenceRight: Float32Array;
     sampleRate?: number;
 }
 /** Canonical request form for a two-input match analysis. */
@@ -311,6 +329,12 @@ export declare function masteringProcessStereo(processorName: SoloProcessor, lef
 export declare function masteringPairProcess(request: MasteringPairProcessRequest): MasteringResult;
 export declare function masteringPairProcess(processorName: PairProcessor, source: Float32Array, reference: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): MasteringResult;
 /**
+ * Apply the stereo `match.abCrossfade` processor. Source and reference stereo
+ * pairs may have independent lengths, but each pair must have equal channels.
+ */
+export declare function masteringPairProcessStereo(request: MasteringPairProcessStereoRequest): MasteringStereoResult;
+export declare function masteringPairProcessStereo(processorName: StereoPairProcessor, sourceLeft: Float32Array, sourceRight: Float32Array, referenceLeft: Float32Array, referenceRight: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): MasteringStereoResult;
+/**
  * Analyze a `source` against a `reference` with a two-input analysis. The two
  * buffers may have independent lengths.
  */
@@ -337,6 +361,8 @@ export declare function masteringPairAnalyze(analysisName: PairAnalysis, source:
  * ```
  */
 export declare function masteringAbMatchLoudness(request: MasteringAbMatchLoudnessRequest): LoudnessMatchResult;
+/** Gain-match a stereo source to a stereo reference with one shared gain. */
+export declare function masteringAbMatchLoudnessStereo(request: MasteringAbMatchLoudnessStereoRequest): LoudnessMatchStereoResult;
 export declare function masteringStereoAnalyze(request: MasteringStereoAnalyzeRequest): string;
 export declare function masteringStereoAnalyze(analysisName: StereoAnalysis, left: Float32Array, right: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): string;
 export declare function masteringAssistantSuggest(request: MasteringAssistantParamsRequest): string;
