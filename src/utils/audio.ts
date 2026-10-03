@@ -242,9 +242,19 @@ export function downloadJson(filename: string, data: unknown): string {
   return url;
 }
 
+/** Sample encodings the WAV writer supports. */
+export type WavFormat = 'pcm16' | 'pcm24' | 'float32';
+
+const WAVE_FORMAT_PCM = 1;
+const WAVE_FORMAT_IEEE_FLOAT = 3;
+
 /** A WAV file from planar channels, ready to download or hand to an `<audio>`. */
-export function wavBlob(channels: readonly Float32Array[], sampleRate: number): Blob {
-  return new Blob([encodeWav(channels, sampleRate)], { type: 'audio/wav' });
+export function wavBlob(
+  channels: readonly Float32Array[],
+  sampleRate: number,
+  format: WavFormat = 'pcm16',
+): Blob {
+  return new Blob([encodeWav(channels, sampleRate, format)], { type: 'audio/wav' });
 }
 
 /**
@@ -252,7 +262,11 @@ export function wavBlob(channels: readonly Float32Array[], sampleRate: number): 
  * per-channel results hand back. Any channel count; the encode stops at the
  * shortest channel, so a ragged set cannot read past its end.
  */
-export function encodeWav(channels: readonly Float32Array[], sampleRate: number): ArrayBuffer {
+export function encodeWav(
+  channels: readonly Float32Array[],
+  sampleRate: number,
+  format: WavFormat = 'pcm16',
+): ArrayBuffer {
   // No channels is degenerate input, not an empty stereo file: call it mono, no frames.
   const channelCount = channels.length || 1;
   const frames = channels.length ? Math.min(...channels.map((c) => c.length)) : 0;
@@ -261,7 +275,7 @@ export function encodeWav(channels: readonly Float32Array[], sampleRate: number)
     const channel = channels[c];
     for (let i = 0; i < frames; i++) interleaved[i * channelCount + c] = channel[i];
   }
-  return encodeWavInterleaved(interleaved, sampleRate, channelCount);
+  return encodeWavInterleaved(interleaved, sampleRate, channelCount, format);
 }
 
 /**
@@ -269,44 +283,70 @@ export function encodeWav(channels: readonly Float32Array[], sampleRate: number)
  * which is how a mixed offline render arrives. `encodeWav` interleaves and
  * calls this; a caller that already has that order should not be made to
  * unpack it first.
+ *
+ * PCM formats clip to [-1, 1) and round to the nearest step; they never dither
+ * (the engine's bounce does that before the samples get here). `float32` writes
+ * the samples unchanged as IEEE float with the `fact` chunk the format requires.
  */
 export function encodeWavInterleaved(
   samples: Float32Array,
   sampleRate: number,
   channels: number,
+  format: WavFormat = 'pcm16',
 ): ArrayBuffer {
-  const bytesPerSample = 2;
+  const isFloat = format === 'float32';
+  const bytesPerSample = format === 'pcm16' ? 2 : format === 'pcm24' ? 3 : 4;
   const blockAlign = channels * bytesPerSample;
   const dataSize = samples.length * bytesPerSample;
-  const buffer = new ArrayBuffer(44 + dataSize);
+  // Non-PCM adds an 18-byte fmt chunk and a 12-byte fact chunk; chunks are word-aligned.
+  const headerSize = isFloat ? 58 : 44;
+  const padding = dataSize % 2;
+  const buffer = new ArrayBuffer(headerSize + dataSize + padding);
   const view = new DataView(buffer);
 
   writeString(view, 0, 'RIFF');
-  view.setUint32(4, 36 + dataSize, true);
+  view.setUint32(4, buffer.byteLength - 8, true);
   writeString(view, 8, 'WAVE');
   writeString(view, 12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
+  view.setUint32(16, isFloat ? 18 : 16, true);
+  view.setUint16(20, isFloat ? WAVE_FORMAT_IEEE_FLOAT : WAVE_FORMAT_PCM, true);
   view.setUint16(22, channels, true);
   view.setUint32(24, sampleRate, true);
   view.setUint32(28, sampleRate * blockAlign, true);
   view.setUint16(32, blockAlign, true);
   view.setUint16(34, bytesPerSample * 8, true);
-  writeString(view, 36, 'data');
-  view.setUint32(40, dataSize, true);
+  if (isFloat) {
+    view.setUint16(36, 0, true); // cbSize: no extension
+    writeString(view, 38, 'fact');
+    view.setUint32(42, 4, true);
+    view.setUint32(46, channels ? samples.length / channels : 0, true);
+  }
+  writeString(view, headerSize - 8, 'data');
+  view.setUint32(headerSize - 4, dataSize, true);
 
-  let offset = 44;
+  let offset = headerSize;
   for (let i = 0; i < samples.length; i++) {
-    view.setInt16(offset, floatToInt16(samples[i]), true);
+    if (format === 'pcm16') {
+      view.setInt16(offset, floatToPcm(samples[i], 16), true);
+    } else if (format === 'pcm24') {
+      const value = floatToPcm(samples[i], 24);
+      view.setUint8(offset, value & 0xff);
+      view.setUint8(offset + 1, (value >> 8) & 0xff);
+      view.setUint8(offset + 2, (value >> 16) & 0xff);
+    } else {
+      view.setFloat32(offset, samples[i], true);
+    }
     offset += bytesPerSample;
   }
 
   return buffer;
 }
 
-function floatToInt16(value: number): number {
-  const clipped = Math.max(-1, Math.min(1, value));
-  return clipped < 0 ? clipped * 0x8000 : clipped * 0x7fff;
+/** Signed integer for `value` at `bits` of depth: clipped to [-1, 1), rounded to nearest, NaN as silence. */
+function floatToPcm(value: number, bits: 16 | 24): number {
+  if (Number.isNaN(value)) return 0;
+  const scale = 2 ** (bits - 1);
+  return Math.max(-scale, Math.min(scale - 1, Math.round(value * scale)));
 }
 
 function writeString(view: DataView, offset: number, value: string) {

@@ -6,7 +6,7 @@
  * call it from a download click on the main thread or from a worker.
  */
 
-import { encodeWavInterleaved } from '@/utils/audio';
+import { encodeWavInterleaved, type WavFormat } from '@/utils/audio';
 
 export interface StemMixOptions {
   /** Linear gain per stem, in stem order. Missing entries mean unity. */
@@ -18,6 +18,8 @@ export interface StemMixOptions {
 export interface WavExportOptions extends StemMixOptions {
   sampleRate: number;
   numChannels: number;
+  /** Sample encoding; defaults to 16-bit PCM. */
+  format?: WavFormat;
 }
 
 export function useAudioExport() {
@@ -44,9 +46,14 @@ export function useAudioExport() {
     return mix;
   }
 
-  /** Encode interleaved float samples as a 16-bit PCM WAV blob. */
-  function encodeWav(interleaved: Float32Array, sampleRate: number, numChannels: number): Blob {
-    return new Blob([encodeWavInterleaved(interleaved, sampleRate, numChannels)], {
+  /** Encode interleaved float samples as a WAV blob (16-bit PCM unless `format` says otherwise). */
+  function encodeWav(
+    interleaved: Float32Array,
+    sampleRate: number,
+    numChannels: number,
+    format: WavFormat = 'pcm16',
+  ): Blob {
+    return new Blob([encodeWavInterleaved(interleaved, sampleRate, numChannels, format)], {
       type: 'audio/wav',
     });
   }
@@ -54,7 +61,7 @@ export function useAudioExport() {
   /** Mix stems with their gains and encode the result; null when nothing was mixed. */
   function exportWav(stems: Float32Array[], options: WavExportOptions): Blob | null {
     const mix = mixStems(stems, options);
-    return mix ? encodeWav(mix, options.sampleRate, options.numChannels) : null;
+    return mix ? encodeWav(mix, options.sampleRate, options.numChannels, options.format) : null;
   }
 
   /** Wrap Standard MIDI File bytes (e.g. `Project.exportSmf()`) as a blob. */
