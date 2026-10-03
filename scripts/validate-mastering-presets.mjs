@@ -1,19 +1,18 @@
 import { fileURLToPath } from 'node:url';
-import { init, masteringChainStereo, masteringPairAnalyze, version } from '../src/wasm/index.js';
+import * as wasm from '../src/wasm/index.js';
 
-export const sampleRate = 22050;
-export const seconds = 2;
+// Verified at 48 kHz: a 44.1 kHz context renders the same presets with
+// slightly different limiter oversampling and LUFS gating.
+export const sampleRate = 48_000;
+export const seconds = 3;
 export const length = sampleRate * seconds;
+/** A fit may land this far from the target (LU). */
+export const TARGET_TOLERANCE_LU = 0.5;
 
-// Neutral tuning + default module settings: exercise the production chain-config
-// builder along its preset/venue branches rather than a hand-rolled config.
-const NEUTRAL_TUNING = { tone: 50, width: 50, dynamics: 50 };
-
-// The production config builder and the canonical preset/venue ID tables live in
-// TypeScript source. Bundling them in-memory (with a Vue stub, since the builder
-// ships alongside a Vue composable) lets this plain-node gate exercise the exact
-// code path the demo runs — and iterate the real MasteringPresetId × VenueId sets
-// instead of a drifting hand-maintained list.
+// The preset map, the engine-op builder and the loudness fit live in
+// TypeScript. Bundling them in memory lets this plain-node gate run the exact
+// code the page and its Worker run — repair, then the fit on a raw engine,
+// then the export render — over the real preset × venue tables.
 let masteringModulePromise;
 
 export function loadMasteringModule() {
@@ -23,24 +22,15 @@ export function loadMasteringModule() {
 
 async function bundleMasteringModule() {
   // Import esbuild lazily: a static import makes vite/vitest pre-transform this
-  // module (it is also imported by tests/scripts/validateMasteringPresets.test.ts)
-  // and choke on the shebang. A dynamic import keeps it out of that transform.
+  // module (it is also imported by tests/scripts/validateMasteringPresets.test.ts).
   const esbuild = await import('esbuild');
   const rootDir = fileURLToPath(new URL('..', import.meta.url));
-  const stubVue = {
-    name: 'stub-vue',
-    setup(build) {
-      build.onResolve({ filter: /^vue$/ }, () => ({ path: 'vue', namespace: 'stub-vue' }));
-      build.onLoad({ filter: /.*/, namespace: 'stub-vue' }, () => ({
-        contents: 'export const ref = () => {}; export const shallowRef = () => {};',
-        loader: 'js',
-      }));
-    },
-  };
   const result = await esbuild.build({
     stdin: {
       contents: [
-        "export { buildMasteringConfig } from './src/demos/mastering/useMastering.ts';",
+        "export { defaultMasteringState, masteringMutators, masteringTargetLufs, MASTERING_SLOT } from './src/demos/mastering/masteringState.ts';",
+        "export { fitMasteringLoudness, measureLufs, prepareProgram, renderMasteringState } from './src/demos/mastering/masteringEngine.ts';",
+        "export { fitMatchEqPeaks } from './src/demos/mastering/masteringPresetMap.ts';",
         "export { MASTERING_PRESETS, MASTERING_VENUES, MASTERING_PRESET_TARGETS } from './src/demos/mastering/masteringUi.ts';",
       ].join('\n'),
       resolveDir: rootDir,
@@ -52,88 +42,78 @@ async function bundleMasteringModule() {
     format: 'esm',
     platform: 'node',
     write: false,
-    plugins: [stubVue],
   });
   const code = result.outputFiles[0].text;
   return import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
 }
 
+/** `[name, state]` for every genre preset in every venue, at the genre's recommended target. */
 export async function buildPresetEntries() {
-  const { buildMasteringConfig, MASTERING_PRESETS, MASTERING_VENUES, MASTERING_PRESET_TARGETS } =
-    await loadMasteringModule();
+  const {
+    defaultMasteringState,
+    masteringMutators: m,
+    MASTERING_PRESETS,
+    MASTERING_VENUES,
+    MASTERING_PRESET_TARGETS,
+  } = await loadMasteringModule();
 
   const entries = [];
   for (const { id: preset } of MASTERING_PRESETS) {
     for (const { id: venue } of MASTERING_VENUES) {
-      const config = buildMasteringConfig({
-        preset,
-        venue,
-        targetLufs: MASTERING_PRESET_TARGETS[preset],
-        tuning: NEUTRAL_TUNING,
-      });
-      entries.push([`${preset}/${venue}`, config]);
+      let state = m.selectVenue(m.selectPreset(defaultMasteringState(), preset), venue);
+      state = m.setCustomLufs(state, MASTERING_PRESET_TARGETS[preset]);
+      entries.push([`${preset}/${venue}`, state]);
     }
   }
   return entries;
 }
 
-export async function validateMasteringPresets({
-  api = { init, masteringChainStereo, masteringPairAnalyze, version },
-  presetEntries,
-  log = () => {},
-} = {}) {
+/**
+ * Runs each preset the way the export does: repair preprocess, loudness fit,
+ * fitted render. A preset fails when the master misses its target by more than
+ * {@link TARGET_TOLERANCE_LU} or its true peak exceeds the limiter ceiling.
+ */
+export async function validateMasteringPresets({ api = wasm, presetEntries, log = () => {} } = {}) {
   await api.init();
   log(`libsonare ${api.version()}`);
 
+  const mastering = await loadMasteringModule();
+  const { masteringMutators: m, masteringTargetLufs, MASTERING_SLOT } = mastering;
   const entries = presetEntries ?? (await buildPresetEntries());
-
-  const source = makeSyntheticMix();
+  const source = { ...makeSyntheticMix(), sampleRate, integratedLufs: Number.NaN };
   const reference = makeReferenceMix();
 
   const failures = [];
-
-  for (const [name, config] of entries) {
+  for (const [name, state] of entries) {
     try {
-      const result = api.masteringChainStereo(source.left, source.right, sampleRate, config);
-      assertFinite(`${name}.inputLufs`, result.inputLufs);
-      assertFinite(`${name}.outputLufs`, result.outputLufs);
-      assertFinite(`${name}.appliedGainDb`, result.appliedGainDb);
+      const { program, stages } = mastering.prepareProgram(api, source, state.repair);
+      assertFinite(`${name}.programLufs`, program.integratedLufs);
+      const fit = await mastering.fitMasteringLoudness(api, state, program);
+      const master = mastering.renderMasteringState(api, m.applyLoudnessFit(state, fit), program);
+      if (master.left.length !== length || master.right.length !== length) {
+        throw new Error(`unexpected output length ${master.left.length}/${master.right.length}`);
+      }
+      const lufs = mastering.measureLufs(api, master.left, master.right, sampleRate);
+      assertFinite(`${name}.outputLufs`, lufs);
+      const truePeak = Math.max(
+        api.meteringTruePeakDb(master.left, sampleRate, 4),
+        api.meteringTruePeakDb(master.right, sampleRate, 4),
+      );
+      assertFinite(`${name}.truePeakDb`, truePeak);
+      const target = masteringTargetLufs(state);
+      const ceiling = state.inserts[MASTERING_SLOT.limiter].params.ceilingDb;
 
-      if (!(result.left instanceof Float32Array) || !(result.right instanceof Float32Array)) {
-        throw new Error('output channels are not Float32Array');
-      }
-      if (result.left.length !== length || result.right.length !== length) {
-        throw new Error(`unexpected output length ${result.left.length}/${result.right.length}`);
-      }
-      if (!Array.isArray(result.stages) || result.stages.length === 0) {
-        throw new Error('no mastering stages were applied');
-      }
-      if (result.outputLufs > config.loudness.targetLufs + 1.0) {
+      if (Math.abs(lufs - target) > TARGET_TOLERANCE_LU) {
         throw new Error(
-          `output LUFS ${result.outputLufs.toFixed(2)} exceeds target ${config.loudness.targetLufs}`,
+          `output ${lufs.toFixed(2)} LUFS misses target ${target} by more than ${TARGET_TOLERANCE_LU} LU (fit residual ${fit.residualLu.toFixed(2)} LU after ${fit.bounces} bounces)`,
         );
       }
-      // loudness.optimize clamps its static gain so the true peak never crosses
-      // the ceiling, so a preset may legitimately land below the target: when
-      // the target sits below the input loudness (it attenuates), and when
-      // denoise removes loudness it cannot boost back without peak headroom.
-      // Allow that headroom shortfall, but still fail on collapse.
-      const denoiseShortfall = config.repair?.denoise ? 4.0 : 0.5;
-      const loudnessFloor =
-        Math.min(result.inputLufs, config.loudness.targetLufs) - denoiseShortfall;
-      if (result.outputLufs < loudnessFloor) {
-        throw new Error(
-          `output LUFS ${result.outputLufs.toFixed(2)} fell below floor ${loudnessFloor.toFixed(2)} (input ${result.inputLufs.toFixed(2)}, target ${config.loudness.targetLufs})`,
-        );
-      }
-
-      const peak = Math.max(maxAbs(result.left), maxAbs(result.right));
-      if (!Number.isFinite(peak) || peak <= 0 || peak > 1.01) {
-        throw new Error(`invalid peak ${peak}`);
+      if (truePeak > ceiling) {
+        throw new Error(`true peak ${truePeak.toFixed(2)} dBTP exceeds ceiling ${ceiling} dBTP`);
       }
 
       log(
-        `${name}: ${result.outputLufs.toFixed(2)} LUFS, peak ${peak.toFixed(4)}, stages ${result.stages.join('/')}`,
+        `${name}: ${lufs.toFixed(2)} LUFS (target ${target}), true peak ${truePeak.toFixed(2)} dBTP (ceiling ${ceiling}), drive ${fit.driveDb.toFixed(2)} dB in ${fit.bounces} bounces, repair ${stages.join('/') || 'none'}`,
       );
     } catch (error) {
       failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
@@ -141,17 +121,14 @@ export async function validateMasteringPresets({
   }
 
   try {
-    const report = api.masteringPairAnalyze(
-      'match.referenceLoudness',
-      source.left,
-      reference.left,
-      sampleRate,
-      {},
+    const curve = JSON.parse(
+      api.masteringPairAnalyze('match.matchEqCurve', source.left, reference.left, sampleRate),
     );
-    if (typeof report !== 'string' || report.length === 0) {
-      throw new Error('empty pair analysis report');
+    const fit = mastering.fitMatchEqPeaks(curve, sampleRate);
+    if (fit.bands.length !== 4 || !fit.bands.every((band) => Number.isFinite(band.gainDb))) {
+      throw new Error('match EQ fit did not produce four finite bands');
     }
-    log('reference analysis: ok');
+    log(`reference match EQ: residual ${(fit.residualRatio * 100).toFixed(0)}% of the deviation`);
   } catch (error) {
     failures.push(`reference analysis: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -159,57 +136,40 @@ export async function validateMasteringPresets({
   return failures;
 }
 
-export function buildConfig({ targetLufs, tiltDb, ratio, air, width, denoise = false }) {
-  return {
-    // Mirror the nested forms the demo builds in `useMastering.ts`: the flat
-    // `eq.tiltDb` / `eq.pivotHz` keys and the `repair.denoise` boolean are
-    // deprecated shorthands, so validating them would stop exercising the
-    // shape the demo actually sends.
-    repair: denoise ? { denoise: { enabled: true }, gainFloor: 0.1 } : undefined,
-    eq: { tilt: { tiltDb, pivotHz: 1000 } },
-    dynamics: {
-      compressor: {
-        thresholdDb: -18,
-        ratio,
-        attackMs: 18,
-        releaseMs: 160,
-        kneeDb: 4,
-        autoMakeup: true,
-      },
-    },
-    spectral: {
-      airBand: { amount: air, shelfFrequencyHz: 14000 },
-    },
-    stereo: {
-      imager: { width, preserveEnergy: true },
-    },
-    maximizer: {
-      truePeakLimiter: {
-        ceilingDb: -1,
-        lookaheadMs: 5,
-        releaseMs: 120,
-        oversampleFactor: 4,
-        applyGainAtInputRate: true,
-      },
-    },
-    loudness: {
-      targetLufs,
-      ceilingDb: -1,
-      truePeakOversample: 4,
-    },
-  };
-}
-
+/**
+ * A deterministic mix with what a master carries: kick, hats, a moving bass
+ * line, a pad and a noise bed. Steady pure tones alone are not enough — the
+ * repair denoiser treats them as noise and removes most of the programme.
+ */
 export function makeSyntheticMix() {
   const left = new Float32Array(length);
   const right = new Float32Array(length);
+  let seed = 12345;
+  const random = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return (seed / 0x7fffffff) * 2 - 1;
+  };
+  const roots = [110, 146.83, 130.81, 98];
+  let bedL = 0;
+  let bedR = 0;
   for (let i = 0; i < length; i++) {
     const t = i / sampleRate;
-    const kick = Math.sin(2 * Math.PI * 55 * t) * Math.exp(-(t % 0.5) * 12);
-    const body = Math.sin(2 * Math.PI * 220 * t) * 0.18;
-    const air = Math.sin(2 * Math.PI * 4200 * t) * 0.025;
-    left[i] = kick * 0.32 + body + air;
-    right[i] = kick * 0.28 + Math.sin(2 * Math.PI * 277 * t) * 0.16 + air * 0.8;
+    const beat = t % 0.5;
+    const root = roots[Math.floor(t / 0.75) % roots.length];
+    const kick =
+      Math.sin(2 * Math.PI * (50 + 80 * Math.exp(-beat * 40)) * beat) * Math.exp(-beat * 9);
+    const hat = t % 0.25 < 0.03 ? random() * Math.exp(-(t % 0.25) * 120) : 0;
+    const bass = Math.sin(2 * Math.PI * root * t) * (0.6 + 0.4 * Math.sin(2 * Math.PI * 2 * t));
+    const pad =
+      ((Math.sin(2 * Math.PI * root * 2 * t) +
+        Math.sin(2 * Math.PI * root * 2.52 * t) +
+        Math.sin(2 * Math.PI * root * 3 * t)) /
+        3) *
+      (0.7 + 0.3 * Math.sin(2 * Math.PI * 0.5 * t));
+    bedL += 0.2 * (random() - bedL);
+    bedR += 0.2 * (random() - bedR);
+    left[i] = 0.3 * kick + 0.12 * hat + 0.16 * bass + 0.1 * pad + 0.03 * bedL;
+    right[i] = 0.28 * kick + 0.1 * hat + 0.15 * bass + 0.09 * pad + 0.03 * bedR;
   }
   return { left, right };
 }

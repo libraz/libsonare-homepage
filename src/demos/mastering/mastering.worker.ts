@@ -1,436 +1,234 @@
-import type {
-  MasteringChainConfig,
-  MasteringChainStereoResult,
-  MasteringResult,
-  StreamingPlatform,
-} from '@/wasm/index';
-
-type WorkerRequest =
-  | {
-      type: 'render';
-      id: number;
-      left: Float32Array;
-      right: Float32Array;
-      sampleRate: number;
-      config: MasteringChainConfig;
-    }
-  | {
-      type: 'referenceMatch';
-      id: number;
-      left: Float32Array;
-      right: Float32Array;
-      referenceLeft: Float32Array;
-      referenceRight: Float32Array;
-      sampleRate: number;
-      referenceSampleRate?: number;
-      targetLufs: number;
-      ceilingDb: number;
-      lookaheadMs: number;
-    }
-  | {
-      type: 'sourceAnalyze';
-      id: number;
-      left: Float32Array;
-      right: Float32Array;
-      sampleRate: number;
-      platforms: StreamingPlatform[];
-      preset?: string;
-    }
-  | {
-      type: 'referenceAnalyze';
-      id: number;
-      sourceLeft: Float32Array;
-      sourceRight: Float32Array;
-      referenceLeft: Float32Array;
-      referenceRight: Float32Array;
-      sampleRate: number;
-      referenceSampleRate?: number;
-    };
-
-type WasmModule = {
-  init: () => Promise<void>;
-  resample: (samples: Float32Array, srcSr: number, targetSr: number) => Float32Array;
-  lufsInterleaved: (
-    samples: Float32Array,
-    channels: number,
-    sampleRate: number,
-  ) => { integratedLufs: number };
-  masteringChainStereoWithProgress: (
-    left: Float32Array,
-    right: Float32Array,
-    sampleRate: number,
-    config: MasteringChainConfig,
-    onProgress: (progress: number, stage: string) => void,
-  ) => MasteringChainStereoResult;
-  masteringPairProcess: (
-    processorName: string,
-    source: Float32Array,
-    reference: Float32Array,
-    sampleRate: number,
-    params?: Record<string, number | boolean>,
-  ) => MasteringResult;
-  masteringPairAnalyze: (
-    analysisName: string,
-    source: Float32Array,
-    reference: Float32Array,
-    sampleRate: number,
-    params?: Record<string, number | boolean>,
-  ) => string;
-  masteringStereoAnalyze: (
-    analysisName: string,
-    left: Float32Array,
-    right: Float32Array,
-    sampleRate: number,
-    params?: Record<string, number | boolean>,
-  ) => string;
-  masteringAudioProfileStereo: (request: {
-    left: Float32Array;
-    right: Float32Array;
-    sampleRate: number;
-  }) => string;
-  masteringAssistantSuggestStereo: (request: {
-    left: Float32Array;
-    right: Float32Array;
-    sampleRate: number;
-    params?: Record<string, number | boolean | string>;
-  }) => string;
-  masteringStreamingPreviewStereo: (request: {
-    left: Float32Array;
-    right: Float32Array;
-    sampleRate: number;
-    platforms: StreamingPlatform[];
-  }) => string;
-};
-
-let wasmModule: WasmModule | null = null;
-
-self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
-  const request = event.data;
-
-  try {
-    postProgress(request.id, 0.04, 'Preparing audio buffers');
-
-    if (!wasmModule) {
-      postProgress(request.id, 0.12, 'Loading libsonare WASM');
-      wasmModule = (await import('@/wasm/index.js')) as WasmModule;
-      await wasmModule.init();
-    }
-
-    if (request.type === 'referenceAnalyze') {
-      const result = analyzeReference(request);
-      self.postMessage({ type: 'analysisDone', id: request.id, result });
-      return;
-    }
-
-    if (request.type === 'sourceAnalyze') {
-      // Only the profile's `loudness` block is measured from the two channels:
-      // BS.1770 channel-summed integrated LUFS and LRA, the larger of the two
-      // channel true peaks, and a crest factor across both channels. Passing a
-      // 0.5*(L+R) downmix to the mono entry points instead reads roughly 6 dB
-      // low on decorrelated material and cancels outright out of phase.
-      //
-      // The spectral, dynamics and tempo fields describe shape and timing
-      // rather than absolute level, so the engine still measures those on the
-      // downmix and they stay comparable with the mono entry point field for
-      // field.
-      postProgress(request.id, 0.3, 'Profiling source');
-      const profile = parseJson(
-        wasmModule.masteringAudioProfileStereo({
-          left: request.left,
-          right: request.right,
-          sampleRate: request.sampleRate,
-        }),
-      );
-      postProgress(request.id, 0.6, 'Building suggestions');
-      const suggestions = parseJson(
-        wasmModule.masteringAssistantSuggestStereo({
-          left: request.left,
-          right: request.right,
-          sampleRate: request.sampleRate,
-          ...(request.preset ? { params: { preset: request.preset } } : {}),
-        }),
-      );
-      postProgress(request.id, 0.85, 'Previewing streaming delivery');
-      const streamingPreview = buildStreamingPreview(request);
-      self.postMessage({
-        type: 'sourceAnalysisDone',
-        id: request.id,
-        result: { profile, suggestions, streamingPreview },
-      });
-      return;
-    }
-
-    const result =
-      request.type === 'render' ? renderMasteringChain(request) : renderReferenceMatch(request);
-    applyOutputSafety(
-      result,
-      request.type === 'render' ? ceilingFromConfig(request.config) : request.ceilingDb,
-    );
-
-    postProgress(request.id, 0.94, 'Finalizing render');
-    self.postMessage(
-      {
-        type: 'done',
-        id: request.id,
-        result: {
-          left: result.left,
-          right: result.right,
-          sampleRate: result.sampleRate,
-          inputLufs: result.inputLufs,
-          outputLufs: result.outputLufs,
-          appliedGainDb: result.appliedGainDb,
-          stages: result.stages || [],
-        },
-      },
-      [result.left.buffer, result.right.buffer],
-    );
-  } catch (error) {
-    self.postMessage({
-      type: 'error',
-      id: request.id,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-};
-
 /**
- * Per-platform delivery estimate, measured by the engine on the stereo pair.
+ * The /mastering Worker: repair preprocess, loudness fit, export bounce, the
+ * assistant, reference analysis and the platform preview, off the main
+ * thread. The clips a job needs arrive transferred (the page holds no copy
+ * meanwhile) and go back transferred in every terminal message — finished,
+ * failed or cancelled — together with any clip the job produced.
  *
- * The engine returns the measured figures and the verdict (normalization gain
- * and ceiling risk) but identifies each row only by platform name. Echo the
- * requested platform spec back onto its row so consumers never have to look a
- * platform's target/ceiling back up by name.
+ * Fit and export render the export variant of the project on a raw
+ * `RealtimeEngine` with the same ops the live facade gets, so the export is
+ * the preview. Engine calls are synchronous, so a cancel takes effect at the
+ * next stage boundary.
  */
-function buildStreamingPreview(request: Extract<WorkerRequest, { type: 'sourceAnalyze' }>) {
-  if (!wasmModule) throw new Error('WASM module is not initialized');
-  const preview = parseJson(
-    wasmModule.masteringStreamingPreviewStereo({
-      left: request.left,
-      right: request.right,
-      sampleRate: request.sampleRate,
-      platforms: request.platforms,
-    }),
-  ) as { platforms?: unknown };
+import {
+  fitMasteringLoudness,
+  interleave,
+  type MasteringClip,
+  measureLufs,
+  prepareProgram,
+  renderMasteringState,
+} from '@/demos/mastering/masteringEngine';
+import type { LoudnessFitResult } from '@/demos/mastering/masteringLoudnessFit';
+import { fitMatchEqPeaks, type MatchEqFit } from '@/demos/mastering/masteringPresetMap';
+import {
+  type MasteringRepair,
+  type MasteringState,
+  masteringMutators,
+  unmappedChainParams,
+} from '@/demos/mastering/masteringState';
+import type { MasteringAssistantPreset } from '@/demos/mastering/useMastering';
+import type { StreamingPlatform } from '@/wasm/index.js';
 
-  const specs = new Map(request.platforms.map((platform) => [platform.name, platform]));
-  const rows = Array.isArray(preview?.platforms) ? preview.platforms : [];
-  return {
-    platforms: rows.map((entry) => {
-      const row = entry as Record<string, unknown>;
-      const spec = typeof row.name === 'string' ? specs.get(row.name) : undefined;
-      return spec ? { ...row, targetLufs: spec.targetLufs, ceilingDb: spec.ceilingDb } : { ...row };
-    }),
-  };
+type Wasm = typeof import('@/wasm/index.js');
+
+/** Clips a job can carry, by role. `master` is the last export render. */
+export type MasteringAudioKey = 'source' | 'program' | 'reference' | 'master';
+/** The clips crossing the Worker boundary for one job. */
+export type MasteringAudioTransfer = Partial<Record<MasteringAudioKey, MasteringClip>>;
+
+export type MasteringWorkerStage =
+  | 'loading'
+  | 'repairing'
+  | 'fitting'
+  | 'rendering'
+  | 'measuring'
+  | 'analyzing';
+
+/** Dither for the export: 1 RPDF, 2 TPDF, 3 noise-shaped, to the WAV's word length. */
+export type MasteringExportOptions = { dither: 0 } | { dither: 1 | 2 | 3; ditherBits: number };
+
+export interface MasteringPrepareResult {
+  /** Repair stages that ran, in chain order; empty when the program is the source. */
+  stages: string[];
 }
 
-function renderMasteringChain(request: Extract<WorkerRequest, { type: 'render' }>) {
-  if (!wasmModule) throw new Error('WASM module is not initialized');
-  postProgress(request.id, 0.24, 'Running mastering chain');
-  return wasmModule.masteringChainStereoWithProgress(
-    request.left,
-    request.right,
-    request.sampleRate,
-    request.config,
-    (progress, stage) => {
-      postProgress(request.id, 0.24 + progress * 0.7, stage);
+export interface MasteringExportResult {
+  /** The fit run before the bounce, when the request asked to refit. */
+  fit: LoudnessFitResult | null;
+  integratedLufs: number;
+  loudnessRange: number;
+  maxMomentaryLufs: number;
+  maxShortTermLufs: number;
+  truePeakDb: number;
+  /** Short-term (3 s) loudness series, one point per 100 ms block. */
+  shortTermLufs: Float32Array;
+}
+
+export interface MasteringAssistantResult {
+  profile: unknown;
+  suggestions: unknown;
+  /** Flat chain config from `masteringAssistantSuggestChainStereo`. */
+  chainParams: Record<string, number | boolean>;
+  /** Keys of `chainParams` the project state cannot carry. */
+  unmapped: string[];
+}
+
+export interface MasteringReferenceResult {
+  loudness: { sourceLufs: number; referenceLufs: number; gainToMatchDb: number };
+  tonalBalance: unknown;
+  monoCompatibility: unknown;
+  matchEq: MatchEqFit;
+}
+
+export interface MasteringPlatformPreviewRow extends Record<string, unknown> {
+  name: string;
+  targetLufs?: number;
+  ceilingDb?: number;
+}
+
+export type MasteringWorkerRequest =
+  | { type: 'prepare'; id: number; audio: MasteringAudioTransfer; repair: MasteringRepair }
+  | { type: 'fit'; id: number; audio: MasteringAudioTransfer; state: MasteringState }
+  | {
+      type: 'export';
+      id: number;
+      audio: MasteringAudioTransfer;
+      state: MasteringState;
+      options: MasteringExportOptions;
+      /** Fit the drive first and render with it (the state's fit is stale). */
+      refit: boolean;
+    }
+  | {
+      type: 'assistant';
+      id: number;
+      audio: MasteringAudioTransfer;
+      preset?: MasteringAssistantPreset;
+    }
+  | { type: 'reference'; id: number; audio: MasteringAudioTransfer }
+  | {
+      type: 'platformPreview';
+      id: number;
+      audio: MasteringAudioTransfer;
+      platforms: StreamingPlatform[];
+    }
+  | { type: 'cancel'; id: number };
+
+type JobRequest = Exclude<MasteringWorkerRequest, { type: 'cancel' }>;
+
+export type MasteringWorkerResponse =
+  | { type: 'progress'; id: number; progress: number; stage: MasteringWorkerStage }
+  | { type: 'prepared'; id: number; result: MasteringPrepareResult; audio: MasteringAudioTransfer }
+  | { type: 'fitted'; id: number; result: LoudnessFitResult; audio: MasteringAudioTransfer }
+  | { type: 'exported'; id: number; result: MasteringExportResult; audio: MasteringAudioTransfer }
+  | {
+      type: 'assisted';
+      id: number;
+      result: MasteringAssistantResult;
+      audio: MasteringAudioTransfer;
+    }
+  | {
+      type: 'referenced';
+      id: number;
+      result: MasteringReferenceResult;
+      audio: MasteringAudioTransfer;
+    }
+  | {
+      type: 'previewed';
+      id: number;
+      result: MasteringPlatformPreviewRow[];
+      audio: MasteringAudioTransfer;
+    }
+  | { type: 'cancelled'; id: number; audio: MasteringAudioTransfer }
+  | { type: 'error'; id: number; error: string; audio: MasteringAudioTransfer };
+
+/** Called between stages; throws to stop the job. */
+export type MasteringCheckpoint = (
+  stage: MasteringWorkerStage,
+  progress: number,
+) => void | Promise<void>;
+
+/** Checkpoints the loudness fit before each of its bounces. */
+function fitCheckpoint(checkpoint: MasteringCheckpoint) {
+  return (index: number) => checkpoint('fitting', 0.1 + 0.25 * index);
+}
+
+function requireClip(audio: MasteringAudioTransfer, key: MasteringAudioKey): MasteringClip {
+  const clip = audio[key];
+  if (!clip) throw new Error(`the ${key} audio is not loaded`);
+  return clip;
+}
+
+/** Renders the export with dither and measures it; refits first when asked. */
+export async function exportMaster(
+  wasm: Wasm,
+  state: MasteringState,
+  program: MasteringClip,
+  options: MasteringExportOptions,
+  refit: boolean,
+  checkpoint: MasteringCheckpoint = () => {},
+): Promise<{ result: MasteringExportResult; master: MasteringClip }> {
+  const fit = refit
+    ? await fitMasteringLoudness(wasm, state, program, fitCheckpoint(checkpoint))
+    : null;
+  const rendered = fit ? masteringMutators.applyLoudnessFit(state, fit) : state;
+  await checkpoint('rendering', 0.85);
+  const master = renderMasteringState(wasm, rendered, program, options);
+  await checkpoint('measuring', 0.92);
+  const interleaved = interleave(master.left, master.right);
+  const loudness = wasm.lufsInterleaved(interleaved, 2, master.sampleRate);
+  const series = wasm.lufsSeriesInterleaved(interleaved, 2, master.sampleRate);
+  return {
+    result: {
+      fit,
+      integratedLufs: loudness.integratedLufs,
+      loudnessRange: loudness.loudnessRange,
+      maxMomentaryLufs: loudness.maxMomentaryLufs,
+      maxShortTermLufs: loudness.maxShortTermLufs,
+      truePeakDb: Math.max(
+        wasm.meteringTruePeakDb(master.left, master.sampleRate, 4),
+        wasm.meteringTruePeakDb(master.right, master.sampleRate, 4),
+      ),
+      shortTermLufs: series.shortTerm,
     },
-  );
-}
-
-function analyzeReference(request: Extract<WorkerRequest, { type: 'referenceAnalyze' }>) {
-  if (!wasmModule) throw new Error('WASM module is not initialized');
-
-  postProgress(request.id, 0.24, 'Analyzing reference loudness');
-  const reference = resampleReference(request);
-  const sourceMono = mixToMono(request.sourceLeft, request.sourceRight);
-  const referenceMono = mixToMono(reference.left, reference.right);
-  const pairLength = Math.min(sourceMono.length, referenceMono.length);
-  if (pairLength <= 0) throw new Error('Reference analysis requires non-empty audio');
-
-  const sourcePair = sourceMono.slice(0, pairLength);
-  const referencePair = referenceMono.slice(0, pairLength);
-  const sourceLufs = wasmModule.lufsInterleaved(
-    interleaveStereo(request.sourceLeft, request.sourceRight),
-    2,
-    request.sampleRate,
-  );
-  const referenceLufs = wasmModule.lufsInterleaved(
-    interleaveStereo(reference.left, reference.right),
-    2,
-    request.sampleRate,
-  );
-  const loudness = {
-    sourceLufs: sourceLufs.integratedLufs,
-    referenceLufs: referenceLufs.integratedLufs,
-    gainToMatchDb:
-      Number.isFinite(sourceLufs.integratedLufs) && Number.isFinite(referenceLufs.integratedLufs)
-        ? referenceLufs.integratedLufs - sourceLufs.integratedLufs
-        : 0,
-  };
-
-  postProgress(request.id, 0.5, 'Analyzing tonal balance');
-  const tonalBalance = parseJson(
-    wasmModule.masteringPairAnalyze(
-      'match.tonalBalance',
-      sourcePair,
-      referencePair,
-      request.sampleRate,
-    ),
-  );
-
-  postProgress(request.id, 0.76, 'Checking mono compatibility');
-  const referenceStereoLength = Math.min(reference.left.length, reference.right.length);
-  const monoCompatibility = parseJson(
-    wasmModule.masteringStereoAnalyze(
-      'stereo.monoCompatCheck',
-      reference.left.slice(0, referenceStereoLength),
-      reference.right.slice(0, referenceStereoLength),
-      request.sampleRate,
-      { correlationThreshold: 0 },
-    ),
-  );
-
-  postProgress(request.id, 0.94, 'Finalizing reference analysis');
-  return { loudness, tonalBalance, monoCompatibility };
-}
-
-function ceilingFromConfig(config: MasteringChainConfig): number {
-  const loudnessCeiling = config.loudness?.ceilingDb;
-  if (typeof loudnessCeiling === 'number' && Number.isFinite(loudnessCeiling)) {
-    return loudnessCeiling;
-  }
-  const limiterCeiling = config.maximizer?.truePeakLimiter?.ceilingDb;
-  if (typeof limiterCeiling === 'number' && Number.isFinite(limiterCeiling)) {
-    return limiterCeiling;
-  }
-  return -1;
-}
-
-function applyOutputSafety(result: MasteringChainStereoResult, ceilingDb: number) {
-  const ceiling = 10 ** (Math.min(ceilingDb, -0.1) / 20);
-  let peak = 0;
-
-  for (let i = 0; i < result.left.length; i++) {
-    const left = Number.isFinite(result.left[i]) ? result.left[i] : 0;
-    const right = Number.isFinite(result.right[i]) ? result.right[i] : 0;
-    result.left[i] = left;
-    result.right[i] = right;
-    peak = Math.max(peak, Math.abs(left), Math.abs(right));
-  }
-
-  if (peak <= ceiling || peak <= 0) return;
-
-  const gain = ceiling / peak;
-  for (let i = 0; i < result.left.length; i++) {
-    result.left[i] *= gain;
-    result.right[i] *= gain;
-  }
-
-  const gainDb = 20 * Math.log10(gain);
-  result.appliedGainDb += gainDb;
-  result.outputLufs += gainDb;
-}
-
-function renderReferenceMatch(request: Extract<WorkerRequest, { type: 'referenceMatch' }>) {
-  if (!wasmModule) throw new Error('WASM module is not initialized');
-
-  const reference = resampleReference(request);
-
-  // The match-EQ curve is derived by comparing the full source and reference
-  // spectra, so each side keeps its own length — never truncate the source to
-  // the (often shorter) reference, which would clip the tail of the master.
-  postProgress(request.id, 0.3, 'match.applyMatchEq left');
-  const leftResult = wasmModule.masteringPairProcess(
-    'match.applyMatchEq',
-    request.left,
-    reference.left,
-    request.sampleRate,
-    { maxGainDb: 6, smoothingBins: 5 },
-  );
-
-  postProgress(request.id, 0.5, 'match.applyMatchEq right');
-  const rightResult = wasmModule.masteringPairProcess(
-    'match.applyMatchEq',
-    request.right,
-    reference.right,
-    request.sampleRate,
-    { maxGainDb: 6, smoothingBins: 5 },
-  );
-
-  // Finish the master: normalize to the target loudness and tame true peaks so
-  // the reference-matched output is delivery-ready instead of left at the raw
-  // (un-normalized) source level.
-  const normalized = wasmModule.masteringChainStereoWithProgress(
-    leftResult.samples,
-    rightResult.samples,
-    request.sampleRate,
-    {
-      maximizer: {
-        truePeakLimiter: {
-          ceilingDb: request.ceilingDb,
-          lookaheadMs: request.lookaheadMs,
-          oversampleFactor: 4,
-          applyGainAtInputRate: true,
-        },
-      },
-      loudness: {
-        targetLufs: request.targetLufs,
-        ceilingDb: request.ceilingDb,
-        truePeakOversample: 4,
-      },
-    },
-    (progress, stage) => postProgress(request.id, 0.55 + progress * 0.35, stage),
-  );
-
-  return {
-    left: normalized.left,
-    right: normalized.right,
-    sampleRate: normalized.sampleRate,
-    inputLufs: normalized.inputLufs,
-    outputLufs: normalized.outputLufs,
-    appliedGainDb: normalized.appliedGainDb,
-    stages: ['match.applyMatchEq', ...normalized.stages],
+    master: { ...master, integratedLufs: loudness.integratedLufs },
   };
 }
 
-function postProgress(id: number, progress: number, stage: string) {
-  self.postMessage({ type: 'progress', id, progress, stage });
+function parseJson(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
 }
 
-function resampleReference(
-  request: Pick<
-    Extract<WorkerRequest, { type: 'referenceAnalyze' | 'referenceMatch' }>,
-    'referenceLeft' | 'referenceRight' | 'sampleRate' | 'referenceSampleRate'
-  >,
-): { left: Float32Array; right: Float32Array } {
-  const referenceSampleRate = request.referenceSampleRate ?? request.sampleRate;
-  if (referenceSampleRate === request.sampleRate) {
-    return { left: request.referenceLeft, right: request.referenceRight };
-  }
-  if (!wasmModule) throw new Error('WASM module is not initialized');
-  const resample = (samples: Float32Array) =>
-    samples.length === 0
-      ? new Float32Array()
-      : wasmModule!.resample(samples, referenceSampleRate, request.sampleRate);
-  return {
-    left: resample(request.referenceLeft),
-    right: resample(request.referenceRight),
+/** Profile, suggestion and flat chain suggestion of the program. */
+export function assistProgram(
+  wasm: Wasm,
+  program: MasteringClip,
+  preset?: MasteringAssistantPreset,
+): MasteringAssistantResult {
+  const request = {
+    left: program.left,
+    right: program.right,
+    sampleRate: program.sampleRate,
+    ...(preset ? { params: { preset } } : {}),
   };
-}
-
-function interleaveStereo(left: Float32Array, right: Float32Array): Float32Array {
-  const length = Math.min(left.length, right.length);
-  const samples = new Float32Array(length * 2);
-  for (let i = 0; i < length; i++) {
-    samples[i * 2] = left[i];
-    samples[i * 2 + 1] = right[i];
-  }
-  return samples;
+  const profile = parseJson(
+    wasm.masteringAudioProfileStereo({
+      left: program.left,
+      right: program.right,
+      sampleRate: program.sampleRate,
+    }),
+  );
+  const suggestions = parseJson(wasm.masteringAssistantSuggestStereo(request));
+  const chainParams = wasm.masteringAssistantSuggestChainStereo(request);
+  return { profile, suggestions, chainParams, unmapped: unmappedChainParams(chainParams) };
 }
 
 /**
  * The two-input `match.*` analyses are mono-only, so they take a downmix. Keep
- * a coherent average, but preserve a usable tonal signal when stereo phase
+ * a coherent average, but fall back to the stronger channel when stereo phase
  * cancellation would otherwise turn the pair into silence.
  */
 function mixToMono(left: Float32Array, right: Float32Array): Float32Array {
@@ -446,19 +244,241 @@ function mixToMono(left: Float32Array, right: Float32Array): Float32Array {
     leftEnergy += left[i] * left[i];
     rightEnergy += right[i] * right[i];
   }
-
   const strongerEnergy = Math.max(leftEnergy, rightEnergy);
   if (strongerEnergy > 0 && monoEnergy < strongerEnergy * 0.0625) {
-    const stronger = leftEnergy >= rightEnergy ? left : right;
-    return stronger.slice(0, length);
+    return (leftEnergy >= rightEnergy ? left : right).slice(0, length);
   }
   return mono;
 }
 
-function parseJson(raw: string): unknown {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return raw;
+/** The reference at the program's rate, with its loudness measured. */
+export function conformReference(
+  wasm: Wasm,
+  reference: MasteringClip,
+  sampleRate: number,
+): MasteringClip {
+  const resample = (samples: Float32Array) =>
+    reference.sampleRate === sampleRate || samples.length === 0
+      ? samples
+      : wasm.resample(samples, reference.sampleRate, sampleRate);
+  const left = resample(reference.left);
+  const right = resample(reference.right);
+  return {
+    left,
+    right,
+    sampleRate,
+    integratedLufs: measureLufs(wasm, left, right, sampleRate),
+  };
+}
+
+/** Loudness, tonal balance, mono compatibility and the match-EQ fit of program vs reference. */
+export function analyzeReference(
+  wasm: Wasm,
+  program: MasteringClip,
+  reference: MasteringClip,
+  onProgress: (progress: number) => void = () => {},
+): MasteringReferenceResult {
+  const sourceMono = mixToMono(program.left, program.right);
+  const referenceMono = mixToMono(reference.left, reference.right);
+  const pair = Math.min(sourceMono.length, referenceMono.length);
+  if (pair <= 0) throw new Error('reference analysis requires non-empty audio');
+  const source = sourceMono.subarray(0, pair);
+  const target = referenceMono.subarray(0, pair);
+  const sourceLufs = Number.isFinite(program.integratedLufs)
+    ? program.integratedLufs
+    : measureLufs(wasm, program.left, program.right, program.sampleRate);
+  const referenceLufs = reference.integratedLufs;
+  onProgress(0.4);
+  const tonalBalance = parseJson(
+    wasm.masteringPairAnalyze('match.tonalBalance', source, target, program.sampleRate),
+  );
+  onProgress(0.6);
+  const curve = parseJson(
+    wasm.masteringPairAnalyze('match.matchEqCurve', source, target, program.sampleRate),
+  ) as { frequencies: number[]; gainDb: number[] };
+  onProgress(0.8);
+  const stereoLength = Math.min(reference.left.length, reference.right.length);
+  const monoCompatibility = parseJson(
+    wasm.masteringStereoAnalyze(
+      'stereo.monoCompatCheck',
+      reference.left.subarray(0, stereoLength),
+      reference.right.subarray(0, stereoLength),
+      program.sampleRate,
+      { correlationThreshold: 0 },
+    ),
+  );
+  return {
+    loudness: {
+      sourceLufs,
+      referenceLufs,
+      gainToMatchDb:
+        Number.isFinite(sourceLufs) && Number.isFinite(referenceLufs)
+          ? referenceLufs - sourceLufs
+          : 0,
+    },
+    tonalBalance,
+    monoCompatibility,
+    matchEq: fitMatchEqPeaks(curve, program.sampleRate),
+  };
+}
+
+/**
+ * Per-platform delivery estimate of the rendered master. The engine identifies
+ * each row by platform name only, so the requested target and ceiling are
+ * echoed onto the row.
+ */
+export function previewPlatforms(
+  wasm: Wasm,
+  master: MasteringClip,
+  platforms: StreamingPlatform[],
+): MasteringPlatformPreviewRow[] {
+  const preview = parseJson(
+    wasm.masteringStreamingPreviewStereo({
+      left: master.left,
+      right: master.right,
+      sampleRate: master.sampleRate,
+      platforms,
+    }),
+  ) as { platforms?: unknown };
+  const specs = new Map(platforms.map((platform) => [platform.name, platform]));
+  const rows = Array.isArray(preview?.platforms) ? preview.platforms : [];
+  return rows.map((entry) => {
+    const row = entry as MasteringPlatformPreviewRow;
+    const spec = specs.get(row.name);
+    return spec ? { ...row, targetLufs: spec.targetLufs, ceilingDb: spec.ceilingDb } : { ...row };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Message loop
+
+class Cancelled extends Error {}
+
+let wasmModule: Promise<Wasm> | null = null;
+const cancelled = new Set<number>();
+
+function loadWasm(): Promise<Wasm> {
+  wasmModule ??= import('@/wasm/index.js').then(async (wasm) => {
+    await wasm.init();
+    return wasm;
+  });
+  return wasmModule;
+}
+
+function transferList(audio: MasteringAudioTransfer): Transferable[] {
+  const buffers = new Set<ArrayBufferLike>(
+    Object.values(audio).flatMap((clip) => (clip ? [clip.left.buffer, clip.right.buffer] : [])),
+  );
+  return [...buffers] as Transferable[];
+}
+
+function post(message: MasteringWorkerResponse): void {
+  const transfer = 'audio' in message ? transferList(message.audio) : [];
+  self.postMessage(message, { transfer });
+}
+
+function checkpointFor(id: number): MasteringCheckpoint {
+  return async (stage, progress) => {
+    post({ type: 'progress', id, progress, stage });
+    // Lets a queued cancel message run before the next synchronous engine call.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (cancelled.has(id)) throw new Cancelled();
+  };
+}
+
+async function run(
+  request: JobRequest,
+  audio: MasteringAudioTransfer,
+): Promise<MasteringWorkerResponse> {
+  const { id } = request;
+  const checkpoint = checkpointFor(id);
+  await checkpoint('loading', 0.02);
+  const wasm = await loadWasm();
+  switch (request.type) {
+    case 'prepare': {
+      await checkpoint('repairing', 0.05);
+      const { program, stages } = prepareProgram(
+        wasm,
+        requireClip(audio, 'source'),
+        request.repair,
+        (p) => post({ type: 'progress', id, progress: 0.05 + p * 0.85, stage: 'repairing' }),
+      );
+      audio.program = program;
+      return { type: 'prepared', id, result: { stages }, audio };
+    }
+    case 'fit': {
+      const result = await fitMasteringLoudness(
+        wasm,
+        request.state,
+        requireClip(audio, 'program'),
+        fitCheckpoint(checkpoint),
+      );
+      return { type: 'fitted', id, result, audio };
+    }
+    case 'export': {
+      const { result, master } = await exportMaster(
+        wasm,
+        request.state,
+        requireClip(audio, 'program'),
+        request.options,
+        request.refit,
+        checkpoint,
+      );
+      audio.master = master;
+      return { type: 'exported', id, result, audio };
+    }
+    case 'assistant': {
+      await checkpoint('analyzing', 0.1);
+      return {
+        type: 'assisted',
+        id,
+        result: assistProgram(wasm, requireClip(audio, 'program'), request.preset),
+        audio,
+      };
+    }
+    case 'reference': {
+      await checkpoint('analyzing', 0.1);
+      const program = requireClip(audio, 'program');
+      audio.reference = conformReference(wasm, requireClip(audio, 'reference'), program.sampleRate);
+      await checkpoint('analyzing', 0.3);
+      const result = analyzeReference(wasm, program, audio.reference, (p) =>
+        post({ type: 'progress', id, progress: p, stage: 'analyzing' }),
+      );
+      return { type: 'referenced', id, result, audio };
+    }
+    case 'platformPreview': {
+      await checkpoint('analyzing', 0.1);
+      return {
+        type: 'previewed',
+        id,
+        result: previewPlatforms(wasm, requireClip(audio, 'master'), request.platforms),
+        audio,
+      };
+    }
   }
 }
+
+async function handle(request: JobRequest): Promise<void> {
+  const audio = { ...request.audio };
+  try {
+    post(await run(request, audio));
+  } catch (error) {
+    if (error instanceof Cancelled) {
+      post({ type: 'cancelled', id: request.id, audio });
+    } else {
+      const message = error instanceof Error ? error.message : String(error);
+      post({ type: 'error', id: request.id, error: message, audio });
+    }
+  } finally {
+    cancelled.delete(request.id);
+  }
+}
+
+self.onmessage = (event: MessageEvent<MasteringWorkerRequest>) => {
+  const request = event.data;
+  if (request.type === 'cancel') {
+    cancelled.add(request.id);
+    return;
+  }
+  void handle(request);
+};

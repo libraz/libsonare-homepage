@@ -1,12 +1,15 @@
 // @vitest-environment node
-// This gate script bundles the production TS config builder with esbuild, whose
-// TextEncoder invariant fails under jsdom; run it in the node environment (also a
-// closer match to how `node scripts/validate-mastering-presets.mjs` runs in CI).
-import { describe, expect, it, vi } from 'vitest';
-import { MASTERING_PRESETS, MASTERING_VENUES } from '@/demos/mastering/masteringUi';
+// The gate bundles the TS preset map with esbuild, whose TextEncoder invariant
+// fails under jsdom; the node environment is also how `yarn check:mastering` runs.
+import { describe, expect, it } from 'vitest';
+import {
+  MASTERING_PRESET_TARGETS,
+  MASTERING_PRESETS,
+  MASTERING_VENUES,
+} from '@/demos/mastering/masteringUi';
+import * as wasm from '@/wasm/index.js';
 import {
   assertFinite,
-  buildConfig,
   buildPresetEntries,
   length,
   loadMasteringModule,
@@ -17,198 +20,103 @@ import {
   validateMasteringPresets,
 } from '../../scripts/validate-mastering-presets.mjs';
 
-const config = buildConfig({
-  targetLufs: -14,
-  tiltDb: 0.25,
-  ratio: 2,
-  air: 0.2,
-  width: 1.05,
-});
-
-function validOutput(
-  overrides: Partial<{
-    left: Float32Array;
-    right: Float32Array;
-    inputLufs: number;
-    outputLufs: number;
-    appliedGainDb: number;
-    stages: string[];
-  }> = {},
-) {
-  return {
-    left: new Float32Array(length).fill(0.2),
-    right: new Float32Array(length).fill(-0.18),
-    inputLufs: -18,
-    outputLufs: -14.2,
-    appliedGainDb: 3.8,
-    stages: ['eq.tilt', 'maximizer.truePeakLimiter'],
-    ...overrides,
-  };
+async function entries(names: string[]) {
+  const all = await buildPresetEntries();
+  return all.filter(([name]: [string]) => names.includes(name));
 }
 
-describe('validate-mastering-presets script helpers', () => {
-  it('builds mastering configs with optional repair and expected processor settings', () => {
-    expect(config).toMatchObject({
-      eq: { tilt: { tiltDb: 0.25, pivotHz: 1000 } },
-      dynamics: { compressor: { ratio: 2, autoMakeup: true } },
-      spectral: { airBand: { amount: 0.2 } },
-      stereo: { imager: { width: 1.05, preserveEnergy: true } },
-      loudness: { targetLufs: -14, truePeakOversample: 4 },
-    });
-    expect(config.repair).toBeUndefined();
-
-    expect(
-      buildConfig({
-        targetLufs: -16,
-        tiltDb: 0,
-        ratio: 3,
-        air: 0.1,
-        width: 0.9,
-        denoise: true,
-      }).repair,
-    ).toEqual({ denoise: { enabled: true }, gainFloor: 0.1 });
-  });
-
-  it('creates deterministic stereo source and reference mixes with finite bounded samples', () => {
+describe('validate-mastering-presets helpers', () => {
+  it('builds deterministic, bounded 48 kHz test mixes', () => {
     const source = makeSyntheticMix();
     const reference = makeReferenceMix();
-
-    expect(source.left.length).toBe(sampleRate * 2);
+    expect(sampleRate).toBe(48_000);
+    expect(source.left.length).toBe(length);
     expect(source.right.length).toBe(length);
     expect(reference.left.length).toBe(length);
-    expect(maxAbs(source.left)).toBeGreaterThan(0);
+    expect(maxAbs(source.left)).toBeGreaterThan(0.1);
     expect(maxAbs(source.left)).toBeLessThan(1);
-    expect(maxAbs(reference.right)).toBeGreaterThan(0);
-    expect(Number.isFinite(source.left[1234])).toBe(true);
+    expect(maxAbs(reference.right)).toBeLessThan(1);
+    expect(makeSyntheticMix().left).toEqual(source.left);
   });
 
-  it('returns no failures and emits progress logs for valid API results', async () => {
-    const log = vi.fn();
-    const api = {
-      init: vi.fn().mockResolvedValue(undefined),
-      version: vi.fn(() => 'test-version'),
-      masteringChainStereo: vi.fn(() => validOutput()),
-      masteringPairAnalyze: vi.fn(() => 'reference report'),
-    };
-
-    await expect(
-      validateMasteringPresets({
-        api,
-        presetEntries: [['unit', config]],
-        log,
-      }),
-    ).resolves.toEqual([]);
-
-    expect(api.init).toHaveBeenCalledOnce();
-    expect(api.masteringChainStereo).toHaveBeenCalledWith(
-      expect.any(Float32Array),
-      expect.any(Float32Array),
-      sampleRate,
-      config,
-    );
-    expect(api.masteringPairAnalyze).toHaveBeenCalledWith(
-      'match.referenceLoudness',
-      expect.any(Float32Array),
-      expect.any(Float32Array),
-      sampleRate,
-      {},
-    );
-    expect(log).toHaveBeenCalledWith('libsonare test-version');
-    expect(log).toHaveBeenCalledWith(expect.stringContaining('unit: -14.20 LUFS'));
-    expect(log).toHaveBeenCalledWith('reference analysis: ok');
+  it('throws for a non-finite measurement', () => {
+    expect(() => assertFinite('x', Number.NaN)).toThrow('x is not finite');
+    expect(() => assertFinite('x', -14)).not.toThrow();
   });
 
-  it('collects validation failures for invalid mastering outputs and reference analysis', async () => {
-    const api = {
-      init: vi.fn().mockResolvedValue(undefined),
-      version: vi.fn(() => 'test-version'),
-      masteringChainStereo: vi
-        .fn()
-        .mockReturnValueOnce(validOutput({ inputLufs: -18, outputLufs: -25 }))
-        .mockReturnValueOnce(validOutput({ stages: [] }))
-        .mockReturnValueOnce(validOutput({ left: new Float32Array([0.1]) }))
-        .mockReturnValueOnce(validOutput({ left: new Float32Array(length).fill(1.2) })),
-      masteringPairAnalyze: vi.fn(() => ''),
-    };
-
-    await expect(
-      validateMasteringPresets({
-        api,
-        presetEntries: [
-          ['lufs', config],
-          ['stages', config],
-          ['length', config],
-          ['peak', config],
-        ],
-      }),
-    ).resolves.toEqual([
-      'lufs: output LUFS -25.00 fell below floor -18.50 (input -18.00, target -14)',
-      'stages: no mastering stages were applied',
-      `length: unexpected output length 1/${length}`,
-      'peak: invalid peak 1.2000000476837158',
-      'reference analysis: empty pair analysis report',
-    ]);
-  });
-
-  it('allows denoise presets to land below target within the headroom shortfall', async () => {
-    // loudness.optimize cannot boost past the true-peak ceiling, so denoise
-    // presets may fall short of the target after the repair removes loudness.
-    const denoiseConfig = buildConfig({
-      targetLufs: -14,
-      tiltDb: 0,
-      ratio: 2,
-      air: 0.2,
-      width: 1,
-      denoise: true,
-    });
-    const api = {
-      init: vi.fn().mockResolvedValue(undefined),
-      version: vi.fn(() => 'test-version'),
-      masteringChainStereo: vi.fn(() =>
-        validOutput({
-          inputLufs: -15.5,
-          outputLufs: -18.9,
-          stages: ['repair.denoise', 'loudness.optimize'],
-        }),
+  it('enumerates every genre preset in every venue at the genre target', async () => {
+    const all = await buildPresetEntries();
+    expect(all.map(([name]: [string]) => name)).toEqual(
+      MASTERING_PRESETS.flatMap(({ id: preset }) =>
+        MASTERING_VENUES.map(({ id: venue }) => `${preset}/${venue}`),
       ),
-      masteringPairAnalyze: vi.fn(() => 'report'),
+    );
+    const { masteringTargetLufs } = await loadMasteringModule();
+    for (const [name, state] of all) {
+      expect(masteringTargetLufs(state), name).toBe(
+        MASTERING_PRESET_TARGETS[state.quick.preset as keyof typeof MASTERING_PRESET_TARGETS],
+      );
+      expect(state.quick.venue, name).toBe(name.split('/')[1]);
+    }
+  });
+});
+
+describe('validateMasteringPresets', () => {
+  it('passes presets that reach their target under the ceiling, and logs each', {
+    timeout: 60_000,
+  }, async () => {
+    const log: string[] = [];
+    const failures = await validateMasteringPresets({
+      presetEntries: await entries([
+        'pop/studio',
+        'aiMusic/livehouseLarge',
+        'liveLarge/livehouseSmall',
+      ]),
+      log: (line: string) => log.push(line),
+    });
+    expect(failures).toEqual([]);
+    expect(log[0]).toBe(`libsonare ${wasm.version()}`);
+    expect(
+      log.filter((line) => /^\w+\/\w+: -\d+\.\d\d LUFS \(target -\d+\), true peak/.test(line)),
+    ).toHaveLength(3);
+    expect(log.some((line) => line.startsWith('reference match EQ: residual'))).toBe(true);
+  });
+
+  it('fails a preset whose target the limiter cannot reach', { timeout: 60_000 }, async () => {
+    const { masteringMutators: m, MASTERING_SLOT } = await loadMasteringModule();
+    const [[, pop]] = await entries(['pop/studio']);
+    const unreachable = m.setInsertParam(
+      m.setCustomLufs(pop, -8),
+      MASTERING_SLOT.limiter,
+      'ceilingDb',
+      -9,
+    );
+    const failures = await validateMasteringPresets({
+      presetEntries: [['pop/unreachable', unreachable]],
+    });
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(
+      /^pop\/unreachable: output -\d+\.\d\d LUFS misses target -8 by more than 0.5 LU/,
+    );
+  });
+
+  it('fails a master whose true peak exceeds the ceiling', { timeout: 60_000 }, async () => {
+    const api = { ...wasm, meteringTruePeakDb: () => 0.4 };
+    const failures = await validateMasteringPresets({
+      api,
+      presetEntries: await entries(['acoustic/studio']),
+    });
+    expect(failures).toEqual(['acoustic/studio: true peak 0.40 dBTP exceeds ceiling -1 dBTP']);
+  });
+
+  it('reports a failing reference analysis', { timeout: 60_000 }, async () => {
+    const api = {
+      ...wasm,
+      masteringPairAnalyze: () => {
+        throw new Error('pair analysis unavailable');
+      },
     };
-
-    await expect(
-      validateMasteringPresets({ api, presetEntries: [['aiMusic', denoiseConfig]] }),
-    ).resolves.toEqual([]);
-  });
-
-  it('exercises the real preset and venue IDs through the production config builder', async () => {
-    const module = await loadMasteringModule();
-
-    // The gate must iterate the exact ID tables the demo ships — not a private,
-    // drift-prone list. Bundling the production source keeps them in lock-step.
-    expect(module.MASTERING_PRESETS.map((preset: { id: string }) => preset.id)).toEqual(
-      MASTERING_PRESETS.map((preset) => preset.id),
-    );
-    expect(module.MASTERING_VENUES.map((venue: { id: string }) => venue.id)).toEqual(
-      MASTERING_VENUES.map((venue) => venue.id),
-    );
-    expect(typeof module.buildMasteringConfig).toBe('function');
-
-    const entries = await buildPresetEntries();
-    expect(entries).toHaveLength(MASTERING_PRESETS.length * MASTERING_VENUES.length);
-    const names = entries.map(([name]: [string, unknown]) => name);
-    for (const { id: preset } of MASTERING_PRESETS) {
-      for (const { id: venue } of MASTERING_VENUES) {
-        expect(names).toContain(`${preset}/${venue}`);
-      }
-    }
-    // Every entry is a fully-shaped chain config with a loudness target.
-    for (const [, config] of entries as Array<[string, { loudness?: { targetLufs?: number } }]>) {
-      expect(Number.isFinite(config.loudness?.targetLufs)).toBe(true);
-    }
-  });
-
-  it('throws helpful errors for non-finite scalar values', () => {
-    expect(() => assertFinite('value', Number.NaN)).toThrow('value is not finite');
-    expect(() => assertFinite('value', Number.POSITIVE_INFINITY)).toThrow('value is not finite');
-    expect(() => assertFinite('value', 1)).not.toThrow();
+    const failures = await validateMasteringPresets({ api, presetEntries: [] });
+    expect(failures).toEqual(['reference analysis: pair analysis unavailable']);
   });
 });
