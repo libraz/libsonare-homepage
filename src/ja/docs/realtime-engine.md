@@ -97,6 +97,8 @@ const playhead = `${barCount + 1}:${beat}`; // 例: "3:2"
 
 読み出した各スコープスナップショットは `targetId`（マスター・レーン・バスのいずれか）で識別され、2 本の配列を持ちます。`bands` は線形バンドの FFT マグニチュード（dB、長さ＝適用されたバンド数）、`points` はベクトルスコープ表示用のゴニオメータ点群で、`{ left, right }` レコードが最大 32 ステレオ点入ります（ワークレットのスコープリングバッファは同じ点群をインターリーブされた `[l0, r0, l1, r1, …]` の `Float32Array` として渡します）。バンドのレベルはレンダーブロックサイズに応じて変化し、ブロックサイズが 2 倍になるとおよそ −3 dB 下がります。比較はブロックサイズを固定したスナップショット同士で行ってください。
 
+マスターメーターの統合ラウドネスをやり直すには `resetMasterLoudnessMeter(renderFrame = -1)` を呼びます（Python は `reset_master_loudness_meter(render_frame=-1)`、ワークレットノードは `resetMasterLoudnessMeter(sampleTime = -1)`）。このコマンドが消去するのは統合ラウドネスの積算値だけで、モーメンタリー、ショートターム、トゥルーピークの履歴は保持されます。`renderFrame` はリセットを適用するレンダーフレームで、負の値を渡すと次のブロック先頭で適用されます。
+
 `drainMeterTelemetry()`／`drainMeterTelemetryWide()`／`drainScopeTelemetry()` が返す各レコードには `droppedRecords` が含まれます。これは前回のドレイン以降にロックフリーのテレメトリリングから失われたスナップショット数です。値が 0 以外なら、消費側のドレインが追いついておらず（バックプレッシャー）、メーターやスコープがちらつかないようにポーリング頻度を上げる必要があります。
 
 メーターレコードの dB 値を持つレベル／ラウドネスのフィールド（`peakDbL`／`R`、`rmsDbL`／`R`、`truePeakDbL`／`R`、`maxTruePeakDb`、`momentaryLufs`／`shortTermLufs`／`integratedLufs`）はすべて −120 dBFS のフロアを持ち、`NaN` や `-Infinity` を返しません。未初期化・無音・未書き込みのプレーン（例: モノラルレーンの右チャンネル）は 0 dBFS ではなく −120 dBFS を返すので、レコードは常に JSON セーフです（`correlation`・`monoCompatWidth`・`gainReductionDb` などの非 dB フィールドは 0 が既定）。積分系メーターのフィールド（`momentaryLufs`／`shortTermLufs`／`integratedLufs` と true-peak 系）は、ストリーミングが一定時間続いて初めてフロアより上に上がります。短いレンダーやワンショットのレンダーでは −120 のままです。
