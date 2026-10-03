@@ -1,203 +1,95 @@
-import type { Ref } from 'vue';
+/**
+ * localStorage persistence of the /mastering project state. The state carries
+ * no audio, so a restored project waits for its audio before it reaches the
+ * engine. The earlier page's chain preset is converted once and the earlier
+ * sessionStorage session is discarded.
+ */
 import {
-  MASTERING_MODULES,
-  MASTERING_PLATFORMS,
-  MASTERING_PRESETS,
-  MASTERING_VENUES,
-  type MasteringMode,
-  type MasteringSessionSettings,
-  moduleControlsFor,
-} from '@/demos/mastering/masteringUi';
-import type {
-  MasteringModuleSettings,
-  MasteringPlatformId,
-  MasteringPresetId,
-  MasteringVenueId,
-} from '@/demos/mastering/useMastering';
-import { clamp } from '@/utils/scale';
+  deserializeMasteringState,
+  MASTERING_LEGACY_PRESET_STORAGE_KEY,
+  MASTERING_STATE_STORAGE_KEY,
+  type MasteringRestore,
+  type MasteringState,
+  serializeMasteringState,
+} from '@/demos/mastering/masteringState';
 
-const sessionStorageKey = 'libsonare-mastering-session-v1';
-const chainPresetStorageKey = 'libsonare-mastering-chain-preset-v1';
-const MAX_CHAIN_SETTINGS_BYTES = 1_000_000;
-const MODULE_RANGES = new Map(
-  MASTERING_MODULES.flatMap((moduleId) => moduleControlsFor(moduleId)).map((control) => [
-    control.key,
-    { min: control.min, max: control.max },
-  ]),
-);
+/** sessionStorage key of the earlier page's session; read by nothing, removed on load. */
+export const MASTERING_LEGACY_SESSION_KEY = 'libsonare-mastering-session-v1';
 
-interface MasteringSessionRefs {
-  mode: Ref<MasteringMode>;
-  selectedPreset: Ref<MasteringPresetId>;
-  selectedVenue: Ref<MasteringVenueId>;
-  selectedPlatform: Ref<MasteringPlatformId>;
-  customLufs: Ref<number>;
-  tone: Ref<number>;
-  width: Ref<number>;
-  dynamics: Ref<number>;
-  showFineTune: Ref<boolean>;
-  activeModule: Ref<string>;
-  loudnessMatched: Ref<boolean>;
-  moduleSettings: Ref<MasteringModuleSettings>;
-  chainSettingsUrl: Ref<string | null>;
-  localError: Ref<string | null>;
-  t: (key: string) => string;
+/** Quiet period after the last edit before the state is written. */
+export const MASTERING_SAVE_DELAY_MS = 250;
+
+export interface MasteringSession {
+  /** The saved project (or the converted earlier preset); null when nothing is stored. */
+  restore(): MasteringRestore | null;
+  /** Schedules a write of `state`; edits within the delay coalesce into one write. */
+  save(state: MasteringState): void;
+  /** Writes a pending save now. */
+  flush(): void;
+  /** Cancels a pending save. */
+  dispose(): void;
 }
 
-export function useMasteringSession(state: MasteringSessionRefs) {
-  function currentSessionSettings(): MasteringSessionSettings {
-    return {
-      mode: state.mode.value,
-      selectedPreset: state.selectedPreset.value,
-      selectedVenue: state.selectedVenue.value,
-      selectedPlatform: state.selectedPlatform.value,
-      customLufs: state.customLufs.value,
-      tone: state.tone.value,
-      width: state.width.value,
-      dynamics: state.dynamics.value,
-      showFineTune: state.showFineTune.value,
-      activeModule: state.activeModule.value,
-      loudnessMatched: state.loudnessMatched.value,
-      moduleSettings: { ...state.moduleSettings.value },
-    };
+function storage(kind: 'localStorage' | 'sessionStorage'): Storage | null {
+  try {
+    return typeof window === 'undefined' ? null : window[kind];
+  } catch {
+    return null;
   }
-
-  function applySessionSettings(settings: Partial<MasteringSessionSettings>) {
-    if (settings.mode === 'quick' || settings.mode === 'studio') state.mode.value = settings.mode;
-    if (isMasteringPresetId(settings.selectedPreset))
-      state.selectedPreset.value = settings.selectedPreset;
-    if (isMasteringVenueId(settings.selectedVenue))
-      state.selectedVenue.value = settings.selectedVenue;
-    if (isMasteringPlatformId(settings.selectedPlatform))
-      state.selectedPlatform.value = settings.selectedPlatform;
-    if (Number.isFinite(settings.customLufs))
-      state.customLufs.value = clamp(Number(settings.customLufs), -24, -8);
-    if (Number.isFinite(settings.tone)) state.tone.value = clamp(Number(settings.tone), 0, 100);
-    if (Number.isFinite(settings.width)) state.width.value = clamp(Number(settings.width), 0, 100);
-    if (Number.isFinite(settings.dynamics))
-      state.dynamics.value = clamp(Number(settings.dynamics), 0, 100);
-    if (typeof settings.showFineTune === 'boolean')
-      state.showFineTune.value = settings.showFineTune;
-    if (settings.activeModule && MASTERING_MODULES.includes(settings.activeModule))
-      state.activeModule.value = settings.activeModule;
-    if (typeof settings.loudnessMatched === 'boolean')
-      state.loudnessMatched.value = settings.loudnessMatched;
-    if (settings.moduleSettings && typeof settings.moduleSettings === 'object') {
-      const current = state.moduleSettings.value;
-      const incoming = settings.moduleSettings as unknown as Record<string, unknown>;
-      const next = { ...current };
-      for (const key of Object.keys(current) as (keyof MasteringModuleSettings)[]) {
-        const value = incoming[key];
-        const range = MODULE_RANGES.get(key);
-        if (typeof value !== 'number' || !Number.isFinite(value) || !range) continue;
-        next[key] = clamp(value, range.min, range.max);
-      }
-      state.moduleSettings.value = next;
-    }
-  }
-
-  function saveSession() {
-    if (typeof window === 'undefined') return;
-    try {
-      sessionStorage.setItem(sessionStorageKey, JSON.stringify(currentSessionSettings()));
-    } catch {
-      // Storage can be unavailable in private mode; session persistence is optional.
-    }
-  }
-
-  function restoreSession() {
-    let raw: string | null = null;
-    try {
-      raw = sessionStorage.getItem(sessionStorageKey);
-    } catch {
-      return;
-    }
-    if (!raw) return;
-    try {
-      applySessionSettings(JSON.parse(raw));
-    } catch {
-      sessionStorage.removeItem(sessionStorageKey);
-    }
-  }
-
-  function saveChainPreset() {
-    try {
-      localStorage.setItem(chainPresetStorageKey, JSON.stringify(currentSessionSettings()));
-      state.localError.value = null;
-    } catch {
-      state.localError.value = state.t('master.errors.presetSaveFailed');
-    }
-  }
-
-  function loadChainPreset() {
-    let raw: string | null = null;
-    try {
-      raw = localStorage.getItem(chainPresetStorageKey);
-    } catch {
-      state.localError.value = state.t('master.errors.presetLoadFailed');
-      return;
-    }
-    if (!raw) {
-      state.localError.value = state.t('master.errors.noSavedPreset');
-      return;
-    }
-    try {
-      applySessionSettings(JSON.parse(raw));
-      state.localError.value = null;
-    } catch {
-      state.localError.value = state.t('master.errors.presetLoadFailed');
-    }
-  }
-
-  function exportChainSettings() {
-    if (state.chainSettingsUrl.value) URL.revokeObjectURL(state.chainSettingsUrl.value);
-    const payload = {
-      exportedAt: new Date().toISOString(),
-      settings: currentSessionSettings(),
-    };
-    state.chainSettingsUrl.value = URL.createObjectURL(
-      new Blob([JSON.stringify(payload, null, 2)], {
-        type: 'application/json',
-      }),
-    );
-  }
-
-  async function handleChainImport(event: Event) {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
-    try {
-      if (file.size > MAX_CHAIN_SETTINGS_BYTES) throw new Error('settings file too large');
-      const payload = JSON.parse(await file.text());
-      applySessionSettings(payload.settings || payload);
-      state.localError.value = null;
-    } catch {
-      state.localError.value = state.t('master.errors.presetLoadFailed');
-    } finally {
-      input.value = '';
-    }
-  }
-
-  return {
-    currentSessionSettings,
-    applySessionSettings,
-    saveSession,
-    restoreSession,
-    saveChainPreset,
-    loadChainPreset,
-    exportChainSettings,
-    handleChainImport,
-  };
 }
 
-function isMasteringPresetId(value: unknown): value is MasteringPresetId {
-  return typeof value === 'string' && MASTERING_PRESETS.some((preset) => preset.id === value);
-}
+export function useMasteringSession(delayMs = MASTERING_SAVE_DELAY_MS): MasteringSession {
+  let pending: MasteringState | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
 
-function isMasteringVenueId(value: unknown): value is MasteringVenueId {
-  return typeof value === 'string' && MASTERING_VENUES.some((venue) => venue.id === value);
-}
+  function write(state: MasteringState): void {
+    try {
+      storage('localStorage')?.setItem(MASTERING_STATE_STORAGE_KEY, serializeMasteringState(state));
+    } catch {
+      // Storage may be full or disabled; persistence is best-effort.
+    }
+  }
 
-function isMasteringPlatformId(value: unknown): value is MasteringPlatformId {
-  return typeof value === 'string' && MASTERING_PLATFORMS.some((platform) => platform.id === value);
+  function flush(): void {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    if (pending) write(pending);
+    pending = null;
+  }
+
+  function save(state: MasteringState): void {
+    pending = state;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(flush, delayMs);
+  }
+
+  function restore(): MasteringRestore | null {
+    const local = storage('localStorage');
+    try {
+      storage('sessionStorage')?.removeItem(MASTERING_LEGACY_SESSION_KEY);
+    } catch {
+      // Nothing to discard.
+    }
+    if (!local) return null;
+    try {
+      const current = local.getItem(MASTERING_STATE_STORAGE_KEY);
+      if (current !== null) return deserializeMasteringState(current);
+      const legacy = local.getItem(MASTERING_LEGACY_PRESET_STORAGE_KEY);
+      if (legacy === null) return null;
+      const converted = deserializeMasteringState(legacy);
+      write(converted.state);
+      local.removeItem(MASTERING_LEGACY_PRESET_STORAGE_KEY);
+      return converted;
+    } catch {
+      return null;
+    }
+  }
+
+  function dispose(): void {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    pending = null;
+  }
+
+  return { restore, save, flush, dispose };
 }

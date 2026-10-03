@@ -19,6 +19,7 @@ import {
   type LoudnessScale,
   loudnessScaleSpec,
   lufsInScale,
+  METER_FLOOR_DB,
 } from './meterBallistics';
 
 const props = withDefaults(
@@ -43,6 +44,14 @@ const props = withDefaults(
 /** Absolute LUFS by default; `ebu9` relabels the scale in LU around -23 LUFS. */
 const scale = defineModel<LoudnessScale>('scale', { default: 'absolute' });
 
+/** At or below this the engine reports its floor: there is no reading yet, not a level. */
+const NO_READING_DB = METER_FLOOR_DB + 1;
+
+/** The value, or NaN when it is the engine floor (silence or nothing measured). */
+function reading(value: number): number {
+  return Number.isFinite(value) && value > NO_READING_DB ? value : Number.NaN;
+}
+
 const spec = computed(() => loudnessScaleSpec(scale.value));
 
 function position(lufs: number): string {
@@ -59,15 +68,15 @@ function inScale(lufs: number): string {
   return formatMeterValue(lufsInScale(lufs, scale.value), scale.value === 'ebu9');
 }
 
-const plr = computed(() => props.truePeakDb - props.integratedLufs);
+const plr = computed(() => reading(props.truePeakDb) - reading(props.integratedLufs));
 
 const readouts = computed(() => [
-  { key: 'M', value: inScale(props.momentaryLufs), unit: spec.value.unit },
-  { key: 'S', value: inScale(props.shortTermLufs), unit: spec.value.unit },
+  { key: 'M', value: inScale(reading(props.momentaryLufs)), unit: spec.value.unit },
+  { key: 'S', value: inScale(reading(props.shortTermLufs)), unit: spec.value.unit },
   { key: 'LRA', value: formatMeterValue(props.lra), unit: 'LU' },
   {
     key: 'TP',
-    value: formatMeterValue(props.truePeakDb),
+    value: formatMeterValue(reading(props.truePeakDb)),
     unit: 'dBTP',
     hot: props.truePeakDb > CLIP_THRESHOLD_DBTP,
   },
@@ -80,13 +89,13 @@ const target = computed(() =>
     : null,
 );
 
-const integratedVisible = computed(() => Number.isFinite(props.integratedLufs));
+const integratedVisible = computed(() => Number.isFinite(reading(props.integratedLufs)));
 
 /** Whole-unit values so a 47 Hz stream does not churn the accessible name. */
 const summary = computed(() => {
   const unit = spec.value.unit;
   const round = (lufs: number) => {
-    const text = inScale(Math.round(lufs));
+    const text = inScale(Math.round(reading(lufs)));
     return text === '—' ? text : `${text} ${unit}`;
   };
   return `${props.labels.name}: M ${round(props.momentaryLufs)}, S ${round(props.shortTermLufs)}, I ${round(props.integratedLufs)}`;
@@ -149,7 +158,7 @@ function toggleScale(): void {
 
       <div class="loudness-meter__integrated">
         <span class="loudness-meter__key">I</span>
-        <strong class="loudness-meter__big">{{ inScale(integratedLufs) }}</strong>
+        <strong class="loudness-meter__big">{{ inScale(reading(integratedLufs)) }}</strong>
         <span class="loudness-meter__unit">{{ spec.unit }}</span>
       </div>
 

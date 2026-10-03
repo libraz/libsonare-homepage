@@ -47,6 +47,8 @@ const props = withDefaults(
 
 /** Level above which a bar turns from the normal to the hot colour. */
 const HOT_ZONE_DB = -6;
+/** At or below this the engine reports its floor: no reading, so the readout shows a dash. */
+const NO_READING_DB = METER_FLOOR_DB + 1;
 
 const channels = shallowRef<[PeakBallistics, PeakBallistics]>([
   createPeakBallistics(),
@@ -101,7 +103,7 @@ function holdOffset(valueDb: number): string {
 const bars = computed(() =>
   channels.value.map((state, i) => {
     const rms = props.rmsDb?.[i] ?? METER_FLOOR_DB;
-    const holdVisible = state.holdDb > props.minDb;
+    const holdVisible = state.holdDb > Math.max(props.minDb, NO_READING_DB);
     return {
       key: i === 0 ? 'L' : 'R',
       peakClip: reveal(state.levelDb),
@@ -126,7 +128,8 @@ const ticks = computed(() => {
 /** Whole-dB summary so assistive tech is not fed a 47 Hz stream of decimals. */
 const summary = computed(() => {
   const parts = channels.value.map((state, i) => {
-    const db = state.holdDb > props.minDb ? `${Math.round(state.holdDb)} dB` : '—';
+    const db =
+      state.holdDb > Math.max(props.minDb, NO_READING_DB) ? `${Math.round(state.holdDb)} dB` : '—';
     return `${i === 0 ? 'L' : 'R'} ${db}`;
   });
   return `${props.labels.name}: ${parts.join(', ')}`;

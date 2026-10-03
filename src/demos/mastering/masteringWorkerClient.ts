@@ -12,6 +12,7 @@ import type {
   MasteringAudioTransfer,
   MasteringExportOptions,
   MasteringExportResult,
+  MasteringMeasureResult,
   MasteringPlatformPreviewRow,
   MasteringPrepareResult,
   MasteringReferenceResult,
@@ -58,6 +59,12 @@ export interface MasteringWorkerClient {
     state: MasteringState,
     onProgress?: MasteringProgress,
   ): MasteringJob<LoudnessFitResult>;
+  /** Loudness of the program and of `state` rendered over it; the program clip comes back measured. */
+  measure(
+    registry: MasteringAudioRegistry,
+    state: MasteringState,
+    onProgress?: MasteringProgress,
+  ): MasteringJob<MasteringMeasureResult>;
   /** Renders the export (refitting first when `refit`); the registry gains `master`. */
   bounce(
     registry: MasteringAudioRegistry,
@@ -171,6 +178,10 @@ export function createMasteringWorkerClient(): MasteringWorkerClient {
     fit: (registry, state, onProgress) =>
       run({ type: 'fit', state }, registry, ['program'], onProgress, (message) =>
         message.type === 'fitted' ? message.result : undefined,
+      ),
+    measure: (registry, state, onProgress) =>
+      run({ type: 'measure', state }, registry, ['program'], onProgress, (message) =>
+        message.type === 'measured' ? message.result : undefined,
       ),
     bounce: (registry, state, options, refit, onProgress) =>
       run(

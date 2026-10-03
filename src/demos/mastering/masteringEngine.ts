@@ -94,6 +94,8 @@ export interface MasteringClip {
 export interface MasteringAudio {
   program: MasteringClip | null;
   reference: MasteringClip | null;
+  /** Integrated loudness of lane 1's output, measured by the page; the last fit's when absent. */
+  afterLufs?: number;
 }
 
 /** `preview` = the three-lane live project; `export` = lane 1 alone at unity. */
@@ -114,7 +116,7 @@ export function afterStripSpec(state: MasteringState): StripSpec {
 /** Integrated loudness of each lane, where it is known. */
 function laneLoudness(state: MasteringState, audio: MasteringAudio): Record<MasteringLane, number> {
   return {
-    after: state.loudness.fit?.measuredLufs ?? Number.NaN,
+    after: audio.afterLufs ?? state.loudness.fit?.measuredLufs ?? Number.NaN,
     before: audio.program?.integratedLufs ?? Number.NaN,
     reference: audio.reference?.integratedLufs ?? Number.NaN,
   };

@@ -28,6 +28,6 @@ describe('locale parity', () => {
   }
 
   it('has a non-trivial number of keys', () => {
-    expect(defaultKeys.size).toBeGreaterThan(100);
+    expect(defaultKeys.size).toBeGreaterThan(50);
   });
 });

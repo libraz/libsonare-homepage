@@ -1,12 +1,41 @@
+/**
+ * The source assistant panel's data: the program's profile, the assistant's
+ * suggested moves and chain, and the per-platform delivery estimate. The page
+ * hands in an adapter that runs the analysis in the Worker; this module only
+ * orders the requests and formats the result.
+ */
 import { computed, type Ref, ref, watch } from 'vue';
+import { enCopy } from '@/demos/mastering/masteringCopy';
 import type {
   MasteringAssistantPreset,
-  MasteringInsightReport,
   MasteringPresetId,
-  useMastering,
+  MasteringStreamingTarget,
 } from '@/demos/mastering/useMastering';
 
-type MasteringApi = ReturnType<typeof useMastering>;
+/** What one analysis returns. */
+export interface MasteringInsightReport {
+  /** Stereo profile; its `loudness` block is measured on the pair itself. */
+  profile: unknown;
+  suggestions: unknown;
+  /** Per-platform estimate of the last rendered master, or null before a render. */
+  streamingPreview: unknown;
+  /** Flat chain suggestion the state can take with `applyAssistant`. */
+  chainParams?: Record<string, number | boolean>;
+  /** Keys of `chainParams` the state cannot carry. */
+  unmapped?: string[];
+}
+
+/** The page side of the panel: whether there is a program, and how to analyse it. */
+export interface MasteringInsightSource {
+  source: Ref<unknown>;
+  analyzeSource(
+    platforms: MasteringStreamingTarget[],
+    preset?: MasteringAssistantPreset,
+  ): Promise<MasteringInsightReport>;
+}
+
+/** Labels of the profile rows, in display order. */
+export type MasteringProfileLabels = typeof enCopy.insights.profileItems;
 
 export interface MasteringInsightItem {
   label: string;
@@ -35,7 +64,7 @@ function clock(seconds: number | null): string {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
-const STREAMING_TARGETS = [
+const STREAMING_TARGETS: MasteringStreamingTarget[] = [
   { name: 'Spotify', targetLufs: -14, ceilingDb: -1 },
   { name: 'YouTube', targetLufs: -14, ceilingDb: -1 },
   { name: 'Apple Music', targetLufs: -16, ceilingDb: -1 },
@@ -53,39 +82,34 @@ export function assistantPresetForAnalysis(preset: MasteringPresetId): Mastering
 }
 
 export function useMasteringInsights(
-  mastering: MasteringApi,
+  mastering: MasteringInsightSource,
   currentCeilingDb?: Ref<number>,
   selectedPreset?: Ref<MasteringPresetId>,
+  labels: Ref<MasteringProfileLabels> = ref(enCopy.insights.profileItems),
 ) {
   const insightReport = ref<MasteringInsightReport | null>(null);
   const isAnalyzingInsights = ref(false);
   let insightRequestId = 0;
 
-  // Curated headline metrics rather than a generic flatten of the profile object,
-  // so labels read cleanly and carry units. Field paths follow
-  // masteringAudioProfileStereo.
-  //
-  // Every figure derived from absolute level — integrated LUFS, loudness range,
-  // true peak, crest factor — comes from that profile's `loudness` block, which
-  // the engine measures from the two channels, so they describe the programme as
-  // delivered. Duration and BPM describe timing rather than level and are
-  // measured on the downmix, which is the right scope for them.
+  // Level figures come from the profile's `loudness` block, measured on the pair.
   const insightProfileItems = computed<MasteringInsightItem[]>(() => {
     const profile = insightReport.value?.profile as Record<string, unknown> | null;
     if (!profile) return [];
     const loudness = (profile.loudness ?? {}) as Record<string, unknown>;
+    const text = labels.value;
     return [
-      { label: 'Duration', value: clock(num(profile.durationSec)) },
-      { label: 'BPM', value: num(profile.bpm) === null ? '-' : (profile.bpm as number).toFixed(1) },
-      { label: 'Integrated LUFS', value: withUnit(num(loudness.integratedLufs), ' LUFS') },
-      { label: 'Loudness range', value: withUnit(num(loudness.lraLu), ' LU') },
-      { label: 'True peak', value: withUnit(num(loudness.truePeakDb), ' dBTP') },
-      { label: 'Crest factor', value: withUnit(num(loudness.crestFactorDb), ' dB') },
+      { label: text.duration, value: clock(num(profile.durationSec)) },
+      {
+        label: text.bpm,
+        value: num(profile.bpm) === null ? '-' : (profile.bpm as number).toFixed(1),
+      },
+      { label: text.integrated, value: withUnit(num(loudness.integratedLufs), ' LUFS') },
+      { label: text.lra, value: withUnit(num(loudness.lraLu), ' LU') },
+      { label: text.truePeak, value: withUnit(num(loudness.truePeakDb), ' dBTP') },
+      { label: text.crest, value: withUnit(num(loudness.crestFactorDb), ' dB') },
     ];
   });
-  // The assistant's `explanation[]` is the plain-language rationale meant for the
-  // UI; `chainConfig.params` is the entire default chain (mostly unchanged), so
-  // flattening it would surface noise instead of the actual suggested moves.
+  // `explanation[]` is the assistant's rationale written for display.
   const insightSuggestions = computed<string[]>(() => {
     const explanation = (insightReport.value?.suggestions as { explanation?: unknown } | null)
       ?.explanation;
@@ -93,13 +117,7 @@ export function useMasteringInsights(
       ? explanation.filter((entry): entry is string => typeof entry === 'string').slice(0, 6)
       : [];
   });
-  // Per-platform delivery rows. The measured loudness/true-peak are identical for
-  // every platform (and already shown in the profile), so the preview focuses on
-  // the actionable values: the normalization gain each platform applies and
-  // whether that risks the ceiling. Flattening would only surface one platform.
-  //
-  // Each row echoes the ceiling of the platform spec it was derived from, so the
-  // ceiling never has to be recovered by matching a platform name.
+  // Each row echoes the ceiling of the platform spec it was derived from.
   const insightPreview = computed<MasteringPreviewRow[]>(() => {
     const platforms = (insightReport.value?.streamingPreview as { platforms?: unknown } | null)
       ?.platforms;
@@ -151,9 +169,7 @@ export function useMasteringInsights(
         : await mastering.analyzeSource(STREAMING_TARGETS);
       if (id === insightRequestId) insightReport.value = report;
     } catch (error) {
-      // Insight analysis is a best-effort background pass. A failure here (e.g.
-      // empty audio) stays on this non-fatal channel
-      // and must not mutate the shared foreground error state.
+      // A background pass: a failure stays here, off the page's error channel.
       console.warn('Mastering insight analysis failed:', error);
     } finally {
       if (id === insightRequestId) isAnalyzingInsights.value = false;

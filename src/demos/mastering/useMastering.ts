@@ -1,6 +1,75 @@
-import { ref, shallowRef } from 'vue';
-import { decodeAudioBuffer, wavBlob } from '@/utils/audio';
-import type { MasteringChainConfig, StreamingPlatform } from '@/wasm/index';
+/**
+ * The /mastering page controller. One project state is the single source:
+ * every edit is a mutator from `masteringState.ts` committed to history, and
+ * each change reaches the live engine as the op diff `masteringEngine.diff`
+ * derives, the session store as JSON, and the export Worker as the state the
+ * bounce renders. PCM lives only in the audio registry; Worker jobs run one at
+ * a time because each one borrows the clips it needs.
+ */
+import { type ComputedRef, computed, ref, shallowRef, watch } from 'vue';
+import type { EngineTransportLoop } from '@/components/ui/EngineTransport.vue';
+import { useHistory } from '@/composables/useHistory';
+import { type UseSonareEngine, useSonareEngine } from '@/composables/useSonareEngine';
+import type {
+  MasteringExportResult,
+  MasteringMeasureResult,
+  MasteringReferenceResult,
+} from '@/demos/mastering/mastering.worker';
+import type { MasteringCopy } from '@/demos/mastering/masteringCopy';
+import {
+  buildFull,
+  clipOps,
+  diff,
+  laneFaderOps,
+  laneMatchGains,
+  MASTERING_LANE_TRACK,
+  type MasteringAudio,
+  type MasteringClip,
+  repairChainConfig,
+} from '@/demos/mastering/masteringEngine';
+import { createMasteringReport } from '@/demos/mastering/masteringReport';
+import {
+  defaultMasteringState,
+  isLoudnessFitStale,
+  MASTERING_SLOT,
+  type MasteringLane,
+  type MasteringMutatorName,
+  type MasteringState,
+  masteringMutators,
+  masteringTargetLufs,
+} from '@/demos/mastering/masteringState';
+import {
+  exportBounceOptions,
+  MASTERING_MAX_SECONDS,
+  type MasteringDither,
+  type MasteringExportFormat,
+} from '@/demos/mastering/masteringUi';
+import {
+  createMasteringWorkerClient,
+  type MasteringAudioRegistry,
+  type MasteringJob,
+  MasteringJobCancelled,
+  type MasteringProgress,
+} from '@/demos/mastering/masteringWorkerClient';
+import {
+  type MasteringInsightReport,
+  useMasteringInsights,
+} from '@/demos/mastering/useMasteringInsights';
+import {
+  type MasteringMetering,
+  useMasteringMetering,
+} from '@/demos/mastering/useMasteringMetering';
+import { useMasteringSession } from '@/demos/mastering/useMasteringSession';
+import {
+  AudioInputBudgetError,
+  decodeAudioBuffer,
+  downsampleWaveform,
+  jsonBlob,
+  triggerDownload,
+  type WaveformPeak,
+  wavBlob,
+} from '@/utils/audio';
+import { applyOps, createFacadeTarget, type EngineTarget } from '@/utils/engineApply';
 
 export type MasteringPresetId =
   | 'pop'
@@ -15,1000 +84,801 @@ export type MasteringPresetId =
 export type MasteringAssistantPreset = 'pop' | 'edm' | 'acoustic' | 'hipHop' | 'aiMusic' | 'speech';
 export type MasteringVenueId = 'studio' | 'livehouseSmall' | 'livehouseLarge';
 export type MasteringPlatformId = 'spotify' | 'youtube' | 'apple' | 'tiktok' | 'custom';
-
-export interface MasteringTuning {
-  tone: number;
-  width: number;
-  dynamics: number;
-}
-
-export interface MasteringDiagnosticBypass {
-  repair: boolean;
-  dynamics: boolean;
-  saturation: boolean;
-  airBand: boolean;
-  stereo: boolean;
-  loudnessLimiter: boolean;
-}
-
-export interface MasteringModuleSettings {
-  inputGainDb: number;
-  // Repair (denoise + declick + dereverb)
-  denoiseAmount: number;
-  declickAmount: number;
-  dereverbAmount: number;
-  // EQ
-  tiltDb: number;
-  // Single-band dynamics
-  compressorThresholdDb: number;
-  compressorRatio: number;
-  compressorAttackMs: number;
-  compressorReleaseMs: number;
-  deesserAmount: number;
-  transientAttackDb: number;
-  // Multiband compressor (per-band amount drives threshold + ratio)
-  multibandLowAmount: number;
-  multibandMidAmount: number;
-  multibandHighAmount: number;
-  // Saturation / Air
-  tapeDriveDb: number;
-  tapeSaturation: number;
-  exciterAmount: number;
-  airBandAmount: number;
-  // Stereo
-  stereoWidth: number;
-  monoMakerAmount: number;
-  // Limiter
-  limiterCeilingDb: number;
-  limiterLookaheadMs: number;
-}
-
-export interface MasteringRenderOptions {
-  preset: MasteringPresetId;
-  venue?: MasteringVenueId;
-  targetLufs: number;
-  tuning: MasteringTuning;
-  moduleSettings?: MasteringModuleSettings;
-  qualityMode?: 'safe' | 'studio';
-  diagnosticBypass?: MasteringDiagnosticBypass;
-}
-
-export interface ReferenceMatchOptions {
+/** One platform the delivery preview estimates. */
+export interface MasteringStreamingTarget {
+  name: string;
   targetLufs: number;
   ceilingDb: number;
-  lookaheadMs: number;
 }
 
-export interface DecodedMasteringAudio {
+type Wasm = typeof import('@/wasm/index.js');
+type Mutators = typeof masteringMutators;
+/** Arguments of a mutator after the state. */
+export type MutatorArgs<K extends MasteringMutatorName> = Mutators[K] extends (
+  state: MasteringState,
+  ...args: infer A
+) => MasteringState
+  ? A
+  : never;
+
+/** A loaded file as the page shows it. */
+export interface MasteringFileInfo {
   fileName: string;
   sampleRate: number;
   duration: number;
   channels: number;
-  left: Float32Array;
-  right: Float32Array;
 }
 
-export interface RenderedMasteringAudio {
-  left: Float32Array;
-  right: Float32Array;
-  sampleRate: number;
-  inputLufs: number;
-  outputLufs: number;
-  appliedGainDb: number;
-  stages: string[];
+export type MasteringJobKind = 'prepare' | 'fit' | 'export' | 'assist' | 'reference' | 'preview';
+
+/** The Worker job in flight. */
+export interface MasteringJobState {
+  kind: MasteringJobKind;
+  progress: number;
+  cancel(): void;
 }
 
-export interface MasteringInsightReport {
-  /**
-   * Stereo assistant profile. Its `loudness` block is measured from the pair
-   * itself — channel-summed integrated LUFS and LRA, the larger of the two
-   * channel true peaks, and a crest factor across both channels.
-   */
-  profile: unknown;
-  suggestions: unknown;
-  streamingPreview: unknown;
+/** Jobs during which the project must not change: their result is written back into it. */
+const LOCKING_JOBS: readonly MasteringJobKind[] = ['fit', 'export'];
+
+/** The last export render. */
+export interface MasteringRenderRecord {
+  result: MasteringExportResult;
+  format: MasteringExportFormat;
+  dither: MasteringDither;
+  at: number;
+  url: string;
+  fileName: string;
 }
 
-export interface ReferenceAnalysisReport {
-  loudness: unknown;
-  tonalBalance: unknown;
-  monoCompatibility: unknown;
+export type MasteringErrorKey = keyof MasteringCopy['errors'];
+
+/** Quiet period after a repair edit before the preprocess reruns. */
+const PREPARE_DELAY_MS = 400;
+/** Quiet period after a lane-1 edit before its loudness is measured again for the A/B match. */
+export const MEASURE_DELAY_MS = 1500;
+/** How long the rack shows that a discrete edit rebuilt the inserts. */
+const RESET_FLASH_MS = 700;
+/** Waveform columns kept for the timeline; zoom reads subsets of them. */
+const WAVEFORM_POINTS = 8192;
+/** The engine tempo: a quarter note is one second, so ppq = seconds. */
+const ENGINE_BPM = 60;
+
+const EMPTY_LOOP: EngineTransportLoop = { enabled: false, start: 0, end: 0 };
+
+function newAudioId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-type WorkerMessage =
-  | { type: 'progress'; id: number; progress: number; stage: string }
-  | { type: 'done'; id: number; result: RenderedMasteringAudio }
-  | { type: 'analysisDone'; id: number; result: ReferenceAnalysisReport }
-  | { type: 'sourceAnalysisDone'; id: number; result: MasteringInsightReport }
-  | { type: 'error'; id: number; error: string };
+function stereoOf(buffer: AudioBuffer): { left: Float32Array; right: Float32Array } {
+  const left = buffer.getChannelData(0).slice();
+  const right = buffer.numberOfChannels > 1 ? buffer.getChannelData(1).slice() : left.slice();
+  return { left, right };
+}
 
-export function useMastering() {
-  const isInitialized = ref(false);
-  const isLoading = ref(false);
-  const isRendering = ref(false);
-  const renderProgress = ref(0);
-  const renderStage = ref('');
-  const error = ref<string | null>(null);
-  const source = shallowRef<DecodedMasteringAudio | null>(null);
-  const rendered = shallowRef<RenderedMasteringAudio | null>(null);
+/** Everything that changes what lane 1 renders; a measured After loudness is valid for one key. */
+function afterKey(state: MasteringState): string {
+  return JSON.stringify([state.source?.id ?? null, state.repair, state.eq, state.inserts]);
+}
 
-  let wasmModule: any = null;
-  let audioContext: AudioContext | null = null;
-  let worker: Worker | null = null;
-  let renderRequestId = 0;
-  let operationGeneration = 0;
-  const pendingWorkerRejects = new Set<(reason?: unknown) => void>();
+function fileBase(name: string): string {
+  return name.replace(/\.[^.]+$/, '') || 'master';
+}
 
-  async function initWasm() {
-    if (isInitialized.value) return;
-    wasmModule = await import('@/wasm/index.js');
-    await wasmModule.init();
-    isInitialized.value = true;
-  }
+export function useMastering(options: { copy: ComputedRef<MasteringCopy> }) {
+  const sonare: UseSonareEngine = useSonareEngine();
+  const worker = createMasteringWorkerClient();
+  const session = useMasteringSession();
+  const registry: MasteringAudioRegistry = new Map();
+  const wasm = shallowRef<Wasm | null>(null);
+  let target: EngineTarget | null = null;
 
-  function getAudioContext(): AudioContext {
-    if (!audioContext) {
-      audioContext = new AudioContext();
-    }
-    return audioContext;
-  }
+  /** True once lane clips and strips are on the engine for the current program. */
+  const applied = ref(false);
+  const pendingRestore = ref(false);
+  const restoreNotices = ref<string[]>([]);
+  const error = ref<MasteringErrorKey | null>(null);
+  const loading = ref<'source' | 'reference' | null>(null);
+  const sourceInfo = shallowRef<MasteringFileInfo | null>(null);
+  const referenceInfo = shallowRef<MasteringFileInfo | null>(null);
+  const referenceReady = ref(false);
+  const referenceAnalysis = shallowRef<MasteringReferenceResult | null>(null);
+  const programLufs = ref(Number.NaN);
+  /** Loudness of lane 1's output and the {@link afterKey} it was measured on. */
+  const afterLoudness = shallowRef<{ key: string; lufs: number } | null>(null);
+  const waveform = shallowRef<WaveformPeak[] | null>(null);
+  const job = shallowRef<MasteringJobState | null>(null);
+  const prepareFailed = ref(false);
+  const resetFlash = ref(0);
+  const lastRender = shallowRef<MasteringRenderRecord | null>(null);
+  const loop = ref<EngineTransportLoop>({ ...EMPTY_LOOP });
+  const now = ref(Date.now());
 
-  async function loadFile(file: File): Promise<DecodedMasteringAudio> {
-    const generation = ++operationGeneration;
-    isLoading.value = true;
-    error.value = null;
-    rendered.value = null;
+  const history = useHistory(defaultMasteringState(), { onChange });
+  const state = history.state;
 
-    try {
-      const decoded = await decodeFile(file);
-      if (generation !== operationGeneration) throw new DOMException('Superseded', 'AbortError');
-      source.value = decoded;
-      return decoded;
-    } catch (e) {
-      console.error('Failed to load mastering file:', e);
-      if (generation === operationGeneration) error.value = 'Failed to decode audio file';
-      throw e;
-    } finally {
-      if (generation === operationGeneration) isLoading.value = false;
-    }
-  }
-
-  async function decodeFile(file: File): Promise<DecodedMasteringAudio> {
-    const ctx = getAudioContext();
-    const buffer = await decodeAudioBuffer(file, ctx);
+  function registryAudio(): MasteringAudio {
     return {
-      fileName: file.name,
-      sampleRate: buffer.sampleRate,
-      duration: buffer.duration,
-      channels: buffer.numberOfChannels,
-      left: new Float32Array(buffer.getChannelData(0)),
-      right:
-        buffer.numberOfChannels > 1
-          ? new Float32Array(buffer.getChannelData(1))
-          : new Float32Array(buffer.getChannelData(0)),
+      program: registry.get('program') ?? null,
+      reference: referenceReady.value ? (registry.get('reference') ?? null) : null,
+      afterLufs: afterLoudness.value?.lufs,
     };
   }
 
-  async function render(options: MasteringRenderOptions): Promise<RenderedMasteringAudio> {
-    if (!source.value) {
-      throw new Error('No audio loaded');
-    }
+  const metering: MasteringMetering = useMasteringMetering({
+    sonare,
+    wasm,
+    program: () => registry.get('program'),
+  });
 
-    const generation = ++operationGeneration;
-    isRendering.value = true;
-    renderProgress.value = 0;
-    renderStage.value = 'Queued';
-    error.value = null;
+  // -------------------------------------------------------------------------
+  // State → engine
 
-    try {
-      const config = buildMasteringConfig(options);
-      const inputGainDb = options.moduleSettings?.inputGainDb ?? 0;
-      const inputSource = inputGainDb !== 0 ? applyGain(source.value, inputGainDb) : source.value;
-      const output = await renderInWorker(inputSource, config);
-      if (generation !== operationGeneration) throw new DOMException('Superseded', 'AbortError');
-      rendered.value = output;
-      renderProgress.value = 1;
-      renderStage.value = 'Complete';
-      return output;
-    } catch (e) {
-      console.error('Mastering render failed:', e);
-      if (generation === operationGeneration) error.value = 'Mastering render failed';
-      throw e;
-    } finally {
-      if (generation === operationGeneration) isRendering.value = false;
-    }
+  let prepareTimer: ReturnType<typeof setTimeout> | null = null;
+  let measureTimer: ReturnType<typeof setTimeout> | null = null;
+  let measureHandle: MasteringJob<MasteringMeasureResult> | null = null;
+  let measureRequest = 0;
+  let flashTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function flashReset(): void {
+    resetFlash.value = Date.now();
+    if (flashTimer) clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => {
+      resetFlash.value = 0;
+    }, RESET_FLASH_MS);
   }
 
-  async function renderReferenceMatch(
-    reference: DecodedMasteringAudio,
-    options: ReferenceMatchOptions,
-  ): Promise<RenderedMasteringAudio> {
-    if (!source.value) {
-      throw new Error('No audio loaded');
+  function onChange(prev: MasteringState, next: MasteringState): void {
+    session.save(next);
+    if (applied.value && target) {
+      const change = diff(prev, next, registryAudio());
+      applyOps(target, change.ops);
+      if (change.discrete) flashReset();
     }
+    if (JSON.stringify(prev.repair) !== JSON.stringify(next.repair) && registry.has('source')) {
+      schedulePrepare();
+    }
+    if (next.monitor.matchLoudness && !prev.monitor.matchLoudness) scheduleMeasure(0);
+    else if (afterKey(prev) !== afterKey(next)) scheduleMeasure();
+  }
 
-    const generation = ++operationGeneration;
-    isRendering.value = true;
-    renderProgress.value = 0;
-    renderStage.value = 'Queued';
-    error.value = null;
+  const editLocked = computed(
+    () =>
+      loading.value === 'source' || (job.value !== null && LOCKING_JOBS.includes(job.value.kind)),
+  );
 
+  /** Applies one mutator as one history entry (a drag folds its entries between begin and end). */
+  function edit<K extends MasteringMutatorName>(name: K, ...args: MutatorArgs<K>): void {
+    if (editLocked.value) return;
+    const mutate = masteringMutators[name] as unknown as (
+      s: MasteringState,
+      ...a: MutatorArgs<K>
+    ) => MasteringState;
+    let next: MasteringState;
     try {
-      const output = await renderReferenceMatchInWorker(source.value, reference, options);
-      if (generation !== operationGeneration) throw new DOMException('Superseded', 'AbortError');
-      rendered.value = output;
-      renderProgress.value = 1;
-      renderStage.value = 'Complete';
-      return output;
-    } catch (e) {
-      console.error('Reference match failed:', e);
-      if (generation === operationGeneration) error.value = 'Reference match failed';
-      throw e;
-    } finally {
-      if (generation === operationGeneration) isRendering.value = false;
+      next = mutate(state.value, ...args);
+    } catch (cause) {
+      console.warn(`mastering: ${String(name)} rejected`, cause);
+      return;
     }
+    if (next !== state.value) history.commit(next);
+  }
+
+  function undo(): void {
+    if (!editLocked.value) history.undo();
+  }
+
+  function redo(): void {
+    if (!editLocked.value) history.redo();
+  }
+
+  // -------------------------------------------------------------------------
+  // Worker jobs, one at a time
+
+  let queue: Promise<unknown> = Promise.resolve();
+
+  function enqueue<T>(run: () => Promise<T>): Promise<T> {
+    const result = queue.then(run, run);
+    queue = result.catch(() => undefined);
+    return result;
+  }
+
+  function runJob<T>(
+    kind: MasteringJobKind,
+    start: (progress: MasteringProgress) => MasteringJob<T>,
+  ): Promise<T> {
+    // A loudness measurement yields to the jobs the visitor waits on and reschedules itself.
+    if (kind === 'prepare' || LOCKING_JOBS.includes(kind)) measureHandle?.cancel();
+    return enqueue(async () => {
+      const handle = start((progress) => {
+        if (job.value) job.value = { ...job.value, progress };
+      });
+      job.value = { kind, progress: 0, cancel: handle.cancel };
+      try {
+        return await handle.result;
+      } finally {
+        job.value = null;
+      }
+    });
+  }
+
+  function cancelJob(): void {
+    job.value?.cancel();
+  }
+
+  async function ensureEngine(): Promise<boolean> {
+    if (target) return true;
+    if (!(await sonare.start())) {
+      error.value = 'engine';
+      return false;
+    }
+    const live = sonare.engine.value;
+    if (!live) return false;
+    live.setTempo(ENGINE_BPM);
+    target = createFacadeTarget(live);
+    wasm.value = await import('@/wasm/index.js');
+    return true;
+  }
+
+  function buildEngine(): void {
+    if (!target || !registry.has('program')) return;
+    applyOps(target, buildFull(state.value, registryAudio()));
+    applied.value = true;
+    pendingRestore.value = false;
+  }
+
+  /** Re-sends the lane clips and the lane faders after the audio changed. */
+  function refreshLanes(lanes: readonly MasteringLane[]): void {
+    if (!target || !applied.value) return;
+    const audio = registryAudio();
+    const tracks = lanes.map((lane) => MASTERING_LANE_TRACK[lane]);
+    const clips = clipOps(audio).filter((op) => op.type === 'clips' && tracks.includes(op.trackId));
+    applyOps(target, [...clips, ...laneFaderOps(state.value, audio)]);
+  }
+
+  function schedulePrepare(): void {
+    if (prepareTimer) clearTimeout(prepareTimer);
+    prepareTimer = setTimeout(() => {
+      prepareTimer = null;
+      void runPrepare();
+    }, PREPARE_DELAY_MS);
+  }
+
+  /** Puts the new program on the lanes, or builds the project on its first program. */
+  function programReady(): void {
+    const program = registry.get('program');
+    if (program) {
+      programLufs.value = program.integratedLufs;
+      waveform.value = downsampleWaveform(program.left, program.right, WAVEFORM_POINTS);
+    }
+    if (applied.value) refreshLanes(['after', 'before']);
+    else buildEngine();
+    scheduleMeasure(0);
   }
 
   /**
-   * Decode a reference track and measure its integrated loudness under one
-   * operation generation, so a reference picked while an earlier one is still
-   * decoding supersedes it instead of racing it for the caller's state.
+   * Runs the repair preprocess; resolves false when it was cancelled or failed.
+   * With no repair stage enabled the program is a copy of the source and no
+   * Worker job runs.
    */
-  async function loadReference(
+  async function runPrepare(): Promise<boolean> {
+    if (!registry.has('source')) return false;
+    if (!repairChainConfig(state.value.repair)) {
+      // Queued, so no running job can put an older program back over this one.
+      const copied = await enqueue(async () => {
+        const source = registry.get('source');
+        if (!source || repairChainConfig(state.value.repair)) return false;
+        registry.set('program', {
+          left: source.left.slice(),
+          right: source.right.slice(),
+          sampleRate: source.sampleRate,
+          integratedLufs: Number.NaN,
+        });
+        return true;
+      });
+      if (!copied) return false;
+      prepareFailed.value = false;
+      programReady();
+      return true;
+    }
+    try {
+      await runJob('prepare', (progress) => worker.prepare(registry, state.value.repair, progress));
+    } catch (cause) {
+      prepareFailed.value = true;
+      if (!(cause instanceof MasteringJobCancelled)) {
+        console.warn('mastering: repair failed', cause);
+        error.value = 'repairFailed';
+      }
+      return false;
+    }
+    prepareFailed.value = false;
+    programReady();
+    return true;
+  }
+
+  // -------------------------------------------------------------------------
+  // Lane loudness for the A/B match
+
+  function measureNeeded(): boolean {
+    return (
+      applied.value &&
+      state.value.monitor.matchLoudness &&
+      registry.has('program') &&
+      (Number.isNaN(programLufs.value) || afterLoudness.value?.key !== afterKey(state.value))
+    );
+  }
+
+  /** True while the match gains wait for a loudness the page has not measured yet. */
+  const matchPending = computed(
+    () =>
+      applied.value &&
+      state.value.monitor.matchLoudness &&
+      (Number.isNaN(programLufs.value) || afterLoudness.value?.key !== afterKey(state.value)),
+  );
+
+  function applyLaneFaders(): void {
+    if (target && applied.value) applyOps(target, laneFaderOps(state.value, registryAudio()));
+  }
+
+  /** Drops the pending measurement and stops the one in flight. */
+  function cancelMeasure(): void {
+    if (measureTimer) clearTimeout(measureTimer);
+    measureTimer = null;
+    measureRequest += 1;
+    measureHandle?.cancel();
+  }
+
+  /** Measures the lanes `delay` ms after the last call; an edit meanwhile restarts the wait. */
+  function scheduleMeasure(delay = MEASURE_DELAY_MS): void {
+    cancelMeasure();
+    if (!measureNeeded()) return;
+    if (delay <= 0) {
+      void runMeasure();
+      return;
+    }
+    measureTimer = setTimeout(() => {
+      measureTimer = null;
+      void runMeasure();
+    }, delay);
+  }
+
+  async function runMeasure(): Promise<void> {
+    const request = ++measureRequest;
+    try {
+      const outcome = await enqueue(async () => {
+        if (request !== measureRequest || !measureNeeded()) return null;
+        const snapshot = state.value;
+        const handle = worker.measure(registry, snapshot);
+        measureHandle = handle;
+        try {
+          return { key: afterKey(snapshot), result: await handle.result };
+        } finally {
+          measureHandle = null;
+        }
+      });
+      if (!outcome) return;
+      programLufs.value = outcome.result.programLufs;
+      afterLoudness.value = { key: outcome.key, lufs: outcome.result.afterLufs };
+      applyLaneFaders();
+    } catch (cause) {
+      if (!(cause instanceof MasteringJobCancelled)) {
+        console.warn('mastering: loudness measurement failed', cause);
+      } else if (request === measureRequest) {
+        scheduleMeasure();
+      }
+    }
+  }
+
+  /** Records a loudness a fit or an export measured on the current lane 1. */
+  function recordAfterLoudness(lufs: number): void {
+    afterLoudness.value = { key: afterKey(state.value), lufs };
+    applyLaneFaders();
+  }
+
+  // -------------------------------------------------------------------------
+  // Loading audio
+
+  async function decode(
     file: File,
-  ): Promise<{ audio: DecodedMasteringAudio; integratedLufs: number }> {
-    const generation = ++operationGeneration;
-    const audio = await decodeFile(file);
-    if (generation !== operationGeneration) throw new DOMException('Superseded', 'AbortError');
-    const integratedLufs = await measureIntegratedLufs(audio);
-    if (generation !== operationGeneration) throw new DOMException('Superseded', 'AbortError');
-    return { audio, integratedLufs };
-  }
-
-  async function measureIntegratedLufs(audio: DecodedMasteringAudio): Promise<number> {
-    await initWasm();
-    const interleaved = interleaveStereo(audio.left, audio.right);
-    return wasmModule.lufsInterleaved(interleaved, 2, audio.sampleRate).integratedLufs;
-  }
-
-  async function analyzeSource(
-    platforms: StreamingPlatform[],
-    preset?: MasteringAssistantPreset,
-  ): Promise<MasteringInsightReport> {
-    if (!source.value) {
-      throw new Error('No audio loaded');
-    }
+  ): Promise<{ clip: MasteringClip; info: MasteringFileInfo } | null> {
+    const context = sonare.context.value;
+    if (!context) return null;
     try {
-      // Source insights run in the same worker as rendering, but they are a
-      // background read. Keep them out of operationGeneration: changing the
-      // assistant preset while a render is in flight must not supersede that
-      // render. useMasteringInsights owns the latest-request guard for the UI.
-      return await analyzeSourceInWorker(source.value, platforms, preset);
-    } catch (e) {
-      // Empty input can surface as a raw WASM exception pointer (a number), so
-      // normalise it into an Error instead of leaking the pointer. This is a background
-      // insight request; leave the shared foreground error channel untouched.
-      console.error('Mastering analysis failed:', e);
-      throw e instanceof Error ? e : new Error('Mastering analysis failed');
+      const buffer = await decodeAudioBuffer(file, context, {
+        maxDurationSeconds: MASTERING_MAX_SECONDS,
+      });
+      const { left, right } = stereoOf(buffer);
+      return {
+        clip: { left, right, sampleRate: buffer.sampleRate, integratedLufs: Number.NaN },
+        info: {
+          fileName: file.name,
+          sampleRate: buffer.sampleRate,
+          duration: buffer.duration,
+          channels: buffer.numberOfChannels,
+        },
+      };
+    } catch (cause) {
+      error.value = cause instanceof AudioInputBudgetError ? 'tooLong' : 'loadFailed';
+      return null;
     }
   }
 
-  async function analyzeReference(
-    reference: DecodedMasteringAudio,
-  ): Promise<ReferenceAnalysisReport> {
-    if (!source.value) {
-      throw new Error('No audio loaded');
-    }
-
-    const generation = ++operationGeneration;
+  async function loadSource(file: File): Promise<void> {
+    if (loading.value || editLocked.value) return;
+    error.value = null;
+    loading.value = 'source';
     try {
-      const report = await analyzeReferenceInWorker(source.value, reference);
-      if (generation !== operationGeneration) throw new DOMException('Superseded', 'AbortError');
-      return report;
-    } catch (e) {
-      console.error('Reference analysis failed:', e);
-      throw e instanceof Error ? e : new Error('Reference analysis failed');
-    }
-  }
-
-  function createAudioUrl(audio: RenderedMasteringAudio): string {
-    return URL.createObjectURL(wavBlob([audio.left, audio.right], audio.sampleRate));
-  }
-
-  function createSourceAudioUrl(audio: DecodedMasteringAudio): string {
-    return URL.createObjectURL(wavBlob([audio.left, audio.right], audio.sampleRate));
-  }
-
-  function dispose() {
-    operationGeneration++;
-    for (const reject of pendingWorkerRejects) reject(new Error('Mastering disposed'));
-    pendingWorkerRejects.clear();
-    worker?.terminate();
-    worker = null;
-    audioContext?.close();
-    audioContext = null;
-  }
-
-  function renderInWorker(
-    audio: DecodedMasteringAudio,
-    config: MasteringChainConfig,
-  ): Promise<RenderedMasteringAudio> {
-    const id = ++renderRequestId;
-
-    if (!worker) {
-      worker = new Worker(new URL('./mastering.worker.ts', import.meta.url), {
-        type: 'module',
-      });
-    }
-
-    return new Promise((resolve, reject) => {
-      pendingWorkerRejects.add(reject);
-      const onMessage = (event: MessageEvent<WorkerMessage>) => {
-        const message = event.data;
-        if (message.id !== id) return;
-
-        if (message.type === 'progress') {
-          renderProgress.value = message.progress;
-          renderStage.value = message.stage;
-          return;
-        }
-
-        worker?.removeEventListener('message', onMessage);
-        worker?.removeEventListener('error', onError);
-        pendingWorkerRejects.delete(reject);
-
-        if (message.type === 'done') {
-          resolve(message.result);
-        } else if (message.type === 'error') {
-          reject(new Error(message.error));
-        } else {
-          reject(new Error('Unexpected worker response for mastering render'));
-        }
+      if (!(await ensureEngine())) return;
+      const decoded = await decode(file);
+      if (!decoded) return;
+      if (prepareTimer) clearTimeout(prepareTimer);
+      prepareTimer = null;
+      cancelMeasure();
+      // Jobs in flight hold clips of the old source and put them back when they settle.
+      await queue;
+      sonare.stop();
+      applied.value = false;
+      afterLoudness.value = null;
+      programLufs.value = Number.NaN;
+      registry.clear();
+      registry.set('source', decoded.clip);
+      referenceReady.value = false;
+      referenceInfo.value = null;
+      referenceAnalysis.value = null;
+      lastRender.value = null;
+      waveform.value = null;
+      sourceInfo.value = decoded.info;
+      loop.value = { enabled: false, start: 0, end: decoded.info.duration };
+      metering.reset();
+      const audioRef = {
+        id: newAudioId(),
+        fileName: decoded.info.fileName,
+        sampleRate: decoded.clip.sampleRate,
+        frames: decoded.clip.left.length,
+        channels: decoded.info.channels,
       };
-
-      const onError = (event: ErrorEvent) => {
-        worker?.removeEventListener('message', onMessage);
-        worker?.removeEventListener('error', onError);
-        pendingWorkerRejects.delete(reject);
-        // A genuine uncaught worker crash leaves the worker unusable — terminate
-        // and null it so the next request spins up a fresh worker instead of
-        // posting into a dead one (which never settles its promise).
-        worker?.terminate();
-        worker = null;
-        reject(event.error || new Error(event.message));
-      };
-
-      worker!.addEventListener('message', onMessage);
-      worker!.addEventListener('error', onError);
-      const messageLeft = new Float32Array(audio.left);
-      const messageRight = new Float32Array(audio.right);
-      worker!.postMessage(
-        {
-          type: 'render',
-          id,
-          left: messageLeft,
-          right: messageRight,
-          sampleRate: audio.sampleRate,
-          config,
-        },
-        [messageLeft.buffer, messageRight.buffer],
+      // A new source starts a new undo history; edits before it do not apply to this audio.
+      history.reset(
+        masteringMutators.setReference(masteringMutators.setSource(state.value, audioRef), null),
       );
-    });
+    } finally {
+      loading.value = null;
+    }
+    if (await runPrepare()) void insights.analyzeSourceInsights();
   }
 
-  function renderReferenceMatchInWorker(
-    audio: DecodedMasteringAudio,
-    referenceAudio: DecodedMasteringAudio,
-    options: ReferenceMatchOptions,
-  ): Promise<RenderedMasteringAudio> {
-    const id = ++renderRequestId;
-
-    if (!worker) {
-      worker = new Worker(new URL('./mastering.worker.ts', import.meta.url), {
-        type: 'module',
-      });
+  async function loadDemo(): Promise<void> {
+    try {
+      const response = await fetch('/demo.mp3');
+      const blob = await response.blob();
+      await loadSource(new File([blob], 'demo.mp3', { type: blob.type || 'audio/mpeg' }));
+    } catch {
+      error.value = 'loadFailed';
     }
+  }
 
-    return new Promise((resolve, reject) => {
-      pendingWorkerRejects.add(reject);
-      const onMessage = (event: MessageEvent<WorkerMessage>) => {
-        const message = event.data;
-        if (message.id !== id) return;
-
-        if (message.type === 'progress') {
-          renderProgress.value = message.progress;
-          renderStage.value = message.stage;
-          return;
-        }
-
-        worker?.removeEventListener('message', onMessage);
-        worker?.removeEventListener('error', onError);
-        pendingWorkerRejects.delete(reject);
-
-        if (message.type === 'done') {
-          resolve(message.result);
-        } else if (message.type === 'error') {
-          reject(new Error(message.error));
-        } else {
-          reject(new Error('Unexpected worker response for reference match'));
-        }
-      };
-
-      const onError = (event: ErrorEvent) => {
-        worker?.removeEventListener('message', onMessage);
-        worker?.removeEventListener('error', onError);
-        pendingWorkerRejects.delete(reject);
-        // A genuine uncaught worker crash leaves the worker unusable — terminate
-        // and null it so the next request spins up a fresh worker instead of
-        // posting into a dead one (which never settles its promise).
-        worker?.terminate();
-        worker = null;
-        reject(event.error || new Error(event.message));
-      };
-
-      worker!.addEventListener('message', onMessage);
-      worker!.addEventListener('error', onError);
-      const left = new Float32Array(audio.left);
-      const right = new Float32Array(audio.right);
-      const referenceLeft = new Float32Array(referenceAudio.left);
-      const referenceRight = new Float32Array(referenceAudio.right);
-      worker!.postMessage(
-        {
-          type: 'referenceMatch',
-          id,
-          left,
-          right,
-          referenceLeft,
-          referenceRight,
-          sampleRate: audio.sampleRate,
-          referenceSampleRate: referenceAudio.sampleRate,
-          targetLufs: options.targetLufs,
-          ceilingDb: options.ceilingDb,
-          lookaheadMs: options.lookaheadMs,
-        },
-        [left.buffer, right.buffer, referenceLeft.buffer, referenceRight.buffer],
+  async function loadReference(file: File): Promise<void> {
+    if (loading.value || !registry.has('program')) return;
+    error.value = null;
+    loading.value = 'reference';
+    let decoded: Awaited<ReturnType<typeof decode>>;
+    try {
+      decoded = await decode(file);
+    } finally {
+      loading.value = null;
+    }
+    if (!decoded) return;
+    registry.set('reference', decoded.clip);
+    referenceReady.value = false;
+    referenceAnalysis.value = null;
+    referenceInfo.value = decoded.info;
+    try {
+      referenceAnalysis.value = await runJob('reference', (progress) =>
+        worker.analyzeReference(registry, progress),
       );
-    });
+    } catch (cause) {
+      if (!(cause instanceof MasteringJobCancelled)) error.value = 'referenceFailed';
+      registry.delete('reference');
+      referenceInfo.value = null;
+      history.commit(masteringMutators.setReference(state.value, null));
+      return;
+    }
+    const conformed = registry.get('reference');
+    if (!conformed) return;
+    referenceReady.value = true;
+    refreshLanes(['reference']);
+    // Not a user edit: written even while another job holds the edit lock.
+    history.commit(
+      masteringMutators.setReference(state.value, {
+        id: newAudioId(),
+        fileName: decoded.info.fileName,
+        sampleRate: conformed.sampleRate,
+        frames: conformed.left.length,
+        channels: decoded.info.channels,
+      }),
+    );
   }
 
-  function analyzeReferenceInWorker(
-    audio: DecodedMasteringAudio,
-    referenceAudio: DecodedMasteringAudio,
-  ): Promise<ReferenceAnalysisReport> {
-    const id = ++renderRequestId;
+  function clearReference(): void {
+    if (editLocked.value) return;
+    edit('setReference', null);
+    registry.delete('reference');
+    referenceReady.value = false;
+    referenceInfo.value = null;
+    referenceAnalysis.value = null;
+    refreshLanes(['reference']);
+  }
 
-    if (!worker) {
-      worker = new Worker(new URL('./mastering.worker.ts', import.meta.url), {
-        type: 'module',
-      });
+  // -------------------------------------------------------------------------
+  // Loudness fit and export
+
+  const fitStale = computed(() => isLoudnessFitStale(state.value));
+  const targetLufs = computed(() => masteringTargetLufs(state.value));
+  const hasProgram = computed(() => applied.value);
+
+  async function fit(): Promise<void> {
+    if (!hasProgram.value || editLocked.value) return;
+    error.value = null;
+    try {
+      const result = await runJob('fit', (progress) => worker.fit(registry, state.value, progress));
+      history.commit(masteringMutators.applyLoudnessFit(state.value, result));
+      recordAfterLoudness(result.measuredLufs);
+    } catch (cause) {
+      if (!(cause instanceof MasteringJobCancelled)) {
+        console.warn('mastering: loudness fit failed', cause);
+        error.value = 'fitFailed';
+      }
     }
+  }
 
-    return new Promise((resolve, reject) => {
-      pendingWorkerRejects.add(reject);
-      const onMessage = (event: MessageEvent<WorkerMessage>) => {
-        const message = event.data;
-        if (message.id !== id) return;
-
-        if (message.type === 'progress') {
-          return;
-        }
-
-        worker?.removeEventListener('message', onMessage);
-        worker?.removeEventListener('error', onError);
-        pendingWorkerRejects.delete(reject);
-
-        if (message.type === 'analysisDone') {
-          resolve(message.result);
-        } else if (message.type === 'error') {
-          reject(new Error(message.error));
-        } else {
-          reject(new Error('Unexpected worker response for reference analysis'));
-        }
-      };
-
-      const onError = (event: ErrorEvent) => {
-        worker?.removeEventListener('message', onMessage);
-        worker?.removeEventListener('error', onError);
-        pendingWorkerRejects.delete(reject);
-        // A genuine uncaught worker crash leaves the worker unusable — terminate
-        // and null it so the next request spins up a fresh worker instead of
-        // posting into a dead one (which never settles its promise).
-        worker?.terminate();
-        worker = null;
-        reject(event.error || new Error(event.message));
-      };
-
-      worker!.addEventListener('message', onMessage);
-      worker!.addEventListener('error', onError);
-      const sourceLeft = new Float32Array(audio.left);
-      const sourceRight = new Float32Array(audio.right);
-      const referenceLeft = new Float32Array(referenceAudio.left);
-      const referenceRight = new Float32Array(referenceAudio.right);
-      worker!.postMessage(
-        {
-          type: 'referenceAnalyze',
-          id,
-          sourceLeft,
-          sourceRight,
-          referenceLeft,
-          referenceRight,
-          sampleRate: audio.sampleRate,
-          referenceSampleRate: referenceAudio.sampleRate,
-        },
-        [sourceLeft.buffer, sourceRight.buffer, referenceLeft.buffer, referenceRight.buffer],
+  async function exportMaster(
+    format: MasteringExportFormat,
+    dither: MasteringDither,
+  ): Promise<void> {
+    if (!hasProgram.value || editLocked.value) return;
+    error.value = null;
+    const refit = fitStale.value;
+    const snapshot = state.value;
+    let result: MasteringExportResult;
+    try {
+      result = await runJob('export', (progress) =>
+        worker.bounce(registry, snapshot, exportBounceOptions(format, dither), refit, progress),
       );
-    });
+    } catch (cause) {
+      if (!(cause instanceof MasteringJobCancelled)) {
+        console.warn('mastering: export failed', cause);
+        error.value = 'exportFailed';
+      }
+      return;
+    }
+    // The refit drive goes back into the project, so the preview is the export.
+    if (result.fit) history.commit(masteringMutators.applyLoudnessFit(state.value, result.fit));
+    recordAfterLoudness(result.integratedLufs);
+    const master = registry.get('master');
+    if (!master) return;
+    if (lastRender.value) URL.revokeObjectURL(lastRender.value.url);
+    const url = URL.createObjectURL(
+      wavBlob([master.left, master.right], master.sampleRate, format),
+    );
+    const fileName = `${fileBase(sourceInfo.value?.fileName ?? 'master')}-master.wav`;
+    lastRender.value = { result, format, dither, at: Date.now(), url, fileName };
+    triggerDownload(url, fileName);
+    void insights.analyzeSourceInsights();
   }
 
-  function analyzeSourceInWorker(
-    audio: DecodedMasteringAudio,
-    platforms: StreamingPlatform[],
-    preset?: MasteringAssistantPreset,
-  ): Promise<MasteringInsightReport> {
-    const id = ++renderRequestId;
-    if (!worker) {
-      worker = new Worker(new URL('./mastering.worker.ts', import.meta.url), {
-        type: 'module',
-      });
-    }
+  function downloadRender(): void {
+    const render = lastRender.value;
+    if (render) triggerDownload(render.url, render.fileName);
+  }
 
-    return new Promise((resolve, reject) => {
-      pendingWorkerRejects.add(reject);
-      const cleanup = () => {
-        worker?.removeEventListener('message', onMessage);
-        worker?.removeEventListener('error', onError);
-        pendingWorkerRejects.delete(reject);
-      };
-      const onMessage = (event: MessageEvent<WorkerMessage>) => {
-        const message = event.data;
-        if (message.id !== id) return;
-        if (message.type === 'progress') return;
-        cleanup();
-        if (message.type === 'sourceAnalysisDone') resolve(message.result);
-        else if (message.type === 'error') reject(new Error(message.error));
-        else reject(new Error('Unexpected worker response for source analysis'));
-      };
-      const onError = (event: ErrorEvent) => {
-        cleanup();
-        worker?.terminate();
-        worker = null;
-        reject(event.error || new Error(event.message));
-      };
-      worker!.addEventListener('message', onMessage);
-      worker!.addEventListener('error', onError);
-      const left = new Float32Array(audio.left);
-      const right = new Float32Array(audio.right);
-      const request = {
-        type: 'sourceAnalyze' as const,
-        id,
-        left,
-        right,
-        sampleRate: audio.sampleRate,
-        platforms,
-        ...(preset ? { preset } : {}),
-      };
-      worker!.postMessage(request, [left.buffer, right.buffer]);
-    });
+  function downloadReport(): void {
+    const render = lastRender.value;
+    if (!render) return;
+    const url = URL.createObjectURL(
+      jsonBlob(createMasteringReport({ state: state.value, source: sourceInfo.value, render })),
+    );
+    triggerDownload(url, `${fileBase(render.fileName)}-report.json`);
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  // -------------------------------------------------------------------------
+  // Monitoring and transport
+
+  const matchGains = computed(() => {
+    // The registry is not reactive; the program's loudness lands in `programLufs`.
+    void programLufs.value;
+    return laneMatchGains(state.value, registryAudio());
+  });
+  const duration = computed(() => sourceInfo.value?.duration ?? 0);
+  const canMonitorReference = computed(
+    () => referenceReady.value && state.value.reference !== null,
+  );
+
+  function setLane(lane: MasteringLane): void {
+    if (lane === 'reference' && !canMonitorReference.value) return;
+    edit('setMonitorLane', lane);
+  }
+
+  function play(): void {
+    if (!hasProgram.value) return;
+    // Integrated loudness and the true-peak maximum cover this pass only.
+    sonare.engine.value?.resetMasterLoudnessMeter();
+    metering.reset();
+    sonare.play();
+  }
+
+  function stop(): void {
+    sonare.stop();
+  }
+
+  function togglePlay(): void {
+    if (sonare.playing.value) stop();
+    else play();
+  }
+
+  function seek(seconds: number): void {
+    sonare.seek(Math.max(0, Math.min(duration.value, seconds)));
+  }
+
+  function setLoop(next: EngineTransportLoop): void {
+    loop.value = { ...next };
+    sonare.engine.value?.setLoop(next.start, next.end, next.enabled);
+  }
+
+  function toggleLoop(): void {
+    if (!hasProgram.value) return;
+    const current = loop.value;
+    const end = current.end > current.start ? current.end : duration.value;
+    setLoop({ ...current, end, enabled: !current.enabled });
+  }
+
+  watch(sonare.position, (seconds) => {
+    if (
+      sonare.playing.value &&
+      !loop.value.enabled &&
+      duration.value > 0 &&
+      seconds >= duration.value
+    ) {
+      stop();
+      seek(0);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Assistant, reference match
+
+  const ceilingDb = computed(
+    () => state.value.inserts[MASTERING_SLOT.limiter].params.ceilingDb as number,
+  );
+  const presetId = computed(() => state.value.quick.preset);
+
+  const insights = useMasteringInsights(
+    {
+      source: hasProgram,
+      async analyzeSource(platforms, preset): Promise<MasteringInsightReport> {
+        const assisted = await runJob('assist', (progress) =>
+          worker.assist(registry, preset, progress),
+        );
+        let streamingPreview: unknown = null;
+        if (registry.has('master')) {
+          const rows = await runJob('preview', (progress) =>
+            worker.previewPlatforms(registry, platforms, progress),
+          );
+          streamingPreview = { platforms: rows };
+        }
+        return {
+          profile: assisted.profile,
+          suggestions: assisted.suggestions,
+          streamingPreview,
+          chainParams: assisted.chainParams,
+          unmapped: assisted.unmapped,
+        };
+      },
+    },
+    ceilingDb,
+    presetId,
+    computed(() => options.copy.value.insights.profileItems),
+  );
+
+  function applyAssistant(): void {
+    const params = insights.insightReport.value?.chainParams;
+    if (params) edit('applyAssistant', params);
+  }
+
+  function applyMatchEq(): void {
+    const analysis = referenceAnalysis.value;
+    const reference = state.value.reference;
+    if (analysis && reference) edit('applyMatchEq', analysis.matchEq, reference.id);
+  }
+
+  // -------------------------------------------------------------------------
+  // Lifecycle
+
+  const clock = setInterval(() => {
+    now.value = Date.now();
+  }, 1000);
+
+  function restore(): void {
+    const restored = session.restore();
+    if (!restored) return;
+    history.reset(restored.state);
+    restoreNotices.value = restored.notices;
+    pendingRestore.value = restored.state.source !== null;
+  }
+
+  function dispose(): void {
+    clearInterval(clock);
+    if (prepareTimer) clearTimeout(prepareTimer);
+    cancelMeasure();
+    if (flashTimer) clearTimeout(flashTimer);
+    session.flush();
+    session.dispose();
+    metering.dispose();
+    worker.dispose();
+    if (lastRender.value) URL.revokeObjectURL(lastRender.value.url);
+    void sonare.dispose();
   }
 
   return {
-    isInitialized,
-    isLoading,
-    isRendering,
-    renderProgress,
-    renderStage,
+    sonare,
+    wasm,
+    state,
+    canUndo: history.canUndo,
+    canRedo: history.canRedo,
+    undo,
+    redo,
+    edit,
+    begin: history.begin,
+    end: history.end,
+    editLocked,
+    applied,
+    hasProgram,
+    pendingRestore,
+    restoreNotices,
     error,
-    source,
-    rendered,
-    initWasm,
-    decodeFile,
-    loadFile,
+    loading,
+    sourceInfo,
+    referenceInfo,
+    referenceReady,
+    referenceAnalysis,
+    canMonitorReference,
+    programLufs,
+    waveform,
+    duration,
+    job,
+    cancelJob,
+    prepareFailed,
+    runPrepare,
+    resetFlash,
+    lastRender,
+    now,
+    loop,
+    metering,
+    matchGains,
+    matchPending,
+    fitStale,
+    targetLufs,
+    insights,
+    loadSource,
+    loadDemo,
     loadReference,
-    render,
-    renderReferenceMatch,
-    analyzeSource,
-    analyzeReference,
-    measureIntegratedLufs,
-    createAudioUrl,
-    createSourceAudioUrl,
+    clearReference,
+    fit,
+    exportMaster,
+    downloadRender,
+    downloadReport,
+    setLane,
+    play,
+    stop,
+    togglePlay,
+    seek,
+    setLoop,
+    toggleLoop,
+    applyAssistant,
+    applyMatchEq,
+    restore,
     dispose,
   };
 }
 
-/**
- * Whether a rejection came from a newer operation superseding this one (or from
- * dispose) rather than from a real failure; callers show no error for it.
- */
-export function isSupersededError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === 'AbortError';
-}
-
-function interleaveStereo(left: Float32Array, right: Float32Array): Float32Array {
-  const length = Math.min(left.length, right.length);
-  const samples = new Float32Array(length * 2);
-  for (let i = 0; i < length; i++) {
-    samples[i * 2] = left[i];
-    samples[i * 2 + 1] = right[i];
-  }
-  return samples;
-}
-
-function applyGain(audio: DecodedMasteringAudio, gainDb: number): DecodedMasteringAudio {
-  const factor = 10 ** (gainDb / 20);
-  const left = new Float32Array(audio.left.length);
-  const right = new Float32Array(audio.right.length);
-  for (let i = 0; i < audio.left.length; i++) left[i] = audio.left[i] * factor;
-  for (let i = 0; i < audio.right.length; i++) right[i] = audio.right[i] * factor;
-  return { ...audio, left, right };
-}
-
-export function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainConfig {
-  const { preset, targetLufs, tuning } = options;
-  const venue: MasteringVenueId = options.venue ?? 'studio';
-  const safeMode = options.qualityMode === 'safe';
-  const warm = tuning.tone / 100;
-  const wide = tuning.width / 100;
-  const compressed = (100 - tuning.dynamics) / 100;
-  const settings = options.moduleSettings || defaultModuleSettings();
-  const ceilingDb = safeMode
-    ? Math.min(settings.limiterCeilingDb, -1.5)
-    : settings.limiterCeilingDb;
-  const exciterAmount = safeMode ? Math.min(settings.exciterAmount, 0.04) : settings.exciterAmount;
-  const exciterEnabled = exciterAmount > 0;
-  const airBandAmount = safeMode ? Math.min(settings.airBandAmount, 0.14) : settings.airBandAmount;
-  const stereoWidth = safeMode ? Math.min(settings.stereoWidth, 1.03) : settings.stereoWidth;
-  const exciterDriveDb = exciterEnabled ? warm * (safeMode ? 0.8 : 2.5) : 0;
-
-  const config: MasteringChainConfig = {
-    eq: {
-      tilt: {
-        tiltDb: settings.tiltDb + (warm - 0.5) * (safeMode ? -1.2 : -2.5),
-        pivotHz: 1000,
-      },
-    },
-    dynamics: {
-      compressor: {
-        thresholdDb: settings.compressorThresholdDb - compressed * (safeMode ? 2 : 4),
-        ratio: settings.compressorRatio + compressed * (safeMode ? 0.35 : 0.8),
-        attackMs:
-          preset === 'speech'
-            ? Math.min(settings.compressorAttackMs, 8)
-            : settings.compressorAttackMs,
-        releaseMs:
-          preset === 'edm'
-            ? Math.min(settings.compressorReleaseMs, 120)
-            : settings.compressorReleaseMs,
-        kneeDb: 4,
-        autoMakeup: !safeMode,
-      },
-    },
-    spectral: {
-      airBand: {
-        amount:
-          preset === 'aiMusic'
-            ? safeMode
-              ? Math.max(airBandAmount, 0.22)
-              : Math.max(airBandAmount, 0.55)
-            : airBandAmount + warm * (safeMode ? 0.04 : 0.12),
-        shelfFrequencyHz: preset === 'aiMusic' ? 15500 : 12000,
-      },
-    },
-    stereo: {
-      imager: {
-        width:
-          preset === 'speech'
-            ? Math.min(stereoWidth, 0.95)
-            : stereoWidth + wide * (safeMode ? 0.06 : 0.2),
-        decorrelationAmount: preset === 'speech' ? 0 : wide * (safeMode ? 0.02 : 0.08),
-        preserveEnergy: true,
-      },
-    },
-    maximizer: {
-      truePeakLimiter: {
-        ceilingDb,
-        lookaheadMs: settings.limiterLookaheadMs,
-        releaseMs: safeMode ? 160 : preset === 'edm' ? 80 : 120,
-        oversampleFactor: 4,
-        applyGainAtInputRate: safeMode,
-      },
-    },
-    loudness: {
-      targetLufs,
-      ceilingDb,
-      truePeakOversample: 4,
-    },
-  };
-
-  if (exciterEnabled) {
-    config.saturation = {
-      exciter: {
-        frequencyHz: preset === 'aiMusic' ? 14500 : 9000,
-        driveDb: exciterDriveDb,
-        amount: preset === 'aiMusic' ? exciterAmount + (safeMode ? 0.02 : 0.08) : exciterAmount,
-        q: 0.8,
-        evenOddMix: 0.65,
-      },
-    };
-  }
-
-  // ---- Repair (denoise / declick / dereverb) -----------------------------
-  const isLivehouse = venue === 'livehouseSmall' || venue === 'livehouseLarge';
-  const repairActive =
-    preset === 'aiMusic' ||
-    preset === 'speech' ||
-    isLivehouse ||
-    settings.denoiseAmount > 0 ||
-    settings.declickAmount > 0 ||
-    settings.dereverbAmount > 0;
-
-  if (repairActive) {
-    config.repair = {
-      denoise: {
-        enabled: settings.denoiseAmount > 0 || preset === 'aiMusic' || preset === 'speech',
-      },
-      nFft: 2048,
-      hopLength: 512,
-      ddAlpha: preset === 'speech' ? 0.96 : 0.98,
-      reductionDb: -20 * Math.log10(Math.max(0.04, 0.16 - settings.denoiseAmount * 0.12)),
-    };
-    if (settings.declickAmount > 0) {
-      config.repair.declick = {
-        // Higher UI amount → lower trigger threshold (more aggressive declick)
-        threshold: Math.max(0.08, 0.5 - settings.declickAmount * 0.4),
-        neighborRatio: 4,
-        maxClickSamples: 96,
-      };
-    }
-    // Small rooms have a short, dense tail (pull back gently); large rooms
-    // wash out with a long tail (pull back harder). User amount always wins.
-    const livehouseDereverb =
-      venue === 'livehouseSmall' ? 0.25 : venue === 'livehouseLarge' ? 0.45 : 0;
-    if (settings.dereverbAmount > 0 || livehouseDereverb > 0) {
-      config.repair.dereverb = {
-        threshold: 0.08,
-        attenuation: settings.dereverbAmount > 0 ? settings.dereverbAmount : livehouseDereverb,
-        nFft: 2048,
-        hopLength: 512,
-        overSubtraction: 1.2,
-      };
-    }
-  }
-
-  // ---- Dynamics: deesser + transient shaper -----------------------------
-  if (settings.deesserAmount > 0) {
-    config.dynamics!.deesser = {
-      frequencyHz: 6500,
-      thresholdDb: -30 + (1 - settings.deesserAmount) * 18,
-      ratio: 2 + settings.deesserAmount * 4,
-      attackMs: 1.5,
-      releaseMs: 60,
-      rangeDb: 12,
-    };
-  }
-  if (settings.transientAttackDb !== 0) {
-    config.dynamics!.transientShaper = {
-      attackGainDb: safeMode
-        ? Math.max(-3, Math.min(3, settings.transientAttackDb))
-        : settings.transientAttackDb,
-      sustainGainDb: 0,
-      fastAttackMs: 1.5,
-      fastReleaseMs: 18,
-      slowAttackMs: 25,
-      slowReleaseMs: 220,
-      sensitivity: 0.6,
-      maxGainDb: 8,
-      gainSmoothingMs: 6,
-      lookaheadMs: 1.5,
-    };
-  }
-
-  // ---- Multiband compressor (3-band, amount-driven) ---------------------
-  const mbLow = settings.multibandLowAmount;
-  const mbMid = settings.multibandMidAmount;
-  const mbHigh = settings.multibandHighAmount;
-  if (mbLow > 0 || mbMid > 0 || mbHigh > 0) {
-    const mbScale = safeMode ? 0.55 : 1;
-    config.dynamics!.multibandComp = {
-      lowCutoffHz: 220,
-      highCutoffHz: 4500,
-      lowThresholdDb: -10 - mbLow * mbScale * 16,
-      lowRatio: 1.4 + mbLow * mbScale * 2,
-      lowAttackMs: 12,
-      lowReleaseMs: 220,
-      midThresholdDb: -12 - mbMid * mbScale * 14,
-      midRatio: 1.4 + mbMid * mbScale * 2,
-      midAttackMs: 18,
-      midReleaseMs: 160,
-      highThresholdDb: -14 - mbHigh * mbScale * 14,
-      highRatio: 1.4 + mbHigh * mbScale * 2,
-      highAttackMs: 6,
-      highReleaseMs: 90,
-    };
-  }
-
-  // ---- Tape saturation (chain-side color) -------------------------------
-  if (settings.tapeDriveDb > 0 || settings.tapeSaturation > 0) {
-    config.saturation = {
-      ...config.saturation,
-      tape: {
-        driveDb: safeMode ? Math.min(settings.tapeDriveDb, 1.5) : settings.tapeDriveDb,
-        saturation: safeMode ? Math.min(settings.tapeSaturation, 0.25) : settings.tapeSaturation,
-        hysteresis: 0.25,
-        outputGainDb: 0,
-        speedIps: 15,
-        headBumpDb: 1.2,
-        bias: 0.5,
-        gapLoss: 0.25,
-      },
-    };
-  }
-
-  // ---- Stereo mono-maker (bass mono safety) -----------------------------
-  if (settings.monoMakerAmount > 0) {
-    config.stereo!.monoMaker = {
-      amount: settings.monoMakerAmount,
-    };
-  }
-
-  // ---- Preset-specific overrides (keep behavior) ------------------------
-  if (preset === 'acoustic') {
-    config.dynamics = {
-      ...config.dynamics,
-      compressor: {
-        thresholdDb: -16,
-        ratio: 1.5,
-        attackMs: Math.max(24, settings.compressorAttackMs),
-        releaseMs: Math.max(220, settings.compressorReleaseMs),
-        kneeDb: 6,
-        autoMakeup: !safeMode,
-      },
-    };
-  }
-
-  if (preset === 'hiphop') {
-    config.eq = {
-      tilt: {
-        tiltDb: (config.eq?.tilt?.tiltDb ?? 0) - 0.5,
-        pivotHz: 850,
-      },
-    };
-    config.dynamics!.compressor!.ratio = safeMode ? 2.2 + compressed * 0.45 : 2.6 + compressed;
-  }
-
-  // Live-music genre character (NOT room repair — that is the venue layer).
-  // These keep the performance dynamics and stage energy that a studio-loud
-  // master would flatten. Small = intimate club gig, Large = big-stage show.
-  if (preset === 'liveSmall') {
-    config.eq = {
-      tilt: {
-        tiltDb: (config.eq?.tilt?.tiltDb ?? 0) + 0.2,
-        pivotHz: 900,
-      },
-    };
-    config.dynamics!.compressor = {
-      ...config.dynamics!.compressor!,
-      ratio: 1.8 + compressed * 0.6,
-      attackMs: Math.max(18, settings.compressorAttackMs),
-      releaseMs: Math.max(180, settings.compressorReleaseMs),
-      kneeDb: 6,
-      autoMakeup: !safeMode,
-    };
-  }
-
-  if (preset === 'liveLarge') {
-    config.eq = {
-      tilt: {
-        tiltDb: (config.eq?.tilt?.tiltDb ?? 0) + 0.1,
-        pivotHz: 700,
-      },
-    };
-    config.dynamics!.compressor = {
-      ...config.dynamics!.compressor!,
-      ratio: 1.6 + compressed * 0.6,
-      attackMs: Math.max(24, settings.compressorAttackMs),
-      releaseMs: Math.max(240, settings.compressorReleaseMs),
-      kneeDb: 6,
-      autoMakeup: !safeMode,
-    };
-    config.stereo!.imager = {
-      ...config.stereo!.imager,
-      width: (config.stereo?.imager?.width ?? settings.stereoWidth) + 0.05,
-      preserveEnergy: true,
-    };
-  }
-
-  // ---- Recording-condition (venue) layer --------------------------------
-  // Orthogonal to the genre preset: a live-room repair pass that composes ON
-  // TOP of the chosen style instead of replacing it. It re-centers the EQ
-  // pivot on the room's problem band, adds a gentle corrective tilt, folds the
-  // low end to tame room modes, and slows the compressor for the acoustic
-  // space — while the genre keeps driving character and loudness. (Dereverb
-  // for the venue is wired through the repair section above.)
-  if (isLivehouse) {
-    // Small clubs (~100-300 cap): close walls give a boxy/one-note low-mid
-    // buildup. Large halls: deep low-frequency room modes and a long, diffuse
-    // tail — fold the bottom harder and slow the compressor for the big space.
-    const room =
-      venue === 'livehouseSmall'
-        ? { pivotHz: 600, tiltDelta: 0.4, monoFloor: 0.25, attackFloor: 20, releaseFloor: 160 }
-        : { pivotHz: 500, tiltDelta: 0.2, monoFloor: 0.45, attackFloor: 24, releaseFloor: 220 };
-
-    // Keep the genre's tonal direction but re-center the pivot on the room and
-    // add a light de-boxing tilt.
-    config.eq = {
-      tilt: {
-        tiltDb: (config.eq?.tilt?.tiltDb ?? 0) + room.tiltDelta,
-        pivotHz: room.pivotHz,
-      },
-    };
-
-    // Floors only — a genre that already compresses slower keeps its setting.
-    const compressor = config.dynamics?.compressor;
-    if (compressor) {
-      compressor.attackMs = Math.max(compressor.attackMs ?? 0, room.attackFloor);
-      compressor.releaseMs = Math.max(compressor.releaseMs ?? 0, room.releaseFloor);
-    }
-
-    // Fold the low end to control room modes; a stronger user/genre value wins.
-    config.stereo = config.stereo ?? {};
-    const existingMono = config.stereo.monoMaker?.amount ?? settings.monoMakerAmount;
-    config.stereo.monoMaker = { amount: Math.max(existingMono, room.monoFloor) };
-  }
-
-  applyDiagnosticBypass(config, options.diagnosticBypass);
-  return config;
-}
-
-function applyDiagnosticBypass(
-  config: MasteringChainConfig,
-  bypass: MasteringDiagnosticBypass | undefined,
-) {
-  if (!bypass) return;
-  if (bypass.repair) delete config.repair;
-  if (bypass.dynamics) delete config.dynamics;
-  if (bypass.saturation) delete config.saturation;
-  if (bypass.airBand) delete config.spectral;
-  if (bypass.stereo) delete config.stereo;
-  if (bypass.loudnessLimiter) {
-    delete config.maximizer;
-    delete config.loudness;
-  }
-}
-
-export function defaultDiagnosticBypass(): MasteringDiagnosticBypass {
-  return {
-    repair: false,
-    dynamics: false,
-    saturation: false,
-    airBand: false,
-    stereo: false,
-    loudnessLimiter: false,
-  };
-}
-
-export function defaultModuleSettings(): MasteringModuleSettings {
-  return {
-    inputGainDb: 0,
-    denoiseAmount: 0,
-    declickAmount: 0,
-    dereverbAmount: 0,
-    tiltDb: 0,
-    compressorThresholdDb: -18,
-    compressorRatio: 2.2,
-    compressorAttackMs: 18,
-    compressorReleaseMs: 160,
-    deesserAmount: 0,
-    transientAttackDb: 0,
-    multibandLowAmount: 0,
-    multibandMidAmount: 0,
-    multibandHighAmount: 0,
-    tapeDriveDb: 0,
-    tapeSaturation: 0,
-    exciterAmount: 0,
-    airBandAmount: 0.22,
-    stereoWidth: 1.05,
-    monoMakerAmount: 0,
-    limiterCeilingDb: -1,
-    limiterLookaheadMs: 5,
-  };
-}
+export type MasteringController = ReturnType<typeof useMastering>;

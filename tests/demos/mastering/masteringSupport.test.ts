@@ -1,415 +1,269 @@
-import { describe, expect, it, vi } from 'vitest';
-import { ref, shallowRef } from 'vue';
-import { analyzeMasteringSignal, normalizeRange } from '@/demos/mastering/masteringMetrics';
-import { createMasteringReportUrl, reportItems } from '@/demos/mastering/masteringReport';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { METER_FLOOR_DB } from '@/components/meters/meterBallistics';
+import type { SonareMeterSnapshot } from '@/composables/useSonareEngine';
+import type { MasteringExportResult } from '@/demos/mastering/mastering.worker';
+import { createMasteringReport } from '@/demos/mastering/masteringReport';
 import {
-  type DecodedMasteringAudio,
-  defaultModuleSettings,
-  type RenderedMasteringAudio,
-} from '@/demos/mastering/useMastering';
-import { useMasteringMetering } from '@/demos/mastering/useMasteringMetering';
-import { useMasteringSession } from '@/demos/mastering/useMasteringSession';
-import { formatClipLength } from '@/utils/audio';
+  defaultMasteringState,
+  MASTERING_LEGACY_PRESET_STORAGE_KEY,
+  MASTERING_STATE_STORAGE_KEY,
+  masteringMutators,
+  serializeMasteringState,
+} from '@/demos/mastering/masteringState';
+import {
+  AFTER_METER_TARGET,
+  applyMeterSnapshot,
+  MASTER_METER_TARGET,
+  programWindow,
+  silentReading,
+} from '@/demos/mastering/useMasteringMetering';
+import {
+  MASTERING_LEGACY_SESSION_KEY,
+  MASTERING_SAVE_DELAY_MS,
+  useMasteringSession,
+} from '@/demos/mastering/useMasteringSession';
 
-function decodedAudio(overrides: Partial<DecodedMasteringAudio> = {}): DecodedMasteringAudio {
+function meter(
+  targetId: number,
+  overrides: Partial<SonareMeterSnapshot> = {},
+): SonareMeterSnapshot {
   return {
-    fileName: 'source.wav',
-    sampleRate: 48_000,
-    duration: 125,
-    channels: 2,
-    left: new Float32Array([0.5, -0.5, 0.25, -0.25]),
-    right: new Float32Array([0.5, -0.5, -0.25, 0.25]),
+    type: 'meter',
+    targetId,
+    frame: 1024,
+    peakDbL: -6,
+    peakDbR: -7,
+    rmsDbL: -18,
+    rmsDbR: -19,
+    correlation: 0.8,
+    truePeakDbL: -0.9,
+    truePeakDbR: -1.2,
+    momentaryLufs: -12,
+    shortTermLufs: -13,
+    integratedLufs: -14,
+    gainReductionDb: -3,
+    inputPeakDbL: -10,
+    inputPeakDbR: -11,
     ...overrides,
-  };
+  } as SonareMeterSnapshot;
 }
-
-function renderedAudio(overrides: Partial<RenderedMasteringAudio> = {}): RenderedMasteringAudio {
-  return {
-    left: new Float32Array([0.25, -0.25, 0.125, -0.125]),
-    right: new Float32Array([0.2, -0.2, 0.1, -0.1]),
-    sampleRate: 48_000,
-    inputLufs: -18,
-    outputLufs: -14,
-    appliedGainDb: 4,
-    stages: ['eq.tilt'],
-    latencySamples: 8,
-    ...overrides,
-  };
-}
-
-describe('mastering metrics and report helpers', () => {
-  it('computes bounded mastering stats and formatting helpers', () => {
-    const stats = analyzeMasteringSignal(
-      new Float32Array([0.5, -0.5, 0.25, -0.25]),
-      new Float32Array([0.5, -0.5, -0.25, 0.25]),
-    );
-
-    expect(stats.peakDb).toBeCloseTo(-6.02, 1);
-    expect(stats.rmsDb).toBeLessThan(stats.peakDb);
-    expect(stats.crestDb).toBeGreaterThan(0);
-    expect(stats.correlation).toBeGreaterThanOrEqual(-1);
-    expect(stats.correlation).toBeLessThanOrEqual(1);
-    expect(formatClipLength(125)).toBe('2:05');
-    expect(normalizeRange(-16, -24, -8)).toBe(50);
-    expect(normalizeRange(Number.NaN, -24, -8)).toBe(0);
-  });
-
-  it('handles silence, missing right channel samples and out-of-range normalization safely', () => {
-    const silent = analyzeMasteringSignal(new Float32Array([0, 0, 0]), new Float32Array([]));
-
-    expect(silent).toEqual({
-      peakDb: -120,
-      rmsDb: -120,
-      crestDb: 0,
-      correlation: 0,
-    });
-
-    const fallbackRight = analyzeMasteringSignal(
-      new Float32Array([1, -1, 0.5, -0.5]),
-      new Float32Array([1]),
-    );
-    expect(fallbackRight.peakDb).toBeCloseTo(0, 6);
-    expect(fallbackRight.correlation).toBeGreaterThan(0.9);
-    expect(formatClipLength(59.6)).toBe('1:00');
-    expect(formatClipLength(Number.NaN)).toBe('0:00');
-    expect(formatClipLength(Number.POSITIVE_INFINITY)).toBe('0:00');
-    expect(normalizeRange(-99, -24, -8)).toBe(0);
-    expect(normalizeRange(0, -24, -8)).toBe(100);
-  });
-
-  it('does not miss a single-sample peak between decimated RMS positions', () => {
-    const left = new Float32Array(400_002);
-    const right = new Float32Array(400_002);
-    left[1] = 1;
-    expect(analyzeMasteringSignal(left, right).peakDb).toBeCloseTo(0, 6);
-  });
-
-  it('computes full-resolution RMS and correlation for long periodic material', () => {
-    const sampleCount = 1_800_000;
-    const amplitude = 0.2;
-    const left = new Float32Array(sampleCount);
-    const right = new Float32Array(sampleCount);
-    for (let i = 0; i < sampleCount; i++) {
-      const sample = amplitude * Math.sin((Math.PI * i) / 9);
-      left[i] = sample;
-      right[i] = sample;
-    }
-
-    const stats = analyzeMasteringSignal(left, right);
-    expect(stats.rmsDb).toBeCloseTo(20 * Math.log10(amplitude / Math.sqrt(2)), 2);
-    expect(stats.correlation).toBeCloseTo(1, 12);
-
-    const lowLevel = new Float32Array([1e-8, -2e-8, 3e-8, -4e-8]);
-    expect(analyzeMasteringSignal(lowLevel, lowLevel).correlation).toBeCloseTo(1, 12);
-  });
-
-  it('flattens nested report values and creates json blob urls', () => {
-    const items = reportItems(
-      {
-        integratedLufs: -14.1234,
-        ok: true,
-        missing: null,
-        nested: {
-          true_peak_db: -1.25,
-          platforms: [
-            { name: 'A', gainDb: 1.234 },
-            { name: 'B', gainDb: 100.2 },
-          ],
-        },
-      },
-      8,
-    );
-
-    expect(items).toEqual(
-      expect.arrayContaining([
-        { label: 'IntegratedLufs', value: '-14.12' },
-        { label: 'Ok', value: 'Yes' },
-        { label: 'Missing', value: '-' },
-        { label: 'Nested / True Peak Db', value: '-1.25' },
-        { label: 'Nested / Platforms / 2 / GainDb', value: '100' },
-      ]),
-    );
-
-    expect(
-      createMasteringReportUrl({
-        preset: 'pop',
-        venue: 'studio',
-        platform: 'spotify',
-        targetLufs: -14,
-        tuning: { tone: 50, width: 50, dynamics: 50 },
-        source: { peak: -6 },
-        rendered: { peak: -1 },
-        reference: null,
-      }),
-    ).toBe('blob:test');
-  });
-
-  it('limits report arrays and serializes complete report payloads into blobs', async () => {
-    const items = reportItems(
-      {
-        platforms: [
-          { name: 'Spotify', gain: -1.5 },
-          { name: 'YouTube', gain: 0 },
-          { name: 'Apple', gain: 1.25 },
-          { name: 'Podcast', gain: -3 },
-          { name: 'Ignored', gain: 99 },
-        ],
-        nested: { bad: Number.POSITIVE_INFINITY, text: 'ok' },
-      },
-      20,
-    );
-
-    expect(items.some((item) => item.label.includes('Ignored'))).toBe(false);
-    expect(items).toContainEqual({ label: 'Nested / Bad', value: '-' });
-    expect(items).toContainEqual({ label: 'Nested / Text', value: 'ok' });
-
-    const originalCreateObjectURL = URL.createObjectURL;
-    const originalBlob = globalThis.Blob;
-    try {
-      const urls: Blob[] = [];
-      const blobParts: unknown[][] = [];
-      globalThis.Blob = vi.fn(function (parts: BlobPart[], options?: BlobPropertyBag) {
-        blobParts.push(parts);
-        return new originalBlob(parts, options);
-      }) as unknown as typeof Blob;
-      URL.createObjectURL = vi.fn((blob: Blob) => {
-        urls.push(blob);
-        return 'blob:report';
-      });
-
-      expect(
-        createMasteringReportUrl({
-          preset: 'rock',
-          venue: 'livehouseLarge',
-          platform: 'custom',
-          targetLufs: -12,
-          tuning: { tone: 60, width: 40, dynamics: 70 },
-          source: { peak: -6 },
-          rendered: { peak: -1, ok: true },
-          reference: { name: 'ref.wav' },
-        }),
-      ).toBe('blob:report');
-
-      expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
-      expect(urls[0].type).toBe('application/json');
-      expect(String(blobParts[0][0])).toContain('"preset": "rock"');
-      expect(String(blobParts[0][0])).toContain('"reference"');
-    } finally {
-      globalThis.Blob = originalBlob;
-      URL.createObjectURL = originalCreateObjectURL;
-    }
-  });
-});
-
-describe('useMasteringMetering', () => {
-  it('derives source, rendered, reference, meter and stereo image values', () => {
-    const mastering = {
-      source: shallowRef(decodedAudio()),
-      rendered: shallowRef(renderedAudio()),
-    } as any;
-    const metering = useMasteringMetering({
-      mastering,
-      reference: shallowRef(decodedAudio({ fileName: 'reference.wav', duration: 60 })),
-      targetLufs: ref(-16),
-      t: (key) => key,
-    });
-
-    expect(metering.sourceMetrics.value).toMatchObject({
-      duration: '2:05',
-      sampleRate: '48 kHz',
-      channels: 'Stereo',
-    });
-    expect(metering.sourceMetrics.value?.peak).toContain('dBFS');
-    expect(metering.masterMetrics.value?.peak).toContain('dBFS');
-    expect(metering.referenceMetrics.value).toMatchObject({
-      fileName: 'reference.wav',
-      duration: '1:00',
-    });
-    expect(metering.meterReadings.value.map((reading) => reading.id)).toEqual([
-      'lufs',
-      'peak',
-      'crest',
-      'correlation',
-    ]);
-    expect(metering.meterReadings.value[0]).toMatchObject({
-      label: 'master.meters.outputLufs',
-      value: '-14.0 LUFS',
-    });
-    expect(metering.phasePoints.value.length).toBeGreaterThan(0);
-    expect(metering.phasePoints.value[0]).toMatchObject({
-      x: expect.any(Number),
-      y: expect.any(Number),
-      opacity: expect.any(Number),
-    });
-    expect(metering.stereoImage.value.label).toMatch(/^master\.meters\.stereo/);
-  });
-
-  it('keeps output LUFS unavailable until a render exists', () => {
-    const mastering = {
-      source: shallowRef(
-        decodedAudio({ channels: 1, right: new Float32Array([0.5, -0.5, 0.25, -0.25]) }),
-      ),
-      rendered: shallowRef(null),
-    } as any;
-    const metering = useMasteringMetering({
-      mastering,
-      reference: shallowRef(null),
-      targetLufs: ref(-16),
-      t: (key) => key,
-    });
-
-    expect(metering.sourceMetrics.value?.channels).toBe('Mono');
-    expect(metering.masterMetrics.value).toBeNull();
-    expect(metering.referenceMetrics.value).toBeNull();
-    expect(metering.meterReadings.value[0]).toMatchObject({ value: '-', percent: 0 });
-    expect(metering.phasePoints.value.length).toBeGreaterThan(0);
-  });
-});
 
 describe('useMasteringSession', () => {
-  function makeState() {
-    return {
-      mode: ref<'quick' | 'studio'>('quick'),
-      selectedPreset: ref<'pop' | 'edm'>('pop'),
-      selectedVenue: ref<'studio' | 'livehouseSmall' | 'livehouseLarge'>('studio'),
-      selectedPlatform: ref<'spotify' | 'youtube' | 'custom'>('spotify'),
-      customLufs: ref(-14),
-      tone: ref(50),
-      width: ref(50),
-      dynamics: ref(50),
-      showFineTune: ref(false),
-      activeModule: ref('eq'),
-      loudnessMatched: ref(false),
-      moduleSettings: ref(defaultModuleSettings()),
-      chainSettingsUrl: ref<string | null>(null),
-      localError: ref<string | null>(null),
-      t: (key: string) => key,
-    };
-  }
-
-  it('applies only valid settings and clamps numeric session values', () => {
-    const state = makeState();
-    const session = useMasteringSession(state as any);
-
-    session.applySessionSettings({
-      mode: 'studio',
-      selectedPreset: 'edm',
-      selectedVenue: 'livehouseSmall',
-      selectedPlatform: 'custom',
-      customLufs: -99,
-      tone: 150,
-      width: -20,
-      dynamics: 75,
-      showFineTune: true,
-      activeModule: 'limiter',
-      loudnessMatched: true,
-      moduleSettings: { inputGainDb: 3, tiltDb: 2 } as any,
-    });
-
-    expect(session.currentSessionSettings()).toMatchObject({
-      mode: 'studio',
-      selectedPreset: 'edm',
-      selectedVenue: 'livehouseSmall',
-      selectedPlatform: 'custom',
-      customLufs: -24,
-      tone: 100,
-      width: 0,
-      dynamics: 75,
-      showFineTune: true,
-      loudnessMatched: true,
-    });
-    expect(state.moduleSettings.value).toMatchObject({ inputGainDb: 3, tiltDb: 2 });
-
-    session.applySessionSettings({
-      mode: 'bad',
-      selectedPreset: 'missing',
-      selectedVenue: 'missing',
-      selectedPlatform: 'missing',
-      activeModule: 'missing',
-    } as any);
-    expect(state.mode.value).toBe('studio');
-    expect(state.selectedPreset.value).toBe('edm');
-    expect(state.selectedVenue.value).toBe('livehouseSmall');
-    expect(state.selectedPlatform.value).toBe('custom');
-    expect(state.activeModule.value).toBe('limiter');
-
-    const originalSettings = { ...state.moduleSettings.value };
-    session.applySessionSettings({
-      moduleSettings: {
-        ...originalSettings,
-        limiterCeilingDb: 999,
-        compressorRatio: 'not-a-number',
-        unknownSetting: 12,
-      },
-    } as any);
-    expect(state.moduleSettings.value.limiterCeilingDb).toBeLessThan(999);
-    expect(state.moduleSettings.value.compressorRatio).toBe(originalSettings.compressorRatio);
-    expect(state.moduleSettings.value).not.toHaveProperty('unknownSetting');
+  beforeEach(() => {
+    vi.useFakeTimers();
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
-  it('saves/restores sessions, handles corrupt storage, and imports/exports presets', async () => {
-    const state = makeState();
-    const session = useMasteringSession(state as any);
+  it('coalesces saves within the delay into one write of the latest state', () => {
+    const session = useMasteringSession();
+    const setItem = vi.spyOn(localStorage, 'setItem');
+    const first = defaultMasteringState();
+    const second = masteringMutators.setMode(first, 'studio');
+    session.save(first);
+    session.save(second);
+    expect(setItem).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(MASTERING_SAVE_DELAY_MS);
+    expect(setItem).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(localStorage.getItem(MASTERING_STATE_STORAGE_KEY) ?? '{}').mode).toBe(
+      'studio',
+    );
+    session.dispose();
+  });
 
-    session.applySessionSettings({ mode: 'studio', customLufs: -12, tone: 80 });
-    session.saveSession();
+  it('writes a pending save on flush and drops it on dispose', () => {
+    const session = useMasteringSession();
+    session.save(masteringMutators.setMode(defaultMasteringState(), 'studio'));
+    session.flush();
+    expect(localStorage.getItem(MASTERING_STATE_STORAGE_KEY)).not.toBeNull();
+    localStorage.clear();
+    session.save(defaultMasteringState());
+    session.dispose();
+    vi.advanceTimersByTime(MASTERING_SAVE_DELAY_MS * 2);
+    expect(localStorage.getItem(MASTERING_STATE_STORAGE_KEY)).toBeNull();
+  });
 
-    const restoredState = makeState();
-    const restoredSession = useMasteringSession(restoredState as any);
-    restoredSession.restoreSession();
-    expect(restoredState.mode.value).toBe('studio');
-    expect(restoredState.customLufs.value).toBe(-12);
-    expect(restoredState.tone.value).toBe(80);
+  it('restores the saved project and discards the earlier sessionStorage session', () => {
+    const saved = masteringMutators.setMacro(defaultMasteringState(), 'tone', 1.5);
+    localStorage.setItem(MASTERING_STATE_STORAGE_KEY, serializeMasteringState(saved));
+    sessionStorage.setItem(MASTERING_LEGACY_SESSION_KEY, '{"mode":"studio"}');
+    const restored = useMasteringSession().restore();
+    expect(restored?.notices).toEqual([]);
+    expect(restored?.state.quick.macros.tone).toBe(1.5);
+    expect(sessionStorage.getItem(MASTERING_LEGACY_SESSION_KEY)).toBeNull();
+  });
 
-    sessionStorage.setItem('libsonare-mastering-session-v1', '{bad json');
-    restoredSession.restoreSession();
-    expect(sessionStorage.getItem('libsonare-mastering-session-v1')).toBeNull();
+  it('converts the earlier chain preset once and stores it in the current format', () => {
+    localStorage.setItem(
+      MASTERING_LEGACY_PRESET_STORAGE_KEY,
+      JSON.stringify({
+        selectedPreset: 'edm',
+        selectedPlatform: 'apple',
+        mode: 'studio',
+        tone: 'loud',
+      }),
+    );
+    const restored = useMasteringSession().restore();
+    expect(restored?.state.quick.preset).toBe('edm');
+    expect(restored?.state.quick.platform).toBe('apple');
+    expect(restored?.state.mode).toBe('studio');
+    expect(restored?.notices).toContain('tone');
+    expect(localStorage.getItem(MASTERING_LEGACY_PRESET_STORAGE_KEY)).toBeNull();
+    expect(localStorage.getItem(MASTERING_STATE_STORAGE_KEY)).not.toBeNull();
+  });
 
-    localStorage.removeItem('libsonare-mastering-chain-preset-v1');
-    restoredSession.loadChainPreset();
-    expect(restoredState.localError.value).toBe('master.errors.noSavedPreset');
+  it('reads corrupt storage as a default project with a notice, and nothing as nothing', () => {
+    expect(useMasteringSession().restore()).toBeNull();
+    localStorage.setItem(MASTERING_STATE_STORAGE_KEY, '{not json');
+    const restored = useMasteringSession().restore();
+    expect(restored?.notices).toEqual(['json']);
+    expect(restored?.state).toEqual(defaultMasteringState());
+  });
+});
 
-    session.saveChainPreset();
-    restoredSession.loadChainPreset();
-    expect(restoredState.localError.value).toBeNull();
-    expect(restoredState.mode.value).toBe('studio');
+describe('mastering meter telemetry', () => {
+  it('starts at the floor', () => {
+    const reading = silentReading();
+    expect(reading.peakDb).toEqual([METER_FLOOR_DB, METER_FLOOR_DB]);
+    expect(reading.grDb).toBe(0);
+    expect(reading.integratedLufs).toBe(Number.NEGATIVE_INFINITY);
+  });
 
-    restoredSession.exportChainSettings();
-    expect(restoredState.chainSettingsUrl.value).toBe('blob:test');
+  it('reads levels, true peak and loudness from the master and GR and input from lane 1', () => {
+    let reading = applyMeterSnapshot(silentReading(), meter(MASTER_METER_TARGET));
+    expect(reading.peakDb).toEqual([-6, -7]);
+    expect(reading.rmsDb).toEqual([-18, -19]);
+    expect(reading.truePeakDb).toBe(-0.9);
+    expect([reading.momentaryLufs, reading.shortTermLufs, reading.integratedLufs]).toEqual([
+      -12, -13, -14,
+    ]);
+    // The master's own GR and input are not the chain's.
+    expect(reading.grDb).toBe(0);
+    expect(reading.inputPeakDb).toEqual([METER_FLOOR_DB, METER_FLOOR_DB]);
 
-    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL');
-    restoredSession.exportChainSettings();
-    expect(revokeSpy).toHaveBeenCalledWith('blob:test');
-    revokeSpy.mockRestore();
+    reading = applyMeterSnapshot(reading, meter(AFTER_METER_TARGET, { gainReductionDb: -4.5 }));
+    expect(reading.grDb).toBe(-4.5);
+    expect(reading.inputPeakDb).toEqual([-10, -11]);
+    expect(reading.peakDb).toEqual([-6, -7]);
 
-    await restoredSession.handleChainImport({
-      target: {
-        files: [{ text: async () => JSON.stringify({ settings: { customLufs: -9, width: 90 } }) }],
-        value: 'preset.json',
+    const unchanged = applyMeterSnapshot(reading, meter(2, { peakDbL: 0 }));
+    expect(unchanged).toBe(reading);
+  });
+
+  it('holds the true-peak maximum, never below a sample peak, until reset', () => {
+    let reading = applyMeterSnapshot(silentReading(), meter(MASTER_METER_TARGET));
+    expect(reading.truePeakDb).toBe(-0.9);
+    // A quieter interval does not pull the held maximum down.
+    reading = applyMeterSnapshot(
+      reading,
+      meter(MASTER_METER_TARGET, {
+        peakDbL: -20,
+        peakDbR: -21,
+        truePeakDbL: -17,
+        truePeakDbR: -18,
+      }),
+    );
+    expect(reading.peakDb).toEqual([-20, -21]);
+    expect(reading.truePeakDb).toBe(-0.9);
+    // A streaming true peak a little under the sample peak reads as the sample peak.
+    reading = applyMeterSnapshot(
+      silentReading(),
+      meter(MASTER_METER_TARGET, {
+        peakDbL: -3,
+        peakDbR: -3.2,
+        truePeakDbL: -3.05,
+        truePeakDbR: -3.3,
+      }),
+    );
+    expect(reading.truePeakDb).toBe(-3);
+    // Non-finite telemetry is ignored rather than poisoning the hold.
+    reading = applyMeterSnapshot(
+      reading,
+      meter(MASTER_METER_TARGET, {
+        peakDbL: Number.NaN,
+        peakDbR: Number.NaN,
+        truePeakDbL: Number.NaN,
+        truePeakDbR: Number.NaN,
+      }),
+    );
+    expect(reading.truePeakDb).toBe(-3);
+    // Lane telemetry never moves the master's true peak.
+    expect(
+      applyMeterSnapshot(reading, meter(AFTER_METER_TARGET, { truePeakDbL: 3 })).truePeakDb,
+    ).toBe(-3);
+    expect(silentReading().truePeakDb).toBe(METER_FLOOR_DB);
+  });
+
+  it('never reports a positive gain reduction', () => {
+    const reading = applyMeterSnapshot(
+      silentReading(),
+      meter(AFTER_METER_TARGET, { gainReductionDb: 0.2 }),
+    );
+    expect(reading.grDb).toBe(0);
+  });
+
+  it('takes the mid of the program window ending at the playhead, zero-padded at the edges', () => {
+    const left = Float32Array.from([1, 2, 3, 4]);
+    const right = Float32Array.from([3, 2, 1, 0]);
+    const clip = { left, right, sampleRate: 4, integratedLufs: -20 };
+    expect(Array.from(programWindow(clip, 1, 4) ?? [])).toEqual([2, 2, 2, 2]);
+    expect(Array.from(programWindow(clip, 0.5, 4) ?? [])).toEqual([0, 0, 2, 2]);
+    expect(programWindow(undefined, 0)).toBeNull();
+    const detached = { ...clip, left: new Float32Array(0), right: new Float32Array(0) };
+    expect(programWindow(detached, 0)).toBeNull();
+  });
+});
+
+describe('mastering export report', () => {
+  it('records the state rendered and the figures it measured', () => {
+    const state = masteringMutators.applyLoudnessFit(defaultMasteringState(), {
+      targetLufs: -14,
+      driveDb: 3.456,
+      measuredLufs: -14.1,
+      residualLu: 0.1,
+      bounces: 2,
+      limited: false,
+    });
+    const result: MasteringExportResult = {
+      fit: null,
+      integratedLufs: -14.123,
+      loudnessRange: 5.55,
+      maxMomentaryLufs: -9.5,
+      maxShortTermLufs: -11.2,
+      truePeakDb: -1.04,
+      shortTermLufs: new Float32Array(4),
+    };
+    const report = createMasteringReport({
+      state,
+      source: { fileName: 'mix.wav', sampleRate: 48000, duration: 12.3456, channels: 2 },
+      render: {
+        result,
+        format: 'float32',
+        dither: 'tpdf',
+        at: 0,
+        url: 'blob:x',
+        fileName: 'mix-master.wav',
       },
-    } as unknown as Event);
-    expect(restoredState.customLufs.value).toBe(-9);
-    expect(restoredState.width.value).toBe(90);
-
-    await restoredSession.handleChainImport({
-      target: {
-        files: [{ text: async () => '{bad json' }],
-        value: 'bad.json',
-      },
-    } as unknown as Event);
-    expect(restoredState.localError.value).toBe('master.errors.presetLoadFailed');
-
-    await restoredSession.handleChainImport({
-      target: {
-        files: [
-          {
-            size: 1_000_001,
-            text: vi.fn(async () => JSON.stringify({ settings: {} })),
-          },
-        ],
-        value: 'huge.json',
-      },
-    } as unknown as Event);
-    expect(restoredState.localError.value).toBe('master.errors.presetLoadFailed');
+    });
+    expect(report.output).toEqual({
+      fileName: 'mix-master.wav',
+      format: 'float32',
+      dither: 'none',
+    });
+    expect(report.measured).toEqual({
+      integratedLufs: -14.12,
+      loudnessRangeLu: 5.55,
+      truePeakDbtp: -1.04,
+      plrDb: 13.08,
+      maxMomentaryLufs: -9.5,
+      maxShortTermLufs: -11.2,
+    });
+    expect(report.loudnessFit).toEqual({ driveDb: 3.46, residualLu: 0.1, limited: false });
+    expect(report.source?.durationSec).toBe(12.346);
+    expect(report.target.integratedLufs).toBe(-14);
+    expect(report.project.inserts).toHaveLength(13);
   });
 });

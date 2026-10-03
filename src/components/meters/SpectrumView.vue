@@ -30,6 +30,48 @@ export interface SpectrumOverlayPoint {
   freqHz: number;
   db: number;
 }
+
+/** Width of the fractional-octave smoothing band. */
+export const SPECTRUM_SMOOTHING_OCTAVES = 1 / 6;
+/** Time constant of the running average when no per-frame `smoothing` weight is given. */
+export const SPECTRUM_AVERAGE_MS = 300;
+
+const HALF_BAND = 2 ** (SPECTRUM_SMOOTHING_OCTAVES / 2);
+
+/**
+ * Smooths a spectrum over a {@link SPECTRUM_SMOOTHING_OCTAVES} band around each
+ * bin, averaging power rather than dB so a narrow peak keeps its energy.
+ * Non-finite bins count as `floorDb`.
+ *
+ * @param freqs Ascending bin centre frequencies in Hz.
+ * @param db Levels in dB, one per bin.
+ * @param floorDb Level a non-finite bin stands for.
+ * @returns Smoothed levels in dB, `min(freqs.length, db.length)` long.
+ */
+export function smoothSpectrumOctaves(
+  freqs: ArrayLike<number>,
+  db: ArrayLike<number>,
+  floorDb: number,
+): Float32Array {
+  const count = Math.min(freqs.length, db.length);
+  const prefix = new Float64Array(count + 1);
+  for (let i = 0; i < count; i++) {
+    const level = Number.isFinite(db[i]) ? db[i] : floorDb;
+    prefix[i + 1] = prefix[i] + 10 ** (level / 10);
+  }
+  const out = new Float32Array(count);
+  let lo = 0;
+  let hi = 0;
+  for (let i = 0; i < count; i++) {
+    const f = freqs[i];
+    while (lo < i && freqs[lo] < f / HALF_BAND) lo++;
+    if (hi < i) hi = i;
+    while (hi + 1 < count && freqs[hi + 1] <= f * HALF_BAND) hi++;
+    const mean = (prefix[hi + 1] - prefix[lo]) / (hi + 1 - lo);
+    out[i] = mean > 0 ? 10 * Math.log10(mean) : floorDb;
+  }
+  return out;
+}
 </script>
 
 <script setup lang="ts">
@@ -48,7 +90,10 @@ const props = withDefaults(
     minDb?: number;
     /** Top of the level axis in dB. */
     maxDb?: number;
-    /** Weight of the running average per new frame, 0 (none) to just under 1. */
+    /**
+     * Weight of the running average per new frame, 0 (none) to just under 1.
+     * Omitted, frames are averaged over {@link SPECTRUM_AVERAGE_MS} of wall time.
+     */
     smoothing?: number;
     /** Curve drawn on its own ±{@link overlayRangeDb} gain axis, e.g. an EQ response. */
     overlay?: readonly SpectrumOverlayPoint[] | null;
@@ -61,7 +106,6 @@ const props = withDefaults(
   {
     minDb: -90,
     maxDb: 0,
-    smoothing: 0.6,
     overlay: null,
     overlayRangeDb: 18,
     bands: null,
@@ -91,6 +135,7 @@ const GRID_FREQS = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const plotRef = ref<HTMLElement | null>(null);
 const averaged: (Float32Array | null)[] = [null, null];
+let lastFrameMs: number | null = null;
 let frame = 0;
 
 function freqToFraction(freqHz: number): number {
@@ -128,18 +173,32 @@ function formatFreq(freqHz: number): string {
   return freqHz >= 1000 ? `${(freqHz / 1000).toFixed(freqHz >= 10000 ? 1 : 2)} kHz` : `${Math.round(freqHz)} Hz`;
 }
 
-/** Fold a new frame into the running average; non-finite bins count as the floor. */
+/** Weight the running average keeps for a frame arriving now. */
+function frameWeight(): number {
+  if (props.smoothing !== undefined) return Math.max(0, Math.min(0.99, props.smoothing));
+  const nowMs = performance.now();
+  const elapsed = lastFrameMs === null ? 0 : Math.max(0, nowMs - lastFrameMs);
+  lastFrameMs = nowMs;
+  return elapsed > 0 ? Math.exp(-elapsed / SPECTRUM_AVERAGE_MS) : 0;
+}
+
+/**
+ * Fold a new frame into the running average after fractional-octave smoothing;
+ * non-finite bins count as the floor.
+ */
 function accumulate(): void {
+  const weight = frameWeight();
   for (let t = 0; t < MAX_TRACES; t++) {
-    const next = props.spectra[t] ?? null;
+    const raw = props.spectra[t] ?? null;
     const prev = averaged[t];
-    if (!next) {
+    if (!raw) {
       averaged[t] = null;
       continue;
     }
+    const next = props.freqs ? smoothSpectrumOctaves(props.freqs, raw, props.minDb) : raw;
     const continuing = prev !== null && prev.length === next.length;
     const avg = continuing ? prev : new Float32Array(next.length);
-    const keep = continuing ? Math.max(0, Math.min(0.99, props.smoothing)) : 0;
+    const keep = continuing ? weight : 0;
     for (let i = 0; i < next.length; i++) {
       const v = Number.isFinite(next[i]) ? next[i] : props.minDb;
       avg[i] = keep * avg[i] + (1 - keep) * v;

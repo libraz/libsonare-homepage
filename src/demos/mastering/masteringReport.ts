@@ -1,83 +1,62 @@
-import type {
-  MasteringPlatformId,
-  MasteringPresetId,
-  MasteringVenueId,
-} from '@/demos/mastering/useMastering';
+/**
+ * The JSON report saved beside an export: what was rendered (the project
+ * state, without audio) and what the render measured.
+ */
+import type { MasteringState } from '@/demos/mastering/masteringState';
+import { masteringTargetLufs } from '@/demos/mastering/masteringState';
+import type { MasteringFileInfo, MasteringRenderRecord } from '@/demos/mastering/useMastering';
 
-export interface MasteringReportPayload {
-  preset: MasteringPresetId;
-  venue: MasteringVenueId;
-  platform: MasteringPlatformId;
-  targetLufs: number;
-  effectiveTargetLufs?: number;
-  tuning: {
-    tone: number;
-    width: number;
-    dynamics: number;
+/** Version of the report layout. */
+export const MASTERING_REPORT_VERSION = 2;
+
+export interface MasteringReportInput {
+  state: MasteringState;
+  source: MasteringFileInfo | null;
+  render: MasteringRenderRecord;
+}
+
+const round = (value: number, digits = 2) =>
+  Number.isFinite(value) ? Number(value.toFixed(digits)) : null;
+
+export function createMasteringReport({ state, source, render }: MasteringReportInput) {
+  const { result } = render;
+  return {
+    version: MASTERING_REPORT_VERSION,
+    renderedAt: new Date(render.at).toISOString(),
+    source: source && {
+      fileName: source.fileName,
+      sampleRate: source.sampleRate,
+      durationSec: round(source.duration, 3),
+      channels: source.channels,
+    },
+    output: {
+      fileName: render.fileName,
+      format: render.format,
+      dither: render.format === 'float32' ? 'none' : render.dither,
+    },
+    target: {
+      platform: state.quick.platform,
+      integratedLufs: masteringTargetLufs(state),
+    },
+    measured: {
+      integratedLufs: round(result.integratedLufs),
+      loudnessRangeLu: round(result.loudnessRange),
+      truePeakDbtp: round(result.truePeakDb),
+      plrDb: round(result.truePeakDb - result.integratedLufs),
+      maxMomentaryLufs: round(result.maxMomentaryLufs),
+      maxShortTermLufs: round(result.maxShortTermLufs),
+    },
+    loudnessFit: state.loudness.fit && {
+      driveDb: round(state.loudness.fit.driveDb),
+      residualLu: round(state.loudness.fit.residualLu),
+      limited: state.loudness.fit.limited,
+    },
+    project: {
+      preset: state.quick.preset,
+      venue: state.quick.venue,
+      repair: state.repair,
+      eq: state.eq,
+      inserts: state.inserts,
+    },
   };
-  source: unknown;
-  rendered: unknown;
-  reference: unknown;
-}
-
-export function reportItems(
-  value: unknown,
-  limit: number,
-): Array<{ label: string; value: string }> {
-  return flattenReport(value)
-    .slice(0, limit)
-    .map(([label, itemValue]) => ({
-      label: prettyReportKey(label),
-      value: formatReportValue(itemValue),
-    }));
-}
-
-export function createMasteringReportUrl(payload: MasteringReportPayload): string {
-  return URL.createObjectURL(
-    new Blob([JSON.stringify(payload, null, 2)], {
-      type: 'application/json',
-    }),
-  );
-}
-
-function flattenReport(value: unknown, prefix = ''): Array<[string, unknown]> {
-  if (value == null) return [];
-  if (Array.isArray(value)) {
-    return value
-      .slice(0, 4)
-      .flatMap((item, index) => flattenReport(item, `${prefix}${prefix ? '.' : ''}${index + 1}`));
-  }
-  if (typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>);
-    const primitiveEntries = entries.filter(
-      ([, child]) => child == null || typeof child !== 'object',
-    );
-    const nestedEntries = entries.filter(([, child]) => child && typeof child === 'object');
-    return [
-      ...primitiveEntries.map(
-        ([key, child]) => [`${prefix}${prefix ? '.' : ''}${key}`, child] as [string, unknown],
-      ),
-      ...nestedEntries.flatMap(([key, child]) =>
-        flattenReport(child, `${prefix}${prefix ? '.' : ''}${key}`),
-      ),
-    ];
-  }
-  return [[prefix || 'value', value]];
-}
-
-function prettyReportKey(key: string): string {
-  return key
-    .replace(/[_-]/g, ' ')
-    .replace(/\./g, ' / ')
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function formatReportValue(value: unknown): string {
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) return '-';
-    return Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(2);
-  }
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  if (value == null) return '-';
-  return String(value);
 }

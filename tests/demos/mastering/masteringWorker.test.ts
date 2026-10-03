@@ -11,7 +11,11 @@ import type {
   MasteringWorkerRequest,
   MasteringWorkerResponse,
 } from '@/demos/mastering/mastering.worker';
-import type { MasteringClip } from '@/demos/mastering/masteringEngine';
+import {
+  type MasteringClip,
+  measureLufs,
+  renderMasteringState,
+} from '@/demos/mastering/masteringEngine';
 import {
   defaultMasteringState,
   isLoudnessFitStale,
@@ -177,6 +181,24 @@ describe('worker jobs', () => {
     expect(reply.result.bounces).toBe(3);
     expect(reply.result.limited).toBe(true);
     expect(reply.result.residualLu).toBeGreaterThan(0.5);
+  });
+
+  it('measure returns the program loudness and the After render loudness', async () => {
+    const wasm = await loadIndexModule();
+    const program = programPcm(7, 0.5);
+    const state = m.setInsertParam(defaultMasteringState(), MASTERING_SLOT.input, 'levelDb', 4);
+    const expectedProgram = measureLufs(wasm, program.left, program.right, SR);
+    const render = renderMasteringState(wasm, state, program);
+    const expectedAfter = measureLufs(wasm, render.left, render.right, SR);
+    const audio = { program };
+    const reply = await send({ type: 'measure', id: ++nextId, audio, state }, buffersOf(audio));
+    if (reply.type !== 'measured')
+      throw new Error(reply.type === 'error' ? reply.error : reply.type);
+    expect(reply.result.programLufs).toBe(expectedProgram);
+    expect(reply.result.afterLufs).toBe(expectedAfter);
+    expect(reply.result.afterLufs - reply.result.programLufs).toBeGreaterThan(2);
+    expect(reply.audio.program?.integratedLufs).toBe(expectedProgram);
+    expect(reply.audio.program?.left.length).toBe(SECONDS * SR);
   });
 
   it('export refits, renders with dither and measures the master', async () => {

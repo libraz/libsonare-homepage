@@ -21,7 +21,10 @@ import {
   stepPeakBallistics,
 } from '@/components/meters/meterBallistics';
 import PeakMeter from '@/components/meters/PeakMeter.vue';
-import SpectrumView from '@/components/meters/SpectrumView.vue';
+import SpectrumView, {
+  SPECTRUM_SMOOTHING_OCTAVES,
+  smoothSpectrumOctaves,
+} from '@/components/meters/SpectrumView.vue';
 
 /** Manual requestAnimationFrame: callbacks run only when the test flushes a timestamp. */
 function installFrameQueue() {
@@ -276,6 +279,38 @@ describe('meter components', () => {
     expect(wrapper.find('[role="img"]').attributes('aria-label')).toBe('Loudness: M —, S —, I —');
   });
 
+  it('LoudnessMeter reads the engine floor as no reading', () => {
+    const wrapper = mount(LoudnessMeter, {
+      props: {
+        momentaryLufs: METER_FLOOR_DB,
+        shortTermLufs: METER_FLOOR_DB,
+        integratedLufs: METER_FLOOR_DB,
+        lra: Number.NaN,
+        truePeakDb: METER_FLOOR_DB,
+        labels: loudnessLabels,
+      },
+    });
+    expect(wrapper.find('.loudness-meter__big').text()).toBe('—');
+    expect(wrapper.findAll('.loudness-meter__value').map((v) => v.text())).toEqual([
+      '—',
+      '—',
+      '—',
+      '—',
+      '—',
+    ]);
+    expect(wrapper.find('.loudness-meter__marker--integrated').exists()).toBe(false);
+  });
+
+  it('PeakMeter reads the engine floor as no reading on any scale', async () => {
+    const wrapper = mount(PeakMeter, {
+      props: { peakDb: [METER_FLOOR_DB, METER_FLOOR_DB], minDb: -144, labels: peakLabels },
+    });
+    frames.flush(0);
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findAll('.peak-meter__readout').map((r) => r.text())).toEqual(['—', '—']);
+    expect(wrapper.find('[role="img"]').attributes('aria-label')).toBe('Master: L —, R —');
+  });
+
   it('LoudnessMeter computes PLR and switches between absolute and EBU +9', async () => {
     const wrapper = mount(LoudnessMeter, {
       props: {
@@ -449,6 +484,68 @@ describe('meter components', () => {
       'Out',
       'In',
     ]);
+  });
+
+  it('smoothSpectrumOctaves averages power over a sixth of an octave', () => {
+    expect(SPECTRUM_SMOOTHING_OCTAVES).toBeCloseTo(1 / 6, 12);
+    const freqs = Float32Array.from({ length: 512 }, (_, i) => i * 10);
+    const flat = smoothSpectrumOctaves(freqs, new Float32Array(512).fill(-30), -90);
+    for (const value of flat) expect(value).toBeCloseTo(-30, 4);
+
+    // A single bin at 3 kHz spreads over the bins within ±1/12 octave of each neighbour.
+    const spike = new Float32Array(512).fill(-90);
+    spike[300] = 0;
+    const smoothed = smoothSpectrumOctaves(freqs, spike, -90);
+    const reach = 3000 * (2 ** (1 / 12) - 1);
+    expect(smoothed[300]).toBeLessThan(-10);
+    expect(smoothed[300]).toBeGreaterThan(-25);
+    expect(smoothed[Math.round(300 + reach / 10) - 1]).toBeGreaterThan(-60);
+    expect(smoothed[Math.round(300 + (2 * reach) / 10) + 2]).toBeCloseTo(-90, 3);
+    // Total power is spread, not created: no bin exceeds the spike.
+    expect(Math.max(...smoothed)).toBeLessThanOrEqual(0);
+
+    // Non-finite bins count as the floor; low bins with no neighbours in band keep their value.
+    const holes = Float32Array.from({ length: 512 }, (_, i) => (i === 1 ? -20 : Number.NaN));
+    const filled = smoothSpectrumOctaves(freqs, holes, -90);
+    expect(filled[1]).toBeCloseTo(-20, 4);
+    expect(filled[400]).toBeCloseTo(-90, 4);
+  });
+
+  it('SpectrumView averages frames over wall time unless a per-frame weight is given', async () => {
+    const moveTo = vi.fn();
+    const ctx = new Proxy({ moveTo } as Record<string, unknown>, {
+      get: (target, key) => (key in target ? target[key as string] : vi.fn()),
+      set: () => true,
+    });
+    let nowMs = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => nowMs);
+    const freqs = Float32Array.from({ length: 64 }, (_, i) => 30 * 1.1 ** i);
+    const loud = new Float32Array(64).fill(-10);
+    const quiet = new Float32Array(64).fill(-70);
+    const wrapper = mount(SpectrumView, {
+      props: { freqs, spectra: [loud], minDb: -90, maxDb: 0, tilt: false, labels: spectrumLabels },
+    });
+    const canvas = wrapper.find('canvas').element as HTMLCanvasElement;
+    Object.defineProperty(canvas, 'clientWidth', { configurable: true, value: 300 });
+    Object.defineProperty(canvas, 'clientHeight', { configurable: true, value: 90 });
+    canvas.getContext = vi.fn(() => ctx) as unknown as typeof canvas.getContext;
+    // The trace starts with a moveTo off both axes; grid lines start on one.
+    const level = () => {
+      moveTo.mockClear();
+      frames.flush(nowMs);
+      const start = moveTo.mock.calls.find(([x, y]) => x > 1 && y > 0);
+      // y in pixels on a 90 px plot spanning 90 dB: the level is -y.
+      return -(start?.[1] as number);
+    };
+
+    // One time constant later the average has moved 1 - 1/e of the way.
+    nowMs = 300;
+    await wrapper.setProps({ spectra: [quiet] });
+    expect(level()).toBeCloseTo(-10 - 60 * (1 - Math.exp(-1)), 1);
+
+    await wrapper.setProps({ smoothing: 0, spectra: [loud] });
+    expect(level()).toBeCloseTo(-10, 4);
+    vi.restoreAllMocks();
   });
 
   it('SpectrumView band handles move by keyboard within the overlay range', async () => {

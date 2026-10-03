@@ -1,297 +1,197 @@
 <script setup lang="ts">
+/**
+ * Delivery target: a platform's loudness, or a custom value. Shows the genre's
+ * recommendation and warns when the target is louder than it.
+ */
 import { computed } from 'vue';
 import { Tooltip } from '@/components/ui';
-import { useI18n } from '@/composables/useI18n';
-import { MASTERING_LOUD_WARNING_LU } from '@/demos/mastering/masteringUi';
+import MasterKnob from '@/demos/mastering/MasterKnob.vue';
+import { fill, useMasteringCopy } from '@/demos/mastering/masteringCopy';
+import {
+  formatNumber,
+  MASTERING_LOUD_WARNING_LU,
+  MASTERING_PLATFORMS,
+} from '@/demos/mastering/masteringUi';
 import type { MasteringPlatformId } from '@/demos/mastering/useMastering';
 
 const props = defineProps<{
-  modelValue: MasteringPlatformId;
+  platform: MasteringPlatformId;
   customLufs: number;
-  platforms: Array<{ id: MasteringPlatformId; lufs: number }>;
-  eyebrow: string;
-  studio?: boolean;
-  recommendedLufs?: number;
-  currentLufs?: number;
-  presetName?: string;
+  targetLufs: number;
+  recommendedLufs: number;
+  presetName: string;
+  disabled?: boolean;
 }>();
 
 const emit = defineEmits<{
-  'update:modelValue': [value: MasteringPlatformId];
-  'update:customLufs': [value: number];
+  platform: [id: MasteringPlatformId];
+  customLufs: [lufs: number];
+  begin: [];
+  end: [];
 }>();
 
-const { t } = useI18n();
+const copy = useMasteringCopy();
 
-const hasRecommendation = computed(() => typeof props.recommendedLufs === 'number');
-
-// Streaming only attenuates, so "louder than recommended" (numerically higher
-// LUFS) is what risks the loudness stage flattening dynamic material.
-const isLouderThanRecommended = computed(
-  () =>
-    hasRecommendation.value &&
-    typeof props.currentLufs === 'number' &&
-    props.currentLufs - (props.recommendedLufs as number) >= MASTERING_LOUD_WARNING_LU,
+const louder = computed(
+  () => props.targetLufs - props.recommendedLufs >= MASTERING_LOUD_WARNING_LU,
 );
 </script>
 
 <template>
-  <div class="platform-grid" :class="{ 'platform-grid--studio': studio }">
-    <div
-      v-for="platform in platforms"
-      :key="platform.id"
-      class="platform-option-wrap"
-    >
-      <label
-        class="platform-option"
-        :class="{ 'platform-option--active': modelValue === platform.id }"
-      >
-        <input
-          type="radio"
-          :value="platform.id"
-          :checked="modelValue === platform.id"
-          @change="emit('update:modelValue', platform.id)"
-        >
-        <span>{{ t(`master.platforms.${platform.id}`) }}</span>
-        <strong>{{ platform.id === 'custom' ? `${customLufs} LUFS` : `${platform.lufs} LUFS` }}</strong>
-      </label>
-      <Tooltip
-        :eyebrow="eyebrow"
-        :title="t(`master.platforms.${platform.id}`)"
-        :body="t(`master.platforms.descriptions.${platform.id}`)"
-        :tip="t(`master.platforms.useWhen.${platform.id}`)"
-        :tip-label="t('master.tips.useWhen')"
-      >
+  <div class="platforms">
+    <div class="platforms__grid" role="radiogroup" :aria-label="copy.quick.steps.platform">
+      <div v-for="option in MASTERING_PLATFORMS" :key="option.id" class="platforms__item">
         <button
           type="button"
-          class="platform-option__info"
-          :aria-label="t('master.glossary.openGuide')"
-          @click.stop.prevent
+          role="radio"
+          class="platforms__option"
+          :aria-checked="platform === option.id"
+          :disabled="disabled"
+          @click="emit('platform', option.id)"
         >
-          <span aria-hidden="true">i</span>
+          <span>{{ copy.platforms.names[option.id] }}</span>
+          <strong>{{ formatNumber(option.id === 'custom' ? customLufs : option.lufs, 1) }} LUFS</strong>
         </button>
-      </Tooltip>
+        <Tooltip :title="copy.platforms.names[option.id]" :body="copy.platforms.descriptions[option.id]">
+          <button type="button" class="platforms__info" :aria-label="copy.platforms.descriptions[option.id]" @click.stop.prevent>
+            <span aria-hidden="true">i</span>
+          </button>
+        </Tooltip>
+      </div>
     </div>
-  </div>
-
-  <div v-if="hasRecommendation" class="platform-rec" :class="{ 'platform-rec--inline': studio }">
-    <span class="platform-rec__badge">
-      {{ t('master.platforms.recommended', { preset: presetName, lufs: recommendedLufs }) }}
-    </span>
-    <p v-if="isLouderThanRecommended" class="platform-rec__warning" role="status">
-      {{ t('master.platforms.loudWarning', { preset: presetName }) }}
+    <MasterKnob
+      v-if="platform === 'custom'"
+      class="platforms__custom"
+      :model-value="customLufs"
+      :min="-24"
+      :max="-8"
+      :step="0.5"
+      unit="LUFS"
+      :default="-14"
+      :label="copy.quick.customTarget"
+      :disabled="disabled"
+      @begin="emit('begin')"
+      @end="emit('end')"
+      @update:model-value="emit('customLufs', $event)"
+    />
+    <p class="platforms__rec">
+      {{ fill(copy.platforms.recommended, { preset: presetName, lufs: formatNumber(recommendedLufs, 0) }) }}
+    </p>
+    <p v-if="louder" class="platforms__warn" role="note">
+      {{ fill(copy.platforms.loudWarning, { preset: presetName }) }}
     </p>
   </div>
-
-  <label v-if="modelValue === 'custom'" class="master-slider" :class="{ 'master-slider--inline': studio }">
-    <span>{{ t('master.quick.customTarget') }}</span>
-    <input
-      type="range"
-      min="-24"
-      max="-8"
-      step="0.5"
-      :value="customLufs"
-      @input="emit('update:customLufs', Number(($event.target as HTMLInputElement).value))"
-    >
-    <strong>{{ customLufs }} LUFS</strong>
-  </label>
 </template>
 
 <style scoped>
-.platform-grid {
+.platforms {
+  display: grid;
+  gap: 10px;
+}
+
+.platforms__grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
-  padding: 14px;
+  gap: 6px;
 }
 
-.platform-grid--studio {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 0;
-}
-
-.platform-option-wrap {
+.platforms__item {
   position: relative;
   display: flex;
 }
 
-.platform-option-wrap > .platform-option {
-  width: 100%;
-}
-
-.platform-option {
+.platforms__option {
   display: grid;
-  gap: 5px;
-  min-height: 72px;
-  padding: 12px;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
   border: 1px solid var(--demo-border);
-  border-radius: 8px;
-  background: var(--master-surface);
+  border-radius: 6px;
+  background: transparent;
   color: var(--demo-text);
+  text-align: left;
   cursor: pointer;
 }
 
-.platform-option {
-  transition: border-color 0.16s ease, background-color 0.16s ease, transform 0.16s ease;
+.platforms__option span {
+  font-size: 12.5px;
+  font-weight: 600;
 }
 
-.platform-option:hover {
+.platforms__option strong {
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.platforms__option[aria-checked='true'] {
   border-color: var(--demo-accent);
-  transform: translateY(-2px);
+  background: var(--demo-accent-subtle);
 }
 
-.platform-option:focus-within {
+.platforms__option[aria-checked='true'] strong {
+  color: var(--demo-accent);
+}
+
+.platforms__option:disabled {
+  opacity: var(--demo-disabled-opacity);
+  cursor: not-allowed;
+}
+
+.platforms__option:focus-visible,
+.platforms__info:focus-visible {
   outline: 2px solid var(--demo-accent);
   outline-offset: 2px;
 }
 
-.platform-option--active {
-  border-color: var(--demo-accent-border);
-  background: var(--demo-accent-subtle);
-}
-
-/* Visually hidden but still keyboard-focusable so the label gets :focus-within. */
-.platform-option input {
+.platforms__info {
   position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  border: 0;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .platform-option {
-    transition: none;
-  }
-}
-
-.platform-option span {
-  color: var(--demo-text-strong);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.platform-option strong,
-.master-slider strong {
-  color: var(--demo-cyan);
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-
-.platform-option__info {
-  position: absolute;
-  top: 7px;
-  right: 7px;
+  top: 6px;
+  right: 6px;
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
   border: 1px solid var(--demo-border);
-  border-radius: 999px;
+  border-radius: 50%;
   background: var(--demo-bg-elevated);
   color: var(--demo-text-muted);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.18s ease, border-color 0.18s ease, color 0.18s ease;
-}
-
-.platform-option-wrap:hover .platform-option__info,
-.platform-option__info:focus-visible {
-  opacity: 1;
-}
-
-.platform-option__info:hover,
-.platform-option__info:focus-visible {
-  border-color: var(--demo-accent-border);
-  color: var(--demo-accent-light);
-}
-
-.platform-option__info > span {
   font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 800;
+  font-size: 9px;
+  cursor: help;
 }
 
-.platform-rec {
-  display: grid;
-  gap: 8px;
-  padding: 0 14px 12px;
+.platforms__custom {
+  max-width: 320px;
 }
 
-.platform-rec--inline {
-  padding: 10px 0 0;
+.platforms__rec,
+.platforms__warn {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
-.platform-rec__badge {
-  justify-self: start;
-  padding: 4px 10px;
-  border: 1px solid var(--demo-accent-border);
-  border-radius: 999px;
-  background: var(--demo-accent-subtle);
-  color: var(--demo-accent-light);
+.platforms__rec {
+  color: var(--demo-text-muted);
   font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 700;
 }
 
-.platform-rec__warning {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 0;
+.platforms__warn {
   padding: 8px 10px;
   border: 1px solid var(--demo-warn-border);
   border-radius: 6px;
   background: var(--demo-warn-bg);
   color: var(--demo-warn-text);
-  font-size: 11px;
-  line-height: 1.45;
 }
 
-.platform-rec__warning::before {
-  content: '!';
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  margin-top: 1px;
-  border-radius: 999px;
-  background: var(--demo-warn);
-  color: var(--demo-on-accent);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.master-slider {
-  display: grid;
-  grid-template-columns: minmax(130px, 0.8fr) minmax(160px, 1.5fr) minmax(58px, auto);
-  gap: 12px;
-  align-items: center;
-  padding: 12px 14px 16px;
-}
-
-.master-slider--inline {
-  padding: 10px 0 0;
-}
-
-.master-slider input {
-  width: 100%;
-  accent-color: var(--demo-accent);
-}
-
-@media (max-width: 900px) {
-  .platform-grid,
-  .platform-grid--studio,
-  .master-slider {
-    grid-template-columns: 1fr;
+@media (max-width: 720px) {
+  .platforms__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>

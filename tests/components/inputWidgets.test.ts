@@ -85,69 +85,78 @@ describe('MasterKnob', () => {
         ...props,
       },
     });
-    const track = wrapper.find('.fader__track').element as HTMLElement;
+    const track = wrapper.find('.knob__track').element as HTMLElement;
     Object.defineProperty(track, 'getBoundingClientRect', {
       configurable: true,
-      value: () => ({ left: 10, width: 100, top: 0, height: 36, right: 110, bottom: 36 }),
+      value: () => ({ left: 10, width: 100, top: 0, height: 18, right: 110, bottom: 18 }),
     });
     track.setPointerCapture = vi.fn();
     track.releasePointerCapture = vi.fn();
     return wrapper;
   }
 
-  it('renders slider aria state and emits pointer, wheel and keyboard changes', async () => {
+  it('is an ARIA slider that brackets a pointer drag with begin and end', async () => {
     const wrapper = mountKnob();
-    const track = wrapper.find('.fader__track');
+    const track = wrapper.find('.knob__track');
 
     expect(track.attributes('role')).toBe('slider');
     expect(track.attributes('aria-label')).toBe('Gain');
     expect(track.attributes('aria-valuetext')).toBe('0.0 dB');
 
     track.element.dispatchEvent(new PointerEvent('pointerdown', { clientX: 110, pointerId: 1 }));
+    track.element.dispatchEvent(new PointerEvent('pointermove', { clientX: 85, pointerId: 1 }));
+    track.element.dispatchEvent(new PointerEvent('pointerup', { clientX: 85, pointerId: 1 }));
     await wrapper.vm.$nextTick();
-    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([12]);
-
-    await wrapper.setProps({ modelValue: 0 });
-    await track.trigger('wheel', { deltaY: -1 });
-    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([0.5]);
-
-    await track.trigger('keydown', { key: 'ArrowLeft' });
-    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([-0.5]);
-
-    await track.trigger('keydown', { key: 'End' });
-    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([12]);
+    expect(wrapper.emitted('begin')).toHaveLength(1);
+    expect(wrapper.emitted('end')).toHaveLength(1);
+    expect(wrapper.emitted('update:modelValue')).toEqual([[12], [6]]);
   });
 
-  it('supports bipolar double-click reset and typed value editing', async () => {
-    const wrapper = mountKnob({ modelValue: 5 });
-    const track = wrapper.find('.fader__track');
+  it('steps by four on keys and wheel, one with Shift, and jumps on Home/End', async () => {
+    const wrapper = mountKnob();
+    const track = wrapper.find('.knob__track');
+    await track.trigger('wheel', { deltaY: -1 });
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([2]);
+    await track.trigger('keydown', { key: 'ArrowLeft', shiftKey: true });
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([-0.5]);
+    await track.trigger('keydown', { key: 'End' });
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([12]);
+    expect(wrapper.emitted('begin')).toBeUndefined();
+  });
 
-    await track.trigger('dblclick');
-    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([0]);
+  it('resets to its default on double-click and accepts a typed value', async () => {
+    const wrapper = mountKnob({ modelValue: 5, default: -3 });
+    await wrapper.find('.knob__track').trigger('dblclick');
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([-3]);
 
-    await wrapper.find('.fader__readout').trigger('click');
+    await wrapper.find('.knob__value').trigger('click');
     await flushPromises();
     const input = wrapper.find('input');
-    expect(input.exists()).toBe(true);
     await input.setValue('3.75');
     await input.trigger('keydown', { key: 'Enter' });
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([4]);
   });
 
-  it('clamps unipolar controls and uses midpoint reset', async () => {
-    const wrapper = mountKnob({ modelValue: 50, min: 0, max: 100, step: 1, unit: '%' });
-    const track = wrapper.find('.fader__track');
+  it('maps a log control evenly in ratio and resets to the minimum without a default', async () => {
+    const wrapper = mountKnob({
+      modelValue: 1000,
+      min: 10,
+      max: 10000,
+      step: 1,
+      unit: 'Hz',
+      scale: 'log',
+    });
+    expect(wrapper.find('.knob__thumb').attributes('style')).toContain('left: 66.66');
+    await wrapper.find('.knob__track').trigger('dblclick');
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([10]);
+  });
 
-    await track.trigger('keydown', { key: 'PageUp' });
-    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([60]);
-
-    await wrapper.setProps({ modelValue: 95 });
-    await track.trigger('keydown', { key: 'PageUp' });
-    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([100]);
-
-    await wrapper.setProps({ modelValue: 90 });
-    await track.trigger('dblclick');
-    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([50]);
+  it('ignores input while disabled', async () => {
+    const wrapper = mountKnob({ disabled: true });
+    await wrapper.find('.knob__track').trigger('keydown', { key: 'End' });
+    await wrapper.find('.knob__track').trigger('dblclick');
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+    expect(wrapper.find('.knob__track').attributes('aria-disabled')).toBe('true');
   });
 });
 

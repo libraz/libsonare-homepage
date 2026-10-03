@@ -1,22 +1,23 @@
 import { describe, expect, it } from 'vitest';
+import { MASTERING_NON_RT_PARAMS } from '@/demos/mastering/masteringEngine';
+import { MASTERING_INSERT_LAYOUT } from '@/demos/mastering/masteringState';
 import {
-  MASTERING_METER_TARGETS,
-  MASTERING_MODULE_GUIDE_SLUGS,
-  MASTERING_MODULES,
-  MASTERING_PARAMETER_GUIDE_SLUGS,
+  exportBounceOptions,
+  formatNumber,
+  formatParam,
+  MASTERING_DITHERS,
+  MASTERING_EXPORT_FORMATS,
+  MASTERING_FIXED_SLOTS,
+  MASTERING_MODULE_GUIDES,
   MASTERING_PLATFORMS,
   MASTERING_PRESET_TARGETS,
   MASTERING_PRESETS,
+  MASTERING_SLOT_CONTROLS,
   MASTERING_VENUES,
-  moduleControlsFor,
 } from '@/demos/mastering/masteringUi';
-import { defaultModuleSettings } from '@/demos/mastering/useMastering';
 
 describe('mastering UI definitions', () => {
-  it('keeps preset and platform identifiers unique with expected defaults', () => {
-    expect(new Set(MASTERING_PRESETS.map((preset) => preset.id)).size).toBe(
-      MASTERING_PRESETS.length,
-    );
+  it('keeps the Quick axes unique, with a recommended target per genre', () => {
     expect(MASTERING_PRESETS.map((preset) => preset.id)).toEqual([
       'pop',
       'edm',
@@ -27,90 +28,93 @@ describe('mastering UI definitions', () => {
       'aiMusic',
       'speech',
     ]);
-
-    expect(new Set(MASTERING_VENUES.map((venue) => venue.id)).size).toBe(MASTERING_VENUES.length);
     expect(MASTERING_VENUES.map((venue) => venue.id)).toEqual([
       'studio',
       'livehouseSmall',
       'livehouseLarge',
     ]);
-
-    // Every genre preset must carry a recommended loudness target.
+    expect(new Set(MASTERING_PLATFORMS.map((platform) => platform.id)).size).toBe(
+      MASTERING_PLATFORMS.length,
+    );
     for (const preset of MASTERING_PRESETS) {
       expect(MASTERING_PRESET_TARGETS[preset.id], preset.id).toBeLessThan(0);
     }
     expect(MASTERING_PRESET_TARGETS.liveLarge).toBeLessThan(MASTERING_PRESET_TARGETS.pop);
-
-    expect(new Set(MASTERING_PLATFORMS.map((platform) => platform.id)).size).toBe(
-      MASTERING_PLATFORMS.length,
-    );
-    expect(MASTERING_PLATFORMS).toEqual(
-      expect.arrayContaining([
-        { id: 'spotify', lufs: -14 },
-        { id: 'youtube', lufs: -14 },
-        { id: 'apple', lufs: -16 },
-        { id: 'tiktok', lufs: -16 },
-        { id: 'custom', lufs: -14 },
-      ]),
-    );
   });
 
-  it('maps every module to a guide slug and exposes valid controls', () => {
-    const defaultSettings = defaultModuleSettings();
-    for (const moduleId of MASTERING_MODULES) {
-      expect(MASTERING_MODULE_GUIDE_SLUGS[moduleId], moduleId).toBeTruthy();
-      for (const control of moduleControlsFor(moduleId)) {
-        expect(control.key in defaultSettings, `${moduleId}:${control.key}`).toBe(true);
-        expect(control.min, control.key).toBeLessThan(control.max);
-        expect(control.step, control.key).toBeGreaterThan(0);
-        expect(MASTERING_PARAMETER_GUIDE_SLUGS[control.key], control.key).toBeTruthy();
+  it('exposes only parameters the slot carries, and never the tape bias', () => {
+    for (const entry of MASTERING_INSERT_LAYOUT) {
+      const groups = MASTERING_SLOT_CONTROLS[entry.id];
+      const names = groups.flatMap((group) => group.params.map((spec) => spec.name));
+      expect(new Set(names).size, entry.id).toBe(names.length);
+      for (const spec of groups.flatMap((group) => group.params)) {
+        const value = entry.params[spec.name];
+        expect(value, `${entry.id}.${spec.name}`).not.toBeUndefined();
+        if ('toggle' in spec) {
+          expect(typeof value).toBe('boolean');
+        } else {
+          expect(typeof value).toBe('number');
+          expect(spec.min).toBeLessThan(spec.max);
+          expect(spec.step).toBeGreaterThan(0);
+          // The layout default sits inside the control range, so a reset is reachable.
+          expect(value as number, `${entry.id}.${spec.name} default`).toBeGreaterThanOrEqual(
+            spec.min,
+          );
+          expect(value as number, `${entry.id}.${spec.name} default`).toBeLessThanOrEqual(spec.max);
+          if (spec.scale === 'log') expect(spec.min).toBeGreaterThan(0);
+        }
       }
     }
+    const tape = MASTERING_SLOT_CONTROLS.tape.flatMap((group) =>
+      group.params.map((spec) => spec.name),
+    );
+    expect(tape).not.toContain('bias');
+    expect(MASTERING_SLOT_CONTROLS.drive).toEqual([]);
+    expect(MASTERING_FIXED_SLOTS).toEqual(['drive']);
   });
 
-  it('returns expected control groups per module and no controls for non-editable modules', () => {
-    expect(moduleControlsFor('input').map((control) => control.key)).toEqual(['inputGainDb']);
-    expect(moduleControlsFor('repair').map((control) => control.key)).toEqual([
-      'denoiseAmount',
-      'declickAmount',
-      'dereverbAmount',
-    ]);
-    expect(moduleControlsFor('dynamics').map((control) => control.key)).toEqual([
-      'compressorThresholdDb',
-      'compressorRatio',
-      'compressorAttackMs',
-      'compressorReleaseMs',
-      'deesserAmount',
-      'transientAttackDb',
-    ]);
-    expect(moduleControlsFor('multiband').map((control) => control.key)).toEqual([
-      'multibandLowAmount',
-      'multibandMidAmount',
-      'multibandHighAmount',
-    ]);
-    expect(moduleControlsFor('exciter').map((control) => control.key)).toEqual([
-      'tapeDriveDb',
-      'tapeSaturation',
-      'exciterAmount',
-      'airBandAmount',
-    ]);
-    expect(moduleControlsFor('stereo').map((control) => control.key)).toEqual([
-      'stereoWidth',
-      'monoMakerAmount',
-    ]);
-    expect(moduleControlsFor('limiter').map((control) => control.key)).toEqual([
-      'limiterCeilingDb',
-      'limiterLookaheadMs',
-    ]);
-    expect(moduleControlsFor('loudness')).toEqual([]);
-    expect(moduleControlsFor('output')).toEqual([]);
-    expect(moduleControlsFor('missing')).toEqual([]);
-  });
-
-  it('keeps meter target modules valid', () => {
-    for (const [meterId, moduleId] of Object.entries(MASTERING_METER_TARGETS)) {
-      expect(['lufs', 'peak', 'crest', 'correlation']).toContain(meterId);
-      expect(MASTERING_MODULES).toContain(moduleId);
+  it('puts the multiband crossovers, which rebuild the inserts, in their own group', () => {
+    const crossover = MASTERING_SLOT_CONTROLS.multiband.find(
+      (group) => group.group === 'crossover',
+    );
+    expect(crossover?.params.map((spec) => spec.name)).toEqual(['cutoff0Hz', 'cutoff1Hz']);
+    for (const spec of crossover?.params ?? []) {
+      expect(MASTERING_NON_RT_PARAMS['multiband.compressor']).toContain(spec.name);
     }
+  });
+
+  it('links every module to a guide', () => {
+    for (const entry of MASTERING_INSERT_LAYOUT) {
+      expect(MASTERING_MODULE_GUIDES[entry.id]).toMatch(/^mastering\/[a-z-]+(#[a-z-]+)?$/);
+    }
+    expect(MASTERING_MODULE_GUIDES.repair).toBe('mastering/repair');
+    expect(MASTERING_MODULE_GUIDES.eq).toBe('mastering/tone-air');
+  });
+
+  it.each(
+    MASTERING_EXPORT_FORMATS.flatMap((format) =>
+      MASTERING_DITHERS.map((dither) => [format, dither] as const),
+    ),
+  )('maps %s with %s dither to the bounce options', (format, dither) => {
+    const options = exportBounceOptions(format, dither);
+    if (format === 'float32' || dither === 'none') {
+      expect(options).toEqual({ dither: 0 });
+      return;
+    }
+    expect(options).toEqual({
+      dither: dither === 'tpdf' ? 2 : 3,
+      ditherBits: format === 'pcm16' ? 16 : 24,
+    });
+  });
+
+  it('formats readouts with a true minus sign and a dash for non-finite values', () => {
+    expect(formatNumber(-14.04, 1)).toBe('−14.0');
+    expect(formatNumber(2.5, 1, true)).toBe('+2.5');
+    expect(formatNumber(-0.01, 1)).toBe('0.0');
+    expect(formatNumber(Number.NaN)).toBe('—');
+    expect(formatNumber(Number.NEGATIVE_INFINITY)).toBe('—');
+    expect(formatParam(1234.4, 1)).toBe('1234');
+    expect(formatParam(0.256, 0.01)).toBe('0.26');
+    expect(formatParam(-1.25, 0.05)).toBe('−1.25');
   });
 });

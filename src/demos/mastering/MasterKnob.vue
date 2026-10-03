@@ -1,606 +1,358 @@
 <script setup lang="ts">
+/**
+ * One parameter as a horizontal slider with a typed readout. Pointer drags
+ * emit `begin` / `end` around their updates so the page can fold a drag into
+ * one history entry; keys and the wheel emit single updates.
+ */
 import { computed, nextTick, ref } from 'vue';
-import Tooltip from '@/components/ui/Tooltip.vue';
+import { formatParam, type ParamScale } from '@/demos/mastering/masteringUi';
 
-const props = defineProps<{
-  modelValue: number;
-  min: number;
-  max: number;
-  step: number;
-  label: string;
-  unit?: string;
-  hint?: string;
-  tip?: string;
-  tipLabel?: string;
-  default?: number;
-  defaultRationale?: string;
-  defaultLabel?: string;
-  defaultOffLabel?: string;
-  docsHref?: string;
-  docsLinkLabel?: string;
+const props = withDefaults(
+  defineProps<{
+    modelValue: number;
+    min: number;
+    max: number;
+    step: number;
+    label: string;
+    unit?: string;
+    scale?: ParamScale;
+    /** Double-click target; the bipolar centre or the minimum when absent. */
+    default?: number;
+    disabled?: boolean;
+    /** Help shown as the control's title. */
+    hint?: string;
+    /** Marks a parameter applied on release. */
+    deferred?: boolean;
+  }>(),
+  {
+    unit: '',
+    scale: 'linear',
+    default: undefined,
+    disabled: false,
+    hint: undefined,
+    deferred: false,
+  },
+);
+
+const emit = defineEmits<{
+  'update:modelValue': [value: number];
+  begin: [];
+  end: [];
 }>();
-
-const emit = defineEmits<(e: 'update:modelValue', value: number) => void>();
 
 const dragging = ref(false);
 const editing = ref(false);
-const draftValue = ref('');
+const draft = ref('');
 const inputRef = ref<HTMLInputElement | null>(null);
 const trackRef = ref<HTMLElement | null>(null);
 
-const range = computed(() => props.max - props.min);
+const logScale = computed(() => props.scale === 'log' && props.min > 0);
 const bipolar = computed(() => props.min < 0 && props.max > 0);
 
-const normalized = computed(() => {
-  if (range.value === 0) return 0;
-  return Math.max(0, Math.min(1, (props.modelValue - props.min) / range.value));
-});
+function toFraction(value: number): number {
+  const clamped = Math.min(props.max, Math.max(props.min, value));
+  if (logScale.value) return Math.log(clamped / props.min) / Math.log(props.max / props.min);
+  return props.max === props.min ? 0 : (clamped - props.min) / (props.max - props.min);
+}
 
-const percent = computed(() => normalized.value * 100);
-const zeroPercent = computed(() => (range.value === 0 ? 0 : (-props.min / range.value) * 100));
+function fromFraction(fraction: number): number {
+  const f = Math.min(1, Math.max(0, fraction));
+  if (logScale.value) return props.min * (props.max / props.min) ** f;
+  return props.min + f * (props.max - props.min);
+}
 
-const fillStyle = computed(() => {
-  if (bipolar.value) {
-    const z = zeroPercent.value;
-    const p = percent.value;
-    const left = Math.min(z, p);
-    const width = Math.abs(p - z);
-    return { left: `${left}%`, width: `${width}%` };
+const position = computed(() => toFraction(props.modelValue) * 100);
+const origin = computed(() => (bipolar.value ? toFraction(0) * 100 : 0));
+const fillStyle = computed(() => ({
+  left: `${Math.min(origin.value, position.value)}%`,
+  width: `${Math.abs(position.value - origin.value)}%`,
+}));
+
+const display = computed(() => formatParam(props.modelValue, props.step));
+const valueText = computed(() => (props.unit ? `${display.value} ${props.unit}` : display.value));
+
+function snap(value: number): number {
+  const stepped = props.step > 0 ? Math.round(value / props.step) * props.step : value;
+  const clamped = Math.min(props.max, Math.max(props.min, stepped));
+  return Number(clamped.toFixed(6));
+}
+
+function commit(value: number): void {
+  const next = snap(value);
+  if (next !== props.modelValue) emit('update:modelValue', next);
+}
+
+/** Moves by `steps` steps; on a log scale a step is a ratio, so low values move finely. */
+function nudge(steps: number): void {
+  if (logScale.value) {
+    const ratio = (props.max / props.min) ** (1 / 200);
+    commit(Math.max(props.min, props.modelValue) * ratio ** steps);
+  } else {
+    commit(props.modelValue + steps * props.step);
   }
-  return { left: '0%', width: `${percent.value}%` };
-});
-
-const ticks = computed(() => {
-  if (bipolar.value) return [0, 25, zeroPercent.value, 75, 100];
-  return [0, 25, 50, 75, 100];
-});
-
-const decimals = computed(() => {
-  const text = props.step.toString();
-  const dot = text.indexOf('.');
-  return dot === -1 ? 0 : text.length - dot - 1;
-});
-
-const displayValue = computed(() => {
-  if (decimals.value === 0) return Math.round(props.modelValue).toString();
-  return props.modelValue.toFixed(decimals.value);
-});
-
-const defaultDisplay = computed(() => {
-  if (props.default === undefined) return undefined;
-  if (props.default === 0 && !props.unit && props.defaultOffLabel) {
-    return `0 · ${props.defaultOffLabel}`;
-  }
-  const num =
-    decimals.value === 0
-      ? Math.round(props.default).toString()
-      : props.default.toFixed(decimals.value);
-  return props.unit ? `${num} ${props.unit}` : num;
-});
-
-function snapValue(value: number): number {
-  let v = value;
-  if (props.step > 0) v = Math.round(v / props.step) * props.step;
-  v = Math.max(props.min, Math.min(props.max, v));
-  if (decimals.value > 0) v = parseFloat(v.toFixed(decimals.value));
-  return v;
 }
 
-function commit(value: number) {
-  const v = snapValue(value);
-  if (v !== props.modelValue) emit('update:modelValue', v);
+function fractionAt(event: PointerEvent): number {
+  const rect = trackRef.value?.getBoundingClientRect();
+  if (!rect || rect.width === 0) return toFraction(props.modelValue);
+  return (event.clientX - rect.left) / rect.width;
 }
 
-function valueFromClientX(clientX: number): number {
-  const track = trackRef.value;
-  if (!track) return props.modelValue;
-  const rect = track.getBoundingClientRect();
-  const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-  return props.min + ratio * range.value;
-}
+let fineOrigin: { x: number; fraction: number } | null = null;
 
-function onPointerDown(event: PointerEvent) {
+function onPointerDown(event: PointerEvent): void {
+  if (props.disabled || event.button !== 0) return;
   event.preventDefault();
-  const target = event.currentTarget as HTMLElement;
-  target.setPointerCapture(event.pointerId);
+  (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+  (event.currentTarget as HTMLElement).focus();
   dragging.value = true;
-  commit(valueFromClientX(event.clientX));
+  emit('begin');
+  fineOrigin = null;
+  commit(fromFraction(fractionAt(event)));
 }
 
-function onPointerMove(event: PointerEvent) {
+function onPointerMove(event: PointerEvent): void {
   if (!dragging.value) return;
   if (event.shiftKey) {
-    const sensitivity = range.value / 800;
-    commit(props.modelValue + event.movementX * sensitivity);
+    const width = trackRef.value?.getBoundingClientRect().width || 1;
+    fineOrigin ??= { x: event.clientX, fraction: toFraction(props.modelValue) };
+    commit(fromFraction(fineOrigin.fraction + ((event.clientX - fineOrigin.x) / width) * 0.1));
   } else {
-    commit(valueFromClientX(event.clientX));
+    fineOrigin = null;
+    commit(fromFraction(fractionAt(event)));
   }
 }
 
-function onPointerUp(event: PointerEvent) {
+function onPointerUp(event: PointerEvent): void {
   if (!dragging.value) return;
   dragging.value = false;
-  (event.currentTarget as Element).releasePointerCapture(event.pointerId);
+  (event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId);
+  emit('end');
 }
 
-function onWheel(event: WheelEvent) {
+function onWheel(event: WheelEvent): void {
+  if (props.disabled) return;
   event.preventDefault();
-  const dir = event.deltaY < 0 ? 1 : -1;
-  const fine = event.shiftKey ? 0.25 : 1;
-  commit(props.modelValue + dir * props.step * (1 / fine));
+  nudge((event.deltaY < 0 ? 1 : -1) * (event.shiftKey ? 1 : 4));
 }
 
-function onDoubleClick() {
-  commit(bipolar.value ? 0 : (props.min + props.max) / 2);
+function onKeyDown(event: KeyboardEvent): void {
+  if (props.disabled) return;
+  const fine = event.shiftKey ? 1 : 4;
+  const keys: Record<string, () => void> = {
+    ArrowUp: () => nudge(fine),
+    ArrowRight: () => nudge(fine),
+    ArrowDown: () => nudge(-fine),
+    ArrowLeft: () => nudge(-fine),
+    PageUp: () => nudge(40),
+    PageDown: () => nudge(-40),
+    Home: () => commit(props.min),
+    End: () => commit(props.max),
+  };
+  const action = keys[event.key];
+  if (!action) return;
+  event.preventDefault();
+  event.stopPropagation();
+  action();
 }
 
-async function startEditing() {
-  if (editing.value) return;
-  draftValue.value = displayValue.value;
+function reset(): void {
+  if (props.disabled) return;
+  commit(props.default ?? (bipolar.value ? 0 : props.min));
+}
+
+async function startEditing(): Promise<void> {
+  if (props.disabled) return;
+  draft.value = display.value.replace('−', '-');
   editing.value = true;
   await nextTick();
   inputRef.value?.focus();
   inputRef.value?.select();
 }
 
-function commitDraft() {
+function finishEditing(apply: boolean): void {
   if (!editing.value) return;
-  const parsed = parseFloat(draftValue.value);
-  if (Number.isFinite(parsed)) commit(parsed);
   editing.value = false;
-}
-
-function cancelDraft() {
-  editing.value = false;
-}
-
-function onDraftKey(event: KeyboardEvent) {
-  if (event.key === 'Enter') {
-    event.preventDefault();
-    commitDraft();
-  } else if (event.key === 'Escape') {
-    event.preventDefault();
-    cancelDraft();
-  }
-}
-
-const shortcutHint = computed(() => {
-  const base = `${props.label}: drag / click anywhere on the track / ←→ keys to nudge / Shift = fine / double-click = reset / click value to type`;
-  return props.hint ? `${props.hint}\n\n${base}` : base;
-});
-
-function onKeyDown(event: KeyboardEvent) {
-  let handled = true;
-  if (event.key === 'ArrowUp' || event.key === 'ArrowRight') {
-    commit(props.modelValue + props.step * (event.shiftKey ? 0.25 : 1));
-  } else if (event.key === 'ArrowDown' || event.key === 'ArrowLeft') {
-    commit(props.modelValue - props.step * (event.shiftKey ? 0.25 : 1));
-  } else if (event.key === 'PageUp') {
-    commit(props.modelValue + props.step * 10);
-  } else if (event.key === 'PageDown') {
-    commit(props.modelValue - props.step * 10);
-  } else if (event.key === 'Home') {
-    commit(props.min);
-  } else if (event.key === 'End') {
-    commit(props.max);
-  } else {
-    handled = false;
-  }
-  if (handled) event.preventDefault();
+  const parsed = Number.parseFloat(draft.value.replace('−', '-'));
+  if (apply && Number.isFinite(parsed)) commit(parsed);
 }
 </script>
 
 <template>
-  <div class="fader" :class="{ 'fader--dragging': dragging, 'fader--bipolar': bipolar }">
-    <div class="fader__head">
-      <span class="fader__label">{{ label }}</span>
+  <div
+    class="knob"
+    :class="{ 'knob--dragging': dragging, 'knob--disabled': disabled, 'knob--deferred': deferred }"
+  >
+    <div class="knob__head">
+      <span class="knob__label" :title="hint">{{ label }}</span>
+      <input
+        v-if="editing"
+        ref="inputRef"
+        v-model="draft"
+        class="knob__input"
+        inputmode="decimal"
+        :aria-label="label"
+        @keydown.enter.prevent="finishEditing(true)"
+        @keydown.escape.prevent="finishEditing(false)"
+        @blur="finishEditing(true)"
+      >
       <button
-        v-if="!editing"
+        v-else
         type="button"
-        class="fader__readout"
-        :title="`Click to type a value · ${label}`"
+        class="knob__value"
+        :disabled="disabled"
+        :aria-label="`${label}: ${valueText}`"
         @click="startEditing"
       >
-        <strong>{{ displayValue }}</strong>
-        <em v-if="unit">{{ unit }}</em>
+        {{ display }}<span v-if="unit" class="knob__unit">{{ unit }}</span>
       </button>
-      <div v-else class="fader__readout fader__readout--editing">
-        <input
-          ref="inputRef"
-          v-model="draftValue"
-          type="number"
-          :min="min"
-          :max="max"
-          :step="step"
-          @keydown="onDraftKey"
-          @blur="commitDraft"
-        >
-        <em v-if="unit">{{ unit }}</em>
-      </div>
-      <Tooltip
-        v-if="hint !== undefined"
-        :title="label"
-        :body="hint"
-        :tip="tip"
-        :tip-label="tipLabel"
-        :default-value="defaultDisplay"
-        :default-rationale="defaultRationale"
-        :default-label="defaultLabel"
-        :href="docsHref"
-        :link-label="docsLinkLabel"
-      >
-        <button
-          type="button"
-          class="fader__info"
-          :aria-label="hint || label"
-        >
-          <span aria-hidden="true">i</span>
-        </button>
-      </Tooltip>
     </div>
-
     <div
       ref="trackRef"
-      class="fader__track"
-      :tabindex="0"
+      class="knob__track"
       role="slider"
+      :tabindex="disabled ? -1 : 0"
       :aria-label="label"
       :aria-valuemin="min"
       :aria-valuemax="max"
       :aria-valuenow="modelValue"
-      :aria-valuetext="displayValue + (unit ? ' ' + unit : '')"
-      :title="shortcutHint"
+      :aria-valuetext="valueText"
+      :aria-disabled="disabled || undefined"
+      :title="hint"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
       @pointercancel="onPointerUp"
-      @wheel.passive="onWheel"
-      @dblclick="onDoubleClick"
+      @wheel="onWheel"
+      @dblclick="reset"
       @keydown="onKeyDown"
     >
-      <div class="fader__ticks" aria-hidden="true">
-        <span
-          v-for="(pos, i) in ticks"
-          :key="i"
-          class="fader__tick"
-          :class="{ 'fader__tick--major': i === 0 || i === ticks.length - 1 || (bipolar && i === 2) }"
-          :style="{ left: `${pos}%` }"
-        ></span>
-      </div>
-
-      <div class="fader__rail" aria-hidden="true">
-        <span class="fader__fill" :style="fillStyle"></span>
-        <span class="fader__fill-glow" :style="fillStyle"></span>
-      </div>
-
-      <span
-        class="fader__thumb"
-        :style="{ left: `${percent}%` }"
-        aria-hidden="true"
-      >
-        <span class="fader__thumb-grip"></span>
-        <span class="fader__thumb-grip"></span>
-        <span class="fader__thumb-grip"></span>
+      <span class="knob__rail" aria-hidden="true">
+        <span class="knob__fill" :style="fillStyle"></span>
+        <span v-if="bipolar" class="knob__origin" :style="{ left: `${origin}%` }"></span>
       </span>
+      <span class="knob__thumb" :style="{ left: `${position}%` }" aria-hidden="true"></span>
     </div>
   </div>
 </template>
 
 <style scoped>
-.fader {
-  position: relative;
+.knob {
   display: grid;
-  grid-template-rows: auto 36px;
-  gap: 6px;
-  width: 168px;
+  gap: 4px;
+  min-width: 0;
   user-select: none;
 }
 
-.fader__head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 6px;
+.knob__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
   min-height: 18px;
 }
 
-.fader__label {
+.knob__label {
+  overflow: hidden;
   color: var(--demo-text-muted);
   font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  line-height: 1.2;
-  overflow: hidden;
+  font-size: var(--demo-label-size);
+  font-weight: var(--demo-label-weight);
+  letter-spacing: var(--demo-label-tracking);
   text-overflow: ellipsis;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
-.fader__info {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: 1px solid var(--demo-border);
-  border-radius: 50%;
-  background: var(--demo-bg);
-  color: var(--demo-text-muted);
-  cursor: pointer;
-  transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
-}
-
-.fader__info > span {
-  font-family: var(--font-body);
-  font-size: 9px;
-  font-style: italic;
-  font-weight: 700;
-  line-height: 1;
-  transform: translateY(-0.5px);
-}
-
-.fader__info:hover,
-.fader__info:focus-visible {
-  color: var(--demo-accent);
-  border-color: var(--demo-accent);
-  background: var(--demo-accent-subtle);
-  outline: none;
-}
-
-.fader__readout {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 3px;
-  padding: 1px 7px;
-  border: 1px solid var(--demo-border);
-  border-radius: 4px;
-  background: var(--master-code-bg);
-  color: inherit;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.4;
-  cursor: text;
-  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
-}
-
-button.fader__readout {
-  font: inherit;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-.fader__readout strong {
-  color: var(--demo-text-strong);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.fader__readout em {
-  color: var(--demo-text-muted);
-  font-size: 9px;
-  font-style: normal;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: lowercase;
-}
-
-.fader__readout:hover {
-  border-color: var(--demo-accent-border);
-  background: color-mix(in srgb, var(--demo-accent) 10%, var(--master-code-bg));
-}
-
-.fader__readout:focus-visible {
-  outline: none;
-  border-color: var(--demo-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--demo-accent) 35%, transparent);
-}
-
-.fader--dragging .fader__readout {
-  border-color: var(--demo-accent);
-  color: var(--demo-text-strong);
-  background: color-mix(in srgb, var(--demo-accent) 14%, var(--master-code-bg));
-}
-
-.fader__readout--editing {
-  padding: 0 4px;
-  border-color: var(--demo-accent);
-}
-
-.fader__readout input {
-  width: 4.2em;
-  padding: 1px 2px;
+.knob__value,
+.knob__input {
+  min-width: 0;
+  padding: 0 2px;
   border: 0;
+  border-radius: 3px;
   background: transparent;
   color: var(--demo-text-strong);
-  font: inherit;
   font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
-.fader__readout input:focus {
-  outline: none;
+.knob__value {
+  cursor: text;
 }
 
-.fader__readout input::-webkit-outer-spin-button,
-.fader__readout input::-webkit-inner-spin-button {
-  margin: 0;
-  -webkit-appearance: none;
-  appearance: none;
+.knob__input {
+  width: 6em;
+  outline: 1px solid var(--demo-accent);
 }
 
-.fader__track {
+.knob__unit {
+  margin-left: 3px;
+  color: var(--demo-text-muted);
+  font-size: 10px;
+}
+
+.knob__value:focus-visible,
+.knob__track:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 2px;
+}
+
+.knob__track {
   position: relative;
-  height: 36px;
-  padding: 0 9px;
+  height: 18px;
   cursor: ew-resize;
   touch-action: none;
 }
 
-.fader__track:focus-visible {
-  outline: none;
-}
-
-.fader__track:focus-visible .fader__rail {
-  box-shadow:
-    inset 0 1px 2px rgba(0, 0, 0, 0.35),
-    0 0 0 2px color-mix(in srgb, var(--demo-accent) 45%, transparent);
-}
-
-.fader__ticks {
+.knob__rail {
   position: absolute;
-  inset: 4px 9px auto 9px;
-  height: 5px;
-  pointer-events: none;
-}
-
-.fader__tick {
-  position: absolute;
-  top: 0;
-  width: 1px;
-  height: 4px;
+  inset: 8px 0 auto;
+  height: 2px;
+  border-radius: 1px;
   background: var(--demo-border-strong);
-  opacity: 0.55;
+}
+
+.knob__fill {
+  position: absolute;
+  inset-block: 0;
+  border-radius: inherit;
+  background: var(--demo-accent);
+}
+
+.knob--deferred .knob__fill {
+  background: var(--demo-amber);
+}
+
+.knob__origin {
+  position: absolute;
+  top: -3px;
+  width: 1px;
+  height: 8px;
+  background: var(--demo-text-muted);
+}
+
+.knob__thumb {
+  position: absolute;
+  top: 3px;
+  width: 4px;
+  height: 12px;
+  border-radius: 1px;
+  background: var(--demo-text-strong);
   transform: translateX(-50%);
 }
 
-.fader__tick--major {
-  height: 5px;
-  background: var(--demo-text-muted);
-  opacity: 0.9;
-}
-
-.fader__rail {
-  position: absolute;
-  left: 9px;
-  right: 9px;
-  top: 50%;
-  height: 7px;
-  transform: translateY(-50%);
-  border-radius: 999px;
-  background:
-    linear-gradient(180deg,
-      color-mix(in srgb, black 35%, var(--master-code-bg)),
-      var(--master-code-bg));
-  border: 1px solid var(--demo-border);
-  box-shadow:
-    inset 0 1px 2px rgba(0, 0, 0, 0.35),
-    inset 0 -1px 0 color-mix(in srgb, white 5%, transparent);
-  transition: box-shadow 0.18s ease;
-}
-
-html:not(.dark) .fader__rail {
-  background:
-    linear-gradient(180deg,
-      color-mix(in srgb, black 10%, var(--master-code-bg)),
-      var(--master-code-bg));
-}
-
-.fader__fill {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  border-radius: inherit;
-  background: linear-gradient(90deg,
-    color-mix(in srgb, var(--demo-accent) 80%, transparent),
-    var(--demo-accent));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, white 30%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, black 30%, transparent);
-}
-
-.fader__fill-glow {
-  position: absolute;
-  top: -3px;
-  bottom: -3px;
-  border-radius: inherit;
+.knob--dragging .knob__thumb,
+.knob__track:focus-visible .knob__thumb {
   background: var(--demo-accent);
-  filter: blur(6px);
-  opacity: 0;
-  transition: opacity 0.2s ease;
-  pointer-events: none;
 }
 
-.fader--dragging .fader__fill-glow,
-.fader__track:focus-visible .fader__fill-glow,
-.fader__track:hover .fader__fill-glow {
-  opacity: 0.35;
+.knob--disabled {
+  opacity: var(--demo-disabled-opacity);
 }
 
-.fader__thumb {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 18px;
-  height: 26px;
-  transform: translate(-50%, -50%);
-  border-radius: 5px;
-  background: linear-gradient(180deg,
-    color-mix(in srgb, white 12%, var(--demo-bg-elevated)),
-    var(--demo-bg-elevated) 45%,
-    color-mix(in srgb, black 18%, var(--demo-bg-elevated)));
-  border: 1px solid var(--demo-border-strong);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, white 18%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, black 20%, transparent),
-    0 2px 5px color-mix(in srgb, black 30%, transparent);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  padding: 0 3px;
-  pointer-events: none;
-  transition: transform 0.12s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-}
-
-.fader__thumb::before {
-  content: '';
-  position: absolute;
-  top: 1px;
-  left: 1px;
-  right: 1px;
-  height: 2px;
-  border-radius: 4px;
-  background: linear-gradient(90deg,
-    transparent,
-    color-mix(in srgb, var(--demo-accent) 70%, transparent),
-    transparent);
-}
-
-.fader__thumb-grip {
-  width: 70%;
-  height: 1px;
-  background: color-mix(in srgb, black 45%, transparent);
-  box-shadow: 0 1px 0 color-mix(in srgb, white 12%, transparent);
-  border-radius: 1px;
-}
-
-html:not(.dark) .fader__thumb-grip {
-  background: color-mix(in srgb, black 25%, transparent);
-}
-
-.fader__track:focus-visible .fader__thumb,
-.fader--dragging .fader__thumb {
-  border-color: var(--demo-accent);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, white 25%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, black 25%, transparent),
-    0 2px 6px color-mix(in srgb, black 35%, transparent),
-    0 0 0 3px color-mix(in srgb, var(--demo-accent) 22%, transparent);
-}
-
-.fader__track:hover:not(.fader--dragging) .fader__thumb {
-  transform: translate(-50%, -50%) scaleY(1.06);
-}
-
-.fader--dragging .fader__thumb {
-  transform: translate(-50%, -50%) scale(1.08);
+.knob--disabled .knob__track {
+  cursor: not-allowed;
 }
 </style>

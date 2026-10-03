@@ -1,7 +1,7 @@
 /**
  * The /mastering Worker: repair preprocess, loudness fit, export bounce, the
- * assistant, reference analysis and the platform preview, off the main
- * thread. The clips a job needs arrive transferred (the page holds no copy
+ * lane loudness the A/B match needs, the assistant, reference analysis and the
+ * platform preview, off the main thread. The clips a job needs arrive transferred (the page holds no copy
  * meanwhile) and go back transferred in every terminal message — finished,
  * failed or cancelled — together with any clip the job produced.
  *
@@ -64,6 +64,12 @@ export interface MasteringExportResult {
   shortTermLufs: Float32Array;
 }
 
+/** Integrated loudness of the Before lane (the program) and the After lane (lane 1's output). */
+export interface MasteringMeasureResult {
+  programLufs: number;
+  afterLufs: number;
+}
+
 export interface MasteringAssistantResult {
   profile: unknown;
   suggestions: unknown;
@@ -89,6 +95,7 @@ export interface MasteringPlatformPreviewRow extends Record<string, unknown> {
 export type MasteringWorkerRequest =
   | { type: 'prepare'; id: number; audio: MasteringAudioTransfer; repair: MasteringRepair }
   | { type: 'fit'; id: number; audio: MasteringAudioTransfer; state: MasteringState }
+  | { type: 'measure'; id: number; audio: MasteringAudioTransfer; state: MasteringState }
   | {
       type: 'export';
       id: number;
@@ -119,6 +126,7 @@ export type MasteringWorkerResponse =
   | { type: 'progress'; id: number; progress: number; stage: MasteringWorkerStage }
   | { type: 'prepared'; id: number; result: MasteringPrepareResult; audio: MasteringAudioTransfer }
   | { type: 'fitted'; id: number; result: LoudnessFitResult; audio: MasteringAudioTransfer }
+  | { type: 'measured'; id: number; result: MasteringMeasureResult; audio: MasteringAudioTransfer }
   | { type: 'exported'; id: number; result: MasteringExportResult; audio: MasteringAudioTransfer }
   | {
       type: 'assisted';
@@ -191,6 +199,25 @@ export async function exportMaster(
       shortTermLufs: series.shortTerm,
     },
     master: { ...master, integratedLufs: loudness.integratedLufs },
+  };
+}
+
+/** Loudness of the program and of the export render of `state` over it. */
+export async function measureLanes(
+  wasm: Wasm,
+  state: MasteringState,
+  program: MasteringClip,
+  checkpoint: MasteringCheckpoint = () => {},
+): Promise<MasteringMeasureResult> {
+  const programLufs = Number.isFinite(program.integratedLufs)
+    ? program.integratedLufs
+    : measureLufs(wasm, program.left, program.right, program.sampleRate);
+  await checkpoint('rendering', 0.2);
+  const render = renderMasteringState(wasm, state, program);
+  await checkpoint('measuring', 0.9);
+  return {
+    programLufs,
+    afterLufs: measureLufs(wasm, render.left, render.right, render.sampleRate),
   };
 }
 
@@ -414,6 +441,12 @@ async function run(
         fitCheckpoint(checkpoint),
       );
       return { type: 'fitted', id, result, audio };
+    }
+    case 'measure': {
+      const program = requireClip(audio, 'program');
+      const result = await measureLanes(wasm, request.state, program, checkpoint);
+      audio.program = { ...program, integratedLufs: result.programLufs };
+      return { type: 'measured', id, result, audio };
     }
     case 'export': {
       const { result, master } = await exportMaster(

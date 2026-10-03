@@ -1,695 +1,170 @@
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { defineComponent, h, nextTick } from 'vue';
 
 const lang = vi.hoisted(() => ({ value: 'en' }));
-const masteringMock = vi.hoisted(() => ({
-  state: null as any,
-  loadFile: vi.fn(),
-  decodeFile: vi.fn(),
-  loadReference: vi.fn(),
-  render: vi.fn(),
-  renderReferenceMatch: vi.fn(),
-  createSourceAudioUrl: vi.fn(),
-  createAudioUrl: vi.fn(),
-  dispose: vi.fn(),
-}));
-const insightMock = vi.hoisted(() => ({
-  analyzeSourceInsights: vi.fn(),
-  resetInsights: vi.fn(),
-  report: null as any,
-  preview: null as any,
-}));
-const resultPanelMock = vi.hoisted(() => ({
-  setVolume: vi.fn(),
-  togglePlayback: vi.fn(),
-}));
 
-vi.mock('vitepress', () => ({
-  useData: () => ({ lang }),
-}));
+vi.mock('vitepress', () => ({ useData: () => ({ lang }) }));
 
 vi.mock('@/wasm/index.js', () => ({
   init: vi.fn(async () => undefined),
-  version: vi.fn(() => 'test-wasm'),
+  version: vi.fn(() => 'test'),
 }));
 
-vi.mock('@/demos/mastering/useMastering', async () => {
-  const actual = await vi.importActual<typeof import('@/demos/mastering/useMastering')>(
-    '@/demos/mastering/useMastering',
-  );
+vi.mock('@/composables/useSonareEngine', async () => {
   const { ref, shallowRef } = await vi.importActual<typeof import('vue')>('vue');
-  const source = shallowRef(null);
-  const rendered = shallowRef(null);
-  const isRendering = ref(false);
-  const renderProgress = ref(0);
-  const renderStage = ref('');
-  const error = ref<string | null>(null);
-  masteringMock.state = { source, rendered, isRendering, renderProgress, renderStage, error };
+  return {
+    useSonareEngine: () => {
+      const engine = { setTempo: vi.fn(), setLoop: vi.fn(), resetMasterLoudnessMeter: vi.fn() };
+      const context = {
+        sampleRate: 48000,
+        decodeAudioData: vi.fn(async () => {
+          const channel = new Float32Array(9600).fill(0.1);
+          return {
+            sampleRate: 48000,
+            duration: 0.2,
+            length: 9600,
+            numberOfChannels: 1,
+            getChannelData: () => channel,
+          };
+        }),
+      };
+      const sonare = {
+        engine: shallowRef<any>(null),
+        context: shallowRef<any>(null),
+        outputNode: shallowRef(null),
+        offlineEngine: shallowRef(null),
+        ready: ref(false),
+        starting: ref(false),
+        error: ref(null),
+        position: ref(0),
+        playing: ref(false),
+        start: vi.fn(async () => {
+          sonare.engine.value = engine;
+          sonare.context.value = context;
+          return true;
+        }),
+        play: vi.fn(),
+        stop: vi.fn(),
+        seek: vi.fn(),
+        onMeter: vi.fn(() => () => {}),
+        dispose: vi.fn(async () => {}),
+      };
+      return sonare;
+    },
+  };
+});
+
+vi.mock('@/utils/engineApply', async () => {
+  const actual = await vi.importActual<typeof import('@/utils/engineApply')>('@/utils/engineApply');
   return {
     ...actual,
-    useMastering: () => ({
-      isInitialized: ref(true),
-      isLoading: ref(false),
-      isRendering,
-      renderProgress,
-      renderStage,
-      error,
-      source,
-      rendered,
-      initWasm: vi.fn(async () => undefined),
-      decodeFile: masteringMock.decodeFile,
-      loadFile: masteringMock.loadFile,
-      loadReference: masteringMock.loadReference,
-      render: masteringMock.render,
-      renderReferenceMatch: masteringMock.renderReferenceMatch,
-      createSourceAudioUrl: masteringMock.createSourceAudioUrl,
-      createAudioUrl: masteringMock.createAudioUrl,
-      dispose: masteringMock.dispose,
-    }),
+    createFacadeTarget: () => new Proxy({}, { get: () => () => undefined }),
   };
 });
 
-vi.mock('@/demos/mastering/useMasteringInsights', async () => {
-  const { computed, ref } = await vi.importActual<typeof import('vue')>('vue');
-  const report = ref(null);
-  const preview = ref<any[]>([]);
-  insightMock.report = report;
-  insightMock.preview = preview;
+vi.mock('@/demos/mastering/masteringWorkerClient', async () => {
+  const actual = await vi.importActual<typeof import('@/demos/mastering/masteringWorkerClient')>(
+    '@/demos/mastering/masteringWorkerClient',
+  );
+  const job = <T>(value: T) => ({ result: Promise.resolve(value), cancel: vi.fn() });
   return {
-    useMasteringInsights: () => ({
-      insightReport: report,
-      isAnalyzingInsights: ref(false),
-      insightProfileItems: computed(() => []),
-      insightSuggestions: computed(() => []),
-      insightPreview: computed(() => preview.value),
-      analyzeSourceInsights: insightMock.analyzeSourceInsights,
-      resetInsights: insightMock.resetInsights,
+    ...actual,
+    createMasteringWorkerClient: () => ({
+      prepare: (registry: Map<string, any>) => {
+        registry.set('program', { ...registry.get('source'), integratedLufs: -18 });
+        return job({ stages: [] });
+      },
+      fit: vi.fn(),
+      measure: (registry: Map<string, any>) => {
+        registry.set('program', { ...registry.get('program'), integratedLufs: -18 });
+        return job({ programLufs: -18, afterLufs: -14 });
+      },
+      bounce: vi.fn(),
+      assist: () =>
+        job({ profile: {}, suggestions: { explanation: [] }, chainParams: {}, unmapped: [] }),
+      analyzeReference: vi.fn(),
+      previewPlatforms: vi.fn(),
+      dispose: vi.fn(),
     }),
   };
 });
-
-vi.mock('@/demos/mastering/MasteringPresetGrid.vue', () => ({
-  default: defineComponent({
-    props: { modelValue: String },
-    emits: ['update:modelValue'],
-    setup(_props, { emit }) {
-      return () =>
-        h(
-          'button',
-          {
-            class: 'preset-edm',
-            onClick: () => emit('update:modelValue', 'edm'),
-          },
-          'Preset EDM',
-        );
-    },
-  }),
-}));
-
-vi.mock('@/demos/mastering/MasteringVenueSelector.vue', () => ({
-  default: defineComponent({
-    props: { modelValue: String },
-    emits: ['update:modelValue'],
-    setup(_props, { emit }) {
-      return () =>
-        h(
-          'button',
-          {
-            class: 'venue-livehouse-small',
-            onClick: () => emit('update:modelValue', 'livehouseSmall'),
-          },
-          'Venue small',
-        );
-    },
-  }),
-}));
-
-vi.mock('@/demos/mastering/MasteringPlatformSelector.vue', () => ({
-  default: defineComponent({
-    props: { modelValue: String, customLufs: Number },
-    emits: ['update:modelValue', 'update:customLufs'],
-    setup(_props, { emit }) {
-      return () =>
-        h('div', { class: 'platform-selector-stub' }, [
-          h(
-            'button',
-            {
-              class: 'platform-custom',
-              onClick: () => {
-                emit('update:modelValue', 'custom');
-                emit('update:customLufs', -16);
-              },
-            },
-            'Custom -16',
-          ),
-        ]);
-    },
-  }),
-}));
-
-vi.mock('@/demos/mastering/MasteringFineTune.vue', () => ({
-  default: defineComponent({
-    emits: ['update:tone', 'update:width', 'update:dynamics', 'update:show', 'update:ceilingDb'],
-    setup(_props, { emit }) {
-      return () =>
-        h(
-          'button',
-          {
-            class: 'fine-tune-stub',
-            onClick: () => {
-              emit('update:show', true);
-              emit('update:tone', 70);
-              emit('update:width', 40);
-              emit('update:dynamics', 65);
-              emit('update:ceilingDb', -1.5);
-            },
-          },
-          'Fine tune',
-        );
-    },
-  }),
-}));
-
-vi.mock('@/demos/mastering/MasteringReferencePanel.vue', () => ({
-  default: defineComponent({
-    props: { canMatch: Boolean, reference: Object, referenceUrl: String },
-    emits: ['file', 'match'],
-    setup(props, { emit }) {
-      return () =>
-        h('div', { class: 'reference-panel-stub', 'data-reference-url': props.referenceUrl }, [
-          h(
-            'button',
-            {
-              class: 'reference-load',
-              onClick: () =>
-                emit('file', {
-                  target: {
-                    files: [{ name: 'reference.wav', arrayBuffer: async () => new ArrayBuffer(8) }],
-                    value: 'reference.wav',
-                  },
-                }),
-            },
-            'Load reference',
-          ),
-          h(
-            'button',
-            {
-              class: 'reference-match',
-              disabled: !props.canMatch,
-              onClick: () => emit('match'),
-            },
-            props.reference ? 'Match reference' : 'No reference',
-          ),
-        ]);
-    },
-  }),
-}));
-
-vi.mock('@/demos/mastering/MasteringResultPanel.vue', () => ({
-  default: defineComponent({
-    props: {
-      playbackUrl: String,
-      sourceUrl: String,
-      outputUrl: String,
-      reportUrl: String,
-      error: String,
-      renderResultStages: String,
-    },
-    emits: ['update:listenTarget', 'update:loudnessMatched'],
-    setup(props, { expose, emit }) {
-      expose({
-        setVolume: resultPanelMock.setVolume,
-        togglePlayback: resultPanelMock.togglePlayback,
-      });
-      return () =>
-        h(
-          'div',
-          {
-            class: 'result-panel-stub',
-            'data-playback-url': props.playbackUrl,
-            'data-source-url': props.sourceUrl,
-            'data-output-url': props.outputUrl,
-            'data-report-url': props.reportUrl,
-            'data-error': props.error,
-            'data-stages': props.renderResultStages,
-          },
-          [
-            h(
-              'button',
-              { class: 'listen-source', onClick: () => emit('update:listenTarget', 'source') },
-              'Source',
-            ),
-            h(
-              'button',
-              { class: 'listen-master', onClick: () => emit('update:listenTarget', 'master') },
-              'Master',
-            ),
-          ],
-        );
-    },
-  }),
-}));
-
-vi.mock('@/demos/mastering/MasteringInsights.vue', () => ({
-  default: defineComponent({
-    emits: ['apply', 'refresh'],
-    setup(_props, { emit }) {
-      return () =>
-        h('div', { class: 'insights-stub' }, [
-          h('button', { class: 'insights-apply', onClick: () => emit('apply') }, 'Apply insights'),
-          h(
-            'button',
-            { class: 'insights-refresh', onClick: () => emit('refresh') },
-            'Refresh insights',
-          ),
-        ]);
-    },
-  }),
-}));
-
-vi.mock('@/demos/mastering/MasteringChainPanel.vue', () => ({
-  default: defineComponent({
-    emits: ['save', 'load', 'export', 'import', 'update:activeModule'],
-    setup() {
-      return () => h('div', { class: 'chain-panel-stub' }, 'Chain');
-    },
-  }),
-}));
-
-vi.mock('@/demos/mastering/MasteringModuleEditor.vue', () => ({
-  default: defineComponent({
-    emits: ['update:moduleSetting', 'update:selectedPlatform', 'update:customLufs', 'reset'],
-    setup() {
-      return () => h('div', { class: 'module-editor-stub' }, 'Module');
-    },
-  }),
-}));
-
-vi.mock('@/demos/mastering/MasteringMetersPanel.vue', () => ({
-  default: defineComponent({
-    setup() {
-      return () => h('div', { class: 'meters-panel-stub' }, 'Meters');
-    },
-  }),
-}));
 
 import MasteringDemo from '@/demos/mastering/MasteringDemo.vue';
 
 enableAutoUnmount(afterEach);
 
-function decodedAudio(fileName = 'source.wav') {
-  return {
-    fileName,
-    sampleRate: 48_000,
-    duration: 2,
-    channels: 2,
-    left: new Float32Array([0.4, -0.4, 0.2, -0.2]),
-    right: new Float32Array([0.3, -0.3, 0.1, -0.1]),
-  };
+function press(code: string, init: KeyboardEventInit = {}) {
+  window.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true, ...init }));
 }
 
-function renderedAudio(stages = ['eq.tilt', 'maximizer.truePeakLimiter']) {
-  return {
-    left: new Float32Array([0.2, -0.2, 0.1, -0.1]),
-    right: new Float32Array([0.2, -0.2, 0.1, -0.1]),
-    sampleRate: 48_000,
-    inputLufs: -18,
-    outputLufs: -14,
-    appliedGainDb: 4,
-    stages,
-    latencySamples: 16,
-  };
-}
-
-async function loadSource(wrapper: ReturnType<typeof mount>) {
-  const input = wrapper.find('input[type="file"]');
-  Object.defineProperty(input.element, 'files', {
-    configurable: true,
-    value: [{ name: 'source.wav', arrayBuffer: async () => new ArrayBuffer(8) }],
-  });
-  await input.trigger('change');
-  await flushPromises();
-}
-
-describe('MasteringDemo flow', () => {
+describe('MasteringDemo', () => {
   beforeEach(() => {
     lang.value = 'en';
-    sessionStorage.clear();
     localStorage.clear();
-    masteringMock.loadFile.mockReset();
-    masteringMock.decodeFile.mockReset();
-    masteringMock.loadReference.mockReset();
-    masteringMock.render.mockReset();
-    masteringMock.renderReferenceMatch.mockReset();
-    masteringMock.createSourceAudioUrl.mockReset();
-    masteringMock.createAudioUrl.mockReset();
-    masteringMock.dispose.mockReset();
-    insightMock.analyzeSourceInsights.mockReset();
-    insightMock.resetInsights.mockReset();
-    insightMock.report.value = null;
-    insightMock.preview.value = [];
-    resultPanelMock.setVolume.mockReset();
-    resultPanelMock.togglePlayback.mockReset();
-    masteringMock.state.source.value = null;
-    masteringMock.state.rendered.value = null;
-    masteringMock.state.isRendering.value = false;
-    masteringMock.state.renderProgress.value = 0;
-    masteringMock.state.renderStage.value = '';
-    masteringMock.state.error.value = null;
-
-    masteringMock.loadFile.mockImplementation(async (file: File) => {
-      const audio = decodedAudio(file.name);
-      masteringMock.state.source.value = audio;
-      return audio;
-    });
-    masteringMock.decodeFile.mockImplementation(async (file: File) => decodedAudio(file.name));
-    masteringMock.loadReference.mockImplementation(async (file: File) => ({
-      audio: decodedAudio(file.name),
-      integratedLufs: -16,
-    }));
-    masteringMock.render.mockImplementation(async () => {
-      const rendered = renderedAudio();
-      masteringMock.state.rendered.value = rendered;
-      return rendered;
-    });
-    masteringMock.renderReferenceMatch.mockImplementation(async () => {
-      const rendered = renderedAudio(['match.applyMatchEq', 'maximizer.truePeakLimiter']);
-      masteringMock.state.rendered.value = rendered;
-      return rendered;
-    });
-    masteringMock.createSourceAudioUrl.mockImplementation(
-      (audio: { fileName: string }) => `blob:${audio.fileName}`,
-    );
-    masteringMock.createAudioUrl.mockReturnValue('blob:master.wav');
+    window.history.replaceState(null, '', '/mastering');
   });
 
-  it('loads a source, runs quick mastering with selected settings and updates result URLs', async () => {
-    const wrapper = mount(MasteringDemo);
-
-    await loadSource(wrapper);
-    expect(masteringMock.loadFile).toHaveBeenCalledTimes(1);
-    expect(insightMock.resetInsights).toHaveBeenCalledTimes(1);
-    expect(insightMock.analyzeSourceInsights).toHaveBeenCalledTimes(1);
-    expect(wrapper.text()).toContain('source.wav');
-    expect(wrapper.find('.result-panel-stub').attributes('data-playback-url')).toBe(
-      'blob:source.wav',
-    );
-
-    await wrapper.find('.preset-edm').trigger('click');
-    await wrapper.find('.venue-livehouse-small').trigger('click');
-    await wrapper.find('.platform-custom').trigger('click');
-    await wrapper.find('.fine-tune-stub').trigger('click');
-    await wrapper.find('.master-action').trigger('click');
+  it('opens in Quick with five numbered steps beside the result pane', async () => {
+    const wrapper = mount(MasteringDemo, { attachTo: document.body });
     await flushPromises();
-
-    expect(masteringMock.render).toHaveBeenCalledWith(
-      expect.objectContaining({
-        preset: 'edm',
-        venue: 'livehouseSmall',
-        targetLufs: -16,
-        tuning: { tone: 70, width: 40, dynamics: 65 },
-        moduleSettings: expect.objectContaining({ limiterCeilingDb: -1.5 }),
-      }),
-    );
-    expect(masteringMock.createAudioUrl).toHaveBeenCalledWith(masteringMock.state.rendered.value);
-    expect(wrapper.find('.result-panel-stub').attributes('data-output-url')).toBe(
-      'blob:master.wav',
-    );
-    expect(wrapper.find('.result-panel-stub').attributes('data-playback-url')).toBe(
-      'blob:master.wav',
-    );
-    expect(wrapper.find('.result-panel-stub').attributes('data-report-url')).toBe('blob:test');
-
-    wrapper.unmount();
-    expect(masteringMock.dispose).toHaveBeenCalledTimes(1);
+    const steps = wrapper.findAll('.panel__step').map((node) => node.text());
+    expect(steps).toEqual(['01', '02', '03', '04', '05']);
+    expect(wrapper.find('.quick__result').exists()).toBe(true);
+    expect(wrapper.find('.export__primary').attributes('disabled')).toBeDefined();
   });
 
-  it('applies source assistant suggestions to quick mastering settings', async () => {
-    const wrapper = mount(MasteringDemo);
-
-    await loadSource(wrapper);
-    insightMock.report.value = {
-      suggestions: {
-        chainConfig: {
-          params: {
-            'eq.tilt.tiltDb': -1.2,
-            'dynamics.compressor.thresholdDb': -20,
-            'dynamics.compressor.ratio': 2.8,
-            'maximizer.truePeakLimiter.ceilingDb': -0.5,
-            'loudness.targetLufs': -16,
-          },
-        },
-        genreCandidates: [{ name: 'hipHop' }],
-      },
-    };
-    insightMock.preview.value = [
-      {
-        name: 'YouTube',
-        normalizationGainDb: 1.2,
-        ceilingRisk: true,
-        safeCeilingDb: -2.2,
-        currentCeilingDb: -1,
-      },
-    ];
-    await nextTick();
-
-    // The assistant may describe its analysis preset, but it never changes the
-    // render preset chosen by the user.
-    await wrapper.find('.preset-edm').trigger('click');
-    await wrapper.find('.insights-apply').trigger('click');
-    await wrapper.find('.master-action').trigger('click');
+  it('edits through history: a genre pick, a monitor key and undo', async () => {
+    const wrapper = mount(MasteringDemo, { attachTo: document.body });
     await flushPromises();
+    const genre = wrapper.findAll('[role="radiogroup"]')[1];
+    const edm = genre.findAll('[role="radio"]')[1];
+    await edm.trigger('click');
+    expect(edm.attributes('aria-checked')).toBe('true');
 
-    expect(masteringMock.render).toHaveBeenCalledWith(
-      expect.objectContaining({
-        preset: 'edm',
-        targetLufs: -14,
-        moduleSettings: expect.objectContaining({
-          tiltDb: -1.2,
-          compressorThresholdDb: -20,
-          compressorRatio: 2.8,
-          limiterCeilingDb: -2.2,
-        }),
-      }),
-    );
+    press('KeyB');
+    await flushPromises();
+    const lanes = () =>
+      wrapper.findAll('.monitor__lane').map((lane) => lane.attributes('aria-checked'));
+    expect(lanes()).toEqual(['false', 'true', 'false']);
+
+    press('KeyZ', { ctrlKey: true, metaKey: false });
+    press('KeyZ', { metaKey: true });
+    await flushPromises();
+    expect(lanes()).toEqual(['true', 'false', 'false']);
   });
 
-  it('keeps the selected render target when source analysis reports limiting risk', async () => {
-    const wrapper = mount(MasteringDemo);
-
-    await loadSource(wrapper);
-    insightMock.report.value = {
-      profile: {
-        loudness: {
-          integratedLufs: -25,
-          truePeakDb: -3,
-          crestFactorDb: 10,
-        },
-      },
-    };
-    await nextTick();
-
-    await wrapper.find('.master-action').trigger('click');
+  it('switches to Studio and back, reflecting the mode in the URL', async () => {
+    const wrapper = mount(MasteringDemo, { attachTo: document.body });
     await flushPromises();
-
-    expect(masteringMock.render).toHaveBeenCalledWith(
-      expect.objectContaining({
-        targetLufs: -14,
-      }),
-    );
+    const studioTab = wrapper.findAll('.tool-mode-tabs__button')[1];
+    await studioTab.trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.studio').exists()).toBe(true);
+    expect(wrapper.findAll('.rack__row')).toHaveLength(15);
+    expect(window.location.search).toBe('?mode=studio');
+    await wrapper.findAll('.tool-mode-tabs__button')[0].trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.quick').exists()).toBe(true);
   });
 
-  it('switches to studio mode, loads a reference and renders reference matching', async () => {
-    const wrapper = mount(MasteringDemo);
-
-    await loadSource(wrapper);
-    await wrapper
-      .findAll('.tool-mode-tabs__button')
-      .find((button) => button.text().includes('Studio'))!
-      .trigger('click');
-    await nextTick();
-    expect(wrapper.find('.chain-panel-stub').exists()).toBe(true);
-    expect(wrapper.find('.module-editor-stub').exists()).toBe(true);
-
-    await wrapper.find('.reference-load').trigger('click');
+  it('loads a file onto the engine and lists it in the status bar', async () => {
+    const wrapper = mount(MasteringDemo, { attachTo: document.body });
     await flushPromises();
-    expect(masteringMock.loadReference).toHaveBeenCalledTimes(1);
-    expect(wrapper.find('.reference-match').attributes('disabled')).toBeUndefined();
-
-    await wrapper.find('.reference-match').trigger('click');
-    await flushPromises();
-
-    expect(masteringMock.renderReferenceMatch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        fileName: 'reference.wav',
-      }),
-      expect.objectContaining({
-        targetLufs: -14,
-        ceilingDb: expect.any(Number),
-        lookaheadMs: expect.any(Number),
-      }),
-    );
-    expect(wrapper.find('.result-panel-stub').attributes('data-stages')).toContain('Match');
-    expect(wrapper.find('.result-panel-stub').attributes('data-output-url')).toBe(
-      'blob:master.wav',
-    );
-  });
-
-  it('keeps the newer reference when an earlier, slower reference load is superseded', async () => {
-    const revoke = vi.mocked(URL.revokeObjectURL);
-    revoke.mockClear();
-    let settleSlow!: (reason: unknown) => void;
-    masteringMock.loadReference
-      .mockImplementationOnce(
-        () =>
-          new Promise((_resolve, reject) => {
-            settleSlow = reject;
-          }),
-      )
-      .mockImplementationOnce(async () => ({
-        audio: decodedAudio('fast.wav'),
-        integratedLufs: -12,
-      }));
-    const wrapper = mount(MasteringDemo);
-
-    await loadSource(wrapper);
-    await wrapper
-      .findAll('.tool-mode-tabs__button')
-      .find((button) => button.text().includes('Studio'))!
-      .trigger('click');
-    await nextTick();
-
-    await wrapper.find('.reference-load').trigger('click');
-    await wrapper.find('.reference-load').trigger('click');
-    await flushPromises();
-    expect(masteringMock.loadReference).toHaveBeenCalledTimes(2);
-    expect(wrapper.find('.reference-panel-stub').attributes('data-reference-url')).toBe(
-      'blob:fast.wav',
-    );
-    expect(wrapper.find('.reference-match').attributes('disabled')).toBeUndefined();
-
-    // The composable reports the earlier load as superseded; that is not a failure.
-    settleSlow(new DOMException('Superseded', 'AbortError'));
-    await flushPromises();
-
-    expect(wrapper.find('.reference-panel-stub').attributes('data-reference-url')).toBe(
-      'blob:fast.wav',
-    );
-    expect(revoke).not.toHaveBeenCalledWith('blob:fast.wav');
-    expect(wrapper.find('.result-panel-stub').attributes('data-error')).toBeUndefined();
-
-    wrapper.unmount();
-  });
-
-  it('surfaces render failures from the parent result panel', async () => {
-    masteringMock.render.mockRejectedValueOnce(new Error('render failed'));
-    const wrapper = mount(MasteringDemo);
-
-    await loadSource(wrapper);
-    await wrapper.find('.master-action').trigger('click');
-    await flushPromises();
-
-    expect(wrapper.find('.result-panel-stub').attributes('data-error')).toBe(
-      'Mastering failed. Try a shorter file or a lighter preset.',
-    );
-  });
-
-  it('reports source and demo load failures without leaving stale URLs', async () => {
-    masteringMock.loadFile.mockRejectedValueOnce(new Error('decode failed'));
-    const originalFetch = globalThis.fetch;
-    const wrapper = mount(MasteringDemo);
-
-    try {
-      await loadSource(wrapper);
-      expect(insightMock.resetInsights).toHaveBeenCalledTimes(1);
-      expect(wrapper.find('.result-panel-stub').attributes('data-error')).toContain(
-        'Could not load this audio file',
-      );
-      expect(wrapper.find('.result-panel-stub').attributes('data-source-url')).toBeUndefined();
-
-      globalThis.fetch = vi.fn(async () => {
-        throw new Error('network failed');
-      }) as any;
-      await wrapper
-        .findAll('button')
-        .find((button) => button.text().includes('Load demo'))!
-        .trigger('click');
-      await flushPromises();
-      expect(wrapper.find('.result-panel-stub').attributes('data-error')).toContain(
-        'Could not load this audio file',
-      );
-    } finally {
-      globalThis.fetch = originalFetch;
-      wrapper.unmount();
-    }
-  });
-
-  it('releases previous source, output, report and reference URLs when replacing the source', async () => {
-    const revoke = vi.mocked(URL.revokeObjectURL);
-    revoke.mockClear();
-    const wrapper = mount(MasteringDemo);
-
-    await loadSource(wrapper);
-    await wrapper.find('.master-action').trigger('click');
-    await flushPromises();
-
-    await wrapper.find('.reference-load').trigger('click');
-    await flushPromises();
-    expect(wrapper.find('.result-panel-stub').attributes('data-source-url')).toBe(
-      'blob:source.wav',
-    );
-    expect(wrapper.find('.result-panel-stub').attributes('data-output-url')).toBe(
-      'blob:master.wav',
-    );
-
-    const input = wrapper.find('input[type="file"]');
-    Object.defineProperty(input.element, 'files', {
-      configurable: true,
-      value: [{ name: 'replacement.wav', arrayBuffer: async () => new ArrayBuffer(8) }],
-    });
+    const input = wrapper.find('.source input[type="file"]');
+    const file = new File([new Uint8Array(4)], 'song.wav', { type: 'audio/wav' });
+    Object.defineProperty(input.element, 'files', { value: [file] });
     await input.trigger('change');
     await flushPromises();
-
-    expect(revoke).toHaveBeenCalledWith('blob:source.wav');
-    expect(revoke).toHaveBeenCalledWith('blob:master.wav');
-    expect(revoke).toHaveBeenCalledWith('blob:test');
-    expect(revoke).toHaveBeenCalledWith('blob:reference.wav');
-    expect(wrapper.find('.result-panel-stub').attributes('data-source-url')).toBe(
-      'blob:replacement.wav',
-    );
-    expect(wrapper.find('.result-panel-stub').attributes('data-output-url')).toBeUndefined();
-
-    wrapper.unmount();
+    expect(wrapper.text()).toContain('song.wav');
+    expect(wrapper.find('.export__primary').attributes('disabled')).toBeUndefined();
+    expect(wrapper.find('.export__primary').text()).toBe('Refit and export');
   });
 
-  it('handles A/B keyboard shortcuts and ignores typing targets', async () => {
-    const wrapper = mount(MasteringDemo);
-
-    await loadSource(wrapper);
-    await wrapper.find('.master-action').trigger('click');
+  it('speaks Japanese on the Japanese route', async () => {
+    lang.value = 'ja';
+    const wrapper = mount(MasteringDemo, { attachTo: document.body });
     await flushPromises();
-
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
-    await nextTick();
-    expect(wrapper.find('.result-panel-stub').attributes('data-playback-url')).toBe(
-      'blob:source.wav',
-    );
-
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b' }));
-    await nextTick();
-    expect(wrapper.find('.result-panel-stub').attributes('data-playback-url')).toBe(
-      'blob:master.wav',
-    );
-
-    resultPanelMock.togglePlayback.mockClear();
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
-    expect(resultPanelMock.togglePlayback).toHaveBeenCalledTimes(1);
-
-    const input = wrapper.find('input[type="file"]').element;
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
-    expect(resultPanelMock.togglePlayback).toHaveBeenCalledTimes(1);
-
-    wrapper.unmount();
+    expect(wrapper.text()).toContain('録音コンディション');
+    expect(wrapper.text()).toContain('試聴と書き出し');
   });
 });

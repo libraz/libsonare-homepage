@@ -1,0 +1,86 @@
+/* /mastering page frame. The `--demo-*` table lives in
+   .vitepress/theme/styles/demo-tokens.css; this sheet only lays out the
+   page's own chrome around the Quick and Studio views. */
+.master-page {
+  color: var(--demo-text);
+  font-family: var(--font-body);
+}
+
+.master-page__chrome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.master-page__history {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.master-page__history button,
+.master-page__job button {
+  padding: 4px 10px;
+  border: 1px solid var(--demo-border-strong);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--demo-text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.master-page__history button:disabled {
+  opacity: var(--demo-disabled-opacity);
+  cursor: not-allowed;
+}
+
+.master-page__keys {
+  margin: 0;
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-align: right;
+}
+
+.master-page__main {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 32px;
+}
+
+.master-page__job {
+  display: grid;
+  grid-template-columns: auto minmax(80px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--demo-accent-border);
+  border-radius: 6px;
+  background: var(--demo-accent-subtle);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.master-page__bar {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--demo-border);
+}
+
+.master-page__bar i {
+  display: block;
+  height: 100%;
+  background: var(--demo-accent);
+}
+
+@media (max-width: 959px) {
+  .master-page__keys {
+    display: none;
+  }
+}
