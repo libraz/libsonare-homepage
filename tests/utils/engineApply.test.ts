@@ -17,6 +17,7 @@ import {
   type EngineOp,
   type StripRef,
   type StripSpec,
+  type TrackStripScalars,
 } from '@/utils/engineApply';
 import {
   createFacadeLoopback,
@@ -96,6 +97,7 @@ const eqBand = (gainDb: number) => ({
 interface TailState {
   faderDb: number;
   pan: number;
+  scalars: TrackStripScalars;
   trim: Record<string, number>;
   width: Record<string, number>;
   bypassed: boolean[];
@@ -107,6 +109,7 @@ interface TailState {
 const initialState = (): TailState => ({
   faderDb: 0,
   pan: 0,
+  scalars: { panLaw: 0, panMode: 0, dualPan: { left: -1, right: 1 }, channelDelaySamples: 0 },
   trim: { levelDb: 0 },
   width: { width: 1 },
   bypassed: [false, false, false, false],
@@ -169,6 +172,7 @@ function buildOps(s: TailState): EngineOp[] {
     ...diffBypass(tailStrip, [], s.bypassed),
     { type: 'fader', target: TAIL_LANE, db: s.faderDb },
     { type: 'pan', target: TAIL_LANE, pan: s.pan },
+    { type: 'stripScalars', trackId: TAIL_LANE, scalars: s.scalars },
     {
       type: 'clips',
       trackId: TAIL_LANE,
@@ -209,6 +213,24 @@ const continuousCases: ContinuousCase[] = [
     ops: (_p, n) => [{ type: 'pan', target: TAIL_LANE, pan: n.pan }],
   },
   {
+    name: 'pan law, pan mode and dual pan',
+    change: (s) => ({
+      ...s,
+      scalars: { ...s.scalars, panLaw: 2, panMode: 2, dualPan: { left: -0.5, right: 0.7 } },
+    }),
+    ops: (_p, n) => [
+      {
+        type: 'stripScalars',
+        trackId: TAIL_LANE,
+        scalars: {
+          panLaw: n.scalars.panLaw,
+          panMode: n.scalars.panMode,
+          dualPan: n.scalars.dualPan,
+        },
+      },
+    ],
+  },
+  {
     name: 'utility.gain levelDb by name',
     change: (s) => ({ ...s, trim: { levelDb: -7 } }),
     ops: (p, n) => diffInsertParams(tailStrip, 1, p.trim, n.trim),
@@ -247,10 +269,10 @@ const continuousCases: ContinuousCase[] = [
 ];
 
 /** Renders `before` to the change point, applies `changeOps`, renders the tail. */
-async function renderWithChange(before: TailState, changeOps: EngineOp[]) {
+async function renderWithChange(before: TailState, changeOps: EngineOp[], extra: EngineOp[] = []) {
   const live = await facade();
   const target = createFacadeTarget(live.engine);
-  applyOps(target, buildOps(before));
+  applyOps(target, [...buildOps(before), ...extra]);
   live.engine.transport.play();
   const lead = live.render(quantumFrames(LEAD_SECONDS));
   applyOps(target, changeOps);
@@ -290,6 +312,23 @@ describe('continuous ops through the facade keep state', () => {
     // The block right after the change still carries the mix.
     const firstBlock = rms(live.out.left, live.changeAt, live.changeAt + RENDER_QUANTUM);
     expect(firstBlock).toBeGreaterThan(1e-2);
+  });
+
+  it('channel delay keeps the reverb tails', async () => {
+    // A running strip does not take its own delay, while PDC re-aligns the other
+    // lanes to it, so a fresh build is no reference: compare the tails alone.
+    const muteTone: EngineOp[] = [
+      { type: 'soloMute', trackId: TONE_LANE, solo: false, mute: true },
+    ];
+    const delay: EngineOp[] = [
+      { type: 'stripScalars', trackId: TAIL_LANE, scalars: { channelDelaySamples: 37 } },
+    ];
+    const control = await renderWithChange(initialState(), [], muteTone);
+    const live = await renderWithChange(initialState(), delay, muteTone);
+    const from = live.changeAt + SETTLE;
+    expect(live.syncErrors).toEqual([]);
+    expect(rms(control.out.left, from)).toBeGreaterThan(5e-3);
+    expect(Math.abs(rms(live.out.left, from) / rms(control.out.left, from) - 1)).toBeLessThan(0.01);
   });
 });
 
@@ -373,6 +412,17 @@ function parityOps(): EngineOp[] {
     { type: 'fader', target: 2, db: -3 },
     { type: 'fader', target: 'master', db: -2 },
     { type: 'pan', target: 2, pan: -0.4 },
+    {
+      type: 'stripScalars',
+      trackId: 1,
+      scalars: {
+        panLaw: 1,
+        panMode: 2,
+        dualPan: { left: -0.6, right: 0.3 },
+        channelDelaySamples: 24,
+      },
+    },
+    { type: 'stripScalars', trackId: 2, scalars: { panLaw: 3, panMode: 1 } },
     { type: 'busGain', busId: REVERB_BUS, db: -2 },
     {
       type: 'automation',
@@ -395,6 +445,11 @@ function parityEditOps(): EngineOp[] {
     },
     { type: 'fader', target: 2, db: -9 },
     { type: 'insertBypass', strip: parityLane, insertIndex: 1, bypassed: true },
+    {
+      type: 'stripScalars',
+      trackId: 1,
+      scalars: { panLaw: 2, dualPan: { left: 0.2, right: 0.9 }, channelDelaySamples: 60 },
+    },
     { type: 'soloMute', trackId: 2, solo: false, mute: true },
   ];
 }

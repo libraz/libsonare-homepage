@@ -16,6 +16,8 @@ import type {
   EngineBus,
   EngineClip,
   EqBand,
+  PanLaw,
+  PanMode,
   RealtimeEngine,
   SendTiming,
 } from '@/wasm/index.js';
@@ -70,6 +72,18 @@ export interface StripSpec {
   polarityInvertRight?: boolean;
 }
 
+/**
+ * Track-strip controls with a dedicated live setter each; an absent field is
+ * left as it is.
+ */
+export interface TrackStripScalars {
+  panLaw?: PanLaw | number;
+  panMode?: PanMode;
+  dualPan?: { left: number; right: number };
+  /** Inter-channel alignment delay in whole engine samples. */
+  channelDelaySamples?: number;
+}
+
 /** A parameter an automation lane can drive. */
 export type AutomationParam =
   | { kind: 'fader'; target: FaderTarget }
@@ -83,6 +97,7 @@ export type EngineOp =
   | { type: 'clips'; trackId: number; clips: readonly ClipSpec[] }
   | { type: 'fader'; target: FaderTarget; db: number }
   | { type: 'pan'; target: FaderTarget; pan: number }
+  | { type: 'stripScalars'; trackId: number; scalars: TrackStripScalars }
   | { type: 'soloMute'; trackId: number; solo: boolean; mute: boolean }
   | { type: 'sends'; trackId: number; sends: readonly LaneSend[] }
   | { type: 'busGain'; busId: number; db: number }
@@ -101,6 +116,7 @@ export interface EngineTarget {
   setTrackClips(trackId: number, clips: readonly ClipSpec[]): void;
   setFader(target: FaderTarget, db: number): void;
   setPan(target: FaderTarget, pan: number): void;
+  setTrackStripScalars(trackId: number, scalars: TrackStripScalars): void;
   setSoloMute(trackId: number, solo: boolean, mute: boolean): void;
   setSends(trackId: number, sends: readonly LaneSend[]): void;
   setBusGain(busId: number, db: number): void;
@@ -157,6 +173,9 @@ export function applyOps(target: EngineTarget, ops: readonly EngineOp[]): void {
         break;
       case 'pan':
         target.setPan(op.target, op.pan);
+        break;
+      case 'stripScalars':
+        target.setTrackStripScalars(op.trackId, op.scalars);
         break;
       case 'soloMute':
         target.setSoloMute(op.trackId, op.solo, op.mute);
@@ -232,6 +251,25 @@ export function diffBypass(
   return ops;
 }
 
+type ScalarSetters = Pick<
+  RealtimeEngine,
+  | 'setTrackStripPanLaw'
+  | 'setTrackStripPanMode'
+  | 'setTrackStripDualPan'
+  | 'setTrackStripChannelDelaySamples'
+>;
+
+/** Sends each present field through its setter; both engines address the strip by track id. */
+function applyScalars(engine: ScalarSetters, trackId: number, scalars: TrackStripScalars): void {
+  const { panLaw, panMode, dualPan, channelDelaySamples } = scalars;
+  if (panLaw !== undefined) engine.setTrackStripPanLaw(trackId, panLaw);
+  if (panMode !== undefined) engine.setTrackStripPanMode(trackId, panMode);
+  if (dualPan) engine.setTrackStripDualPan(trackId, dualPan.left, dualPan.right);
+  if (channelDelaySamples !== undefined) {
+    engine.setTrackStripChannelDelaySamples(trackId, channelDelaySamples);
+  }
+}
+
 function toEngineSends(sends: readonly LaneSend[]) {
   return sends.map((send) => ({ ...send }));
 }
@@ -269,6 +307,7 @@ export function createFacadeTarget(engine: SonareEngine): EngineTarget {
     },
     setFader: (t, db) => void engine.setStripGain(t, db),
     setPan: (t, pan) => void engine.setStripPan(t, pan),
+    setTrackStripScalars: (trackId, scalars) => applyScalars(engine, trackId, scalars),
     setSoloMute: (trackId, solo, mute) => void engine.setSoloMute(trackId, solo, mute),
     setSends: (trackId, sends) => engine.setSends(trackId, toEngineSends(sends)),
     setBusGain: (busId, db) => void engine.setBusGain(busId, db),
@@ -379,6 +418,7 @@ export function createRawTarget(engine: RealtimeEngine): EngineTarget {
     },
     setFader: (t, db) => engine.setParameterSmoothed(stripParamId(t, MIXER_PARAM_FADER_DB), db),
     setPan: (t, pan) => engine.setParameterSmoothed(stripParamId(t, MIXER_PARAM_PAN), pan),
+    setTrackStripScalars: (trackId, scalars) => applyScalars(engine, trackId, scalars),
     setSoloMute: (trackId, solo, mute) => engine.setSoloMute(laneIndex(trackId), solo, mute),
     setSends(trackId, sends) {
       lanes[laneIndex(trackId)] = { ...lanes[laneIndex(trackId)], sends: [...sends] };
