@@ -1,0 +1,709 @@
+import type { EngineAutomationPoint, EngineBus, EngineCaptureStatus, EngineClip, EngineMarker, EngineMetronomeConfig, EngineMidiClipSchedule, EngineParameterInfo, EngineTempoSegment, EngineTimeSignatureSegment, EngineTrackLane, EngineTransportState, PlaybackDiagnostics, PlaybackRendererConfig, RealtimeVoiceChangerConfigInput, RealtimeVoiceChangerPodConfig } from '../index';
+import type { AutomationCurve } from '../public_types';
+import type { SonareEngineCommandRecord, SonareEngineTelemetryRecord, SonareWorkletMeterSnapshot, SonareWorkletScopeSnapshot, SonareWorkletSpectrumSnapshot } from './protocol';
+export interface SonareWorkletProcessorOptions {
+    sceneJson: string;
+    sampleRate?: number;
+    blockSize?: number;
+    stripCount?: number;
+    meterIntervalFrames?: number;
+    meterSharedBuffer?: SharedArrayBuffer;
+    meterRingCapacity?: number;
+    spectrumIntervalFrames?: number;
+    spectrumBands?: number;
+    spectrumSharedBuffer?: SharedArrayBuffer;
+    spectrumRingCapacity?: number;
+}
+export interface SonareRealtimeEngineWorkletProcessorOptions {
+    wasmBinary?: ArrayBuffer | Uint8Array;
+    initialSyncMessages?: SonareEngineSyncMessage[];
+    initialCommands?: SonareEngineCommandRecord[];
+    sampleRate?: number;
+    blockSize?: number;
+    channelCount?: number;
+    meterIntervalFrames?: number;
+    commandSharedBuffer?: SharedArrayBuffer;
+    commandRingCapacity?: number;
+    telemetrySharedBuffer?: SharedArrayBuffer;
+    telemetryRingCapacity?: number;
+    meterSharedBuffer?: SharedArrayBuffer;
+    meterRingCapacity?: number;
+    scopeIntervalFrames?: number;
+    scopeBands?: number;
+    scopeSharedBuffer?: SharedArrayBuffer;
+    scopeRingCapacity?: number;
+    /**
+     * Lock-free SPSC queue for clip-page cache misses. Supplying this is required
+     * for realtime-safe OPFS streaming: it avoids both embind object creation and
+     * postMessage structured cloning from AudioWorklet process().
+     */
+    clipPageRequestSharedBuffer?: SharedArrayBuffer;
+    clipPageRequestRingCapacity?: number;
+    /** Lock-free worklet-to-main-thread MIDI-1 output ring. */
+    externalMidiSharedBuffer?: SharedArrayBuffer;
+    externalMidiRingCapacity?: number;
+    /**
+     * Route the PFL/AFL cue bus to the processor's SECOND output instead of
+     * folding it into the program output. Off by default, so an existing
+     * single-output host keeps its current mix sample for sample. The node must
+     * be constructed with two outputs for the cue to be audible.
+     */
+    cueOutput?: boolean;
+}
+export interface SonareRealtimeVoiceChangerWorkletProcessorOptions {
+    preset?: RealtimeVoiceChangerConfigInput;
+    sampleRate?: number;
+    blockSize?: number;
+    channelCount?: number;
+}
+export interface SonareRealtimeVoiceChangerSetConfigMessage {
+    type: 'setConfig';
+    /** Pre-normalized by the main thread; never JSON parsed in the worklet. */
+    config: RealtimeVoiceChangerPodConfig;
+}
+export interface SonareRealtimeVoiceChangerResetMessage {
+    type: 'reset';
+}
+export interface SonareRealtimeVoiceChangerDestroyMessage {
+    type: 'destroy';
+}
+export type SonareRealtimeVoiceChangerMessage = SonareRealtimeVoiceChangerSetConfigMessage | SonareRealtimeVoiceChangerResetMessage | SonareRealtimeVoiceChangerDestroyMessage;
+export interface SonarePlaybackWorkletProcessorOptions {
+    /** Renderer configuration; parsed once, in the processor constructor. Default `{}`. */
+    config?: PlaybackRendererConfig | string;
+    /**
+     * SHRF v1 bytes, required for a headphones target (e.g. the package asset
+     * `./hrtf/default.shrf`). Copied into the renderer at construction.
+     */
+    hrtf?: ArrayBuffer | Uint8Array;
+    /** Largest render quantum the processor accepts. Default 128. */
+    maxBlockSize?: number;
+    /** Defaults to the AudioWorkletGlobalScope `sampleRate`, then 48000. */
+    sampleRate?: number;
+}
+export interface SonarePlaybackNodeOptions extends SonarePlaybackWorkletProcessorOptions {
+    processorName?: string;
+    nodeFactory?: (context: BaseAudioContext, processorName: string, options: AudioWorkletNodeOptions) => AudioWorkletNode;
+}
+export interface SonarePlaybackConfigMessage {
+    type: 'config';
+    /** A complete configuration document, serialized on the main thread. */
+    config: string;
+}
+export interface SonarePlaybackOrientationMessage {
+    type: 'orientation';
+    /** Degrees; see `PlaybackRenderer.setHeadOrientation`. */
+    yaw: number;
+    pitch?: number;
+    roll?: number;
+}
+/** Clears the pipeline after a seek; the handler runs between render quanta. */
+export interface SonarePlaybackResetMessage {
+    type: 'reset';
+}
+/** Requests a {@link SonarePlaybackDiagnosticsReplyMessage}. */
+export interface SonarePlaybackDiagnosticsRequestMessage {
+    type: 'diagnostics';
+}
+export interface SonarePlaybackDestroyMessage {
+    type: 'destroy';
+}
+export type SonarePlaybackMessage = SonarePlaybackConfigMessage | SonarePlaybackOrientationMessage | SonarePlaybackResetMessage | SonarePlaybackDiagnosticsRequestMessage | SonarePlaybackDestroyMessage;
+/** The renderer's diagnostics plus the worklet's own block counter. */
+export interface SonarePlaybackWorkletDiagnostics extends PlaybackDiagnostics {
+    /**
+     * Render quanta whose input channel count the renderer does not accept
+     * (not 1, 2, 6 or 8 under `"auto"`; not the fixed layout's count otherwise).
+     * Each was rendered as silence on the active input layout, so the timeline
+     * still advanced.
+     */
+    unsupported_input_blocks: number;
+}
+export interface SonarePlaybackDiagnosticsReplyMessage {
+    type: 'diagnostics';
+    diagnostics: SonarePlaybackWorkletDiagnostics;
+}
+/** Posted when a control message is refused (e.g. a changed prepare key). */
+export interface SonarePlaybackErrorMessage {
+    type: 'error';
+    request: SonarePlaybackMessage['type'];
+    message: string;
+}
+export interface SonareRealtimeEngineNodeCapabilities {
+    mode: 'sab' | 'postMessage';
+    runtimeTarget: 'embind';
+    sharedArrayBuffer: boolean;
+    atomics: boolean;
+    audioWorklet: boolean;
+    /** True only when clip-page misses use the bounded SAB ring. */
+    clipPageRequestsRealtimeSafe: boolean;
+    /** True when external MIDI uses the SAB output ring rather than postMessage. */
+    externalMidiRealtimeSafe: boolean;
+    /**
+     * True when the node carries a second output fed by the PFL/AFL cue bus. When
+     * false the cue is folded into the program output, as it always was.
+     */
+    cueOutput: boolean;
+    engineAbiVersion?: number;
+    expectedEngineAbiVersion?: number;
+    abiCompatible?: boolean;
+    degradedReason?: string;
+    readyMessage?: boolean;
+}
+export interface SonareRealtimeEngineNodeOptions extends SonareRealtimeEngineWorkletProcessorOptions {
+    processorName?: string;
+    moduleUrl?: string | URL;
+    mode?: 'auto' | 'sab' | 'postMessage';
+    engineAbiVersion?: number;
+    expectedEngineAbiVersion?: number;
+    requireAbiCompatible?: boolean;
+    nodeFactory?: (context: BaseAudioContext, processorName: string, options: AudioWorkletNodeOptions) => AudioWorkletNode;
+}
+export interface SonareEngineTransportFacade {
+    play(sampleTime?: number): boolean;
+    stop(sampleTime?: number): boolean;
+    seekPpq(ppq: number, sampleTime?: number): boolean;
+    seekSeconds(seconds: number, sampleTime?: number): boolean;
+    setTempo(bpm: number): void;
+    setTempoSegments(segments: readonly EngineTempoSegment[]): void;
+    setLoop(startPpq: number, endPpq: number, enabled?: boolean): boolean;
+}
+export interface SonareWorkletScheduleInsertAutomationMessage {
+    type: 'scheduleInsertAutomation';
+    stripIndex: number;
+    insertIndex: number;
+    paramId: number;
+    value: number;
+    samplePos?: number;
+    curve?: AutomationCurve;
+}
+export interface SonareWorkletSetMeterIntervalMessage {
+    type: 'setMeterInterval';
+    frames: number;
+}
+export interface SonareWorkletDestroyMessage {
+    type: 'destroy';
+}
+export type SonareWorkletMessage = SonareWorkletScheduleInsertAutomationMessage | SonareWorkletSetMeterIntervalMessage | SonareWorkletDestroyMessage;
+/** One external-MIDI event delivered to the main thread, lowered to MIDI 1.0
+ * bytes ready for a Web MIDI output port. */
+export interface SonareWorkletExternalMidiEvent {
+    /** Originating track lane, or 0xFFFFFFFF for transport/clock bytes. */
+    destinationId: number;
+    /** Sample position within the producing block. */
+    renderFrame: number;
+    /** MIDI 1.0 status + data bytes (1..3 entries). */
+    bytes: number[];
+}
+/** Batch of external-MIDI events posted from the worklet once per render block. */
+export interface SonareWorkletExternalMidiMessage {
+    type: 'externalMidi';
+    events: SonareWorkletExternalMidiEvent[];
+}
+/** A control-plane sync message that the worklet rejected without crashing. */
+export interface SonareEngineSyncErrorMessage {
+    type: 'syncError';
+    /**
+     * Discriminant of the rejected sync. Usually a known member, but a
+     * `sync`-prefixed type this build does not recognize is reported here too
+     * rather than dropped, so the set is open. `Record<never, never>` keeps the
+     * known members as editor completions instead of collapsing to `string`.
+     */
+    syncType: SonareEngineSyncMessage['type'] | (string & Record<never, never>);
+    message: string;
+}
+export type SonareWorkletTransportMessage = SonareWorkletMeterSnapshot | SonareWorkletScopeSnapshot | SonareWorkletSpectrumSnapshot | SonareWorkletExternalMidiMessage | SonareEngineClipPageRequestMessage | SonareEngineTelemetryRecord;
+export interface WorkletTransport {
+    postMessage?: (message: SonareWorkletTransportMessage | SonareEngineCaptureResponseMessageInternal | SonareEngineTransportResponseMessage | SonareEngineSyncErrorMessage, transfer?: Transferable[]) => void;
+    onMeter?: (meter: SonareWorkletMeterSnapshot) => void;
+    onSpectrum?: (spectrum: SonareWorkletSpectrumSnapshot) => void;
+}
+export interface ResolvedMetronomeConfig {
+    beatGain: number;
+    accentGain: number;
+    clickSamples: number;
+    clickSeconds: number;
+}
+export declare const DEFAULT_METRONOME_CONFIG: ResolvedMetronomeConfig;
+export declare function resolveMetronomeConfig(config: EngineMetronomeConfig): ResolvedMetronomeConfig;
+export interface SonareEngineSyncClipsMessage {
+    type: 'syncClips';
+    clips: EngineClip[];
+}
+export interface SonareEngineSyncClipsDeltaMessage {
+    type: 'syncClipsDelta';
+    upserts: EngineClip[];
+    removeIds: number[];
+}
+/** Begins a paged, pre-baked clip transfer. PCM pages follow in FIFO order. */
+export interface SonareEngineSyncClipPageProviderMessage {
+    type: 'syncClipPageProvider';
+    clipId: number;
+    /** Omitted when an OPFS stream is primed before its clip is scheduled. */
+    clip?: EngineClip;
+    numChannels: number;
+    numSamples: number;
+    pageFrames: number;
+}
+/** Supplies one bounded PCM page for a pending pre-baked clip transfer. */
+export interface SonareEngineSyncClipPageMessage {
+    type: 'syncClipPage';
+    clipId: number;
+    pageIndex: number;
+    channels: Float32Array[];
+}
+/**
+ * Sets the worklet engine's clip-page look-ahead window in timeline frames, so
+ * the audio thread reports the pages it is about to read before it reads them.
+ * 0 disables the look-ahead.
+ */
+export interface SonareEngineSyncClipPagePrefetchFramesMessage {
+    type: 'syncClipPagePrefetchFrames';
+    frames: number;
+}
+/**
+ * Sets the worklet engine's concurrent time-stretch voice capacity. The
+ * capacity was already validated (and applied to the offline engine) by the
+ * caller, so the worklet side just mirrors the accepted value; the pool
+ * rebuild itself happens on the audio thread, at the next block boundary.
+ */
+export interface SonareEngineSyncWarpVoiceCapacityMessage {
+    type: 'syncWarpVoiceCapacity';
+    voices: number;
+}
+/** Evicts one page after the main-thread sliding window advances. */
+export interface SonareEngineSyncClipPageClearMessage {
+    type: 'syncClipPageClear';
+    clipId: number;
+    pageIndex: number;
+}
+/** Releases a provider whose clip was removed or whose stream was closed. */
+export interface SonareEngineSyncClipPageDestroyMessage {
+    type: 'syncClipPageDestroy';
+    clipId: number;
+}
+/** Makes a fully supplied paged clip visible to the audio engine. */
+export interface SonareEngineSyncClipPageCommitMessage {
+    type: 'syncClipPageCommit';
+    clipId: number;
+    /**
+     * Clip schedule to publish with a provider that was primed before its
+     * schedule was known. The original pre-baked push path supplies it on the
+     * provider message instead.
+     */
+    clip?: EngineClip;
+}
+/**
+ * A bounded batch of page misses emitted by the AudioWorklet. The main thread
+ * resolves these from OPFS and responds with `syncClipPage`; a missing page is
+ * silent until that response arrives.
+ */
+export interface SonareEngineClipPageRequestMessage {
+    type: 'clipPageRequest';
+    requests: Array<{
+        clipId: number;
+        pageIndex: number;
+    }>;
+    /** Number of misses dropped because a bounded native or SAB request queue was full. */
+    dropped?: number;
+}
+export interface SonareEngineSyncMidiClipsMessage {
+    type: 'syncMidiClips';
+    clips: EngineMidiClipSchedule[];
+}
+export interface SonareEngineSyncMarkersMessage {
+    type: 'syncMarkers';
+    markers: EngineMarker[];
+}
+export interface SonareEngineSyncMetronomeMessage {
+    type: 'syncMetronome';
+    config: EngineMetronomeConfig;
+}
+export interface SonareEngineSyncAutomationMessage {
+    type: 'syncAutomation';
+    paramId: number;
+    points: EngineAutomationPoint[];
+}
+/** Replaces the live engine's registered custom-parameter set. */
+export interface SonareEngineSyncParametersMessage {
+    type: 'syncParameters';
+    parameters: EngineParameterInfo[];
+}
+export interface SonareEngineSyncTempoMessage {
+    type: 'syncTempo';
+    bpm: number;
+    timeSignature: {
+        numerator: number;
+        denominator: number;
+    };
+    tempoSegments?: EngineTempoSegment[];
+    timeSignatureSegments?: EngineTimeSignatureSegment[];
+}
+export type SonareEngineSyncMixerInsertParamOverride = {
+    kind: 'track';
+    trackId: number;
+    insertIndex: number;
+    paramName: string;
+    value: number;
+} | {
+    kind: 'bus';
+    busId: number;
+    insertIndex: number;
+    paramName: string;
+    value: number;
+} | {
+    kind: 'master';
+    insertIndex: number;
+    paramName: string;
+    value: number;
+};
+export interface SonareEngineSyncMixerMessage {
+    type: 'syncMixer';
+    /** Apply only supplied sidechain bindings; preserve current mixer topology. */
+    sidechainDelta?: boolean;
+    lanes: EngineTrackLane[];
+    buses?: EngineBus[];
+    trackStrips?: Array<{
+        trackId: number;
+        sceneJson: string;
+    }>;
+    busStrips?: Array<{
+        busId: number;
+        sceneJson: string;
+    }>;
+    masterStripJson?: string;
+    /** Retained by-name insert values, applied after strip and sidechain replay. */
+    insertParamOverrides?: SonareEngineSyncMixerInsertParamOverride[];
+    /** Strips whose manual insert bases are cleared after the strip replay, before insertParamOverrides. */
+    insertBaseResets?: Array<{
+        kind: 'track';
+        trackId: number;
+    } | {
+        kind: 'bus';
+        busId: number;
+    } | {
+        kind: 'master';
+    }>;
+    /** Lane insert sidechain bindings (replayed after lanes/strips). */
+    laneSidechains?: Array<{
+        trackId: number;
+        insertIndex: number;
+        sourceTrackId: number;
+    }>;
+    /**
+     * Bus insert sidechain bindings (replayed after lanes/buses/strips).
+     * `sourceKind` is a `SonareSidechainSourceKind` ordinal (0 track / 1 bus).
+     */
+    busSidechains?: Array<{
+        busId: number;
+        insertIndex: number;
+        sourceKind: number;
+        sourceId: number;
+    }>;
+    /** Master strip insert sidechain bindings. Same `sourceKind` convention. */
+    masterSidechains?: Array<{
+        insertIndex: number;
+        sourceKind: number;
+        sourceId: number;
+    }>;
+}
+export interface SonareEngineSyncCaptureMessage {
+    type: 'syncCapture';
+    bufferFrames: number;
+    channels: number;
+    source: EngineCaptureStatus['source'];
+    recordOffsetSamples: number;
+    inputMonitor: {
+        enabled: boolean;
+        gain: number;
+    };
+}
+export interface SonareEngineSyncTrackStripEqBandMessage {
+    type: 'syncTrackStripEqBand';
+    trackId: number;
+    bandIndex: number;
+    bandJson: string;
+}
+export interface SonareEngineSyncMasterStripEqBandMessage {
+    type: 'syncMasterStripEqBand';
+    bandIndex: number;
+    bandJson: string;
+}
+export interface SonareEngineSyncBusStripEqBandMessage {
+    type: 'syncBusStripEqBand';
+    busId: number;
+    bandIndex: number;
+    bandJson: string;
+}
+export interface SonareEngineSyncTrackStripInsertBypassedMessage {
+    type: 'syncTrackStripInsertBypassed';
+    trackId: number;
+    insertIndex: number;
+    bypassed: boolean;
+    resetOnBypass: boolean;
+}
+export interface SonareEngineSyncMasterStripInsertBypassedMessage {
+    type: 'syncMasterStripInsertBypassed';
+    insertIndex: number;
+    bypassed: boolean;
+    resetOnBypass: boolean;
+}
+export interface SonareEngineSyncTrackStripInsertParamByNameMessage {
+    type: 'syncTrackStripInsertParamByName';
+    trackId: number;
+    insertIndex: number;
+    paramName: string;
+    value: number;
+}
+export interface SonareEngineSyncMasterStripInsertParamByNameMessage {
+    type: 'syncMasterStripInsertParamByName';
+    insertIndex: number;
+    paramName: string;
+    value: number;
+}
+export interface SonareEngineSyncBusStripInsertParamByNameMessage {
+    type: 'syncBusStripInsertParamByName';
+    busId: number;
+    insertIndex: number;
+    paramName: string;
+    value: number;
+}
+export interface SonareEngineSyncBusStripInsertBypassedMessage {
+    type: 'syncBusStripInsertBypassed';
+    busId: number;
+    insertIndex: number;
+    bypassed: boolean;
+    resetOnBypass: boolean;
+}
+export interface SonareEngineSyncTrackStripPanMessage {
+    type: 'syncTrackStripPan';
+    trackId: number;
+    pan: number;
+}
+export interface SonareEngineSyncTrackStripPanLawMessage {
+    type: 'syncTrackStripPanLaw';
+    trackId: number;
+    panLaw: number;
+}
+export interface SonareEngineSyncTrackStripPanModeMessage {
+    type: 'syncTrackStripPanMode';
+    trackId: number;
+    panMode: number;
+}
+export interface SonareEngineSyncTrackStripDualPanMessage {
+    type: 'syncTrackStripDualPan';
+    trackId: number;
+    leftPan: number;
+    rightPan: number;
+}
+export interface SonareEngineSyncBusStripPanMessage {
+    type: 'syncBusStripPan';
+    busId: number;
+    pan: number;
+}
+export interface SonareEngineSyncBusStripPanLawMessage {
+    type: 'syncBusStripPanLaw';
+    busId: number;
+    panLaw: number;
+}
+export interface SonareEngineSyncBusStripPanModeMessage {
+    type: 'syncBusStripPanMode';
+    busId: number;
+    panMode: number;
+}
+export interface SonareEngineSyncBusStripDualPanMessage {
+    type: 'syncBusStripDualPan';
+    busId: number;
+    leftPan: number;
+    rightPan: number;
+}
+export interface SonareEngineSyncTrackStripChannelDelaySamplesMessage {
+    type: 'syncTrackStripChannelDelaySamples';
+    trackId: number;
+    delaySamples: number;
+}
+export interface SonareEngineSyncBuiltinInstrumentMessage {
+    type: 'syncBuiltinInstrument';
+    destinationId: number;
+    config: {
+        destinationId?: number;
+    } & Record<string, unknown>;
+}
+export interface SonareEngineSyncSynthInstrumentMessage {
+    type: 'syncSynthInstrument';
+    destinationId: number;
+    patch: Record<string, unknown> | string;
+}
+export interface SonareEngineSyncSf2InstrumentMessage {
+    type: 'syncSf2Instrument';
+    destinationId: number;
+    config: {
+        destinationId?: number;
+        gain?: number;
+        polyphony?: number;
+        preferModelForModeledFamilies?: boolean;
+        clearBankRig?: boolean;
+        gsEfxRealization?: 'modern' | 'classic';
+    };
+}
+export interface SonareEngineSyncLoadSoundFontMessage {
+    type: 'syncLoadSoundFont';
+    data: Uint8Array;
+}
+export interface SonareEngineSyncMidiFxMessage {
+    type: 'syncMidiFx' | 'syncClearMidiFx';
+    destinationId: number;
+    /** Engine MIDI-FX config JSON; present for 'syncMidiFx', absent for a clear. */
+    configJson?: string;
+}
+export interface SonareEngineSyncMidiNoteMessage {
+    type: 'syncMidiNoteOn' | 'syncMidiNoteOff';
+    destinationId: number;
+    group: number;
+    channel: number;
+    note: number;
+    velocity: number;
+    renderFrame: number;
+}
+export interface SonareEngineSyncMidiCcMessage {
+    type: 'syncMidiCc';
+    destinationId: number;
+    group: number;
+    channel: number;
+    controller: number;
+    value: number;
+    renderFrame: number;
+}
+export interface SonareEngineSyncMidiUmpMessage {
+    type: 'syncMidiUmp';
+    destinationId: number;
+    word0: number;
+    renderFrame: number;
+}
+/**
+ * One of the three per-note expression dimensions, addressed to a destination.
+ * `data0`/`data1` carry the dimension's own payload the way the live-input
+ * message beside this one does: bend14 / 0, pressure / 0, or note / pressure.
+ * A bend is 14-bit, which is why these do not ride the 7-bit CC message.
+ */
+export interface SonareEngineSyncMidiExpressionMessage {
+    type: 'syncMidiPitchBend' | 'syncMidiChannelPressure' | 'syncMidiPolyPressure';
+    destinationId: number;
+    group: number;
+    channel: number;
+    data0: number;
+    data1: number;
+    renderFrame: number;
+}
+export interface SonareEngineSyncMidiSysexMessage {
+    type: 'syncMidiSysex';
+    destinationId: number;
+    data: Uint8Array;
+    renderFrame: number;
+}
+export interface SonareEngineSyncMidiPanicMessage {
+    type: 'syncMidiPanic';
+    renderFrame: number;
+}
+export interface SonareEngineSyncMidiDestinationExternalMessage {
+    type: 'syncMidiDestinationExternal';
+    destinationId: number;
+    external: boolean;
+}
+export interface SonareEngineSyncExternalMidiClockMessage {
+    type: 'syncExternalMidiClock';
+    enabled: boolean;
+}
+export interface SonareEngineSyncMidiInputSourceMessage {
+    type: 'syncMidiInputSource' | 'syncClearMidiInputSource';
+    destinationId?: number;
+}
+export interface SonareEngineSyncMidiCcBindingMessage {
+    type: 'syncMidiCcBinding';
+    channel: number;
+    controller: number;
+    paramId: number;
+    minValue: number;
+    maxValue: number;
+}
+export interface SonareEngineSyncMidiInputEventMessage {
+    type: 'syncMidiInputNoteOn' | 'syncMidiInputNoteOff' | 'syncMidiInputCc' | 'syncMidiInputPitchBend' | 'syncMidiInputChannelPressure' | 'syncMidiInputPolyPressure';
+    group: number;
+    channel: number;
+    data0: number;
+    data1: number;
+    portTimeSamples: number;
+}
+/** Releases the realtime engine and all worklet-owned clip buffers. */
+export interface SonareEngineDestroyMessage {
+    type: 'destroy';
+}
+export type SonareEngineInstrumentSyncMessage = SonareEngineSyncBuiltinInstrumentMessage | SonareEngineSyncSynthInstrumentMessage | SonareEngineSyncSf2InstrumentMessage | SonareEngineSyncLoadSoundFontMessage | SonareEngineSyncMidiFxMessage;
+export type SonareEngineSyncMessage = SonareEngineSyncClipsMessage | SonareEngineSyncClipsDeltaMessage | SonareEngineSyncClipPageProviderMessage | SonareEngineSyncClipPageMessage | SonareEngineSyncClipPageClearMessage | SonareEngineSyncClipPagePrefetchFramesMessage | SonareEngineSyncWarpVoiceCapacityMessage | SonareEngineSyncClipPageCommitMessage | SonareEngineSyncClipPageDestroyMessage | SonareEngineSyncMidiClipsMessage | SonareEngineSyncMarkersMessage | SonareEngineSyncMetronomeMessage | SonareEngineSyncAutomationMessage | SonareEngineSyncParametersMessage | SonareEngineSyncTempoMessage | SonareEngineSyncMixerMessage | SonareEngineSyncCaptureMessage | SonareEngineSyncTrackStripEqBandMessage | SonareEngineSyncMasterStripEqBandMessage | SonareEngineSyncBusStripEqBandMessage | SonareEngineSyncTrackStripInsertBypassedMessage | SonareEngineSyncMasterStripInsertBypassedMessage | SonareEngineSyncTrackStripInsertParamByNameMessage | SonareEngineSyncMasterStripInsertParamByNameMessage | SonareEngineSyncBusStripInsertParamByNameMessage | SonareEngineSyncBusStripInsertBypassedMessage | SonareEngineSyncTrackStripPanMessage | SonareEngineSyncTrackStripPanLawMessage | SonareEngineSyncTrackStripPanModeMessage | SonareEngineSyncTrackStripDualPanMessage | SonareEngineSyncBusStripPanMessage | SonareEngineSyncBusStripPanLawMessage | SonareEngineSyncBusStripPanModeMessage | SonareEngineSyncBusStripDualPanMessage | SonareEngineSyncTrackStripChannelDelaySamplesMessage | SonareEngineSyncBuiltinInstrumentMessage | SonareEngineSyncSynthInstrumentMessage | SonareEngineSyncSf2InstrumentMessage | SonareEngineSyncLoadSoundFontMessage | SonareEngineSyncMidiFxMessage | SonareEngineSyncMidiNoteMessage | SonareEngineSyncMidiCcMessage | SonareEngineSyncMidiUmpMessage | SonareEngineSyncMidiExpressionMessage | SonareEngineSyncMidiSysexMessage | SonareEngineSyncMidiPanicMessage | SonareEngineSyncMidiDestinationExternalMessage | SonareEngineSyncExternalMidiClockMessage | SonareEngineSyncMidiInputSourceMessage | SonareEngineSyncMidiCcBindingMessage | SonareEngineSyncMidiInputEventMessage | SonareEngineDestroyMessage;
+export interface WorkletPort {
+    postMessage?: (message: unknown, transfer?: Transferable[]) => void;
+    onmessage?: (event: {
+        data: unknown;
+    }) => void;
+    addEventListener?: (type: 'message', listener: (event: {
+        data: unknown;
+    }) => void) => void;
+    start?: () => void;
+}
+export interface SonareEngineCaptureRequestMessage {
+    type: 'captureRequest';
+    requestId: number;
+    op: 'status' | 'read' | 'reset';
+}
+/**
+ * Public capture response shape retained for source compatibility.
+ *
+ * The worklet wire protocol is stricter than this legacy structural type; use
+ * `SonareEngineCaptureResponseMessageInternal` inside the implementation.
+ */
+export interface SonareEngineCaptureResponseMessage {
+    type: 'captureResponse';
+    requestId: number;
+    ok: boolean;
+    status?: EngineCaptureStatus;
+    channels?: Float32Array[] | number[][];
+    error?: string;
+}
+interface SonareEngineCaptureStatusResponseMessageInternal {
+    type: 'captureResponse';
+    requestId: number;
+    ok: true;
+    status: EngineCaptureStatus;
+}
+interface SonareEngineCaptureReadResponseMessageInternal {
+    type: 'captureResponse';
+    requestId: number;
+    ok: true;
+    channels: Float32Array[];
+}
+interface SonareEngineCaptureResetResponseMessageInternal {
+    type: 'captureResponse';
+    requestId: number;
+    ok: true;
+}
+interface SonareEngineCaptureErrorResponseMessageInternal {
+    type: 'captureResponse';
+    requestId: number;
+    ok: false;
+    error: string;
+}
+/** Strict wire response type used only by the worklet implementation. */
+export type SonareEngineCaptureResponseMessageInternal = SonareEngineCaptureStatusResponseMessageInternal | SonareEngineCaptureReadResponseMessageInternal | SonareEngineCaptureResetResponseMessageInternal | SonareEngineCaptureErrorResponseMessageInternal;
+export interface SonareEngineTransportRequestMessage {
+    type: 'transportRequest';
+    requestId: number;
+    op: 'state';
+}
+export interface SonareEngineTransportResponseMessage {
+    type: 'transportResponse';
+    requestId: number;
+    ok: boolean;
+    state?: EngineTransportState;
+    error?: string;
+}
+export {};

@@ -28,6 +28,9 @@ JS_CHUNK_GLOB="chunk-*.js"
 DTS_GLOB="*.d.ts"
 # A type-check probe the upstream build leaves behind; it is not part of the API.
 DTS_EXCLUDE_GLOB="__tmp_*"
+# worklet.d.ts re-exports from ./worklet/*, so that subdirectory's declarations
+# are copied too (its .d.ts.map files are not).
+WORKLET_SUBDIR="worklet"
 
 # Obsolete files from previous layouts — removed after libsonare switched to a
 # tsup bundle and after the realtime runtime was folded into the main module.
@@ -104,6 +107,10 @@ for source_file in "$JS_DIST_DIR"/$DTS_GLOB; do
   esac
   DTS_FILES+=("$source_file")
 done
+WORKLET_DTS_FILES=()
+for source_file in "$JS_DIST_DIR/$WORKLET_SUBDIR"/$DTS_GLOB; do
+  WORKLET_DTS_FILES+=("$source_file")
+done
 shopt -u nullglob
 
 if [ ${#missing_js[@]} -gt 0 ]; then
@@ -169,6 +176,14 @@ for source_file in "${JS_CHUNK_FILES[@]}" "${DTS_FILES[@]}"; do
   fi
 done
 
+for source_file in "${WORKLET_DTS_FILES[@]}"; do
+  file=$(basename "$source_file")
+  if ! same_normalized_js_file "$source_file" "$DEST_DIR/$WORKLET_SUBDIR/$file"; then
+    JS_CHANGED=true
+    break
+  fi
+done
+
 # Detect leftover obsolete files
 OBSOLETE_PRESENT=false
 for file in "${OBSOLETE_FILES[@]}"; do
@@ -201,6 +216,18 @@ for dest_file in "$DEST_DIR"/$JS_CHUNK_GLOB "$DEST_DIR"/$DTS_GLOB; do
     fi
   done
   $found || STALE_CHUNKS+=("$name")
+done
+# Same for the worklet declaration subdirectory.
+for dest_file in "$DEST_DIR/$WORKLET_SUBDIR"/$DTS_GLOB; do
+  name=$(basename "$dest_file")
+  found=false
+  for source_file in "${WORKLET_DTS_FILES[@]}"; do
+    if [ "$name" = "$(basename "$source_file")" ]; then
+      found=true
+      break
+    fi
+  done
+  $found || STALE_CHUNKS+=("$WORKLET_SUBDIR/$name")
 done
 shopt -u nullglob
 
@@ -252,6 +279,13 @@ if $JS_CHANGED; then
     cp "$source_file" "$DEST_DIR/"
   done
   echo "   ✓ ${#DTS_FILES[@]} sibling declaration files (index.d.ts re-exports from these)"
+  mkdir -p "$DEST_DIR/$WORKLET_SUBDIR"
+  for source_file in "${WORKLET_DTS_FILES[@]}"; do
+    cp "$source_file" "$DEST_DIR/$WORKLET_SUBDIR/"
+    sed -i.bak '/^\/\/# sourceMappingURL=/d' "$DEST_DIR/$WORKLET_SUBDIR/$(basename "$source_file")"
+    rm "$DEST_DIR/$WORKLET_SUBDIR/$(basename "$source_file").bak"
+  done
+  echo "   ✓ ${#WORKLET_DTS_FILES[@]} worklet declaration files (worklet.d.ts re-exports from these)"
 
   # Remove sourceMappingURL from copied JS/DTS files (not needed in homepage)
   JS_COPIED_FILES=("${JS_FILES[@]}")
