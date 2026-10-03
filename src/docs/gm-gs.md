@@ -413,7 +413,7 @@ A composite EFX type realises as an ordered **chain** of the same DSP inserts ru
 `gsEfxRealization` selects the EFX sound when binding or bouncing a SoundFont instrument, including its NativeSynth fallback:
 
 - `modern` (default) builds chains from the current insert processors. The mapping tables above describe this path.
-- `classic` uses dedicated models running at 32 kHz internally, with resampling to the project's rate. It receives the same EFX type and parameter bytes; the instrument voices and system reverb, chorus and delay stay separate from this choice.
+- `classic` uses dedicated models running at 32 kHz internally, with resampling to the project's rate. It receives the same EFX type and parameter bytes; the instrument voices and system reverb, chorus and delay stay separate from this choice. The resampling round trip and its output FIFO prefill add internal latency that the insert reports as zero, so a host aligning a parallel or dry path must not rely on the reported latency for the classic realisation.
 
 The [GS module demo](/gs-module) lets you choose either path before playback. Assign the selected part to EFX and select an effect to hear the comparison; Thru has no insertion effect to compare.
 
