@@ -15,6 +15,7 @@ import type {
   EngineAutomationPoint,
   EngineBus,
   EngineClip,
+  EngineMidiClipSchedule,
   EqBand,
   PanLaw,
   PanMode,
@@ -95,6 +96,8 @@ export type AutomationParam =
 export type EngineOp =
   | { type: 'topology'; buses: readonly EngineBus[]; lanes: readonly LaneSpec[] }
   | { type: 'clips'; trackId: number; clips: readonly ClipSpec[] }
+  | { type: 'midiClips'; clips: readonly EngineMidiClipSchedule[] }
+  | { type: 'synthInstrument'; destinationId: number; preset: string }
   | { type: 'fader'; target: FaderTarget; db: number }
   | { type: 'pan'; target: FaderTarget; pan: number }
   | { type: 'stripScalars'; trackId: number; scalars: TrackStripScalars }
@@ -114,6 +117,10 @@ export interface EngineTarget {
   setTopology(buses: readonly EngineBus[], lanes: readonly LaneSpec[]): void;
   /** Replaces every clip on one track. */
   setTrackClips(trackId: number, clips: readonly ClipSpec[]): void;
+  /** Replaces the whole MIDI clip schedule. */
+  setMidiClips(clips: readonly EngineMidiClipSchedule[]): void;
+  /** Binds a NativeSynth preset to a MIDI destination. */
+  setSynthInstrument(destinationId: number, preset: string): void;
   setFader(target: FaderTarget, db: number): void;
   setPan(target: FaderTarget, pan: number): void;
   setTrackStripScalars(trackId: number, scalars: TrackStripScalars): void;
@@ -167,6 +174,12 @@ export function applyOps(target: EngineTarget, ops: readonly EngineOp[]): void {
         break;
       case 'clips':
         target.setTrackClips(op.trackId, op.clips);
+        break;
+      case 'midiClips':
+        target.setMidiClips(op.clips);
+        break;
+      case 'synthInstrument':
+        target.setSynthInstrument(op.destinationId, op.preset);
         break;
       case 'fader':
         target.setFader(op.target, op.db);
@@ -305,6 +318,8 @@ export function createFacadeTarget(engine: SonareEngine): EngineTarget {
         ),
       );
     },
+    setMidiClips: (midiClips) => engine.setMidiClips(midiClips),
+    setSynthInstrument: (destinationId, preset) => engine.setSynthInstrument(destinationId, preset),
     setFader: (t, db) => void engine.setStripGain(t, db),
     setPan: (t, pan) => void engine.setStripPan(t, pan),
     setTrackStripScalars: (trackId, scalars) => applyScalars(engine, trackId, scalars),
@@ -416,6 +431,8 @@ export function createRawTarget(engine: RealtimeEngine): EngineTarget {
       );
       engine.setClips([...clips.values()].flat());
     },
+    setMidiClips: (midiClips) => engine.setMidiClips(midiClips),
+    setSynthInstrument: (destinationId, preset) => engine.setSynthInstrument(preset, destinationId),
     setFader: (t, db) => engine.setParameterSmoothed(stripParamId(t, MIXER_PARAM_FADER_DB), db),
     setPan: (t, pan) => engine.setParameterSmoothed(stripParamId(t, MIXER_PARAM_PAN), pan),
     setTrackStripScalars: (trackId, scalars) => applyScalars(engine, trackId, scalars),

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_METER_INTERVAL_FRAMES } from '@/composables/useSonareEngine';
 import { exportFrames } from '@/demos/studio/studioBounce';
 import { BAR_PPQ, defaultPattern, STUDIO_TRACKS } from '@/demos/studio/studioCopy';
-import { MASTER_LIMITER_PROCESSOR, masterLimiterStripJson } from '@/utils/masterLimiter';
+import { MASTER_LIMITER_PROCESSOR } from '@/utils/masterLimiter';
 
 const BUCKET_COUNT = 24;
 const studioDir = resolve(process.cwd(), 'src/demos/studio');
@@ -40,14 +40,19 @@ const wasmMock = vi.hoisted(() => {
     static instances: RealtimeEngineMock[] = [];
     destroy = vi.fn();
     setTempoSegments = vi.fn();
+    setTrackBuses = vi.fn();
     setTrackLanes = vi.fn();
     setSynthInstrument = vi.fn();
     setTrackStripJson = vi.fn();
     setSoloMute = vi.fn();
     setMasterStripJson = vi.fn();
     setMidiClips = vi.fn();
+    setParameterSmoothed = vi.fn();
+    play = vi.fn();
     // A constant non-zero render makes the WAV encoding observable.
-    renderOffline = vi.fn((planes: Float32Array[]) => planes.map((p) => p.fill(0.5)));
+    bounceOffline = vi.fn((options: { totalFrames: number; numChannels: number }) => ({
+      interleaved: new Float32Array(options.totalFrames * options.numChannels).fill(0.5),
+    }));
     constructor(
       public sampleRate: number,
       public blockSize: number,
@@ -83,6 +88,7 @@ const facadeMock = vi.hoisted(() => {
       setLoop: vi.fn(() => true),
     },
     setTempoSegments: vi.fn(),
+    setTrackBuses: vi.fn(),
     setTrackLanes: vi.fn(),
     setSynthInstrument: vi.fn(),
     setMidiClips: vi.fn(),
@@ -183,7 +189,8 @@ describe('useStudioEngine', () => {
     expect(options.meterIntervalFrames).toBe(DEFAULT_METER_INTERVAL_FRAMES);
 
     // Lanes are declared 1-based and each track binds its synth preset.
-    expect(facadeMock.facade.setTrackLanes).toHaveBeenCalledWith([1, 2, 3]);
+    const lanes = facadeMock.facade.setTrackLanes.mock.lastCall?.[0] as Array<{ trackId: number }>;
+    expect(lanes.map((lane) => lane.trackId)).toEqual([1, 2, 3]);
     for (let i = 0; i < STUDIO_TRACKS.length; i++) {
       expect(facadeMock.facade.setSynthInstrument).toHaveBeenCalledWith(
         i + 1,
@@ -194,8 +201,9 @@ describe('useStudioEngine', () => {
     expect(facadeMock.facade.node.connect).toHaveBeenCalled();
 
     // The master strip carries the engine's limiter, installed at boot.
-    expect(facadeMock.facade.setMasterStripJson).toHaveBeenCalledWith(masterLimiterStripJson());
-    expect(masterLimiterStripJson()).toContain(MASTER_LIMITER_PROCESSOR);
+    expect(String(facadeMock.facade.setMasterStripJson.mock.lastCall?.[0])).toContain(
+      MASTER_LIMITER_PROCESSOR,
+    );
   });
 
   it('boots through the shared engine composable, not a local worklet source', () => {
@@ -282,17 +290,19 @@ describe('useStudioEngine', () => {
     // render span fixed to the export length rather than auto-derived.
     const offline = wasmMock.RealtimeEngine.instances.at(-1)!;
     expect(offline.sampleRate).toBe(48000);
-    expect(offline.setTrackLanes).toHaveBeenCalledWith([1, 2, 3]);
+    const offlineLanes = offline.setTrackLanes.mock.lastCall?.[0] as Array<{ trackId: number }>;
+    expect(offlineLanes.map((lane) => lane.trackId)).toEqual([1, 2, 3]);
     expect(offline.setSoloMute).toHaveBeenCalledWith(1, false, true);
     expect(offline.setSoloMute).toHaveBeenCalledWith(0, false, false);
     expect(String(offline.setMasterStripJson.mock.lastCall?.[0])).toContain(
       MASTER_LIMITER_PROCESSOR,
     );
+    // The schedule is the live one; the muted lane silences its track.
     const clips = offline.setMidiClips.mock.lastCall?.[0] as Array<{ trackId: number }>;
-    expect(clips.map((clip) => clip.trackId)).toEqual([1, 3]);
-    const planes = offline.renderOffline.mock.lastCall?.[0] as Float32Array[];
-    expect(planes).toHaveLength(2);
-    expect(planes[0]).toHaveLength(exportFrames(120));
+    expect(clips.map((clip) => clip.trackId)).toEqual([1, 2, 3]);
+    const options = offline.bounceOffline.mock.lastCall?.[0];
+    expect(options?.numChannels).toBe(2);
+    expect(options?.totalFrames).toBe(exportFrames(120));
     expect(offline.destroy).toHaveBeenCalledTimes(1);
     expect(blob?.size).toBe(44 + exportFrames(120) * 2 * 2);
     // The export never touches the Project path the stem views use.
@@ -334,12 +344,16 @@ describe('useStudioEngine', () => {
     const blob = engine.exportWav(defaultPattern(), 120);
     expect(blob).toBeInstanceOf(Blob);
     const offline = wasmMock.RealtimeEngine.instances.at(-1)!;
-    const stripDb = (call: unknown[]) => JSON.parse(String(call[1])).strips[0].faderDb as number;
-    const strips = offline.setTrackStripJson.mock.calls.map(stripDb);
-    expect(strips[0]).toBe(0);
-    expect(strips[2]).toBeCloseTo(20 * Math.log10(0.25), 6);
-    const master = JSON.parse(String(offline.setMasterStripJson.mock.lastCall?.[0]));
-    expect(master.strips[0].faderDb).toBeCloseTo(20 * Math.log10(0.5), 6);
+    // Fader values land as smoothed sets of the engine's per-strip fader ids:
+    // three lanes and the master, each its own id.
+    const faders = new Map(
+      offline.setParameterSmoothed.mock.calls.map(([id, db]: unknown[]) => [id, db as number]),
+    );
+    const dbs = [...faders.values()].sort((x, y) => x - y);
+    expect(dbs).toHaveLength(STUDIO_TRACKS.length + 1);
+    expect(dbs[0]).toBeCloseTo(20 * Math.log10(0.25), 6);
+    expect(dbs[1]).toBeCloseTo(20 * Math.log10(0.5), 6);
+    expect(dbs.slice(2)).toEqual([0, 0]);
     // The encoded samples are the engine's render, untouched by JS gain.
     const view = new DataView(await (blob as Blob).arrayBuffer());
     expect(view.getInt16(44, true)).toBe(0x4000); // 0.5 at the PCM16 quantization step

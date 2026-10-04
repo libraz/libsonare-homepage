@@ -5,16 +5,16 @@ import { describe, expect, it } from 'vitest';
 /**
  * Strip JSON rebuilds every insert on a strip, so the engine-backed demos send
  * it from one place: `src/utils/engineApply.ts`. The scan covers that file and
- * the code the mastering and mixing demos are built from — their directories
- * and the shared composables and components. /studio's bounce, the inline
- * demos and the other demos drive the engine on their own terms and are out of
- * scope.
+ * the code the mastering, mixing and studio demos are built from — their
+ * directories and the shared composables and components. The inline demos and
+ * the other demos drive the engine on their own terms and are out of scope.
  */
 const root = join(__dirname, '../..');
 const SCOPE = [
   'src/utils/engineApply.ts',
   'src/demos/mastering',
   'src/demos/mixing',
+  'src/demos/studio',
   'src/composables',
   'src/components',
 ];

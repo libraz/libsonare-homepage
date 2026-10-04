@@ -3,11 +3,14 @@ import { useAudioExport } from '@/composables/useAudioExport';
 import { useSonareEngine } from '@/composables/useSonareEngine';
 import {
   barFrames,
-  buildLaneClips,
   EXPORT_SAMPLE_RATE,
   laneTrackId,
-  linearToDb,
+  masterFaderOp,
   renderStudioMix,
+  studioClipsOp,
+  studioSetupOps,
+  trackFaderOp,
+  trackMuteOp,
 } from '@/demos/studio/studioBounce';
 import {
   BAR_PPQ,
@@ -16,7 +19,12 @@ import {
   STUDIO_TRACKS,
   type StudioPattern,
 } from '@/demos/studio/studioCopy';
-import { masterLimiterStripJson } from '@/utils/masterLimiter';
+import {
+  applyOps,
+  createFacadeTarget,
+  type EngineOp,
+  type EngineTarget,
+} from '@/utils/engineApply';
 
 type WasmModule = typeof import('@/wasm/index.js');
 /** Per-tick meter decay factor, matching the previous analyser-based meters. */
@@ -40,9 +48,9 @@ function dbToLinear(db: number): number {
  * lane mixer (`setTrackLanes` + strip fader/mute) into a master strip carrying
  * the engine's true-peak limiter. Pattern and tempo edits update the schedule
  * in place — playback never stops to re-render. Meters come from the engine's
- * per-lane and master meter telemetry, the WAV export is the same lane mix
- * rendered deterministically offline, and the stem waveforms are display-only
- * offline Project renders.
+ * per-lane and master meter telemetry, the WAV export applies the same engine
+ * ops (`studioBounce.ts`) to an offline engine, and the stem waveforms are
+ * display-only offline Project renders.
  */
 export function useStudioEngine() {
   const sonare = useSonareEngine();
@@ -61,6 +69,8 @@ export function useStudioEngine() {
   const audioExport = useAudioExport();
 
   let wasm: WasmModule | null = null;
+  /** The facade as an engineApply target; the export applies the same ops to a raw engine. */
+  let target: EngineTarget | null = null;
   const gains: number[] = STUDIO_TRACKS.map((track) => track.gain);
   const mutes: boolean[] = STUDIO_TRACKS.map(() => false);
   let masterGainValue = STUDIO_MASTER_GAIN;
@@ -113,13 +123,8 @@ export function useStudioEngine() {
       wasm = mod;
       libVersion.value = mod.version();
 
-      engine.setTrackLanes(STUDIO_TRACKS.map((_, i) => trackId(i)));
-      for (let i = 0; i < STUDIO_TRACKS.length; i++) {
-        engine.setSynthInstrument(trackId(i), STUDIO_TRACKS[i].preset);
-      }
-      // The master fader itself is driven by setStripGain; the scene only
-      // installs the limiter, so it goes in before any fader value.
-      engine.setMasterStripJson(masterLimiterStripJson());
+      target = createFacadeTarget(engine);
+      applyOps(target, studioSetupOps());
       engine.transport.setLoop(0, BAR_PPQ, true);
 
       ready.value = true;
@@ -128,6 +133,7 @@ export function useStudioEngine() {
       console.error('studio engine start failed:', err);
       error.value = err instanceof Error ? err.message : String(err);
       // The engine never came up — release it and its AudioContext.
+      target = null;
       await sonare.dispose();
       return false;
     } finally {
@@ -135,9 +141,9 @@ export function useStudioEngine() {
     }
   }
 
-  /** The one-bar clip schedule for the live engine, at the context's rate. */
-  function buildMidiClips(pattern: StudioPattern, bpm: number) {
-    return buildLaneClips(pattern, bpm, sonare.context.value?.sampleRate ?? EXPORT_SAMPLE_RATE, 1);
+  /** Applies `op` to the live engine once it is up. */
+  function apply(op: EngineOp): void {
+    if (target) applyOps(target, [op]);
   }
 
   /**
@@ -149,7 +155,7 @@ export function useStudioEngine() {
     const mod = wasm;
     const engine = sonare.engine.value;
     const context = sonare.context.value;
-    if (!mod || !engine) return;
+    if (!mod || !engine || !target) return;
     if (bpm !== currentBpm) {
       const phase = playing.value ? currentPhase() : 0;
       currentBpm = bpm;
@@ -161,7 +167,8 @@ export function useStudioEngine() {
         loopStart = context.currentTime - phase * loopDuration;
       }
     }
-    engine.setMidiClips(buildMidiClips(pattern, bpm));
+    // The one-bar schedule, at the context's rate.
+    applyOps(target, [studioClipsOp(pattern, bpm, context?.sampleRate ?? EXPORT_SAMPLE_RATE, 1)]);
     refreshStemViews(mod, pattern, bpm);
   }
 
@@ -353,17 +360,17 @@ export function useStudioEngine() {
 
   function setTrackGain(index: number, value: number): void {
     gains[index] = value;
-    sonare.engine.value?.setStripGain(trackId(index), linearToDb(value));
+    apply(trackFaderOp(index, value));
   }
 
   function setTrackMute(index: number, muted: boolean): void {
     mutes[index] = muted;
-    sonare.engine.value?.setSoloMute(trackId(index), false, muted);
+    apply(trackMuteOp(index, muted));
   }
 
   function setMasterGain(value: number): void {
     masterGainValue = value;
-    sonare.engine.value?.setStripGain('master', linearToDb(value));
+    apply(masterFaderOp(value));
   }
 
   /**
@@ -438,6 +445,7 @@ export function useStudioEngine() {
     cancelAnimationFrame(auditionRaf);
     auditioning = 0;
     ready.value = false;
+    target = null;
     masterLevel.value = 0;
     stemViews.value = [];
     stemCache.clear();

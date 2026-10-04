@@ -1,5 +1,6 @@
 import { BAR_PPQ, STEP_COUNT, STUDIO_TRACKS, type StudioPattern } from '@/demos/studio/studioCopy';
-import { masterLimiterStripJson } from '@/utils/masterLimiter';
+import { applyOps, createRawTarget, type EngineOp, type StripSpec } from '@/utils/engineApply';
+import { MASTER_LIMITER_CEILING_DB, MASTER_LIMITER_PROCESSOR } from '@/utils/masterLimiter';
 import { noteOffWord, noteOnWord } from '@/utils/ump';
 
 type WasmModule = typeof import('@/wasm/index.js');
@@ -10,6 +11,19 @@ export const EXPORT_SAMPLE_RATE = 48000;
 export const EXPORT_BARS = 2;
 /** Room after the last bar for the instruments' release tails. */
 export const EXPORT_TAIL_SECONDS = 1.6;
+/** Render block size of the offline export engine. */
+const EXPORT_BLOCK_SIZE = 128;
+
+/** The master strip: the engine's true-peak limiter as its one post-fader insert. */
+const MASTER_STRIP: StripSpec = {
+  inserts: [
+    {
+      slot: 'post',
+      processor: MASTER_LIMITER_PROCESSOR,
+      params: { ceilingDb: MASTER_LIMITER_CEILING_DB },
+    },
+  ],
+};
 
 /** Mixer state the export applies: linear fader gains, mutes, master. */
 export interface StudioMixSettings {
@@ -84,11 +98,83 @@ export function buildLaneClips(
   return clips;
 }
 
+/** Lanes, one NativeSynth per lane, and the limited master strip. */
+export function studioSetupOps(): EngineOp[] {
+  return [
+    {
+      type: 'topology',
+      buses: [],
+      lanes: STUDIO_TRACKS.map((_, i) => ({ trackId: laneTrackId(i), sends: [] })),
+    },
+    ...STUDIO_TRACKS.map(
+      (def, i): EngineOp => ({
+        type: 'synthInstrument',
+        destinationId: laneTrackId(i),
+        preset: def.preset,
+      }),
+    ),
+    // The scene installs only the limiter; the master fader op comes after it.
+    { type: 'strip', strip: { kind: 'master' }, spec: MASTER_STRIP },
+  ];
+}
+
+/** One track's fader, from its linear UI value. */
+export function trackFaderOp(index: number, gain: number): EngineOp {
+  return { type: 'fader', target: laneTrackId(index), db: linearToDb(gain) };
+}
+
+/** One track's mute; the studio has no solo. */
+export function trackMuteOp(index: number, muted: boolean): EngineOp {
+  return { type: 'soloMute', trackId: laneTrackId(index), solo: false, mute: muted };
+}
+
+/** The master fader, from its linear UI value. */
+export function masterFaderOp(gain: number): EngineOp {
+  return { type: 'fader', target: 'master', db: linearToDb(gain) };
+}
+
+/** The pattern's MIDI clip schedule, replacing the previous one. */
+export function studioClipsOp(
+  pattern: StudioPattern,
+  bpm: number,
+  sampleRate: number,
+  bars: number,
+): EngineOp {
+  return { type: 'midiClips', clips: buildLaneClips(pattern, bpm, sampleRate, bars) };
+}
+
 /**
- * Render the session the way the live engine plays it — the same lane strips,
- * mutes, master fader and master limiter — but offline and deterministic, as
- * interleaved stereo at {@link EXPORT_SAMPLE_RATE}. Returns null when nothing
- * would sound (every track muted or empty).
+ * The whole session as engine ops: setup, every fader and mute, the master
+ * fader, then the clip schedule. Tempo is a transport setting and stays out.
+ */
+export function buildStudioOps(
+  pattern: StudioPattern,
+  bpm: number,
+  settings: StudioMixSettings,
+  sampleRate: number,
+  bars: number,
+): EngineOp[] {
+  return [
+    ...studioSetupOps(),
+    ...STUDIO_TRACKS.flatMap((_, i) => [
+      trackFaderOp(i, settings.gains[i]),
+      trackMuteOp(i, settings.mutes[i]),
+    ]),
+    masterFaderOp(settings.masterGain),
+    studioClipsOp(pattern, bpm, sampleRate, bars),
+  ];
+}
+
+/** Whether any unmuted track has an active step. */
+function audible(pattern: StudioPattern, mutes: readonly boolean[]): boolean {
+  return STUDIO_TRACKS.some((_, t) => !mutes[t] && pattern[t].some((row) => row.some(Boolean)));
+}
+
+/**
+ * Render the session the way the live engine plays it — the same ops on a raw
+ * engine — but offline and deterministic, as interleaved stereo at
+ * {@link EXPORT_SAMPLE_RATE}. Returns null when nothing would sound (every
+ * track muted or empty).
  */
 export function renderStudioMix(
   mod: WasmModule,
@@ -96,33 +182,22 @@ export function renderStudioMix(
   bpm: number,
   settings: StudioMixSettings,
 ): Float32Array | null {
-  const clips = buildLaneClips(pattern, bpm, EXPORT_SAMPLE_RATE, EXPORT_BARS).filter(
-    (clip) => !settings.mutes[clip.trackId - 1],
-  );
-  if (clips.length === 0) return null;
-  const total = exportFrames(bpm);
-  const engine = new mod.RealtimeEngine(EXPORT_SAMPLE_RATE, 128);
+  if (!audible(pattern, settings.mutes)) return null;
+  const engine = new mod.RealtimeEngine(EXPORT_SAMPLE_RATE, EXPORT_BLOCK_SIZE);
   try {
     engine.setTempoSegments([{ startPpq: 0, bpm }]);
-    engine.setTrackLanes(STUDIO_TRACKS.map((_, i) => laneTrackId(i)));
-    for (let i = 0; i < STUDIO_TRACKS.length; i++) {
-      const def = STUDIO_TRACKS[i];
-      engine.setSynthInstrument(def.preset, laneTrackId(i));
-      engine.setTrackStripJson(
-        laneTrackId(i),
-        JSON.stringify({ strips: [{ id: def.id, faderDb: linearToDb(settings.gains[i]) }] }),
-      );
-      engine.setSoloMute(i, false, settings.mutes[i]);
-    }
-    engine.setMasterStripJson(masterLimiterStripJson(linearToDb(settings.masterGain)));
-    engine.setMidiClips(clips);
-    const planes = engine.renderOffline([new Float32Array(total), new Float32Array(total)]);
-    const interleaved = new Float32Array(total * 2);
-    for (let f = 0; f < total; f++) {
-      interleaved[2 * f] = planes[0][f];
-      interleaved[2 * f + 1] = planes[1][f];
-    }
-    return interleaved;
+    applyOps(
+      createRawTarget(engine),
+      buildStudioOps(pattern, bpm, settings, EXPORT_SAMPLE_RATE, EXPORT_BARS),
+    );
+    engine.play();
+    // The bounce primes one stopped block and settles every ramp before the first audible one.
+    return engine.bounceOffline({
+      totalFrames: exportFrames(bpm),
+      blockSize: EXPORT_BLOCK_SIZE,
+      numChannels: 2,
+      dither: 0,
+    }).interleaved;
   } finally {
     engine.destroy();
   }
