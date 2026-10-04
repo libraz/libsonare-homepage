@@ -171,9 +171,9 @@ const tuned = pitchCorrectToMidiTimevarying(
 
 `voiced` の型は `VoicedFlags` で、`Int32Array`、`Uint8Array`、`Float32Array`、`readonly number[]`、`readonly boolean[]` を受け付けます。各要素は大きさではなくフラグとして読まれ、真と評価される値がすべて有声を意味します。そのため `pitchPyin` が `boolean[]` として返す `pitch.voicedFlag` を、変換せずそのまま渡せます。
 
-`voiced` と `voicedProb` の長さは、どちらも `f0Hz` と一致している必要があります。一致しない場合は `SonareError` ではなく `RangeError` が投げられるため、`isSonareError` によるガードでは捕捉できません。
+`voiced` の長さは `f0Hz` と一致している必要があります。`voiced` を省略した場合は、`voicedProb` の長さも `f0Hz` と一致している必要があります。一致しない場合は `SonareError` ではなく `RangeError` が投げられるため、`isSonareError` によるガードでは捕捉できません。
 
-`f0Hz` に `NaN` を入れられるのは、対応する `voiced` が未設定（`0` または `false`）のフレームだけです。
+有声フレームの `f0Hz` は有限の正の値で、ナイキスト周波数（`sampleRate / 2`）以下である必要があります。有声フレームに 0・負の値・有限でない値を指定すると拒否されます。無声フレームには `NaN`、または 0 以上ナイキスト周波数以下の有限値を指定できます。ピッチ解析の無声フレームに `NaN` が含まれる場合は、その解析の `voiced` フラグも渡してください。
 
 ::: tip 一定補正と輪郭追従補正
 1 回のトランスポーズで十分な、安定して伸ばすノートには `pitchCorrectToMidi(...)` を使います。ビブラートやスライド、揺らぎを保ちながら音程へ寄せたいテイクには `pitchCorrectToMidiTimevarying(...)` を選んでください。

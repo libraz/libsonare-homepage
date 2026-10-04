@@ -113,7 +113,7 @@ The wider figure holds for every target that can run the upmix stage, whether or
 
 With `input.layout: "auto"` (the default), the renderer follows the channel count of each processed block — 1, 2, 6 or 8 — and switches the active input layout at a block boundary with no dropped or duplicated audio and no change in latency. Internally, the six source-dependent stages of the previous layout keep draining into the output for as long as their own state takes to decay, while the new layout's stages start fresh; the two sum together so nothing is lost or repeated at the seam. `input_channels()` / `inputChannels()` reports the active layout's channel count (2 before the first call); an unsupported channel count on a fixed (non-`auto`) layout is refused without advancing any state.
 
-`diagnostics()` reports `active_input_layout`, `layout_switches` (a running count), and `truncated_drains` — incremented when a layout switches back before the previous one finished draining, which fades the interrupted drain out over 2 ms rather than cutting it.
+`diagnostics()` reports `active_input_layout`, `layout_switches` (a running count), and `truncated_drains` — incremented when a layout switches back before the previous one finished draining, which fades the interrupted drain out over 2 ms rather than cutting it. It also reports `limiter_gain_reduction_db`: the deepest (most negative) reduction in the last processed block across the main limiter and, for a speaker target with an LFE plane, the LFE limiter. `0` means no reduction; negative dB values mean attenuation.
 
 ## Audio and Video Sync
 

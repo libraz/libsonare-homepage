@@ -361,7 +361,7 @@ engine.node.connect(cueDestination, 1);
 
 `automationParamId(target, 'faderDb' | 'pan')` と `busAutomationParamId(busId)` はミキサー名前空間の予約済みエンジンパラメータ id を返すので、`addParameter` でカスタムパラメータを登録しなくても、それらをそのまま `setAutomationLane(paramId, points)` に渡してトラック／マスターのフェーダーやパン、あるいはバスのフェーダー（そのフェーダーゲイン dB に解決されます）を自動化できます。`target`／`busId` は初回利用時にミキサーのレーン／バスを宣言します。
 
-Worklet 側でスコープスナップショットを流す場合は、`SonareRealtimeEngineNode.create(...)` に `scopeIntervalFrames`、`scopeBands`、必要に応じて `scopeSharedBuffer` / `scopeRingCapacity` を渡します。独自ブリッジでスペクトラムとベクトルスコープのスナップショットを共有リングに流したい場合は、低レベルの `createSonareScopeRingBuffer(...)` と `readSonareScopeRingBuffer(...)` を使えます。
+Worklet 側でスコープスナップショットを流す場合は、`SonareRealtimeEngineNode.create(...)` に `scopeIntervalFrames`、`scopeBands`、必要に応じて `scopeSharedBuffer` / `scopeRingCapacity` を渡します。SAB のスコープ共有リングはレンダーコールバック内で確保を行わず、`pollScope()` で読み出します。`onScope()` は同じ `SonareWorkletScopeSnapshot` 形式を受け取ります。SAB が使えない場合や `mode: 'postMessage'` を指定した場合、プロセッサは `bands` と `points` を転送する `Float32Array` バッファとして各スナップショットに含めて送ります。この場合も `onScope()` は同じ形式で受け取りますが、共有リングがないため `pollScope()` は空配列を返します。postMessage 経路では転送前にスナップショットごとの配列を作ります。独自ブリッジでスペクトラムとベクトルスコープのスナップショットを共有リングに流したい場合は、低レベルの `createSonareScopeRingBuffer(...)` と `readSonareScopeRingBuffer(...)` を使えます。
 
 ```typescript
 import { SonareEngine } from '@libraz/libsonare/worklet';

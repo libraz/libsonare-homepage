@@ -243,8 +243,8 @@ and the built-in preset lists. It is the same canonical JSON the C ABI publishes
 and Python exposes as `capability_catalog`, validated against
 `schemas/capability-catalog.schema.json`.
 
-The catalog carries real values: the current build publishes 89 processors and
-5,352 parameter descriptors. Defaults can be `null` when a construction key has
+The catalog carries real values: the current build publishes 92 processors and
+5,478 parameter descriptors. Defaults can be `null` when a construction key has
 no fallback. Bounds are measured with the processor's other parameters at their
 defaults; a `null` bound means the catalog knows of no limit on that side, not
 that bounds are unavailable in general.

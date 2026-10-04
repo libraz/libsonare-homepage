@@ -61,14 +61,16 @@ Keys outside an insert's list are ignored by the processor and reported through 
 
 The route is three lookups in the one document rather than a call per processor:
 
-1. **Pick the insert set.** Filter `processors` on `realtimeInsertable`. That is 76 of the 91 entries, and it is the same set `masteringInsertNames()` returns; the other 15 — the 11 offline processors and the 4 pair processors — carry an empty `params` array. `category` groups the set the way a picker does (`effects` is the 18 creative-FX ids on this page; the other categories are the mastering families), and `channelPolicy` says how the mixer wraps the insert on a bus wider than stereo — every reverb, modulation and delay insert is `stereoPairOnly` except `effects.modulation.ringModulator`, which is `multichannel`.
+1. **Pick the insert set.** Filter `processors` on `realtimeInsertable`. That is 77 of the 92 entries, and it is the same set `masteringInsertNames()` returns; the other 15 — the 11 offline processors and the 4 pair processors — carry an empty `params` array. `category` groups the set the way a picker does (`effects` is the 19 creative-FX ids on this page; the other categories are the mastering families), and `channelPolicy` says how the mixer wraps the insert on a bus wider than stereo — every reverb, modulation and delay insert is `stereoPairOnly` except `effects.modulation.ringModulator`, which is `multichannel`.
 2. **Read the descriptors.** An entry's `params` is exactly the list `masteringInsertParamInfo(id)` returns for that id, in the same order, so a host holding the catalog never needs the per-processor call. Entries with `id: null` are construction-only; non-null ids are the automation ids used by `Mixer.scheduleInsertAutomation(strip, insertIndex, paramId, samplePos, value)` on Node and WASM, `Mixer.schedule_insert_automation(...)` on Python, and `sonare_strip_schedule_insert_automation` on the C ABI. The realtime engine's setters take the `name` instead (`setTrackStripInsertParamByName` and its master and bus variants).
 3. **Lay out each control** from `type`, `default`, `min`, `max`, `unit`, and `choices`. Construction-only keys now have descriptors too, so `stages` on the phaser, `attackMs` / `releaseMs` on the auto-wah, `stereoSpread` on the rotary, and room geometry can be represented as build-time fields. Use `slot` to identify a slot group, then read the processor's `slots` entry: `activation` (`anyKey` or `always`), the enclosing `parent`, and `minCrossoverCutoffs` determine whether that group is present.
 
+The same descriptor route covers the current insertable maximizer controls: `ceilingDb` on `maximizer.truePeakLimiter`, `maximizer.maximizer`, `maximizer.adaptiveRelease`, and `maximizer.softKneeMax`. GS-bound realtime controls are also published there: `windowMs`, `preDelayMs`, and `preDelay2Ms` on `effects.modulation.pitchShifter`; `stereoSpread`, `accelTauS`, `decelTauS`, `undershootHz`, and `drumUndershootHz` on `effects.modulation.rotary`; `preDelayMs` and `character` on `effects.reverb.dattorro`; and `typeLadder` on `saturation.bitcrusher`. Use the descriptor list instead of maintaining a second control table.
+
 ```typescript
 const catalog = capabilityCatalog();
-const inserts = catalog.processors.filter((p) => p.realtimeInsertable);   // 76 of 91
-const fx = inserts.filter((p) => p.category === 'effects');               // the 18 ids below
+const inserts = catalog.processors.filter((p) => p.realtimeInsertable);   // 77 of 92
+const fx = inserts.filter((p) => p.category === 'effects');               // the 19 ids below
 const chorus = fx.find((p) => p.id === 'effects.modulation.chorus')!;
 for (const param of chorus.params) {
   // param.id is null for construction-only keys; param.name is the scene JSON key
@@ -81,14 +83,16 @@ for (const param of chorus.params) {
 
 Four things the effects family reports that a general reading of the document would not lead you to expect:
 
-- **`rtSafe: false` is a hard stop for automation, not a hint.** Scheduling automation on such a parameter returns `NotSupported` (code 6). Construction-only rows are marked with `id: null` and `rtSafe: false`; this page also contains id-bearing targets such as `modDepthSamples` whose prepared processor cannot change them safely. A UI that draws an automation lane per descriptor has to disable every row whose `rtSafe` is false.
+- **`rtSafe: false` is a hard stop for automation, not a hint.** Scheduling automation on such a parameter returns `NotSupported` (code 6). Construction-only rows are marked with `id: null` and `rtSafe: false`; this page also contains id-bearing targets that remain unsafe, including every GS EFX raw byte and `modDepthSamples`. A UI that draws an automation lane per descriptor has to disable every row whose `rtSafe` is false, including an id-bearing row.
 - **The catalog has more than numeric toggles.** Effects descriptors include `number`, `boolean`, `enum`, `string`, and `array` types. `choices` can describe enum values or a closed numeric set with gaps. Do not infer a toggle from a name; use `type`, and use `choices` for discrete controls.
 - **Latency and tail are per insert, and non-zero for the reverbs.** `effects.reverb.convolution`, `effects.reverb.room` and `effects.acoustic.roomMorph` report 256 samples of latency; the reverbs report tails from 51,217 samples (`room`, `roomMorph`) up to 264,000 (`fdn`), and the stereo delay 59,795, all at the representative 48 kHz probe. `realtimeCost` is `moderate` for every reverb except `velvet`, which is `high`, and `low` for every modulation and delay insert; it is `null` only on the 15 non-inserts.
-- **The effects family is small in parameters.** Its 18 processors publish 136 descriptors between them; the per-band EQ processors account for most of the 5,352 (`multiband.dynamicEq` alone has 1,019). An insert UI that sizes itself by descriptor count should expect the two families to differ by an order of magnitude.
+- **The effects family is small in parameters.** Its 19 processors publish 229 descriptors between them; the per-band EQ processors account for most of the 5,478 descriptors in the full catalog (`multiband.dynamicEq` alone has 1,019). An insert UI that sizes itself by descriptor count should expect the two families to differ by an order of magnitude.
 
 ### Two things a null and a default do not tell you
 
 **A `null` bound means construction did not refuse, not that any value is meaningful.** An absent bound is literally `null` in the JSON (`None` in Python): the schema types `min` and `max` as `number | null`, and every descriptor carries both keys. Construction-only descriptors can publish bounds when their validation exposes them, while string and array keys generally publish `null`. `effects.modulation.chorus` publishes no bound on `dryWet`, construction accepts `5`, and the processor then clamps its wet mix to `[0, 1]` internally, so `dryWet: 5` renders identically to `dryWet: 1`. The catalog measures what construction rejects; a processor that folds a value instead of rejecting it reports `null`, so a range check against `null` rules out only one kind of mistake. Read a `null` bound as "no validation to lean on", and take the sensible range from the parameter's meaning and unit.
+
+The catalog's finite bounds are acceptance limits. For example, `saturation.bitcrusher.bitDepth` publishes `min: 2` and `max: 24`, and values outside that interval are rejected. Some gain fields also reject values whose dB-to-linear conversion is non-finite; a large measured upper bound is still an implementation limit, not a useful control range.
 
 **A default is the config struct's initializer, and a preset is under no obligation to hand it to you.** A construction-only descriptor can have `default: null` when there is no fallback, while a preset or scene can supply that key explicitly. A control surface that initialises from `default` alone can show the wrong value for a loaded scene. Initialise from the scene's own `params`, fall back to the catalog default only for keys the scene does not carry, and treat a `null` default as a value that still needs an explicit scene or user choice.
 
@@ -96,7 +100,7 @@ Four things the effects family reports that a general reading of the document wo
 
 In addition to the mastering [solo processors](./mastering-processors.md#solo-processors), builds with creative FX enabled expose reverb, modulation, vowel-filter, delay, and stereo insert IDs:
 
-The `effects` category contains 18 entries; `stereo.binaural` is listed alongside them as a stereo-category insert.
+The `effects` category contains 19 entries; `stereo.binaural` is listed alongside them as a stereo-category insert.
 
 | Insert ID | Meaning |
 |-----------|---------|
@@ -107,6 +111,7 @@ The `effects` category contains 18 entries; `stereo.binaural` is listed alongsid
 | `effects.reverb.convolution` | Convolution reverb; takes an impulse response as `irF32Base64` in its params, or synthesizes one from `decaySec` and `seed` |
 | `effects.reverb.room` | Geometric room reverb synthesized from room parameters |
 | `effects.acoustic.roomMorph` | Room-character morph toward a target geometric room |
+| `effects.gsEfx` | GS insertion-effect unit with a selected type and 20 raw parameter bytes |
 | `effects.filter.vowel` | Three-band resonant vowel filter with a direct path |
 | `effects.modulation.ensemble` | Solina-style BBD string-machine ensemble |
 | `effects.modulation.chorus` | Stereo chorus |
@@ -123,6 +128,24 @@ The `effects` category contains 18 entries; `stereo.binaural` is listed alongsid
 ::: warning Build-flag gating
 These insert IDs are available only in builds configured with the CMake option `BUILD_FX` (which derives the internal `SONARE_HAVE_FX` define). The geometric room inserts (`effects.reverb.room`, `effects.acoustic.roomMorph`) also require `BUILD_ACOUSTIC_SIM`. In a build without an option, the corresponding IDs simply do not appear in `masteringInsertNames()`.
 :::
+
+### GS EFX (`effects.gsEfx`)
+
+`effects.gsEfx` is the standalone GS insertion-effect unit. It is included only when the library is built with `BUILD_FX`; otherwise the name is absent from `masteringInsertNames()` and cannot be passed to `masteringProcess()` or an insert slot.
+
+The factory takes a flat numeric parameter object. If both `typeMsb` and `typeLsb` are omitted, the type is `0` (thru). To select another type, supply both selectors as integers in `0..127`; supplying only one is rejected, and the pair selects `(typeMsb << 8) | typeLsb`. A non-zero type must be known by the build. `realization` is optional and is `0` for modern (the default) or `1` for classic. `byte0` through `byte19` are optional raw GS parameter bytes, each in `0..127`; omitted bytes use the selected type's defaults, and values that the selected type does not accept are rejected.
+
+```typescript
+const processed = masteringProcess('effects.gsEfx', samples, sampleRate, {
+  typeMsb: 0x01,
+  typeLsb: 0x10,
+  realization: 0,
+  byte0: 64,
+  byte19: 127,
+});
+```
+
+The same parameter object is used when the processor is constructed as a mixer or realtime insert. Use `masteringInsertParamInfo('effects.gsEfx')` or the capability catalog for the descriptors published by the current build.
 
 The table below highlights representative keys and behavior; it is intentionally abbreviated. The complete, build-specific list — including newer keys such as chorus/flanger `preFilterHz` and `preFilterMode`, phaser `feedback` and `mixMode`, rotary drum controls, pitch-shifter `windowMs`, and stereo-delay `dampingHz` — is available through [`masteringInsertParamInfo(name)`](#the-parameter-descriptor) or `capabilityCatalog().processors[].params`.
 

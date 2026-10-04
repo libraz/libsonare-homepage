@@ -355,7 +355,6 @@ print(chain_result.stage_gain_reductions)
 if chain_result.report is not None:
     print(chain_result.report.before, chain_result.report.after)
     print(chain_result.report.band_energy_delta_db)
-
 # ブロック単位のストリーミング処理
 with sonare.StreamingMasteringChain({
     "eq.tilt.tiltDb": 0.5,
@@ -369,7 +368,6 @@ with sonare.StreamingMasteringChain({
         if not tail:
             break
         output.extend(tail)
-
 profile = json.loads(sonare.mastering_audio_profile(samples, sample_rate=sample_rate, params={
     "n_fft": 2048,
     "hop_length": 512,
@@ -384,7 +382,6 @@ preview = json.loads(sonare.mastering_streaming_preview(samples, sample_rate=sam
     {"name": "YouTube", "targetLufs": -14, "ceilingDb": -1},
     {"name": "Podcast", "targetLufs": -16, "ceilingDb": -1},
 ]))
-
 # ステレオ入口: パラメータも戻り値の JSON も同じで、測定だけが両チャンネル基準になります。
 stereo_profile = json.loads(sonare.mastering_audio_profile_stereo(left, right, sample_rate=sample_rate, params={
     "n_fft": 2048,
@@ -400,6 +397,8 @@ stereo_suggestions = json.loads(sonare.mastering_assistant_suggest_stereo(left, 
 stereo_preview = json.loads(sonare.mastering_streaming_preview_stereo(left, right, sample_rate=sample_rate))
 ```
 
+`prepare()` のあとに `chain.set_parameter(key, value)` を呼ぶと、ストリーミングで安全なパラメータをブロック境界で 1 つ変更できます。この呼び出しは処理、フラッシュ、リセット、prepare と直列化されます。未知のキー、構造を変えるキー、無効化したステージのキーは変更前に拒否されるため、失敗してもチェーンと音声履歴は変わりません。パラメータ変更に自動スムージングはありません。
+
 3 つの JSON ヘルパーにはそれぞれ `_stereo` 版があります。バッファ 1 本ではなく `left` と `right` を受け取り、`params` / `platforms` は同じもの、戻り値も同じ JSON 文字列です。2 チャンネルの素材を扱うときは常にこちらを使ってください。モノラル側の入口は `0.5 * (left + right)` のダウンミックスを測定するため、相関の低いステレオ素材では約 6 dB 低く出ます。その分だけ、インテグレーテッドラウドネス、そこから導かれるノーマライズゲイン、ピーク余裕の判定がまとめて過小評価されます。相関を落としたピンクノイズのペア（48 kHz・4 秒）では、ダウンミックス経由が -22.55 LUFS、ステレオ経由が -16.44 LUFS で、差は 6.11 dB でした。同じ差が Spotify の `normalizationGainDb` を +2.44 から +8.55 に押し上げます。相関の高いペアでは差は 3.01 dB にとどまり、これはダウンミックスで振幅が半分になる分です。残りの約 3 dB が相関の低さによるものです。
 
 ステレオプロファイルのうち、両チャンネルから測るのは `loudness` ブロックだけです。インテグレーテッド LUFS と LRA はチャンネルを合算したプログラムから求め、True Peak は 2 つのうち大きい方を採ります。スペクトル・ダイナミクス・テンポの各フィールドは絶対レベルではなく形と時間構造を表すため、ダウンミックス基準のまま据え置き、モノラル呼び出しの結果とそのまま比較できます。
@@ -414,7 +413,9 @@ stereo_preview = json.loads(sonare.mastering_streaming_preview_stereo(left, righ
 
 ストリーミング入力の最終ブロック後は、空のリストが返るまで `flush_mono()` を呼び、ステレオでは 2 つの空リストが返るまで `flush_stereo()` を呼びます。
 
-リファレンストラックを使う処理では `mastering_pair_processor_names()`、`mastering_pair_process()`、`mastering_pair_analysis_names()`、`mastering_pair_analyze()` を使います。ペア入力はサンプルレートを揃え、長さもなるべく近づけてください。
+リファレンストラックを使う処理では `mastering_pair_processor_names()`、`mastering_pair_process()`、`mastering_pair_process_stereo()`、`mastering_pair_analysis_names()`、`mastering_pair_analyze()` を使います。モノラルの `mastering_pair_process(processor_name, source, reference, sample_rate=22050, params=None)` は `MasteringResult` を返し、ソースとリファレンスの長さが異なっていても処理できます。ステレオ版は `source_left`、`source_right`、`reference_left`、`reference_right` を受け取り、`left`、`right`、`sample_rate`、`input_lufs`、`output_lufs`、`applied_gain_db`、`latency_samples`、`loudness_target_limited`、`non_finite_substitution_count` を持つ `MasteringStereoResult` を返します。各ソースペアと各リファレンスペアは左右の長さを揃える必要がありますが、ソースペアとリファレンスペアの長さは異なって構いません。ステレオの `match.abCrossfade` は短い方のペア長を使います。
+
+ラウドネスを揃えた A/B 比較には、`mastering_ab_match_loudness(source, reference, sample_rate=22050, *, with_match=True)` を使うと `(np.ndarray, LoudnessMatch | None)` が返ります。`mastering_ab_match_loudness_stereo(source_left, source_right, reference_left, reference_right, sample_rate=22050, *, with_match=True)` は `((np.ndarray, np.ndarray), LoudnessMatch | None)` を返します。ステレオの各ソース／リファレンスペアは左右の長さを揃えますが、ソースとリファレンスの長さは異なって構いません。ステレオ版はソースの両チャンネルに 1 つのゲインを共有して適用し、シーリングは行いません。
 
 ### 単発のダイナミクスとリペア
 
@@ -495,8 +496,11 @@ result = sonare.mastering_chain(
 | ステレオプロセッサを単体で実行 | `mastering_process_stereo()` |
 | ペアプロセッサ一覧 | `mastering_pair_processor_names()` |
 | ソース／リファレンスのペア処理 | `mastering_pair_process()` |
+| ステレオのソース／リファレンスのペア処理 | `mastering_pair_process_stereo()` |
 | ペア解析の一覧 | `mastering_pair_analysis_names()` |
 | ソース／リファレンスのペア解析 | `mastering_pair_analyze()` |
+| ソースのラウドネスをリファレンスへ合わせる | `mastering_ab_match_loudness()` |
+| ステレオソースのラウドネスをステレオリファレンスへ合わせる | `mastering_ab_match_loudness_stereo()` |
 | ステレオ解析の一覧 | `mastering_stereo_analysis_names()` |
 | ステレオチャンネル解析 | `mastering_stereo_analyze()` |
 

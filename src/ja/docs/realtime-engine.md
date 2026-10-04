@@ -95,11 +95,15 @@ const playhead = `${barCount + 1}:${beat}`; // 例: "3:2"
   - `intervalFrames` — スナップショット間の最小レンダーフレーム間隔（`0` で取得を無効化）。
   - `bandCount` — FFT のバンド分解能。`1..64` にクランプされ、実際に適用されたバンド数が戻り値として返ります。
 
-読み出した各スコープスナップショットは `targetId`（マスター・レーン・バスのいずれか）で識別され、2 本の配列を持ちます。`bands` は線形バンドの FFT マグニチュード（dB、長さ＝適用されたバンド数）、`points` はベクトルスコープ表示用のゴニオメータ点群で、`{ left, right }` レコードが最大 32 ステレオ点入ります（ワークレットのスコープリングバッファは同じ点群をインターリーブされた `[l0, r0, l1, r1, …]` の `Float32Array` として渡します）。バンドのレベルはレンダーブロックサイズに応じて変化し、ブロックサイズが 2 倍になるとおよそ −3 dB 下がります。比較はブロックサイズを固定したスナップショット同士で行ってください。
+メーターレコードにはトリム前入力ピークも含まれます。ステレオ経路では `inputPeakDbL` と `inputPeakDbR`、ワイド経路では有効なプレーンごとの `inputPeakDb` として返ります。`gainReductionDb` はマスターだけでなく、対象ストリップまたはバスのリダクションを報告します。
+
+AudioWorklet の生メーターリングは 16 float のレコードを使います。`SharedArrayBuffer` を直接読むコードは、固定されたレコード形式を前提にせず、公開された `SONARE_METER_RING_RECORD_FLOATS` 定数でレコードのサイズとストライドを決め、レコード数／ヘッダーを使ってください。
+
+読み出した各スコープスナップショットは `targetId`（マスター・レーン・バスのいずれか）で識別され、2 本の配列を持ちます。`bands` は線形バンドの FFT マグニチュード（dB、長さ＝適用されたバンド数）、`points` はベクトルスコープ表示用のゴニオメータ点群で、`{ left, right }` レコードが最大 32 ステレオ点入ります（ワークレットのスコープリングバッファは同じ点群をインターリーブされた `[l0, r0, l1, r1, …]` の `Float32Array` として渡します）。スペクトラムは実際のサンプル数に Hann 窓を適用し、窓のコヒーレントゲインを正規化した FFT から、各線形バンドに含まれるビンの平均パワーを dBFS へ変換して求めます。読み値はレンダーブロックサイズ、FFT の周波数分解能、`bandCount` に依存するため、これらの設定をそろえたスナップショット同士を比較してください。
 
 マスターメーターの統合ラウドネスをやり直すには `resetMasterLoudnessMeter(renderFrame = -1)` を呼びます（Python は `reset_master_loudness_meter(render_frame=-1)`、ワークレットノードは `resetMasterLoudnessMeter(sampleTime = -1)`）。このコマンドが消去するのは統合ラウドネスの積算値だけで、モーメンタリー、ショートターム、True Peak の履歴は保持されます。`renderFrame` はリセットを適用するレンダーフレームで、負の値を渡すと次のブロック先頭で適用されます。
 
-`drainMeterTelemetry()`／`drainMeterTelemetryWide()`／`drainScopeTelemetry()` が返す各レコードには `droppedRecords` が含まれます。これは前回のドレイン以降にロックフリーのテレメトリリングから失われたスナップショット数です。値が 0 以外なら、消費側のドレインが追いついておらず（バックプレッシャー）、メーターやスコープがちらつかないようにポーリング頻度を上げる必要があります。
+`drainMeterTelemetry()`／`drainMeterTelemetryWide()`／`drainScopeTelemetry()` が返す各レコードには、生成元のタップに対応する `droppedRecords` が含まれます。この値はタップの `prepare` または `reset` 以降に失われたレコードの累積数で、ドレインしても 0 には戻りません。前回のポーリング値と比較し、増加していればその間にレコードが失われています。値が変わらなければ、その間に新しいドロップはありません。0 以外でも、以前の期間に発生したドロップを示す場合があります。
 
 メーターレコードの dB 値を持つレベル／ラウドネスのフィールド（`peakDbL`／`R`、`rmsDbL`／`R`、`truePeakDbL`／`R`、`maxTruePeakDb`、`momentaryLufs`／`shortTermLufs`／`integratedLufs`）はすべて −120 dBFS のフロアを持ち、`NaN` や `-Infinity` を返しません。未初期化・無音・未書き込みのプレーン（例: モノラルレーンの右チャンネル）は 0 dBFS ではなく −120 dBFS を返すので、レコードは常に JSON セーフです（`correlation`・`monoCompatWidth`・`gainReductionDb` などの非 dB フィールドは 0 が既定）。積分系メーターのフィールド（`momentaryLufs`／`shortTermLufs`／`integratedLufs` と true-peak 系）は、ストリーミングが一定時間続いて初めてフロアより上に上がります。短いレンダーやワンショットのレンダーでは −120 のままです。
 
@@ -156,8 +160,8 @@ engine.setTrackStripInsertBypassed(1, 0, true);
 engine.setSoloMute(0, true, false, -1);
 ```
 
-::: info レーンインデックスは追加専用
-あるトラック id が一度レーンを占有すると、そのレーンインデックスはエンジンの生存期間中固定されます。`setTrackLanes(...)` を呼ぶたびに、宣言済みのレーン id を現在の順序どおりに並べ、新しいトラック id はその後ろにのみ追加できます。生の `RealtimeEngine` では、呼び出しのたびに各レーンのセンドを、そのレーンのエントリーが渡した `sends` 配列から作り直します。`sends` を省略すると（id だけの指定を含む）、既存のセンドは維持されず消去されます。省略時にセンドを維持するのは `SonareEngine` ワークレットファサードのほうで、JS 側にセンドのキャッシュを持ち、呼び出しのたびに完全なリストを裏で再送信しています。`setSoloMute` はこの固定インデックスでレーンを指定します。
+::: info レーンの順序は `setTrackLanes(...)` に従います
+`setTrackLanes(...)` が成功すると、トラックの並べ替え、削除、追加が反映されます。キュー済みコマンド、センド、インサートオートメーション、レーン状態はトラックの識別子に追従し、レーンインデックスは呼び出し後の現在位置になります。生の `RealtimeEngine` では、呼び出しのたびに各レーンのセンドを、そのレーンのエントリーが渡した `sends` 配列から作り直します。`sends` を省略すると（id だけの指定を含む）、既存のセンドは維持されず消去されます。省略時にセンドを維持するのは `SonareEngine` ワークレットファサードのほうで、JS 側にセンドのキャッシュを持ち、呼び出しのたびに完全なリストを裏で再送信しています。トポロジー変更後は、数値のレーン指定やトラックインサート指定を読み直してください。
 :::
 
 ::: warning 構造を変えるストリップ呼び出しはコントロールスレッドで
@@ -178,7 +182,7 @@ engine.setSoloMute(0, true, false, -1);
 
 ## トラックモニタータップ: off・PFL・AFL
 
-設定済みの各トラックレーンは、独立したキュー／モニターバスへ信号を送れます。`setTrackMonitorMode(laneIndex, mode, renderFrame?)` でモードをキューします。`laneIndex` は `setTrackLanes` で決まる追加専用のインデックス、`renderFrame` の既定値は `-1`（次のブロック先頭）、`mode` は `'off'`・`'pfl'`・`'afl'`（または序数 `0`・`1`・`2`）です。
+設定済みの各トラックレーンは、独立したキュー／モニターバスへ信号を送れます。`setTrackMonitorMode(laneIndex, mode, renderFrame?)` でモードをキューします。`laneIndex` は直近の `setTrackLanes` 呼び出しにおける現在の位置なので、並べ替え後は読み直してください。`renderFrame` の既定値は `-1`（次のブロック先頭）、`mode` は `'off'`・`'pfl'`・`'afl'`（または序数 `0`・`1`・`2`）です。
 
 - **off** — レーンはモニターバスへ何も送らない。
 - **PFL**（pre-fader listen）— レーンストリップとプラグインディレイ補正の後、レーンのフェーダー・ゲート・パンの前でタップします。そのため、レーンをミュートしたりソロ制御でゲートしたりしても、ここでは聞こえます。
@@ -278,6 +282,8 @@ engine.setParameter(1, 0.5);
 `SonareEngine` ワークレット API では、パラメータを登録せずにミキサーのフェーダー／パンを自動化することもできます。`automationParamId(target, 'faderDb' | 'pan')` と `busAutomationParamId(busId)` はミキサー名前空間の予約済みエンジンパラメータ id を返すので、それをそのまま `setAutomationLane(paramId, points)` に渡してトラック／マスターのフェーダーやパン、あるいはバスのフェーダー（バス id はそのフェーダーゲイン dB に解決されます）を自動化できます。`target`／`busId` は初回利用時にミキサーのレーン／バスを宣言します。
 
 インサートパラメータも同じオートメーションレーンで動かせますが、先に予約 id を取得します。`resolveTrackInsertAutomationId(trackId, insertIndex, paramName)`、`resolveMasterInsertAutomationId(...)`、`resolveBusInsertAutomationId(...)` のいずれかを呼び、その戻り値を `setAutomationLane`、`setParameter`、`setParameterSmoothed` に渡してください。`insertIndex` はストリップの pre インサート、続いて post インサートを連結した列を指し、`paramName` は `masteringInsertParamInfo` が返す JSON キーです。未知のストリップ／インサート／キーでは WASM/Node は `-1`、Python は `SonareError` を返します。
+
+トラックインサート ID は数値の位置指定です。レーンのトポロジー変更が成功すると、キュー済み／公開済みのオートメーションは内部で移し替えられますが、呼び出し側が保持した数値を書き換えることはできません。`setTrackLanes(...)` のあとで新しい操作を行う前に、トラックインサート ID を毎回解決し直してください。安定したトラック識別子を使いたい場合は `setTrackStripInsertParamByName(...)` を使えます。`insertParameterConstructedValue(paramId)` は、現在のライブ値やオートメーション値ではなく、そのインサートパラメータの構築時に使った不変値を返します。
 
 ストリップインサートとして使える `eq.*`、`dynamics.*`、`saturation.*`、`spectral.*`、`stereo.*`、`maximizer.*`、`multiband.*` は、すべてこの方法で id を解決でき、音声ブロック単位で動かせます。一方、信号全体を扱う `repair.*`、`loudness`、マッチ系のマスタリング段にはインサート形式もオートメーション id もありません。これらは信号全体をバッファリングするため、リアルタイム経路では動作しません。
 

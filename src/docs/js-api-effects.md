@@ -206,9 +206,14 @@ const tuned = pitchCorrectToMidiTimevarying(
 );
 ```
 
-`voiced` and `voicedProb` must each be the same length as `f0Hz`. A mismatch
-throws a `RangeError` (`'pitchCorrectToMidiTimevarying: voiced length must match
-f0Hz length'`), not a `SonareError`, so `isSonareError` does not catch it.
+`voiced` must be the same length as `f0Hz`; when it is omitted, `voicedProb` must
+also be the same length. A mismatch throws a `RangeError` (for example,
+`'pitchCorrectToMidiTimevarying: voiced must have the same length as f0Hz'`), not
+a `SonareError`, so `isSonareError` does not catch it. Every frame treated as
+voiced must have an `f0Hz` that is finite, strictly positive, and no higher than
+the Nyquist frequency (`sampleRate / 2`); violating this rejects the call. An
+unvoiced frame may use `NaN` (a finite value from `0` through Nyquist is also
+accepted), but `NaN` is never valid for a voiced frame.
 
 ::: warning `voicedProb` decides voicing, and nothing else
 `voicedProb` exists for one purpose: to derive a per-frame voiced/unvoiced

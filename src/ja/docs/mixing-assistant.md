@@ -353,7 +353,7 @@ sonare mix --scene scene.json --input kick=kick.wav --input vocal=vocal.wav -o m
 | `track is silent` | |
 | `track has no energy in the analysis bands` | |
 
-**唯一拒否される入力は、トラック ID の重複です。** これは吸収されずに `InvalidParameter` を発生させます（Node では `RangeError`、Python では `SonareValueError`）。同じ ID のストリップを 2 つ持つシーンは、ミキサーが読み込みを拒否するシーンだからです。ここで受け入れても、後段のより原因の分かりにくい場所で失敗するだけです。
+**トラック ID の欠落・空文字列と、ID の重複は拒否されます。** 欠落・空文字列は解析前のバインディング検証で拒否されます（Node は `TypeError`、Python は `SonareValueError`）。重複した ID は `InvalidParameter` になります（Node は `RangeError`、Python は `SonareValueError`）。同じ ID のストリップを 2 つ持つシーンはミキサーが読み込みを拒否するため、ここで受け入れると原因が分かりにくい後段で失敗します。
 
 ## 利用可否
 

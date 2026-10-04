@@ -163,6 +163,10 @@ A MIDI 2.0 Clip File is an in-memory UMP container with an `SMF2CLIP` header. `P
 
 It preserves 16-bit velocity, 32-bit CC, per-note and registered controllers, and bank-valid Program Change. This is the interchange path to use when those values matter. Clip files also carry SysEx7/8 data. Export serializes the project’s separate SysEx store into the file; import restores it to that store.
 
+Time-signature Flex Data stores the denominator as a base-2 exponent `e`, decoded as `2^e`. Clip Files reserve `e = 0` for a non-standard denominator, so representable exponents are `1..7` (denominators 2..128); exporting a non-power-of-two denominator rounds up to the next representable power, capped at 128, and increments the skipped-event count. An imported exponent outside `1..7` is skipped, and Clip File import supplies 4/4 at PPQ 0 when no valid signature starts there. The `SMF2CLIP` header has no project-history or schema-version field, so the format carries current Clip File interchange data without project history or version negotiation.
+
+Import rejects a clip that starts but ends without an End-of-Clip marker, and rejects a truncated UMP when its message type requires words that are missing. Export rejects an explicit UMP `word_count` that does not match the message type before producing output, so malformed packets cannot be published as a partial Clip File.
+
 ::: code-group
 
 ```typescript [Browser / Node]

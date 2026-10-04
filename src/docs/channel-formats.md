@@ -61,14 +61,14 @@ The playback renderer's own conversion table, by source and target:
 
 ## Widening (Upmix)
 
-Every module that widens a channel bed — the mixer graph placing a narrower bus's planes on a wider one, and the playback renderer's stereo upmix — follows one shared principle: **place each source plane at the destination role whose angle, on that module's own angle table, is closest to the source plane's own angle.** The angle tables differ by module because they serve different jobs, so the same role name can end up at a different angle depending which module's table is in play:
+The mixer and playback renderer widen channel beds differently. The mixer sums a narrower bus into the same plane indices of a wider bus, leaving the additional planes silent. The playback renderer uses speaker geometry when mapping ambience to a wider layout. These routing rules are separate from the surround panner's speaker angles:
 
 | Module | L / R | 5.1 `Ls`/`Rs` | 7.1 `Ls`/`Rs` | 7.1 `Lss`/`Rss` |
 |---|---|---|---|---|
-| Mixer graph panner | ±30° | ±110° | ±110° (same table, no separate 7.1 row) | ±90° |
+| Mixer surround panner | ±30° | ±110° | ±135° (rear) | ±90° (side) |
 | Playback renderer | ±30° | ±110° | ±135° (rear) | ±90° (side) |
 
-The mixer graph keeps one angle per role across every width it renders, so a bus's 5.1 surround pair lands on the same channel index when the bus widens to 7.1. The playback renderer instead follows ITU-R BS.2051's nominal loudspeaker angles, which place 5.1's `Ls`/`Rs` (±110°) closer to 7.1's side pair `Lss`/`Rss` (±90°) than to 7.1's own `Ls`/`Rs` (±135°, further back). Applying the same nearest-angle rule with a different table therefore sends a stereo upmix's decorrelated ambience to `Lss`/`Rss` rather than to `Ls`/`Rs`: the two tables give the same role name a different angle, and the rule follows the angle, not the name.
+For a mixer bus widened from 5.1 to 7.1, the surround pair stays at indices 4 and 5 (`Ls`/`Rs`); the side planes at indices 6 and 7 receive no copied signal. The playback renderer's 5.1-to-7.1 conversion instead moves the surround pair to the side planes at indices 6 and 7, leaving the rear planes silent. Its stereo-to-7.1 upmix generates ambience for both rear and side pairs, with an additional anti-phase component on the rear pair. A matching panner angle table therefore does not imply matching bus-widening behavior.
 
 The renderer does not create a rear pair from a 5.1 source (no synthetic rear-channel generation), and it does not upmix to a wide-plus-height format — see [Playback Renderer § Non-Goals](./playback.md#non-goals).
 

@@ -118,6 +118,8 @@ There are two queueing paths, and you should pick one per destination. Rule of t
 
 Every binding exposes the same SysEx call; only the naming convention changes. `data` is the complete frame (leading `0xF0`, trailing `0xF7`, 1..512 bytes) and the last argument is the same `-1`-for-immediate render frame as the other `pushMidi*` calls.
 
+The destination instrument prepares a live SysEx payload on the control thread before it is queued. If preparation is refused, the call reports `InvalidParameter`; retrying the same payload cannot fix that refusal. `setMidiClips` prepares every scheduled SysEx before publishing a replacement, so one refusal leaves the previously accepted schedule in place. Rebinding a destination also stages preparation for scheduled and already queued SysEx; a refusal leaves the previous instrument binding and pending operations unchanged. A later `prepare()` rechecks scheduled payloads; if the bound instrument refuses one, the schedule is cleared and `InvalidParameter` is reported.
+
 ::: code-group
 
 ```typescript [Browser]
@@ -197,6 +199,8 @@ engine.bindMidiCcBinding({
 
 ::: tip CC "learn" workflows
 For an offline "wiggle a knob, capture which CC moved" flow, the project API exposes `Project.midiCcLearn(events, paramId, options)` plus `midiCcToBreakpoint` / `midiParamToCc` for turning recorded CC streams into automation. Those operate on captured `ProjectMidiEvent` data rather than the live engine — see [Project Editing](./project-editing.md).
+
+`options.minMovement` is an integer from `0` through `127` (default `0`) measured in 7-bit CC units. With `0`, the first observed standalone controller value binds immediately; a low-numbered CC (`0..31`) is held until the next message so it can still form a 14-bit pair. With a positive threshold, the controller must move by at least that many 7-bit units from its first value on the same UMP group and channel. MIDI 2.0 32-bit CC values are downscaled to those 7-bit units. The threshold applies only to standalone 7-bit controllers; 14-bit pairs and RPN/NRPN sequences are assembled without this gate.
 :::
 
 ## Swapping MIDI FX without hanging notes

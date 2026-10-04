@@ -171,9 +171,9 @@ const tuned = pitchCorrectToMidiTimevarying(
 
 `voiced` is typed `VoicedFlags` — `Int32Array`, `Uint8Array`, `Float32Array`, `readonly number[]`, or `readonly boolean[]`. Each entry is read as a flag, not a magnitude: any truthy value means voiced. That is why `pitch.voicedFlag`, which `pitchPyin` returns as a `boolean[]`, goes straight in with no conversion step.
 
-`voiced` and `voicedProb` must each be the same length as `f0Hz`. A mismatch throws a `RangeError` rather than a `SonareError`, so an `isSonareError` guard will not catch it.
+`voiced` must be the same length as `f0Hz`; when it is omitted, `voicedProb` must also be the same length. A mismatch throws a `RangeError` rather than a `SonareError`, so an `isSonareError` guard will not catch it.
 
-An `f0Hz` value of `NaN` is valid only on a frame whose `voiced` entry is unset — `0` or `false`.
+A voiced frame must have a finite, positive `f0Hz` no higher than Nyquist (`sampleRate / 2`); zero, negative, or non-finite voiced F0 is rejected. An unvoiced frame may carry `NaN` or a finite F0 between zero and Nyquist. Pass `voiced` flags from the pitch analysis when its unvoiced frames contain `NaN`.
 
 ::: tip Constant vs contour-following correction
 Use `pitchCorrectToMidi(...)` for a steady held note where one transpose is enough. Reach for `pitchCorrectToMidiTimevarying(...)` when the take has vibrato, slides, or drift you want to preserve while nudging it onto pitch.

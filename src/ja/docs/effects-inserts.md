@@ -61,14 +61,16 @@ Python の対応関数は `mastering_insert_names()`、`mastering_insert_param_n
 
 手順は、プロセッサごとに API を呼ぶのではなく、1 つのドキュメントを 3 回参照するだけです。
 
-1. **インサート集合を選ぶ。** `processors` を `realtimeInsertable` で絞ります。91 エントリ中 76 で、`masteringInsertNames()` が返す集合と同一です。残る 15（オフラインプロセッサ 11 とペアプロセッサ 4）は空の `params` 配列を持ちます。`category` はピッカーと同じ切り方で集合を分けます（`effects` がこのページの 18 個のクリエイティブ FX id、その他のカテゴリがマスタリングの各ファミリー）。`channelPolicy` は、ステレオより広いバスでミキサーがそのインサートをどう包むかを示します。リバーブ、モジュレーション、ディレイのインサートは `effects.modulation.ringModulator` を除いて `stereoPairOnly` で、ringModulator は `multichannel` です。
+1. **インサート集合を選ぶ。** `processors` を `realtimeInsertable` で絞ります。92 エントリ中 77 で、`masteringInsertNames()` が返す集合と同一です。残る 15（オフラインプロセッサ 11 とペアプロセッサ 4）は空の `params` 配列を持ちます。`category` はピッカーと同じ切り方で集合を分けます（`effects` がこのページの 19 個のクリエイティブ FX id、その他のカテゴリがマスタリングの各ファミリー）。`channelPolicy` は、ステレオより広いバスでミキサーがそのインサートをどう包むかを示します。リバーブ、モジュレーション、ディレイのインサートは `effects.modulation.ringModulator` を除いて `stereoPairOnly` で、ringModulator は `multichannel` です。
 2. **記述子を読む。** エントリの `params` は、その id に対して `masteringInsertParamInfo(id)` が返すリストと同一で、順序も同じです。カタログを持っているホストは、プロセッサごとの呼び出しを必要としません。`id: null` は構築時専用キーを示し、整数の id は Node／WASM の `Mixer.scheduleInsertAutomation(strip, insertIndex, paramId, samplePos, value)`、Python の `Mixer.schedule_insert_automation(...)`、C ABI の `sonare_strip_schedule_insert_automation` に渡すオートメーション id です。リアルタイムエンジンのセッターは代わりに `name` を取ります（`setTrackStripInsertParamByName` とそのマスター版、バス版）。
 3. **各コントロールを配置する。** `type`、`default`、`min`、`max`、`unit`、`choices` から組みます。構築時専用キーにも記述子があるため、フェイザーの `stages`、オートワウの `attackMs` / `releaseMs`、ロータリーの `stereoSpread`、ルームのジオメトリを構築時フィールドとして表現できます。`slot` で所属するスロット群を特定し、プロセッサの `slots` エントリにある `activation`（`anyKey` または `always`）、内側を包む `parent`、`minCrossoverCutoffs` を組み合わせて、その群の存在を表示・検証します。
 
+同じ記述子経路から、現在インサートとして使えるマキシマイザーのコントロールも取得できます。`maximizer.truePeakLimiter`、`maximizer.maximizer`、`maximizer.adaptiveRelease`、`maximizer.softKneeMax` の `ceilingDb` です。GS に結び付いたリアルタイムコントロールも記述子に載ります。`effects.modulation.pitchShifter` の `windowMs`、`preDelayMs`、`preDelay2Ms`、`effects.modulation.rotary` の `stereoSpread`、`accelTauS`、`decelTauS`、`undershootHz`、`drumUndershootHz`、`effects.reverb.dattorro` の `preDelayMs`、`character`、`saturation.bitcrusher` の `typeLadder` です。別の操作表を持たず、記述子一覧を使ってください。
+
 ```typescript
 const catalog = capabilityCatalog();
-const inserts = catalog.processors.filter((p) => p.realtimeInsertable);   // 91 中 76
-const fx = inserts.filter((p) => p.category === 'effects');               // 下の 18 id
+const inserts = catalog.processors.filter((p) => p.realtimeInsertable);   // 92 中 77
+const fx = inserts.filter((p) => p.category === 'effects');               // 下の 19 id
 const chorus = fx.find((p) => p.id === 'effects.modulation.chorus')!;
 for (const param of chorus.params) {
   // param.id は構築時専用キーでは null、param.name はシーン JSON のキー
@@ -81,14 +83,16 @@ for (const param of chorus.params) {
 
 エフェクト系のエントリが報告する内容のうち、ドキュメントの一般的な読み方からは予想しにくいものが 4 つあります。
 
-- **`rtSafe: false` はオートメーションを止める。** ヒントではありません。そのパラメータにオートメーションをスケジュールすると `NotSupported`（コード 6）が返ります。構築時専用の行は `id: null` かつ `rtSafe: false` で、準備済みプロセッサで安全に変更できない id 付き対象もあります。記述子ごとにオートメーションレーンを描く UI は、`rtSafe` が false の行をすべて無効化する必要があります。
+- **`rtSafe: false` はオートメーションを止める。** ヒントではありません。そのパラメータにオートメーションをスケジュールすると `NotSupported`（コード 6）が返ります。構築時専用の行は `id: null` かつ `rtSafe: false` です。GS EFX の raw バイトはすべて id 付きでも `rtSafe: false` で、`modDepthSamples` も同じです。記述子ごとにオートメーションレーンを描く UI は、id の有無にかかわらず `rtSafe` が false の行をすべて無効化する必要があります。
 - **カタログには数値以外の型もあります。** エフェクト系の記述子には `number`、`boolean`、`enum`、`string`、`array` があります。`choices` には enum 値や、間隔のある離散的な数値集合が載ります。名前からトグルを推測せず、`type` を使い、離散値の操作には `choices` を使ってください。
 - **レイテンシとテールはインサートごとで、リバーブでは 0 ではない。** `effects.reverb.convolution`、`effects.reverb.room`、`effects.acoustic.roomMorph` は 256 サンプルのレイテンシを報告します。リバーブのテールは 51,217 サンプル（`room`、`roomMorph`）から 264,000（`fdn`）まで、ステレオディレイは 59,795 で、いずれも代表構成の 48 kHz プローブでの値です。`realtimeCost` はリバーブでは `moderate`、`velvet` だけが `high`、モジュレーションとディレイはすべて `low` で、`null` になるのは非インサートの 15 個だけです。
-- **エフェクト系はパラメータ数が少ない。** 18 プロセッサ合わせて 136 記述子です。5,352 の大半はバンド単位の EQ プロセッサが占めます（`multiband.dynamicEq` だけで 1,019）。記述子の数で自身の大きさを決めるインサート UI は、2 つのファミリーが 1 桁違うことを前提にしてください。
+- **エフェクト系はパラメータ数が少ない。** 19 プロセッサ合わせて 229 記述子です。全カタログの 5,478 記述子の大半はバンド単位の EQ プロセッサが占めます（`multiband.dynamicEq` だけで 1,019）。記述子の数で自身の大きさを決めるインサート UI は、2 つのファミリーが 1 桁違うことを前提にしてください。
 
 ### null と既定値が教えてくれないこと
 
 **`null` の境界が示すのは構築がその値を拒否しないということだけで、どんな値でも意味を持つわけではありません。** 境界がないことは JSON では文字通り `null`（Python では `None`）です。スキーマは `min` と `max` を `number | null` と定め、すべての記述子が両方のキーを持ちます。構築時専用の記述子にも、検証が公開する場合は境界が載ります。一方、string や array のキーは通常 `null` です。`effects.modulation.chorus` は `dryWet` に境界を公開せず、構築は `5` を受け入れ、プロセッサは内部でウェット比を `[0, 1]` にクランプするので、`dryWet: 5` は `dryWet: 1` と同じ音になります。カタログが測るのは構築が拒否する値であり、拒否せず折り畳むプロセッサは `null` を報告します。`null` に対する範囲チェックは、1 種類の誤りしか除外できません。`null` の境界は「頼れる検証がない」と読み、妥当な範囲はパラメータの意味と単位から決めてください。
+
+カタログの有限な値域は受理条件です。たとえば `saturation.bitcrusher.bitDepth` は `min: 2`、`max: 24` を公開し、範囲外の値を拒否します。ゲイン系の一部は、dB から線形値へ変換した結果が有限にならない値も拒否します。大きな上限が実測されても、実用的な操作範囲を意味するわけではありません。
 
 **既定値は設定構造体の初期化子の値にすぎず、プリセットがその値を使うとは限りません。** 構築時専用の記述子は、フォールバックがなければ `default: null` になりますが、プリセットやシーンはそのキーを明示できます。`default` だけで初期化する操作面は、読み込んだシーンに対して誤った値を表示することがあります。シーン自身の `params` から初期化し、シーンが持たないキーだけカタログの既定値に戻し、`null` の既定値にはシーンまたはユーザーの明示値が必要だと扱ってください。
 
@@ -96,7 +100,7 @@ for (const param of chorus.params) {
 
 マスタリングの[ソロプロセッサ](./mastering-processors.md#ソロプロセッサ)に加え、クリエイティブ FX 有効ビルドではリバーブ、モジュレーション、母音フィルター、ディレイ、ステレオのインサート ID も使えます。
 
-`effects` カテゴリは 18 件で、`stereo.binaural` はステレオカテゴリのインサートとして同じ表に載せています。
+`effects` カテゴリは 19 件で、`stereo.binaural` はステレオカテゴリのインサートとして同じ表に載せています。
 
 | Insert ID | 意味 |
 |-----------|------|
@@ -107,6 +111,7 @@ for (const param of chorus.params) {
 | `effects.reverb.convolution` | Convolution リバーブ。params の `irF32Base64` でインパルス応答を受け取るか、`decaySec` と `seed` から合成します |
 | `effects.reverb.room` | ルームパラメータから合成する幾何ベースのルームリバーブ |
 | `effects.acoustic.roomMorph` | 目標の幾何ベースルームへ寄せるルームモーフィング |
+| `effects.gsEfx` | 選択したタイプと 20 個の raw パラメータバイトを持つ GS インサートエフェクト |
 | `effects.filter.vowel` | 3 つの共鳴帯域とダイレクト経路を持つ母音フィルター |
 | `effects.modulation.ensemble` | Solina 系 BBD ストリングマシンアンサンブル |
 | `effects.modulation.chorus` | ステレオコーラス |
@@ -123,6 +128,24 @@ for (const param of chorus.params) {
 ::: warning ビルドフラグによる有効化
 これらの insert ID は、CMake オプション `BUILD_FX` を有効にしたビルドでのみ使えます（内部的にはこのオプションから `SONARE_HAVE_FX` マクロが導出されます）。幾何ベースのルーム系インサート（`effects.reverb.room`、`effects.acoustic.roomMorph`）は `BUILD_ACOUSTIC_SIM` も必要です。オプションを有効にしていないビルドでは、対応する ID は `masteringInsertNames()` に現れません。
 :::
+
+### GS EFX（`effects.gsEfx`）
+
+`effects.gsEfx` は、単体でも使える GS インサートエフェクトです。ライブラリを `BUILD_FX` 有効でビルドした場合だけ含まれます。無効なビルドでは `masteringInsertNames()` に名前が現れず、`masteringProcess()` やインサートスロットへ渡せません。
+
+ファクトリにはフラットな数値パラメータオブジェクトを渡します。`typeMsb` と `typeLsb` を両方とも省略するとタイプ `0`（thru）になります。別のタイプを選ぶときは、両方を整数の `0..127` で指定します。片方だけの指定は拒否され、2 つを `(typeMsb << 8) | typeLsb` として GS タイプを選びます。0 以外はビルドが対応するタイプでなければなりません。`realization` は省略可能で、`0` が modern（既定値）、`1` が classic です。`byte0` から `byte19` までは省略可能な GS の raw パラメータバイトで、それぞれ `0..127` にします。省略したバイトには選択したタイプの既定値が入り、タイプが受け付けない値は拒否されます。
+
+```typescript
+const processed = masteringProcess('effects.gsEfx', samples, sampleRate, {
+  typeMsb: 0x01,
+  typeLsb: 0x10,
+  realization: 0,
+  byte0: 64,
+  byte19: 127,
+});
+```
+
+ミキサーやリアルタイムインサートとして構築するときも同じパラメータオブジェクトを使います。現在のビルドが公開する記述子は `masteringInsertParamInfo('effects.gsEfx')` または機能カタログから取得してください。
 
 以下の表は代表的なキーと挙動を取り上げた要約です。完全なビルド別一覧 — chorus／flanger の `preFilterHz` と `preFilterMode`、phaser の `feedback` と `mixMode`、rotary のドラム制御、pitch-shifter の `windowMs`、ステレオディレイの `dampingHz` などの新しいキーを含む — は [`masteringInsertParamInfo(name)`](#パラメータ記述子) または `capabilityCatalog().processors[].params` から取得できます。
 

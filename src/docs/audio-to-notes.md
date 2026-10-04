@@ -59,7 +59,7 @@ with sonare.Project() as project:
 
 ## Choose the analysis mode
 
-The default monophonic path follows one pYIN-derived pitch line and segments it into notes. Set `polyphonic: true` to use the multi-F0 path for overlapping notes. The polyphonic path has its own framing and range; monophonic `fmin` and `fmax` do not tune it.
+The default monophonic path follows one pYIN-derived pitch line and segments it into notes. Set `polyphonic: true` to use the multi-F0 path for overlapping notes. Omit either `fmin` or `fmax` to use that path's default for the endpoint (`65..2093 Hz` for mono, `55..1760 Hz` for poly). Explicit endpoints must be positive and are honored by both paths; the JavaScript and Python bindings reject an explicit `0`. In polyphonic mode the resolved bounds apply to the salience estimator's F0 axis; the cent-spectrum bounds remain independent.
 
 `tempoBpm` is a coordinate system for the standalone function. Omit it to run tempo detection; if no usable tempo is found, the call uses 120 BPM. `Project.transcribeToClip` has no tempo option because it reads the project's map. Call `autoTempo` first when the project should follow the recording, then transcribe into the clip.
 
@@ -71,7 +71,7 @@ The tuning reference defaults to 440 Hz and is not measured during transcription
 |---|---|
 | `polyphonic` | `false` uses the monophonic pYIN segmentation; `true` uses multi-F0 tracking |
 | `referenceHz` | Positive tuning reference for MIDI note numbers; default `440` and not auto-measured |
-| `fmin`, `fmax` | Monophonic search range in Hz; positive, with `fmax > fmin` |
+| `fmin`, `fmax` | F0 search range in Hz for either path; omit an endpoint for the selected path's default, or supply a positive value, with resolved `fmax > fmin` |
 | `minNoteMs` | Shortest monophonic note span; default `30` ms |
 | `segmentationThresholdCents` | Pitch movement that starts a new monophonic note; default `50` cents |
 | `velocityFloorDb` / `fixedVelocity` | Map RMS level from the negative dBFS floor, or assign one velocity in `1..127` |

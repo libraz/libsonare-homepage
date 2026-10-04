@@ -97,11 +97,15 @@ Beyond transport, `RealtimeEngine` also registers parameter metadata, sets autom
   - `intervalFrames` — the minimum render-frame gap between snapshots (`0` disables capture).
   - `bandCount` — the FFT band resolution, clamped to `1..64`; the call returns the band count actually applied.
 
-Each drained scope snapshot is addressed by `targetId` (master, a lane, or a bus) and carries two arrays: `bands` holds the linear-band FFT magnitudes in dB (length = the applied band count), and `points` holds up to 32 stereo goniometer samples as `{ left, right }` records for a vectorscope display. (The worklet scope ring buffer carries the same cloud in its own interleaved `[l0, r0, l1, r1, …]` `Float32Array` form.) Band levels scale with the render block size — roughly −3 dB per doubling of the block — so compare snapshots only within one fixed block size.
+Meter records include pre-trim input peaks as `inputPeakDbL` and `inputPeakDbR` on the stereo path, or `inputPeakDb` as one value per valid plane on the wide path. `gainReductionDb` reports reduction from the target strip or bus as well as the master path.
+
+The AudioWorklet raw meter ring uses a 16-float record. Code that reads its `SharedArrayBuffer` directly must size and stride records with the exported `SONARE_METER_RING_RECORD_FLOATS` constant and read the record count/header instead of hard-coding the record layout.
+
+Each drained scope snapshot is addressed by `targetId` (master, a lane, or a bus) and carries two arrays: `bands` holds the linear-band FFT magnitudes in dB (length = the applied band count), and `points` holds up to 32 stereo goniometer samples as `{ left, right }` records for a vectorscope display. (The worklet scope ring buffer carries the same cloud in its own interleaved `[l0, r0, l1, r1, …]` `Float32Array` form.) The spectrum uses a Hann-windowed, coherently normalized FFT and reports the mean power of the bins in each linear band in dBFS. Readings depend on the render block size, FFT frequency resolution, and `bandCount`; compare snapshots only when those settings match.
 
 To restart the master meter's integrated loudness, call `resetMasterLoudnessMeter(renderFrame = -1)` (`reset_master_loudness_meter(render_frame=-1)` in Python; the worklet node takes `resetMasterLoudnessMeter(sampleTime = -1)`). The command clears only the integrated-loudness accumulator; momentary, short-term, and true-peak history are retained. `renderFrame` is the render frame at which the reset applies, and a negative value applies it at the next block head.
 
-Each record returned by `drainMeterTelemetry()`, `drainMeterTelemetryWide()`, and `drainScopeTelemetry()` carries a `droppedRecords` count of snapshots lost from the lock-free telemetry ring since the previous drain. A non-zero value means the consumer is draining too slowly (back-pressure) — poll more frequently to keep the meters and scopes glitch-free.
+Each record returned by `drainMeterTelemetry()`, `drainMeterTelemetryWide()`, and `drainScopeTelemetry()` carries a `droppedRecords` count for its producing tap. The count is cumulative from that tap's `prepare` or `reset`; draining does not clear it. Compare it with the value from the previous poll: an increase means records were lost between polls, while an unchanged value means no new drop. A non-zero value can refer to an earlier interval.
 
 All dB-valued level and loudness fields in a meter record — `peakDbL`/`R`, `rmsDbL`/`R`, `truePeakDbL`/`R`, `maxTruePeakDb`, and `momentaryLufs`/`shortTermLufs`/`integratedLufs` — have a defined floor of −120 dBFS and never carry `NaN` or `-Infinity`. An uninitialized, silent, or unwritten plane (e.g. the right channel of a mono lane) reports −120 dBFS, not 0 dBFS, so records are always JSON-safe. (Non-dB fields like `correlation`, `monoCompatWidth`, and `gainReductionDb` default to 0.) The integrating-meter fields — `momentaryLufs`/`shortTermLufs`/`integratedLufs` and the true-peak fields — only rise above the floor after sustained streaming; on a short or one-shot render they stay at −120.
 
@@ -157,8 +161,8 @@ engine.setTrackStripInsertBypassed(1, 0, true);
 engine.setSoloMute(0, true, false, -1);
 ```
 
-::: info Lane indices are append-only
-Once a track id occupies a lane, its lane index stays fixed for the engine's lifetime. Each `setTrackLanes(...)` call must list the already-declared lane ids in their current order and may only append new track ids after them. On the raw `RealtimeEngine`, every call rebuilds each lane's sends from scratch from whatever `sends` array that lane's entry passed — omitting `sends` (including a bare id) clears that lane's sends rather than leaving them untouched. The `SonareEngine` worklet facade is the one that preserves sends on omission: it keeps its own JS-side send cache and resends the full list underneath on every call. `setSoloMute` addresses lanes by that fixed index.
+::: info Lane order follows `setTrackLanes(...)`
+A successful `setTrackLanes(...)` call may reorder, remove, or add tracks. Queued commands, sends, insert automation, and lane state follow the track identity; lane indices are the current positions after the call. On the raw `RealtimeEngine`, every call rebuilds each lane's sends from scratch from whatever `sends` array that lane's entry passed — omitting `sends` (including a bare id) clears that lane's sends rather than leaving them untouched. The `SonareEngine` worklet facade preserves sends on omission by keeping its own JS-side send cache and resending the full list underneath on every call. Re-read any numeric lane or track-insert selector after a topology change.
 :::
 
 ::: warning Structural strip calls belong on the control thread
@@ -181,7 +185,8 @@ Because each lane is finished once per block, its fader, pan, and gate smoothers
 
 Each configured track lane can contribute to a separate cue/monitor bus. Queue a
 mode with `setTrackMonitorMode(laneIndex, mode, renderFrame?)`; `laneIndex` is
-the fixed, append-only index from `setTrackLanes`, `renderFrame` defaults to
+the current index from the latest `setTrackLanes` call, so re-read it after a reorder;
+`renderFrame` defaults to
 `-1` (the next block head), and `mode` accepts `'off'`, `'pfl'`, or `'afl'`
 (or ordinals `0`, `1`, and `2`).
 
@@ -293,6 +298,8 @@ engine.setParameter(1, 0.5);
 On the `SonareEngine` worklet API you can also automate a mixer fader/pan without registering a parameter: `automationParamId(target, 'faderDb' | 'pan')` and `busAutomationParamId(busId)` return reserved engine parameter ids in the mixer namespace, so you can pass them straight to `setAutomationLane(paramId, points)` to automate a track or master fader or pan, or a bus fader (a bus id resolves to its fader gain in dB). The `target`/`busId` declares the mixer lane/bus on first use.
 
 Insert parameters use the same automation-lane mechanism, but first need a reserved id. Call `resolveTrackInsertAutomationId(trackId, insertIndex, paramName)`, `resolveMasterInsertAutomationId(...)`, or `resolveBusInsertAutomationId(...)`, then pass the returned id to `setAutomationLane`, `setParameter`, or `setParameterSmoothed`. `insertIndex` addresses the strip's combined pre-then-post insert sequence, and `paramName` is the JSON key reported by `masteringInsertParamInfo`. WASM/Node return `-1` for an unknown strip, insert, or key; Python raises `SonareError`.
+
+Track-insert ids are numeric positional selectors. A successful lane topology change remaps queued and published automation internally, but the engine cannot rewrite a number retained by the caller; resolve each track insert id again after `setTrackLanes(...)` before using it. `setTrackStripInsertParamByName(...)` uses stable track identity when that is preferable. `insertParameterConstructedValue(paramId)` returns the immutable value used when that insert parameter was constructed, rather than its current live or automated value.
 
 The strip-insert processors — `eq.*`, `dynamics.*`, `saturation.*`, `spectral.*`, `stereo.*`, `maximizer.*`, and `multiband.*` — all resolve through these methods and can be driven at audio-block precision. Whole-signal mastering stages (`repair.*`, `loudness`, and match stages) have no insert form or automation id: they buffer the full signal and do not run on the realtime path.
 

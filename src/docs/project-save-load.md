@@ -66,7 +66,9 @@ In Python, `project.compile()` returns the same shape (`has_timeline`, `diagnost
 
 ## Save and load: deterministic JSON
 
-`toJson()` serializes the whole project — tracks, clips, MIDI content, loop crossfades, tempo map, time signatures, markers, annotations, warp maps, and automation — to **deterministic JSON**: the same project always produces byte-identical text. `Project.fromJson(...)` restores it. Loop crossfade fields are omitted when they are zero, so older hard-loop projects keep the same JSON shape.
+`toJson()` serializes the whole project — tracks, clips, MIDI content, loop crossfades, tempo map, time signatures, markers, annotations, warp maps, and automation — to **deterministic JSON**: the same project always produces byte-identical text. `Project.fromJson(...)` restores it. Loop crossfade fields are omitted when they are zero, so older hard-loop projects keep the same JSON shape. Loading requires a numeric integer `version`; a missing or non-integer value, schema `0`, and a version above the supported `4` are rejected.
+
+The serializer selects the lowest schema needed by the model. A project with no typed or physical fields uses schema `1`; a typed automation lane raises it to schema `2`; a clip or take with a physical source offset in seconds, or a clip with a loop anchor, raises it to schema `3`; comp render parts use schema `4`. The physical source-offset, loop-anchor, and comp-render-part fields are JSON/native-model data, so the current JavaScript surface has no setters for them; preserve them through the JSON/native model when exchanging projects. A project without these fields keeps the lower schema and its existing content.
 
 ```typescript
 const json = project.toJson();

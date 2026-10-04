@@ -396,6 +396,8 @@ stereo_suggestions = json.loads(sonare.mastering_assistant_suggest_stereo(left, 
 stereo_preview = json.loads(sonare.mastering_streaming_preview_stereo(left, right, sample_rate=sample_rate))
 ```
 
+After `prepare()`, `chain.set_parameter(key, value)` changes one streaming-safe parameter at a block boundary. The call is serialized with processing, flushing, resetting, and preparing; unknown keys, structural keys, and keys for disabled stages are rejected before mutation, so a failed call leaves the chain and its audio history unchanged. Parameter changes take effect without automatic smoothing.
+
 Each of the three JSON helpers has a `_stereo` sibling that takes `left` and `right` instead of one buffer, accepts the same `params` / `platforms`, and returns the same JSON string. Reach for it whenever you actually have two channels. The mono entry points measure a `0.5 * (left + right)` downmix, and on decorrelated stereo material that downmix reads about 6 dB low — which drags down integrated loudness, the normalization gain derived from it, and the ceiling-risk judgement by the same amount. On a decorrelated pink-noise pair (48 kHz, 4 s) the downmix path reports -22.55 LUFS against -16.44 LUFS from the stereo path, a 6.11 dB gap that turns a Spotify `normalizationGainDb` of +2.44 into +8.55. A correlated pair differs by only 3.01 dB, the plain downmix halving; the remaining ~3 dB is the decorrelation.
 
 Only the `loudness` block of the stereo profile is measured from both channels: integrated LUFS and LRA come from the channel-summed program, and true peak is the larger of the two. The spectral, dynamics, and tempo fields describe shape and timing rather than absolute level, so they stay on the downmix and remain directly comparable with the mono call.
@@ -410,7 +412,9 @@ When `result.report` is present, its `before` and `after` summaries each contain
 
 After the final streaming input block, call `flush_mono()` until it returns an empty list; for stereo, call `flush_stereo()` until it returns two empty lists.
 
-Reference-track workflows use `mastering_pair_processor_names()`, `mastering_pair_process()`, `mastering_pair_analysis_names()`, and `mastering_pair_analyze()`. Pair inputs should use the same sample rate and comparable length.
+Reference-track workflows use `mastering_pair_processor_names()`, `mastering_pair_process()`, `mastering_pair_process_stereo()`, `mastering_pair_analysis_names()`, and `mastering_pair_analyze()`. The mono pair processor accepts `mastering_pair_process(processor_name, source, reference, sample_rate=22050, params=None)` and returns a `MasteringResult`; source and reference lengths may differ. The stereo form accepts `source_left`, `source_right`, `reference_left`, and `reference_right` and returns a `MasteringStereoResult` with `left`, `right`, `sample_rate`, `input_lufs`, `output_lufs`, `applied_gain_db`, `latency_samples`, `loudness_target_limited`, and `non_finite_substitution_count`. Each source pair and each reference pair must have equal left/right lengths, but the source and reference pair lengths may differ; the stereo `match.abCrossfade` result uses the shorter pair length.
+
+For loudness-matched A/B comparisons, `mastering_ab_match_loudness(source, reference, sample_rate=22050, *, with_match=True)` returns `(np.ndarray, LoudnessMatch | None)`. `mastering_ab_match_loudness_stereo(source_left, source_right, reference_left, reference_right, sample_rate=22050, *, with_match=True)` returns `((np.ndarray, np.ndarray), LoudnessMatch | None)`. Each stereo source/reference pair must have equal channel lengths, while source and reference lengths may differ. The stereo helper applies one shared gain to both source channels and does not apply a ceiling.
 
 ### Standalone dynamics and repair
 
@@ -487,8 +491,11 @@ The named mastering API families are:
 | Process stereo audio | `mastering_process_stereo()` |
 | List pair processors | `mastering_pair_processor_names()` |
 | Process source/reference pair | `mastering_pair_process()` |
+| Process stereo source/reference pair | `mastering_pair_process_stereo()` |
 | List pair analyses | `mastering_pair_analysis_names()` |
 | Analyze source/reference pair | `mastering_pair_analyze()` |
+| Match source loudness to a reference | `mastering_ab_match_loudness()` |
+| Match stereo source loudness to a stereo reference | `mastering_ab_match_loudness_stereo()` |
 | List stereo analyses | `mastering_stereo_analysis_names()` |
 | Analyze stereo channels | `mastering_stereo_analyze()` |
 

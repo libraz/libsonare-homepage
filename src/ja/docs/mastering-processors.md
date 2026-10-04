@@ -191,6 +191,7 @@ description: libsonare の名前付きマスタリング API、プリセット�
 | ファミリー | プロセッサ名 |
 |-----------|-------------|
 | Dynamics | `dynamics.brickwallLimiter`, `dynamics.compressor`, `dynamics.deesser`, `dynamics.expander`, `dynamics.gate`, `dynamics.limiter`, `dynamics.parallelComp`, `dynamics.sidechainRouter`, `dynamics.duckingProcessor`, `dynamics.transientShaper`, `dynamics.upwardCompressor`, `dynamics.upwardExpander`, `dynamics.vocalRider` |
+| Effects | `effects.gsEfx` |
 | EQ | `eq.apiStyle`, `eq.bandPass`, `eq.cutFilter`, `eq.dynamic`, `eq.equalizer`, `eq.graphic`, `eq.linearPhase`, `eq.midSide`, `eq.minimumPhase`, `eq.parametric`, `eq.pultec`, `eq.shelving`, `eq.tilt` |
 | Final | `final.bitDepth`, `final.dither`, `final.outputChain` |
 | Maximizer | `maximizer.adaptiveRelease`, `maximizer.loudnessOptimize`, `maximizer.maximizer`, `maximizer.softKneeMax`, `maximizer.truePeakLimiter` |
@@ -275,6 +276,8 @@ DNN 音源分離やニューラルなスペクトル修復**ではありませ�
 | ペア解析 | `match.referenceLoudness`, `match.tonalBalance`, `match.tonalBalanceLogBands`, `match.matchEqCurve`, `match.estimateReferenceDelaySamples` |
 | ステレオ解析 | `stereo.monoCompatCheck`, `stereo.monoCompatCheckLogBands` |
 
+ステレオペアの入口 `masteringPairProcessStereo()` が受け付けるプロセッサ名は `match.abCrossfade` だけです。各ソースペアの左右、各リファレンスペアの左右は同じ長さでなければなりませんが、ソースペアとリファレンスペアの長さは異なっていても構いません。`masteringAbMatchLoudnessStereo()` はリクエストオブジェクトを受け取り、ステレオプログラムに対して 1 つのゲインを計測して左右へ共有し、シーリングによるクランプなしで `left` と `right` の結果を返します。
+
 これらは `masteringPairAnalyze(...)` / `masteringStereoAnalyze(...)` に渡すレジストリ名です。レジストリとは別に、アシスタント系ヘルパーにも左右のペアを直接受け取るステレオ版があります — `masteringAudioProfileStereo`、`masteringAssistantSuggestStereo`、`masteringStreamingPreviewStereo` の 3 つです。ダウンミックスをプロファイルすると無相関素材では積分ラウドネスを約 6 dB 過小に読むため、これらを使ってください。詳細は[ステレオ素材](./mastering-assistant.md#ステレオ素材)を参照してください。
 
 ::: details 「トーナルバランス」と「モノラル互換性」は何を測る？
@@ -321,7 +324,7 @@ DNN 音源分離やニューラルなスペクトル修復**ではありませ�
 
 ## ミキサー／エンジンのインサート
 
-クリエイティブ FX インサートのカタログ — リバーブ、モジュレーション、ディレイのインサート ID、それぞれのパラメータ表、`masteringInsertNames()` の検出 API、`SONARE_HAVE_FX` / `BUILD_ACOUSTIC_SIM` によるビルド有効化 — は独立したページにまとめました。[エフェクトインサート](./effects-inserts.md) を参照してください。
+クリエイティブ FX インサートのカタログ — リバーブ、モジュレーション、ディレイ、GS のインサート ID、それぞれのパラメータ表、`masteringInsertNames()` の検出 API、`SONARE_HAVE_FX` / `BUILD_ACOUSTIC_SIM` によるビルド有効化 — は独立したページにまとめました。[エフェクトインサート](./effects-inserts.md) を参照してください。単体でも使える `effects.gsEfx` は `BUILD_FX` で有効になり、GS タイプと raw バイトのオプションも同ページで説明しています。
 
 ## 呼び出し方
 

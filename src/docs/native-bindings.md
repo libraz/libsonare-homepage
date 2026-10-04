@@ -84,13 +84,13 @@ A binding and the shared library it loads must come from the same tree. The C AB
 
 | ABI | Current | Covers |
 |-----|---------|--------|
-| Feature | 5 | the flat analysis and feature-result structs — `SonareKey`, `SonareAnalysisResult`, `SonareChordDetectionOptions`, and their neighbours |
+| Feature | 6 | the flat analysis and feature-result structs plus the shipped general C function contracts — `SonareKey`, `SonareAnalysisResult`, `SonareChordDetectionOptions`, and their neighbours |
 | Project | 2 | the headless-DAW project and arrangement structs. Reports `0` in a build without arrangement support |
 | Voice changer | 2 | the realtime voice-changer configuration struct |
 | Acoustic | 4 | the room-acoustics structs |
 | Engine | 3 | the realtime command queue |
 
-`sonare_abi_version()` packs the first four into one `uint32_t` — feature in bits 0-7, project in 8-15, voice changer in 16-23, acoustic in 24-31 — so one comparison covers all of them. The engine ABI is deliberately excluded and keeps its own accessor, `sonare_engine_abi_version()`, because it versions a SharedArrayBuffer record layout rather than a POD struct. Each subsystem's header owns its macro (`SONARE_FEATURE_ABI_VERSION`, `SONARE_PROJECT_ABI_VERSION`, `SONARE_VOICE_CHANGER_ABI_VERSION`, `SONARE_ACOUSTIC_ABI_VERSION`) and moves it on any layout change to the structs it guards; the project version moves once per release that changes the layout. Equal values therefore mean identical layout, and a field appended to a guarded struct is a bump, not an additive change.
+`sonare_abi_version()` packs the first four into one `uint32_t` — feature in bits 0-7, project in 8-15, voice changer in 16-23, acoustic in 24-31 — so one comparison covers all of them. The engine ABI is deliberately excluded and keeps its own accessor, `sonare_engine_abi_version()`, because it versions a SharedArrayBuffer record layout rather than a POD struct. Each subsystem's header owns its macro (`SONARE_FEATURE_ABI_VERSION`, `SONARE_PROJECT_ABI_VERSION`, `SONARE_VOICE_CHANGER_ABI_VERSION`, `SONARE_ACOUSTIC_ABI_VERSION`). The feature macro also covers shipped general C function contracts, so a signature change such as the note APIs' `voiced` argument moves it; the other macros move on layout changes to the structs they guard. The project version moves once per release that changes its layout. Equal values therefore mean identical layout and covered contracts, and a field appended to a guarded struct is a bump, not an additive change.
 
 What each binding does with the number differs, and it decides where a stale library shows up:
 
@@ -343,8 +343,11 @@ const monoOut = chain.processMono(monoBlock);
 const { left, right } = chain.processStereo(leftBlock, rightBlock);
 
 console.log(chain.stageNames(), chain.latencySamples());
+chain.setParameter('eq.tilt.tiltDb', 1.0); // realtime-safe update at a block boundary
 chain.reset();   // clear state without rebuilding
 ```
+
+After `prepare()`, `setParameter(key, value)` changes one realtime-safe full-chain parameter at a serialized block boundary. The native chain keeps its processor instances, audio history, and latency. Use the full dotted key (for example, `eq.tilt.tiltDb`); structural keys, keys from disabled stages, and unknown keys are rejected. Serialize this call with `process*()`, `flush*()`, `reset()`, and `prepare()`. Changes take effect at the boundary and are not smoothed automatically.
 
 Stereo-only stages are skipped when `numChannels === 1`. The streaming chain
 rejects offline-only repair stages. A `loudness` stage requires a precomputed

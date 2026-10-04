@@ -310,7 +310,7 @@ function decomposeStems(request: DecomposeStemsRequest): DecomposeStemsResult
 
 interface DecomposeStemsRequest {
   samples: Float32Array;
-  sampleRate: number;
+  sampleRate?: number;    // default 22050 — pass the buffer's real rate
   nComponents?: number;   // default 4
   nFft?: number;          // default 2048
   hopLength?: number;     // default 512
@@ -530,9 +530,17 @@ oscillation on top. Editing any one of them needs them separated first.
 begins. **Hand the same cutoff to `renderNotes`**, or it edits a curve nobody was
 shown.
 
+Pass the note's original `f0Hz` track as a `Float32Array` and an optional
+`voiced` flag array with the same length. A `false` flag suppresses that frame even when its F0 is
+positive; `true` does not make a non-positive, non-finite, or otherwise unusable
+F0 valid. `frameRate` is required with `f0Hz`. Use the same track, flags, frame
+rate, and cutoff when rendering a curve edit; ordinary note edits do not need
+F0 metadata.
+
 Frames whose F0 is unusable carry no measurement, so the curve is held at the
 nearest usable neighbour across them; both curves therefore have an entry
-everywhere, and a host marking the held ones reads them off `f0Hz`. A note with
+everywhere, and a host marking the held ones checks `f0Hz` together with the
+supplied `voiced` flags when present. A note with
 no usable pitch comes back as a zero `centreHz` and two empty curves — that is a
 measurement that came up empty, not a bad argument.
 

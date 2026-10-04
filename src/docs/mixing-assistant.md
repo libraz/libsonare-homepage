@@ -353,7 +353,7 @@ The filter is proposed only when the share of the track's energy below its corne
 | `track is silent` | |
 | `track has no energy in the analysis bands` | |
 
-**A duplicate track id is the one rejected input.** It raises `InvalidParameter` (a `RangeError` in Node, `SonareValueError` in Python) rather than being absorbed, because a scene with two strips of the same id is a scene the mixer refuses to load — accepting it here would only move the failure somewhere harder to read.
+**A missing or empty track id, and a duplicate track id, are rejected inputs.** Binding validation rejects a missing or empty id before analysis (Node reports `TypeError`; Python reports `SonareValueError`), while a duplicate id raises `InvalidParameter` (Node reports `RangeError`; Python reports `SonareValueError`). A scene with two strips of the same id is a scene the mixer refuses to load — accepting it here would only move the failure somewhere harder to read.
 
 ## Availability
 

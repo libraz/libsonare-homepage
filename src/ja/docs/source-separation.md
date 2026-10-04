@@ -45,7 +45,7 @@ const { components, w, h } = decomposeStems({
 
 <SonareDemo id="nmf-stems" />
 
-覚えておくとよい既定値。メディアンフィルタのカーネルはどちらも 31 で、既定のソフトマスクでは 2 つのマスクの和がすでに 1 になるため `hpssWithResidual(...)` の残差は無音です。どちらの成分にも割り当てられなかった帯域を残差として得たい場合は `hardMask: true` を渡します。`decomposeStems(...)` と `decomposeStemsLinked(...)` の NMF の既定値は同じで、成分 4 個、`nFft: 2048`、`hopLength: 512`、反復 100 回、`beta: 2`（Frobenius。Kullback-Leibler なら `1`）、`init: 'random'`、`maskPower: 1`（振幅比）です。`decomposeStemsLinked(...)` は `sampleRate` を省略すると `22050` を使います。
+覚えておくとよい既定値。メディアンフィルタのカーネルはどちらも 31 で、既定のソフトマスクでは 2 つのマスクの和がすでに 1 になるため `hpssWithResidual(...)` の残差は無音です。どちらの成分にも割り当てられなかった帯域を残差として得たい場合は `hardMask: true` を渡します。`decomposeStems(...)` と `decomposeStemsLinked(...)` の NMF の既定値は同じで、成分 4 個、`nFft: 2048`、`hopLength: 512`、反復 100 回、`beta: 2`（Frobenius。Kullback-Leibler なら `1`）、`init: 'random'`、`maskPower: 1`（振幅比）です。どちらのステム関数も `sampleRate` を省略すると `22050` を使うため、録音の実際のレートを渡してください。
 
 マルチチャンネルの録音には `decomposeStemsLinked(...)` を使います。各チャンネルの振幅スペクトログラムを平均して 1 つの NMF モデルと成分マスクを作り、そのマスクを各チャンネルの元の複素スペクトログラムへ同じまま適用します。各時間・周波数ビン内のチャンネル間のレベル差と位相差を保ち、左右で別々のマスクを選ぶことを避けます。ただし、各成分に残る内容はフルミックスと異なるため、分離した成分のステレオの広がりや定位がフルミックスと同じになる保証はありません。
 

@@ -266,9 +266,9 @@ sonare transcribe chords.wav -o chords.mid --polyphonic --tempo-bpm 120
 | `--tempo-bpm` | Tempo the PPQ grid is built on. Omitted, it is detected from the take |
 | `--polyphonic` | Use the multi-F0 chain, which finds overlapping notes |
 | `--reference-hz` | Tuning reference the MIDI note numbers are measured against (default 440) |
-| `--fmin`, `--fmax` | Pitch range the monophonic tracker looks in, in Hz (defaults 65 and 2093) |
-| `--min-note-ms` | Shortest span kept as a note, in ms (default 30) |
-| `--segmentation-threshold-cents` | Pitch movement that ends one note and starts the next (default 50) |
+| `--fmin`, `--fmax` | F0 range in Hz for either chain; omitted endpoints use 65/2093 for monophonic and 55/1760 for polyphonic, while explicit endpoints override the selected chain's defaults |
+| `--min-note-ms` | Monophonic only: shortest span kept as a note, in ms (default 30); the polyphonic path does not use it |
+| `--segmentation-threshold-cents` | Monophonic split threshold in cents (default 50); the polyphonic path uses it only for reported F0 stability and never to split a ridge |
 | `--velocity-floor-db` | Level mapped to velocity 1; must be negative (default -48) |
 | `--fixed-velocity N` | Give every note velocity N (1-127) and skip the level measurement |
 | `--group`, `--channel` | UMP group and MIDI channel the events are emitted on (default 0) |

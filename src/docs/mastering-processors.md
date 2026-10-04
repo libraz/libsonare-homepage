@@ -175,6 +175,7 @@ The same knob is also accepted as a linear floor. A `repair.denoise.gainFloor` k
 | Family | Processor names |
 |--------|-----------------|
 | Dynamics | `dynamics.brickwallLimiter`, `dynamics.compressor`, `dynamics.deesser`, `dynamics.expander`, `dynamics.gate`, `dynamics.limiter`, `dynamics.parallelComp`, `dynamics.sidechainRouter`, `dynamics.duckingProcessor`, `dynamics.transientShaper`, `dynamics.upwardCompressor`, `dynamics.upwardExpander`, `dynamics.vocalRider` |
+| Effects | `effects.gsEfx` |
 | EQ | `eq.apiStyle`, `eq.bandPass`, `eq.cutFilter`, `eq.dynamic`, `eq.equalizer`, `eq.graphic`, `eq.linearPhase`, `eq.midSide`, `eq.minimumPhase`, `eq.parametric`, `eq.pultec`, `eq.shelving`, `eq.tilt` |
 | Final | `final.bitDepth`, `final.dither`, `final.outputChain` |
 | Maximizer | `maximizer.adaptiveRelease`, `maximizer.loudnessOptimize`, `maximizer.maximizer`, `maximizer.softKneeMax`, `maximizer.truePeakLimiter` |
@@ -259,6 +260,8 @@ Pair processors consume a source **and** a reference. Pair/stereo *analyses* ret
 | Pair analyses | `match.referenceLoudness`, `match.tonalBalance`, `match.tonalBalanceLogBands`, `match.matchEqCurve`, `match.estimateReferenceDelaySamples` |
 | Stereo analyses | `stereo.monoCompatCheck`, `stereo.monoCompatCheckLogBands` |
 
+The stereo pair entry point `masteringPairProcessStereo()` accepts only `match.abCrossfade`. Each source pair and each reference pair must have equal left/right lengths, while the source pair and reference pair may have different durations. `masteringAbMatchLoudnessStereo()` takes a request object, measures one shared gain for the stereo program, and returns matched `left` and `right` results without a ceiling clamp.
+
 These are registry names you pass to `masteringPairAnalyze(...)` / `masteringStereoAnalyze(...)`. Separately from the registry, the assistant helpers have their own stereo entry points that take a left/right pair directly — `masteringAudioProfileStereo`, `masteringAssistantSuggestStereo`, and `masteringStreamingPreviewStereo`. Use them instead of profiling a downmix, which under-reports integrated loudness by about 6 dB on decorrelated material; see [Stereo sources](./mastering-assistant.md#stereo-sources).
 
 ::: details What do "tonal balance" and "mono compatibility" measure?
@@ -303,7 +306,7 @@ Band count does not drive cost the way it looks like it should: the bands share 
 
 ## Mixer and engine inserts
 
-The creative-FX insert catalog — reverb, modulation, and delay insert IDs, their parameter tables, the `masteringInsertNames()` discovery APIs, and `SONARE_HAVE_FX` / `BUILD_ACOUSTIC_SIM` build gating — lives on its own page: [Effects Inserts](./effects-inserts.md).
+The creative-FX insert catalog — reverb, modulation, delay, and GS insert IDs, their parameter tables, the `masteringInsertNames()` discovery APIs, and `SONARE_HAVE_FX` / `BUILD_ACOUSTIC_SIM` build gating — lives on its own page: [Effects Inserts](./effects-inserts.md). The standalone `effects.gsEfx` processor uses the same `BUILD_FX` gate and GS type/raw-byte options described there.
 
 ## How to call them
 

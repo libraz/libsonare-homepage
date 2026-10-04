@@ -84,13 +84,13 @@ yarn build
 
 | ABI | 現在の値 | 対象 |
 |-----|---------|------|
-| Feature | 5 | フラットな解析・特徴量の結果構造体（`SonareKey`、`SonareAnalysisResult`、`SonareChordDetectionOptions` など） |
+| Feature | 6 | フラットな解析・特徴量の結果構造体と、公開する一般 C 関数の契約（`SonareKey`、`SonareAnalysisResult`、`SonareChordDetectionOptions` など） |
 | Project | 2 | ヘッドレス DAW のプロジェクト・アレンジ構造体。アレンジ機能なしのビルドでは `0` を返します |
 | Voice changer | 2 | リアルタイムボイスチェンジャーの設定構造体 |
 | Acoustic | 4 | ルーム音響の構造体 |
 | Engine | 3 | リアルタイムコマンドキュー |
 
-`sonare_abi_version()` は上の 4 つを 1 つの `uint32_t` に詰めて返します。ビット 0〜7 が Feature、8〜15 が Project、16〜23 が Voice changer、24〜31 が Acoustic で、1 回の比較で全体を照合できます。Engine の ABI はここに含めず、専用のアクセサ `sonare_engine_abi_version()` を持ちます。POD 構造体ではなく SharedArrayBuffer のレコードレイアウトをバージョン管理しているためです。各サブシステムのヘッダーが自分のマクロ（`SONARE_FEATURE_ABI_VERSION`、`SONARE_PROJECT_ABI_VERSION`、`SONARE_VOICE_CHANGER_ABI_VERSION`、`SONARE_ACOUSTIC_ABI_VERSION`）を持ち、保証対象の構造体のレイアウトが変わるたびに値を進めます。Project のバージョンだけは、レイアウトが変わったリリースごとに 1 回進みます。したがって値が等しければレイアウトは同一であり、保証対象の構造体へのフィールド追加は「追加的な変更」ではなくバージョンの更新です。
+`sonare_abi_version()` は上の 4 つを 1 つの `uint32_t` に詰めて返します。ビット 0〜7 が Feature、8〜15 が Project、16〜23 が Voice changer、24〜31 が Acoustic で、1 回の比較で全体を照合できます。Engine の ABI はここに含めず、専用のアクセサ `sonare_engine_abi_version()` を持ちます。POD 構造体ではなく SharedArrayBuffer のレコードレイアウトをバージョン管理しているためです。各サブシステムのヘッダーが自分のマクロ（`SONARE_FEATURE_ABI_VERSION`、`SONARE_PROJECT_ABI_VERSION`、`SONARE_VOICE_CHANGER_ABI_VERSION`、`SONARE_ACOUSTIC_ABI_VERSION`）を持ちます。Feature のマクロは公開する一般 C 関数の契約も保証するため、ノート API の `voiced` 引数のようなシグネチャ変更で値が進みます。それ以外のマクロは、保証対象の構造体のレイアウトが変わるたびに値を進めます。Project のバージョンだけは、レイアウトが変わったリリースごとに 1 回進みます。したがって値が等しければレイアウトと保証対象の契約は同一であり、保証対象の構造体へのフィールド追加は「追加的な変更」ではなくバージョンの更新です。
 
 この値をどう使うかはバインディングごとに異なり、古いライブラリがどこで露見するかもそれで決まります。
 
@@ -343,8 +343,11 @@ const monoOut = chain.processMono(monoBlock);
 const { left, right } = chain.processStereo(leftBlock, rightBlock);
 
 console.log(chain.stageNames(), chain.latencySamples());
+chain.setParameter('eq.tilt.tiltDb', 1.0); // ブロック境界でリアルタイム安全な値を更新
 chain.reset();   // 状態だけクリア（prepare し直さない）
 ```
+
+`prepare()` の後は `setParameter(key, value)` で、リアルタイム安全なフルチェーンパラメータをブロック境界で直列化して変更できます。ネイティブチェーンはプロセッサのインスタンス、音声履歴、レイテンシを保持します。`eq.tilt.tiltDb` のような完全なドット区切りキーを使い、構造を変えるキー、無効なステージのキー、未知のキーは拒否されます。呼び出しは `process*()`、`flush*()`、`reset()`、`prepare()` と直列化します。変更は境界で反映され、自動的にはスムージングされません。
 
 `numChannels === 1` のときはステレオ専用ステージはスキップされます。ストリーミングチェーンはオフライン専用の repair 段を拒否します。`loudness` 段を使うには事前計算した静的ゲインを `loudnessStaticGainDb` で指定し、必要に応じて音源の True Peak を `loudnessStaticGainPeakDb` で渡します。後者を指定すると、静的ゲインは設定したシーリングを超えないように制限されます。WASM ビルドは `chain.delete()` でハンドルを解放します。ネイティブアドオンは冪等な `destroy()` を公開し、`[Symbol.dispose]` も実装しているので Node 22+ では `using` が使えます。ネイティブハンドルは最終的には GC でも回収されますが、リクエストごとにチェーンを生成するような長寿命プロセスでは明示的に解放しないとネイティブメモリが積み上がります。
 

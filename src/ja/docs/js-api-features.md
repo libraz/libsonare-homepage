@@ -299,7 +299,7 @@ function decomposeStems(request: DecomposeStemsRequest): DecomposeStemsResult
 
 interface DecomposeStemsRequest {
   samples: Float32Array;
-  sampleRate: number;
+  sampleRate?: number;    // 既定 22050。バッファの実際のレートを渡す
   nComponents?: number;   // 既定 4
   nFft?: number;          // 既定 2048
   hopLength?: number;     // 既定 512
@@ -486,7 +486,9 @@ function decomposeNotePitch(request: DecomposeNotePitchRequest): PitchDecomposit
 
 ドリフトとビブラートの境界を決めているのは `vibratoCutoffHz` だけです。**同じカットオフを `renderNotes` にも渡してください。** そうしないと、ユーザーに表示しているものとは別の曲線を編集することになります。
 
-F0 が使えないフレームには測定値がないため、曲線は最も近い有効な隣接値で保持されます。したがってどちらの曲線も全フレームに値を持ちます。保持された箇所を示したいホストは `f0Hz` を見れば正確に判別できます。使えるピッチが全く無いノートは、エラーではなく `centreHz` が 0 で 2 本の曲線が空という形で返ります。これは引数の誤りではなく、測定が空振りしたという報告です。
+元の `f0Hz` トラックを `Float32Array` で渡し、任意で同じ長さの `voiced` フラグ配列も渡します。`false` は F0 が正でもそのフレームを抑制し、`true` でも 0 以下・有限でない・その他の理由で利用できない F0 は有効になりません。`f0Hz` と一緒に `frameRate` も必要です。カーブ編集をレンダーするときは同じトラック、フラグ、フレームレート、カットオフを使います。通常のノート編集に F0 メタデータは不要です。
+
+F0 が使えないフレームには測定値がないため、曲線は最も近い有効な隣接値で保持されます。したがってどちらの曲線も全フレームに値を持ちます。保持された箇所を示したいホストは、`f0Hz` と、渡している場合は `voiced` フラグを合わせて確認できます。使えるピッチが全く無いノートは、エラーではなく `centreHz` が 0 で 2 本の曲線が空という形で返ります。これは引数の誤りではなく、測定が空振りしたという報告です。
 
 ### `extractPercussiveEvents(request)` と `renderPercussiveEvents(request)`
 

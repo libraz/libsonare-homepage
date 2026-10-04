@@ -349,8 +349,50 @@ For realtime insert automation and external MIDI in the C ABI:
 - `sonare_engine_resolve_{track,master,bus}_insert_automation_id` converts an insert parameter name into the numeric id accepted by `sonare_engine_set_automation_lane`, `sonare_engine_set_parameter`, and `sonare_engine_set_parameter_smoothed`. `sonare_engine_set_param_smoothing_ms` changes the shared ramp time (20 ms by default; `0` makes changes immediate).
 - `sonare_engine_push_midi_sysex` copies one complete SysEx frame, including `0xF0` and `0xF7`; its size must be 1–512 bytes.
 - `sonare_engine_set_midi_destination_external` moves a destination out of the internal instrument rack and into the host-drained output queue. Up to 16 destinations may be external. Clock/transport forwarding is opt-in through `sonare_engine_set_external_midi_clock_enabled`; those messages use destination `0xFFFFFFFF`.
-- On the host/control thread, call `sonare_engine_drain_external_midi` repeatedly until it returns zero events, then deliver each 1–3-byte MIDI 1.0 message to the device. `max_events` must be at least 3 because one queued UMP (Universal MIDI Packet) record can expand to three messages. Monitor `sonare_engine_external_midi_dropped_count` to detect a host that is draining too slowly. SysEx/Data and other UMP messages that cannot be lowered to MIDI 1.0 are not emitted by this drain API.
+- On the host/control thread, call `sonare_engine_drain_external_midi` repeatedly until it returns zero events, then deliver each 1–3-byte MIDI 1.0 message to the device. `max_events` must be at least 4 because one queued UMP (Universal MIDI Packet) record can expand to four messages. Monitor `sonare_engine_external_midi_dropped_count` to detect a host that is draining too slowly. SysEx/Data and other UMP messages that cannot be lowered to MIDI 1.0 are not emitted by this drain API.
 - Each drained `SonareEngineTelemetry` record's `error` field is a `SonareEngineTelemetryError` ordinal (`sonare_c_types_engine.h`): `NONE = 0`, then queue/backlog/overflow conditions `1`–`18` (command queue, pending-command, boundary, telemetry, capture, automation-bind-target, insert-automation, MIDI-clock, and metronome overflow among them), and `MAX_CHANNELS_EXCEEDED = 20`.
+
+### Canonical C ABI contracts
+
+The stereo pair and note-editing entry points keep their contracts in the C ABI names and signatures below:
+
+```c
+SonareError sonare_mastering_apply_pair_processor_stereo(
+    const char* processor_name, const float* source_left, const float* source_right,
+    const float* reference_left, const float* reference_right, size_t length,
+    int sample_rate, const SonareMasteringParam* params, size_t param_count,
+    SonareMasteringStereoResult* out);
+SonareError sonare_mastering_apply_pair_processor_stereo_ex(
+    const char* processor_name, const float* source_left, const float* source_right,
+    size_t source_length, const float* reference_left, const float* reference_right,
+    size_t reference_length, int sample_rate, const SonareMasteringParam* params,
+    size_t param_count, SonareMasteringStereoResult* out);
+SonareError sonare_mastering_ab_match_loudness_stereo(
+    const float* source_left, const float* source_right, size_t source_length,
+    const float* reference_left, const float* reference_right, size_t reference_length,
+    int sample_rate, SonareMasteringStereoResult* out, SonareLoudnessMatch* out_match);
+```
+
+Both stereo pair processor functions support only `match.abCrossfade`. The source left/right channels and the reference left/right channels must each have equal lengths. The non-`_ex` form uses one common length; `_ex` permits different source and reference lengths and returns the shorter pair length. `sonare_mastering_ab_match_loudness_stereo` applies one shared gain to both source channels, preserves the source length and stereo image, and applies no ceiling. Pass `NULL` for `out_match` when the match details are not needed.
+
+```c
+SonareError sonare_streaming_mastering_chain_set_parameter(
+    SonareStreamingMasteringChain* handle, const char* key, double value);
+SonareError sonare_render_notes(
+    const float* samples, size_t length, int sample_rate,
+    const SonareNoteObject* notes, size_t note_count,
+    const float* envelopes, size_t envelope_count, const float* f0_hz,
+    const int32_t* voiced, size_t n_frames, float frame_rate,
+    const SonareNoteRenderConfig* config, float** out, size_t* out_length);
+SonareError sonare_decompose_note_pitch(
+    const float* f0_hz, const int32_t* voiced, size_t n_frames,
+    float frame_rate, float median_hz, float vibrato_cutoff_hz,
+    SonarePitchDecompositionResult* out);
+```
+
+`sonare_streaming_mastering_chain_set_parameter` takes a full dotted key for an enabled, prepared stage. The key must be realtime-safe; structural, disabled-stage, and unknown keys are rejected before mutation. Serialize it with processing, flushing, reset, and prepare at a block boundary; existing DSP instances, audio history, and latency remain in place.
+
+For `sonare_render_notes`, `f0_hz` may be `NULL` when no pitch-curve edit needs it, and `voiced` is optional. A non-`NULL` `voiced` array requires `f0_hz`; a `NULL` array infers voicing from usable positive finite F0, while a zero flag suppresses an otherwise usable F0. `sonare_decompose_note_pitch` requires a non-`NULL` F0 track with `n_frames > 0`, but its `voiced` flags are optional and use the same usable-F0 rule. A non-positive or non-finite F0 frame contributes no pitch measurement.
 
 To classify processors in the C ABI, `sonare_mastering_processor_catalog()` returns a JSON array string `[{"id","kind","realtimeInsertable","stereoOnly","latencySamples","tailSamples","realtimeCost","channelPolicy","category","params","slots"}, ...]`. `kind` is `realtime`/`offline`/`pair`, and `realtimeInsertable` is true exactly for the ids in `sonare_mastering_insert_names()`. `latencySamples` and `tailSamples` are representative default-configuration probes (48 kHz / 512 samples); configuration-dependent values should come from `sonare_mastering_insert_timing`. `realtimeCost` is a coarse `low`/`moderate`/`high` algorithmic estimate for live inserts, not a hardware benchmark, and is `null` for non-insert ids. `channelPolicy` tells a surround host how the mixer wraps the processor, `category` is the stable UI grouping derived from the id namespace, and `params` contains descriptors for realtime and construction keys (empty for non-insert processors). Each descriptor includes `name`, `id`, `rtSafe`, `type`, `min`, `max`, `default`, `unit`, `choices`, and `slot`. `slots` lists conditional key groups as `{name,parent,activation,minCrossoverCutoffs}`. The id universe is the union of `sonare_mastering_processor_names()`, the insert set, and `sonare_mastering_pair_processor_names()`, so hosts can filter a processor picker without hardcoding ids. The pointer is thread-local (do not free it or cache it across threads), mirroring `sonare_mastering_processor_names()`.
 

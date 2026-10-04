@@ -137,6 +137,7 @@ chain.prepare(48000, /*maxBlockSize=*/512, /*numChannels=*/2);
 // flushMono() after prepare(..., 1), processStereo() / flushStereo() after
 // prepare(..., 2). Mixing them throws a num_channels mismatch.
 const { left, right } = chain.processStereo(leftBlock, rightBlock);
+chain.setParameter('eq.tilt.tiltDb', 1.0);
 
 console.log(chain.stageNames());      // ['eq.tilt', 'dynamics.compressor', ...]
 console.log(chain.latencySamples());  // total latency reported by active stages
@@ -150,6 +151,8 @@ while ((tail = chain.flushStereo()).left.length > 0) {
 chain.reset();   // clear processor state without re-preparing
 chain.delete();  // release the WASM handle (call when done)
 ```
+
+`setParameter(key, value)` updates one realtime-safe parameter on a prepared chain. The write is serialized at a block boundary while the chain keeps its processor instances, audio history, and latency. Keys use their full dotted form, such as `eq.tilt.tiltDb`; only realtime-safe keys belonging to enabled stages are available. Structural keys, keys from disabled stages, and unknown keys are rejected. Serialize calls to `setParameter()` with `process*()`, `flush*()`, `reset()`, and `prepare()`; parameter changes take effect at the boundary and are not smoothed automatically.
 
 `flushMono()` / `flushStereo()` emit the delayed audio plus finite processor
 tails once you have no more input. Call until an empty result comes back.

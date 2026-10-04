@@ -344,8 +344,50 @@ C ABI のリアルタイム・インサートオートメーションと外部 M
 - `sonare_engine_resolve_{track,master,bus}_insert_automation_id` は、インサートのパラメータ名を `sonare_engine_set_automation_lane`、`sonare_engine_set_parameter`、`sonare_engine_set_parameter_smoothed` が受け取る数値 id に変換します。共通のランプ時間は `sonare_engine_set_param_smoothing_ms` で変更でき、既定は 20 ms、`0` は即時変更です。
 - `sonare_engine_push_midi_sysex` には、先頭の `0xF0` と末尾の `0xF7` を含む完全な SysEx フレームを渡します。長さは 1〜512 バイトです。
 - `sonare_engine_set_midi_destination_external` を使うと、その送出先（デスティネーション）は内蔵インストゥルメントラックを通らず、ホストが回収する出力キューへ送られます。外部化できるデスティネーションは最大 16 個です。クロック／トランスポート転送は `sonare_engine_set_external_midi_clock_enabled` で明示的に有効化し、そのメッセージのデスティネーション id は `0xFFFFFFFF` です。
-- ホスト／制御スレッドでは `sonare_engine_drain_external_midi` をイベント数が 0 になるまで繰り返し呼び、得られた 1〜3 バイトの MIDI 1.0 メッセージを機器へ渡します。1 個の UMP（Universal MIDI Packet）レコードが 3 メッセージへ展開される場合があるため、`max_events` は 3 以上必要です。ホストの回収が遅すぎないかは `sonare_engine_external_midi_dropped_count` で監視できます。SysEx／Data など MIDI 1.0 へ変換できない UMP メッセージは、この drain API からは出力されません。
+- ホスト／制御スレッドでは `sonare_engine_drain_external_midi` をイベント数が 0 になるまで繰り返し呼び、得られた 1〜3 バイトの MIDI 1.0 メッセージを機器へ渡します。1 個の UMP（Universal MIDI Packet）レコードが 4 メッセージへ展開される場合があるため、`max_events` は 4 以上必要です。ホストの回収が遅すぎないかは `sonare_engine_external_midi_dropped_count` で監視できます。SysEx／Data など MIDI 1.0 へ変換できない UMP メッセージは、この drain API からは出力されません。
 - drain した各 `SonareEngineTelemetry` レコードの `error` フィールドは `SonareEngineTelemetryError`（`sonare_c_types_engine.h`）の序数です。`NONE = 0` に続き、キュー／バックログ／オーバーフロー系の条件が `1`〜`18`（コマンドキュー、保留コマンド、境界、テレメトリ、キャプチャ、オートメーションバインドターゲット、インサートオートメーション、MIDI クロック、メトロノームのオーバーフローなど）、そして `MAX_CHANNELS_EXCEEDED = 20` と続きます。
+
+### C ABI の正準契約
+
+ステレオのペア処理とノート編集の入口は、次の C ABI 名とシグネチャで契約を定義しています。
+
+```c
+SonareError sonare_mastering_apply_pair_processor_stereo(
+    const char* processor_name, const float* source_left, const float* source_right,
+    const float* reference_left, const float* reference_right, size_t length,
+    int sample_rate, const SonareMasteringParam* params, size_t param_count,
+    SonareMasteringStereoResult* out);
+SonareError sonare_mastering_apply_pair_processor_stereo_ex(
+    const char* processor_name, const float* source_left, const float* source_right,
+    size_t source_length, const float* reference_left, const float* reference_right,
+    size_t reference_length, int sample_rate, const SonareMasteringParam* params,
+    size_t param_count, SonareMasteringStereoResult* out);
+SonareError sonare_mastering_ab_match_loudness_stereo(
+    const float* source_left, const float* source_right, size_t source_length,
+    const float* reference_left, const float* reference_right, size_t reference_length,
+    int sample_rate, SonareMasteringStereoResult* out, SonareLoudnessMatch* out_match);
+```
+
+ステレオのペアプロセッサ関数が対応するのは `match.abCrossfade` だけです。ソースの左右チャンネル、リファレンスの左右チャンネルは、それぞれ同じ長さにしてください。`_ex` なしは 1 つの共通長を使い、`_ex` 版はソースとリファレンスで異なる長さを許し、短い方のペア長を返します。`sonare_mastering_ab_match_loudness_stereo` はソースの両チャンネルへ 1 つのゲインを共有して適用し、ソースの長さとステレオイメージを保ち、シーリングを行いません。マッチ情報が不要な場合は `out_match` に `NULL` を渡します。
+
+```c
+SonareError sonare_streaming_mastering_chain_set_parameter(
+    SonareStreamingMasteringChain* handle, const char* key, double value);
+SonareError sonare_render_notes(
+    const float* samples, size_t length, int sample_rate,
+    const SonareNoteObject* notes, size_t note_count,
+    const float* envelopes, size_t envelope_count, const float* f0_hz,
+    const int32_t* voiced, size_t n_frames, float frame_rate,
+    const SonareNoteRenderConfig* config, float** out, size_t* out_length);
+SonareError sonare_decompose_note_pitch(
+    const float* f0_hz, const int32_t* voiced, size_t n_frames,
+    float frame_rate, float median_hz, float vibrato_cutoff_hz,
+    SonarePitchDecompositionResult* out);
+```
+
+`sonare_streaming_mastering_chain_set_parameter` は、準備済みで有効なステージをフルドット記法のキーで指定します。キーはリアルタイム安全である必要があり、構造を変えるキー、無効なステージのキー、未知のキーは変更前に拒否されます。処理、フラッシュ、リセット、prepare とブロック境界で直列化してください。既存の DSP インスタンス、音声履歴、レイテンシは保持されます。
+
+`sonare_render_notes` は、ピッチカーブを使う編集がなければ `f0_hz` に `NULL` を渡せます。`voiced` も省略できます。`voiced` が非 `NULL` の場合は `f0_hz` も必要です。`voiced` が `NULL` なら、正で有限な利用可能 F0 から有声判定を推測し、0 のフラグは利用可能な F0 も無効にします。`sonare_decompose_note_pitch` は `n_frames > 0` の非 `NULL` F0 トラックを必要としますが、`voiced` フラグは省略でき、同じ利用可能 F0 の規則を使います。非正または非有限の F0 フレームはピッチ測定に寄与しません。
 
 C ABI でプロセッサを分類するには、`sonare_mastering_processor_catalog()` が JSON 配列の文字列 `[{"id","kind","realtimeInsertable","stereoOnly","latencySamples","tailSamples","realtimeCost","channelPolicy","category","params","slots"}, ...]` を返します。`kind` は `realtime`／`offline`／`pair` で、`realtimeInsertable` は `sonare_mastering_insert_names()` の id に対してのみ真になります。`latencySamples` と `tailSamples` は代表的な既定構成（48 kHz／512 サンプル）での測定値で、構成によって変わる値は `sonare_mastering_insert_timing` で取得します。`realtimeCost` はライブインサート向けの大まかな `low`／`moderate`／`high` のアルゴリズム負荷見積もりであり、ハードウェア上のベンチマークではなく、非インサート id では `null` です。`channelPolicy` はサラウンドホストでミキサーがプロセッサをどうラップするか、`category` は id 名前空間から導出する安定した UI グループです。`params` はリアルタイム対象と構築用キーの記述子（非インサートプロセッサでは空配列）で、各記述子は `name`、`id`、`rtSafe`、`type`、`min`、`max`、`default`、`unit`、`choices`、`slot` を持ちます。`slots` は条件付きキー群を `{name,parent,activation,minCrossoverCutoffs}` として列挙します。id の全集合は `sonare_mastering_processor_names()`、インサート集合、`sonare_mastering_pair_processor_names()` の和なので、ホストは id をハードコードせずにプロセッサ選択を絞り込めます。ポインタはスレッドローカルで（解放せず、スレッドをまたいでキャッシュしないでください）、`sonare_mastering_processor_names()` と同様の扱いです。
 

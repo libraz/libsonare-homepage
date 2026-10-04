@@ -199,7 +199,7 @@ const tuned = pitchCorrectToMidiTimevarying(
 );
 ```
 
-`voiced` と `voicedProb` は、どちらも `f0Hz` と同じ長さである必要があります。長さが食い違うと `RangeError`（`'pitchCorrectToMidiTimevarying: voiced length must match f0Hz length'`）を投げます。`SonareError` ではないため `isSonareError` では捕捉できません。
+`voiced` は `f0Hz` と同じ長さである必要があります。`voiced` を省略する場合は `voicedProb` も `f0Hz` と同じ長さにします。長さが食い違うと `RangeError`（たとえば `pitchCorrectToMidiTimevarying: voiced must have the same length as f0Hz`）を投げます。`SonareError` ではないため `isSonareError` では捕捉できません。有声として扱うすべてのフレームの `f0Hz` は、有限で正の値であり、ナイキスト周波数（`sampleRate / 2`）以下である必要があります。これに違反すると呼び出しを拒否します。無声フレームでは `NaN`（または 0 以上ナイキスト周波数以下の有限値）を使えますが、有声フレームの `NaN` は無効です。
 
 ::: warning `voicedProb` が決めるのは有声判定だけ
 `voicedProb` の用途は 1 つだけです。`voiced` を渡さなかったときに、フレームごとの有声／無声の判定を導くことです。`voiced` を渡した場合、`voicedProb` は完全に無視されます。両方渡しても `voicedProb` は使われないため、上の例ではフラグだけを渡しています。

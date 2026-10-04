@@ -143,6 +143,7 @@ chain.prepare(48000, /*maxBlockSize=*/512, /*numChannels=*/2);
 // flushMono() after prepare(..., 1), processStereo() / flushStereo() after
 // prepare(..., 2). Mixing them throws a num_channels mismatch.
 const { left, right } = chain.processStereo(leftBlock, rightBlock);
+chain.setParameter('eq.tilt.tiltDb', 1.0);
 
 console.log(chain.stageNames());      // ['eq.tilt', 'dynamics.compressor', ...]
 console.log(chain.latencySamples());  // 有効ステージの合計レイテンシ
@@ -156,6 +157,8 @@ while ((tail = chain.flushStereo()).left.length > 0) {
 chain.reset();   // prepare し直さずに状態だけクリア
 chain.delete();  // WASM ハンドルを解放（使い終わったら呼ぶ）
 ```
+
+準備済みのチェーンでは `setParameter(key, value)` でリアルタイム安全なパラメータを 1 つ更新できます。書き込みはブロック境界で直列化され、チェーンはプロセッサのインスタンス、音声履歴、レイテンシを保持します。キーは `eq.tilt.tiltDb` のような完全なドット区切り形式を使います。利用できるのは有効なステージに属するリアルタイム安全なキーだけです。構造を変えるキー、無効なステージのキー、未知のキーは拒否されます。`setParameter()` は `process*()`、`flush*()`、`reset()`、`prepare()` と直列化して呼び出してください。パラメータの変更は境界で反映され、自動的にはスムージングされません。
 
 `flushMono()` / `flushStereo()` は、入力がもうない状態で遅延分の音声と有限のプロセッサ
 テールを吐き出します。空の結果が返るまで呼び続けてください。フラッシュしないと、
