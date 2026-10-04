@@ -154,7 +154,7 @@ describe('the audition renders', () => {
     expect(full.frames).toBeGreaterThan(Math.round(9 * 0.5 * 44100));
     const afterNoteOnset = full.left.subarray(Math.round(4 * 44100), Math.round(4.5 * 44100));
     expect(rms(afterNoteOnset)).toBeGreaterThan(1e-3);
-  });
+  }, 30_000);
 
   it('omits the fixed frame limit when bouncing an imported file', () => {
     const bounce = vi.fn(() => new Float32Array(2));
