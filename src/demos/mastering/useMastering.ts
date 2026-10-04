@@ -7,7 +7,7 @@
  * a time because each one borrows the clips it needs.
  */
 
-import { type ComputedRef, computed, ref, shallowRef, watch } from 'vue';
+import { type ComputedRef, computed, onMounted, ref, shallowRef, watch } from 'vue';
 import type { EngineTransportLoop } from '@/components/ui/EngineTransport.vue';
 import { useHistory } from '@/composables/useHistory';
 import { type UseSonareEngine, useSonareEngine } from '@/composables/useSonareEngine';
@@ -790,9 +790,13 @@ export function useMastering(options: { copy: ComputedRef<MasteringCopy> }) {
   // -------------------------------------------------------------------------
   // Lifecycle
 
-  const clock = setInterval(() => {
-    now.value = Date.now();
-  }, 1000);
+  // Client only: a timer started during server rendering would never be cleared.
+  let clock: ReturnType<typeof setInterval> | null = null;
+  onMounted(() => {
+    clock = setInterval(() => {
+      now.value = Date.now();
+    }, 1000);
+  });
 
   function restore(): void {
     const restored = session.restore();
@@ -803,7 +807,7 @@ export function useMastering(options: { copy: ComputedRef<MasteringCopy> }) {
   }
 
   function dispose(): void {
-    clearInterval(clock);
+    if (clock) clearInterval(clock);
     if (prepareTimer) clearTimeout(prepareTimer);
     cancelMeasure();
     if (flashTimer) clearTimeout(flashTimer);
