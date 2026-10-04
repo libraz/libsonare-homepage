@@ -233,7 +233,7 @@ describe('spatial worker protocol', () => {
 
     expect(done()).toBeUndefined();
     const err = posted.find((p) => p.message?.type === 'error')!;
-    expect(err.message).toMatchObject({ id: 5, message: 'Invalid room geometry for synthesis' });
+    expect(err.message).toMatchObject({ id: 5, error: 'Invalid room geometry for synthesis' });
   });
 
   it('morphs both channels and transfers the rendered buffers', async () => {

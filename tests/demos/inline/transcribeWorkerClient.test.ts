@@ -4,19 +4,17 @@ import type {
   TranscribeResponse,
 } from '@/demos/inline/archetypes/transcribe.worker';
 import type { TranscriptionRender } from '@/demos/inline/archetypes/transcribePipeline';
-import {
-  createTranscribeWorkerClient,
-  type TranscribeWorkerLike,
-} from '@/demos/inline/archetypes/transcribeWorkerClient';
+import { createTranscribeWorkerClient } from '@/demos/inline/archetypes/transcribeWorkerClient';
+import type { WorkerLike } from '@/utils/workerRpc';
 
-class FakeWorker implements TranscribeWorkerLike {
-  onmessage: ((event: MessageEvent<TranscribeResponse>) => void) | null = null;
+class FakeWorker implements WorkerLike {
+  onmessage: ((event: MessageEvent) => void) | null = null;
   onerror: ((event: ErrorEvent) => void) | null = null;
   messages: TranscribeRequest[] = [];
   terminated = false;
 
-  postMessage(message: TranscribeRequest): void {
-    this.messages.push(message);
+  postMessage(message: unknown): void {
+    this.messages.push(message as TranscribeRequest);
   }
 
   terminate(): void {
@@ -24,7 +22,7 @@ class FakeWorker implements TranscribeWorkerLike {
   }
 
   respond(response: TranscribeResponse): void {
-    this.onmessage?.({ data: response } as MessageEvent<TranscribeResponse>);
+    this.onmessage?.({ data: response } as MessageEvent);
   }
 
   fail(error: Error): void {

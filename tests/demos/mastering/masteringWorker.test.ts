@@ -26,8 +26,8 @@ import {
 import {
   createMasteringWorkerClient,
   type MasteringAudioRegistry,
-  MasteringJobCancelled,
 } from '@/demos/mastering/masteringWorkerClient';
+import { WorkerJobCancelled } from '@/utils/workerRpc';
 import { loadIndexModule, noise } from '../../wasm/support/engineHarness';
 
 const SR = 48_000;
@@ -39,7 +39,7 @@ const SECONDS = 3;
 
 type Listener = (event: { data: unknown }) => void;
 const replies: MasteringWorkerResponse[] = [];
-const clientListeners = new Set<Listener>();
+let clientOnMessage: Listener | null = null;
 const replyWaiters: Array<() => void> = [];
 
 const scope = {
@@ -48,7 +48,7 @@ const scope = {
     const data = structuredClone(message, { transfer: options?.transfer ?? [] });
     replies.push(data);
     queueMicrotask(() => {
-      for (const listener of clientListeners) listener({ data });
+      clientOnMessage?.({ data });
       for (const wake of replyWaiters.splice(0)) wake();
     });
   },
@@ -59,12 +59,10 @@ class InProcessWorker {
   constructor() {
     InProcessWorker.created++;
   }
-  addEventListener(type: string, listener: Listener) {
-    if (type === 'message') clientListeners.add(listener);
+  set onmessage(listener: Listener | null) {
+    clientOnMessage = listener;
   }
-  removeEventListener(type: string, listener: Listener) {
-    if (type === 'message') clientListeners.delete(listener);
-  }
+  onerror: unknown = null;
   postMessage(message: unknown, transfer: Transferable[] = []) {
     const data = structuredClone(message, { transfer });
     queueMicrotask(() => scope.onmessage?.({ data }));
@@ -343,12 +341,12 @@ describe('worker client', () => {
     client.dispose();
   });
 
-  it('a cancel rejects with MasteringJobCancelled and the clips come back', async () => {
+  it('a cancel rejects with WorkerJobCancelled and the clips come back', async () => {
     const client = createMasteringWorkerClient();
     const audio = registry();
     const job = client.fit(audio, defaultMasteringState());
     job.cancel();
-    await expect(job.result).rejects.toBeInstanceOf(MasteringJobCancelled);
+    await expect(job.result).rejects.toBeInstanceOf(WorkerJobCancelled);
     expect(audio.get('program')?.left.length).toBe(SECONDS * SR);
     client.dispose();
   });

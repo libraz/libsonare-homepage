@@ -1,14 +1,11 @@
 import { onBeforeUnmount, ref, shallowRef } from 'vue';
 import type { RoomGeometry, ScanResult } from '@/demos/spatial/spatial.worker';
 import { PRESET_GEOMETRY, type PresetId } from '@/demos/spatial/spatialCopy';
+import { createSpatialRpc, type SpatialReply } from '@/demos/spatial/spatialWorkerClient';
 import { decodeAudioBuffer } from '@/utils/audio';
+import { WorkerJobSuperseded } from '@/utils/workerRpc';
 
 type Status = 'idle' | 'decoding' | 'scanning' | 'ready' | 'error';
-
-type WorkerMessage =
-  | { type: 'progress'; id: number; stage: string; value: number }
-  | { type: 'done'; id: number; result: ScanResult }
-  | { type: 'error'; id: number; message: string };
 
 // Synthesis sample rate for the built-in preset RIRs.
 const PRESET_SAMPLE_RATE = 48000;
@@ -82,7 +79,7 @@ export function useSpatialScanner(options: SpatialScannerOptions = {}) {
   const result = shallowRef<ScanResult | null>(null);
 
   const externalAudioContext = options.getAudioContext ?? null;
-  let worker: Worker | null = null;
+  const rpc = createSpatialRpc({ latestOnly: true });
   let audioContext: AudioContext | null = null;
   let requestId = 0;
   let lastFile: File | null = null;
@@ -90,29 +87,28 @@ export function useSpatialScanner(options: SpatialScannerOptions = {}) {
   let lastIsIR = false;
   let disposed = false;
 
-  function ensureWorker(): Worker {
-    if (disposed) throw new Error('Spatial scanner disposed');
-    if (!worker) {
-      worker = new Worker(new URL('./spatial.worker.ts', import.meta.url), {
-        type: 'module',
-      });
-      worker.onmessage = (event: MessageEvent<WorkerMessage>) => {
-        if (disposed) return;
-        const msg = event.data;
-        if (msg.id !== requestId) return; // stale response from a superseded scan
-        if (msg.type === 'progress') {
-          progress.value = msg.value;
-        } else if (msg.type === 'done') {
-          result.value = msg.result;
+  function post(request: Parameters<typeof rpc.run>[0], id: number, transfer?: Transferable[]) {
+    rpc
+      .run<ScanResult>(request, {
+        transfer,
+        onProgress: (message) => {
+          if (!disposed && id === requestId) progress.value = message.value;
+        },
+        pick: (message: SpatialReply) => (message.type === 'done' ? message.result : undefined),
+      })
+      .result.then(
+        (value) => {
+          if (disposed || id !== requestId) return; // stale response from a superseded scan
+          result.value = value;
           progress.value = 1;
           status.value = 'ready';
-        } else if (msg.type === 'error') {
-          error.value = msg.message;
+        },
+        (reason: unknown) => {
+          if (disposed || id !== requestId || reason instanceof WorkerJobSuperseded) return;
+          error.value = reason instanceof Error ? reason.message : String(reason);
           status.value = 'error';
-        }
-      };
-    }
-    return worker;
+        },
+      );
   }
 
   function ensureAudioContext(): AudioContext {
@@ -167,10 +163,7 @@ export function useSpatialScanner(options: SpatialScannerOptions = {}) {
 
     status.value = 'scanning';
     progress.value = 0.2;
-    ensureWorker().postMessage(
-      { type: 'scan', id, samples: mono, sampleRate: buffer.sampleRate, isIR },
-      [mono.buffer],
-    );
+    post({ type: 'scan', samples: mono, sampleRate: buffer.sampleRate, isIR }, id, [mono.buffer]);
   }
 
   function scanPreset(preset: PresetId) {
@@ -183,12 +176,7 @@ export function useSpatialScanner(options: SpatialScannerOptions = {}) {
     progress.value = 0.15;
     const geometry: RoomGeometry = PRESET_GEOMETRY[preset];
     const id = ++requestId;
-    ensureWorker().postMessage({
-      type: 'preset',
-      id,
-      sampleRate: PRESET_SAMPLE_RATE,
-      geometry,
-    });
+    post({ type: 'preset', sampleRate: PRESET_SAMPLE_RATE, geometry }, id);
   }
 
   function rescan(isIR: boolean) {
@@ -217,8 +205,7 @@ export function useSpatialScanner(options: SpatialScannerOptions = {}) {
     if (disposed) return;
     disposed = true;
     requestId++;
-    worker?.terminate();
-    worker = null;
+    rpc.dispose();
     // Only close a self-owned context; a shared context is owned by useSpatialAudio.
     if (!externalAudioContext) void audioContext?.close();
     audioContext = null;

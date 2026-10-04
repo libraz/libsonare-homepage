@@ -144,35 +144,17 @@ class MockFile {
   }
 }
 
-type WorkerListener = (event: MessageEvent) => void;
-
 class MockWorker {
   static messages: any[] = [];
   static mode: 'done' | 'error' | 'defer' = 'done';
   static terminated = 0;
   static instances: MockWorker[] = [];
 
-  private messageListeners = new Set<WorkerListener>();
-  private errorListeners = new Set<(event: ErrorEvent) => void>();
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: ((event: ErrorEvent) => void) | null = null;
 
   constructor() {
     MockWorker.instances.push(this);
-  }
-
-  addEventListener(
-    type: 'message' | 'error',
-    listener: WorkerListener | ((event: ErrorEvent) => void),
-  ) {
-    if (type === 'message') this.messageListeners.add(listener as WorkerListener);
-    else this.errorListeners.add(listener as (event: ErrorEvent) => void);
-  }
-
-  removeEventListener(
-    type: 'message' | 'error',
-    listener: WorkerListener | ((event: ErrorEvent) => void),
-  ) {
-    if (type === 'message') this.messageListeners.delete(listener as WorkerListener);
-    else this.errorListeners.delete(listener as (event: ErrorEvent) => void);
   }
 
   postMessage(message: any) {
@@ -191,8 +173,7 @@ class MockWorker {
   }
 
   emit(data: unknown) {
-    const event = { data } as MessageEvent;
-    for (const listener of this.messageListeners) listener(event);
+    this.onmessage?.({ data } as MessageEvent);
   }
 }
 
@@ -209,7 +190,7 @@ describe('MusicAnalysisStudio', () => {
     globalThis.AudioContext = MockAudioContext;
     // @ts-expect-error test File mock implements the browser method decodeAudioFile needs
     globalThis.File = MockFile;
-    // @ts-expect-error test Worker mock implements the event API used here
+    // @ts-expect-error test Worker mock implements the handler API used here
     globalThis.Worker = MockWorker;
     vi.stubGlobal(
       'fetch',

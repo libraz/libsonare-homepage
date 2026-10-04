@@ -25,27 +25,16 @@ import type { LoudnessFitResult } from '@/demos/mastering/masteringLoudnessFit';
 import type { MasteringRepair, MasteringState } from '@/demos/mastering/masteringState';
 import type { MasteringAssistantPreset } from '@/demos/mastering/useMastering';
 import type { WavBounceOptions } from '@/utils/audio';
+import { createWorkerRpc, type DistributiveOmit, type WorkerJob } from '@/utils/workerRpc';
 import type { StreamingPlatform } from '@/wasm/index.js';
 
 /** The page's clips by role; the only place PCM lives on the main thread. */
 export type MasteringAudioRegistry = Map<MasteringAudioKey, MasteringClip>;
 
-/** Rejection reason of a job stopped by {@link MasteringJob.cancel}. */
-export class MasteringJobCancelled extends Error {
-  constructor() {
-    super('Mastering job cancelled');
-    this.name = 'MasteringJobCancelled';
-  }
-}
-
 export type MasteringProgress = (progress: number, stage: MasteringWorkerStage) => void;
 
-export interface MasteringJob<T> {
-  /** Settles after the audio is back in the registry. */
-  result: Promise<T>;
-  /** Asks the Worker to stop at its next stage boundary; the job then rejects with {@link MasteringJobCancelled}. */
-  cancel(): void;
-}
+/** `result` settles after the audio is back in the registry; a cancel rejects with `WorkerJobCancelled`. */
+export type MasteringJob<T> = WorkerJob<T>;
 
 export interface MasteringWorkerClient {
   /** Runs the repair stages over `source`; the registry gains `program`. */
@@ -96,7 +85,6 @@ export interface MasteringWorkerClient {
 }
 
 type JobRequest = Exclude<MasteringWorkerRequest, { type: 'cancel' }>;
-type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
 function transferList(audio: MasteringAudioTransfer): Transferable[] {
   const buffers = new Set<ArrayBufferLike>(
@@ -106,14 +94,10 @@ function transferList(audio: MasteringAudioTransfer): Transferable[] {
 }
 
 export function createMasteringWorkerClient(): MasteringWorkerClient {
-  let worker: Worker | null = null;
-  let requestId = 0;
-  const pendingRejects = new Set<(reason: unknown) => void>();
-
-  function ensureWorker(): Worker {
-    worker ??= new Worker(new URL('./mastering.worker.ts', import.meta.url), { type: 'module' });
-    return worker;
-  }
+  const rpc = createWorkerRpc<JobRequest, MasteringWorkerResponse>({
+    create: () => new Worker(new URL('./mastering.worker.ts', import.meta.url), { type: 'module' }),
+    name: 'Mastering',
+  });
 
   function run<T>(
     request: DistributiveOmit<JobRequest, 'id' | 'audio'>,
@@ -122,53 +106,25 @@ export function createMasteringWorkerClient(): MasteringWorkerClient {
     onProgress: MasteringProgress | undefined,
     pick: (message: MasteringWorkerResponse) => T | undefined,
   ): MasteringJob<T> {
-    const id = ++requestId;
-    const target = ensureWorker();
     const audio: MasteringAudioTransfer = {};
     for (const key of keys) {
       const clip = registry.get(key);
       if (clip) audio[key] = clip;
     }
-
-    const result = new Promise<T>((resolve, reject) => {
-      const settle = () => {
-        target.removeEventListener('message', onMessage);
-        target.removeEventListener('error', onError);
-        pendingRejects.delete(reject);
-      };
-      const onMessage = (event: MessageEvent<MasteringWorkerResponse>) => {
-        const message = event.data;
-        if (message.id !== id) return;
-        if (message.type === 'progress') {
-          onProgress?.(message.progress, message.stage);
-          return;
-        }
-        settle();
+    return rpc.run({ ...request, audio } as DistributiveOmit<JobRequest, 'id'>, {
+      transfer: transferList(audio),
+      onProgress: (message) => onProgress?.(message.progress, message.stage),
+      settle: (message) => {
+        if (message.type === 'progress') return;
         for (const [key, clip] of Object.entries(message.audio) as [
           MasteringAudioKey,
           MasteringClip,
         ][]) {
           registry.set(key, clip);
         }
-        const value = pick(message);
-        if (value !== undefined) resolve(value);
-        else if (message.type === 'cancelled') reject(new MasteringJobCancelled());
-        else if (message.type === 'error') reject(new Error(message.error));
-        else reject(new Error(`unexpected ${message.type} reply`));
-      };
-      const onError = (event: ErrorEvent) => {
-        settle();
-        reject(event.error ?? new Error(event.message));
-      };
-      pendingRejects.add(reject);
-      target.addEventListener('message', onMessage);
-      target.addEventListener('error', onError);
-      target.postMessage({ ...request, id, audio } as MasteringWorkerRequest, transferList(audio));
+      },
+      pick,
     });
-    return {
-      result,
-      cancel: () => target.postMessage({ type: 'cancel', id } satisfies MasteringWorkerRequest),
-    };
   }
 
   return {
@@ -208,12 +164,6 @@ export function createMasteringWorkerClient(): MasteringWorkerClient {
       run({ type: 'platformPreview', platforms }, registry, ['master'], onProgress, (message) =>
         message.type === 'previewed' ? message.result : undefined,
       ),
-    dispose() {
-      // Terminating fires no message or error event, so in-flight jobs settle here.
-      for (const reject of pendingRejects) reject(new Error('Mastering worker disposed'));
-      pendingRejects.clear();
-      worker?.terminate();
-      worker = null;
-    },
+    dispose: () => rpc.dispose(),
   };
 }

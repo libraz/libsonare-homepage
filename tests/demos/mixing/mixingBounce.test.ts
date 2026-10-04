@@ -7,9 +7,10 @@
  */
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { MixWorkerResponse } from '@/demos/mixing/mixing.worker';
-import { createMixWorkerClient, MixJobCancelled } from '@/demos/mixing/mixingBounce';
+import { createMixWorkerClient } from '@/demos/mixing/mixingBounce';
 import type { MixAudio } from '@/demos/mixing/mixingEngine';
 import { addTrack, createMixingState, type MixingState } from '@/demos/mixing/mixingState';
+import { WorkerJobCancelled } from '@/utils/workerRpc';
 import { noise, sine } from '../../wasm/support/engineHarness';
 
 const SR = 48_000;
@@ -18,19 +19,12 @@ type Listener = (event: { data: unknown }) => void;
 
 class LoopbackWorker {
   static current: LoopbackWorker | null = null;
-  readonly listeners = new Set<Listener>();
+  onmessage: Listener | null = null;
+  onerror: unknown = null;
   terminated = false;
 
   constructor() {
     LoopbackWorker.current = this;
-  }
-
-  addEventListener(type: string, listener: Listener) {
-    if (type === 'message') this.listeners.add(listener);
-  }
-
-  removeEventListener(type: string, listener: Listener) {
-    if (type === 'message') this.listeners.delete(listener);
   }
 
   postMessage(message: unknown, transfer: Transferable[] = []) {
@@ -52,8 +46,7 @@ beforeAll(async () => {
       postMessage(message: MixWorkerResponse, options?: { transfer?: Transferable[] }) {
         const data = structuredClone(message, { transfer: options?.transfer ?? [] });
         const worker = LoopbackWorker.current;
-        if (worker && !worker.terminated)
-          for (const listener of worker.listeners) listener({ data });
+        if (worker && !worker.terminated) worker.onmessage?.({ data });
       },
     },
   });
@@ -116,7 +109,7 @@ describe('mixing worker client', () => {
     const { state, registry, copies } = project();
     const job = client().bounce(state, registry, SR, { dither: 0 });
     job.cancel();
-    await expect(job.result).rejects.toBeInstanceOf(MixJobCancelled);
+    await expect(job.result).rejects.toBeInstanceOf(WorkerJobCancelled);
     channelsOf(registry).forEach((channel, i) => {
       expect(channel).toEqual(copies[i]);
     });

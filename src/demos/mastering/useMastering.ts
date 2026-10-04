@@ -44,7 +44,6 @@ import {
   createMasteringWorkerClient,
   type MasteringAudioRegistry,
   type MasteringJob,
-  MasteringJobCancelled,
   type MasteringProgress,
 } from '@/demos/mastering/masteringWorkerClient';
 import {
@@ -69,6 +68,7 @@ import {
   wavBounceOptions,
 } from '@/utils/audio';
 import { applyOps, createFacadeTarget, type EngineTarget } from '@/utils/engineApply';
+import { WorkerJobCancelled } from '@/utils/workerRpc';
 
 export type MasteringPresetId =
   | 'pop'
@@ -384,7 +384,7 @@ export function useMastering(options: { copy: ComputedRef<MasteringCopy> }) {
       await runJob('prepare', (progress) => worker.prepare(registry, state.value.repair, progress));
     } catch (cause) {
       prepareFailed.value = true;
-      if (!(cause instanceof MasteringJobCancelled)) {
+      if (!(cause instanceof WorkerJobCancelled)) {
         console.warn('mastering: repair failed', cause);
         error.value = 'repairFailed';
       }
@@ -460,7 +460,7 @@ export function useMastering(options: { copy: ComputedRef<MasteringCopy> }) {
       afterLoudness.value = { key: outcome.key, lufs: outcome.result.afterLufs };
       applyLaneFaders();
     } catch (cause) {
-      if (!(cause instanceof MasteringJobCancelled)) {
+      if (!(cause instanceof WorkerJobCancelled)) {
         console.warn('mastering: loudness measurement failed', cause);
       } else if (request === measureRequest) {
         scheduleMeasure();
@@ -576,7 +576,7 @@ export function useMastering(options: { copy: ComputedRef<MasteringCopy> }) {
         worker.analyzeReference(registry, progress),
       );
     } catch (cause) {
-      if (!(cause instanceof MasteringJobCancelled)) error.value = 'referenceFailed';
+      if (!(cause instanceof WorkerJobCancelled)) error.value = 'referenceFailed';
       registry.delete('reference');
       referenceInfo.value = null;
       history.commit(masteringMutators.setReference(state.value, null));
@@ -623,7 +623,7 @@ export function useMastering(options: { copy: ComputedRef<MasteringCopy> }) {
       history.commit(masteringMutators.applyLoudnessFit(state.value, result));
       recordAfterLoudness(result.measuredLufs);
     } catch (cause) {
-      if (!(cause instanceof MasteringJobCancelled)) {
+      if (!(cause instanceof WorkerJobCancelled)) {
         console.warn('mastering: loudness fit failed', cause);
         error.value = 'fitFailed';
       }
@@ -641,7 +641,7 @@ export function useMastering(options: { copy: ComputedRef<MasteringCopy> }) {
         worker.bounce(registry, snapshot, wavBounceOptions(format, dither), refit, progress),
       );
     } catch (cause) {
-      if (!(cause instanceof MasteringJobCancelled)) {
+      if (!(cause instanceof WorkerJobCancelled)) {
         console.warn('mastering: export failed', cause);
         error.value = 'exportFailed';
       }

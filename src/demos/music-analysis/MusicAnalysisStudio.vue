@@ -28,6 +28,10 @@ import {
   formatSectionName as resolveSectionName,
 } from '@/demos/music-analysis/musicAnalysisViewModel';
 import {
+  createMusicAnalysisClient,
+  type MusicAnalysisClient,
+} from '@/demos/music-analysis/musicAnalysisWorkerClient';
+import {
   calculateCorrelation,
   calculatePeakRms,
   type DecodedStereoAudio,
@@ -40,12 +44,7 @@ import {
   type WaveformPeak,
 } from '@/utils/audio';
 import { buildTimeSeriesPath, invertedRangeToPercent } from '@/utils/scale';
-
-type WorkerMessage =
-  | { type: 'progress'; id: number; progress: number; stage: string }
-  | { type: 'done'; id: number; result: MusicAnalysisWorkerResult }
-  | { type: 'error'; id: number; error: string; recoverable?: boolean }
-  | { type: 'cancelled'; id: number };
+import { WorkerJobCancelled } from '@/utils/workerRpc';
 
 type HeatmapKey = 'chroma' | 'mel' | 'cqt';
 
@@ -69,10 +68,9 @@ const transport = ref<InstanceType<typeof AudioTransport> | null>(null);
 const playFraction = ref(0);
 
 let audioContext: AudioContext | null = null;
-let worker: Worker | null = null;
+let analysisClient: MusicAnalysisClient | null = null;
 let requestId = 0;
 let loadGeneration = 0;
-let rejectActiveAnalysis: ((error: Error) => void) | null = null;
 let reportUrl: string | null = null;
 
 const docsPath = computed(() => localizedPath('/docs/glossary/concepts/mir-overview'));
@@ -324,10 +322,8 @@ async function analyzeCurrent(requestedGeneration?: number | Event) {
   if (!audio || generation !== loadGeneration) return;
 
   terminateAnalysisWorker();
-  const analysisWorker = new Worker(new URL('./music-analysis.worker.ts', import.meta.url), {
-    type: 'module',
-  });
-  worker = analysisWorker;
+  const client = createMusicAnalysisClient();
+  analysisClient = client;
 
   const id = ++requestId;
   const sourceLeft = new Float32Array(audio.left);
@@ -339,77 +335,48 @@ async function analyzeCurrent(requestedGeneration?: number | Event) {
   progress.value = 0.01;
   progressStage.value = copy.value.progress.queued;
 
-  await new Promise<void>((resolve, reject) => {
-    rejectActiveAnalysis = reject;
-    const onMessage = (event: MessageEvent<WorkerMessage>) => {
-      const message = event.data;
-      if (message.id !== id || generation !== loadGeneration) return;
+  const transfer: Transferable[] = [sourceLeft.buffer];
+  if (sourceRight && meter) {
+    transfer.push(sourceRight.buffer, meter.left.buffer, meter.right.buffer);
+  }
 
-      if (message.type === 'progress') {
-        progress.value = message.progress;
-        progressStage.value = formatStage(message.stage);
-        return;
-      }
-
-      analysisWorker.removeEventListener('message', onMessage);
-      analysisWorker.removeEventListener('error', onError);
-      rejectActiveAnalysis = null;
-
-      if (message.type === 'done') {
-        result.value = message.result;
-        libVersion.value = message.result.version || libVersion.value;
-        progress.value = 1;
-        progressStage.value = copy.value.progress.complete;
-        resolve();
-      } else if (message.type === 'cancelled') {
-        reject(new Error('cancelled'));
-      } else {
-        reject(new Error(message.error));
-      }
-    };
-
-    const onError = (event: ErrorEvent) => {
-      analysisWorker.removeEventListener('message', onMessage);
-      analysisWorker.removeEventListener('error', onError);
-      rejectActiveAnalysis = null;
-      reject(event.error || new Error(event.message));
-    };
-
-    analysisWorker.addEventListener('message', onMessage);
-    analysisWorker.addEventListener('error', onError);
-    const message = {
-      type: 'analyze' as const,
-      id,
-      sourceLeft,
-      sampleRate: audio.sampleRate,
-      ...(sourceRight ? { sourceRight } : {}),
-      ...(meter ? { meterLeft: meter.left, meterRight: meter.right } : {}),
-    };
-    const transfer: Transferable[] = [sourceLeft.buffer];
-    if (sourceRight && meter) {
-      transfer.push(sourceRight.buffer, meter.left.buffer, meter.right.buffer);
+  try {
+    const analysis = await client.analyze(
+      {
+        sourceLeft,
+        sampleRate: audio.sampleRate,
+        ...(sourceRight ? { sourceRight } : {}),
+        ...(meter ? { meterLeft: meter.left, meterRight: meter.right } : {}),
+      },
+      transfer,
+      (value, stage) => {
+        if (generation !== loadGeneration) return;
+        progress.value = value;
+        progressStage.value = formatStage(stage);
+      },
+    );
+    if (generation !== loadGeneration) return;
+    result.value = analysis;
+    libVersion.value = analysis.version || libVersion.value;
+    progress.value = 1;
+    progressStage.value = copy.value.progress.complete;
+  } catch (error) {
+    if (generation === loadGeneration && !(error instanceof WorkerJobCancelled)) {
+      console.error(error);
+      localError.value = copy.value.errors.analysisFailed;
+      terminateAnalysisWorker();
     }
-    analysisWorker.postMessage(message, transfer);
-  })
-    .catch((error) => {
-      if (generation === loadGeneration && String(error?.message || error) !== 'cancelled') {
-        console.error(error);
-        localError.value = copy.value.errors.analysisFailed;
-        terminateAnalysisWorker();
-      }
-    })
-    .finally(() => {
-      if (generation === loadGeneration && id === requestId) isAnalyzing.value = false;
-    });
+  } finally {
+    if (generation === loadGeneration && id === requestId) isAnalyzing.value = false;
+  }
 }
 
+// A running analysis cannot be interrupted from inside the worker, so stopping
+// one means disposing its client; the next analysis starts a fresh worker.
 function terminateAnalysisWorker() {
-  const reject = rejectActiveAnalysis;
-  rejectActiveAnalysis = null;
-  const currentWorker = worker;
-  worker = null;
-  currentWorker?.terminate();
-  reject?.(new Error('cancelled'));
+  const client = analysisClient;
+  analysisClient = null;
+  client?.dispose();
 }
 
 function exportReport() {

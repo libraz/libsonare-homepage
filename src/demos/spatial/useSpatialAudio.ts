@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, ref } from 'vue';
 import type { RenderNote } from '@/demos/spatial/renderNotes';
 import type { RoomGeometry } from '@/demos/spatial/spatial.worker';
+import { createSpatialRpc } from '@/demos/spatial/spatialWorkerClient';
 import { decodeAudioBuffer, wavBlob } from '@/utils/audio';
 
 type MorphGeometry = Partial<RoomGeometry> & {
@@ -15,18 +16,6 @@ const MORPH_EXCERPT_SECONDS = 15;
 
 /** What the demo itself made of the loaded content, if anything. */
 export type RenderedKind = 'impulse' | 'morph';
-
-type MorphWorkerMessage =
-  | { type: 'progress'; id: number; stage: string; value: number }
-  | {
-      type: 'morphDone';
-      id: number;
-      left: Float32Array;
-      right: Float32Array;
-      sampleRate: number;
-      notes: RenderNote[];
-    }
-  | { type: 'error'; id: number; message: string };
 
 /**
  * Spatial-demo audio engine.
@@ -62,25 +51,14 @@ export function useSpatialAudio() {
   let contentBuffer: AudioBuffer | null = null;
   let dryBuffer: AudioBuffer | null = null;
   let timeData: Float32Array<ArrayBuffer> | null = null;
-  let morphWorker: Worker | null = null;
+  const morphRpc = createSpatialRpc();
   let morphRequestId = 0;
   let startTime = 0;
   let pauseOffset = 0;
   let raf: number | null = null;
   let disposed = false;
   let contentGeneration = 0;
-  const pendingMorphs = new Map<
-    number,
-    {
-      resolve: (value: {
-        left: Float32Array;
-        right: Float32Array;
-        sampleRate: number;
-        notes: RenderNote[];
-      }) => void;
-      reject: (reason: Error) => void;
-    }
-  >();
+  let abortMorph: ((reason: Error) => void) | null = null;
 
   function getCtx(): AudioContext {
     if (disposed) throw new Error('Spatial audio disposed');
@@ -324,8 +302,7 @@ export function useSpatialAudio() {
     contentGeneration++;
     cancelMorphs(new Error('Spatial audio disposed'));
     stop();
-    morphWorker?.terminate();
-    morphWorker = null;
+    morphRpc.dispose();
     void ctx?.close();
     ctx = null;
   });
@@ -342,36 +319,6 @@ export function useSpatialAudio() {
     geometry: MorphGeometry,
   ): Promise<{ left: Float32Array; right: Float32Array; sampleRate: number; notes: RenderNote[] }> {
     const id = ++morphRequestId;
-    if (!morphWorker) {
-      morphWorker = new Worker(new URL('./spatial.worker.ts', import.meta.url), {
-        type: 'module',
-      });
-      morphWorker.onmessage = (event: MessageEvent<MorphWorkerMessage>) => {
-        const message = event.data;
-        const pending = pendingMorphs.get(message.id);
-        if (!pending) return;
-        if (message.type === 'progress') {
-          morphProgress.value = message.value;
-          return;
-        }
-        pendingMorphs.delete(message.id);
-        if (message.type === 'morphDone') {
-          pending.resolve({
-            left: message.left,
-            right: message.right,
-            sampleRate: message.sampleRate,
-            notes: message.notes,
-          });
-        } else {
-          pending.reject(new Error(message.message));
-        }
-      };
-      morphWorker.onerror = (event) => {
-        cancelMorphs(event.error || new Error(event.message || 'Spatial morph worker failed'));
-        morphWorker?.terminate();
-        morphWorker = null;
-      };
-    }
 
     // Convolving a whole track costs seconds per channel and grows without bound on an
     // upload, while a room reveals itself in the first few bars. Morph an excerpt so the
@@ -382,26 +329,34 @@ export function useSpatialAudio() {
       buffer.getChannelData(buffer.numberOfChannels > 1 ? 1 : 0).subarray(0, frames),
     );
 
-    return new Promise((resolve, reject) => {
-      pendingMorphs.set(id, { resolve, reject });
-      morphWorker!.postMessage(
-        {
-          type: 'morph',
-          id,
-          left,
-          right,
-          sampleRate: buffer.sampleRate,
-          geometry,
+    const job = morphRpc.run(
+      { type: 'morph', left, right, sampleRate: buffer.sampleRate, geometry },
+      {
+        transfer: [left.buffer, right.buffer],
+        onProgress: (message) => {
+          if (id === morphRequestId) morphProgress.value = message.value;
         },
-        [left.buffer, right.buffer],
-      );
+        pick: (message) =>
+          message.type === 'morphDone'
+            ? {
+                left: message.left,
+                right: message.right,
+                sampleRate: message.sampleRate,
+                notes: message.notes,
+              }
+            : undefined,
+      },
+    );
+    const aborted = new Promise<never>((_, reject) => {
+      abortMorph = reject;
     });
+    return Promise.race([job.result, aborted]);
   }
 
   function cancelMorphs(reason: Error) {
     morphRequestId++;
-    for (const pending of pendingMorphs.values()) pending.reject(reason);
-    pendingMorphs.clear();
+    abortMorph?.(reason);
+    abortMorph = null;
   }
 
   return {

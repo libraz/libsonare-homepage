@@ -7,12 +7,9 @@ import {
   NMF_ITERATIONS,
   NMF_N_FFT,
   type NmfWorkerRequest,
-  type NmfWorkerResponse,
 } from '@/demos/inline/archetypes/nmf.worker';
-import {
-  createNmfWorkerClient,
-  type NmfWorkerLike,
-} from '@/demos/inline/archetypes/nmfWorkerClient';
+import { createNmfWorkerClient } from '@/demos/inline/archetypes/nmfWorkerClient';
+import type { WorkerLike } from '@/utils/workerRpc';
 
 function components(length: number): Float32Array[] {
   return Array.from({ length: NMF_COMPONENT_COUNT }, (_, component) =>
@@ -20,15 +17,15 @@ function components(length: number): Float32Array[] {
   );
 }
 
-class MockWorker implements NmfWorkerLike {
+class MockWorker implements WorkerLike {
   readonly messages: NmfWorkerRequest[] = [];
   readonly transfers: Transferable[][] = [];
-  onmessage: ((event: MessageEvent<NmfWorkerResponse>) => void) | null = null;
+  onmessage: ((event: MessageEvent) => void) | null = null;
   onerror: ((event: ErrorEvent) => void) | null = null;
   terminated = false;
 
-  postMessage(message: NmfWorkerRequest, transfer?: Transferable[]): void {
-    this.messages.push(message);
+  postMessage(message: unknown, transfer?: Transferable[]): void {
+    this.messages.push(message as NmfWorkerRequest);
     this.transfers.push(transfer ?? []);
   }
 
@@ -45,7 +42,7 @@ class MockWorker implements NmfWorkerLike {
         components: output,
         sampleRate: request.sampleRate,
       },
-    } as MessageEvent<NmfWorkerResponse>);
+    } as MessageEvent);
   }
 }
 
@@ -152,7 +149,7 @@ describe('NMF worker client', () => {
     const client = createNmfWorkerClient({ createWorker: () => worker });
 
     const first = client.decompose(firstSource, 44_100);
-    const firstRejection = expect(first).rejects.toThrow('NMF request superseded');
+    const firstRejection = expect(first).rejects.toThrow('superseded');
     const second = client.decompose(secondSource, 44_100);
     await firstRejection;
 
@@ -163,7 +160,7 @@ describe('NMF worker client', () => {
         components: components(firstSource.length),
         sampleRate: 44_100,
       },
-    } as MessageEvent<NmfWorkerResponse>);
+    } as MessageEvent);
     expect(worker.messages).toHaveLength(2);
     worker.respondDone(components(secondSource.length));
     await expect(second).resolves.toHaveLength(NMF_COMPONENT_COUNT);

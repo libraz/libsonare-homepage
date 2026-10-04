@@ -116,7 +116,7 @@ type MorphRequest = {
   geometry: MorphGeometry;
 };
 
-type WorkerRequest = ScanRequest | PresetRequest | MorphRequest;
+export type WorkerRequest = ScanRequest | PresetRequest | MorphRequest;
 
 type WasmModule = {
   init: () => Promise<void>;
@@ -242,7 +242,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     self.postMessage({
       type: 'error',
       id: request.id,
-      message: error instanceof Error ? error.message : String(error),
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 };

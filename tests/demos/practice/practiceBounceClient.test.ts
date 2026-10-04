@@ -62,7 +62,7 @@ describe('createBounceClient recovery', () => {
     finish(index = 0) {
       const request = this.messages[index];
       this.onmessage?.({
-        data: { id: request.id, pcm: new Float32Array([0.1]), version: 'test' },
+        data: { type: 'done', id: request.id, pcm: new Float32Array([0.1]), version: 'test' },
       } as MessageEvent);
     }
   }

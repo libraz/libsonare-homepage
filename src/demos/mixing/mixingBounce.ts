@@ -17,23 +17,12 @@ import type {
 import type { MixAudio } from '@/demos/mixing/mixingEngine';
 import type { MixingState } from '@/demos/mixing/mixingState';
 import type { WavBounceOptions } from '@/utils/audio';
-
-/** Rejection reason of a job stopped by {@link MixJob.cancel}. */
-export class MixJobCancelled extends Error {
-  constructor() {
-    super('Mix job cancelled');
-    this.name = 'MixJobCancelled';
-  }
-}
+import { createWorkerRpc, type DistributiveOmit, type WorkerJob } from '@/utils/workerRpc';
 
 export type MixProgress = (progress: number, stage: MixWorkerStage) => void;
 
-export interface MixJob<T> {
-  /** Settles after the audio is back in the registry. */
-  result: Promise<T>;
-  /** Asks the Worker to stop at its next stage boundary; the job then rejects with {@link MixJobCancelled}. */
-  cancel(): void;
-}
+/** `result` settles after the audio is back in the registry; a cancel rejects with `WorkerJobCancelled`. */
+export type MixJob<T> = WorkerJob<T>;
 
 export interface MixWorkerClient {
   bounce(
@@ -63,17 +52,12 @@ export interface MixWorkerClient {
 }
 
 type JobRequest = Extract<MixWorkerRequest, { type: 'bounce' | 'suggest' | 'measureAB' }>;
-type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
 export function createMixWorkerClient(): MixWorkerClient {
-  let worker: Worker | null = null;
-  let requestId = 0;
-  const pendingRejects = new Set<(reason: unknown) => void>();
-
-  function ensureWorker(): Worker {
-    worker ??= new Worker(new URL('./mixing.worker.ts', import.meta.url), { type: 'module' });
-    return worker;
-  }
+  const rpc = createWorkerRpc<JobRequest, MixWorkerResponse>({
+    create: () => new Worker(new URL('./mixing.worker.ts', import.meta.url), { type: 'module' }),
+    name: 'Mix',
+  });
 
   function run<T>(
     request: DistributiveOmit<JobRequest, 'id' | 'audio'>,
@@ -81,8 +65,6 @@ export function createMixWorkerClient(): MixWorkerClient {
     onProgress: MixProgress | undefined,
     pick: (message: MixWorkerResponse) => T | undefined,
   ): MixJob<T> {
-    const id = ++requestId;
-    const target = ensureWorker();
     const trackIds = new Set(
       (request.type === 'measureAB' ? request.stateA : request.state).tracks.map(
         (track) => track.id,
@@ -95,42 +77,17 @@ export function createMixWorkerClient(): MixWorkerClient {
       ...new Set(audio.flatMap((track) => track.channels.map((channel) => channel.buffer))),
     ] as Transferable[];
 
-    const result = new Promise<T>((resolve, reject) => {
-      const settle = () => {
-        target.removeEventListener('message', onMessage);
-        target.removeEventListener('error', onError);
-        pendingRejects.delete(reject);
-      };
-      const onMessage = (event: MessageEvent<MixWorkerResponse>) => {
-        const message = event.data;
-        if (message.id !== id) return;
-        if (message.type === 'progress') {
-          onProgress?.(message.progress, message.stage);
-          return;
-        }
-        settle();
+    return rpc.run({ ...request, audio } as DistributiveOmit<JobRequest, 'id'>, {
+      transfer,
+      onProgress: (message) => onProgress?.(message.progress, message.stage),
+      settle: (message) => {
+        if (message.type === 'progress') return;
         for (const { trackId, channels, sampleRate } of message.audio) {
           registry.set(trackId, { channels, sampleRate });
         }
-        const value = pick(message);
-        if (value !== undefined) resolve(value);
-        else if (message.type === 'cancelled') reject(new MixJobCancelled());
-        else if (message.type === 'error') reject(new Error(message.error));
-        else reject(new Error(`unexpected ${message.type} reply`));
-      };
-      const onError = (event: ErrorEvent) => {
-        settle();
-        reject(event.error ?? new Error(event.message));
-      };
-      pendingRejects.add(reject);
-      target.addEventListener('message', onMessage);
-      target.addEventListener('error', onError);
-      target.postMessage({ ...request, id, audio } as MixWorkerRequest, transfer);
+      },
+      pick,
     });
-    return {
-      result,
-      cancel: () => target.postMessage({ type: 'cancel', id } satisfies MixWorkerRequest),
-    };
   }
 
   return {
@@ -149,12 +106,6 @@ export function createMixWorkerClient(): MixWorkerClient {
         onProgress,
         (message) => (message.type === 'measured' ? message.result : undefined),
       ),
-    dispose() {
-      // Terminating fires no message or error event, so in-flight jobs settle here.
-      for (const reject of pendingRejects) reject(new Error('Mix worker disposed'));
-      pendingRejects.clear();
-      worker?.terminate();
-      worker = null;
-    },
+    dispose: () => rpc.dispose(),
   };
 }

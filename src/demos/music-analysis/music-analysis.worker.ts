@@ -12,7 +12,7 @@ import type {
   VectorscopeReport,
 } from '@/wasm/index';
 
-type AnalyzeRequest = {
+export type AnalyzeRequest = {
   type: 'analyze';
   id: number;
   samples?: Float32Array;
@@ -26,6 +26,13 @@ type AnalyzeRequest = {
   meterLeft?: Float32Array;
   meterRight?: Float32Array;
 };
+
+/** Every reply the worker posts; `progress` may repeat before a final reply. */
+export type MusicAnalysisWorkerReply =
+  | { type: 'progress'; id: number; progress: number; stage: string }
+  | { type: 'done'; id: number; result: MusicAnalysisWorkerResult }
+  | { type: 'error'; id: number; error: string; recoverable?: boolean }
+  | { type: 'cancelled'; id: number };
 
 type WorkerRequest =
   | AnalyzeRequest

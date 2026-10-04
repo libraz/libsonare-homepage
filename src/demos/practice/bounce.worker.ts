@@ -46,8 +46,8 @@ export interface BounceRequest {
 }
 
 export type BounceResponse =
-  | { id: number; pcm: Float32Array; version: string }
-  | { id: number; error: string };
+  | { type: 'done'; id: number; pcm: Float32Array; version: string }
+  | { type: 'error'; id: number; error: string };
 
 interface ProjectLike {
   setSampleRate(sr: number): void;
@@ -158,9 +158,12 @@ self.onmessage = async (event: MessageEvent<BounceRequest>) => {
   const req = event.data;
   try {
     const { pcm, version } = await bounce(req);
-    self.postMessage({ id: req.id, pcm, version } satisfies BounceResponse, [pcm.buffer]);
+    self.postMessage({ type: 'done', id: req.id, pcm, version } satisfies BounceResponse, [
+      pcm.buffer,
+    ]);
   } catch (error) {
     self.postMessage({
+      type: 'error',
       id: req.id,
       error: error instanceof Error ? error.message : String(error),
     } satisfies BounceResponse);

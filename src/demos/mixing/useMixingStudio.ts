@@ -24,12 +24,7 @@ import type {
   MixSuggestResult,
   MixWorkerStage,
 } from '@/demos/mixing/mixing.worker';
-import {
-  createMixWorkerClient,
-  type MixJob,
-  MixJobCancelled,
-  type MixProgress,
-} from '@/demos/mixing/mixingBounce';
+import { createMixWorkerClient, type MixJob, type MixProgress } from '@/demos/mixing/mixingBounce';
 import { MAX_DURATION_SECONDS } from '@/demos/mixing/mixingConstants';
 import type { MixingCopy } from '@/demos/mixing/mixingCopy';
 import {
@@ -79,6 +74,7 @@ import {
   wavBounceOptions,
 } from '@/utils/audio';
 import { applyOps, createFacadeTarget, type EngineTarget } from '@/utils/engineApply';
+import { WorkerJobCancelled } from '@/utils/workerRpc';
 
 type Wasm = typeof import('@/wasm/index.js');
 type Mutators = typeof MIXING_MUTATORS;
@@ -607,7 +603,7 @@ export function useMixingStudio(options: MixingStudioOptions) {
         worker.bounce(snapshot, registry, sampleRate(), wavBounceOptions(format, dither), progress),
       );
     } catch (cause) {
-      if (!(cause instanceof MixJobCancelled)) {
+      if (!(cause instanceof WorkerJobCancelled)) {
         console.warn('mixing: export failed', cause);
         error.value = 'exportFailed';
       }
@@ -661,7 +657,7 @@ export function useMixingStudio(options: MixingStudioOptions) {
       suggestionFor = trackIdsKey(snapshot);
       ab.value = 'a';
     } catch (cause) {
-      if (!(cause instanceof MixJobCancelled)) {
+      if (!(cause instanceof WorkerJobCancelled)) {
         console.warn('mixing: suggestion failed', cause);
         error.value = 'suggestFailed';
       }
@@ -693,7 +689,7 @@ export function useMixingStudio(options: MixingStudioOptions) {
       }
     } catch (cause) {
       // Without a measurement the sides simply play unmatched.
-      if (!(cause instanceof MixJobCancelled)) console.warn('mixing: A/B match failed', cause);
+      if (!(cause instanceof WorkerJobCancelled)) console.warn('mixing: A/B match failed', cause);
     }
   }
 
