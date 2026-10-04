@@ -81,7 +81,7 @@ Continuous controls go to the engine as parameter setters, so a knob keeps the p
 
 The loudness fit moves only the Drive gain in front of the limiter, so the level feeding the dynamics stages never changes. It renders at most three times, and it reports a result as limited when the limiter cannot reach the target at the chosen ceiling.
 
-The meter bridge shows peak, true peak (held since playback started), momentary, short-term and integrated loudness, peak-to-loudness ratio, gain reduction for the whole chain, correlation, a goniometer, and a spectrum for the lane being heard, plus the loudness range of the last export render. Every edit is one history entry, so undo and redo reach the engine like any other edit.
+The meter bridge shows peak, true peak (held since playback started), momentary, short-term and integrated loudness, peak-to-loudness ratio, the deepest gain reduction in the chain, correlation, a goniometer, and a spectrum for the lane being heard, plus the loudness range of the last export render. Every edit is one history entry, so undo and redo reach the engine like any other edit.
 
 ## Data Ownership
 

@@ -1,7 +1,7 @@
 /**
  * Live metering for /mixing. Engine meter telemetry covers the master (peak,
  * RMS, true peak, M/S/I, correlation, GR), every lane (input peak before trim,
- * post-fader peak/RMS, summed insert GR) and both aux buses. Snapshots arrive
+ * post-fader peak/RMS, the deepest insert GR) and both aux buses. Snapshots arrive
  * at the engine's meter rate and are folded into one frame per animation
  * frame. Spectrum and goniometer come from an analyser tap on the engine
  * output; the selected track's source spectrum at the playhead feeds the EQ.
@@ -29,7 +29,7 @@ export interface StripReading {
   /** Post-fader sample peak, dBFS. */
   peakDb: [number, number];
   rmsDb: [number, number];
-  /** Gain reduction summed over the strip's inserts, dB ≤ 0. */
+  /** The deepest gain reduction among the strip's inserts, dB ≤ 0. */
   grDb: number;
   correlation: number;
 }

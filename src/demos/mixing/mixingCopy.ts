@@ -478,7 +478,7 @@ export const enCopy = {
       },
       gainReduction: {
         title: 'Gain Reduction',
-        body: "How much the strip's dynamics are lowering the signal right now, summed over its inserts, in dB.",
+        body: "How much the strip's dynamics are lowering the signal right now: the deepest reduction among its inserts, in dB.",
         tip: 'More than 6 dB of constant reduction usually means the threshold is too low.',
       },
       send: {
@@ -1036,7 +1036,7 @@ export const jaCopy: MixingCopy = {
       },
       gainReduction: {
         title: 'ゲインリダクション',
-        body: 'ストリップのダイナミクスがいま下げている量を、インサートの合計で示します（dB）。',
+        body: 'ストリップのダイナミクスがいま下げている量です。インサートのうち最も深いリダクションを示します（dB）。',
         tip: '常に 6 dB 以上下がっているなら、たいていスレッショルドが低すぎます。',
       },
       send: {

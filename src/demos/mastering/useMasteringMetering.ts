@@ -1,7 +1,7 @@
 /**
  * Live metering for /mastering. Meter telemetry from the engine: the master
  * (what is being heard: peak, RMS, true peak, M/S/I, correlation) and lane 1
- * (the aggregate gain reduction of its inserts and its input peak). Spectrum
+ * (the deepest gain reduction among its inserts and its input peak). Spectrum
  * and goniometer come from an analyser tap on the engine output; the input
  * spectrum is the program PCM at the playhead, analysed the same way, so the
  * EQ view can lay input and output over each other.
@@ -37,7 +37,7 @@ export interface MasteringMeterReading {
   shortTermLufs: number;
   integratedLufs: number;
   correlation: number;
-  /** Lane 1's gain reduction summed over its inserts, dB ≤ 0. */
+  /** The deepest gain reduction among lane 1's inserts, dB ≤ 0. */
   grDb: number;
 }
 
