@@ -2,8 +2,7 @@
 import { useData } from 'vitepress';
 import DefaultTheme from 'vitepress/theme';
 import { computed } from 'vue';
-import { defineDemoAsync } from '@/components/defineDemoAsync';
-import { defineDemoPageAsync } from '@/components/defineDemoPageAsync';
+import { defineDemoPageAsync, defineSitePageAsync } from '@/components/defineDemoPageAsync';
 import NavSearch from '@/components/search/NavSearch.vue';
 import { createTheme } from '@/composables/useTheme';
 
@@ -11,7 +10,8 @@ import { createTheme } from '@/composables/useTheme';
 // documentation theme and load only the application selected by frontmatter.
 // A shared errorComponent turns a failed chunk load (flaky network, stale
 // deploy) into a retry panel instead of a permanently blank route. Demo pages
-// keep the site shell on screen while their chunk loads.
+// keep the site shell on screen while their chunk loads; the landing and demo
+// index pages, which carry their own header, show a full-viewport loader.
 const AnalyzerDemo = defineDemoPageAsync(
   'analyzer',
   () => import('@/demos/analyzer/AnalyzerDemo.vue'),
@@ -47,8 +47,8 @@ const SpatialScanner = defineDemoPageAsync(
 );
 const StudioDemo = defineDemoPageAsync('studio', () => import('@/demos/studio/StudioDemo.vue'));
 const SynthDemo = defineDemoPageAsync('synth', () => import('@/demos/synth/SynthDemo.vue'));
-const DemosLayout = defineDemoAsync(() => import('./DemosLayout.vue'));
-const LandingLayout = defineDemoAsync(() => import('./LandingLayout.vue'));
+const DemosLayout = defineSitePageAsync(() => import('./DemosLayout.vue'));
+const LandingLayout = defineSitePageAsync(() => import('./LandingLayout.vue'));
 
 defineOptions({ name: 'ThemeLayout' });
 
