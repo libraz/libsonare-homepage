@@ -12,9 +12,10 @@ import Goniometer from '@/components/meters/Goniometer.vue';
 import LoudnessMeter from '@/components/meters/LoudnessMeter.vue';
 import PeakMeter from '@/components/meters/PeakMeter.vue';
 import SpectrumView from '@/components/meters/SpectrumView.vue';
-import { fill, useMasteringCopy } from '@/demos/mastering/masteringCopy';
+import { useMasteringCopy } from '@/demos/mastering/masteringCopy';
 import type { MasteringLane } from '@/demos/mastering/masteringState';
 import type { MasteringMeterReading } from '@/demos/mastering/useMasteringMetering';
+import { fill } from '@/utils/template';
 
 const props = withDefaults(
   defineProps<{

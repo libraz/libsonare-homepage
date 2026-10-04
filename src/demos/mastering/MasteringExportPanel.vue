@@ -4,17 +4,14 @@
  * fit no longer describes lane 1 it refits first and keeps the new drive, so
  * the preview and the file stay one render.
  */
+
 import { computed, ref } from 'vue';
-import { fill, useMasteringCopy } from '@/demos/mastering/masteringCopy';
+import { useMasteringCopy } from '@/demos/mastering/masteringCopy';
 import type { MasteringLoudnessFitRecord } from '@/demos/mastering/masteringState';
-import {
-  formatNumber,
-  MASTERING_DITHERS,
-  MASTERING_EXPORT_FORMATS,
-  type MasteringDither,
-  type MasteringExportFormat,
-} from '@/demos/mastering/masteringUi';
+import { formatNumber } from '@/demos/mastering/masteringUi';
 import type { MasteringJobState, MasteringRenderRecord } from '@/demos/mastering/useMastering';
+import { WAV_DITHERS, WAV_FORMATS, type WavDither, type WavFormat } from '@/utils/audio';
+import { fill } from '@/utils/template';
 
 const props = defineProps<{
   fit: MasteringLoudnessFitRecord | null;
@@ -28,15 +25,15 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   fit: [];
-  export: [format: MasteringExportFormat, dither: MasteringDither];
+  export: [format: WavFormat, dither: WavDither];
   download: [];
   report: [];
   cancel: [];
 }>();
 
 const copy = useMasteringCopy();
-const format = ref<MasteringExportFormat>('pcm24');
-const dither = ref<MasteringDither>('tpdf');
+const format = ref<WavFormat>('pcm24');
+const dither = ref<WavDither>('tpdf');
 
 const busy = computed(
   () => props.job !== null && (props.job.kind === 'fit' || props.job.kind === 'export'),
@@ -105,7 +102,7 @@ const renderedLine = computed(() => {
         <span class="export__label">{{ copy.export.format }}</span>
         <div class="export__segments">
           <button
-            v-for="option in MASTERING_EXPORT_FORMATS"
+            v-for="option in WAV_FORMATS"
             :key="option"
             type="button"
             role="radio"
@@ -120,7 +117,7 @@ const renderedLine = computed(() => {
         <span class="export__label">{{ copy.export.dither }}</span>
         <div class="export__segments">
           <button
-            v-for="option in MASTERING_DITHERS"
+            v-for="option in WAV_DITHERS"
             :key="option"
             type="button"
             role="radio"

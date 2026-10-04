@@ -6,6 +6,7 @@
  * bounce renders. PCM lives only in the audio registry; Worker jobs run one at
  * a time because each one borrows the clips it needs.
  */
+
 import { type ComputedRef, computed, ref, shallowRef, watch } from 'vue';
 import type { EngineTransportLoop } from '@/components/ui/EngineTransport.vue';
 import { useHistory } from '@/composables/useHistory';
@@ -38,12 +39,7 @@ import {
   masteringMutators,
   masteringTargetLufs,
 } from '@/demos/mastering/masteringState';
-import {
-  exportBounceOptions,
-  MASTERING_MAX_SECONDS,
-  type MasteringDither,
-  type MasteringExportFormat,
-} from '@/demos/mastering/masteringUi';
+import { MASTERING_MAX_SECONDS } from '@/demos/mastering/masteringUi';
 import {
   createMasteringWorkerClient,
   type MasteringAudioRegistry,
@@ -66,8 +62,11 @@ import {
   downsampleWaveform,
   jsonBlob,
   triggerDownload,
+  type WavDither,
   type WaveformPeak,
+  type WavFormat,
   wavBlob,
+  wavBounceOptions,
 } from '@/utils/audio';
 import { applyOps, createFacadeTarget, type EngineTarget } from '@/utils/engineApply';
 
@@ -124,8 +123,8 @@ const LOCKING_JOBS: readonly MasteringJobKind[] = ['fit', 'export'];
 /** The last export render. */
 export interface MasteringRenderRecord {
   result: MasteringExportResult;
-  format: MasteringExportFormat;
-  dither: MasteringDither;
+  format: WavFormat;
+  dither: WavDither;
   at: number;
   url: string;
   fileName: string;
@@ -631,10 +630,7 @@ export function useMastering(options: { copy: ComputedRef<MasteringCopy> }) {
     }
   }
 
-  async function exportMaster(
-    format: MasteringExportFormat,
-    dither: MasteringDither,
-  ): Promise<void> {
+  async function exportMaster(format: WavFormat, dither: WavDither): Promise<void> {
     if (!hasProgram.value || editLocked.value) return;
     error.value = null;
     const refit = fitStale.value;
@@ -642,7 +638,7 @@ export function useMastering(options: { copy: ComputedRef<MasteringCopy> }) {
     let result: MasteringExportResult;
     try {
       result = await runJob('export', (progress) =>
-        worker.bounce(registry, snapshot, exportBounceOptions(format, dither), refit, progress),
+        worker.bounce(registry, snapshot, wavBounceOptions(format, dither), refit, progress),
       );
     } catch (cause) {
       if (!(cause instanceof MasteringJobCancelled)) {

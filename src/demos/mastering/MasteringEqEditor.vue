@@ -11,12 +11,13 @@ import SpectrumView, {
   type SpectrumOverlayPoint,
 } from '@/components/meters/SpectrumView.vue';
 import MasterKnob from '@/demos/mastering/MasterKnob.vue';
-import { fill, useMasteringCopy } from '@/demos/mastering/masteringCopy';
+import { useMasteringCopy } from '@/demos/mastering/masteringCopy';
 import {
   MASTERING_MATCH_EQ_BANDS,
   type MasteringEqBand,
   type MasteringMatchEq,
 } from '@/demos/mastering/masteringState';
+import { fill } from '@/utils/template';
 import type { StreamingEqualizer } from '@/wasm/index.js';
 
 type Wasm = typeof import('@/wasm/index.js');

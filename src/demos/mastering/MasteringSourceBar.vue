@@ -4,10 +4,11 @@
  * facts, and the notes a restored session leaves until its audio is back.
  */
 import { computed, ref } from 'vue';
-import { fill, useMasteringCopy } from '@/demos/mastering/masteringCopy';
+import { useMasteringCopy } from '@/demos/mastering/masteringCopy';
 import { formatNumber } from '@/demos/mastering/masteringUi';
 import type { MasteringFileInfo } from '@/demos/mastering/useMastering';
 import { formatClipLength } from '@/utils/audio';
+import { fill } from '@/utils/template';
 
 const props = defineProps<{
   info: MasteringFileInfo | null;

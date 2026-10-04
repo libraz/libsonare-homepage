@@ -6,13 +6,14 @@
 import { computed } from 'vue';
 import { Tooltip } from '@/components/ui';
 import MasterKnob from '@/demos/mastering/MasterKnob.vue';
-import { fill, useMasteringCopy } from '@/demos/mastering/masteringCopy';
+import { useMasteringCopy } from '@/demos/mastering/masteringCopy';
 import {
   formatNumber,
   MASTERING_LOUD_WARNING_LU,
   MASTERING_PLATFORMS,
 } from '@/demos/mastering/masteringUi';
 import type { MasteringPlatformId } from '@/demos/mastering/useMastering';
+import { fill } from '@/utils/template';
 
 const props = defineProps<{
   platform: MasteringPlatformId;

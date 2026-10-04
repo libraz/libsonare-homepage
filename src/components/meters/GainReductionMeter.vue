@@ -16,6 +16,7 @@ import {
   isPeakBallisticsMoving,
   type PeakBallistics,
   stepPeakBallistics,
+  tickText,
 } from './meterBallistics';
 import { useMeterClock } from './useMeterClock';
 
@@ -93,7 +94,7 @@ const readout = computed(() => formatMeterValue(depth.value > 0 ? -depth.value :
           :key="tick.label"
           class="gr-meter__tick"
           :style="{ top: tick.offset }"
-        >{{ tick.label }}</span>
+        >{{ tickText(tick.label) }}</span>
       </div>
       <div class="gr-meter__track">
         <div class="gr-meter__fill" :style="{ clipPath: barClip }" />

@@ -8,6 +8,7 @@ export interface CorrelationMeterLabels {
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { tickText } from '@/components/meters/meterBallistics';
 
 const props = defineProps<{
   /** Stereo correlation in [-1, +1]; +1 is mono, negative cancels in mono. NaN shows no needle. */
@@ -30,7 +31,7 @@ const readout = computed(() => {
   if (!known.value) return '—';
   const text = value.value.toFixed(2);
   if (text === '-0.00') return '0.00';
-  return value.value > 0 ? `+${text}` : text;
+  return value.value > 0 ? `+${text}` : tickText(text);
 });
 
 /** Two-decimal reading for assistive tech, matching the printed value. */

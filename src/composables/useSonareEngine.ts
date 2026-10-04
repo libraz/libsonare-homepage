@@ -25,10 +25,24 @@ export type SonareMirrorEngine = NonNullable<FacadeOptions['offlineEngine']>;
 /** One meter snapshot (master, lane or bus target). */
 export type SonareMeterSnapshot = Parameters<Parameters<SonareEngine['onMeter']>[0]>[0];
 
+/**
+ * Folds a snapshot into a held true peak, as peak meters hold theirs. The
+ * streaming true peak reads up to ~0.1 dB low at block edges, and a true peak
+ * is never below a sample peak, so the sample peaks bound it from below.
+ */
+export function heldTruePeakDb(held: number, meter: SonareMeterSnapshot): number {
+  return [meter.truePeakDbL, meter.truePeakDbR, meter.peakDbL, meter.peakDbR].reduce(
+    (max, value) => (Number.isFinite(value) && value > max ? value : max),
+    held,
+  );
+}
+
 /** Default engine meter cadence in frames (~47 Hz at 48 kHz). */
 export const DEFAULT_METER_INTERVAL_FRAMES = 1024;
 /** Offline mirror block size; matches the AudioWorklet render quantum. */
 const MIRROR_BLOCK_SIZE = 128;
+/** Time constant of the monitor gain ramp; short enough to follow a switch, long enough not to click. */
+const MONITOR_GAIN_TIME_CONSTANT_SEC = 0.01;
 /** `SonareEngineTelemetryType.ProcessBlock`. */
 const TELEMETRY_PROCESS_BLOCK = 0;
 
@@ -75,7 +89,7 @@ export interface UseSonareEngine {
   context: ShallowRef<AudioContext | null>;
   /** The facade's offline mirror (state of record). Owned and destroyed by the facade. */
   offlineEngine: ShallowRef<SonareMirrorEngine | null>;
-  /** The engine's output node, for analysers to tap. */
+  /** The engine's output node (before the monitor gain), for analysers to tap. */
   outputNode: ShallowRef<AudioNode | null>;
   ready: Ref<boolean>;
   starting: Ref<boolean>;
@@ -91,6 +105,8 @@ export interface UseSonareEngine {
   seek(seconds: number): void;
   /** Subscribes to meter snapshots; valid before `start()`. Returns the unsubscribe. */
   onMeter(callback: (meter: SonareMeterSnapshot) => void): () => void;
+  /** Sets the listening-only gain after the engine, in dB; it is not in meters, scopes or exports. */
+  setMonitorGainDb(db: number): void;
   /** Stops the transport and releases the engine, mirror, context and blob URL. */
   dispose(): Promise<void>;
 }
@@ -111,6 +127,8 @@ export function useSonareEngine(options: UseSonareEngineOptions = {}): UseSonare
   const position = ref(0);
   const playing = ref(false);
 
+  let monitorGain: GainNode | null = null;
+  let monitorGainDb = 0;
   const meterListeners = new Set<(meter: SonareMeterSnapshot) => void>();
   let unsubscribers: Array<() => void> = [];
   let moduleUrl: string | null = null;
@@ -190,7 +208,10 @@ export function useSonareEngine(options: UseSonareEngineOptions = {}): UseSonare
         created.destroy();
         return false;
       }
-      created.node.connect(ctx.destination);
+      monitorGain = ctx.createGain();
+      monitorGain.gain.value = 10 ** (monitorGainDb / 20);
+      created.node.connect(monitorGain);
+      monitorGain.connect(ctx.destination);
       unsubscribers = [
         created.onMeter((meter) => {
           for (const listener of meterListeners) listener(meter);
@@ -259,6 +280,16 @@ export function useSonareEngine(options: UseSonareEngineOptions = {}): UseSonare
     };
   }
 
+  function setMonitorGainDb(db: number): void {
+    monitorGainDb = Number.isFinite(db) ? db : 0;
+    const ctx = context.value;
+    monitorGain?.gain.setTargetAtTime(
+      10 ** (monitorGainDb / 20),
+      ctx?.currentTime ?? 0,
+      MONITOR_GAIN_TIME_CONSTANT_SEC,
+    );
+  }
+
   async function dispose(): Promise<void> {
     disposed = true;
     stop();
@@ -273,6 +304,8 @@ export function useSonareEngine(options: UseSonareEngineOptions = {}): UseSonare
     engine.value = null;
     offlineEngine.value = null;
     outputNode.value = null;
+    monitorGain?.disconnect();
+    monitorGain = null;
     if (moduleUrl) {
       URL.revokeObjectURL(moduleUrl);
       moduleUrl = null;
@@ -299,6 +332,7 @@ export function useSonareEngine(options: UseSonareEngineOptions = {}): UseSonare
     stop,
     seek,
     onMeter,
+    setMonitorGainDb,
     dispose,
   };
 }

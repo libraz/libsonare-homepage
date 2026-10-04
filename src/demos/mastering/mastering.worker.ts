@@ -10,6 +10,7 @@
  * the preview. Engine calls are synchronous, so a cancel takes effect at the
  * next stage boundary.
  */
+
 import {
   fitMasteringLoudness,
   interleave,
@@ -27,6 +28,7 @@ import {
   unmappedChainParams,
 } from '@/demos/mastering/masteringState';
 import type { MasteringAssistantPreset } from '@/demos/mastering/useMastering';
+import type { WavBounceOptions } from '@/utils/audio';
 import type { StreamingPlatform } from '@/wasm/index.js';
 
 type Wasm = typeof import('@/wasm/index.js');
@@ -43,9 +45,6 @@ export type MasteringWorkerStage =
   | 'rendering'
   | 'measuring'
   | 'analyzing';
-
-/** Dither for the export: 1 RPDF, 2 TPDF, 3 noise-shaped, to the WAV's word length. */
-export type MasteringExportOptions = { dither: 0 } | { dither: 1 | 2 | 3; ditherBits: number };
 
 export interface MasteringPrepareResult {
   /** Repair stages that ran, in chain order; empty when the program is the source. */
@@ -101,7 +100,7 @@ export type MasteringWorkerRequest =
       id: number;
       audio: MasteringAudioTransfer;
       state: MasteringState;
-      options: MasteringExportOptions;
+      options: WavBounceOptions;
       /** Fit the drive first and render with it (the state's fit is stale). */
       refit: boolean;
     }
@@ -171,7 +170,7 @@ export async function exportMaster(
   wasm: Wasm,
   state: MasteringState,
   program: MasteringClip,
-  options: MasteringExportOptions,
+  options: WavBounceOptions,
   refit: boolean,
   checkpoint: MasteringCheckpoint = () => {},
 ): Promise<{ result: MasteringExportResult; master: MasteringClip }> {

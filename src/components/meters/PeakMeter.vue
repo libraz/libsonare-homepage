@@ -23,6 +23,7 @@ import {
   METER_FLOOR_DB,
   type PeakBallistics,
   stepPeakBallistics,
+  tickText,
 } from './meterBallistics';
 import { useMeterClock } from './useMeterClock';
 
@@ -151,7 +152,7 @@ const summary = computed(() => {
           :key="tick.db"
           class="peak-meter__tick"
           :style="{ bottom: tick.offset }"
-        >{{ tick.db }}</span>
+        >{{ tickText(tick.db) }}</span>
       </div>
       <div v-for="bar in bars" :key="bar.key" class="peak-meter__channel">
         <span v-if="vertical" class="peak-meter__readout">{{ bar.readout }}</span>

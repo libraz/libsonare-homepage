@@ -14,7 +14,11 @@ import {
   type ScopeTapWasm,
   useScopeTap,
 } from '@/composables/useScopeTap';
-import type { SonareMeterSnapshot, UseSonareEngine } from '@/composables/useSonareEngine';
+import {
+  heldTruePeakDb,
+  type SonareMeterSnapshot,
+  type UseSonareEngine,
+} from '@/composables/useSonareEngine';
 import type { MasteringClip } from '@/demos/mastering/masteringEngine';
 
 /** Meter target of the master bus. */
@@ -51,13 +55,6 @@ export function silentReading(): MasteringMeterReading {
   };
 }
 
-function maxFinite(start: number, values: readonly number[]): number {
-  return values.reduce(
-    (max, value) => (Number.isFinite(value) && value > max ? value : max),
-    start,
-  );
-}
-
 /**
  * Folds one meter snapshot into the reading; other targets leave it unchanged.
  * Peaks and loudness are the snapshot's own interval; the true peak is held at
@@ -72,13 +69,7 @@ export function applyMeterSnapshot(
       ...reading,
       peakDb: [meter.peakDbL, meter.peakDbR],
       rmsDb: [meter.rmsDbL, meter.rmsDbR],
-      // The streaming true peak reads up to ~0.1 dB low at block edges; a true peak is never below the sample peak.
-      truePeakDb: maxFinite(reading.truePeakDb, [
-        meter.truePeakDbL,
-        meter.truePeakDbR,
-        meter.peakDbL,
-        meter.peakDbR,
-      ]),
+      truePeakDb: heldTruePeakDb(reading.truePeakDb, meter),
       momentaryLufs: meter.momentaryLufs,
       shortTermLufs: meter.shortTermLufs,
       integratedLufs: meter.integratedLufs,

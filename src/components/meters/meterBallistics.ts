@@ -141,10 +141,15 @@ export function lufsInScale(lufs: number, scale: LoudnessScale): number {
   return scale === 'ebu9' ? lufs - EBU_REFERENCE_LUFS : lufs;
 }
 
-/** One-decimal readout; NaN and ±Infinity read as an em dash. */
+/** One-decimal readout with a true minus sign; NaN and ±Infinity read as an em dash. */
 export function formatMeterValue(value: number, signed = false): string {
   if (!Number.isFinite(value)) return '—';
   const text = value.toFixed(1);
   if (text === '-0.0') return '0.0';
-  return signed && value > 0 ? `+${text}` : text;
+  return signed && value > 0 ? `+${text}` : tickText(text);
+}
+
+/** Scale-tick text with a true minus sign (U+2212) in place of the ASCII hyphen. */
+export function tickText(label: string | number): string {
+  return String(label).replace('-', '−');
 }

@@ -292,33 +292,6 @@ export const MASTERING_MODULE_GUIDES: Readonly<Record<MasteringModuleId, string>
   limiter: 'mastering/stereo-limiter-loudness#true-peak-limiter',
 };
 
-/** Export word lengths the page writes. */
-export type MasteringExportFormat = 'pcm16' | 'pcm24' | 'float32';
-export const MASTERING_EXPORT_FORMATS: readonly MasteringExportFormat[] = [
-  'pcm16',
-  'pcm24',
-  'float32',
-];
-
-/** Dither choices for a PCM export; the engine codes are 0 none, 2 TPDF, 3 noise-shaped. */
-export type MasteringDither = 'none' | 'tpdf' | 'noiseShaped';
-export const MASTERING_DITHERS: readonly MasteringDither[] = ['none', 'tpdf', 'noiseShaped'];
-
-const DITHER_CODE: Readonly<Record<MasteringDither, 0 | 2 | 3>> = {
-  none: 0,
-  tpdf: 2,
-  noiseShaped: 3,
-};
-
-/** Bounce options for a format and dither; 32-bit float never dithers. */
-export function exportBounceOptions(
-  format: MasteringExportFormat,
-  dither: MasteringDither,
-): { dither: 0 } | { dither: 2 | 3; ditherBits: number } {
-  if (format === 'float32' || dither === 'none') return { dither: 0 };
-  return { dither: DITHER_CODE[dither] as 2 | 3, ditherBits: format === 'pcm16' ? 16 : 24 };
-}
-
 /** A number for a readout: fixed digits, a true minus sign, `—` when not finite. */
 export function formatNumber(value: number, digits = 1, signed = false): string {
   if (!Number.isFinite(value)) return '—';

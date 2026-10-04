@@ -5,13 +5,14 @@
  * estimate of the last export.
  */
 import { computed } from 'vue';
-import { fill, useMasteringCopy } from '@/demos/mastering/masteringCopy';
+import { useMasteringCopy } from '@/demos/mastering/masteringCopy';
 import { assistantNoteText, unmappedLabels } from '@/demos/mastering/masteringInsightLabels';
 import { formatNumber } from '@/demos/mastering/masteringUi';
 import type {
   MasteringInsightItem,
   MasteringPreviewRow,
 } from '@/demos/mastering/useMasteringInsights';
+import { fill } from '@/utils/template';
 
 const props = defineProps<{
   hasProgram: boolean;

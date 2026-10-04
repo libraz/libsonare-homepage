@@ -6,11 +6,11 @@
  * (the repaired program, the conformed reference, the rendered master) — are
  * put back into the same registry.
  */
+
 import type {
   MasteringAssistantResult,
   MasteringAudioKey,
   MasteringAudioTransfer,
-  MasteringExportOptions,
   MasteringExportResult,
   MasteringMeasureResult,
   MasteringPlatformPreviewRow,
@@ -24,6 +24,7 @@ import type { MasteringClip } from '@/demos/mastering/masteringEngine';
 import type { LoudnessFitResult } from '@/demos/mastering/masteringLoudnessFit';
 import type { MasteringRepair, MasteringState } from '@/demos/mastering/masteringState';
 import type { MasteringAssistantPreset } from '@/demos/mastering/useMastering';
+import type { WavBounceOptions } from '@/utils/audio';
 import type { StreamingPlatform } from '@/wasm/index.js';
 
 /** The page's clips by role; the only place PCM lives on the main thread. */
@@ -69,7 +70,7 @@ export interface MasteringWorkerClient {
   bounce(
     registry: MasteringAudioRegistry,
     state: MasteringState,
-    options: MasteringExportOptions,
+    options: WavBounceOptions,
     refit: boolean,
     onProgress?: MasteringProgress,
   ): MasteringJob<MasteringExportResult>;

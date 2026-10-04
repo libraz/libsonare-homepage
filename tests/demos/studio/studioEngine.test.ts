@@ -115,6 +115,12 @@ class AudioContextMock {
   currentTime = 0;
   sampleRate = 48000;
   destination = {};
+  // The monitor gain stage between the engine node and the destination.
+  createGain = vi.fn(() => ({
+    gain: { value: 1, setTargetAtTime: vi.fn() },
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  }));
   resume = vi.fn(async () => {
     this.state = 'running';
   });

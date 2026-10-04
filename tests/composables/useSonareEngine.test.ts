@@ -27,6 +27,12 @@ class FakeAudioContext {
   readonly currentTime = 0;
   state: 'suspended' | 'running' | 'closed' = 'suspended';
   readonly destination = { kind: 'destination' };
+  readonly gain = {
+    value: 1,
+    setTargetAtTime: vi.fn(),
+  };
+  readonly gainNode = { gain: this.gain, connect: vi.fn(), disconnect: vi.fn() };
+  readonly createGain = vi.fn(() => this.gainNode);
   readonly audioWorklet = { addModule: vi.fn(async (_url: string) => {}) };
   readonly close = vi.fn(async () => {
     this.state = 'closed';
@@ -233,7 +239,8 @@ describe('useSonareEngine', () => {
     expect(DEFAULT_METER_INTERVAL_FRAMES).toBe(1024);
     expect(rig.processorOptions?.meterIntervalFrames).toBe(1024);
     expect(sonare.engine.value?.capabilities.mode).toBe('postMessage');
-    expect(rig.node.connect).toHaveBeenCalledWith(ctx.destination);
+    expect(rig.node.connect).toHaveBeenCalledWith(ctx.gainNode);
+    expect(ctx.gainNode.connect).toHaveBeenCalledWith(ctx.destination);
     expect(ctx.resume).toHaveBeenCalled();
     expect(sonare.ready.value).toBe(true);
     expect(sonare.error.value).toBeNull();
@@ -293,6 +300,24 @@ describe('useSonareEngine', () => {
     sonare.stop();
     expect(sonare.playing.value).toBe(false);
     await sonare.dispose();
+  });
+
+  it('ramps the monitor gain after the engine and keeps the output node pre-gain', async () => {
+    const rig = createRig();
+    const sonare = useSonareEngine({ nodeFactory: rig.nodeFactory });
+    sonare.setMonitorGainDb(-6);
+    expect(await sonare.start()).toBe(true);
+    const ctx = FakeAudioContext.instances[0];
+    expect(ctx.gain.value).toBeCloseTo(10 ** (-6 / 20), 6);
+
+    sonare.setMonitorGainDb(-20);
+    const [target, , constant] = ctx.gain.setTargetAtTime.mock.calls.at(-1)!;
+    expect(target).toBeCloseTo(0.1, 6);
+    expect(constant).toBe(0.01);
+    expect(sonare.outputNode.value).toBe(rig.node);
+
+    await sonare.dispose();
+    expect(ctx.gainNode.disconnect).toHaveBeenCalled();
   });
 
   it('dispose destroys the engine and mirror, closes the context and revokes the blob URL', async () => {

@@ -245,6 +245,26 @@ export function downloadJson(filename: string, data: unknown): string {
 /** Sample encodings the WAV writer supports. */
 export type WavFormat = 'pcm16' | 'pcm24' | 'float32';
 
+/** Every WAV sample encoding, in menu order. */
+export const WAV_FORMATS: readonly WavFormat[] = ['pcm16', 'pcm24', 'float32'];
+
+/** Dither choices for a PCM export. */
+export type WavDither = 'none' | 'tpdf' | 'noiseShaped';
+
+/** Every dither choice, in menu order. */
+export const WAV_DITHERS: readonly WavDither[] = ['none', 'tpdf', 'noiseShaped'];
+
+/** Engine bounce dither options; the codes are 0 none, 2 TPDF, 3 noise-shaped. */
+export type WavBounceOptions = { dither: 0 } | { dither: 2 | 3; ditherBits: 16 | 24 };
+
+const DITHER_CODE = { tpdf: 2, noiseShaped: 3 } as const;
+
+/** Bounce options for a format and dither; 32-bit float never dithers. */
+export function wavBounceOptions(format: WavFormat, dither: WavDither): WavBounceOptions {
+  if (format === 'float32' || dither === 'none') return { dither: 0 };
+  return { dither: DITHER_CODE[dither], ditherBits: format === 'pcm16' ? 16 : 24 };
+}
+
 const WAVE_FORMAT_PCM = 1;
 const WAVE_FORMAT_IEEE_FLOAT = 3;
 

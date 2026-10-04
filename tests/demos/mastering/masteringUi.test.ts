@@ -2,11 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { MASTERING_NON_RT_PARAMS } from '@/demos/mastering/masteringEngine';
 import { MASTERING_INSERT_LAYOUT } from '@/demos/mastering/masteringState';
 import {
-  exportBounceOptions,
   formatNumber,
   formatParam,
-  MASTERING_DITHERS,
-  MASTERING_EXPORT_FORMATS,
   MASTERING_FIXED_SLOTS,
   MASTERING_MODULE_GUIDES,
   MASTERING_PLATFORMS,
@@ -89,22 +86,6 @@ describe('mastering UI definitions', () => {
     }
     expect(MASTERING_MODULE_GUIDES.repair).toBe('mastering/repair');
     expect(MASTERING_MODULE_GUIDES.eq).toBe('mastering/tone-air');
-  });
-
-  it.each(
-    MASTERING_EXPORT_FORMATS.flatMap((format) =>
-      MASTERING_DITHERS.map((dither) => [format, dither] as const),
-    ),
-  )('maps %s with %s dither to the bounce options', (format, dither) => {
-    const options = exportBounceOptions(format, dither);
-    if (format === 'float32' || dither === 'none') {
-      expect(options).toEqual({ dither: 0 });
-      return;
-    }
-    expect(options).toEqual({
-      dither: dither === 'tpdf' ? 2 : 3,
-      ditherBits: format === 'pcm16' ? 16 : 24,
-    });
   });
 
   it('formats readouts with a true minus sign and a dash for non-finite values', () => {

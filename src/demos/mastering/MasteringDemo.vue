@@ -14,11 +14,12 @@ import { useUrlState } from '@/composables/useUrlState';
 import { useWasmBoot } from '@/composables/useWasmBoot';
 import MasteringQuick from '@/demos/mastering/MasteringQuick.vue';
 import MasteringStudio from '@/demos/mastering/MasteringStudio.vue';
-import { enCopy, fill, jaCopy, MASTERING_COPY } from '@/demos/mastering/masteringCopy';
+import { enCopy, jaCopy, MASTERING_COPY } from '@/demos/mastering/masteringCopy';
 import { MASTERING_REPAIR_STAGES } from '@/demos/mastering/masteringState';
 import { formatNumber, type MasteringMode } from '@/demos/mastering/masteringUi';
 import { useMastering } from '@/demos/mastering/useMastering';
 import { formatClipLength } from '@/utils/audio';
+import { fill } from '@/utils/template';
 
 const { localizedPath, alternateLocalePath, localizedValue } = useI18n();
 const copy = computed(() => localizedValue({ en: enCopy, ja: jaCopy }));

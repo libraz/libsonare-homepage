@@ -7,6 +7,7 @@ import {
   localeMessages,
   normalizeLocale,
 } from '@/locales';
+import { fill } from '@/utils/template';
 
 function ensureLeadingSlash(path: string): string {
   return path.startsWith('/') ? path : `/${path}`;
@@ -57,7 +58,7 @@ export function useI18n() {
 
     // Parameter interpolation
     if (params) {
-      return message.replace(/\{(\w+)\}/g, (_, paramKey) => params[paramKey] ?? `{${paramKey}}`);
+      return fill(message, params);
     }
 
     return message;

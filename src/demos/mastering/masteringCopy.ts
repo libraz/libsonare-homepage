@@ -919,13 +919,6 @@ export const jaCopy: MasteringCopy = {
   },
 };
 
-/** Fills `{name}` placeholders; an unknown name is left as written. */
-export function fill(template: string, values: Record<string, string | number>): string {
-  return template.replace(/\{(\w+)\}/g, (match, key: string) =>
-    key in values ? String(values[key]) : match,
-  );
-}
-
 /** Injection key of the active locale's copy. */
 export const MASTERING_COPY: InjectionKey<ComputedRef<MasteringCopy>> = Symbol('mastering-copy');
 

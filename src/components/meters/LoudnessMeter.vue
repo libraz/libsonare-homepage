@@ -20,6 +20,7 @@ import {
   loudnessScaleSpec,
   lufsInScale,
   METER_FLOOR_DB,
+  tickText,
 } from './meterBallistics';
 
 const props = withDefaults(
@@ -115,7 +116,7 @@ function toggleScale(): void {
           :key="tick.lufs"
           class="loudness-meter__tick"
           :style="{ bottom: position(tick.lufs) }"
-        >{{ tick.label }}</span>
+        >{{ tickText(tick.label) }}</span>
       </div>
       <div class="loudness-meter__bars">
         <div v-for="bar in ['M', 'S']" :key="bar" class="loudness-meter__bar">

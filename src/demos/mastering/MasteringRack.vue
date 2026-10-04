@@ -6,7 +6,7 @@
  */
 import { computed } from 'vue';
 import GainReductionMeter from '@/components/meters/GainReductionMeter.vue';
-import { fill, useMasteringCopy } from '@/demos/mastering/masteringCopy';
+import { useMasteringCopy } from '@/demos/mastering/masteringCopy';
 import {
   MASTERING_INSERT_LAYOUT,
   MASTERING_REPAIR_STAGES,
@@ -19,6 +19,7 @@ import {
   MASTERING_FIXED_SLOTS,
   type MasteringModuleId,
 } from '@/demos/mastering/masteringUi';
+import { fill } from '@/utils/template';
 
 const props = defineProps<{
   state: MasteringState;

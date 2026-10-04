@@ -185,7 +185,7 @@ describe('meterBallistics', () => {
     expect(formatMeterValue(Number.NEGATIVE_INFINITY)).toBe('—');
     expect(formatMeterValue(-0.04)).toBe('0.0');
     expect(formatMeterValue(3.25, true)).toBe('+3.3');
-    expect(formatMeterValue(-3.25, true)).toBe('-3.3');
+    expect(formatMeterValue(-3.25, true)).toBe('−3.3');
   });
 });
 
@@ -226,13 +226,26 @@ describe('meter components', () => {
     expect(clip.attributes('disabled')).toBeDefined();
   });
 
+  it('prints scale ticks with a true minus sign', () => {
+    const peak = mount(PeakMeter, { props: { peakDb: [-20, -20], labels: peakLabels } });
+    const ticks = peak.findAll('.peak-meter__tick').map((t) => t.text());
+    expect(ticks).toContain('−12');
+    expect(ticks.some((t) => t.includes('-'))).toBe(false);
+    const gr = mount(GainReductionMeter, {
+      props: { grDb: 3, rangeDb: 24, labels: { name: 'GR' } },
+    });
+    const grTicks = gr.findAll('.gr-meter__tick').map((t) => t.text());
+    expect(grTicks).toContain('−12');
+    expect(grTicks.some((t) => t.includes('-'))).toBe(false);
+  });
+
   it('PeakMeter applies ballistics on animation frames', async () => {
     const wrapper = mount(PeakMeter, {
       props: { peakDb: [-6, -12], labels: peakLabels },
     });
     frames.flush(1000);
     await wrapper.vm.$nextTick();
-    expect(wrapper.findAll('.peak-meter__readout').map((r) => r.text())).toEqual(['-6.0', '-12.0']);
+    expect(wrapper.findAll('.peak-meter__readout').map((r) => r.text())).toEqual(['−6.0', '−12.0']);
     expect(wrapper.find('[role="img"]').attributes('aria-label')).toBe('Master: L -6 dB, R -12 dB');
 
     await wrapper.setProps({ peakDb: [-60, -60] });
@@ -241,8 +254,8 @@ describe('meter components', () => {
     await wrapper.vm.$nextTick();
     // 1.5 s hold, then (3.0 - 2.5) s of fall at 20 dB/s.
     expect(wrapper.findAll('.peak-meter__readout').map((r) => r.text())).toEqual([
-      '-16.0',
-      '-22.0',
+      '−16.0',
+      '−22.0',
     ]);
   });
 
@@ -330,10 +343,10 @@ describe('meter components', () => {
         ?.find('.loudness-meter__value')
         .text();
     expect(value('PLR')).toBe('13.2');
-    expect(value('M')).toBe('-14.0');
-    expect(wrapper.find('.loudness-meter__big').text()).toBe('-14.2');
+    expect(value('M')).toBe('−14.0');
+    expect(wrapper.find('.loudness-meter__big').text()).toBe('−14.2');
     expect(wrapper.find('.loudness-meter__marker--target').exists()).toBe(true);
-    expect(wrapper.findAll('.loudness-meter__tick').map((t) => t.text())).toContain('-40');
+    expect(wrapper.findAll('.loudness-meter__tick').map((t) => t.text())).toContain('−40');
 
     const toggle = wrapper.find('.loudness-meter__switch');
     expect(toggle.attributes('aria-pressed')).toBe('false');
@@ -378,7 +391,7 @@ describe('meter components', () => {
     await wrapper.vm.$nextTick();
     expect(wrapper.attributes('aria-valuenow')).toBe('-6.5');
     expect(wrapper.attributes('aria-valuemin')).toBe('-20');
-    expect(wrapper.find('.gr-meter__readout').text()).toBe('-6.3');
+    expect(wrapper.find('.gr-meter__readout').text()).toBe('−6.3');
     const hold = wrapper.find('.gr-meter__hold');
     expect(hold.attributes('style')).toContain('top: 31.5%');
 
