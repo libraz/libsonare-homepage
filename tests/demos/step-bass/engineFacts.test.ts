@@ -466,7 +466,7 @@ describe('what a lane or clip re-send costs while the transport is running', () 
 });
 
 describe('whether the limiter reports its gain reduction', () => {
-  it('carries the field but never fills it in, so there is no meter to build on', () => {
+  it('reports reduction while the limiter holds the output ceiling', () => {
     const engine = newEngine();
     // +24 dB into a -1 dBTP ceiling: the limiter is working hard here.
     applyCompiled(
@@ -497,9 +497,9 @@ describe('whether the limiter reports its gain reduction', () => {
     const atCeiling = targets.find((target) => target.loudestPeak > -1.5);
     expect(atCeiling, 'no meter target reaches the ceiling').toBeTruthy();
     expect(atCeiling?.loudestPeak).toBeLessThanOrEqual(-0.9);
-    // And every record still reports no reduction at all, on every target. The
-    // number is not available, so nothing on screen may claim to show it.
-    for (const target of targets) expect(target.worstGr).toBe(0);
+    // The limiter's target reports attenuation as a negative dB value.
+    expect(atCeiling?.worstGr).toBeLessThan(0);
+    for (const target of targets) expect(Number.isFinite(target.worstGr)).toBe(true);
   }, 180_000);
 });
 

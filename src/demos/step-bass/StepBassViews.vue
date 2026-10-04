@@ -8,8 +8,8 @@
  * the CUTOFF reading, which it deliberately does not follow: the audible
  * corner sits below that number, further below the lower the resonance.
  *
- * The meter is peak only. The limiter's gain reduction is not published by the
- * engine, and a display with nothing behind it would be the worse of the two.
+ * The meter displays the output peak; limiter gain reduction is available
+ * separately in engine meter telemetry.
  */
 import { computed, onMounted, ref, watch } from 'vue';
 import { MetricItem } from '@/components/ui';

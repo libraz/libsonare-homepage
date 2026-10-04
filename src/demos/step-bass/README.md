@@ -49,9 +49,8 @@ measurement says is that the audible corner sits well below the number on the
 knob, further below the lower the resonance is. The display marks the corner
 where the curve actually turns.
 
-The meter is peak only. The master chain ends in a true-peak limiter, but the
-engine does not publish that limiter's gain reduction, and a meter with nothing
-behind it would be worse than none.
+The display shows the output peak. The master chain ends in a true-peak limiter;
+the engine also publishes its gain reduction through meter telemetry.
 
 ## The accent memory, and when it is audible
 
