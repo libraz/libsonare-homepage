@@ -1,436 +1,495 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { computed, effectScope, nextTick, shallowRef } from 'vue';
 
-const lang = vi.hoisted(() => ({ value: 'en' }));
-const bounceMock = vi.hoisted(() => ({
-  bounce: vi.fn(),
-  dispose: vi.fn(),
+const harness = vi.hoisted(() => ({
+  calls: [] as Array<[string, ...unknown[]]>,
+  engine: null as any,
+  worker: null as any,
+  downloads: [] as string[],
+  durationSec: 2,
+  lang: { value: 'en' },
 }));
 
-vi.mock('vitepress', () => ({
-  useData: () => ({ lang }),
-}));
+vi.mock('vitepress', () => ({ useData: () => ({ lang: harness.lang }) }));
 
+// No equalizer: EQ curves stay flat, which these tests do not look at.
 vi.mock('@/wasm/index.js', () => ({
   init: vi.fn(async () => undefined),
   version: vi.fn(() => 'test-wasm'),
+  StreamingEqualizer: undefined,
 }));
 
-vi.mock('@/demos/mixing/useRealtimeMixer', async () => {
-  const { ref } = await vi.importActual<typeof import('vue')>('vue');
+vi.mock('@/composables/useSonareEngine', async () => {
+  // The same Vue instance the page uses, so its watchers see these refs.
+  const { ref: vueRef, shallowRef: vueShallowRef } = await import('vue');
   return {
-    useRealtimeMixer: () => ({
-      playing: ref(false),
-      positionSec: ref(0),
-      start: vi.fn(async (_config: unknown, onEnded?: () => void) => {
-        onEnded?.();
-      }),
-      stop: vi.fn(),
-      seek: vi.fn(),
-      updateScene: vi.fn(),
-      updateGates: vi.fn(),
-      updateMasterGain: vi.fn(),
-      dispose: vi.fn(async () => undefined),
-    }),
+    useSonareEngine: () => {
+      const engine = {
+        setTempo: vi.fn(),
+        setLoop: vi.fn(),
+        resetMasterLoudnessMeter: vi.fn(),
+      };
+      const context = {
+        sampleRate: 48000,
+        decodeAudioData: vi.fn(async () => {
+          const left = new Float32Array(480).fill(0.25);
+          const right = new Float32Array(480).fill(-0.25);
+          return {
+            sampleRate: 48000,
+            duration: harness.durationSec,
+            length: 480,
+            numberOfChannels: 2,
+            getChannelData: (channel: number) => (channel === 0 ? left : right),
+          };
+        }),
+      };
+      const playing = vueRef(false);
+      const sonare = {
+        engine: vueShallowRef<any>(null),
+        context: vueShallowRef<any>(null),
+        outputNode: vueShallowRef(null),
+        offlineEngine: vueShallowRef(null),
+        ready: vueRef(false),
+        starting: vueRef(false),
+        error: vueRef(null),
+        position: vueRef(0),
+        playing,
+        start: vi.fn(async () => {
+          sonare.engine.value = engine;
+          sonare.context.value = context;
+          sonare.ready.value = true;
+          return true;
+        }),
+        play: vi.fn(() => {
+          playing.value = true;
+        }),
+        stop: vi.fn(() => {
+          playing.value = false;
+        }),
+        seek: vi.fn(),
+        onMeter: vi.fn(() => () => {}),
+        setMonitorGainDb: vi.fn(),
+        dispose: vi.fn(async () => {}),
+      };
+      harness.engine = sonare;
+      return sonare;
+    },
   };
 });
 
-vi.mock('@/demos/mixing/mixingBounce', () => ({
-  createMixBounceController: () => bounceMock,
-}));
+vi.mock('@/utils/engineApply', async () => {
+  const actual = await vi.importActual<typeof import('@/utils/engineApply')>('@/utils/engineApply');
+  return {
+    ...actual,
+    createFacadeTarget: () =>
+      new Proxy(
+        {},
+        {
+          get:
+            (_target, name) =>
+            (...args: unknown[]) => {
+              harness.calls.push([String(name), ...args]);
+            },
+        },
+      ),
+  };
+});
+
+vi.mock('@/utils/audio', async () => {
+  const actual = await vi.importActual<typeof import('@/utils/audio')>('@/utils/audio');
+  return {
+    ...actual,
+    triggerDownload: (_url: string, name: string) => {
+      harness.downloads.push(name);
+    },
+    downloadBlob: (_blob: Blob, name: string) => {
+      harness.downloads.push(name);
+    },
+  };
+});
+
+vi.mock('@/demos/mixing/mixingBounce', async () => {
+  const actual = await vi.importActual<typeof import('@/demos/mixing/mixingBounce')>(
+    '@/demos/mixing/mixingBounce',
+  );
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((r) => {
+      resolve = r;
+    });
+    return { promise, resolve };
+  }
+  return {
+    ...actual,
+    createMixWorkerClient: () => {
+      const worker = {
+        pending: null as null | { resolve: (value: unknown) => void },
+        bounce: vi.fn((_state, _audio, sampleRate: number) => {
+          const d = deferred<unknown>();
+          worker.pending = d;
+          return {
+            result: d.promise.then(() => ({
+              left: new Float32Array(4),
+              right: new Float32Array(4),
+              sampleRate,
+              integratedLufs: -18,
+              loudnessRange: 5,
+              maxMomentaryLufs: -12,
+              maxShortTermLufs: -14,
+              truePeakDb: -1.5,
+            })),
+            cancel: vi.fn(),
+          };
+        }),
+        suggest: vi.fn((state: any) => ({
+          result: Promise.resolve({
+            analyzedSec: 60,
+            suggestion: {
+              patch: { tracks: { [state.tracks[0].id]: { faderDb: -9, pan: 0.25 } } },
+              unapplied: [{ source: '1', name: 'dynamics.vocalRider', reason: 'noSlot' }],
+              classification: [
+                { trackId: state.tracks[0].id, source: 'bass', confidence: 0.62, usable: true },
+              ],
+              mix: {
+                trackCount: 1,
+                bandDominance: [],
+                alignment: [],
+                crowdedBands: [],
+                monoRisks: [],
+              },
+              explanation: ['Lowered the bass'],
+            },
+          }),
+          cancel: vi.fn(),
+        })),
+        measureAB: vi.fn(() => ({
+          result: Promise.resolve({ aLufs: -26, bLufs: -30 }),
+          cancel: vi.fn(),
+        })),
+        dispose: vi.fn(),
+      };
+      harness.worker = worker;
+      return worker;
+    },
+  };
+});
 
 import MixingStudio from '@/demos/mixing/MixingStudio.vue';
+import { enCopy } from '@/demos/mixing/mixingCopy';
+import {
+  addTrack,
+  createMixingState,
+  serializeMixingState,
+  setFader,
+} from '@/demos/mixing/mixingState';
+import { MIXING_STATE_STORAGE_KEY } from '@/demos/mixing/useMixingSession';
+import { useMixingStudio } from '@/demos/mixing/useMixingStudio';
 
-const SAMPLE_RATE = 48_000;
-
-class MockFile {
-  name: string;
-  type: string;
-  private body: string;
-
-  constructor(parts: unknown[], name: string, options: { type?: string } = {}) {
-    this.name = name;
-    this.type = options.type || '';
-    this.body = parts.map((part) => (typeof part === 'string' ? part : '')).join('');
-  }
-
-  async arrayBuffer() {
-    return new ArrayBuffer(16);
-  }
-
-  async text() {
-    return this.body;
-  }
+function setup() {
+  const scope = effectScope();
+  const m = scope.run(() =>
+    useMixingStudio({ copy: computed(() => enCopy), wasm: shallowRef(null) }),
+  )!;
+  return {
+    m,
+    stop: () => {
+      m.dispose();
+      scope.stop();
+    },
+  };
 }
 
-class MockAudioContext {
-  static duration = 2;
-  static nextDecodeError: Error | null = null;
-  currentTime = 0;
-  state = 'running';
-  destination = {};
+const file = (name: string) => new File([new Uint8Array(8)], name, { type: 'audio/wav' });
+const opNames = () => harness.calls.map((call) => call[0]);
+const opsOf = (name: string) => harness.calls.filter((call) => call[0] === name);
 
-  async decodeAudioData(_buffer: ArrayBuffer) {
-    if (MockAudioContext.nextDecodeError) throw MockAudioContext.nextDecodeError;
-    return {
-      length: 8,
-      duration: MockAudioContext.duration,
-      sampleRate: SAMPLE_RATE,
-      numberOfChannels: 2,
-      getChannelData: (channel: number) =>
-        channel === 0
-          ? new Float32Array([0, 0.2, -0.4, 0.6, -0.8, 0.4, -0.2, 0])
-          : new Float32Array([0, -0.1, 0.3, -0.5, 0.7, -0.3, 0.1, 0]),
-    };
-  }
-}
-
-function dropFile(name = 'Drums.wav') {
-  return new MockFile([new Uint8Array([1, 2, 3])], name, { type: 'audio/wav' }) as unknown as File;
-}
-
-async function loadTrack(wrapper: ReturnType<typeof mount>) {
-  await wrapper.find('.mix-studio').trigger('drop', {
-    dataTransfer: { files: [dropFile()] },
-  });
+async function loaded(names = ['Kick.wav', 'Bass.wav']) {
+  const context = setup();
+  await context.m.addFiles(names.map(file));
   await flushPromises();
+  harness.calls.length = 0;
+  return context;
 }
 
-describe('MixingStudio', () => {
-  beforeEach(() => {
-    lang.value = 'en';
-    MockAudioContext.duration = 2;
-    MockAudioContext.nextDecodeError = null;
-    bounceMock.bounce.mockReset();
-    bounceMock.dispose.mockReset();
-    bounceMock.bounce.mockImplementation(async (config: any) => {
-      config.onProgress(0.25, 'Preparing tracks');
-      config.onProgress(0.8, 'Running mixer');
-      return {
-        left: new Float32Array([0, 0.1, -0.1, 0]),
-        right: new Float32Array([0, -0.1, 0.1, 0]),
-        sampleRate: config.sampleRate,
-        duration: 4 / config.sampleRate,
-        peakDb: -3,
-        rmsDb: -12,
-        integratedLufs: -14,
-        truePeakDb: -1,
-        correlation: 0.4,
-        stripMeters: config.tracks.map((track: any) => ({
-          id: track.id,
-          peakDb: -6,
-          rmsDb: -18,
-          truePeakDb: -1,
-          correlation: 0.5,
-          monoCompatible: true,
-          goniometer: [
-            { left: 0, right: 0 },
-            { left: 0.4, right: -0.2 },
-          ],
-        })),
-      };
-    });
-    // @ts-expect-error test AudioContext mock implements the decode path used here
-    globalThis.AudioContext = MockAudioContext;
-    // @ts-expect-error test File mock implements arrayBuffer/text
-    globalThis.File = MockFile;
+const stops: Array<() => void> = [];
+
+beforeEach(() => {
+  harness.calls.length = 0;
+  harness.downloads.length = 0;
+  harness.durationSec = 2;
+  harness.lang.value = 'en';
+  localStorage.clear();
+  globalThis.URL.createObjectURL = vi.fn(() => 'blob:test');
+  globalThis.URL.revokeObjectURL = vi.fn();
+});
+
+afterEach(() => {
+  for (const stop of stops.splice(0)) stop();
+});
+
+describe('useMixingStudio', () => {
+  it('builds the engine from the first audio and adds later tracks by diff', async () => {
+    const { m, stop } = setup();
+    stops.push(stop);
+    await m.addFiles([file('Kick.wav')]);
+    expect(m.state.value.tracks.map((t) => t.name)).toEqual(['Kick']);
+    expect(opNames()).toContain('setTopology');
+    expect(opsOf('setTrackClips')).toHaveLength(1);
+    expect(harness.engine.engine.value.setTempo).toHaveBeenCalledWith(60);
+    expect(m.hasAudio.value).toBe(true);
+
+    harness.calls.length = 0;
+    await m.addFiles([file('Bass.wav')]);
+    expect(opsOf('setTopology')).toHaveLength(1);
+    expect(opsOf('setStripJson').map((call) => call[1])).toEqual([{ kind: 'track', trackId: 2 }]);
+    expect(opsOf('setTrackClips').map((call) => call[1])).toEqual([2]);
   });
 
-  it('loads dropped stems and wires core mixer controls to track state', async () => {
+  it('sends a continuous edit as its setter and folds a drag into one history entry', async () => {
+    const { m, stop } = await loaded();
+    stops.push(stop);
+    m.begin();
+    m.edit('setFader', 1, -3);
+    m.edit('setFader', 1, -4.5);
+    m.end();
+    expect(opNames()).toEqual(['setFader', 'setFader']);
+    expect(opNames()).not.toContain('setStripJson');
+    m.undo();
+    expect(m.state.value.tracks[0].faderDb).toBe(0);
+    m.redo();
+    expect(m.state.value.tracks[0].faderDb).toBe(-4.5);
+  });
+
+  it('rebuilds a strip for a construction-only parameter and flags it', async () => {
+    const { m, stop } = await loaded();
+    stops.push(stop);
+    m.edit('setSlotParam', 2, 'gate', 'holdMs', 20);
+    expect(opsOf('setStripJson').map((call) => call[1])).toEqual([{ kind: 'track', trackId: 2 }]);
+    expect(m.rebuilt.value.has(2)).toBe(true);
+  });
+
+  it('holds a channel-delay edit while playing and applies it when the transport stops', async () => {
+    const { m, stop } = await loaded();
+    stops.push(stop);
+    m.play();
+    expect(harness.engine.engine.value.resetMasterLoudnessMeter).toHaveBeenCalled();
+    m.edit('setChannelDelay', 1, 2);
+    const delayCalls = () =>
+      opsOf('setTrackStripScalars').filter(
+        (call) => (call[2] as any).channelDelaySamples !== undefined,
+      );
+    expect(delayCalls()).toHaveLength(0);
+    expect(m.pendingDelays.value.has(1)).toBe(true);
+    m.stop();
+    expect(delayCalls().map((call) => [call[1], (call[2] as any).channelDelaySamples])).toEqual([
+      [1, 96],
+    ]);
+    expect(m.pendingDelays.value.size).toBe(0);
+  });
+
+  it('auditions a suggestion with setters only and adopts it as one entry', async () => {
+    const { m, stop } = await loaded();
+    stops.push(stop);
+    await m.suggest();
+    expect(m.suggestion.value?.analyzedSec).toBe(60);
+    harness.calls.length = 0;
+
+    m.setAb('b');
+    expect(opNames().sort()).toEqual(['setFader', 'setPan']);
+    expect(m.view.value.tracks[0].faderDb).toBe(-9);
+    expect(m.state.value.tracks[0].faderDb).toBe(0);
+    expect(m.editLocked.value).toBe(true);
+    m.edit('setFader', 2, -20);
+    expect(m.state.value.tracks[1].faderDb).toBe(0);
+
+    m.setAb('a');
+    expect(harness.calls.at(-1)?.[0]).toMatch(/setFader|setPan/);
+    expect(m.view.value.tracks[0].faderDb).toBe(0);
+
+    m.setAb('b');
+    harness.calls.length = 0;
+    m.adoptSuggestion();
+    expect(opNames()).toEqual([]);
+    expect(m.state.value.tracks[0].faderDb).toBe(-9);
+    expect(m.suggestion.value).toBeNull();
+    m.undo();
+    expect(m.state.value.tracks[0].faderDb).toBe(0);
+  });
+
+  it('level-matches A and B on the monitor and returns to 0 dB when the suggestion ends', async () => {
+    const { m, stop } = await loaded();
+    stops.push(stop);
+    const gain = harness.engine.setMonitorGainDb as ReturnType<typeof vi.fn>;
+    await m.suggest();
+    await flushPromises();
+    expect(harness.worker.measureAB.mock.calls[0][4]).toBe(60);
+    expect(m.match.value).toMatchObject({ aDb: -4, bDb: 0 });
+    expect(gain).toHaveBeenLastCalledWith(-4);
+
+    m.setAb('b');
+    await nextTick();
+    expect(gain).toHaveBeenLastCalledWith(0);
+    m.setAb('a');
+    await nextTick();
+    expect(gain).toHaveBeenLastCalledWith(-4);
+    expect(harness.worker.measureAB).toHaveBeenCalledTimes(1);
+
+    m.edit('setFader', 2, -3);
+    m.setAb('b');
+    await flushPromises();
+    expect(harness.worker.measureAB).toHaveBeenCalledTimes(2);
+
+    m.discardSuggestion();
+    await flushPromises();
+    expect(m.match.value).toBeNull();
+    expect(gain).toHaveBeenLastCalledWith(0);
+  });
+
+  it('locks editing while the export borrows the audio, then downloads the render', async () => {
+    const { m, stop } = await loaded();
+    stops.push(stop);
+    const exporting = m.exportMix('pcm16', 'tpdf');
+    await flushPromises();
+    expect(harness.worker.bounce.mock.calls[0][3]).toEqual({ dither: 2, ditherBits: 16 });
+    expect(m.editLocked.value).toBe(true);
+    m.edit('setFader', 1, -6);
+    expect(m.state.value.tracks[0].faderDb).toBe(0);
+    harness.worker.pending.resolve(undefined);
+    await exporting;
+    expect(m.editLocked.value).toBe(false);
+    expect(m.lastRender.value?.result.integratedLufs).toBe(-18);
+    expect(harness.downloads).toEqual(['libsonare-mix.wav']);
+  });
+
+  it('refuses audio over the per-track and total budgets', async () => {
+    const { m, stop } = setup();
+    stops.push(stop);
+    harness.durationSec = 301;
+    await m.addFiles([file('long.wav')]);
+    expect(m.notices.value.map((n) => n.key)).toEqual(['trackTooLong']);
+    harness.durationSec = 300;
+    await m.addFiles(['a', 'b', 'c', 'd'].map((n) => file(`${n}.wav`)));
+    harness.durationSec = 10;
+    await m.addFiles([file('e.wav')]);
+    expect(m.state.value.tracks).toHaveLength(4);
+    expect(m.notices.value.map((n) => n.key)).toEqual(['trackTooLong', 'totalExceeded']);
+    expect(m.notices.value[1].values.min).toBe('0.0');
+  });
+
+  it('restores a saved project without touching the engine until its audio arrives', async () => {
+    let saved = addTrack(addTrack(createMixingState(), 'Kick', 2), 'Bass', 2);
+    saved = setFader(saved, 2, -7);
+    localStorage.setItem(MIXING_STATE_STORAGE_KEY, serializeMixingState(saved));
+    const { m, stop } = setup();
+    stops.push(stop);
+    m.restore();
+    expect(m.state.value.tracks.map((t) => t.name)).toEqual(['Kick', 'Bass']);
+    expect(m.missingAudio.value).toHaveLength(2);
+    expect(harness.calls).toEqual([]);
+    expect(m.hasAudio.value).toBe(false);
+
+    await m.addFiles([file('Bass.wav')]);
+    expect(m.missingAudio.value.map((t) => t.name)).toEqual(['Kick']);
+    expect(m.state.value.tracks).toHaveLength(2);
+    expect(opsOf('setTrackClips').map((call) => call[1])).toEqual([2]);
+    expect(opsOf('setFader')).toContainEqual(['setFader', 2, -7]);
+  });
+
+  it('saves the project JSON under its file name and reads v1 files with a notice', async () => {
+    const { m, stop } = await loaded();
+    stops.push(stop);
+    m.exportProject();
+    expect(harness.downloads).toEqual(['libsonare-mix-project.json']);
+
+    const v1 = JSON.stringify({
+      version: 1,
+      masterFaderDb: -2,
+      tracks: [{ name: 'Kick', faderDb: -5 }],
+    });
+    await m.importProject(new File([v1], 'old.json', { type: 'application/json' }));
+    expect(m.notices.value.map((n) => n.key)).toEqual(['projectV1']);
+    expect(m.state.value.tracks[0].faderDb).toBe(-5);
+    expect(m.state.value.master.faderDb).toBe(-2);
+
+    await m.importProject(new File(['{"strips":[]}'], 'scene.json'));
+    expect(m.error.value).toBe('projectInvalid');
+  });
+
+  it('persists every committed state to localStorage', async () => {
+    vi.useFakeTimers();
+    try {
+      const { m, stop } = await loaded();
+      stops.push(stop);
+      m.edit('setMute', 1, true);
+      vi.runAllTimers();
+      const stored = JSON.parse(localStorage.getItem(MIXING_STATE_STORAGE_KEY) ?? '{}');
+      expect(stored.version).toBe(2);
+      expect(stored.tracks[0].muted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('MixingStudio page', () => {
+  it('mounts in English and Japanese with an empty console', () => {
     const wrapper = mount(MixingStudio);
+    expect(wrapper.find('.tool-page').exists()).toBe(true);
+    expect(wrapper.text()).toContain('Mixing Studio');
+    expect(wrapper.findAll('.console__free')).toHaveLength(8);
+    wrapper.unmount();
 
-    await loadTrack(wrapper);
+    harness.lang.value = 'ja';
+    const ja = mount(MixingStudio);
+    expect(ja.text()).toContain('ミキシングスタジオ');
+    ja.unmount();
+  });
 
-    expect(wrapper.text()).toContain('Drums');
-    expect(wrapper.text()).toContain('TRACKS1/8');
-    expect(wrapper.find('.mix-strip__name').element).toHaveProperty('value', 'Drums');
-
-    await wrapper.find('.mix-strip__name').setValue('Main Drums');
-    expect(wrapper.find('.mix-inspector__name').element).toHaveProperty('value', 'Main Drums');
-
-    await wrapper
-      .findAll('.mix-toggle')
-      .find((button) => button.text() === 'M')!
-      .trigger('click');
-    expect(wrapper.find('.mix-clip').classes()).toContain('mix-clip--muted');
-
-    await wrapper
-      .findAll('.mix-toggle')
-      .find((button) => button.text() === 'EQ On')!
-      .trigger('click');
-    expect(wrapper.text()).toContain('Tilt');
-    expect(wrapper.text()).toContain('Air');
-
-    await wrapper
-      .findAll('.mix-segment__btn')
-      .find((button) => button.text() === 'Dual Pan')!
-      .trigger('click');
-    expect(wrapper.text()).toContain('Dual L');
-    expect(wrapper.text()).toContain('Dual R');
-
-    await wrapper.find('.mix-studio').trigger('drop', {
-      dataTransfer: { files: [dropFile('Bass.wav')] },
+  it('loads dropped stems, then mutes, solos and undoes from the keyboard', async () => {
+    const wrapper = mount(MixingStudio, { attachTo: document.body });
+    await wrapper.find('.mix-page__main').trigger('drop', {
+      dataTransfer: { files: [file('Kick.wav'), file('Bass.wav')] },
     });
     await flushPromises();
-    expect(wrapper.findAll('.mix-lane__header small').map((node) => node.text())).toEqual([
-      '0:00',
-      '0:00',
-    ]);
+    expect(wrapper.findAll('.strip')).toHaveLength(2);
 
+    const key = (code: string, init: KeyboardEventInit = {}) =>
+      window.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true, ...init }));
+    key('KeyM');
+    key('KeyS');
+    await nextTick();
+    const first = wrapper.findAll('.strip')[0];
+    expect(first.find('.strip__btn--mute').attributes('aria-pressed')).toBe('true');
+    expect(first.find('.strip__btn--solo').attributes('aria-pressed')).toBe('true');
+
+    key('KeyZ', { ctrlKey: true });
+    await nextTick();
+    expect(wrapper.findAll('.strip')[0].find('.strip__btn--solo').attributes('aria-pressed')).toBe(
+      'false',
+    );
+    key('KeyZ', { ctrlKey: true, shiftKey: true });
+    await nextTick();
+    expect(wrapper.findAll('.strip')[0].find('.strip__btn--solo').attributes('aria-pressed')).toBe(
+      'true',
+    );
+
+    key('Space');
+    expect(harness.engine.play).toHaveBeenCalled();
     wrapper.unmount();
   });
 
-  it('enforces duration and track-count limits while loading dropped stems', async () => {
+  it('shows the restore note until the saved tracks have audio', async () => {
+    const saved = addTrack(createMixingState(), 'Kick', 2);
+    localStorage.setItem(MIXING_STATE_STORAGE_KEY, serializeMixingState(saved));
     const wrapper = mount(MixingStudio);
-
-    try {
-      MockAudioContext.duration = 301;
-      await wrapper.find('.mix-studio').trigger('drop', {
-        dataTransfer: { files: [dropFile('too-long.wav')] },
-      });
-      await flushPromises();
-
-      expect(wrapper.text()).toContain('too-long.wav is longer than 5:00 and was not loaded.');
-      expect(wrapper.text()).toContain('TRACKS0/8');
-
-      MockAudioContext.duration = 2;
-      await wrapper.find('.mix-studio').trigger('drop', {
-        dataTransfer: {
-          files: Array.from({ length: 9 }, (_, index) => dropFile(`Stem ${index + 1}.wav`)),
-        },
-      });
-      await flushPromises();
-
-      expect(wrapper.text()).toContain('TRACKS8/8');
-      expect(wrapper.text()).toContain('The mixer is limited to 8 tracks.');
-      expect(wrapper.findAll('.mix-strip__name')).toHaveLength(8);
-    } finally {
-      wrapper.unmount();
-    }
-  });
-
-  it('reports decode failures and loads the two-band demo only once', async () => {
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const originalFetch = globalThis.fetch;
-    const wrapper = mount(MixingStudio);
-
-    try {
-      MockAudioContext.nextDecodeError = new Error('decode failed');
-      await wrapper.find('.mix-studio').trigger('drop', {
-        dataTransfer: { files: [dropFile('broken.wav')] },
-      });
-      await flushPromises();
-      expect(wrapper.text()).toContain('Failed to decode one of the audio files.');
-      expect(wrapper.text()).toContain('TRACKS0/8');
-
-      MockAudioContext.nextDecodeError = null;
-      globalThis.fetch = vi.fn(async () => ({
-        blob: async () => ({ type: 'audio/mpeg' }),
-      })) as any;
-
-      await wrapper
-        .findAll('button')
-        .find((button) => button.text() === 'Load demo')!
-        .trigger('click');
-      await flushPromises();
-      expect(globalThis.fetch).toHaveBeenCalledWith('/demo.mp3');
-      expect(wrapper.text()).toContain('Low band');
-      expect(wrapper.text()).toContain('High band');
-      expect(wrapper.text()).toContain('TRACKS2/8');
-
-      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
-      expect(wrapper.findAll('button').some((button) => button.text() === 'Load demo')).toBe(false);
-    } finally {
-      globalThis.fetch = originalFetch;
-      consoleError.mockRestore();
-      wrapper.unmount();
-    }
-  });
-
-  it('adds, clears and serializes automation lane points', async () => {
-    const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
-      width: 200,
-      height: 100,
-      left: 0,
-      top: 0,
-      right: 200,
-      bottom: 100,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    });
-    let downloadedFilename = '';
-    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
-      downloadedFilename = this.download;
-    });
-    const wrapper = mount(MixingStudio);
-
-    try {
-      await loadTrack(wrapper);
-
-      expect(wrapper.text()).toContain('Applied to Bounce Mix; Play uses current controls.');
-      expect(wrapper.text()).toContain(
-        'Project settings include no audio. Load the matching audio before importing.',
-      );
-
-      await wrapper.find('.mix-autolane__plot').trigger('click', { clientX: 100, clientY: 25 });
-      expect(wrapper.findAll('.mix-autolane__node')).toHaveLength(1);
-      expect(wrapper.find('.mix-autolane__line').exists()).toBe(true);
-
-      await wrapper
-        .findAll('button')
-        .find((button) => button.text() === 'Export project settings')!
-        .trigger('click');
-      expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-      expect(click).toHaveBeenCalled();
-      expect(downloadedFilename).toBe('libsonare-mix-project.json');
-
-      await wrapper
-        .findAll('button')
-        .find((button) => button.text() === 'Clear Lane')!
-        .trigger('click');
-      expect(wrapper.findAll('.mix-autolane__node')).toHaveLength(0);
-    } finally {
-      click.mockRestore();
-      rectSpy.mockRestore();
-      wrapper.unmount();
-    }
-  });
-
-  it('bounces the loaded mix, exposes metrics and downloads the rendered wav', async () => {
-    const click = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(() => undefined);
-    const wrapper = mount(MixingStudio);
-
-    try {
-      await loadTrack(wrapper);
-      await wrapper
-        .findAll('button')
-        .find((button) => button.text() === 'Bounce Mix')!
-        .trigger('click');
-      await flushPromises();
-
-      expect(bounceMock.bounce).toHaveBeenCalledTimes(1);
-      expect(bounceMock.bounce.mock.calls[0][0]).toMatchObject({
-        sampleRate: SAMPLE_RATE,
-        masterFaderDb: 0,
-      });
-      expect(bounceMock.bounce.mock.calls[0][0].tracks).toHaveLength(1);
-      expect(wrapper.text()).toContain('-3.0 dB');
-      expect(wrapper.text()).toContain('-14.0 LUFS');
-
-      await wrapper
-        .findAll('button')
-        .find((button) => button.text() === 'Download WAV')!
-        .trigger('click');
-      expect(click).toHaveBeenCalled();
-    } finally {
-      click.mockRestore();
-      wrapper.unmount();
-    }
-  });
-
-  it('imports project settings onto matching tracks and reports invalid files', async () => {
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const wrapper = mount(MixingStudio);
-
-    try {
-      await loadTrack(wrapper);
-      const trackName = 'Drums';
-      const validScene = new MockFile(
-        [
-          JSON.stringify({
-            masterFaderDb: -6,
-            reverb: { enabled: true, decaySec: 3, preDelayMs: 40 },
-            vcaGains: { A: -2 },
-            tracks: [{ name: trackName, faderDb: -9, pan: 0.5, vcaGroup: 'A', eqEnabled: true }],
-          }),
-        ],
-        'scene.json',
-        { type: 'application/json' },
-      );
-      const sceneInput = wrapper.find('input[accept="application/json,.json"]');
-      Object.defineProperty(sceneInput.element, 'files', {
-        configurable: true,
-        value: [validScene],
-      });
-      await sceneInput.trigger('change');
-      await flushPromises();
-
-      expect(wrapper.text()).toContain('-9.0');
-      expect(wrapper.text()).toContain('Reverb Bus');
-      expect(wrapper.findAll('.mix-flag--vca').map((node) => node.text())).toContain('A');
-      expect(wrapper.find('input[type="range"][min="-24"][max="12"]').element).toHaveProperty(
-        'value',
-        '-6',
-      );
-      expect(wrapper.find('.mix-strip__control input[type="range"]').element).toHaveProperty(
-        'value',
-        '-9',
-      );
-
-      const invalidProjects = [
-        ['broken.json', 'not-json'],
-        [
-          'engine-scene.json',
-          JSON.stringify({ version: 1, strips: [], buses: [], connections: [] }),
-        ],
-        ['arbitrary.json', JSON.stringify({ hello: 'world' })],
-        ['malformed.json', JSON.stringify({ version: 1, tracks: [{}] })],
-        ['numeric-leaf.json', JSON.stringify({ tracks: [{ name: trackName, faderDb: 'loud' }] })],
-        ['reverb-leaf.json', JSON.stringify({ reverb: { decaySec: 'bad' } })],
-        [
-          'automation-leaf.json',
-          JSON.stringify({
-            tracks: [{ name: trackName, automation: [{ param: 'fader', value: 'bad' }] }],
-          }),
-        ],
-      ];
-      for (const [fileName, body] of invalidProjects) {
-        const invalidProject = new MockFile([body], fileName, { type: 'application/json' });
-        Object.defineProperty(sceneInput.element, 'files', {
-          configurable: true,
-          value: [invalidProject],
-        });
-        await sceneInput.trigger('change');
-        await flushPromises();
-        expect(wrapper.text()).toContain('Could not import project settings JSON.');
-        expect(wrapper.text()).toContain('-6.0 dB');
-        expect(wrapper.text()).toContain('-9.0');
-        expect(wrapper.find('input[type="range"][min="-24"][max="12"]').element).toHaveProperty(
-          'value',
-          '-6',
-        );
-        expect(wrapper.find('.mix-strip__control input[type="range"]').element).toHaveProperty(
-          'value',
-          '-9',
-        );
-      }
-
-      const recoveredProject = new MockFile(
-        [JSON.stringify({ masterFaderDb: -3, tracks: [{ name: trackName, faderDb: -4 }] })],
-        'recovered.json',
-        { type: 'application/json' },
-      );
-      Object.defineProperty(sceneInput.element, 'files', {
-        configurable: true,
-        value: [recoveredProject],
-      });
-      await sceneInput.trigger('change');
-      await flushPromises();
-      expect(wrapper.text()).not.toContain('Could not import project settings JSON.');
-      expect(wrapper.find('input[type="range"][min="-24"][max="12"]').element).toHaveProperty(
-        'value',
-        '-3',
-      );
-      expect(wrapper.find('.mix-strip__control input[type="range"]').element).toHaveProperty(
-        'value',
-        '-4',
-      );
-    } finally {
-      consoleError.mockRestore();
-      wrapper.unmount();
-    }
+    await nextTick();
+    expect(wrapper.find('.mix-page__banner--restore').exists()).toBe(true);
+    await wrapper
+      .find('.mix-page__main')
+      .trigger('drop', { dataTransfer: { files: [file('Kick.wav')] } });
+    await flushPromises();
+    expect(wrapper.find('.mix-page__banner--restore').exists()).toBe(false);
+    wrapper.unmount();
   });
 });

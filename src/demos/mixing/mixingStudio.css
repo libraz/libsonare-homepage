@@ -1,5 +1,228 @@
-@import './mixingLayout.css';
-@import './mixingTimeline.css';
-@import './mixingConsole.css';
-@import './mixingInspector.css';
-@import './mixingResponsive.css';
+/* /mixing page frame. The `--demo-*` table lives in
+   .vitepress/theme/styles/demo-tokens.css; this sheet lays out the page's own
+   chrome around the arrangement, the desk and the panels below it. */
+.mix-page {
+  color: var(--demo-text);
+  font-family: var(--font-body);
+}
+
+.mix-page__chrome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px 16px 0;
+}
+
+.mix-page__actions,
+.mix-page__history {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.mix-page__chrome button,
+.mix-page__banner button {
+  padding: 4px 10px;
+  border: 1px solid var(--demo-border-strong);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--demo-text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mix-page__chrome .mix-page__primary {
+  border-color: var(--demo-accent);
+  background: var(--demo-accent);
+  color: var(--demo-on-accent);
+}
+
+.mix-page__chrome button:disabled,
+.mix-page__banner button:disabled {
+  cursor: not-allowed;
+  opacity: var(--demo-disabled-opacity);
+}
+
+.mix-page__budget {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-left: 6px;
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mix-page__file {
+  display: none;
+}
+
+.mix-page__drawer-toggle {
+  display: none;
+}
+
+.mix-page__main {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding-bottom: 32px;
+}
+
+.mix-page__main--drop {
+  outline: 2px dashed var(--demo-accent-border);
+  outline-offset: 4px;
+}
+
+.mix-page__banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--demo-warn-border);
+  border-radius: 6px;
+  background: var(--demo-warn-bg);
+  color: var(--demo-warn-text);
+  font-size: 12.5px;
+}
+
+.mix-page__banner ul,
+.mix-page__banner p {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mix-page__banner strong {
+  margin-right: 6px;
+  color: var(--demo-text-strong);
+}
+
+.mix-page__banner--error {
+  border-color: var(--demo-status-error);
+  background: transparent;
+  color: var(--demo-danger);
+}
+
+.mix-page__banner--restore {
+  border-color: var(--demo-accent-border);
+  background: var(--demo-accent-subtle);
+  color: var(--demo-text);
+}
+
+.mix-page__banner-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.mix-page__lock {
+  padding: 6px 12px;
+  border: 1px solid var(--demo-accent-border);
+  border-radius: 6px;
+  background: var(--demo-accent-subtle);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.mix-page__drop {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 22px 16px;
+  border: 1px dashed var(--demo-border-strong);
+  border-radius: 6px;
+  background: var(--demo-dropzone-bg);
+  color: var(--demo-text-muted);
+  font-size: 12.5px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.mix-page__drop strong {
+  color: var(--demo-text-strong);
+  font-size: 14px;
+}
+
+.mix-page__desk {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px 340px;
+  gap: 12px;
+  align-items: start;
+}
+
+.mix-page__console {
+  min-width: 0;
+}
+
+.mix-page__lower {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.mix-page__keys {
+  margin: 0;
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-align: right;
+}
+
+@media (max-width: 1439px) {
+  .mix-page__desk {
+    grid-template-columns: minmax(0, 1fr) 360px;
+  }
+
+  .mix-page__inspector {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 959px) {
+  .mix-page__desk,
+  .mix-page__lower {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mix-page__drawer-toggle {
+    display: inline-block;
+  }
+
+  .mix-page__inspector {
+    position: fixed;
+    inset: 0 0 0 auto;
+    z-index: 40;
+    width: min(92vw, 380px);
+    overflow-y: auto;
+    padding: 12px;
+    background: var(--demo-bg);
+    box-shadow: -12px 0 32px -16px var(--demo-shadow);
+    transform: translateX(100%);
+    transition: transform 0.2s ease;
+  }
+
+  .mix-page__inspector--open {
+    transform: none;
+  }
+
+  .mix-page__keys {
+    display: none;
+  }
+
+  .mix-page__chrome {
+    padding: 8px 10px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mix-page__inspector {
+    transition: none;
+  }
+}

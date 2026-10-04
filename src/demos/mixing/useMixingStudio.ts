@@ -1,904 +1,833 @@
-import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
-import { useI18n } from '@/composables/useI18n';
+/**
+ * The /mixing page controller. One project state is the single source: every
+ * edit is a mutator from `mixingState.ts` committed to history, and each
+ * change reaches the live engine as the op diff `mixingEngine.diff` derives,
+ * the session store as JSON, and the export Worker as the state it bounces.
+ *
+ * The engine holds the *audible* state: the user's mix (A) or, while a mix
+ * assistant suggestion is auditioned, that mix with the suggestion applied
+ * (B). Both reach the engine through the same diff, so switching is setters
+ * only. A channel-delay edit made while playing is held back until the
+ * transport stops, because a live delay change misaligns the other lanes.
+ *
+ * PCM lives only in the audio registry, keyed by track id. Worker jobs borrow
+ * every clip (transferred, not copied), so they run one at a time and lock
+ * editing until the audio is back.
+ */
+
+import { type ComputedRef, computed, ref, type ShallowRef, shallowRef, watch } from 'vue';
+import { useHistory } from '@/composables/useHistory';
+import { type UseSonareEngine, useSonareEngine } from '@/composables/useSonareEngine';
+import { abMatchGains } from '@/demos/mixing/mixAssistantMap';
 import type {
-  AutomationCurve,
-  AutomationParam,
-  MixingBounceResult,
-  StripMeter,
+  MixBounceResult,
+  MixSuggestResult,
+  MixWorkerStage,
 } from '@/demos/mixing/mixing.worker';
-import { createMixBounceController } from '@/demos/mixing/mixingBounce';
 import {
-  AUTOMATION_CURVES,
-  AUTOMATION_PARAM_IDS,
-  AUTOMATION_RANGES,
-  MAX_DURATION_SECONDS,
-  MAX_TRACKS,
-  REVERB_SEND_FLOOR,
-  VCA_GROUP_IDS,
-} from '@/demos/mixing/mixingConstants';
-import { enCopy, jaCopy } from '@/demos/mixing/mixingCopy';
-import { MIXING_TERM_SLUGS, type MixingTermKey } from '@/demos/mixing/mixingTerms';
+  createMixWorkerClient,
+  type MixJob,
+  MixJobCancelled,
+  type MixProgress,
+} from '@/demos/mixing/mixingBounce';
+import { MAX_DURATION_SECONDS } from '@/demos/mixing/mixingConstants';
+import type { MixingCopy } from '@/demos/mixing/mixingCopy';
 import {
-  applySceneTrack,
-  buildCurrentSceneJson,
-  createMixTrack,
-  currentGates,
-  resetMixTrack,
-  toRenderTrack,
-  toSceneTrack,
-} from '@/demos/mixing/mixingTrackState';
+  buildFull,
+  diff,
+  MIX_TEMPO_BPM,
+  type MixAudio,
+  secondsToPpq,
+} from '@/demos/mixing/mixingEngine';
 import {
-  type AutomationNode,
-  type MixTrack,
-  parseMixingProjectSettings,
-} from '@/demos/mixing/mixingTypes';
-import { goniometerPoints, meterHeight, waveformPath } from '@/demos/mixing/mixingVisuals';
-import { useRealtimeMixer } from '@/demos/mixing/useRealtimeMixer';
+  createEqResponder,
+  type EqCurvePoint,
+  type EqResponder,
+} from '@/demos/mixing/mixingEqResponse';
+import { parseMixingProject } from '@/demos/mixing/mixingProjectV1';
+import {
+  type AudioBudgetVerdict,
+  addTrack,
+  applyMixPatch,
+  arrangementEndSec,
+  checkAudioBudget,
+  createMixingState,
+  type LoopState,
+  MIXING_MUTATORS,
+  type MixingState,
+  type StripEqBand,
+} from '@/demos/mixing/mixingState';
+import {
+  fileBase,
+  holdChannelDelays,
+  pendingDelayIds,
+  rebuiltTrackIds,
+} from '@/demos/mixing/mixingUi';
+import { type MixingMetering, useMixingMetering } from '@/demos/mixing/useMixingMetering';
+import { useMixingSession } from '@/demos/mixing/useMixingSession';
 import {
   AudioInputBudgetError,
-  calculatePeakRms,
-  decodeAudioFile,
-  formatDb,
-  formatDuration,
-  formatSampleRate,
+  decodeAudioBuffer,
+  downloadBlob,
+  downsampleWaveform,
   jsonBlob,
   triggerDownload,
+  type WavDither,
+  type WaveformPeak,
+  type WavFormat,
   wavBlob,
+  wavBounceOptions,
 } from '@/utils/audio';
-import { clamp, dbToLinear, invertedRangeToPercent } from '@/utils/scale';
-import sonareJsUrl from '@/wasm/sonare.js?url';
-import sonareWasmUrl from '@/wasm/sonare.wasm?url';
+import { applyOps, createFacadeTarget, type EngineTarget } from '@/utils/engineApply';
 
-export function useMixingStudio() {
-  const { localizedPath, alternateLocalePath, localizedValue } = useI18n();
-  const copy = computed(() => localizedValue({ en: enCopy, ja: jaCopy }));
-  const libVersion = ref('');
-  const tracks = ref<MixTrack[]>([]);
-  const selectedTrackId = ref<string | null>(null);
-  const masterFaderDb = ref(0);
-  const reverb = ref({ enabled: false, decaySec: 2.2, preDelayMs: 20 });
-  const vcaGains = ref<Record<string, number>>({ A: 0, B: 0, C: 0 });
-  const automationParam = ref<AutomationParam>('fader');
-  const automationCurve = ref<AutomationCurve>('linear');
-  const automationDrag = ref<{ trackId: string; pointId: string } | null>(null);
+type Wasm = typeof import('@/wasm/index.js');
+type Mutators = typeof MIXING_MUTATORS;
+export type MixingMutatorName = keyof Mutators;
+/** Arguments of a mutator after the state. */
+export type MixingMutatorArgs<K extends MixingMutatorName> = Mutators[K] extends (
+  state: MixingState,
+  ...args: infer A
+) => MixingState
+  ? A
+  : never;
 
-  const isLoading = ref(false);
-  const isBouncing = ref(false);
-  const progress = ref(0);
-  const progressStage = ref('');
-  const localError = ref<string | null>(null);
-  const warning = ref<string | null>(null);
-  const bounceResult = shallowRef<MixingBounceResult | null>(null);
-  const outputUrl = ref<string | null>(null);
-  const fileInput = ref<HTMLInputElement | null>(null);
-  const sceneInput = ref<HTMLInputElement | null>(null);
-  const timelineRef = ref<HTMLElement | null>(null);
-  const autoLaneRef = ref<HTMLElement | null>(null);
-  const zoomSeconds = ref(300);
-  const playheadSeconds = ref(0);
-  const isPlaying = ref(false);
+/** What the page knows about a track's source audio. */
+export interface MixTrackInfo {
+  fileName: string;
+  sampleRate: number;
+  channels: number;
+  durationSec: number;
+  waveform: WaveformPeak[];
+}
 
-  let audioContext: AudioContext | null = null;
-  const bounceController = createMixBounceController();
-  let sceneUrl: string | null = null;
-  let previewSources: AudioBufferSourceNode[] = [];
-  let previewStartedAt = 0;
-  let previewStartPosition = 0;
-  let playheadRaf = 0;
-  let activeDrag: { trackId: string; startX: number; startOffset: number } | null = null;
+export type MixingJobKind = 'export' | 'suggest' | 'match';
 
-  const docsPath = computed(() => localizedPath('/docs/use-cases/browser-mixer'));
-  const oppositeLocalePath = computed(() => alternateLocalePath('/mixing'));
-  const glossaryBase = computed(() => localizedPath('/docs/glossary'));
+export interface MixingJobState {
+  kind: MixingJobKind;
+  progress: number;
+  stage: MixWorkerStage;
+  cancel(): void;
+}
 
-  function term(key: MixingTermKey, compact = false) {
-    const item = copy.value.terms.items[key];
-    const slug = MIXING_TERM_SLUGS[key];
-    return {
-      eyebrow: copy.value.terms.eyebrow,
-      title: item.title,
-      body: item.body,
-      tip: item.tip,
-      tipLabel: copy.value.terms.tipLabel,
-      defaultValue: 'default' in item ? (item as { default?: string }).default : undefined,
-      defaultLabel: copy.value.terms.defaultLabel,
-      href: slug ? `${glossaryBase.value}/${slug}` : undefined,
-      linkLabel: copy.value.terms.linkLabel,
-      compact,
-    };
+export interface MixRender {
+  result: MixBounceResult;
+  format: WavFormat;
+  dither: WavDither;
+  url: string;
+  fileName: string;
+  at: number;
+}
+
+export type MixingErrorKey = keyof MixingCopy['errors'];
+export type MixingNoticeKey = keyof MixingCopy['notices'];
+
+export interface MixingNotice {
+  key: MixingNoticeKey;
+  values: Record<string, string | number>;
+}
+
+/** Which mix is audible: the user's (A) or the assistant's suggestion (B). */
+export type AbSide = 'a' | 'b';
+
+/** File name of the project JSON. */
+export const MIX_PROJECT_FILE = 'libsonare-mix-project.json';
+/** How long a strip shows that a discrete edit rebuilt its inserts. */
+const RESET_FLASH_MS = 700;
+/** Waveform columns kept per track; the arrangement draws subsets. */
+const WAVEFORM_POINTS = 4096;
+/** Crossover of the demo's low/high pseudo-stems. */
+const DEMO_CROSSOVER_HZ = 250;
+
+/**
+ * Splits a signal into complementary bands with a one-pole low-pass (high =
+ * input − low), so the two bands sum back to the source exactly.
+ */
+export function splitBands(samples: Float32Array, sampleRate: number, crossoverHz: number) {
+  const coeff = 1 - Math.exp((-2 * Math.PI * crossoverHz) / sampleRate);
+  const low = new Float32Array(samples.length);
+  const high = new Float32Array(samples.length);
+  let state = 0;
+  for (let i = 0; i < samples.length; i++) {
+    state += coeff * (samples[i] - state);
+    low[i] = state;
+    high[i] = samples[i] - state;
   }
+  return { low, high };
+}
 
-  const statusKind = computed<'idle' | 'active' | 'warning' | 'error'>(() => {
-    if (localError.value) return 'error';
-    if (warning.value) return 'warning';
-    if (tracks.value.length || isBouncing.value) return 'active';
-    return 'idle';
-  });
+function trackIdsKey(state: MixingState): string {
+  return state.tracks.map((track) => track.id).join(',');
+}
 
-  const statusLabel = computed(() => {
-    if (isBouncing.value) return copy.value.status.bouncing;
-    if (tracks.value.length) return copy.value.status.ready;
-    return copy.value.status.idle;
-  });
+interface Decoded {
+  audio: MixAudio;
+  info: MixTrackInfo;
+}
+
+function decodedFrom(
+  left: Float32Array,
+  right: Float32Array,
+  info: Omit<MixTrackInfo, 'waveform'>,
+) {
+  return {
+    audio: { channels: [left, right], sampleRate: info.sampleRate },
+    info: { ...info, waveform: downsampleWaveform(left, right, WAVEFORM_POINTS) },
+  };
+}
+
+export interface MixingStudioOptions {
+  copy: ComputedRef<MixingCopy>;
+  /** The page's WASM module once booted; the engine boot also fills it. */
+  wasm: ShallowRef<Wasm | null>;
+}
+
+export function useMixingStudio(options: MixingStudioOptions) {
+  const sonare: UseSonareEngine = useSonareEngine();
+  const worker = createMixWorkerClient();
+  const session = useMixingSession();
+  const registry = new Map<number, MixAudio>();
+  const { wasm } = options;
+  let target: EngineTarget | null = null;
+  /** The state the engine currently holds; null until it is built. */
+  let engineState: MixingState | null = null;
+
+  const engineApplied = shallowRef<MixingState | null>(null);
+  const trackInfo = shallowRef<ReadonlyMap<number, MixTrackInfo>>(new Map());
+  const loading = ref(false);
+  const error = ref<MixingErrorKey | null>(null);
+  const notices = ref<MixingNotice[]>([]);
+  const job = shallowRef<MixingJobState | null>(null);
+  const lastRender = shallowRef<MixRender | null>(null);
+  const suggestion = shallowRef<MixSuggestResult | null>(null);
+  const ab = ref<AbSide>('a');
+  const selectedId = ref<number | null>(null);
+  const rebuilt = shallowRef<ReadonlySet<number>>(new Set());
+  const restored = ref(false);
+  let suggestionFor = '';
+  /** Monitor gains that level-match A and B, with the A state they were measured on. */
+  const match = shallowRef<{ aDb: number; bDb: number; measuredA: MixingState } | null>(null);
+
+  const history = useHistory(createMixingState(), { onChange });
+  const state = history.state;
+
+  /** What the console shows and the engine plays. */
+  const view = computed<MixingState>(() =>
+    ab.value === 'b' && suggestion.value
+      ? applyMixPatch(state.value, suggestion.value.suggestion.patch)
+      : state.value,
+  );
 
   const selectedTrack = computed(
-    () =>
-      tracks.value.find((track) => track.id === selectedTrackId.value) || tracks.value[0] || null,
+    () => view.value.tracks.find((track) => track.id === selectedId.value) ?? null,
   );
-  const slots = computed<Array<MixTrack | null>>(() => {
-    const next: Array<MixTrack | null> = [...tracks.value];
-    while (next.length < MAX_TRACKS) next.push(null);
-    return next.slice(0, MAX_TRACKS);
+
+  const metering: MixingMetering = useMixingMetering({
+    sonare,
+    wasm,
+    laneOrder: () => engineState?.tracks.map((track) => track.id) ?? [],
+    selected: () => {
+      const track = selectedTrack.value;
+      return track ? { track, audio: registry.get(track.id) } : null;
+    },
   });
 
-  const loadedDuration = computed(() =>
-    tracks.value.reduce(
-      (max, track) => Math.max(max, track.offsetSeconds + track.audio.duration),
-      0,
-    ),
-  );
-  const timelineDuration = computed(() =>
-    Math.max(10, Math.min(MAX_DURATION_SECONDS, Math.max(loadedDuration.value, zoomSeconds.value))),
-  );
-  const timelineTicks = computed(() => {
-    const duration = timelineDuration.value;
-    const step = duration <= 30 ? 5 : duration <= 90 ? 10 : duration <= 180 ? 15 : 30;
-    const ticks: Array<{ time: number; label: string; left: number }> = [];
-    for (let time = 0; time <= duration + 0.01; time += step) {
-      ticks.push({ time, label: formatDuration(time), left: timeToPercent(time) });
-    }
-    return ticks;
-  });
-  const sampleRateLabel = computed(() =>
-    tracks.value[0] ? formatSampleRate(tracks.value[0].audio.sampleRate) : '-',
-  );
-  const memoryEstimateMb = computed(() => {
-    const bytes = tracks.value.reduce(
-      (sum, track) => sum + (track.audio.left.byteLength + track.audio.right.byteLength),
-      0,
+  // -------------------------------------------------------------------------
+  // State → engine
+
+  let flashTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function flash(ids: ReadonlySet<number>): void {
+    rebuilt.value = ids;
+    if (flashTimer) clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => {
+      rebuilt.value = new Set();
+    }, RESET_FLASH_MS);
+  }
+
+  function applyLoop(loop: LoopState): void {
+    sonare.engine.value?.setLoop(
+      secondsToPpq(loop.startSec),
+      secondsToPpq(loop.endSec),
+      loop.enabled,
     );
-    return bytes / 1024 / 1024;
-  });
-
-  const statusFields = computed(() => [
-    { key: 'TRACKS', value: `${tracks.value.length}/${MAX_TRACKS}` },
-    { key: 'LIMIT', value: '5:00' },
-    { key: 'LEN', value: tracks.value.length ? formatDuration(loadedDuration.value) : '--:--' },
-    { key: 'SR', value: sampleRateLabel.value },
-    { key: 'MEM', value: `${memoryEstimateMb.value.toFixed(0)} MB` },
-    { key: 'PEAK', value: bounceResult.value ? formatDb(bounceResult.value.peakDb) : '-' },
-    { key: 'RMS', value: bounceResult.value ? formatDb(bounceResult.value.rmsDb) : '-' },
-  ]);
-
-  const stripMeterMap = computed(() => {
-    const map = new Map<string, StripMeter>();
-    for (const meter of bounceResult.value?.stripMeters || []) map.set(meter.id, meter);
-    return map;
-  });
-
-  const selectedMeter = computed(() =>
-    selectedTrack.value ? stripMeterMap.value.get(selectedTrack.value.id) || null : null,
-  );
-
-  const masterMonoCompatible = computed(() =>
-    bounceResult.value ? bounceResult.value.correlation > -0.2 : true,
-  );
-
-  function stripMeterFor(track: MixTrack | null): StripMeter | null {
-    return track ? stripMeterMap.value.get(track.id) || null : null;
   }
 
-  onMounted(() => {
-    const ric = (window as any).requestIdleCallback;
-    if (ric) ric(initWasmVersion, { timeout: 2000 });
-    else setTimeout(initWasmVersion, 100);
-  });
+  function desiredEngineState(): MixingState {
+    return sonare.playing.value && engineState
+      ? holdChannelDelays(view.value, engineState)
+      : view.value;
+  }
 
-  onUnmounted(() => {
-    bounceController.dispose();
-    revokeOutputUrl();
-    if (sceneUrl) URL.revokeObjectURL(sceneUrl);
-    stopPreview();
-    void realtime.dispose();
-    const context = audioContext;
-    audioContext = null;
-    if (typeof context?.close === 'function') void context.close();
-  });
+  /** Brings the engine from the state it holds to the audible one. */
+  function syncEngine(): void {
+    if (!target || !engineState) return;
+    const next = desiredEngineState();
+    if (next === engineState) return;
+    const ops = diff(engineState, next, registry);
+    const ids = rebuiltTrackIds(ops, engineState);
+    applyOps(target, ops);
+    if (JSON.stringify(engineState.loop) !== JSON.stringify(next.loop)) applyLoop(next.loop);
+    engineState = next;
+    engineApplied.value = next;
+    if (ids.size > 0) flash(ids);
+  }
 
-  async function initWasmVersion() {
-    if (libVersion.value || typeof window === 'undefined') return;
+  /** Constructs the audible state on the engine from scratch (load time, transport stopped). */
+  function rebuildEngine(): void {
+    if (!target) return;
+    sonare.stop();
+    const next = view.value;
+    applyOps(target, buildFull(next, registry));
+    applyLoop(next.loop);
+    engineState = next;
+    engineApplied.value = next;
+  }
+
+  function onChange(prev: MixingState, next: MixingState): void {
+    session.save(next);
+    if (suggestion.value && trackIdsKey(next) !== suggestionFor) {
+      suggestion.value = null;
+      ab.value = 'a';
+    }
+    if (selectedId.value !== null && !next.tracks.some((t) => t.id === selectedId.value)) {
+      selectedId.value = next.tracks[0]?.id ?? null;
+    }
+    if (prev !== next) syncEngine();
+  }
+
+  const editLocked = computed(() => loading.value || job.value !== null || ab.value === 'b');
+
+  /** Applies one mutator as one history entry (a drag folds its entries between begin and end). */
+  function edit<K extends MixingMutatorName>(name: K, ...args: MixingMutatorArgs<K>): void {
+    if (editLocked.value) return;
+    const mutate = MIXING_MUTATORS[name] as unknown as (
+      s: MixingState,
+      ...a: MixingMutatorArgs<K>
+    ) => MixingState;
+    let next: MixingState;
     try {
-      const wasm = await import('@/wasm/index.js');
-      await wasm.init();
-      libVersion.value = wasm.version();
-    } catch (error) {
-      console.warn('Failed to initialize WASM version:', error);
-    }
-  }
-
-  function chooseFiles() {
-    fileInput.value?.click();
-  }
-
-  async function handleFileInput(event: Event) {
-    const input = event.target as HTMLInputElement;
-    await addFiles(input.files);
-    input.value = '';
-  }
-
-  async function handleDrop(event: DragEvent) {
-    event.preventDefault();
-    await addFiles(event.dataTransfer?.files || null);
-  }
-
-  async function addFiles(fileList: FileList | null) {
-    if (!fileList?.length) return;
-    localError.value = null;
-    warning.value = null;
-    isLoading.value = true;
-
-    try {
-      for (const file of Array.from(fileList)) {
-        if (tracks.value.length >= MAX_TRACKS) {
-          warning.value = copy.value.warnings.trackLimit;
-          break;
-        }
-
-        let audio: Awaited<ReturnType<typeof decodeAudioFile>>;
-        try {
-          audio = await decodeAudioFile(file, getAudioContext(), {
-            maxDurationSeconds: MAX_DURATION_SECONDS,
-          });
-        } catch (error) {
-          if (error instanceof AudioInputBudgetError && error.code === 'duration') {
-            warning.value = copy.value.warnings.durationLimit.replace('{file}', file.name);
-            continue;
-          }
-          throw error;
-        }
-        if (audio.duration > MAX_DURATION_SECONDS) {
-          warning.value = copy.value.warnings.durationLimit.replace('{file}', file.name);
-          continue;
-        }
-
-        const track = createMixTrack(file.name, audio);
-        tracks.value.push(track);
-        selectedTrackId.value = track.id;
-      }
-
-      if (memoryEstimateMb.value > 650) warning.value = copy.value.warnings.memory;
-    } catch (error) {
-      console.error(error);
-      localError.value = copy.value.errors.loadFailed;
-    } finally {
-      isLoading.value = false;
-    }
-  }
-
-  // Split a clip into two complementary frequency bands with a one-pole
-  // crossover (high = original - low), so the bands sum back to the source at
-  // unity. Cheap O(n) per channel — no STFT/WASM needed for the demo.
-  function splitBands(samples: Float32Array, sampleRate: number, crossoverHz: number) {
-    const coeff = 1 - Math.exp((-2 * Math.PI * crossoverHz) / sampleRate);
-    const low = new Float32Array(samples.length);
-    const high = new Float32Array(samples.length);
-    let state = 0;
-    for (let i = 0; i < samples.length; i++) {
-      state += coeff * (samples[i] - state);
-      low[i] = state;
-      high[i] = samples[i] - state;
-    }
-    return { low, high };
-  }
-
-  async function loadDemo() {
-    if (tracks.value.length) return;
-    localError.value = null;
-    warning.value = null;
-    isLoading.value = true;
-    try {
-      const response = await fetch('/demo.mp3');
-      const blob = await response.blob();
-      const file = new File([blob], 'demo.mp3', { type: blob.type || 'audio/mpeg' });
-      const audio = await decodeAudioFile(file, getAudioContext(), {
-        maxDurationSeconds: MAX_DURATION_SECONDS,
-      });
-      const crossoverHz = 250;
-      const leftBands = splitBands(audio.left, audio.sampleRate, crossoverHz);
-      const rightBands = splitBands(audio.right, audio.sampleRate, crossoverHz);
-      const base = {
-        sampleRate: audio.sampleRate,
-        duration: audio.duration,
-        channels: audio.channels,
-      };
-      const lowAudio = {
-        ...base,
-        fileName: copy.value.import.demoLow,
-        left: leftBands.low,
-        right: rightBands.low,
-      };
-      const highAudio = {
-        ...base,
-        fileName: copy.value.import.demoHigh,
-        left: leftBands.high,
-        right: rightBands.high,
-      };
-      tracks.value.push(createMixTrack(copy.value.import.demoLow, lowAudio));
-      tracks.value.push(createMixTrack(copy.value.import.demoHigh, highAudio));
-      selectedTrackId.value = tracks.value[0]?.id || null;
-    } catch (error) {
-      console.error(error);
-      localError.value = copy.value.errors.loadFailed;
-    } finally {
-      isLoading.value = false;
-    }
-  }
-
-  function removeTrack(track: MixTrack) {
-    tracks.value = tracks.value.filter((candidate) => candidate.id !== track.id);
-    if (selectedTrackId.value === track.id) selectedTrackId.value = tracks.value[0]?.id || null;
-    bounceResult.value = null;
-    revokeOutputUrl();
-  }
-
-  function resetTrack(track: MixTrack) {
-    resetMixTrack(track);
-  }
-
-  async function bounceMix() {
-    if (!tracks.value.length || isBouncing.value) return;
-    isBouncing.value = true;
-    localError.value = null;
-    progress.value = 0.01;
-    progressStage.value = copy.value.progress.queued;
-    revokeOutputUrl();
-
-    const renderTracks = tracks.value.map(toRenderTrack);
-
-    await bounceController
-      .bounce({
-        sampleRate: tracks.value[0]?.audio.sampleRate || 48000,
-        masterFaderDb: masterFaderDb.value,
-        tracks: renderTracks,
-        reverb: { ...reverb.value },
-        vcaGroups: VCA_GROUP_IDS.map((id) => ({ id, gainDb: vcaGains.value[id] })),
-        onProgress: (nextProgress, stage) => {
-          progress.value = nextProgress;
-          progressStage.value = formatStage(stage);
-        },
-      })
-      .then((result) => {
-        bounceResult.value = result;
-        outputUrl.value = URL.createObjectURL(
-          wavBlob([result.left, result.right], result.sampleRate),
-        );
-        progress.value = 1;
-        progressStage.value = copy.value.progress.complete;
-      })
-      .catch((error) => {
-        console.error(error);
-        localError.value = copy.value.errors.bounceFailed;
-      })
-      .finally(() => {
-        isBouncing.value = false;
-      });
-  }
-
-  function downloadMix() {
-    if (!outputUrl.value) return;
-    triggerDownload(outputUrl.value, 'libsonare-mix.wav');
-  }
-
-  function exportScene() {
-    if (sceneUrl) URL.revokeObjectURL(sceneUrl);
-    const scene = {
-      version: 1,
-      masterFaderDb: masterFaderDb.value,
-      reverb: { ...reverb.value },
-      vcaGains: { ...vcaGains.value },
-      tracks: tracks.value.map(toSceneTrack),
-    };
-    // The URL is kept so a repeated export can revoke the previous one.
-    sceneUrl = URL.createObjectURL(jsonBlob(scene));
-    triggerDownload(sceneUrl, 'libsonare-mix-project.json');
-  }
-
-  function chooseScene() {
-    sceneInput.value?.click();
-  }
-
-  async function importScene(event: Event) {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = '';
-    if (!file) return;
-
-    try {
-      const scene = parseMixingProjectSettings(JSON.parse(await file.text()));
-      if (!scene) throw new Error('Invalid mixing project settings');
-      localError.value = null;
-
-      if (scene.masterFaderDb !== undefined) {
-        masterFaderDb.value = clamp(scene.masterFaderDb, -24, 12);
-      }
-      if (scene.reverb) {
-        reverb.value = {
-          enabled: Boolean(scene.reverb.enabled),
-          decaySec: clamp(scene.reverb.decaySec ?? 2.2, 0.2, 8),
-          preDelayMs: clamp(scene.reverb.preDelayMs ?? 20, 0, 120),
-        };
-      }
-      if (scene.vcaGains) {
-        for (const id of VCA_GROUP_IDS) {
-          const gain = scene.vcaGains[id];
-          if (typeof gain === 'number' && Number.isFinite(gain))
-            vcaGains.value[id] = clamp(gain, -24, 12);
-        }
-      }
-      // A scene exported from a different session references tracks by id/name; when
-      // none match the loaded tracks the per-track settings are silently dropped, so
-      // count matches and surface it when nothing applied.
-      const sceneTracks = scene.tracks || [];
-      let applied = 0;
-      for (const setting of sceneTracks) {
-        const track = tracks.value.find(
-          (candidate) => candidate.id === setting.id || candidate.name === setting.name,
-        );
-        if (!track) continue;
-        applySceneTrack(track, setting);
-        applied++;
-      }
-      if (sceneTracks.length > 0 && applied === 0) {
-        console.warn(
-          `[mixing] project settings import matched no tracks (${sceneTracks.length} skipped)`,
-        );
-        localError.value = copy.value.errors.projectSettingsNoMatch;
-      }
-    } catch (error) {
-      console.error(error);
-      localError.value = copy.value.errors.projectSettingsFailed;
-    }
-  }
-
-  const automationRange = computed(() => AUTOMATION_RANGES[automationParam.value]);
-
-  const selectedAutomation = computed(() => {
-    if (!selectedTrack.value) return [] as AutomationNode[];
-    return selectedTrack.value.automation
-      .filter((point) => point.param === automationParam.value)
-      .sort((a, b) => a.timeSec - b.timeSec);
-  });
-
-  const automationPath = computed(() => {
-    const points = selectedAutomation.value;
-    if (!points.length) return '';
-    return points
-      .map(
-        (point) =>
-          `${timeToPercent(point.timeSec).toFixed(2)},${automationValueToY(point.value).toFixed(2)}`,
-      )
-      .join(' ');
-  });
-
-  function automationValueToY(value: number): number {
-    const { min, max } = automationRange.value;
-    return invertedRangeToPercent(value, min, max);
-  }
-
-  function automationLaneMetrics(event: MouseEvent) {
-    const host = autoLaneRef.value;
-    if (!host) return null;
-    const rect = host.getBoundingClientRect();
-    const ratioX = clamp((event.clientX - rect.left) / Math.max(1, rect.width), 0, 1);
-    const ratioY = clamp((event.clientY - rect.top) / Math.max(1, rect.height), 0, 1);
-    const { min, max } = automationRange.value;
-    return {
-      timeSec: ratioX * timelineDuration.value,
-      value: clamp(min + (1 - ratioY) * (max - min), min, max),
-    };
-  }
-
-  function addAutomationPoint(event: MouseEvent) {
-    if (!selectedTrack.value) return;
-    const metrics = automationLaneMetrics(event);
-    if (!metrics) return;
-    selectedTrack.value.automation.push({
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      param: automationParam.value,
-      timeSec: metrics.timeSec,
-      value: metrics.value,
-      curve: automationCurve.value,
-    });
-    bounceResult.value = null;
-    revokeOutputUrl();
-  }
-
-  function startAutomationDrag(event: PointerEvent, point: AutomationNode) {
-    event.stopPropagation();
-    if (!selectedTrack.value) return;
-    automationDrag.value = { trackId: selectedTrack.value.id, pointId: point.id };
-    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
-  }
-
-  function dragAutomationPoint(event: PointerEvent) {
-    if (!automationDrag.value || !selectedTrack.value) return;
-    const point = selectedTrack.value.automation.find(
-      (candidate) => candidate.id === automationDrag.value?.pointId,
-    );
-    if (!point) return;
-    const metrics = automationLaneMetrics(event);
-    if (!metrics) return;
-    point.timeSec = metrics.timeSec;
-    point.value = metrics.value;
-    bounceResult.value = null;
-    revokeOutputUrl();
-  }
-
-  function endAutomationDrag() {
-    automationDrag.value = null;
-  }
-
-  function removeAutomationPoint(event: Event, point: AutomationNode) {
-    event.stopPropagation();
-    if (!selectedTrack.value) return;
-    selectedTrack.value.automation = selectedTrack.value.automation.filter(
-      (candidate) => candidate.id !== point.id,
-    );
-    bounceResult.value = null;
-    revokeOutputUrl();
-  }
-
-  function clearAutomation() {
-    if (!selectedTrack.value) return;
-    selectedTrack.value.automation = selectedTrack.value.automation.filter(
-      (point) => point.param !== automationParam.value,
-    );
-    bounceResult.value = null;
-    revokeOutputUrl();
-  }
-
-  function formatAutomationValue(point: AutomationNode): string {
-    if (point.param === 'fader') return `${point.value.toFixed(1)} dB`;
-    if (point.param === 'pan') return point.value.toFixed(2);
-    return `${Math.round(point.value * 100)}%`;
-  }
-
-  function revokeOutputUrl() {
-    if (outputUrl.value) URL.revokeObjectURL(outputUrl.value);
-    outputUrl.value = null;
-  }
-
-  function getAudioContext(): AudioContext {
-    if (!audioContext) audioContext = new AudioContext();
-    return audioContext;
-  }
-
-  const realtime = useRealtimeMixer(sonareJsUrl, sonareWasmUrl);
-  let realtimeActive = false;
-
-  function currentSceneJson(): string {
-    return buildCurrentSceneJson(tracks.value, reverb.value, vcaGains.value);
-  }
-
-  function currentGateValues(): boolean[] {
-    return currentGates(tracks.value);
-  }
-
-  // Mirror the realtime worklet's reported position onto the timeline playhead.
-  watch(
-    () => realtime.positionSec.value,
-    (sec) => {
-      if (realtimeActive && realtime.playing.value)
-        playheadSeconds.value = clamp(sec, 0, timelineDuration.value);
-    },
-  );
-  watch(
-    () => realtime.playing.value,
-    (value) => {
-      isPlaying.value = value;
-    },
-  );
-
-  // Live updates while playing: rebuild scene / gates / master gain in the worklet.
-  watch(
-    () => (realtimeActive && realtime.playing.value ? currentSceneJson() : null),
-    (json) => {
-      if (json) realtime.updateScene(json);
-    },
-  );
-  watch(
-    () => (realtimeActive && realtime.playing.value ? currentGateValues().join(',') : null),
-    () => {
-      if (realtimeActive && realtime.playing.value) realtime.updateGates(currentGateValues());
-    },
-  );
-  watch(
-    () => masterFaderDb.value,
-    (db) => {
-      if (realtimeActive && realtime.playing.value) realtime.updateMasterGain(dbToLinear(db));
-    },
-  );
-
-  async function togglePreview() {
-    if (isPlaying.value) {
-      stopPreview();
+      next = mutate(state.value, ...args);
+    } catch (cause) {
+      console.warn(`mixing: ${String(name)} rejected`, cause);
       return;
     }
-    await startPreview();
+    if (next !== state.value) history.commit(next);
   }
 
-  async function startRealtime(): Promise<boolean> {
-    if (!tracks.value.length) return false;
-    const sampleRate = tracks.value[0]?.audio.sampleRate || 48000;
-    const totalFrames = Math.round(loadedDuration.value * sampleRate);
-    const startFrame = Math.round(playheadSeconds.value * sampleRate);
-    const strips = tracks.value.map((track) => ({
-      left: track.audio.left,
-      right: track.audio.right,
-      offsetFrames: Math.round(track.offsetSeconds * sampleRate),
-    }));
-    try {
-      realtimeActive = true;
-      await realtime.start(
-        {
-          sceneJson: currentSceneJson(),
-          sampleRate,
-          masterGain: dbToLinear(masterFaderDb.value),
-          startFrame,
-          totalFrames,
-          strips,
-          gates: currentGateValues(),
-        },
-        () => {
-          realtimeActive = false;
-        },
-      );
-      warning.value = null;
-      return true;
-    } catch (error) {
-      console.warn('Realtime mixer unavailable, falling back to node preview:', error);
-      realtimeActive = false;
+  function undo(): void {
+    if (!editLocked.value) history.undo();
+  }
+
+  function redo(): void {
+    if (!editLocked.value) history.redo();
+  }
+
+  // Held channel delays reach the engine once the transport stops.
+  watch(sonare.playing, (playing) => {
+    if (!playing) syncEngine();
+  });
+
+  const pendingDelays = computed(() => pendingDelayIds(view.value, engineApplied.value));
+
+  // -------------------------------------------------------------------------
+  // Worker jobs, one at a time
+
+  let queue: Promise<unknown> = Promise.resolve();
+
+  function runJob<T>(kind: MixingJobKind, start: (progress: MixProgress) => MixJob<T>): Promise<T> {
+    const run = async () => {
+      const handle = start((progress, stage) => {
+        if (job.value) job.value = { ...job.value, progress, stage };
+      });
+      job.value = { kind, progress: 0, stage: 'loading', cancel: handle.cancel };
+      try {
+        return await handle.result;
+      } finally {
+        job.value = null;
+      }
+    };
+    const result = queue.then(run, run);
+    queue = result.catch(() => undefined);
+    return result;
+  }
+
+  function cancelJob(): void {
+    job.value?.cancel();
+  }
+
+  // -------------------------------------------------------------------------
+  // Audio
+
+  const audioIds = shallowRef<ReadonlySet<number>>(new Set());
+  const missingAudio = computed(() =>
+    state.value.tracks.filter((track) => !audioIds.value.has(track.id)),
+  );
+  const hasAudio = computed(() => engineApplied.value !== null && audioIds.value.size > 0);
+
+  function putAudio(trackId: number, decoded: Decoded): void {
+    registry.set(trackId, decoded.audio);
+    audioIds.value = new Set(registry.keys());
+    trackInfo.value = new Map(trackInfo.value).set(trackId, decoded.info);
+  }
+
+  async function ensureEngine(): Promise<boolean> {
+    if (target) return true;
+    if (!(await sonare.start())) {
+      error.value = 'engine';
       return false;
     }
+    const live = sonare.engine.value;
+    if (!live) return false;
+    live.setTempo(MIX_TEMPO_BPM);
+    target = createFacadeTarget(live);
+    wasm.value ??= await import('@/wasm/index.js');
+    return true;
   }
 
-  async function startPreview() {
-    if (!tracks.value.length) return;
-    stopPreview();
-    // Prefer the WASM realtime mixer (reflects EQ/reverb/sends/VCA); fall back to plain nodes.
-    if (await startRealtime()) return;
-    warning.value = copy.value.warnings.fallback;
-    const context = getAudioContext();
-    if (context.state === 'suspended') await context.resume();
-    const soloActive = tracks.value.some((track) => track.soloed);
-    const startAt = context.currentTime + 0.04;
-    previewStartPosition = playheadSeconds.value;
-    previewStartedAt = startAt;
-
-    for (const track of tracks.value) {
-      if (soloActive ? !(track.soloed || track.soloSafe) : track.muted) continue;
-      const clipStart = track.offsetSeconds;
-      const clipEnd = track.offsetSeconds + track.audio.duration;
-      if (clipEnd <= previewStartPosition) continue;
-
-      const buffer = context.createBuffer(2, track.audio.left.length, track.audio.sampleRate);
-      buffer.copyToChannel(track.audio.left, 0);
-      buffer.copyToChannel(track.audio.right, 1);
-      const source = context.createBufferSource();
-      const gain = context.createGain();
-      const pan = context.createStereoPanner();
-      const master = context.createGain();
-      source.buffer = buffer;
-      gain.gain.value = dbToLinear(track.inputTrimDb + track.faderDb);
-      pan.pan.value = track.pan;
-      master.gain.value = dbToLinear(masterFaderDb.value);
-      source.connect(gain).connect(pan).connect(master).connect(context.destination);
-
-      const sourceOffset = Math.max(0, previewStartPosition - clipStart);
-      const when = startAt + Math.max(0, clipStart - previewStartPosition);
-      source.start(when, sourceOffset);
-      source.onended = () => {
-        previewSources = previewSources.filter((candidate) => candidate !== source);
-        if (isPlaying.value && previewSources.length === 0) stopPreview();
-      };
-      previewSources.push(source);
-    }
-
-    isPlaying.value = previewSources.length > 0;
-    if (isPlaying.value) tickPlayhead();
+  function notify(key: MixingNoticeKey, values: Record<string, string | number> = {}): void {
+    notices.value = [...notices.value, { key, values }];
   }
 
-  function stopPreview(resetSources = true) {
-    if (realtimeActive) {
-      realtime.stop();
-      realtimeActive = false;
-    }
-    for (const source of previewSources) {
-      try {
-        if (resetSources) source.stop();
-      } catch {
-        // Source may already have ended.
+  function dismissNotices(): void {
+    notices.value = [];
+  }
+
+  function budgetNotice(verdict: Extract<AudioBudgetVerdict, { ok: false }>, file: string): void {
+    notify(verdict.reason, {
+      file,
+      min: (verdict.remainingSec / 60).toFixed(1),
+      max: MAX_DURATION_SECONDS / 60,
+    });
+  }
+
+  async function decode(file: File): Promise<Decoded | null> {
+    const context = sonare.context.value;
+    if (!context) return null;
+    try {
+      const buffer = await decodeAudioBuffer(file, context, {
+        maxDurationSeconds: MAX_DURATION_SECONDS,
+      });
+      const left = buffer.getChannelData(0).slice();
+      const right = buffer.numberOfChannels > 1 ? buffer.getChannelData(1).slice() : left.slice();
+      return decodedFrom(left, right, {
+        fileName: file.name,
+        sampleRate: buffer.sampleRate,
+        channels: buffer.numberOfChannels,
+        durationSec: buffer.duration,
+      });
+    } catch (cause) {
+      if (cause instanceof AudioInputBudgetError && cause.code === 'duration') {
+        notify('trackTooLong', { file: file.name, max: MAX_DURATION_SECONDS / 60 });
+      } else {
+        console.warn('mixing: decode failed', cause);
+        notify('decodeFailed', { file: file.name });
       }
+      return null;
     }
-    previewSources = [];
-    isPlaying.value = false;
-    if (playheadRaf) cancelAnimationFrame(playheadRaf);
-    playheadRaf = 0;
   }
 
-  function tickPlayhead() {
-    if (!isPlaying.value || !audioContext) return;
-    playheadSeconds.value = clamp(
-      previewStartPosition + audioContext.currentTime - previewStartedAt,
-      0,
-      timelineDuration.value,
+  /** Adds a decoded source as a new track; false when the budget refuses it. */
+  function addDecoded(name: string, decoded: Decoded): boolean {
+    const verdict = checkAudioBudget(
+      state.value.tracks.map((track) => track.sourceDurationSec),
+      decoded.info.durationSec,
     );
-    if (playheadSeconds.value >= loadedDuration.value) {
-      stopPreview();
+    if (!verdict.ok) {
+      budgetNotice(verdict, decoded.info.fileName);
+      return false;
+    }
+    const next = addTrack(state.value, name, decoded.info.durationSec);
+    const id = next.tracks[next.tracks.length - 1].id;
+    putAudio(id, decoded);
+    // Not a user edit: written while the load holds the edit lock.
+    history.commit(next);
+    selectedId.value ??= id;
+    return true;
+  }
+
+  /** A restored track without audio that `fileName` should fill: same name first, else the next in order. */
+  function missingFor(fileName: string): number | null {
+    const missing = missingAudio.value;
+    const byName = missing.find((track) => track.name === fileBase(fileName));
+    return (byName ?? missing[0])?.id ?? null;
+  }
+
+  async function withLoad(task: () => Promise<boolean>): Promise<void> {
+    if (loading.value || job.value) return;
+    error.value = null;
+    loading.value = true;
+    try {
+      if (!(await ensureEngine())) return;
+      const attached = await task();
+      // A restored project reaches the engine once audio arrives; attaching rebuilds it.
+      if (!engineState || attached) rebuildEngine();
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function addFiles(files: readonly File[]): Promise<void> {
+    if (files.length === 0 || ab.value === 'b') return;
+    await withLoad(async () => {
+      let attached = false;
+      for (const file of files) {
+        const decoded = await decode(file);
+        if (!decoded) continue;
+        const restoredId = missingFor(file.name);
+        if (restoredId !== null) {
+          putAudio(restoredId, decoded);
+          attached = true;
+        } else {
+          addDecoded(fileBase(file.name), decoded);
+        }
+      }
+      return attached;
+    });
+  }
+
+  async function loadDemo(): Promise<void> {
+    if (ab.value === 'b') return;
+    await withLoad(async () => {
+      let file: File;
+      try {
+        const response = await fetch('/demo.mp3');
+        const blob = await response.blob();
+        file = new File([blob], 'demo.mp3', { type: blob.type || 'audio/mpeg' });
+      } catch {
+        error.value = 'loadFailed';
+        return false;
+      }
+      const decoded = await decode(file);
+      if (!decoded) return false;
+      const [left, right] = decoded.audio.channels;
+      const { sampleRate } = decoded.audio;
+      const l = splitBands(left, sampleRate, DEMO_CROSSOVER_HZ);
+      const r = splitBands(right, sampleRate, DEMO_CROSSOVER_HZ);
+      const names = [options.copy.value.import.demoLow, options.copy.value.import.demoHigh];
+      const bands = [
+        decodedFrom(l.low, r.low, { ...decoded.info, fileName: names[0] }),
+        decodedFrom(l.high, r.high, { ...decoded.info, fileName: names[1] }),
+      ];
+      const missing = missingAudio.value.slice(0, bands.length);
+      if (missing.length > 0) {
+        missing.forEach((track, i) => {
+          putAudio(track.id, bands[i]);
+        });
+        return true;
+      }
+      if (state.value.tracks.length > 0) return false;
+      bands.forEach((band, i) => {
+        addDecoded(names[i], band);
+      });
+      return false;
+    });
+  }
+
+  function removeTrack(trackId: number): void {
+    // The audio stays in the registry so an undo brings the track back with it.
+    edit('removeTrack', trackId);
+  }
+
+  // -------------------------------------------------------------------------
+  // Transport
+
+  const duration = computed(() => arrangementEndSec(view.value));
+
+  function play(): void {
+    if (!hasAudio.value) return;
+    // Integrated loudness and the true-peak maximum cover this pass only.
+    sonare.engine.value?.resetMasterLoudnessMeter();
+    metering.reset();
+    sonare.play();
+  }
+
+  function stop(): void {
+    sonare.stop();
+    // Held channel delays go out now; the watcher below covers any other stop.
+    syncEngine();
+  }
+
+  function togglePlay(): void {
+    if (sonare.playing.value) stop();
+    else play();
+  }
+
+  function seek(seconds: number): void {
+    sonare.seek(Math.max(0, Math.min(Math.max(duration.value, state.value.loop.endSec), seconds)));
+  }
+
+  function setLoop(loop: Partial<LoopState>): void {
+    edit('setLoop', loop);
+  }
+
+  function toggleLoop(): void {
+    if (!hasAudio.value) return;
+    const { loop } = state.value;
+    const valid = loop.endSec > loop.startSec;
+    setLoop({
+      enabled: !loop.enabled,
+      startSec: valid ? loop.startSec : 0,
+      endSec: valid ? loop.endSec : duration.value,
+    });
+  }
+
+  watch(sonare.position, (seconds) => {
+    if (
+      sonare.playing.value &&
+      !view.value.loop.enabled &&
+      duration.value > 0 &&
+      seconds >= duration.value
+    ) {
+      stop();
+      seek(0);
+    }
+  });
+
+  function toggleSelected(field: 'muted' | 'soloed'): void {
+    const track = selectedTrack.value;
+    if (!track) return;
+    if (field === 'muted') edit('setMute', track.id, !track.muted);
+    else edit('setSolo', track.id, !track.soloed);
+  }
+
+  // -------------------------------------------------------------------------
+  // Export and project files
+
+  function sampleRate(): number {
+    return sonare.context.value?.sampleRate ?? 48000;
+  }
+
+  async function exportMix(format: WavFormat, dither: WavDither): Promise<void> {
+    if (!hasAudio.value || editLocked.value) return;
+    error.value = null;
+    const snapshot = state.value;
+    let result: MixBounceResult;
+    try {
+      result = await runJob('export', (progress) =>
+        worker.bounce(snapshot, registry, sampleRate(), wavBounceOptions(format, dither), progress),
+      );
+    } catch (cause) {
+      if (!(cause instanceof MixJobCancelled)) {
+        console.warn('mixing: export failed', cause);
+        error.value = 'exportFailed';
+      }
       return;
     }
-    playheadRaf = requestAnimationFrame(tickPlayhead);
+    if (lastRender.value) URL.revokeObjectURL(lastRender.value.url);
+    const url = URL.createObjectURL(
+      wavBlob([result.left, result.right], result.sampleRate, format),
+    );
+    const fileName = 'libsonare-mix.wav';
+    lastRender.value = { result, format, dither, url, fileName, at: Date.now() };
+    triggerDownload(url, fileName);
   }
 
-  function seekTimeline(event: MouseEvent) {
-    if (!timelineRef.value) return;
-    const rect = timelineRef.value.getBoundingClientRect();
-    const timelineLeft = rect.left + 140;
-    const timelineWidth = Math.max(1, rect.width - 140);
-    const position = clamp((event.clientX - timelineLeft) / timelineWidth, 0, 1);
-    playheadSeconds.value = position * timelineDuration.value;
-    if (realtimeActive && realtime.playing.value) {
-      realtime.seek(
-        Math.round(playheadSeconds.value * (tracks.value[0]?.audio.sampleRate || 48000)),
+  function downloadRender(): void {
+    const render = lastRender.value;
+    if (render) triggerDownload(render.url, render.fileName);
+  }
+
+  function exportProject(): void {
+    downloadBlob(jsonBlob(state.value), MIX_PROJECT_FILE);
+  }
+
+  async function importProject(file: File): Promise<void> {
+    if (editLocked.value) return;
+    error.value = null;
+    const loaded = parseMixingProject(await file.text(), state.value);
+    if (!loaded) {
+      error.value = 'projectInvalid';
+      return;
+    }
+    if (loaded.fromVersion === 1) notify('projectV1');
+    if (loaded.unmatched.length > 0)
+      notify('projectUnmatched', { names: loaded.unmatched.join(', ') });
+    history.commit(loaded.state);
+    selectedId.value = loaded.state.tracks[0]?.id ?? null;
+  }
+
+  // -------------------------------------------------------------------------
+  // Mix assistant
+
+  async function suggest(): Promise<void> {
+    if (!hasAudio.value || editLocked.value) return;
+    error.value = null;
+    const snapshot = state.value;
+    try {
+      const result = await runJob('suggest', (progress) =>
+        worker.suggest(snapshot, registry, sampleRate(), progress),
       );
-    } else if (isPlaying.value) {
-      void startPreview();
+      suggestion.value = result;
+      suggestionFor = trackIdsKey(snapshot);
+      ab.value = 'a';
+    } catch (cause) {
+      if (!(cause instanceof MixJobCancelled)) {
+        console.warn('mixing: suggestion failed', cause);
+        error.value = 'suggestFailed';
+      }
+      return;
+    }
+    await measureMatch();
+  }
+
+  /** Measures A against B over the analysed window and stores the level-matching gains. */
+  async function measureMatch(): Promise<void> {
+    const current = suggestion.value;
+    if (!current) return;
+    const measuredA = state.value;
+    const measuredB = applyMixPatch(measuredA, current.suggestion.patch);
+    match.value = null;
+    try {
+      const { aLufs, bLufs } = await runJob('match', (progress) =>
+        worker.measureAB(
+          measuredA,
+          measuredB,
+          registry,
+          sampleRate(),
+          current.analyzedSec,
+          progress,
+        ),
+      );
+      if (suggestion.value === current) {
+        match.value = { ...abMatchGains(aLufs, bLufs), measuredA };
+      }
+    } catch (cause) {
+      // Without a measurement the sides simply play unmatched.
+      if (!(cause instanceof MixJobCancelled)) console.warn('mixing: A/B match failed', cause);
     }
   }
 
-  function startClipDrag(event: PointerEvent, track: MixTrack) {
-    if (!timelineRef.value) return;
-    selectedTrackId.value = track.id;
-    activeDrag = { trackId: track.id, startX: event.clientX, startOffset: track.offsetSeconds };
-    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  /** The monitor gain of the audible side; 0 dB without a suggestion or a measurement. */
+  const monitorGainDb = computed(() => {
+    if (!suggestion.value || !match.value) return 0;
+    return ab.value === 'b' ? match.value.bDb : match.value.aDb;
+  });
+  watch(monitorGainDb, (db) => sonare.setMonitorGainDb(db), { immediate: true });
+  watch(suggestion, (value) => {
+    if (!value) match.value = null;
+  });
+
+  function setAb(side: AbSide): void {
+    if (side === ab.value || job.value || (side === 'b' && !suggestion.value)) return;
+    history.end();
+    ab.value = side;
+    syncEngine();
+    if (side === 'b' && match.value?.measuredA !== state.value) void measureMatch();
   }
 
-  function dragClip(event: PointerEvent) {
-    if (!activeDrag || !timelineRef.value) return;
-    const track = tracks.value.find((candidate) => candidate.id === activeDrag?.trackId);
-    if (!track) return;
-    const rect = timelineRef.value.getBoundingClientRect();
-    const deltaSeconds =
-      ((event.clientX - activeDrag.startX) / Math.max(1, rect.width - 140)) *
-      timelineDuration.value;
-    track.offsetSeconds = clamp(
-      roundToGrid(activeDrag.startOffset + deltaSeconds),
-      0,
-      Math.max(0, MAX_DURATION_SECONDS - track.audio.duration),
-    );
-    bounceResult.value = null;
-    revokeOutputUrl();
+  /** Takes the whole suggestion as one history entry. */
+  function adoptSuggestion(): void {
+    const current = suggestion.value;
+    if (!current || job.value || loading.value) return;
+    const next = applyMixPatch(state.value, current.suggestion.patch);
+    suggestion.value = null;
+    ab.value = 'a';
+    history.commit(next);
   }
 
-  function endClipDrag() {
-    activeDrag = null;
+  function discardSuggestion(): void {
+    suggestion.value = null;
+    ab.value = 'a';
+    syncEngine();
   }
 
-  function clipStyle(track: MixTrack) {
-    return {
-      left: `${timeToPercent(track.offsetSeconds)}%`,
-      width: `${Math.max(0.8, (track.audio.duration / timelineDuration.value) * 100)}%`,
-    };
+  // -------------------------------------------------------------------------
+  // EQ curves
+
+  const eqResponder = shallowRef<EqResponder | null>(null);
+  watch(
+    [wasm, () => sonare.context.value?.sampleRate],
+    ([module, rate]) => {
+      eqResponder.value?.dispose();
+      eqResponder.value =
+        module && typeof module.StreamingEqualizer === 'function'
+          ? createEqResponder(module, rate ?? 48000)
+          : null;
+    },
+    { immediate: true },
+  );
+
+  function eqCurve(bands: readonly StripEqBand[]): EqCurvePoint[] | null {
+    return eqResponder.value?.curve(bands) ?? null;
   }
 
-  function playheadStyle() {
-    return {
-      '--playhead-position': `${timeToPercent(playheadSeconds.value)}%`,
-    };
+  // -------------------------------------------------------------------------
+  // Lifecycle
+
+  function restore(): void {
+    const saved = session.restore();
+    if (!saved) return;
+    history.reset(saved);
+    selectedId.value = saved.tracks[0]?.id ?? null;
+    restored.value = saved.tracks.length > 0;
   }
 
-  function timeToPercent(time: number): number {
-    return clamp((time / timelineDuration.value) * 100, 0, 100);
-  }
-
-  function roundToGrid(value: number): number {
-    const grid = timelineDuration.value <= 60 ? 0.1 : 0.25;
-    return Math.round(value / grid) * grid;
-  }
-
-  function formatStage(stage: string): string {
-    return copy.value.stages[stage] || stage;
-  }
-
-  function trackLevels(track: MixTrack) {
-    const levels = calculatePeakRms(track.audio.left, track.audio.right);
-    return {
-      peak: formatDb(levels.peakDb),
-      rms: formatDb(levels.rmsDb),
-    };
+  function dispose(): void {
+    if (flashTimer) clearTimeout(flashTimer);
+    session.flush();
+    session.dispose();
+    metering.dispose();
+    worker.dispose();
+    eqResponder.value?.dispose();
+    eqResponder.value = null;
+    if (lastRender.value) URL.revokeObjectURL(lastRender.value.url);
+    void sonare.dispose();
   }
 
   return {
-    MAX_TRACKS,
-    MAX_DURATION_SECONDS,
-    REVERB_SEND_FLOOR,
-    VCA_GROUP_IDS,
-    AUTOMATION_CURVES,
-    AUTOMATION_PARAM_IDS,
-    copy,
-    libVersion,
-    tracks,
-    selectedTrackId,
-    masterFaderDb,
-    reverb,
-    vcaGains,
-    automationParam,
-    automationCurve,
-    isLoading,
-    isBouncing,
-    progress,
-    progressStage,
-    localError,
-    warning,
-    bounceResult,
-    outputUrl,
-    fileInput,
-    sceneInput,
-    timelineRef,
-    autoLaneRef,
-    zoomSeconds,
-    playheadSeconds,
-    isPlaying,
-    docsPath,
-    oppositeLocalePath,
-    statusKind,
-    statusLabel,
+    sonare,
+    state,
+    view,
+    canUndo: history.canUndo,
+    canRedo: history.canRedo,
+    undo,
+    redo,
+    edit,
+    begin: history.begin,
+    end: history.end,
+    editLocked,
+    loading,
+    error,
+    notices,
+    dismissNotices,
+    job,
+    cancelJob,
+    trackInfo,
+    missingAudio,
+    hasAudio,
+    restored,
+    selectedId,
     selectedTrack,
-    slots,
-    loadedDuration,
-    timelineDuration,
-    timelineTicks,
-    statusFields,
-    selectedMeter,
-    masterMonoCompatible,
-    selectedAutomation,
-    automationPath,
-    term,
-    stripMeterFor,
-    meterHeight,
-    goniometerPoints,
-    chooseFiles,
-    handleFileInput,
-    handleDrop,
+    rebuilt,
+    pendingDelays,
+    metering,
+    duration,
+    lastRender,
+    suggestion,
+    match,
+    ab,
+    addFiles,
     loadDemo,
     removeTrack,
-    resetTrack,
-    bounceMix,
-    downloadMix,
-    exportScene,
-    chooseScene,
-    importScene,
-    automationValueToY,
-    addAutomationPoint,
-    startAutomationDrag,
-    dragAutomationPoint,
-    endAutomationDrag,
-    removeAutomationPoint,
-    clearAutomation,
-    formatAutomationValue,
-    togglePreview,
-    stopPreview,
-    seekTimeline,
-    startClipDrag,
-    dragClip,
-    endClipDrag,
-    clipStyle,
-    playheadStyle,
-    timeToPercent,
-    trackLevels,
-    waveformPath,
-    formatDb,
-    formatDuration,
-    formatSampleRate,
+    play,
+    stop,
+    togglePlay,
+    seek,
+    setLoop,
+    toggleLoop,
+    toggleSelected,
+    exportMix,
+    downloadRender,
+    exportProject,
+    importProject,
+    suggest,
+    setAb,
+    adoptSuggestion,
+    discardSuggestion,
+    eqCurve,
+    restore,
+    dispose,
   };
 }
+
+export type MixingController = ReturnType<typeof useMixingStudio>;

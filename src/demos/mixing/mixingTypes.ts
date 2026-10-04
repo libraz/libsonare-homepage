@@ -1,42 +1,16 @@
-import type { AutomationPoint, MixingBounceResult } from '@/demos/mixing/mixing.worker';
+/**
+ * The v1 project-settings file (the page's earlier JSON format), validated
+ * before `mixingProjectV1.ts` converts it to the current state.
+ */
 import { AUTOMATION_RANGES } from '@/demos/mixing/mixingConstants';
-import type { DecodedStereoAudio, WaveformPeak } from '@/utils/audio';
 
-export interface AutomationNode extends AutomationPoint {
+/** One v1 automation point; v1 kept every lane in one list keyed by `param`. */
+export interface AutomationNode {
   id: string;
-}
-
-export type MixingWorkerMessage =
-  | { type: 'progress'; id: number; progress: number; stage: string }
-  | { type: 'done'; id: number; result: MixingBounceResult }
-  | { type: 'error'; id: number; error: string; recoverable?: boolean };
-
-export interface MixTrack {
-  id: string;
-  name: string;
-  audio: DecodedStereoAudio;
-  waveform: WaveformPeak[];
-  offsetSeconds: number;
-  inputTrimDb: number;
-  faderDb: number;
-  pan: number;
-  width: number;
-  panLaw: number;
-  panMode: number;
-  dualPanLeft: number;
-  dualPanRight: number;
-  channelDelayMs: number;
-  eqEnabled: boolean;
-  eqTiltDb: number;
-  eqAirDb: number;
-  reverbSendDb: number;
-  vcaGroup: string;
-  automation: AutomationNode[];
-  muted: boolean;
-  soloed: boolean;
-  soloSafe: boolean;
-  polarityLeft: boolean;
-  polarityRight: boolean;
+  param: string;
+  timeSec: number;
+  value: number;
+  curve: string;
 }
 
 export interface SceneTrackSettings {

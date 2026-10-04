@@ -7,6 +7,8 @@ vi.mock('vitepress', () => ({ useData: () => ({ lang }) }));
 vi.mock('@/wasm/index.js', () => ({
   init: vi.fn(async () => undefined),
   version: vi.fn(() => 'test-wasm'),
+  // Read by the mixing console once WASM boots; absent, its EQ curves stay flat.
+  StreamingEqualizer: undefined,
 }));
 
 import MixingStudio from '@/demos/mixing/MixingStudio.vue';

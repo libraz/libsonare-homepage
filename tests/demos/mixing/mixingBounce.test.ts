@@ -1,241 +1,158 @@
-import { describe, expect, it, vi } from 'vitest';
-import { createMixBounceController } from '@/demos/mixing/mixingBounce';
+// @vitest-environment node
+/**
+ * The Worker client wired to the real worker module through an in-process
+ * Worker whose messages are structured-cloned with their transfer lists: the
+ * page's PCM is detached (byteLength 0) while a job runs and is back in the
+ * registry, intact, once the job settles, whichever way it settles.
+ */
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import type { MixWorkerResponse } from '@/demos/mixing/mixing.worker';
+import { createMixWorkerClient, MixJobCancelled } from '@/demos/mixing/mixingBounce';
+import type { MixAudio } from '@/demos/mixing/mixingEngine';
+import { addTrack, createMixingState, type MixingState } from '@/demos/mixing/mixingState';
+import { noise, sine } from '../../wasm/support/engineHarness';
 
-class MockWorker {
-  static instances: MockWorker[] = [];
-  listeners = {
-    message: new Set<(event: MessageEvent) => void>(),
-    error: new Set<(event: ErrorEvent) => void>(),
-  };
-  messages: Array<{ message: unknown; transfer?: Transferable[] }> = [];
+const SR = 48_000;
+
+type Listener = (event: { data: unknown }) => void;
+
+class LoopbackWorker {
+  static current: LoopbackWorker | null = null;
+  readonly listeners = new Set<Listener>();
   terminated = false;
 
-  constructor(
-    public url: URL,
-    public options: WorkerOptions,
-  ) {
-    MockWorker.instances.push(this);
+  constructor() {
+    LoopbackWorker.current = this;
   }
 
-  addEventListener(
-    type: 'message' | 'error',
-    listener: ((event: MessageEvent) => void) | ((event: ErrorEvent) => void),
-  ) {
-    this.listeners[type].add(listener as never);
+  addEventListener(type: string, listener: Listener) {
+    if (type === 'message') this.listeners.add(listener);
   }
 
-  removeEventListener(
-    type: 'message' | 'error',
-    listener: ((event: MessageEvent) => void) | ((event: ErrorEvent) => void),
-  ) {
-    this.listeners[type].delete(listener as never);
+  removeEventListener(type: string, listener: Listener) {
+    if (type === 'message') this.listeners.delete(listener);
   }
 
-  postMessage(message: unknown, transfer?: Transferable[]) {
-    this.messages.push({ message, transfer });
+  postMessage(message: unknown, transfer: Transferable[] = []) {
+    const data = structuredClone(message, { transfer });
+    queueMicrotask(() =>
+      (self as unknown as { onmessage: (event: { data: unknown }) => void }).onmessage({ data }),
+    );
   }
 
   terminate() {
     this.terminated = true;
   }
-
-  emitMessage(data: unknown) {
-    for (const listener of this.listeners.message) listener({ data } as MessageEvent);
-  }
-
-  emitError(message: string, error = new Error(message)) {
-    for (const listener of this.listeners.error) listener({ message, error } as ErrorEvent);
-  }
 }
 
-function makeRequest(overrides = {}) {
-  const left = new Float32Array([0.1, 0.2]);
-  const right = new Float32Array([0.2, 0.1]);
-  return {
-    sampleRate: 48_000,
-    masterFaderDb: -1,
-    tracks: [
-      {
-        id: 'track-1',
-        name: 'Track 1',
-        left,
-        right,
-        offsetSeconds: 0,
-        inputTrimDb: 0,
-        faderDb: 0,
-        pan: 0,
-        width: 1,
-        muted: false,
-        soloed: false,
-        polarityLeft: false,
-        polarityRight: false,
+beforeAll(async () => {
+  Object.defineProperty(globalThis, 'self', {
+    configurable: true,
+    value: {
+      postMessage(message: MixWorkerResponse, options?: { transfer?: Transferable[] }) {
+        const data = structuredClone(message, { transfer: options?.transfer ?? [] });
+        const worker = LoopbackWorker.current;
+        if (worker && !worker.terminated)
+          for (const listener of worker.listeners) listener({ data });
       },
-    ],
-    reverb: { enabled: false, decaySec: 2.2, preDelayMs: 20 },
-    vcaGroups: [{ id: 'A', gainDb: 0 }],
-    onProgress: vi.fn(),
-    ...overrides,
-  };
+    },
+  });
+  vi.stubGlobal('Worker', LoopbackWorker);
+  await import('@/demos/mixing/mixing.worker');
+});
+
+const clients: Array<ReturnType<typeof createMixWorkerClient>> = [];
+afterEach(() => {
+  for (const client of clients.splice(0)) client.dispose();
+});
+
+function client() {
+  const created = createMixWorkerClient();
+  clients.push(created);
+  return created;
 }
 
-describe('createMixBounceController', () => {
-  it('posts mix bounce requests with transfer buffers and resolves done messages', async () => {
-    const originalWorker = globalThis.Worker;
-    // @ts-expect-error focused Worker mock
-    globalThis.Worker = MockWorker;
-    MockWorker.instances = [];
+function project(): {
+  state: MixingState;
+  registry: Map<number, MixAudio>;
+  copies: Float32Array[];
+} {
+  let state = createMixingState();
+  state = addTrack(state, 'tone', 0.5);
+  state = addTrack(state, 'noise', 0.5);
+  const registry = new Map<number, MixAudio>([
+    [1, { channels: [sine(330, 0.5, SR, 0.3), sine(331, 0.5, SR, 0.3)], sampleRate: SR }],
+    [2, { channels: [noise(0.5, 4, SR, 0.2)], sampleRate: SR }],
+    // Audio of a track that is not in the state stays with the page.
+    [9, { channels: [sine(100, 0.1, SR)], sampleRate: SR }],
+  ]);
+  const copies = [...registry.values()].flatMap((entry) => entry.channels.map((c) => c.slice()));
+  return { state, registry, copies };
+}
 
-    try {
-      const controller = createMixBounceController();
-      const request = makeRequest();
-      const promise = controller.bounce(request);
-      const worker = MockWorker.instances[0];
+const channelsOf = (registry: Map<number, MixAudio>) =>
+  [...registry.values()].flatMap((entry) => entry.channels);
 
-      expect(worker.options).toEqual({ type: 'module' });
-      expect(worker.messages).toHaveLength(1);
-      expect(worker.messages[0].message).toMatchObject({
-        type: 'mixBounce',
-        id: 1,
-        sampleRate: 48_000,
-        masterFaderDb: -1,
-        reverb: request.reverb,
-        vcaGroups: request.vcaGroups,
-      });
-      expect(worker.messages[0].transfer).toEqual([
-        request.tracks[0].left.buffer,
-        request.tracks[0].right.buffer,
-      ]);
+describe('mixing worker client', () => {
+  it('detaches the PCM during a bounce and restores it after', async () => {
+    const { state, registry, copies } = project();
+    const onProgress = vi.fn();
+    const job = client().bounce(state, registry, SR, { dither: 0 }, onProgress);
 
-      worker.emitMessage({ type: 'progress', id: 999, progress: 0.1, stage: 'ignored' });
-      expect(request.onProgress).not.toHaveBeenCalled();
+    expect(channelsOf(registry).map((c) => c.byteLength)).toEqual([0, 0, 0, 0.1 * SR * 4]);
 
-      worker.emitMessage({ type: 'progress', id: 1, progress: 0.5, stage: 'Running mixer' });
-      expect(request.onProgress).toHaveBeenCalledWith(0.5, 'Running mixer');
-
-      const result = {
-        left: new Float32Array([0.1]),
-        right: new Float32Array([0.1]),
-        sampleRate: 48_000,
-        duration: 1 / 48_000,
-        meters: [],
-        stripMeters: [],
-        sceneJson: '{}',
-        peakDb: -6,
-        rmsDb: -12,
-        integratedLufs: -14,
-        truePeakDb: -5,
-        correlation: 1,
-      };
-      worker.emitMessage({ type: 'done', id: 1, result });
-      await expect(promise).resolves.toBe(result);
-      expect(worker.listeners.message.size).toBe(0);
-      expect(worker.listeners.error.size).toBe(0);
-
-      controller.dispose();
-      expect(worker.terminated).toBe(true);
-    } finally {
-      globalThis.Worker = originalWorker;
-    }
+    const result = await job.result;
+    expect(result.left.length).toBeGreaterThan(0.5 * SR);
+    expect(Number.isFinite(result.integratedLufs)).toBe(true);
+    expect(onProgress).toHaveBeenCalledWith(expect.any(Number), 'rendering');
+    const restored = channelsOf(registry);
+    expect(restored.map((c) => c.byteLength)).toEqual(copies.map((c) => c.byteLength));
+    restored.forEach((channel, i) => {
+      expect(channel).toEqual(copies[i]);
+    });
   });
 
-  it('rejects worker error messages and reuses the worker for later requests', async () => {
-    const originalWorker = globalThis.Worker;
-    // @ts-expect-error focused Worker mock
-    globalThis.Worker = MockWorker;
-    MockWorker.instances = [];
-
-    try {
-      const controller = createMixBounceController();
-      const first = controller.bounce(makeRequest());
-      const worker = MockWorker.instances[0];
-      worker.emitMessage({ type: 'error', id: 1, error: 'mix failed' });
-      await expect(first).rejects.toThrow('mix failed');
-
-      const second = controller.bounce(makeRequest());
-      expect(MockWorker.instances).toHaveLength(1);
-      expect(worker.messages.at(-1)?.message).toMatchObject({ id: 2 });
-      worker.emitError('worker crashed');
-      await expect(second).rejects.toThrow('worker crashed');
-
-      controller.dispose();
-    } finally {
-      globalThis.Worker = originalWorker;
-    }
+  it('restores the PCM when the job is cancelled', async () => {
+    const { state, registry, copies } = project();
+    const job = client().bounce(state, registry, SR, { dither: 0 });
+    job.cancel();
+    await expect(job.result).rejects.toBeInstanceOf(MixJobCancelled);
+    channelsOf(registry).forEach((channel, i) => {
+      expect(channel).toEqual(copies[i]);
+    });
   });
 
-  it('settles an in-flight bounce when disposed, since the terminated worker never will', async () => {
-    const originalWorker = globalThis.Worker;
-    // @ts-expect-error focused Worker mock
-    globalThis.Worker = MockWorker;
-    MockWorker.instances = [];
-
-    try {
-      const controller = createMixBounceController();
-      const pending = controller.bounce(makeRequest());
-      const worker = MockWorker.instances[0];
-
-      controller.dispose();
-
-      await expect(pending).rejects.toThrow('Mix bounce disposed');
-      expect(worker.terminated).toBe(true);
-
-      // A later request is unaffected by the settled one.
-      const next = controller.bounce(makeRequest());
-      const fresh = MockWorker.instances[1];
-      fresh.emitMessage({ type: 'error', id: 2, error: 'next failed' });
-      await expect(next).rejects.toThrow('next failed');
-      controller.dispose();
-    } finally {
-      globalThis.Worker = originalWorker;
-    }
+  it('restores the PCM when the job fails', async () => {
+    const { state, registry, copies } = project();
+    const broken: MixingState = {
+      ...state,
+      tracks: state.tracks.map((t) => ({ ...t, clip: { ...t.clip, trimStartSec: 9 } })),
+    };
+    await expect(client().bounce(broken, registry, SR, { dither: 0 }).result).rejects.toThrow(
+      /offset/i,
+    );
+    channelsOf(registry).forEach((channel, i) => {
+      expect(channel).toEqual(copies[i]);
+    });
   });
 
-  it('creates a fresh worker after dispose and supports empty transfer lists', async () => {
-    const originalWorker = globalThis.Worker;
-    // @ts-expect-error focused Worker mock
-    globalThis.Worker = MockWorker;
-    MockWorker.instances = [];
+  it('runs the assistant through the same transfer', async () => {
+    const { state, registry, copies } = project();
+    const job = client().suggest(state, registry, SR);
+    expect(channelsOf(registry)[0].byteLength).toBe(0);
+    const result = await job.result;
+    expect(result.analyzedSec).toBe(60);
+    channelsOf(registry).forEach((channel, i) => {
+      expect(channel).toEqual(copies[i]);
+    });
+  });
 
-    try {
-      const controller = createMixBounceController();
-      const first = controller.bounce(makeRequest({ tracks: [] }));
-      const firstWorker = MockWorker.instances[0];
-      expect(firstWorker.messages[0].transfer).toEqual([]);
-      firstWorker.emitMessage({
-        type: 'done',
-        id: 1,
-        result: {
-          left: new Float32Array(),
-          right: new Float32Array(),
-          sampleRate: 48_000,
-          duration: 0,
-          meters: [],
-          stripMeters: [],
-          sceneJson: '{}',
-          peakDb: -120,
-          rmsDb: -120,
-          integratedLufs: -70,
-          truePeakDb: -120,
-          correlation: 0,
-        },
-      });
-      await expect(first).resolves.toMatchObject({ duration: 0 });
-
-      controller.dispose();
-      expect(firstWorker.terminated).toBe(true);
-
-      const second = controller.bounce(makeRequest());
-      expect(MockWorker.instances).toHaveLength(2);
-      expect(MockWorker.instances[1]).not.toBe(firstWorker);
-      MockWorker.instances[1].emitMessage({
-        type: 'error',
-        id: 2,
-        error: 'second failed',
-      });
-      await expect(second).rejects.toThrow('second failed');
-      controller.dispose();
-    } finally {
-      globalThis.Worker = originalWorker;
-    }
+  it('dispose terminates the worker and rejects what is in flight', async () => {
+    const { state, registry } = project();
+    const mixClient = createMixWorkerClient();
+    const job = mixClient.bounce(state, registry, SR, { dither: 0 });
+    mixClient.dispose();
+    await expect(job.result).rejects.toThrow(/disposed/);
+    expect(LoopbackWorker.current?.terminated).toBe(true);
   });
 });
