@@ -403,7 +403,7 @@ function implementationRequiredTerms(locale, defaultLocale) {
     'yarn check:mastering-docs',
   ];
   if (!shouldRequireLocalizedPhrase(locale, defaultLocale)) return shared;
-  return ['Mastering worker', 'libsonare WASM', 'JSON report', ...shared];
+  return ['SonareEngine', 'RealtimeEngine', 'JSON report', ...shared];
 }
 
 function requireFrontmatterTitleMatchesH1(failures, label, content) {

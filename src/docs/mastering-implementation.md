@@ -1,11 +1,11 @@
 ---
 title: Mastering Implementation
-description: How the browser mastering demo maps UI decisions to libsonare WASM processing.
+description: How the browser mastering demo maps UI decisions to libsonare WASM processing — an offline repair step, a fixed insert chain on the realtime engine, and a three-lane A/B.
 ---
 
 # Mastering Implementation
 
-This page explains how the `/mastering` demo turns a small set of user decisions into a deterministic libsonare mastering render. It is not a generated parameter dump. Use it as the implementation map that connects the UI, worker, WASM exports, and the grouped glossary guides.
+This page explains how the `/mastering` demo turns a small set of user decisions into a deterministic libsonare mastering render. It is not a generated parameter dump. Use it as the implementation map that connects the UI, worker, realtime engine, WASM exports, and the grouped glossary guides.
 
 The browser demo keeps long-form explanation in VitePress docs. The application UI only shows short labels and links into these pages.
 
@@ -17,9 +17,10 @@ A **worker** runs JavaScript off the main UI thread. A **transferable buffer** l
 
 By the end of this page you should be able to:
 
-- trace the browser mastering demo from file input through worker rendering, metrics, export, and report generation;
+- trace the browser mastering demo from file input through the repair preprocess, the live insert chain, metering, export, and report generation;
 - understand why explanatory text lives in docs while the app UI stays compact;
-- map UI controls to chain areas and glossary pages;
+- map UI controls to insert slots and glossary pages;
+- know how the After, Before, and Reference lanes make a gapless, loudness-matched A/B/R;
 - know which docs check keeps the mastering API documentation aligned with the WASM declarations.
 
 ## Render Path
@@ -30,46 +31,74 @@ By the end of this page you should be able to:
     { id: 'file', label: 'Audio file', col: 0, row: 0 },
     { id: 'decode', label: 'Web Audio decode', col: 1, row: 0 },
     { id: 'buffers', label: 'Float32 buffers', col: 2, row: 0 },
-    { id: 'worker', label: 'Mastering worker', col: 3, row: 0, variant: 'accent' },
-    { id: 'wasm', label: 'libsonare WASM', col: 4, row: 0, variant: 'accent' },
-    { id: 'srcMetrics', label: 'Source metrics', col: 5, row: 0 },
-    { id: 'render', label: 'Preset / chain render', col: 5, row: 1 },
-    { id: 'outMetrics', label: 'Rendered metrics', col: 6, row: 1 },
-    { id: 'wav', label: 'WAV export', col: 7, row: 0, variant: 'success' },
+    { id: 'worker', label: 'Repair preprocess (worker)', col: 3, row: 0, variant: 'accent' },
+    { id: 'lanes', label: 'Realtime engine: After / Before / Reference lanes', col: 4, row: 0, variant: 'accent' },
+    { id: 'meters', label: 'Live meters and A/B/R', col: 5, row: 0 },
+    { id: 'export', label: 'Export render (worker, same operations)', col: 5, row: 1, variant: 'accent' },
+    { id: 'wav', label: 'WAV with dither', col: 6, row: 1, variant: 'success' },
     { id: 'json', label: 'JSON report', col: 7, row: 1, variant: 'success' }
   ]"
   :edges="[
     { from: 'file', to: 'decode' },
     { from: 'decode', to: 'buffers' },
     { from: 'buffers', to: 'worker' },
-    { from: 'worker', to: 'wasm' },
-    { from: 'wasm', to: 'srcMetrics' },
-    { from: 'wasm', to: 'render' },
-    { from: 'render', to: 'outMetrics' },
-    { from: 'outMetrics', to: 'wav' },
-    { from: 'outMetrics', to: 'json' }
+    { from: 'worker', to: 'lanes' },
+    { from: 'lanes', to: 'meters' },
+    { from: 'worker', to: 'export' },
+    { from: 'export', to: 'wav' },
+    { from: 'export', to: 'json' }
   ]"
-  caption="Source metrics are read once from the decoded buffers; the render path always produces its own rendered metrics."
+  caption="Repair runs once offline. Listening and export use the same engine operations, so the file contains what the lane played."
 />
 
-Decoding uses browser APIs. The mastering work runs in a worker so expensive DSP does not block the VitePress page. The worker passes mono or stereo `Float32Array` buffers into the WASM package, receives rendered samples and metrics, then creates local object URLs for playback, download, and reports.
+Decoding uses browser APIs. The repair stages (declip, declick, decrackle, dehum, denoise, dereverb) are offline-only, so they run first in a worker and produce the program clip the engine plays; they rerun only when a repair setting changes. Everything after that is the realtime engine: the page plays it through the `SonareEngine` AudioWorklet facade in postMessage mode, which keeps the site free of SharedArrayBuffer.
+
+The engine holds three lanes. **After** carries the program through the insert chain and an 8-band strip EQ. **Before** is the same program with no processing, and **Reference** is the optional reference file. The A/B/R switch moves lane faders, so all three lanes keep running and the switch has no gap. Each lane is loudness-matched on the way out: the louder lanes are turned down to the quietest one, and nothing is turned up. Turning matching off leaves every lane at unity.
+
+Export renders lane 1 on a plain `RealtimeEngine` in a worker with the same operations the live engine received. Preview and export render bit-exact from the same state, and the worker hands the PCM back for WAV encoding at 16-bit, 24-bit, or 32-bit float, with optional dither. The 32-bit float format is never dithered.
+
+## The Insert Chain
+
+Lane 1 has a fixed column of 13 insert slots. Turning a module on or off is a bypass, so slot indices and automation ids never move.
+
+| Slot | Processor |
+|------|-----------|
+| Input | `utility.gain` |
+| Tone | `eq.tilt` |
+| De-esser | `dynamics.deesser` |
+| Transient | `dynamics.transientShaper` |
+| Compressor | `dynamics.compressor` |
+| Multiband | `multiband.compressor` |
+| Tape | `saturation.tape` |
+| Exciter | `saturation.exciter` |
+| Air | `spectral.airBand` |
+| Stereo | `stereo.imager` |
+| Mono bass | `stereo.monoMaker` |
+| Drive | `utility.gain`, just before the limiter |
+| Limiter | `maximizer.truePeakLimiter` |
+
+Continuous controls go to the engine as parameter setters, so a knob keeps the processor's state. A few construction-only parameters, such as a multiband knee or the limiter's lookahead, rebuild the strip's inserts; the UI applies those when the control is released.
+
+The loudness fit moves only the Drive gain in front of the limiter, so the level feeding the dynamics stages never changes. It renders at most three times, and it reports a result as limited when the limiter cannot reach the target at the chosen ceiling.
+
+The meter bridge shows peak, true peak (held since playback started), momentary, short-term and integrated loudness, peak-to-loudness ratio, gain reduction for the whole chain, correlation, a goniometer, and a spectrum for the lane being heard, plus the loudness range of the last export render. Every edit is one history entry, so undo and redo reach the engine like any other edit.
 
 ## Data Ownership
 
 Audio stays on the user's device. The source file, optional reference file, rendered WAV, JSON report, and exported settings are represented as local browser objects. They are not uploaded for rendering.
 
-This matters for implementation because the UI cannot depend on server retries, remote queues, or account state. Errors must be recoverable locally: try another browser-supported format, reduce the source length, lower an aggressive setting, or re-render after a worker failure.
+This matters for implementation because the UI cannot depend on server retries, remote queues, or account state. Errors must be recoverable locally: try another browser-supported format, reduce the source length, lower an aggressive setting, or export again after a worker failure.
 
 ## UI To Chain Mapping
 
-Quick Master exposes musical choices. Studio exposes grouped controls. Both routes feed the same underlying chain model.
+Quick Master exposes musical choices. Studio exposes grouped controls. Both routes edit the same project state, which maps onto the insert chain above.
 
 | UI area | Chain area | Main docs |
 |---------|------------|-----------|
-| Input gain, denoise | Repair and input | [Repair and Input Controls](./glossary/mastering/repair.md) |
+| Repair stages, input gain | Offline repair and the Input slot | [Repair and Input Controls](./glossary/mastering/repair.md) |
 | Tone, exciter, air | Tone and air | [Tone and Air Controls](./glossary/mastering/tone-air.md) |
 | Threshold, ratio, attack, release | Dynamics | [Dynamics Controls](./glossary/mastering/dynamics.md) |
-| Width, ceiling, target LUFS | Final stage | [Stereo, Limiter, and Loudness Controls](./glossary/mastering/stereo-limiter-loudness.md) |
+| Width, ceiling, target LUFS | Stereo, Drive, and Limiter slots | [Stereo, Limiter, and Loudness Controls](./glossary/mastering/stereo-limiter-loudness.md) |
 | Source/reference comparison | Pair analysis | [Reference Match](./glossary/mastering/reference-match.md) |
 | LUFS, true peak, crest, correlation | Metering | [Reading Mastering Meters](./glossary/mastering/meter-reading.md) |
 
@@ -88,9 +117,9 @@ The grouped pages are intentionally broad. A compressor page can explain thresho
 The demo does not reimplement the mastering algorithms in Vue. Vue owns interaction, validation, local playback state, and display. libsonare owns DSP.
 
 :::: details Implementation notes
-The worker boundary is the important architectural line. UI state is converted into a serializable chain object, then sent to the worker with transferable channel buffers where possible. The worker initializes the WASM module, calls the selected preset, chain, processor, or analysis API, and posts progress and completion messages back to the UI.
+The state is one plain, serializable object: no audio, only the settings. Each edit is a pure mutator that produces the next state, and the difference between two states becomes the smallest list of engine operations. `src/utils/engineApply.ts` interprets that list for the live facade and for the export worker's raw engine, which is why the two cannot drift apart.
 
-The final result is treated as immutable. A later A/B comparison may apply temporary playback gain for loudness-matched listening, but it does not rewrite the exported WAV. Reports should record rendered metrics, stage names, preset names, target values, and tuning values from the actual render rather than from UI defaults.
+The exported result is treated as immutable. The loudness match only changes monitor lane gains; it never enters the exported WAV. When the loudness fit is out of date, export refits first and writes the fitted drive back to the state, so the file and the preview stay the same. Reports record rendered metrics, preset names, target values, and tuning values from the actual render rather than from UI defaults.
 ::::
 
 ## WASM API Surface
@@ -106,7 +135,7 @@ Use these entry points by intent:
 | Use a preset | `masterAudio()`, `masterAudioStereo()`, `masteringPresetNames()` |
 | Run a full chain | `masteringChain()`, `masteringChainStereo()` |
 | Show progress | `masteringChainWithProgress()`, `masteringChainStereoWithProgress()` |
-| Render block-by-block | `StreamingMasteringChain` (`prepare` / `processMono` / `processStereo` / `flushMono` / `flushStereo` / `reset` / `latencySamples` / `stageNames`) |
+| Render block-by-block | `StreamingMasteringChain` (`prepare` / `processMono` / `processStereo` / `flushMono` / `flushStereo` / `setParameter` / `reset` / `latencySamples` / `stageNames`) |
 | Run one named processor | `masteringProcessorNames()`, `masteringProcess()`, `masteringProcessStereo()` |
 | Compare source and reference | `masteringPairProcessorNames()`, `masteringPairProcess()`, `masteringPairAnalysisNames()`, `masteringPairAnalyze()` |
 | Analyze stereo output | `masteringStereoAnalysisNames()`, `masteringStereoAnalyze()` |

@@ -20,7 +20,7 @@ This page covers the offline mastering entry points of the libsonare JavaScript/
 
 ## Mastering API
 
-The browser package includes the same named mastering processors used by the `/mastering` demo. Decode audio with the Web Audio API, pass `Float32Array` channel buffers to libsonare, then export the returned samples as WAV in your application.
+The browser package includes the same named mastering processors that the `/mastering` demo runs as inserts on the realtime engine. Decode audio with the Web Audio API, pass `Float32Array` channel buffers to libsonare, then export the returned samples as WAV in your application.
 
 This section lists the JS entry points and their result/config types. For what each processor does, the preset list, and the analysis/assistant JSON, see [Mastering Processors](./mastering-processors.md) and [Mastering Assistant](./mastering-assistant.md).
 

@@ -75,7 +75,7 @@ A DAW (Digital Audio Workstation) is software for recording, editing, and produc
 - **Game / interactive media developers** — Analyze music in real time for rhythm games, music visualizers, or adaptive audio systems using the streaming API.
 
 ::: tip Try it in the browser
-Open [Demos](/demos) for the browser-local tools. Use [Music Analysis Studio](/music-analysis) for MIR features, or open the [Mastering Studio](/mastering) to render a local-only WAV master with no upload.
+Open [Demos](/demos) for the browser-local tools. Use [Music Analysis Studio](/music-analysis) for MIR features, or open the [Mastering Studio](/mastering) to master a local file on the realtime engine, with live meters and a loudness-matched before/after/reference switch, and export a WAV with no upload.
 :::
 
 ## How Audio Analysis Works
