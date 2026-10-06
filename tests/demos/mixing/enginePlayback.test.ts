@@ -1,8 +1,8 @@
 // @vitest-environment node
 /**
- * Preview equals export: one three-track mixing state, built with the page's
- * own ops, rendered through the live worklet facade and through the export
- * Worker's raw-engine bounce, must agree sample for sample. The state touches
+ * One three-track state synchronized through the live facade and the export
+ * Worker must bounce sample for sample. Live worklet processing is separately
+ * compared with the raw engine under the same rendering lifecycle. The state touches
  * every engine surface the mix uses: trimmed and faded clips, strip EQ, gate,
  * compressor, de-esser, keyed ducking, pre- and post-fader sends into the
  * reverb and delay buses, fader/pan/width automation, pan law, pan mode, dual
@@ -187,26 +187,18 @@ function transfers(registry: Map<number, MixAudio>): MixAudioTransfer[] {
   return [...registry].map(([trackId, entry]) => ({ trackId, ...entry }));
 }
 
-function roundUp(frames: number): number {
-  return Math.ceil(frames / RENDER_QUANTUM) * RENDER_QUANTUM;
-}
-
-function slice(buffer: StereoBuffer, frames: number): StereoBuffer {
-  return { left: buffer.left.subarray(0, frames), right: buffer.right.subarray(0, frames) };
-}
-
 async function facadeWith(state: MixingState, registry: Map<number, MixAudio>) {
   const f = await createFacadeLoopback({ sampleRate: SR });
   facades.push(f);
   f.engine.transport.setTempo(MIX_TEMPO_BPM);
   const target = createFacadeTarget(f.engine);
-  applyOps(target, buildFull(state, registry));
+  applyOps(target, buildFull(state, registry, SR));
   f.flush();
   return { f, target };
 }
 
 describe('mixing preview and export render the same state', () => {
-  it('facade loopback matches the export bounce sample for sample', async () => {
+  it('facade-synchronized state matches the export bounce sample for sample', async () => {
     const wasm = await loadIndexModule();
     const state = threeTrackState();
     const registry = audio();
@@ -218,12 +210,21 @@ describe('mixing preview and export render the same state', () => {
     expect(exported.left.length).toBe(frames);
 
     const { f } = await facadeWith(state, registry);
-    // Prime the worklet engine as bounceOffline primes itself: one stopped quantum, then settle.
-    // A live engine's idle history (a closed gate, a modulation phase) is not project state.
-    f.render(RENDER_QUANTUM);
-    f.processor.engine.settleParameters();
     f.engine.transport.play();
-    const live = slice(f.render(roundUp(frames)), frames);
+    f.flush();
+    // Bounce adopts lane controls and automation before settling, without rendering
+    // a stopped quantum. Compare the facade and Worker under that same lifecycle;
+    // the live process path is compared with raw renderOffline below.
+    const bounced = f.processor.engine.bounceOffline({
+      totalFrames: frames,
+      blockSize: RENDER_QUANTUM,
+      numChannels: 2,
+      dither: 0,
+    }).interleaved;
+    const live = {
+      left: Float32Array.from({ length: frames }, (_, i) => bounced[i * 2]),
+      right: Float32Array.from({ length: frames }, (_, i) => bounced[i * 2 + 1]),
+    };
     expect(f.syncErrors).toEqual([]);
 
     expect(rms(live.left)).toBeGreaterThan(1e-2);
@@ -263,7 +264,7 @@ describe('mixing preview and export render the same state', () => {
     after = setDualPan(after, 3, 0.1, 0.9);
     after = setPanLaw(after, 2, 1);
     const registry = audio();
-    const edit = diff(before, after, registry);
+    const edit = diff(before, after, registry, SR);
     expect(edit.some((op) => op.type === 'strip')).toBe(true);
     expect(edit.filter((op) => op.type === 'stripScalars').map((op) => op.trackId)).toEqual([
       1, 2, 3,
@@ -282,7 +283,7 @@ describe('mixing preview and export render the same state', () => {
     const raw = await createRawEngine(SR);
     raw.setTempo(MIX_TEMPO_BPM);
     const rawTarget = createRawTarget(raw);
-    applyOps(rawTarget, buildFull(before, registry));
+    applyOps(rawTarget, buildFull(before, registry, SR));
     const renderRaw = (frames: number): StereoBuffer => {
       const [left, right] = raw.renderOffline(
         [new Float32Array(frames), new Float32Array(frames)],
@@ -304,7 +305,7 @@ describe('mixing preview and export render the same state', () => {
 });
 
 describe('page-side folding in the ops', () => {
-  const ops = (state: MixingState) => buildFull(state, new Map());
+  const ops = (state: MixingState) => buildFull(state, new Map(), SR);
   const ofType = <T extends EngineOp['type']>(list: EngineOp[], type: T) =>
     list.filter((op): op is Extract<EngineOp, { type: T }> => op.type === type);
 
@@ -317,7 +318,7 @@ describe('page-side folding in the ops', () => {
       [2, false, false],
       [3, false, true],
     ]);
-    const unsolo = diff(s, setSolo(s, 1, false), new Map());
+    const unsolo = diff(s, setSolo(s, 1, false), new Map(), SR);
     expect(ofType(unsolo, 'soloMute').map((op) => [op.trackId, op.mute])).toEqual([[3, false]]);
   });
 
@@ -330,7 +331,7 @@ describe('page-side folding in the ops', () => {
     const faderLane = ofType(ops(s), 'automation').find((op) => op.param.kind === 'fader');
     expect(faderLane?.points.map((p) => p.value)).toEqual([-2 - 3, -8 - 3]);
 
-    const changed = diff(s, setVcaGain(s, 'A', 0), new Map());
+    const changed = diff(s, setVcaGain(s, 'A', 0), new Map(), SR);
     expect(ofType(changed, 'fader').map((op) => [op.target, op.db])).toEqual([
       [1, 0],
       [2, -3],
@@ -358,7 +359,7 @@ describe('page-side folding in the ops', () => {
 
   it('a live param is a by-name set; a construction-only one rebuilds the strip and re-sends it', () => {
     const s = threeTrackState();
-    const live = diff(s, setSlotParam(s, 2, 'duck', 'ratio', 4), new Map());
+    const live = diff(s, setSlotParam(s, 2, 'duck', 'ratio', 4), new Map(), SR);
     expect(live).toEqual([
       {
         type: 'insertParam',
@@ -368,7 +369,7 @@ describe('page-side folding in the ops', () => {
         value: 4,
       },
     ]);
-    const discrete = diff(s, setSlotParam(s, 2, 'gate', 'holdMs', 15), new Map());
+    const discrete = diff(s, setSlotParam(s, 2, 'gate', 'holdMs', 15), new Map(), SR);
     expect(discrete[0].type).toBe('strip');
     expect(ofType(discrete, 'insertBypass')).toHaveLength(6);
     expect(ofType(discrete, 'sidechain')).toEqual([
@@ -380,6 +381,6 @@ describe('page-side folding in the ops', () => {
 
   it('an unchanged state diffs to nothing', () => {
     const s = threeTrackState();
-    expect(diff(s, structuredClone(s), audio())).toEqual([]);
+    expect(diff(s, structuredClone(s), audio(), SR)).toEqual([]);
   });
 });

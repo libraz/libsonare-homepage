@@ -5,10 +5,16 @@
  * the strip, so it is held while dragging and applied once on release.
  */
 import { computed, reactive, ref } from 'vue';
+import GainReductionMeter from '@/components/meters/GainReductionMeter.vue';
 import { TermLabel } from '@/components/ui';
 import MixParam from '@/demos/mixing/MixParam.vue';
 import { useMixingCopy } from '@/demos/mixing/mixingCopy';
-import { defaultTrackSlots, type MixTrackState } from '@/demos/mixing/mixingState';
+import { TRACK_SLOT_INDEX } from '@/demos/mixing/mixingEngine';
+import {
+  defaultTrackSlots,
+  duckKeyClosesCycle,
+  type MixTrackState,
+} from '@/demos/mixing/mixingState';
 import { type MixingTermKey, useMixingTerm } from '@/demos/mixing/mixingTerms';
 import {
   DYNAMICS_SLOTS,
@@ -24,7 +30,7 @@ const props = defineProps<{ m: MixingController; track: MixTrackState }>();
 const copy = useMixingCopy();
 const term = useMixingTerm();
 const { m } = props;
-const { view, editLocked } = m;
+const { view, editLocked, metering } = m;
 const defaults = defaultTrackSlots();
 
 const SLOT_TERMS: Record<DynamicsSlot, MixingTermKey> = {
@@ -37,7 +43,17 @@ const SLOT_TERMS: Record<DynamicsSlot, MixingTermKey> = {
 const slot = ref<DynamicsSlot>('comp');
 const state = computed(() => props.track.slots[slot.value]);
 const controls = computed(() => TRACK_SLOT_CONTROLS[slot.value]);
-const keyOptions = computed(() => view.value.tracks.filter((t) => t.id !== props.track.id));
+const grDb = computed(
+  () => metering.frame.value.tracks[props.track.id]?.insertGrDb[TRACK_SLOT_INDEX[slot.value]] ?? 0,
+);
+const grLabels = computed(() => ({
+  name: `${copy.value.slots[slot.value]} ${copy.value.console.gr}`,
+}));
+const keyOptions = computed(() =>
+  view.value.tracks.filter(
+    (t) => t.id !== props.track.id && !duckKeyClosesCycle(view.value.tracks, props.track.id, t.id),
+  ),
+);
 
 /** Values of construction-only parameters while their drag is in progress. */
 const drafts = reactive<Record<string, number>>({});
@@ -90,6 +106,13 @@ function setKey(event: Event): void {
     </div>
     <div class="dyn__head">
       <TermLabel v-bind="term(SLOT_TERMS[slot])">{{ copy.slots[slot] }}</TermLabel>
+      <GainReductionMeter
+        class="dyn__gr"
+        orientation="horizontal"
+        :gr-db="grDb"
+        :range-db="12"
+        :labels="grLabels"
+      />
       <button
         type="button"
         class="dyn__power"
@@ -162,6 +185,10 @@ function setKey(event: Event): void {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.dyn__gr {
+  flex: 1;
 }
 
 .dyn__power {

@@ -15,6 +15,7 @@ import {
   createMixingState,
   type MixingState,
   plateDecayFromSeconds,
+  setDuckKey,
 } from '@/demos/mixing/mixingState';
 import { applyOps, createRawTarget } from '@/utils/engineApply';
 import type { MixAssistantResult, MixSceneStrip } from '@/wasm/index.js';
@@ -194,8 +195,8 @@ describe('mix assistant proposal on a real analysis', () => {
 
   it('switching to the proposal and back is setters only, and audible', async () => {
     const proposal = applyMixPatch(state, suggested.suggestion.patch);
-    const there = diff(state, proposal, new Map());
-    const back = diff(proposal, state, new Map());
+    const there = diff(state, proposal, new Map(), SR);
+    const back = diff(proposal, state, new Map(), SR);
     expect(there.length).toBeGreaterThan(0);
     for (const op of [...there, ...back]) expect(op.type).not.toBe('strip');
 
@@ -203,8 +204,8 @@ describe('mix assistant proposal on a real analysis', () => {
     const render = async (built: MixingState, switchTo?: MixingState) => {
       const engine = await createRawEngine(SR);
       const target = createRawTarget(engine);
-      applyOps(target, buildFull(built, registry));
-      if (switchTo) applyOps(target, diff(built, switchTo, registry));
+      applyOps(target, buildFull(built, registry, SR));
+      if (switchTo) applyOps(target, diff(built, switchTo, registry, SR));
       engine.play();
       const out = engine.bounceOffline({
         totalFrames: RENDER_QUANTUM * 400,
@@ -355,5 +356,26 @@ describe('mix assistant mapping edge cases', () => {
     );
     expect(mapped.patch.tracks[2].duckKeyTrackId).toBe(1);
     expect(applyMixPatch(s, mapped.patch).tracks[1].slots.duck.params.thresholdDb).toBe(-30);
+  });
+
+  it('skips a key that would close a cycle, with the mix or within the proposal', () => {
+    const ducked = (id: string, key: string) =>
+      strip({
+        id,
+        inserts: [
+          { slot: 'pre', processor: 'dynamics.duckingProcessor', params: {}, sidechainKey: key },
+        ],
+      });
+    const two = addTrack(base(), 'two', 10);
+    const label = 'dynamics.duckingProcessor.sidechainKey';
+
+    const withMix = mapMixSuggestion(result([ducked('2', '1')]), setDuckKey(two, 1, 2), info);
+    expect(withMix.patch.tracks[2].duckKeyTrackId).toBeUndefined();
+    expect(withMix.unapplied.some((u) => u.name === label)).toBe(true);
+
+    const within = mapMixSuggestion(result([ducked('1', '2'), ducked('2', '1')]), two, info);
+    expect(within.patch.tracks[1].duckKeyTrackId).toBe(2);
+    expect(within.patch.tracks[2].duckKeyTrackId).toBeUndefined();
+    expect(() => applyMixPatch(two, within.patch)).not.toThrow();
   });
 });

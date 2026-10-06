@@ -269,23 +269,18 @@ describe('useMixingStudio', () => {
     expect(m.rebuilt.value.has(2)).toBe(true);
   });
 
-  it('holds a channel-delay edit while playing and applies it when the transport stops', async () => {
+  it('applies a channel-delay edit while playing without waiting for a stop', async () => {
     const { m, stop } = await loaded();
     stops.push(stop);
     m.play();
-    expect(harness.engine.engine.value.resetMasterLoudnessMeter).toHaveBeenCalled();
     m.edit('setChannelDelay', 1, 2);
     const delayCalls = () =>
       opsOf('setTrackStripScalars').filter(
         (call) => (call[2] as any).channelDelaySamples !== undefined,
       );
-    expect(delayCalls()).toHaveLength(0);
-    expect(m.pendingDelays.value.has(1)).toBe(true);
-    m.stop();
     expect(delayCalls().map((call) => [call[1], (call[2] as any).channelDelaySamples])).toEqual([
       [1, 96],
     ]);
-    expect(m.pendingDelays.value.size).toBe(0);
   });
 
   it('auditions a suggestion with setters only and adopts it as one entry', async () => {

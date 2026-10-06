@@ -125,6 +125,15 @@ describe('mixing state mutators', () => {
     expect(() => MIXING_MUTATORS.setEqBand(s, 1, 6, { gainDb: 1 })).toThrow(RangeError);
   });
 
+  it('refuses a duck key that closes a cycle', () => {
+    let s = addTrack(addTrack(baseState(), 'c', 10), 'd', 10);
+    s = setDuckKey(setDuckKey(s, 2, 1), 3, 2);
+    expect(() => setDuckKey(s, 1, 2)).toThrow(RangeError);
+    expect(() => setDuckKey(s, 1, 3)).toThrow(RangeError);
+    expect(setDuckKey(s, 1, 4).tracks[0].duckKeyTrackId).toBe(4);
+    expect(setDuckKey(s, 2, null).tracks[1].duckKeyTrackId).toBeNull();
+  });
+
   it('removing a track releases the ducks it keyed', () => {
     const keyed = setDuckKey(baseState(), 2, 1);
     expect(MIXING_MUTATORS.removeTrack(keyed, 1).tracks[0].duckKeyTrackId).toBeNull();
@@ -173,6 +182,16 @@ describe('mixing project v2 file', () => {
       },
     ],
     ['a duck key to no track', { version: 2, tracks: [{ id: 1, name: 'a', duckKeyTrackId: 7 }] }],
+    [
+      'a duck key cycle',
+      {
+        version: 2,
+        tracks: [
+          { id: 1, name: 'a', duckKeyTrackId: 2 },
+          { id: 2, name: 'b', duckKeyTrackId: 1 },
+        ],
+      },
+    ],
     ['an unknown VCA group', { version: 2, tracks: [{ id: 1, name: 'a', vcaGroup: 'Z' }] }],
     [
       'a bad send timing',

@@ -16,6 +16,7 @@ import { TermLabel } from '@/components/ui';
 import MixFader from '@/demos/mixing/MixFader.vue';
 import MixParam from '@/demos/mixing/MixParam.vue';
 import { useMixingCopy } from '@/demos/mixing/mixingCopy';
+import { MASTER_SLOT_INDEX } from '@/demos/mixing/mixingEngine';
 import { defaultMasterSlots, MASTER_SLOTS, type MasterSlotName } from '@/demos/mixing/mixingState';
 import { useMixingTerm } from '@/demos/mixing/mixingTerms';
 import { formatFader, MASTER_SLOT_CONTROLS } from '@/demos/mixing/mixingUi';
@@ -40,6 +41,14 @@ const peakLabels = computed(() => ({
   clearClip: copy.value.console.clearClip,
 }));
 const grLabels = computed(() => ({ name: `${copy.value.master.title} ${copy.value.console.gr}` }));
+const slotGrLabels = computed(() =>
+  Object.fromEntries(
+    MASTER_SLOTS.map((slot) => [
+      slot,
+      { name: `${copy.value.slots[slot]} ${copy.value.console.gr}` },
+    ]),
+  ),
+);
 const paramLabel = (name: string) =>
   copy.value.params[name as keyof typeof copy.value.params] ?? name;
 </script>
@@ -61,6 +70,13 @@ const paramLabel = (name: string) =>
             @click="m.edit('setMasterSlotBypass', slot, !view.master.slots[slot].bypassed)"
           >{{ view.master.slots[slot].bypassed ? copy.common.off : copy.common.on }}</button>
           <TermLabel v-bind="term(termKey(slot), true)">{{ copy.slots[slot] }}</TermLabel>
+          <GainReductionMeter
+            class="master__slot-gr"
+            orientation="horizontal"
+            :gr-db="master.insertGrDb[MASTER_SLOT_INDEX[slot]] ?? 0"
+            :range-db="12"
+            :labels="slotGrLabels[slot]"
+          />
         </div>
         <details v-if="slot === 'glue'" class="master__details">
           <summary>{{ copy.inspector.dynamics }}</summary>
@@ -185,6 +201,10 @@ const paramLabel = (name: string) =>
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.master__slot-gr {
+  flex: 1;
 }
 
 .master__power {

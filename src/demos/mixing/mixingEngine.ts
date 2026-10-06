@@ -210,15 +210,19 @@ export function trackClipOp(track: MixTrackState, audio: MixAudioRegistry): Engi
   return { type: 'clips', trackId: track.id, clips: [clip] };
 }
 
-/** The strip scalars of `track`; the channel delay only once its audio is loaded. */
-function trackScalars(track: MixTrackState, audio: MixAudioRegistry): TrackStripScalars {
+/** The strip scalars of `track`; the channel delay (engine samples) only once its audio is loaded. */
+function trackScalars(
+  track: MixTrackState,
+  audio: MixAudioRegistry,
+  engineRate: number,
+): TrackStripScalars {
   const source = audio.get(track.id);
   return {
     panLaw: track.panLaw,
     panMode: track.panMode,
     dualPan: { left: track.dualPanLeft, right: track.dualPanRight },
     ...(source
-      ? { channelDelaySamples: Math.round((track.channelDelayMs / 1000) * source.sampleRate) }
+      ? { channelDelaySamples: Math.round((track.channelDelayMs / 1000) * engineRate) }
       : {}),
   };
 }
@@ -237,6 +241,7 @@ function trackLiveOps(
   state: MixingState,
   track: MixTrackState,
   audio: MixAudioRegistry,
+  engineRate: number,
 ): EngineOp[] {
   const strip = trackStrip(track.id);
   const ops: EngineOp[] = TRACK_SLOTS.map((name) => ({
@@ -265,7 +270,7 @@ function trackLiveOps(
   ops.push(
     { type: 'fader', target: track.id, db: effectiveFaderDb(state, track) },
     { type: 'pan', target: track.id, pan: track.pan },
-    { type: 'stripScalars', trackId: track.id, scalars: trackScalars(track, audio) },
+    { type: 'stripScalars', trackId: track.id, scalars: trackScalars(track, audio, engineRate) },
     { type: 'soloMute', trackId: track.id, solo: false, mute: isTrackSilenced(state, track) },
   );
   return ops;
@@ -285,8 +290,15 @@ function masterLiveOps(state: MixingState): EngineOp[] {
   ];
 }
 
-/** Ops that construct `state` on a fresh engine; tracks without audio get no clip yet. */
-export function buildFull(state: MixingState, audio: MixAudioRegistry): EngineOp[] {
+/**
+ * Ops that construct `state` on a fresh engine running at `engineRate`; tracks
+ * without audio get no clip yet.
+ */
+export function buildFull(
+  state: MixingState,
+  audio: MixAudioRegistry,
+  engineRate: number,
+): EngineOp[] {
   const ops: EngineOp[] = [topologyOp(state)];
   for (const track of state.tracks) {
     ops.push({ type: 'strip', strip: trackStrip(track.id), spec: trackStripSpec(track) });
@@ -299,7 +311,7 @@ export function buildFull(state: MixingState, audio: MixAudioRegistry): EngineOp
     const clip = trackClipOp(track, audio);
     if (clip) ops.push(clip);
   }
-  for (const track of state.tracks) ops.push(...trackLiveOps(state, track, audio));
+  for (const track of state.tracks) ops.push(...trackLiveOps(state, track, audio, engineRate));
   for (const bus of AUX_BUSES) {
     ops.push({ type: 'busGain', busId: AUX_BUS_IDS[bus], db: state.buses[bus].gainDb });
   }
@@ -332,6 +344,7 @@ function diffTrack(
   prev: MixTrackState,
   next: MixTrackState,
   audio: MixAudioRegistry,
+  engineRate: number,
 ): EngineOp[] {
   const strip = trackStrip(next.id);
   const ops: EngineOp[] = [];
@@ -341,7 +354,7 @@ function diffTrack(
   }
   if (trackDiscreteKey(prev) !== trackDiscreteKey(next)) {
     ops.push({ type: 'strip', strip, spec: trackStripSpec(next) });
-    ops.push(...trackLiveOps(nextState, next, audio));
+    ops.push(...trackLiveOps(nextState, next, audio, engineRate));
     return ops;
   }
   ops.push(...diffEqBands(strip, prev.eq.map(toEqBand), next.eq.map(toEqBand)));
@@ -387,7 +400,10 @@ function diffTrack(
   if (prev.pan !== next.pan || changedLanes.has('pan')) {
     ops.push({ type: 'pan', target: next.id, pan: next.pan });
   }
-  const scalars = changedScalars(trackScalars(prev, audio), trackScalars(next, audio));
+  const scalars = changedScalars(
+    trackScalars(prev, audio, engineRate),
+    trackScalars(next, audio, engineRate),
+  );
   if (Object.keys(scalars).length > 0) {
     ops.push({ type: 'stripScalars', trackId: next.id, scalars });
   }
@@ -410,8 +426,13 @@ function diffTrack(
   return ops;
 }
 
-/** Ops that take an engine holding `prev` to `next`. */
-export function diff(prev: MixingState, next: MixingState, audio: MixAudioRegistry): EngineOp[] {
+/** Ops that take an engine holding `prev` at `engineRate` to `next`. */
+export function diff(
+  prev: MixingState,
+  next: MixingState,
+  audio: MixAudioRegistry,
+  engineRate: number,
+): EngineOp[] {
   const ops: EngineOp[] = [];
   const prevById = new Map(prev.tracks.map((track) => [track.id, track]));
   const nextIds = new Set(next.tracks.map((track) => track.id));
@@ -429,13 +450,13 @@ export function diff(prev: MixingState, next: MixingState, audio: MixAudioRegist
       ops.push({ type: 'strip', strip: trackStrip(track.id), spec: trackStripSpec(track) });
       const clip = trackClipOp(track, audio);
       if (clip) ops.push(clip);
-      ops.push(...trackLiveOps(next, track, audio));
+      ops.push(...trackLiveOps(next, track, audio, engineRate));
       continue;
     }
     if (sameLanes && !sameJson(laneSends(before), laneSends(track))) {
       ops.push({ type: 'sends', trackId: track.id, sends: laneSends(track) });
     }
-    ops.push(...diffTrack(prev, next, before, track, audio));
+    ops.push(...diffTrack(prev, next, before, track, audio, engineRate));
   }
   for (const bus of AUX_BUSES) {
     const processor = AUX_BUS_PROCESSORS[bus];

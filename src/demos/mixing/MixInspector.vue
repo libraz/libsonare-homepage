@@ -27,7 +27,7 @@ const emit = defineEmits<{ close: [] }>();
 const copy = useMixingCopy();
 const term = useMixingTerm();
 const { m } = props;
-const { selectedTrack, editLocked, pendingDelays, trackInfo } = m;
+const { selectedTrack, editLocked, trackInfo } = m;
 
 const track = computed(() => selectedTrack.value);
 const info = computed(() => (track.value ? trackInfo.value.get(track.value.id) : undefined));
@@ -148,8 +148,6 @@ function fades(fadeIn: number, fadeOut: number): void {
             :label="term('channelDelay').title"
             :default-value="0"
             :disabled="editLocked"
-            :deferred="pendingDelays.has(track.id)"
-            :hint="copy.inspector.delayHeld"
             @update:model-value="(v) => m.edit('setChannelDelay', track!.id, v)"
             @begin="m.begin"
             @end="m.end"
@@ -175,7 +173,6 @@ function fades(fadeIn: number, fadeOut: number): void {
             >{{ copy.console.safe }}</button>
           </div>
         </div>
-        <p v-if="pendingDelays.has(track.id)" class="inspector__held" role="status">{{ copy.inspector.delayHeld }}</p>
       </div>
 
       <div class="inspector__section">
@@ -384,13 +381,6 @@ function fades(fadeIn: number, fadeOut: number): void {
 .inspector button:disabled {
   cursor: not-allowed;
   opacity: var(--demo-disabled-opacity);
-}
-
-.inspector__held {
-  margin: 0;
-  color: var(--demo-warn-text);
-  font-family: var(--font-mono);
-  font-size: 10px;
 }
 
 @media (max-width: 959px) {

@@ -1,7 +1,7 @@
 /**
  * Live metering for /mixing. Engine meter telemetry covers the master (peak,
  * RMS, true peak, M/S/I, correlation, GR), every lane (input peak before trim,
- * post-fader peak/RMS, the deepest insert GR) and both aux buses. Snapshots arrive
+ * post-fader peak/RMS, the deepest and each insert's GR) and both aux buses. Snapshots arrive
  * at the engine's meter rate and are folded into one frame per animation
  * frame. Spectrum and goniometer come from an analyser tap on the engine
  * output; the selected track's source spectrum at the playhead feeds the EQ.
@@ -31,6 +31,11 @@ export interface StripReading {
   rmsDb: [number, number];
   /** The deepest gain reduction among the strip's inserts, dB ≤ 0. */
   grDb: number;
+  /**
+   * Each insert's own gain reduction, dB ≤ 0, in the strip's insert order.
+   * Empty until the engine reports it; the last report is kept between drains.
+   */
+  insertGrDb: readonly number[];
   correlation: number;
 }
 
@@ -56,6 +61,7 @@ export function silentStrip(): StripReading {
     peakDb: [...FLOOR],
     rmsDb: [...FLOOR],
     grDb: 0,
+    insertGrDb: [],
     correlation: 1,
   };
 }
@@ -77,12 +83,14 @@ export function silentFrame(): MixMeterFrame {
   };
 }
 
-function stripOf(meter: SonareMeterSnapshot): StripReading {
+function stripOf(meter: SonareMeterSnapshot, previous?: StripReading): StripReading {
   return {
     inputPeakDb: [meter.inputPeakDbL, meter.inputPeakDbR],
     peakDb: [meter.peakDbL, meter.peakDbR],
     rmsDb: [meter.rmsDbL, meter.rmsDbR],
     grDb: Math.min(0, meter.gainReductionDb),
+    // Only the newest record of a drain carries the per-insert array.
+    insertGrDb: meter.insertGainReductionDb ?? previous?.insertGrDb ?? [],
     correlation: meter.correlation,
   };
 }
@@ -99,7 +107,7 @@ export function applyMixMeter(
     return {
       ...frame,
       master: {
-        ...stripOf(meter),
+        ...stripOf(meter, frame.master),
         truePeakDb: heldTruePeakDb(frame.master.truePeakDb, meter),
         momentaryLufs: meter.momentaryLufs,
         shortTermLufs: meter.shortTermLufs,
@@ -108,9 +116,15 @@ export function applyMixMeter(
     };
   }
   if (source.kind === 'track') {
-    return { ...frame, tracks: { ...frame.tracks, [source.trackId]: stripOf(meter) } };
+    return {
+      ...frame,
+      tracks: { ...frame.tracks, [source.trackId]: stripOf(meter, frame.tracks[source.trackId]) },
+    };
   }
-  return { ...frame, buses: { ...frame.buses, [source.bus]: stripOf(meter) } };
+  return {
+    ...frame,
+    buses: { ...frame.buses, [source.bus]: stripOf(meter, frame.buses[source.bus]) },
+  };
 }
 
 /**

@@ -13,6 +13,7 @@
 import {
   AUX_BUS_PROCESSORS,
   type AuxBusName,
+  duckKeyClosesCycle,
   type MixingState,
   type MixPatch,
   plateDecayFromSeconds,
@@ -308,6 +309,20 @@ export function mapMixSuggestion(
       };
     }
     patch.tracks[trackId] = trackPatch;
+  }
+
+  // The engine refuses a key that closes a cycle with the keys already in place.
+  let keyed = base.tracks;
+  for (const strip of scene.strips) {
+    const trackId = trackIds.get(strip.id);
+    const key = trackId === undefined ? undefined : patch.tracks[trackId]?.duckKeyTrackId;
+    if (trackId === undefined || key == null) continue;
+    if (duckKeyClosesCycle(keyed, trackId, key)) {
+      delete patch.tracks[trackId].duckKeyTrackId;
+      mapper.skip(strip.id, `${TRACK_SLOT_PROCESSORS.duck}.sidechainKey`, 'noSlot');
+    } else {
+      keyed = keyed.map((t) => (t.id === trackId ? { ...t, duckKeyTrackId: key } : t));
+    }
   }
 
   for (const bus of scene.buses) {

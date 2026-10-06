@@ -246,7 +246,6 @@ export const enCopy = {
     mono: 'mono',
     stereo: 'stereo',
     discrete: 'Rebuilds the strip, applied on release',
-    delayHeld: 'Applies when the transport stops',
     polarityLeft: 'Ø L',
     polarityRight: 'Ø R',
     spectrum: { name: 'Track EQ', tilt: 'Slope', traces: ['Track input'] },
@@ -436,7 +435,7 @@ export const enCopy = {
       },
       channelDelay: {
         title: 'Channel Delay',
-        body: 'Delays the whole strip by up to 50 ms; latency compensation keeps the other lanes aligned. A change made while playing is applied when the transport stops.',
+        body: 'Delays only this strip by up to 50 ms. It is a deliberate offset, not latency, so the other lanes are not delayed to match; a change applies immediately, playing or not.',
         tip: 'Nudge a stem by a few milliseconds to line up transients or close and room microphones.',
         default: '0 ms',
       },
@@ -804,7 +803,6 @@ export const jaCopy: MixingCopy = {
     mono: 'モノラル',
     stereo: 'ステレオ',
     discrete: 'ストリップを再構築するため、離したときに適用',
-    delayHeld: '停止したときに適用',
     polarityLeft: 'Ø L',
     polarityRight: 'Ø R',
     spectrum: { name: 'トラック EQ', tilt: '傾斜補正', traces: ['トラック入力'] },
@@ -994,7 +992,7 @@ export const jaCopy: MixingCopy = {
       },
       channelDelay: {
         title: 'チャンネルディレイ',
-        body: 'ストリップ全体を最大 50 ms 遅らせます。レイテンシー補正で他のレーンとの時間はそろったままです。再生中の変更は停止したときに適用します。',
+        body: 'このストリップだけを最大 50 ms 遅らせます。意図的なずらしでレイテンシーではないため、他のレーンは合わせて遅れません。変更は再生中でも停止中でもすぐに適用します。',
         tip: '数ミリ秒ずらして、トランジェントやオンマイクと部屋マイクのタイミングを合わせます。',
         default: '0 ms',
       },

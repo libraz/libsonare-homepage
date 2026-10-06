@@ -570,6 +570,22 @@ export function setSlotParam(
   });
 }
 
+/** Whether keying `trackId` from `keyTrackId` would key a track from itself, directly or through a chain of keys. */
+export function duckKeyClosesCycle(
+  tracks: readonly MixTrackState[],
+  trackId: number,
+  keyTrackId: number,
+): boolean {
+  const keyOf = new Map(tracks.map((t) => [t.id, t.duckKeyTrackId]));
+  const seen = new Set<number>();
+  for (let id: number | null | undefined = keyTrackId; id != null; id = keyOf.get(id)) {
+    if (id === trackId) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+  }
+  return false;
+}
+
 export function setDuckKey(
   state: MixingState,
   trackId: number,
@@ -577,7 +593,8 @@ export function setDuckKey(
 ): MixingState {
   if (
     keyTrackId !== null &&
-    (keyTrackId === trackId || !state.tracks.some((t) => t.id === keyTrackId))
+    (!state.tracks.some((t) => t.id === keyTrackId) ||
+      duckKeyClosesCycle(state.tracks, trackId, keyTrackId))
   ) {
     throw new RangeError(`track ${keyTrackId} cannot key track ${trackId}`);
   }
@@ -1044,6 +1061,14 @@ export function parseMixingState(value: unknown): MixingState | null {
     if (ids.size !== tracks.length) invalid('tracks.id');
     for (const track of tracks) {
       if (track.duckKeyTrackId !== null && !ids.has(track.duckKeyTrackId)) {
+        invalid(`tracks.${track.id}.duckKeyTrackId`);
+      }
+    }
+    for (const track of tracks) {
+      if (
+        track.duckKeyTrackId !== null &&
+        duckKeyClosesCycle(tracks, track.id, track.duckKeyTrackId)
+      ) {
         invalid(`tracks.${track.id}.duckKeyTrackId`);
       }
     }

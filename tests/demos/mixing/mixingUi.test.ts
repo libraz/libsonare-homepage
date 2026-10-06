@@ -4,7 +4,6 @@ import {
   createMixingState,
   MAX_TOTAL_TRACK_SECONDS,
   plateDecayFromSeconds,
-  setChannelDelay,
 } from '@/demos/mixing/mixingState';
 import {
   audioBudget,
@@ -15,11 +14,9 @@ import {
   faderPosition,
   formatFader,
   formatPan,
-  holdChannelDelays,
   isDiscreteParam,
   MASTER_METER_TARGET,
   meterSources,
-  pendingDelayIds,
   plateSecondsFromDecay,
   rebuiltTrackIds,
 } from '@/demos/mixing/mixingUi';
@@ -77,20 +74,6 @@ describe('automation readout', () => {
   });
 });
 
-describe('channel delay hold', () => {
-  it('keeps the engine delay of existing tracks and passes new tracks through', () => {
-    const applied = threeTracks();
-    const edited = setChannelDelay(setChannelDelay(applied, 1, 2), 3, 4);
-    const added = addTrack(edited, 'd', 5);
-    const withNew = setChannelDelay(added, 4, 3);
-    const held = holdChannelDelays(withNew, applied);
-    expect(held.tracks.map((t) => t.channelDelayMs)).toEqual([0, 0, 0, 3]);
-    expect(pendingDelayIds(withNew, applied)).toEqual(new Set([1, 3]));
-    expect(holdChannelDelays(applied, applied)).toBe(applied);
-    expect(pendingDelayIds(withNew, null).size).toBe(0);
-  });
-});
-
 describe('rebuilt strips', () => {
   it('reports strip ops on tracks that already existed', () => {
     const prev = threeTracks();
@@ -143,6 +126,7 @@ describe('meter targets', () => {
       peakDb: [-6, -7],
       rmsDb: [-18, -19],
       grDb: -3.5,
+      insertGrDb: [],
       correlation: 0.8,
     });
     const master = applyMixMeter(frame, { ...snapshot, targetId: 0 }, [5, 9]).master;
@@ -161,6 +145,38 @@ describe('meter targets', () => {
     expect(held.truePeakDb).toBe(-4);
     expect(held.peakDb).toEqual([-32, -33]);
     expect(applyMixMeter(frame, { ...snapshot, targetId: 20 }, [5, 9])).toBe(frame);
+  });
+
+  it("keeps each strip's last per-insert reduction when a snapshot omits it", () => {
+    const base = {
+      peakDbL: -6,
+      peakDbR: -6,
+      rmsDbL: -18,
+      rmsDbR: -18,
+      correlation: 1,
+      truePeakDbL: -5,
+      truePeakDbR: -5,
+      momentaryLufs: -14,
+      shortTermLufs: -14,
+      integratedLufs: -14,
+      gainReductionDb: -4,
+      inputPeakDbL: -2,
+      inputPeakDbR: -2,
+    };
+    const snap = (targetId: number, insertGainReductionDb?: number[]) =>
+      ({ ...base, targetId, insertGainReductionDb }) as unknown as Parameters<
+        typeof applyMixMeter
+      >[1];
+    let frame = applyMixMeter(silentFrame(), snap(2, [0, 0, -4, 0, 0, 0]), [5, 9]);
+    frame = applyMixMeter(frame, snap(0, [-2, -1]), [5, 9]);
+    frame = applyMixMeter(frame, snap(2), [5, 9]);
+    frame = applyMixMeter(frame, snap(0), [5, 9]);
+    expect(frame.tracks[9].insertGrDb).toEqual([0, 0, -4, 0, 0, 0]);
+    expect(frame.master.insertGrDb).toEqual([-2, -1]);
+    // Another strip's report never leaks across.
+    expect(applyMixMeter(frame, snap(1), [5, 9]).tracks[5].insertGrDb).toEqual([]);
+    frame = applyMixMeter(frame, snap(2, [0, -9, 0, 0, 0, 0]), [5, 9]);
+    expect(frame.tracks[9].insertGrDb[1]).toBe(-9);
   });
 
   it('reads the selected track source window at the playhead, honouring the clip', () => {

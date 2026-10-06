@@ -7,8 +7,8 @@
  * The engine holds the *audible* state: the user's mix (A) or, while a mix
  * assistant suggestion is auditioned, that mix with the suggestion applied
  * (B). Both reach the engine through the same diff, so switching is setters
- * only. A channel-delay edit made while playing is held back until the
- * transport stops, because a live delay change misaligns the other lanes.
+ * only. A channel delay shifts only its own strip, so it is applied at once,
+ * playing or not.
  *
  * PCM lives only in the audio registry, keyed by track id. Worker jobs borrow
  * every clip (transferred, not copied), so they run one at a time and lock
@@ -52,12 +52,7 @@ import {
   type MixingState,
   type StripEqBand,
 } from '@/demos/mixing/mixingState';
-import {
-  fileBase,
-  holdChannelDelays,
-  pendingDelayIds,
-  rebuiltTrackIds,
-} from '@/demos/mixing/mixingUi';
+import { fileBase, rebuiltTrackIds } from '@/demos/mixing/mixingUi';
 import { type MixingMetering, useMixingMetering } from '@/demos/mixing/useMixingMetering';
 import { useMixingSession } from '@/demos/mixing/useMixingSession';
 import {
@@ -248,18 +243,12 @@ export function useMixingStudio(options: MixingStudioOptions) {
     );
   }
 
-  function desiredEngineState(): MixingState {
-    return sonare.playing.value && engineState
-      ? holdChannelDelays(view.value, engineState)
-      : view.value;
-  }
-
   /** Brings the engine from the state it holds to the audible one. */
   function syncEngine(): void {
     if (!target || !engineState) return;
-    const next = desiredEngineState();
+    const next = view.value;
     if (next === engineState) return;
-    const ops = diff(engineState, next, registry);
+    const ops = diff(engineState, next, registry, sampleRate());
     const ids = rebuiltTrackIds(ops, engineState);
     applyOps(target, ops);
     if (JSON.stringify(engineState.loop) !== JSON.stringify(next.loop)) applyLoop(next.loop);
@@ -273,7 +262,7 @@ export function useMixingStudio(options: MixingStudioOptions) {
     if (!target) return;
     sonare.stop();
     const next = view.value;
-    applyOps(target, buildFull(next, registry));
+    applyOps(target, buildFull(next, registry, sampleRate()));
     applyLoop(next.loop);
     engineState = next;
     engineApplied.value = next;
@@ -317,13 +306,6 @@ export function useMixingStudio(options: MixingStudioOptions) {
   function redo(): void {
     if (!editLocked.value) history.redo();
   }
-
-  // Held channel delays reach the engine once the transport stops.
-  watch(sonare.playing, (playing) => {
-    if (!playing) syncEngine();
-  });
-
-  const pendingDelays = computed(() => pendingDelayIds(view.value, engineApplied.value));
 
   // -------------------------------------------------------------------------
   // Worker jobs, one at a time
@@ -539,8 +521,6 @@ export function useMixingStudio(options: MixingStudioOptions) {
 
   function stop(): void {
     sonare.stop();
-    // Held channel delays go out now; the watcher below covers any other stop.
-    syncEngine();
   }
 
   function togglePlay(): void {
@@ -795,7 +775,6 @@ export function useMixingStudio(options: MixingStudioOptions) {
     selectedId,
     selectedTrack,
     rebuilt,
-    pendingDelays,
     metering,
     duration,
     lastRender,

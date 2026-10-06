@@ -87,7 +87,7 @@ The example is abbreviated: a real file lists all six EQ bands and every slot pa
 - `vcaGroup` is `"A"`, `"B"`, `"C"`, or `null`. `duckKeyTrackId` names the track whose signal keys the `duck` slot, or `null` to key it from the track's own input.
 - A file holds at most eight tracks.
 
-Omitted fields take the demo's defaults. A present field of the wrong type, a slot parameter the slot does not have, a duplicate track id, a `duckKeyTrackId` that names no track, or an `eq` array that is not six bands rejects the whole file before anything changes. Numeric values must be finite numbers; a string such as `"-6"` is rejected.
+Omitted fields take the demo's defaults. A present field of the wrong type, a slot parameter the slot does not have, a duplicate track id, a `duckKeyTrackId` that names no track or that keys a track from itself through a chain of keys, or an `eq` array that is not six bands rejects the whole file before anything changes. Numeric values must be finite numbers; a string such as `"-6"` is rejected.
 
 Opening a v2 file replaces the whole project, undoably.
 

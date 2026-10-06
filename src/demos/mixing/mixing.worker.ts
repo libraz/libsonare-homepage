@@ -114,7 +114,7 @@ function bounceInterleaved(
   const engine = new wasm.RealtimeEngine(sampleRate, RENDER_QUANTUM);
   try {
     engine.setTempo(MIX_TEMPO_BPM);
-    applyOps(createRawTarget(engine), buildFull(state, registry(audio)));
+    applyOps(createRawTarget(engine), buildFull(state, registry(audio), sampleRate));
     const totalFrames = Math.min(
       maxFrames,
       exportFrames(state, sampleRate, (processor, params, rate) =>
@@ -123,7 +123,7 @@ function bounceInterleaved(
     );
     checkpoint('rendering', 0.2);
     engine.play();
-    // The bounce primes one stopped block and settles every ramp before the first audible one.
+    // The bounce settles parameter ramps without advancing processor state.
     return engine.bounceOffline({
       totalFrames,
       blockSize: RENDER_QUANTUM,

@@ -255,33 +255,6 @@ export function automationValueAt(
 // ---------------------------------------------------------------------------
 // Engine-side helpers
 
-/**
- * `next` with each existing track's channel delay taken from `applied`: a live
- * delay change misaligns the other lanes, so it waits for the transport to stop.
- */
-export function holdChannelDelays(next: MixingState, applied: MixingState): MixingState {
-  const held = new Map(applied.tracks.map((track) => [track.id, track.channelDelayMs]));
-  let changed = false;
-  const tracks = next.tracks.map((track) => {
-    const delay = held.get(track.id);
-    if (delay === undefined || delay === track.channelDelayMs) return track;
-    changed = true;
-    return { ...track, channelDelayMs: delay };
-  });
-  return changed ? { ...next, tracks } : next;
-}
-
-/** Tracks whose channel delay in `state` has not reached the engine yet. */
-export function pendingDelayIds(state: MixingState, applied: MixingState | null): Set<number> {
-  if (!applied) return new Set();
-  const engine = new Map(applied.tracks.map((track) => [track.id, track.channelDelayMs]));
-  return new Set(
-    state.tracks
-      .filter((track) => engine.has(track.id) && engine.get(track.id) !== track.channelDelayMs)
-      .map((track) => track.id),
-  );
-}
-
 /** Existing track strips an op list rebuilds (a discrete edit resets their inserts). */
 export function rebuiltTrackIds(ops: readonly EngineOp[], previous: MixingState): Set<number> {
   const known = new Set(previous.tracks.map((track) => track.id));
