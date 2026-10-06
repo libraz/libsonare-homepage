@@ -43,10 +43,6 @@ function session(): StudioMixSettings {
   return { gains: [0.5, 1.2, 0.8], mutes: [false, true, false], masterGain: 1.3 };
 }
 
-function roundUp(frames: number): number {
-  return Math.ceil(frames / RENDER_QUANTUM) * RENDER_QUANTUM;
-}
-
 async function facadeWith(settings: StudioMixSettings) {
   const f = await createFacadeLoopback({ sampleRate: SR });
   facades.push(f);
@@ -58,7 +54,7 @@ async function facadeWith(settings: StudioMixSettings) {
 }
 
 describe('studio preview and export render the same session', () => {
-  it('facade loopback matches the WAV export bounce sample for sample', async () => {
+  it('facade-synchronized state matches the WAV export bounce sample for sample', async () => {
     const wasm = await loadIndexModule();
     const settings = session();
     const frames = exportFrames(BPM);
@@ -73,18 +69,24 @@ describe('studio preview and export render the same session', () => {
     }
 
     const { f } = await facadeWith(settings);
-    // Prime the worklet engine as bounceOffline primes itself: one stopped quantum, then settle.
-    f.render(RENDER_QUANTUM);
-    f.processor.engine.settleParameters();
     f.engine.transport.play();
-    const live = f.render(roundUp(frames));
+    f.flush();
+    // Bounce primes itself without rendering, so the facade and the export Worker
+    // share one lifecycle; live process() is compared with the raw engine below.
+    const bounced = f.processor.engine.bounceOffline({
+      totalFrames: frames,
+      blockSize: RENDER_QUANTUM,
+      numChannels: 2,
+      dither: 0,
+    }).interleaved;
+    const live = {
+      left: Float32Array.from({ length: frames }, (_, i) => bounced[i * 2]),
+      right: Float32Array.from({ length: frames }, (_, i) => bounced[i * 2 + 1]),
+    };
     expect(f.syncErrors).toEqual([]);
 
     expect(rms(left)).toBeGreaterThan(1e-2);
-    const diff = Math.max(
-      maxAbsDiff(live.left.subarray(0, frames), left),
-      maxAbsDiff(live.right.subarray(0, frames), right),
-    );
+    const diff = Math.max(maxAbsDiff(live.left, left), maxAbsDiff(live.right, right));
     expect(diff).toBeLessThanOrEqual(1e-7);
   });
 
@@ -94,10 +96,8 @@ describe('studio preview and export render the same session', () => {
     const lead = RENDER_QUANTUM * 150;
     const rest = RENDER_QUANTUM * 300;
 
-    // Both sides start settled, as a page does that set up well before Play.
+    // Neither side renders a stopped quantum first: both start from the queued state.
     const { f, target } = await facadeWith(settings);
-    f.render(RENDER_QUANTUM);
-    f.processor.engine.settleParameters();
     f.engine.transport.play();
     const liveLead = f.render(lead);
     applyOps(target, edit);
@@ -117,8 +117,6 @@ describe('studio preview and export render the same session', () => {
       });
       return { left, right };
     };
-    raw.process([new Float32Array(RENDER_QUANTUM), new Float32Array(RENDER_QUANTUM)]);
-    raw.settleParameters();
     raw.play();
     const rawLead = renderRaw(lead);
     applyOps(rawTarget, edit);

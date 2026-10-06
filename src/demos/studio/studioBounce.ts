@@ -191,7 +191,7 @@ export function renderStudioMix(
       buildStudioOps(pattern, bpm, settings, EXPORT_SAMPLE_RATE, EXPORT_BARS),
     );
     engine.play();
-    // The bounce primes one stopped block and settles every ramp before the first audible one.
+    // The bounce settles parameter ramps without advancing processor state.
     return engine.bounceOffline({
       totalFrames: exportFrames(bpm),
       blockSize: EXPORT_BLOCK_SIZE,

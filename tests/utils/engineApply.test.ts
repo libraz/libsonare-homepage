@@ -314,21 +314,17 @@ describe('continuous ops through the facade keep state', () => {
     expect(firstBlock).toBeGreaterThan(1e-2);
   });
 
-  it('channel delay keeps the reverb tails', async () => {
-    // A running strip does not take its own delay, while PDC re-aligns the other
-    // lanes to it, so a fresh build is no reference: compare the tails alone.
-    const muteTone: EngineOp[] = [
-      { type: 'soloMute', trackId: TONE_LANE, solo: false, mute: true },
-    ];
+  it('channel delay shifts no other lane', async () => {
+    // The tail lane's clip has ended at the change point, so delaying it moves
+    // only silence: the tone and send lanes and the reverb tails must not move.
     const delay: EngineOp[] = [
       { type: 'stripScalars', trackId: TAIL_LANE, scalars: { channelDelaySamples: 37 } },
     ];
-    const control = await renderWithChange(initialState(), [], muteTone);
-    const live = await renderWithChange(initialState(), delay, muteTone);
-    const from = live.changeAt + SETTLE;
+    const control = await renderWithChange(initialState(), []);
+    const live = await renderWithChange(initialState(), delay);
     expect(live.syncErrors).toEqual([]);
-    expect(rms(control.out.left, from)).toBeGreaterThan(5e-3);
-    expect(Math.abs(rms(live.out.left, from) / rms(control.out.left, from) - 1)).toBeLessThan(0.01);
+    expect(maxDiffFrom(live.out, control.out, live.changeAt + SETTLE)).toBeLessThanOrEqual(1e-7);
+    expect(rms(live.out.left, live.changeAt + SETTLE)).toBeGreaterThan(5e-3);
   });
 });
 
