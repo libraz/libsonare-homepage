@@ -123,6 +123,14 @@ export declare const CONTROLLER_AXES: readonly ["none", "excitation", "position"
  * message: CC126 names a monophonic mode but not this one.
  */
 export declare const ARTICULATIONS: readonly ["poly", "mono-retrigger", "mono-legato"];
+/**
+ * How a part's signal path is built. `'bank'` keeps whatever the instrument's
+ * own bank/program selection resolves to, `'none'` bypasses the rig stage, and
+ * `'chain'` replaces it with an explicit insert chain.
+ */
+export declare const PART_RIG_MODES: readonly ["bank", "none", "chain"];
+/** The `part` value that addresses a destination's default instead of one part (0-15). */
+export declare const PART_RIG_ALL_PARTS = 255;
 /** The three dimensions MPE carries per note ({@link RealtimeEngine.setControllerNoteTracking}). */
 export declare const MPE_DIMENSIONS: readonly ["bend", "pressure", "timbre"];
 /**
@@ -256,6 +264,23 @@ export type ControllerInput = (typeof CONTROLLER_INPUTS)[number];
 export type ControllerAxis = (typeof CONTROLLER_AXES)[number];
 /** Per-channel note-overlap rule ({@link RealtimeEngine.setArticulation}). */
 export type Articulation = (typeof ARTICULATIONS)[number];
+/** How a part's rig is built ({@link PART_RIG_MODES}). */
+export type PartRigMode = (typeof PART_RIG_MODES)[number];
+/** One stage of a `'chain'` part rig: a processor name and its parameters. */
+export interface PartRigInsert {
+    processor: string;
+    /** Processor parameters, as an object or an already-serialized JSON object string. */
+    params?: Record<string, unknown> | string;
+}
+/** A part rig as stored on a project ({@link Project.getPartRig}). */
+export interface PartRig {
+    mode: PartRigMode;
+    /** Present for `'chain'` only; `params` is the parsed parameter object. */
+    inserts?: {
+        processor: string;
+        params: Record<string, unknown>;
+    }[];
+}
 /** One per-note MPE dimension ({@link MPE_DIMENSIONS}). */
 export type MpeDimension = (typeof MPE_DIMENSIONS)[number];
 /** One note-attribution rule ({@link NOTE_TRACKINGS}). */
@@ -453,9 +478,8 @@ export interface SynthPatch {
      * whose per-note kit patch replaces this whole section and never reads it.
      *
      * Also automatable under this same name through
-     * {@link RealtimeEngine.resolveInstrumentAutomationId}; it is one of the names
-     * that reaches a voice that is already sounding, rather than waiting for the
-     * next note.
+     * {@link RealtimeEngine.resolveInstrumentAutomationId}; it reaches
+     * already-sounding voices from the next processed block.
      */
     pitchOffsetCents?: number;
     ampAttackMs?: number;

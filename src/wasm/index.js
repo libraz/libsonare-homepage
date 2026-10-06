@@ -177,8 +177,8 @@ function wrapModuleErrors(raw) {
     }
   });
 }
-function setSonareModule(module2) {
-  wrappedModule = wrapModuleErrors(module2);
+function setSonareModule(module3) {
+  wrappedModule = wrapModuleErrors(module3);
 }
 function getSonareModule() {
   if (!wrappedModule) {
@@ -518,6 +518,19 @@ function assertInterleavedSamples(fnName, samples, channels, validate) {
 }
 
 // src/project_internal.ts
+var projectTimelineHandles = /* @__PURE__ */ new WeakMap();
+function registerProjectTimeline(owner, native) {
+  projectTimelineHandles.set(owner, native);
+}
+function unregisterProjectTimeline(owner) {
+  projectTimelineHandles.delete(owner);
+}
+function projectTimelineNativeId(owner) {
+  if (owner === null || typeof owner !== "object" && typeof owner !== "function") {
+    return void 0;
+  }
+  return projectTimelineHandles.get(owner)?.id;
+}
 function normalizeSynthInstrument(patch) {
   if (patch === null || typeof patch !== "object") {
     return patch;
@@ -533,6 +546,35 @@ function normalizeSynthInstrument(patch) {
     throw new TypeError("sampleBank is destroyed");
   }
   return { ...rest, sampleBankId: sampleBank.nativeId };
+}
+function partRigInsertsJson(inserts) {
+  if (inserts === void 0 || inserts === null) {
+    return void 0;
+  }
+  if (!Array.isArray(inserts)) {
+    throw new TypeError("inserts must be an array");
+  }
+  return JSON.stringify(
+    inserts.map((insert) => {
+      const { processor, params } = insert;
+      return params === void 0 ? { processor } : { processor, params: typeof params === "string" ? params : JSON.stringify(params) };
+    })
+  );
+}
+function partRigFromNative(native) {
+  if (native === null) {
+    return null;
+  }
+  if (native.insertsJson === null) {
+    return { mode: native.mode };
+  }
+  const inserts = JSON.parse(native.insertsJson).map(
+    ({ processor, params }) => ({
+      processor,
+      params: JSON.parse(params)
+    })
+  );
+  return { mode: native.mode, inserts };
 }
 function projectModule() {
   const candidate = getSonareModule();
@@ -764,11 +806,11 @@ function mergeNotes(request) {
   );
 }
 function noteTargetsFromSmf(request) {
-  const module2 = requireModule();
-  if (typeof module2.noteTargetsFromSmf !== "function") {
+  const module3 = requireModule();
+  if (typeof module3.noteTargetsFromSmf !== "function") {
     throw new Error("libsonare was built without arrangement support");
   }
-  return module2.noteTargetsFromSmf(request.data, request.trackIndex ?? 0);
+  return module3.noteTargetsFromSmf(request.data, request.trackIndex ?? 0);
 }
 function assignNoteTargets(request) {
   return requireModule().assignNoteTargets(
@@ -4005,29 +4047,29 @@ function detectAcoustic(samples, sampleRate = 48e3, options = {}) {
   return result;
 }
 function synthesizeRir(options = {}) {
-  const module2 = requireModule25();
-  if (typeof module2.synthesizeRir !== "function") {
+  const module3 = requireModule25();
+  if (typeof module3.synthesizeRir !== "function") {
     throw new Error("libsonare was built without acoustic-simulation support");
   }
-  return module2.synthesizeRir(options);
+  return module3.synthesizeRir(options);
 }
 function estimateRoom(samples, sampleRate = 48e3, options = {}) {
-  const module2 = requireModule25();
-  if (typeof module2.estimateRoom !== "function") {
+  const module3 = requireModule25();
+  if (typeof module3.estimateRoom !== "function") {
     throw new Error("libsonare was built without acoustic-simulation support");
   }
   const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
   validateAnalysisInput("estimateRoom", request.samples, request.sampleRate ?? 48e3, request);
-  return module2.estimateRoom(request.samples, request.sampleRate ?? 48e3, request);
+  return module3.estimateRoom(request.samples, request.sampleRate ?? 48e3, request);
 }
 function roomMorph(samples, sampleRate, options = {}) {
-  const module2 = requireModule25();
-  if (typeof module2.roomMorph !== "function") {
+  const module3 = requireModule25();
+  if (typeof module3.roomMorph !== "function") {
     throw new Error("libsonare was built without acoustic-simulation support");
   }
   const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
   validateAnalysisInput("roomMorph", request.samples, request.sampleRate, request);
-  return module2.roomMorph(request.samples, request.sampleRate, request);
+  return module3.roomMorph(request.samples, request.sampleRate, request);
 }
 function analyzeWithProgress(samples, sampleRate = 22050, onProgress, options) {
   const request = samples instanceof Float32Array ? { samples, sampleRate, onProgress, options } : samples;
@@ -4910,8 +4952,8 @@ function suggestJson(fnName, request, sceneOnly) {
   const { left, right, ids, names } = planarTracks(request.tracks);
   const sampleRate = request.sampleRate;
   const params = request.options ?? {};
-  const module2 = requireModule26();
-  return sceneOnly ? module2.mixingAssistantSuggestSceneJson(left, right, ids, names, sampleRate, params) : module2.mixingAssistantSuggest(left, right, ids, names, sampleRate, params);
+  const module3 = requireModule26();
+  return sceneOnly ? module3.mixingAssistantSuggestSceneJson(left, right, ids, names, sampleRate, params) : module3.mixingAssistantSuggest(left, right, ids, names, sampleRate, params);
 }
 function suggestMixScene(request) {
   return JSON.parse(suggestJson("suggestMixScene", request, false));
@@ -5097,8 +5139,8 @@ var PolyphonicAnalysis = class {
   constructor(request) {
     assertSamples("analyzePolyphonic", request.samples, request.validate !== false);
     assertSampleRate("analyzePolyphonic", request.sampleRate);
-    const module2 = getSonareModule();
-    this.native = module2.createPolyphonicAnalysis(
+    const module3 = getSonareModule();
+    this.native = module3.createPolyphonicAnalysis(
       request.samples,
       request.sampleRate,
       request
@@ -5374,8 +5416,260 @@ var CONTROLLER_AXES = [
   "vibrato-depth"
 ];
 var ARTICULATIONS = ["poly", "mono-retrigger", "mono-legato"];
+var PART_RIG_MODES = ["bank", "none", "chain"];
+var PART_RIG_ALL_PARTS = 255;
 var MPE_DIMENSIONS = ["bend", "pressure", "timbre"];
 var NOTE_TRACKINGS = ["last", "lowest", "highest", "all"];
+
+// src/vocal_project.ts
+var UINT32_MAX = 4294967295;
+var PROJECT_ID_MAX = UINT32_MAX - 1;
+var UINT64_MAX = "18446744073709551615";
+function requireObject(value, field) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError(`${field} must be an object`);
+  }
+  return value;
+}
+function uint32(value, field, allowZero = true) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < (allowZero ? 0 : 1) || value > PROJECT_ID_MAX) {
+    throw new RangeError(`${field} must be a uint32 project id`);
+  }
+  return value;
+}
+function nativeUint32(value, field) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || value > UINT32_MAX) {
+    throw new RangeError(`${field} must be a native uint32`);
+  }
+  return value;
+}
+function nativeInt64(value, field) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value)) {
+    throw new RangeError(`${field} must be a safe integer`);
+  }
+  return value;
+}
+function positiveSampleCount(value, field) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+    throw new RangeError(`${field} must be a positive safe integer`);
+  }
+  return value;
+}
+function finite(value, field) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new RangeError(`${field} must be finite`);
+  }
+  return value;
+}
+function decimalUint64(value, field) {
+  if (typeof value !== "string" || !/^(0|[1-9]\d*)$/.test(value)) {
+    throw new RangeError(`${field} must be a canonical decimal uint64 string`);
+  }
+  if (value.length > UINT64_MAX.length || value.length === UINT64_MAX.length && value > UINT64_MAX) {
+    throw new RangeError(`${field} must fit uint64`);
+  }
+  return value;
+}
+function hexSha256(value, field) {
+  if (typeof value !== "string" || !/^[0-9a-fA-F]{64}$/.test(value)) {
+    throw new TypeError(`${field} must be 64 hexadecimal characters`);
+  }
+  return value.toLowerCase();
+}
+function finiteMono(value, field) {
+  if (!(value instanceof Float32Array) || value.length === 0) {
+    throw new TypeError(`${field} must be a non-empty Float32Array`);
+  }
+  for (let index = 0; index < value.length; index += 1) {
+    if (!Number.isFinite(value[index])) {
+      throw new RangeError(`${field} must contain only finite samples`);
+    }
+  }
+  return new Float32Array(value);
+}
+function sve1(value) {
+  if (!(value instanceof Uint8Array) || value.length === 0) {
+    throw new TypeError("sve1 must be a non-empty Uint8Array");
+  }
+  return new Uint8Array(value);
+}
+function copyToken(value) {
+  const source = requireObject(value, "renderToken");
+  return {
+    sessionEpoch: decimalUint64(source.sessionEpoch, "renderToken.sessionEpoch"),
+    revision: decimalUint64(source.revision, "renderToken.revision"),
+    draftId: decimalUint64(source.draftId, "renderToken.draftId"),
+    generation: decimalUint64(source.generation, "renderToken.generation"),
+    requestId: decimalUint64(source.requestId, "renderToken.requestId"),
+    profileId: uint32(source.profileId, "renderToken.profileId")
+  };
+}
+function copyApplyRequest(request) {
+  const source = requireObject(request, "request");
+  const renderedMono = finiteMono(source.renderedMono, "renderedMono");
+  const expectedSourceSampleCount = positiveSampleCount(
+    source.expectedSourceSampleCount,
+    "expectedSourceSampleCount"
+  );
+  if (renderedMono.length !== expectedSourceSampleCount) {
+    throw new RangeError(
+      `renderedMono length must equal expectedSourceSampleCount (${renderedMono.length} != ${expectedSourceSampleCount})`
+    );
+  }
+  const expectedSourceSampleRate = finite(
+    source.expectedSourceSampleRate,
+    "expectedSourceSampleRate"
+  );
+  assertSampleRate("Project.applyVocalEdit", expectedSourceSampleRate);
+  const renderedSampleRate = finite(source.renderedSampleRate, "renderedSampleRate");
+  assertSampleRate("Project.applyVocalEdit", renderedSampleRate, "renderedSampleRate");
+  if (renderedSampleRate !== expectedSourceSampleRate) {
+    throw new RangeError("renderedSampleRate must equal expectedSourceSampleRate");
+  }
+  const renderedStartSample = source.renderedStartSample ?? 0;
+  if (renderedStartSample !== 0) {
+    throw new RangeError("renderedStartSample must be zero for the v1 Project vocal API");
+  }
+  const renderToken = copyToken(source.renderToken);
+  if (renderToken.draftId !== "0" || renderToken.generation !== "0") {
+    throw new RangeError("renderToken must be a committed session token");
+  }
+  return {
+    clipId: uint32(source.clipId, "clipId", false),
+    takeId: uint32(source.takeId ?? 0, "takeId"),
+    expectedSourceId: uint32(source.expectedSourceId, "expectedSourceId", false),
+    expectedSourceSampleRate,
+    expectedSourceSampleCount,
+    expectedSourceSha256: hexSha256(source.expectedSourceSha256, "expectedSourceSha256"),
+    expectedClipLengthPpq: finite(source.expectedClipLengthPpq, "expectedClipLengthPpq"),
+    expectedSourceOffsetPpq: finite(source.expectedSourceOffsetPpq, "expectedSourceOffsetPpq"),
+    renderedMono,
+    renderedSampleRate,
+    renderedStartSample: 0,
+    renderToken,
+    sve1: sve1(source.sve1)
+  };
+}
+function copyApplyResult(value) {
+  const source = requireObject(value, "applyVocalEdit result");
+  return {
+    clipId: uint32(source.clipId, "result.clipId", false),
+    takeId: uint32(source.takeId, "result.takeId"),
+    originalSourceId: uint32(source.originalSourceId, "result.originalSourceId", false),
+    derivedSourceId: uint32(source.derivedSourceId, "result.derivedSourceId", false),
+    committedRevision: decimalUint64(source.committedRevision, "result.committedRevision"),
+    profileId: uint32(source.profileId, "result.profileId"),
+    derivedSourceSha256: hexSha256(source.derivedSourceSha256, "result.derivedSourceSha256"),
+    sidecarKey: typeof source.sidecarKey === "string" ? source.sidecarKey : (() => {
+      throw new TypeError("result.sidecarKey must be a string");
+    })()
+  };
+}
+function copyDependency(value) {
+  const source = requireObject(value, "vocal edit dependency");
+  const reason = nativeUint32(source.reason, "dependency.reason");
+  return {
+    clipId: nativeUint32(source.clipId, "dependency.clipId"),
+    takeId: nativeUint32(source.takeId, "dependency.takeId"),
+    originalSourceId: nativeUint32(source.originalSourceId, "dependency.originalSourceId"),
+    derivedSourceId: nativeUint32(source.derivedSourceId, "dependency.derivedSourceId"),
+    sourceSampleRate: nativeUint32(source.sourceSampleRate, "dependency.sourceSampleRate"),
+    profileId: nativeUint32(source.profileId, "dependency.profileId"),
+    sourceSampleCount: nativeInt64(source.sourceSampleCount, "dependency.sourceSampleCount"),
+    committedRevision: decimalUint64(source.committedRevision, "dependency.committedRevision"),
+    originalSourceSha256: hexSha256(source.originalSourceSha256, "dependency.originalSourceSha256"),
+    derivedSourceSha256: hexSha256(source.derivedSourceSha256, "dependency.derivedSourceSha256"),
+    originalPcmAvailable: source.originalPcmAvailable === true,
+    derivedPcmAvailable: source.derivedPcmAvailable === true,
+    reason,
+    sidecarKey: typeof source.sidecarKey === "string" ? source.sidecarKey : (() => {
+      throw new TypeError("dependency.sidecarKey must be a string");
+    })()
+  };
+}
+function copyRehydrateItem(value) {
+  const source = requireObject(value, "vocal rehydrate item");
+  const status = source.status;
+  if (typeof status !== "number" || !Number.isSafeInteger(status) || status < 0 || status > 2) {
+    throw new RangeError("rehydrate.status must be one of 0, 1, or 2");
+  }
+  const reason = nativeUint32(source.reason, "rehydrate.reason");
+  return {
+    clipId: nativeUint32(source.clipId, "rehydrate.clipId"),
+    takeId: nativeUint32(source.takeId, "rehydrate.takeId"),
+    derivedSourceId: nativeUint32(source.derivedSourceId, "rehydrate.derivedSourceId"),
+    status,
+    reason
+  };
+}
+function copyOriginalSources(originals) {
+  if (!Array.isArray(originals)) {
+    throw new TypeError("originals must be an array");
+  }
+  const seen = /* @__PURE__ */ new Set();
+  return originals.map((original, index) => {
+    const source = requireObject(original, `originals[${index}]`);
+    const sourceId = uint32(source.sourceId, `originals[${index}].sourceId`, false);
+    if (seen.has(sourceId)) {
+      throw new RangeError(`originals contains duplicate sourceId ${sourceId}`);
+    }
+    seen.add(sourceId);
+    const sampleRate = finite(source.sampleRate, `originals[${index}].sampleRate`);
+    assertSampleRate("Project.rehydrateVocalEdits", sampleRate, `originals[${index}].sampleRate`);
+    return {
+      sourceId,
+      mono: finiteMono(source.mono, `originals[${index}].mono`),
+      sampleRate
+    };
+  });
+}
+function projectApplyVocalEdit(native, request) {
+  const normalized = copyApplyRequest(request);
+  return copyApplyResult(native.applyVocalEdit(normalized));
+}
+function projectGetVocalEditDependencies(native) {
+  const value = native.getVocalEditDependencies();
+  if (!Array.isArray(value)) {
+    throw new TypeError("native vocal dependencies must be an array");
+  }
+  return value.map(copyDependency);
+}
+function projectRehydrateVocalEdits(native, originals, cancel) {
+  if (cancel !== void 0 && typeof cancel !== "function") {
+    throw new TypeError("cancel must be a function");
+  }
+  const normalized = copyOriginalSources(originals);
+  let callbackFailed = false;
+  let callbackFailure;
+  const guardedCancel = cancel === void 0 ? void 0 : () => {
+    try {
+      return cancel();
+    } catch (error) {
+      callbackFailed = true;
+      callbackFailure = error;
+      return true;
+    }
+  };
+  let value;
+  try {
+    value = native.rehydrateVocalEdits(normalized, guardedCancel);
+  } catch (error) {
+    if (callbackFailed) {
+      throw callbackFailure;
+    }
+    throw error;
+  }
+  if (callbackFailed) {
+    throw callbackFailure;
+  }
+  if (value !== null && typeof value === "object" && "cancelFailure" in value) {
+    throw value.cancelFailure;
+  }
+  if (!Array.isArray(value)) {
+    throw new TypeError("native vocal rehydrate result must be an array");
+  }
+  return value.map(copyRehydrateItem);
+}
 
 // src/project_class.ts
 function normalizeMidiFxBakeRequest(clipIdOrRequest, configJson) {
@@ -5445,10 +5739,56 @@ function midi2Byte(fnName, value, argName) {
   assertBoundedInteger(fnName, value, argName, 0, 255);
   return value;
 }
+var ProjectTimeline = class {
+  /** @internal */
+  constructor(native) {
+    this.native = native;
+    registerProjectTimeline(this, native);
+  }
+  /**
+   * Identity an engine names this timeline by, so no raw pointer crosses into JS.
+   *
+   * @internal
+   */
+  get nativeId() {
+    if (this.native === null) {
+      throw new TypeError("ProjectTimeline is disposed");
+    }
+    return this.native.id;
+  }
+  /** Release the underlying WASM object. Idempotent. */
+  dispose() {
+    if (this.native === null) {
+      return;
+    }
+    unregisterProjectTimeline(this);
+    this.native.delete();
+    this.native = null;
+  }
+};
 var Project = class _Project {
   constructor() {
     this.released = false;
+    this.deleteRequested = false;
+    this.activeVocalRehydrateCalls = 0;
     this.native = new (projectModule()).Project();
+  }
+  applyVocalEdit(request) {
+    return projectApplyVocalEdit(this.native, request);
+  }
+  getVocalEditDependencies() {
+    return projectGetVocalEditDependencies(this.native);
+  }
+  rehydrateVocalEdits(originals, cancel) {
+    this.activeVocalRehydrateCalls += 1;
+    try {
+      return projectRehydrateVocalEdits(this.native, originals, cancel);
+    } finally {
+      this.activeVocalRehydrateCalls -= 1;
+      if (this.activeVocalRehydrateCalls === 0 && this.deleteRequested) {
+        this.native.delete();
+      }
+    }
   }
   /** Create a new empty project. */
   static create() {
@@ -5818,6 +6158,26 @@ var Project = class _Project {
   setTrackGain(trackId, gain) {
     this.native.setTrackGain(trackId, gain);
   }
+  /**
+   * Set the rig of one part (0-15), or of the destination's default when `part`
+   * is {@link PART_RIG_ALL_PARTS}, on MIDI destination `destinationId`, via an
+   * undoable edit. `'chain'` takes 1-8 `inserts` and is the only mode that does;
+   * a destination no track references is stored and read back all the same.
+   * Refused: a malformed insert document (invalid format), an out-of-range part,
+   * an unknown mode or processor, or inserts on a non-chain mode (invalid
+   * parameter), and an insert chain in a build without mastering.
+   */
+  setPartRig(destinationId, part, mode, inserts) {
+    this.native.setPartRig(destinationId, part, mode, partRigInsertsJson(inserts));
+  }
+  /** The stored rig for `(destinationId, part)`, or null when none is stored. */
+  getPartRig(destinationId, part) {
+    return partRigFromNative(this.native.getPartRig(destinationId, part));
+  }
+  /** Remove the stored rig for `(destinationId, part)` via an undoable edit (no-op when absent). */
+  clearPartRig(destinationId, part) {
+    this.native.clearPartRig(destinationId, part);
+  }
   /** Set a track's mute flag via an undoable edit (a muted track is silent). */
   setTrackMute(trackId, mute) {
     this.native.setTrackMute(trackId, mute);
@@ -6022,6 +6382,16 @@ var Project = class _Project {
   /** Compile the project into a renderable timeline, surfacing diagnostics. */
   compile() {
     return this.native.compile();
+  }
+  /**
+   * Compile the project and keep the resulting timeline. The result is
+   * {@link compile}'s plus `timeline`: a {@link ProjectTimeline} to install with
+   * `RealtimeEngine.applyProjectTimeline`, or `null` when an error diagnostic
+   * means nothing compiled.
+   */
+  compileTimeline() {
+    const { timeline, ...result } = this.native.compileTimeline();
+    return { ...result, timeline: timeline === null ? null : new ProjectTimeline(timeline) };
   }
   /**
    * Compile + render the project offline to interleaved float audio. MIDI
@@ -6395,12 +6765,20 @@ var Project = class _Project {
   lastBounceCompileResult() {
     return this.native.lastBounceCompileResult();
   }
-  /** Release the underlying WASM object. Idempotent, as the Node facade is. */
+  /**
+   * Release the underlying WASM object. Idempotent, as the Node facade is.
+   * Called from a rehydrate cancel callback, the release happens when the
+   * outermost {@link rehydrateVocalEdits} call returns.
+   */
   delete() {
     if (this.released) {
       return;
     }
     this.released = true;
+    if (this.activeVocalRehydrateCalls !== 0) {
+      this.deleteRequested = true;
+      return;
+    }
     this.native.delete();
   }
   /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
@@ -6500,14 +6878,14 @@ function engineCapabilities() {
 var RealtimeEngine = class _RealtimeEngine {
   constructor(sampleRate = 48e3, maxBlockSize = 128, commandCapacity = 1024, telemetryCapacity = 1024, maxChannels = 64) {
     this.released = false;
-    const module2 = getSonareModule();
+    const module3 = getSonareModule();
     const capabilities2 = engineCapabilities();
     if (!capabilities2.abiCompatible) {
       throw new Error(
         `Engine ABI mismatch: wasm=${capabilities2.engineAbiVersion}, expected=${capabilities2.expectedEngineAbiVersion}`
       );
     }
-    this.native = new module2.RealtimeEngine(
+    this.native = new module3.RealtimeEngine(
       sampleRate,
       maxBlockSize,
       commandCapacity,
@@ -6710,6 +7088,17 @@ var RealtimeEngine = class _RealtimeEngine {
    */
   setArticulation(destinationId, channel, articulation) {
     this.native.setArticulation(destinationId, channel, articulation);
+  }
+  /**
+   * Set the rig of one part (0-15), or of the destination's default when `part`
+   * is `PART_RIG_ALL_PARTS`, on the instrument bound to `destinationId`. A
+   * direct call, not a stored edit: a destination with no instrument is an
+   * invalid parameter, and an instrument without part rigs (a builtin, a
+   * host-callback instrument) is refused as not implemented rather than
+   * succeeding quietly. `'chain'` takes 1-8 `inserts`; no other mode does.
+   */
+  setPartRig(destinationId, part, mode, inserts) {
+    this.native.setPartRig(destinationId, part, mode, partRigInsertsJson(inserts));
   }
   /**
    * Read back {@link setArticulation} as the canonical name. An ordinal this
@@ -7121,9 +7510,39 @@ var RealtimeEngine = class _RealtimeEngine {
   /**
    * Keys one insert of a lane strip from another lane's post-strip audio
    * (ducking/sidechainRouter inserts). sourceTrackId 0 removes the binding.
+   * Lanes are processed in key order and the key is delay-compensated to the
+   * destination strip input, so the result depends on neither the lane order
+   * nor the block size. Throws, leaving the bindings unchanged, for a lane
+   * keying itself, a binding that would close a cycle over the lane bindings,
+   * a full binding table and an alignment past the delay ceiling. Not callable
+   * while a block is being processed.
    */
   setLaneSidechain(trackId, insertIndex, sourceTrackId) {
     this.native.setLaneSidechain(trackId, insertIndex, sourceTrackId);
+  }
+  /**
+   * Installs a compiled project timeline into this stopped engine, all or
+   * nothing: tempo and time-signature segments, markers, track lanes, track
+   * automation, audio and MIDI clips, and the per-track strips of the project's
+   * mixer scene are replaced in full (a later low-level setter on those domains
+   * is overwritten by the next apply). Instruments, buses, the master strip,
+   * metronome, loop and capture are not touched; bind instruments separately.
+   *
+   * Throws while the transport is playing, for a timeline the engine cannot
+   * hold, and for a scene strip routed from several tracks. A validation
+   * failure leaves the engine unchanged. The engine keeps its own reference, so
+   * {@link ProjectTimeline.dispose} may follow immediately.
+   *
+   * Also throws on an unprepared engine and on a timeline whose sample rate
+   * differs from the engine's. Once a timeline is applied, a later prepare at
+   * another rate is refused until the timeline's clips are cleared.
+   */
+  applyProjectTimeline(timeline) {
+    const timelineId = projectTimelineNativeId(timeline);
+    if (timelineId === void 0) {
+      throw new TypeError("timeline must be a ProjectTimeline instance");
+    }
+    this.native.applyProjectTimeline(timelineId);
   }
   setTrackBuses(buses) {
     this.native.setTrackBuses(
@@ -7326,12 +7745,9 @@ var RealtimeEngine = class _RealtimeEngine {
    * return `-1`: they resize voice pools or swap DSP topology, which is not
    * audio-thread safe. Rebind the instrument with a new patch instead.
    *
-   * `gain`, `busDrive`, `cutoffHz`, `resonanceQ`, `envToCutoffCents`,
-   * `lfoToPitchCents` and `pitchOffsetCents` reach voices that are already
-   * sounding from the next block; the rest are cached into per-voice state at
-   * note-on and take effect from the next note, so a lane that moves one of
-   * them under a held note looks inert until the next one speaks — that is the
-   * behaviour, not a dropped write.
+   * All automatable parameters of a NativeSynth reach already-sounding voices
+   * from the next processed block. Voices using GM program patches are
+   * unaffected; parameters apply to NativeSynth's own patch only.
    *
    * The id survives an unbind/rebind of the same destination and applies
    * nothing while that destination is unbound.
@@ -7356,6 +7772,16 @@ var RealtimeEngine = class _RealtimeEngine {
     this.native.setTrackStripDualPan(trackId, leftPan, rightPan);
   }
   /**
+   * Sets a track lane strip's surround placement in realtime (glitch-free; a
+   * constant-power 5 ms one-pole glide). Used when the destination has more than
+   * two channels. Omitted fields default to a centered point source
+   * (`distance` 1); a `distance` of 0 or less is treated as 1. Throws for an
+   * unknown track, a track without a lane strip, or a non-finite field.
+   */
+  setTrackStripSurroundPan(trackId, pan) {
+    this.native.setTrackStripSurroundPan(trackId, pan);
+  }
+  /**
    * Sets a bus strip's output pan position in realtime (glitch-free). Throws
    * for an unknown bus or one wider than stereo.
    */
@@ -7375,8 +7801,9 @@ var RealtimeEngine = class _RealtimeEngine {
     this.native.setBusStripDualPan(busId, leftPan, rightPan);
   }
   /**
-   * Sets a track lane strip's inter-channel alignment delay (whole samples).
-   * Adjusts strip latency, so PDC and reported graph latency are refreshed.
+   * Sets a track lane strip's alignment delay (whole samples), moving this lane
+   * later relative to every other lane. It is not latency: PDC does not
+   * compensate it and the reported graph latency is unchanged.
    */
   setTrackStripChannelDelaySamples(trackId, delaySamples) {
     this.native.setTrackStripChannelDelaySamples(trackId, delaySamples);
@@ -7645,6 +8072,15 @@ var RealtimeEngine = class _RealtimeEngine {
     return this.native.drainMeterTelemetryWide(maxRecords);
   }
   /**
+   * Per-insert gain reduction in dB (each <= 0) of a meter target's strip from the
+   * last rendered block, in combined pre-to-post insert order. `targetId` uses the
+   * meter-record encoding (0 master, 1..32 lanes, 33..40 buses; 0xFFFF monitor
+   * yields an empty array). Throws for an id outside that range.
+   */
+  meterTargetInsertGainReduction(targetId) {
+    return this.native.meterTargetInsertGainReduction(targetId);
+  }
+  /**
    * Enables per-target spectrum + vectorscope capture. @param intervalFrames is
    * the minimum render-frame gap between snapshots (0 disables). @param bandCount
    * is the FFT band resolution (1..64); changing it re-prepares the tap. Returns
@@ -7757,9 +8193,9 @@ var StreamAnalyzer = class {
       throw new TypeError("outputFormat must be the integer 0 (Float32)");
     }
     const window = config.window === void 0 ? void 0 : resolveOrdinalInRange(config.window, 0, 3, "stream analyzer window");
-    const module2 = getSonareModule();
+    const module3 = getSonareModule();
     const defaults = streamAnalyzerConfigDefaults();
-    this.analyzer = new module2.StreamAnalyzer(
+    this.analyzer = new module3.StreamAnalyzer(
       config.sampleRate ?? defaults.sampleRate,
       config.nFft ?? defaults.nFft,
       config.hopLength ?? defaults.hopLength,
@@ -8019,8 +8455,8 @@ var Mixer = class _Mixer {
    * @param blockSize - Maximum block size per {@link processStereo} call (default: 512)
    */
   static fromSceneJson(json, sampleRate = 48e3, blockSize = 512) {
-    const module2 = getSonareModule();
-    return new _Mixer(module2.createMixerFromSceneJson(json, sampleRate, blockSize), blockSize);
+    const module3 = getSonareModule();
+    return new _Mixer(module3.createMixerFromSceneJson(json, sampleRate, blockSize), blockSize);
   }
   /**
    * Rebuild and compile the routing graph without resetting its absolute
@@ -8347,8 +8783,8 @@ var Mixer = class _Mixer {
     this.mixer.setPanLaw(stripIndex, panLawCode(panLaw));
   }
   /**
-   * Set a per-strip channel delay in samples. This changes the strip's reported
-   * latency; recompile to re-run latency compensation.
+   * Set a per-strip channel delay in samples, moving the strip later relative to
+   * the others. It is not latency: latency compensation does not undo it.
    */
   setChannelDelaySamples(stripIndex, delaySamples) {
     this.mixer.setChannelDelaySamples(stripIndex, delaySamples);
@@ -8602,8 +9038,8 @@ var RealtimeVoiceChanger = class {
    */
   constructor(config = "neutral-monitor", sampleRate, maxBlockSize = 128, channels = 1) {
     this.released = false;
-    const module2 = getSonareModule();
-    this.changer = module2.createRealtimeVoiceChanger(config);
+    const module3 = getSonareModule();
+    this.changer = module3.createRealtimeVoiceChanger(config);
     if (sampleRate !== void 0) {
       let prepared = false;
       try {
@@ -8879,9 +9315,9 @@ var EQ_PHASE_MODES = {
 var StreamingMasteringChain = class {
   constructor(config) {
     this.released = false;
-    const module2 = getSonareModule();
+    const module3 = getSonareModule();
     const { loudnessStaticGainDb, loudnessStaticGainPeakDb, ...chainConfig } = config;
-    this.chain = module2.createStreamingMasteringChain({
+    this.chain = module3.createStreamingMasteringChain({
       __flatParams: flattenChainConfig(chainConfig),
       loudnessStaticGainDb,
       loudnessStaticGainPeakDb
@@ -9017,8 +9453,8 @@ var StreamingMasteringChain = class {
 var StreamingEqualizer = class {
   constructor(config = {}) {
     this.released = false;
-    const module2 = getSonareModule();
-    this.eq = module2.createEqualizer(config);
+    const module3 = getSonareModule();
+    this.eq = module3.createEqualizer(config);
   }
   /**
    * Configure the band at `index` (0..23). Omitted fields use C++ defaults.
@@ -9187,8 +9623,8 @@ var StreamingEqualizer = class {
 var StreamingRetune = class {
   constructor(config = {}) {
     this.released = false;
-    const module2 = getSonareModule();
-    this.retune = module2.createStreamingRetune(config);
+    const module3 = getSonareModule();
+    this.retune = module3.createStreamingRetune(config);
   }
   /**
    * Allocate and initialize native state for the given sample rate and maximum
@@ -9251,6 +9687,1270 @@ function transcribe(request) {
     request
   );
 }
+
+// src/vocal_edit.ts
+var vocalErrorFields = [
+  "reason",
+  "field",
+  "expected",
+  "actual",
+  "expectedText",
+  "actualText"
+];
+var cachedModuleSource = null;
+var cachedVocalModule = null;
+function addVocalErrorDetail(error, detail) {
+  if (error === null || typeof error !== "object") {
+    return;
+  }
+  const candidate = error;
+  if (candidate.name !== "SonareError" || typeof candidate.code !== "number") {
+    return;
+  }
+  for (const field of vocalErrorFields) {
+    Object.defineProperty(candidate, field, {
+      configurable: true,
+      enumerable: true,
+      value: detail[field],
+      writable: false
+    });
+  }
+}
+function module() {
+  const source = getSonareModule();
+  if (source === cachedModuleSource && cachedVocalModule !== null) {
+    return cachedVocalModule;
+  }
+  const detailReader = source.vocalEditLastErrorDetail;
+  if (typeof detailReader !== "function") {
+    cachedModuleSource = source;
+    cachedVocalModule = source;
+    return source;
+  }
+  const functionCache = /* @__PURE__ */ new Map();
+  const wrapped = new Proxy(source, {
+    get(target, property, receiver) {
+      const member = Reflect.get(target, property, receiver);
+      if (property === "vocalEditLastErrorDetail" || typeof property !== "string" || !property.startsWith("vocalEdit") || typeof member !== "function") {
+        return member;
+      }
+      const cached = functionCache.get(property);
+      if (cached !== void 0) {
+        return cached;
+      }
+      const wrappedMember = (...args) => {
+        let beforeSequence;
+        try {
+          beforeSequence = detailReader.call(target).sequence;
+        } catch {
+        }
+        try {
+          return Reflect.apply(member, target, args);
+        } catch (error) {
+          if (beforeSequence !== void 0) {
+            try {
+              const detail = detailReader.call(target);
+              if (detail.sequence !== beforeSequence) {
+                addVocalErrorDetail(error, detail);
+              }
+            } catch {
+            }
+          }
+          throw error;
+        }
+      };
+      functionCache.set(property, wrappedMember);
+      return wrappedMember;
+    }
+  });
+  cachedModuleSource = source;
+  cachedVocalModule = wrapped;
+  return wrapped;
+}
+function requireHandle(handle, subject) {
+  if (!Number.isSafeInteger(handle) || handle <= 0) {
+    throw new TypeError(`${subject} has already been disposed`);
+  }
+}
+function requireFinite(value, field) {
+  if (!Number.isFinite(value)) {
+    throw new RangeError(`${field} must be finite`);
+  }
+  return value;
+}
+function requireSample(value, field) {
+  requireFinite(value, field);
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new RangeError(`${field} must be a non-negative safe integer`);
+  }
+  return value;
+}
+function requireUint32(value, field) {
+  requireSample(value, field);
+  if (value > 4294967295) {
+    throw new RangeError(`${field} must fit uint32`);
+  }
+  return value;
+}
+function requireSampleRate(value) {
+  requireSample(value, "sampleRate");
+  if (value < 8e3 || value > 384e3) {
+    throw new RangeError("sampleRate must be an integer in [8000, 384000]");
+  }
+  return value;
+}
+function requireToken(value, field, fallback = "0") {
+  const token = value ?? fallback;
+  if (typeof token !== "string" || !/^(0|[1-9]\d*)$/.test(token)) {
+    throw new RangeError(`${field} must be a canonical decimal uint64 string`);
+  }
+  if (token.length > 20 || token.length === 20 && token > "18446744073709551615") {
+    throw new RangeError(`${field} must fit uint64`);
+  }
+  return token;
+}
+function resolveRevision(argument, fallback) {
+  const value = typeof argument === "string" ? argument : argument?.expectedRevision;
+  return requireToken(value, "expectedRevision", fallback);
+}
+function requireRange(range) {
+  if (!range || typeof range !== "object") {
+    throw new TypeError("range must be an object");
+  }
+  const startSample = requireSample(range.startSample, "range.startSample");
+  const endSample = requireSample(range.endSample, "range.endSample");
+  if (endSample < startSample) {
+    throw new RangeError("range.endSample must be >= startSample");
+  }
+  return { startSample, endSample };
+}
+function copyToken2(token) {
+  return {
+    sessionEpoch: requireToken(token.sessionEpoch, "sessionEpoch"),
+    revision: requireToken(token.revision, "revision"),
+    draftId: requireToken(token.draftId, "draftId"),
+    generation: requireToken(token.generation, "generation"),
+    requestId: requireToken(token.requestId, "requestId"),
+    profileId: token.profileId
+  };
+}
+function copyRange(range) {
+  return { startSample: range.startSample, endSample: range.endSample };
+}
+function copyNotes(value) {
+  const notes = Array.from(value.notes, (note) => ({
+    ...note,
+    amplitude: new Float32Array(note.amplitude),
+    edit: {
+      ...note.edit,
+      pitch: {
+        ...note.edit.pitch,
+        target: note.edit.pitch.target.mode === "curve" ? {
+          mode: "curve",
+          points: note.edit.pitch.target.points.map((point) => ({ ...point }))
+        } : { ...note.edit.pitch.target }
+      },
+      amplitudeEnvelope: Array.from(note.edit.amplitudeEnvelope),
+      formant: { ...note.edit.formant }
+    }
+  }));
+  return {
+    notes,
+    transitions: Array.from(value.transitions, (transition) => ({ ...transition }))
+  };
+}
+function copyAnalysis(value) {
+  return {
+    frameOriginSample: value.frameOriginSample,
+    samplesPerFrame: value.samplesPerFrame,
+    frameLengthSamples: value.frameLengthSamples,
+    f0Hz: new Float32Array(value.f0Hz),
+    voiced: new Uint8Array(value.voiced),
+    algorithmId: value.algorithmId,
+    algorithmVersion: value.algorithmVersion,
+    sourceLengthSamples: value.sourceLengthSamples,
+    sampleRate: value.sampleRate,
+    sourceSha256: value.sourceSha256,
+    analysisSha256: value.analysisSha256,
+    fminHz: value.fminHz,
+    fmaxHz: value.fmaxHz,
+    yinThreshold: value.yinThreshold,
+    voicedThreshold: value.voicedThreshold,
+    centered: value.centered,
+    segmentationThresholdCents: value.segmentationThresholdCents,
+    minNoteMs: value.minNoteMs,
+    referenceHz: value.referenceHz
+  };
+}
+function copyPitch(value) {
+  return {
+    sourceSamples: new Float64Array(value.sourceSamples),
+    measuredMidi: new Float64Array(value.measuredMidi),
+    targetMidi: new Float64Array(value.targetMidi),
+    effectiveMidi: new Float64Array(value.effectiveMidi),
+    voiced: new Uint8Array(value.voiced),
+    hasTarget: new Uint8Array(value.hasTarget)
+  };
+}
+function copyRender(value) {
+  return {
+    samples: new Float32Array(value.samples),
+    startSample: value.startSample,
+    token: copyToken2(value.token),
+    processedRanges: Array.from(value.processedRanges, copyRange),
+    cacheHitUnits: requireToken(value.cacheHitUnits, "cacheHitUnits"),
+    dryPassedFrames: requireToken(value.dryPassedFrames, "dryPassedFrames"),
+    limitedCorrectionFrames: requireToken(value.limitedCorrectionFrames, "limitedCorrectionFrames")
+  };
+}
+function validateSessionLimits(limits) {
+  if (limits === void 0) {
+    return;
+  }
+  if (limits.maxHistoryBytes !== void 0) {
+    requireToken(limits.maxHistoryBytes, "limits.maxHistoryBytes");
+  }
+  if (limits.maxCacheBytes !== void 0) {
+    requireToken(limits.maxCacheBytes, "limits.maxCacheBytes");
+  }
+}
+function copyEditResult(value) {
+  return {
+    token: copyToken2(value.token),
+    dirtyRanges: Array.from(value.dirtyRanges, copyRange),
+    idChanges: Array.from(value.idChanges, (change) => ({
+      operationIndex: change.operationIndex,
+      retiredId: change.retiredId,
+      newIds: Array.from(change.newIds)
+    }))
+  };
+}
+function validateCreate(request) {
+  if (!request || typeof request !== "object") {
+    throw new TypeError("request must be an object");
+  }
+  if (!(request.samples instanceof Float32Array) || request.samples.length === 0) {
+    throw new TypeError("samples must be a non-empty Float32Array");
+  }
+  for (const sample of request.samples) {
+    requireFinite(sample, "samples");
+  }
+  requireSampleRate(request.sampleRate);
+  if (request.outputLengthSamples !== void 0) {
+    requireSample(request.outputLengthSamples, "outputLengthSamples");
+  }
+  validateSessionLimits(request.limits);
+  if (request.analysis) {
+    const analysis = request.analysis;
+    if (analysis.algorithmId !== void 0) {
+      if (typeof analysis.algorithmId !== "string") {
+        throw new TypeError("analysis.algorithmId must be a string");
+      }
+      if (analysis.algorithmId.includes("\0")) {
+        throw new RangeError("analysis.algorithmId must not contain NUL");
+      }
+    }
+    requireFinite(analysis.frameOriginSample, "analysis.frameOriginSample");
+    requireFinite(analysis.samplesPerFrame, "analysis.samplesPerFrame");
+    if (analysis.samplesPerFrame <= 0) {
+      throw new RangeError("analysis.samplesPerFrame must be positive");
+    }
+    requireSample(analysis.frameLengthSamples, "analysis.frameLengthSamples");
+    if (analysis.frameLengthSamples === 0) {
+      throw new RangeError("analysis.frameLengthSamples must be positive");
+    }
+    if (!(analysis.f0Hz instanceof Float32Array) || !(analysis.voiced instanceof Uint8Array)) {
+      throw new TypeError("analysis arrays must be Float32Array and Uint8Array");
+    }
+    if (analysis.f0Hz.length !== analysis.voiced.length) {
+      throw new RangeError("analysis arrays must have equal lengths");
+    }
+  }
+}
+function normalizeRequest(request, outputLengthSamples) {
+  const range = request.range === void 0 ? { startSample: 0, endSample: requireSample(outputLengthSamples, "outputLengthSamples") } : requireRange(request.range);
+  const requestId = requireToken(request.requestId, "requestId");
+  return { range, requestId };
+}
+function vocalEditAvailable() {
+  const raw = module();
+  return typeof raw.vocalEditAvailable === "function" && raw.vocalEditAvailable() !== 0;
+}
+function vocalEditApiVersion() {
+  const raw = module();
+  return typeof raw.vocalEditApiVersion === "function" ? raw.vocalEditApiVersion() : 0;
+}
+function createVocalEditSession(request) {
+  validateCreate(request);
+  if (!vocalEditAvailable()) {
+    throw new Error("vocal edit is unavailable in this WASM build");
+  }
+  return new VocalEditSession(
+    module().vocalEditSessionCreate(request.samples, request.sampleRate, request)
+  );
+}
+function restoreVocalEditSession(request) {
+  if (!(request.samples instanceof Float32Array) || request.samples.length === 0) {
+    throw new TypeError("samples must be a non-empty Float32Array");
+  }
+  if (!(request.state instanceof Uint8Array)) {
+    throw new TypeError("state must be a Uint8Array");
+  }
+  for (const sample of request.samples) {
+    requireFinite(sample, "samples");
+  }
+  requireSampleRate(request.sampleRate);
+  validateSessionLimits(request.limits);
+  if (!vocalEditAvailable()) {
+    throw new Error("vocal edit is unavailable in this WASM build");
+  }
+  return new VocalEditSession(
+    module().vocalEditSessionRestore(request.samples, request.sampleRate, request.state, request)
+  );
+}
+var VocalEditSession = class {
+  /** @internal Instances are created by {@link createVocalEditSession} and {@link restoreVocalEditSession}. */
+  constructor(handle) {
+    this.drafts = /* @__PURE__ */ new Set();
+    this.disposed = false;
+    requireHandle(handle, "session");
+    this.handle = handle;
+  }
+  dispose() {
+    if (this.disposed) {
+      return;
+    }
+    for (const draft of this.drafts) {
+      draft.dispose();
+    }
+    this.drafts.clear();
+    module().vocalEditSessionDestroy(this.handle);
+    this.handle = 0;
+    this.disposed = true;
+  }
+  delete() {
+    this.dispose();
+  }
+  destroy() {
+    this.dispose();
+  }
+  native() {
+    if (this.disposed) {
+      throw new TypeError("session has already been disposed");
+    }
+    requireHandle(this.handle, "session");
+    return this.handle;
+  }
+  token() {
+    return copyToken2(module().vocalEditSessionToken(this.native()));
+  }
+  revision() {
+    return this.token().revision;
+  }
+  notes() {
+    return copyNotes(module().vocalEditSessionNotes(this.native()));
+  }
+  analysis() {
+    return copyAnalysis(module().vocalEditSessionAnalysis(this.native()));
+  }
+  capabilities() {
+    return { ...module().vocalEditSessionCapabilities(this.native()) };
+  }
+  outputLengthSamples() {
+    return requireSample(
+      module().vocalEditSessionOutputLength(this.native()),
+      "outputLengthSamples"
+    );
+  }
+  history() {
+    const value = module().vocalEditSessionHistory(this.native());
+    return { canUndo: value.canUndo === true, canRedo: value.canRedo === true };
+  }
+  beginEdit(options = {}) {
+    const draft = new VocalEditDraft(
+      module().vocalEditSessionBeginEdit(this.native(), resolveRevision(options, this.revision())),
+      this
+    );
+    this.drafts.add(draft);
+    return draft;
+  }
+  undo(options = {}) {
+    return copyEditResult(
+      module().vocalEditSessionApplyHistory(
+        this.native(),
+        resolveRevision(options, this.revision()),
+        false
+      )
+    );
+  }
+  redo(options = {}) {
+    return copyEditResult(
+      module().vocalEditSessionApplyHistory(
+        this.native(),
+        resolveRevision(options, this.revision()),
+        true
+      )
+    );
+  }
+  evaluatePitch(noteId) {
+    return copyPitch(
+      module().vocalEditEvaluatePitch(this.native(), requireUint32(noteId, "noteId"), false)
+    );
+  }
+  sourceSampleToDestinationSample(noteId, sourceSample) {
+    requireFinite(sourceSample, "sourceSample");
+    return module().vocalEditMapCoordinate(
+      this.native(),
+      requireUint32(noteId, "noteId"),
+      sourceSample,
+      false,
+      false
+    );
+  }
+  destinationSampleToSourceSample(noteId, destinationSample) {
+    requireFinite(destinationSample, "destinationSample");
+    return module().vocalEditMapCoordinate(
+      this.native(),
+      requireUint32(noteId, "noteId"),
+      destinationSample,
+      false,
+      true
+    );
+  }
+  captureRenderSnapshot() {
+    return new VocalRenderSnapshot(module().vocalEditCaptureSnapshot(this.native(), false));
+  }
+  exportState() {
+    return new Uint8Array(module().vocalEditSessionExportState(this.native()));
+  }
+  /** @internal Used by the draft to remove itself from the owner set. */
+  _forgetDraft(draft) {
+    this.drafts.delete(draft);
+  }
+};
+var VocalEditDraft = class {
+  /** @internal Instances are created by {@link VocalEditSession.beginEdit}. */
+  constructor(handle, owner) {
+    this.disposed = false;
+    requireHandle(handle, "draft");
+    this.handle = handle;
+    this.owner = owner;
+  }
+  native() {
+    if (this.disposed) {
+      throw new TypeError("draft has already been disposed");
+    }
+    requireHandle(this.handle, "draft");
+    return this.handle;
+  }
+  token() {
+    return copyToken2(module().vocalEditDraftToken(this.native()));
+  }
+  notes() {
+    return copyNotes(module().vocalEditDraftNotes(this.native()));
+  }
+  apply(request) {
+    if (request.expectedGeneration === void 0) {
+      throw new TypeError("expectedGeneration is required");
+    }
+    const generation = requireToken(request.expectedGeneration, "expectedGeneration");
+    if (!Array.isArray(request.operations)) {
+      throw new TypeError("operations must be an array");
+    }
+    return copyEditResult(
+      module().vocalEditDraftApply(this.native(), generation, request.operations)
+    );
+  }
+  commit(options = {}) {
+    const result = copyEditResult(
+      module().vocalEditDraftCommit(this.native(), resolveRevision(options, this.owner.revision()))
+    );
+    this.dispose();
+    return result;
+  }
+  cancel() {
+    if (this.disposed) {
+      return;
+    }
+    module().vocalEditDraftCancel(this.native());
+    this.dispose();
+  }
+  evaluatePitch(noteId) {
+    return copyPitch(
+      module().vocalEditEvaluatePitch(this.native(), requireUint32(noteId, "noteId"), true)
+    );
+  }
+  sourceSampleToDestinationSample(noteId, sourceSample) {
+    requireFinite(sourceSample, "sourceSample");
+    return module().vocalEditMapCoordinate(
+      this.native(),
+      requireUint32(noteId, "noteId"),
+      sourceSample,
+      true,
+      false
+    );
+  }
+  destinationSampleToSourceSample(noteId, destinationSample) {
+    requireFinite(destinationSample, "destinationSample");
+    return module().vocalEditMapCoordinate(
+      this.native(),
+      requireUint32(noteId, "noteId"),
+      destinationSample,
+      true,
+      true
+    );
+  }
+  captureRenderSnapshot() {
+    return new VocalRenderSnapshot(module().vocalEditCaptureSnapshot(this.native(), true));
+  }
+  dispose() {
+    if (this.disposed) {
+      return;
+    }
+    module().vocalEditDraftDestroy(this.handle);
+    this.handle = 0;
+    this.disposed = true;
+    this.owner._forgetDraft(this);
+  }
+  delete() {
+    this.dispose();
+  }
+  destroy() {
+    this.dispose();
+  }
+};
+var VocalRenderSnapshot = class {
+  /** @internal Instances are created by a session or draft. */
+  constructor(handle) {
+    this.disposed = false;
+    requireHandle(handle, "snapshot");
+    this.handle = handle;
+  }
+  native() {
+    if (this.disposed) {
+      throw new TypeError("snapshot has already been disposed");
+    }
+    requireHandle(this.handle, "snapshot");
+    return this.handle;
+  }
+  outputLengthSamples() {
+    return requireSample(
+      module().vocalEditSnapshotOutputLength(this.native()),
+      "outputLengthSamples"
+    );
+  }
+  render(request) {
+    const handle = this.native();
+    if (request.signal?.aborted) {
+      throw new DOMException("The render was aborted", "AbortError");
+    }
+    const normalized = normalizeRequest(request, this.outputLengthSamples());
+    return copyRender(
+      module().vocalEditSnapshotRender(
+        handle,
+        normalized.range.startSample,
+        normalized.range.endSample,
+        normalized.requestId
+      )
+    );
+  }
+  beginRenderJob(request) {
+    const handle = this.native();
+    if (request.signal?.aborted) {
+      throw new DOMException("The render was aborted", "AbortError");
+    }
+    const normalized = normalizeRequest(request, this.outputLengthSamples());
+    return new VocalRenderJob(
+      module().vocalEditRenderJobBegin(
+        handle,
+        normalized.range.startSample,
+        normalized.range.endSample,
+        normalized.requestId
+      )
+    );
+  }
+  /**
+   * Render one native work unit per macrotask so `request.signal` can stop the
+   * job between units. A cancelled job publishes no partial PCM.
+   */
+  renderAsync(request) {
+    this.native();
+    const signal = request.signal;
+    if (signal?.aborted) {
+      return Promise.reject(new DOMException("The render was aborted", "AbortError"));
+    }
+    const job = this.beginRenderJob(request);
+    return (async () => {
+      try {
+        while (true) {
+          if (signal?.aborted) {
+            job.abort();
+            throw new DOMException("The render was aborted", "AbortError");
+          }
+          if (job.next().complete) {
+            return job.finalize();
+          }
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+      } catch (error) {
+        job.abort();
+        throw error;
+      } finally {
+        job.dispose();
+      }
+    })();
+  }
+  dispose() {
+    if (this.disposed) {
+      return;
+    }
+    module().vocalEditSnapshotDestroy(this.handle);
+    this.handle = 0;
+    this.disposed = true;
+  }
+  delete() {
+    this.dispose();
+  }
+  destroy() {
+    this.dispose();
+  }
+};
+var VocalRenderJob = class {
+  /** @internal Instances are created by {@link VocalRenderSnapshot.beginRenderJob}. */
+  constructor(handle) {
+    this.disposed = false;
+    requireHandle(handle, "render job");
+    this.handle = handle;
+  }
+  native() {
+    if (this.disposed) {
+      throw new TypeError("render job has already been disposed");
+    }
+    requireHandle(this.handle, "render job");
+    return this.handle;
+  }
+  next() {
+    return { complete: module().vocalEditRenderJobNext(this.native()) };
+  }
+  finalize() {
+    const result = copyRender(module().vocalEditRenderJobFinalize(this.native()));
+    this.dispose();
+    return result;
+  }
+  abort() {
+    if (!this.disposed) {
+      module().vocalEditRenderJobAbort(this.handle);
+    }
+  }
+  dispose() {
+    if (this.disposed) {
+      return;
+    }
+    module().vocalEditRenderJobDestroy(this.handle);
+    this.handle = 0;
+    this.disposed = true;
+  }
+  delete() {
+    this.dispose();
+  }
+  destroy() {
+    this.dispose();
+  }
+};
+
+// src/vocal_edit_worker_protocol.ts
+function stateTokenEquals(a, b) {
+  if (!a || !b) {
+    return a === b;
+  }
+  return a.sessionEpoch === b.sessionEpoch && a.revision === b.revision && a.draftId === b.draftId && a.generation === b.generation && a.profileId === b.profileId;
+}
+function compareUint64(a, b) {
+  const left = a.replace(/^0+(?=\d)/, "");
+  const right = b.replace(/^0+(?=\d)/, "");
+  if (left.length !== right.length) {
+    return left.length < right.length ? -1 : 1;
+  }
+  if (left === right) {
+    return 0;
+  }
+  return left < right ? -1 : 1;
+}
+
+// src/vocal_edit_worker_client.ts
+var VocalEditWorkerStaleResultError = class extends Error {
+  constructor(message = "A vocal edit Worker result is stale") {
+    super(message);
+    this.name = "StaleResultError";
+  }
+};
+var VocalEditWorkerTask = class {
+  constructor(result, cancelRequest) {
+    this.result = result;
+    this.cancelRequest = cancelRequest;
+  }
+  cancel() {
+    this.cancelRequest();
+  }
+  // biome-ignore lint/suspicious/noThenProperty: PromiseLike intentionally exposes then.
+  then(onfulfilled, onrejected) {
+    return this.result.then(onfulfilled, onrejected);
+  }
+  catch(onrejected) {
+    return this.result.catch(onrejected);
+  }
+  finally(onfinally) {
+    return this.result.finally(onfinally);
+  }
+};
+function resolveRevision2(argument, fallback) {
+  const value = typeof argument === "string" ? argument : argument?.expectedRevision;
+  return value ?? fallback;
+}
+function incrementDecimal(value) {
+  if (compareUint64(value, "18446744073709551615") >= 0) {
+    throw new RangeError("vocal Worker intent sequence exhausted uint64");
+  }
+  const digits = value.split("").map((digit) => digit.charCodeAt(0) - 48);
+  let carry = 1;
+  for (let i = digits.length - 1; i >= 0; i--) {
+    const next = digits[i] + carry;
+    digits[i] = next % 10;
+    carry = Math.floor(next / 10);
+  }
+  if (carry !== 0) {
+    digits.unshift(carry);
+  }
+  return digits.join("");
+}
+function cancellationFlag() {
+  if (typeof SharedArrayBuffer === "undefined") {
+    return void 0;
+  }
+  return new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
+}
+function cloneForWorker(value, copy, transfers, transferred = /* @__PURE__ */ new Set()) {
+  if (value instanceof Float32Array) {
+    const next = copy ? value.slice() : value;
+    if (next.buffer instanceof ArrayBuffer && !transferred.has(next.buffer)) {
+      transferred.add(next.buffer);
+      transfers.push(next.buffer);
+    }
+    return next;
+  }
+  if (value instanceof Uint8Array) {
+    const next = copy ? value.slice() : value;
+    if (next.buffer instanceof ArrayBuffer && !transferred.has(next.buffer)) {
+      transferred.add(next.buffer);
+      transfers.push(next.buffer);
+    }
+    return next;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => cloneForWorker(item, copy, transfers, transferred));
+  }
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        cloneForWorker(item, copy, transfers, transferred)
+      ])
+    );
+  }
+  return value;
+}
+function cloneRequest(request, copy, transfers) {
+  return cloneForWorker(request, copy, transfers);
+}
+function workerError(message) {
+  if (message.error.name === "StaleResultError") {
+    return new VocalEditWorkerStaleResultError(message.error.message);
+  }
+  const { code, codeName } = message.error;
+  const error = message.error.name === "SonareError" && typeof code === "number" ? new SonareError(code, codeName ?? "", message.error.message) : new Error(message.error.message);
+  error.name = message.error.name;
+  for (const key of [
+    "code",
+    "reason",
+    "field",
+    "expected",
+    "actual",
+    "expectedText",
+    "actualText"
+  ]) {
+    const value = message.error[key];
+    if (value !== void 0) {
+      Object.defineProperty(error, key, { value, enumerable: true, configurable: true });
+    }
+  }
+  return error;
+}
+function sameSessionToken(a, b) {
+  return a.sessionEpoch === b.sessionEpoch && a.profileId === b.profileId;
+}
+function nextSessionId(counter) {
+  return `vocal-${counter.toString(36)}`;
+}
+function abortError() {
+  return new DOMException("The operation was aborted", "AbortError");
+}
+var VocalEditWorkerClient = class {
+  constructor(options = {}) {
+    this.pending = /* @__PURE__ */ new Map();
+    this.latestIntent = /* @__PURE__ */ new Map();
+    this.sessions = /* @__PURE__ */ new Set();
+    this.nextId = 1;
+    this.nextSession = 1;
+    this.closed = false;
+    this.usesEventTarget = false;
+    this.onMessage = (event) => {
+      const message = event.data;
+      if (message.type === "sonare:vocal-progress") {
+        return;
+      }
+      const pending = this.pending.get(message.id);
+      if (!pending) {
+        return;
+      }
+      this.pending.delete(message.id);
+      if (pending.abortListener && pending.signal) {
+        pending.signal.removeEventListener("abort", pending.abortListener);
+      }
+      if (!pending.preview && pending.session && message.token && pending.baseToken && sameSessionToken(message.token, pending.baseToken)) {
+        pending.session.updateToken(message.token);
+      }
+      const latest = this.latestIntent.get(pending.sessionId) ?? pending.intent;
+      if (compareUint64(pending.intent, latest) < 0) {
+        pending.reject(new VocalEditWorkerStaleResultError());
+        return;
+      }
+      if (message.token && pending.baseToken) {
+        const tokenMatches = pending.preview && pending.session ? stateTokenEquals(message.token, pending.session.latestToken()) : sameSessionToken(message.token, pending.baseToken);
+        if (!tokenMatches) {
+          pending.reject(new VocalEditWorkerStaleResultError());
+          return;
+        }
+      }
+      if (pending.preview && !message.token) {
+        pending.reject(new VocalEditWorkerStaleResultError());
+        return;
+      }
+      if (message.type === "sonare:vocal-error") {
+        pending.reject(workerError(message));
+        return;
+      }
+      pending.resolve({ result: message.result, token: message.token });
+    };
+    this.onError = (event) => {
+      const error = new Error(event.message || "Vocal edit Worker failed");
+      for (const pending of this.pending.values()) {
+        pending.abortListener && pending.signal?.removeEventListener("abort", pending.abortListener);
+        pending.reject(error);
+      }
+      this.pending.clear();
+    };
+    this.onNodeMessage = (data) => {
+      this.onMessage({ data });
+    };
+    this.onNodeError = (error) => {
+      this.onError({ message: error instanceof Error ? error.message : String(error) });
+    };
+    this.ownsWorker = options.worker === void 0 || options.terminateWorkerOnDispose === true;
+    if (options.worker) {
+      this.worker = options.worker;
+    } else {
+      if (!options.workerFactory && typeof Worker === "undefined") {
+        throw new Error("VocalEditWorkerClient requires a Worker implementation");
+      }
+      const url = options.workerUrl === void 0 ? new URL("./vocal_edit_worker.js", import.meta.url) : new URL(options.workerUrl, import.meta.url);
+      this.worker = options.workerFactory?.(url) ?? new Worker(url, { type: "module", name: "sonare-vocal-edit" });
+    }
+    if (this.worker.addEventListener) {
+      this.usesEventTarget = true;
+      this.worker.addEventListener("message", this.onMessage);
+      this.worker.addEventListener("error", this.onError);
+    } else if (this.worker.on) {
+      this.worker.on("message", this.onNodeMessage);
+      this.worker.on("error", this.onNodeError);
+    } else {
+      throw new TypeError("VocalEditWorkerClient requires Worker event listeners");
+    }
+  }
+  create(request, options = {}) {
+    return this.openSession({ kind: "create", request }, options);
+  }
+  restore(request, options = {}) {
+    return this.openSession({ kind: "restore", request }, options);
+  }
+  postDisposeMessage(sessionId, clientIntentSequence) {
+    try {
+      this.worker.postMessage({
+        type: "sonare:vocal-dispose",
+        id: this.nextId++,
+        sessionId,
+        clientIntentSequence
+      });
+    } catch {
+    }
+  }
+  postCancelMessage(id, pending) {
+    if (pending.cancelFlag) {
+      Atomics.store(pending.cancelFlag, 0, 1);
+    }
+    try {
+      this.worker.postMessage({
+        type: "sonare:vocal-cancel",
+        id,
+        sessionId: pending.sessionId,
+        clientIntentSequence: pending.intent
+      });
+    } catch {
+    }
+  }
+  dispose() {
+    if (this.closed) {
+      return;
+    }
+    const pendingEntries = [...this.pending.entries()];
+    const sessionIntents = /* @__PURE__ */ new Map();
+    for (const session of this.sessions) {
+      sessionIntents.set(session.sessionId, this.latestIntent.get(session.sessionId) ?? "0");
+    }
+    for (const [, pending] of pendingEntries) {
+      if (!sessionIntents.has(pending.sessionId)) {
+        sessionIntents.set(pending.sessionId, pending.intent);
+      }
+    }
+    this.closed = true;
+    for (const [id, pending] of pendingEntries) {
+      this.postCancelMessage(id, pending);
+    }
+    for (const [sessionId, intent] of sessionIntents) {
+      this.postDisposeMessage(sessionId, intent);
+    }
+    if (this.usesEventTarget) {
+      this.worker.removeEventListener?.("message", this.onMessage);
+      this.worker.removeEventListener?.("error", this.onError);
+    } else {
+      this.worker.off?.("message", this.onNodeMessage);
+      this.worker.off?.("error", this.onNodeError);
+    }
+    for (const [, pending] of pendingEntries) {
+      pending.abortListener && pending.signal?.removeEventListener("abort", pending.abortListener);
+      pending.reject(new Error("VocalEditWorkerClient was disposed"));
+    }
+    this.pending.clear();
+    this.sessions.clear();
+    this.latestIntent.clear();
+    if (this.ownsWorker) {
+      this.worker.terminate();
+    }
+  }
+  /** @internal Called by VocalEditWorkerSession. */
+  disposeSession(session) {
+    const task = this.call({
+      type: "sonare:vocal-dispose",
+      id: 0,
+      sessionId: session.sessionId,
+      clientIntentSequence: this.intent(session.sessionId)
+    });
+    const result = task.result.then(() => {
+      this.sessions.delete(session);
+      this.latestIntent.delete(session.sessionId);
+      return null;
+    });
+    return new VocalEditWorkerTask(result, () => task.cancel());
+  }
+  /** @internal */
+  callMutation(session, mutation, options = {}) {
+    const message = {
+      type: "sonare:vocal-mutate",
+      id: 0,
+      sessionId: session.sessionId,
+      clientIntentSequence: this.intent(session.sessionId),
+      baseToken: session.currentToken(),
+      mutation
+    };
+    const task = this.call(message, { copy: options.copy }, session);
+    const result = task.result.then((response) => response.result);
+    return new VocalEditWorkerTask(result, () => {
+    });
+  }
+  /** @internal */
+  callPreview(session, request, options = {}) {
+    const signal = request.signal;
+    const { signal: _ignoredSignal, ...portableRequest } = request;
+    const message = {
+      type: "sonare:vocal-preview",
+      id: 0,
+      sessionId: session.sessionId,
+      clientIntentSequence: this.intent(session.sessionId),
+      baseToken: session.currentToken(),
+      request: portableRequest
+    };
+    const task = this.call(message, { signal, copy: options.copy }, session);
+    const result = task.result.then((response) => response.result);
+    return new VocalEditWorkerTask(result, () => task.cancel());
+  }
+  intent(sessionId) {
+    const next = incrementDecimal(this.latestIntent.get(sessionId) ?? "0");
+    this.latestIntent.set(sessionId, next);
+    return next;
+  }
+  openSession(request, options) {
+    const sessionId = nextSessionId(this.nextSession++);
+    let cancelled = false;
+    const task = this.callCreate(sessionId, request, options);
+    const result = task.result.then((value) => {
+      const session = new VocalEditWorkerSession(this, sessionId, value.token, value);
+      if (cancelled || options.signal?.aborted) {
+        if (!this.closed) {
+          session.dispose().result.catch(() => {
+          });
+        }
+        throw abortError();
+      }
+      this.sessions.add(session);
+      return session;
+    });
+    return new VocalEditWorkerTask(result, () => {
+      cancelled = true;
+      task.cancel();
+    });
+  }
+  callCreate(sessionId, request, options) {
+    const message = {
+      type: "sonare:vocal-create",
+      id: 0,
+      sessionId,
+      clientIntentSequence: this.intent(sessionId),
+      request
+    };
+    const task = this.call(message, options);
+    const result = task.result.then((response) => response.result);
+    return new VocalEditWorkerTask(result, () => task.cancel());
+  }
+  call(input, options = {}, session) {
+    if (this.closed) {
+      throw new Error("VocalEditWorkerClient was disposed");
+    }
+    const id = this.nextId++;
+    const transfers = [];
+    const message = cloneRequest(
+      { ...input, id },
+      options.copy === true,
+      transfers
+    );
+    const cancelFlag = cancellationFlag();
+    if (cancelFlag) {
+      message.cancelBuffer = cancelFlag.buffer;
+    }
+    const result = new Promise((resolve, reject) => {
+      if (options.signal?.aborted) {
+        reject(abortError());
+        return;
+      }
+      const pending = {
+        resolve: (value) => resolve(value),
+        reject,
+        sessionId: message.sessionId,
+        intent: message.clientIntentSequence,
+        baseToken: message.type === "sonare:vocal-mutate" || message.type === "sonare:vocal-preview" ? message.baseToken : void 0,
+        preview: message.type === "sonare:vocal-preview",
+        session,
+        cancelFlag,
+        signal: options.signal
+      };
+      if (options.signal) {
+        pending.abortListener = () => {
+          if (cancelFlag) {
+            Atomics.store(cancelFlag, 0, 1);
+          }
+          this.worker.postMessage({
+            type: "sonare:vocal-cancel",
+            id,
+            sessionId: message.sessionId,
+            clientIntentSequence: message.clientIntentSequence
+          });
+        };
+        options.signal.addEventListener("abort", pending.abortListener, { once: true });
+      }
+      this.pending.set(id, pending);
+    });
+    if (!options.signal?.aborted) {
+      try {
+        this.worker.postMessage(message, transfers);
+      } catch (error) {
+        const pending = this.pending.get(id);
+        if (pending) {
+          this.pending.delete(id);
+          if (pending.abortListener && pending.signal) {
+            pending.signal.removeEventListener("abort", pending.abortListener);
+          }
+          pending.reject(error);
+        }
+      }
+    }
+    return new VocalEditWorkerTask(result, () => {
+      const pending = this.pending.get(id);
+      if (!pending) {
+        return;
+      }
+      if (pending.cancelFlag) {
+        Atomics.store(pending.cancelFlag, 0, 1);
+      }
+      this.worker.postMessage({
+        type: "sonare:vocal-cancel",
+        id,
+        sessionId: pending.sessionId,
+        clientIntentSequence: pending.intent
+      });
+    });
+  }
+};
+var VocalEditWorkerSession = class {
+  /** @internal Created by VocalEditWorkerClient.create/restore. */
+  constructor(client, sessionId, token, created) {
+    this.disposed = false;
+    this.client = client;
+    this.sessionId = sessionId;
+    this.tokenValue = token;
+    this.created = created;
+  }
+  currentToken() {
+    this.requireAlive();
+    return this.tokenValue;
+  }
+  updateToken(token) {
+    this.tokenValue = token;
+  }
+  /** @internal The adopted token, readable after dispose for reply checks. */
+  latestToken() {
+    return this.tokenValue;
+  }
+  token() {
+    this.requireAlive();
+    return { ...this.tokenValue };
+  }
+  /** The adopted revision; like {@link token}, it follows replies already received. */
+  revision() {
+    return this.token().revision;
+  }
+  notes() {
+    this.requireAlive();
+    return this.client.callMutation(this, { kind: "notes" });
+  }
+  analysis() {
+    this.requireAlive();
+    return this.client.callMutation(this, { kind: "analysis" });
+  }
+  capabilities() {
+    this.requireAlive();
+    return this.client.callMutation(this, { kind: "capabilities" });
+  }
+  outputLengthSamples() {
+    this.requireAlive();
+    return this.client.callMutation(this, { kind: "outputLength" });
+  }
+  history() {
+    this.requireAlive();
+    return this.client.callMutation(this, { kind: "history" });
+  }
+  /** Token of the open draft; rejects when no draft is open. */
+  draftToken() {
+    this.requireAlive();
+    return this.client.callMutation(this, { kind: "draftToken" });
+  }
+  evaluatePitch(noteId, options = {}) {
+    this.requireAlive();
+    return this.client.callMutation(this, {
+      kind: "evaluatePitch",
+      noteId,
+      draft: options.draft === true
+    });
+  }
+  sourceSampleToDestinationSample(noteId, sourceSample, options = {}) {
+    this.requireAlive();
+    return this.client.callMutation(this, {
+      kind: "mapCoordinate",
+      noteId,
+      sample: sourceSample,
+      inverse: false,
+      draft: options.draft === true
+    });
+  }
+  destinationSampleToSourceSample(noteId, destinationSample, options = {}) {
+    this.requireAlive();
+    return this.client.callMutation(this, {
+      kind: "mapCoordinate",
+      noteId,
+      sample: destinationSample,
+      inverse: true,
+      draft: options.draft === true
+    });
+  }
+  beginEdit(options = {}) {
+    this.requireAlive();
+    return this.client.callMutation(this, {
+      kind: "beginEdit",
+      expectedRevision: resolveRevision2(options, this.tokenValue.revision)
+    });
+  }
+  apply(request, options = {}) {
+    this.requireAlive();
+    if (request.expectedGeneration === void 0) {
+      throw new TypeError("expectedGeneration is required");
+    }
+    return this.client.callMutation(this, { kind: "apply", request }, options);
+  }
+  commit(options = {}) {
+    this.requireAlive();
+    return this.client.callMutation(this, {
+      kind: "commit",
+      expectedRevision: resolveRevision2(options, this.tokenValue.revision)
+    });
+  }
+  cancel() {
+    this.requireAlive();
+    return this.client.callMutation(this, { kind: "cancel" });
+  }
+  undo(options = {}) {
+    this.requireAlive();
+    return this.client.callMutation(this, {
+      kind: "undo",
+      expectedRevision: resolveRevision2(options, this.tokenValue.revision)
+    });
+  }
+  redo(options = {}) {
+    this.requireAlive();
+    return this.client.callMutation(this, {
+      kind: "redo",
+      expectedRevision: resolveRevision2(options, this.tokenValue.revision)
+    });
+  }
+  exportState() {
+    this.requireAlive();
+    return this.client.callMutation(this, { kind: "exportState" });
+  }
+  preview(request, options = {}) {
+    this.requireAlive();
+    return this.client.callPreview(this, request, options);
+  }
+  /** Releases the Worker session and any open draft; later calls on it are rejected. */
+  dispose() {
+    if (this.disposed) {
+      return new VocalEditWorkerTask(Promise.resolve(null), () => {
+      });
+    }
+    this.disposed = true;
+    return this.client.disposeSession(this);
+  }
+  requireAlive() {
+    if (this.disposed) {
+      throw new TypeError("vocal Worker session has already been disposed");
+    }
+  }
+};
 
 // src/web_midi.ts
 function isWebMidiAvailable() {
@@ -9376,8 +11076,8 @@ function dispatchMidiMessage(engine, event, group, runningStatus, timestampToSam
     return 0;
   }
   const first = data[0];
-  if (first > 255) {
-    dispatchUmpMessage(
+  if (first > 255 || data instanceof Uint32Array) {
+    dispatchUmpMessages(
       engine,
       data,
       timestampToSamples?.(event.receivedTime ?? event.timeStamp ?? 0) ?? 0
@@ -9400,8 +11100,12 @@ function dispatchMidiMessage(engine, event, group, runningStatus, timestampToSam
     return status >= 248 ? runningStatus : 0;
   }
   const a = readU7(data, offset);
-  const b = readU7(data, offset + 1);
-  if (a < 0 || b < 0) {
+  if (a < 0) {
+    return status;
+  }
+  const oneDataByteMessage = message === 192 || message === 208;
+  const b = oneDataByteMessage ? -1 : readU7(data, offset + 1);
+  if (!oneDataByteMessage && b < 0) {
     return status;
   }
   const portTimeSamples = timestampToSamples ? timestampToSamples(event.receivedTime ?? event.timeStamp ?? 0) : 0;
@@ -9415,13 +11119,42 @@ function dispatchMidiMessage(engine, event, group, runningStatus, timestampToSam
     }
   } else if (message === 176 && b >= 0) {
     engine.pushMidiInputCc(group, channel, a, b, portTimeSamples);
+  } else if (message === 160 && b >= 0) {
+    engine.pushMidiInputPolyPressure?.(group, channel, a, b, portTimeSamples);
+  } else if (message === 208) {
+    engine.pushMidiInputChannelPressure?.(group, channel, a, portTimeSamples);
+  } else if (message === 224 && b >= 0) {
+    engine.pushMidiInputPitchBend?.(group, channel, a | b << 7, portTimeSamples);
   }
   return status;
+}
+function dispatchUmpMessages(engine, words, portTimeSamples) {
+  let offset = 0;
+  while (offset < words.length) {
+    const word0 = words[offset] >>> 0;
+    const wordCount = umpWordCount(word0 >>> 28);
+    if (words.length - offset < wordCount) {
+      return;
+    }
+    const packet = new Uint32Array(wordCount);
+    for (let index = 0; index < wordCount; index++) {
+      packet[index] = words[offset + index] >>> 0;
+    }
+    dispatchUmpMessage(engine, packet, portTimeSamples);
+    offset += wordCount;
+  }
 }
 function dispatchUmpMessage(engine, words, portTimeSamples) {
   const word0 = words[0] >>> 0;
   const messageType = word0 >>> 28;
   const group = word0 >>> 24 & 15;
+  if (messageType === 3 || messageType === 5) {
+    return;
+  }
+  if (engine.pushMidiInputUmp) {
+    engine.pushMidiInputUmp(words, portTimeSamples);
+    return;
+  }
   if (messageType === 2) {
     const status = word0 >>> 16 & 255;
     const message = status & 240;
@@ -9438,6 +11171,12 @@ function dispatchUmpMessage(engine, words, portTimeSamples) {
       }
     } else if (message === 176) {
       engine.pushMidiInputCc(group, channel, a, b, portTimeSamples);
+    } else if (message === 160) {
+      engine.pushMidiInputPolyPressure?.(group, channel, a, b, portTimeSamples);
+    } else if (message === 208) {
+      engine.pushMidiInputChannelPressure?.(group, channel, a, portTimeSamples);
+    } else if (message === 224) {
+      engine.pushMidiInputPitchBend?.(group, channel, a | b << 7, portTimeSamples);
     }
     return;
   }
@@ -9453,7 +11192,40 @@ function dispatchUmpMessage(engine, words, portTimeSamples) {
       engine.pushMidiInputNoteOn(group, channel, data1, velocity, portTimeSamples);
     } else if (status === 11) {
       engine.pushMidiInputCc(group, channel, data1, word1 >>> 25 & 127, portTimeSamples);
+    } else if (status === 10) {
+      engine.pushMidiInputPolyPressure?.(
+        group,
+        channel,
+        data1,
+        word1 >>> 25 & 127,
+        portTimeSamples
+      );
+    } else if (status === 13) {
+      engine.pushMidiInputChannelPressure?.(group, channel, word1 >>> 25 & 127, portTimeSamples);
+    } else if (status === 14) {
+      engine.pushMidiInputPitchBend?.(group, channel, word1 >>> 18, portTimeSamples);
     }
+  }
+}
+function umpWordCount(messageType) {
+  switch (messageType & 15) {
+    case 0:
+    case 1:
+    case 2:
+    case 6:
+    case 7:
+      return 1;
+    case 3:
+    case 4:
+    case 8:
+    case 9:
+    case 10:
+      return 2;
+    case 11:
+    case 12:
+      return 3;
+    default:
+      return 4;
   }
 }
 function readU7(data, index) {
@@ -9490,7 +11262,7 @@ var OfflineWorkerTask = class {
     return this.result.finally(onfinally);
   }
 };
-function cloneForWorker(value, copy, transfers, transferred = /* @__PURE__ */ new Set()) {
+function cloneForWorker2(value, copy, transfers, transferred = /* @__PURE__ */ new Set()) {
   if (value instanceof Float32Array) {
     const samples = copy ? value.slice() : value;
     const buffer = samples.buffer;
@@ -9506,25 +11278,25 @@ function cloneForWorker(value, copy, transfers, transferred = /* @__PURE__ */ ne
     return samples;
   }
   if (Array.isArray(value)) {
-    return value.map((item) => cloneForWorker(item, copy, transfers, transferred));
+    return value.map((item) => cloneForWorker2(item, copy, transfers, transferred));
   }
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
         key,
-        cloneForWorker(item, copy, transfers, transferred)
+        cloneForWorker2(item, copy, transfers, transferred)
       ])
     );
   }
   return value;
 }
-function cancellationFlag() {
+function cancellationFlag2() {
   if (typeof SharedArrayBuffer === "undefined") {
     return void 0;
   }
   return new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
 }
-function workerError(message) {
+function workerError2(message) {
   if (message.error.code !== void 0) {
     return new SonareError(
       message.error.code,
@@ -9557,7 +11329,7 @@ var OfflineWorkerClient = class {
         pending.resolve(message.result);
         return;
       }
-      pending.reject(workerError(message));
+      pending.reject(workerError2(message));
     };
     this.onError = (event) => {
       const error = new Error(event.message || "Offline Worker failed");
@@ -9646,8 +11418,8 @@ var OfflineWorkerClient = class {
     }
     const id = this.nextId++;
     const transfers = [];
-    const preparedRequest = cloneForWorker(request, options.copy === true, transfers);
-    const cancelFlag = cancellationFlag();
+    const preparedRequest = cloneForWorker2(request, options.copy === true, transfers);
+    const cancelFlag = cancellationFlag2();
     const result = new Promise((resolve, reject) => {
       this.pending.set(id, {
         resolve: (value) => resolve(value),
@@ -9679,10 +11451,10 @@ var OfflineWorkerClient = class {
 };
 
 // src/index.ts
-var module = null;
+var module2 = null;
 var initPromise = null;
 async function init(options) {
-  if (module) {
+  if (module2) {
     return;
   }
   if (initPromise) {
@@ -9691,8 +11463,8 @@ async function init(options) {
   initPromise = (async () => {
     try {
       const createModule = options?.moduleFactory ?? (await import("./sonare.js")).default;
-      module = await createModule(options);
-      setSonareModule(module);
+      module2 = await createModule(options);
+      setSonareModule(module2);
     } catch (error) {
       initPromise = null;
       throw error;
@@ -9701,43 +11473,43 @@ async function init(options) {
   return initPromise;
 }
 function isInitialized() {
-  return module !== null;
+  return module2 !== null;
 }
 function version() {
-  if (!module) {
+  if (!module2) {
     throw new Error("Module not initialized. Call init() first.");
   }
-  return module.version();
+  return module2.version();
 }
 function capabilities() {
-  if (!module) {
+  if (!module2) {
     throw new Error("Module not initialized. Call init() first.");
   }
-  return module.capabilities();
+  return module2.capabilities();
 }
 function capabilityCatalog() {
-  if (!module) {
+  if (!module2) {
     throw new Error("Module not initialized. Call init() first.");
   }
-  return JSON.parse(module.capabilityCatalog());
+  return JSON.parse(module2.capabilityCatalog());
 }
 function abiVersion() {
-  if (!module) {
+  if (!module2) {
     throw new Error("Module not initialized. Call init() first.");
   }
-  return module.abiVersion();
+  return module2.abiVersion();
 }
 function engineAbiVersion() {
-  if (!module) {
+  if (!module2) {
     throw new Error("Module not initialized. Call init() first.");
   }
-  return module.engineAbiVersion();
+  return module2.engineAbiVersion();
 }
 function voiceChangerAbiVersion() {
-  if (!module) {
+  if (!module2) {
     throw new Error("Module not initialized. Call init() first.");
   }
-  return module.voiceChangerAbiVersion();
+  return module2.voiceChangerAbiVersion();
 }
 var VOICE_PRESET_ORDINALS = [
   "neutral-monitor",
@@ -9761,19 +11533,19 @@ function resolveVoicePresetOrdinal(preset) {
   return ordinal;
 }
 function voiceCharacterPresetId(preset) {
-  if (!module) {
+  if (!module2) {
     throw new Error("Module not initialized. Call init() first.");
   }
   if (typeof preset === "number" && (!Number.isSafeInteger(preset) || preset < 0 || preset >= VOICE_PRESET_ORDINALS.length)) {
     return null;
   }
-  return module.voiceCharacterPresetId(resolveVoicePresetOrdinal(preset));
+  return module2.voiceCharacterPresetId(resolveVoicePresetOrdinal(preset));
 }
 function realtimeVoiceChangerPresetConfig(preset) {
-  if (!module) {
+  if (!module2) {
     throw new Error("Module not initialized. Call init() first.");
   }
-  return module.realtimeVoiceChangerPresetConfig(resolveVoicePresetOrdinal(preset));
+  return module2.realtimeVoiceChangerPresetConfig(resolveVoicePresetOrdinal(preset));
 }
 export {
   ARTICULATIONS,
@@ -9797,6 +11569,8 @@ export {
   NOTE_TRACKINGS,
   OfflineWorkerClient,
   OfflineWorkerTask,
+  PART_RIG_ALL_PARTS,
+  PART_RIG_MODES,
   PROJECT_AUTOMATION_TARGET_OPAQUE,
   PROJECT_AUTOMATION_TARGET_TRACK_FADER_DB,
   PROJECT_AUTOMATION_TARGET_TRACK_PAN,
@@ -9806,6 +11580,7 @@ export {
   PlaybackRenderer,
   PolyphonicAnalysis,
   Project,
+  ProjectTimeline,
   RealtimeEngine,
   RealtimeVoiceChanger,
   SAMPLE_KEY_TRACKS,
@@ -9825,6 +11600,14 @@ export {
   StreamingEqualizer,
   StreamingMasteringChain,
   StreamingRetune,
+  VocalEditDraft,
+  VocalEditSession,
+  VocalEditWorkerClient,
+  VocalEditWorkerSession,
+  VocalEditWorkerStaleResultError,
+  VocalEditWorkerTask,
+  VocalRenderJob,
+  VocalRenderSnapshot,
   abiVersion,
   alignTakeToReference,
   amplitudeToDb,
@@ -9856,6 +11639,7 @@ export {
   cqtToAudio,
   createOpfsClipPageProvider,
   createOpfsClipPageWorker,
+  createVocalEditSession,
   cyclicTempogram,
   dbToAmplitude,
   dbToPower,
@@ -10046,6 +11830,7 @@ export {
   renderPercussiveEvents,
   renderPlayback,
   resample,
+  restoreVocalEditSession,
   rmsEnergy,
   roomMorph,
   samplesToFrames,
@@ -10095,6 +11880,8 @@ export {
   validateRealtimeVoiceChangerPresetJson,
   vectorNormalize,
   version,
+  vocalEditApiVersion,
+  vocalEditAvailable,
   voiceChange,
   voiceChangeRealtime,
   voiceChangerAbiVersion,

@@ -15,7 +15,8 @@ WASM_FILES=("sonare.wasm" "sonare.js")
 # entry, and worker.* is the offline Worker entry `OfflineWorkerClient` resolves
 # with `new URL('./worker.js', import.meta.url)` — copying it keeps that
 # specifier resolvable instead of leaving a dangling runtime URL in the bundle.
-JS_FILES=("index.js" "index.d.ts" "worklet.js" "worklet.d.ts" "worker.js" "worker.d.ts")
+# VocalEditWorkerClient similarly resolves ./vocal_edit_worker.js.
+JS_FILES=("index.js" "index.d.ts" "worklet.js" "worklet.d.ts" "worker.js" "worker.d.ts" "vocal_edit_worker.js" "vocal_edit_worker.d.ts")
 JS_CHUNK_GLOB="chunk-*.js"
 
 # index.d.ts is a barrel: it re-exports every public type from a sibling

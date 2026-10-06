@@ -1,17 +1,17 @@
 {
   "_sources": {
-    "tools/gs/efx-bindings/01.json": "5dc44751cb5742b13b9d4bfd669f957b3079dccadc9742df43dcecfd36a84fca",
-    "tools/gs/efx-bindings/02.json": "ecfec52f044d650062453b9c26d16f714b453a7663f8b214706666e36b066c46",
-    "tools/gs/efx-bindings/04.json": "9ddbb8bcdcbcf55fac3f476fee600b6678f10f107cf4f9b327b99c0298cf0403",
+    "tools/gs/efx-bindings/01.json": "c8edada16035d1bfabd11f752c23d6047aa2b4f2d83ab23f34d4d2cf38b01617",
+    "tools/gs/efx-bindings/02.json": "173f69ecef61798fd691019183abcf61bbbaa5d122f585e75d214bd409b73b52",
+    "tools/gs/efx-bindings/04.json": "7519df65a12d00ea29109c95a2aeb6767510e71393d662dac94fd72f67e1ead8",
     "tools/gs/efx-bindings/05.json": "4a441d819d2acecabae0176425bac4c7c8bb3c4a8f1965e025aa54e5cb5bc36a",
-    "tools/gs/efx-bindings/11.json": "0e365b3bc39b3f2a068b72167ee5cd20d1f2bc9fbd2f0b530c5a61bfc78f0897"
+    "tools/gs/efx-bindings/11.json": "306040c1498bd66896fec607fca3791a8554041d8c56cce7a293c9b022da3755"
   },
   "what_this_is": "Which physical quantity each insertion-effect (type, slot) names, and which insert control receives it. The conversion archive measures laws and which slots move the sound; it does not record what a slot is called, so this is the side that gives a byte a name.",
   "slots_per_type": 20,
   "counts": {
     "translated": 379,
-    "designed": 362,
-    "enables": 29
+    "designed": 345,
+    "enables": 46
   },
   "rows": [
     {
@@ -468,14 +468,14 @@
     {
       "type": "01 10",
       "slot": 0,
-      "stage": "saturation.ampSim",
-      "key": "inputDb",
+      "stage": "saturation.overdrive",
+      "key": "gainDb",
       "printed_values": "00–7F",
       "printed_mark": "+",
       "printed_name": "Drive",
       "designed": {
         "basis": "carried",
-        "law": "drive.gain",
+        "law": "drive.pedal",
         "from": "0110-a-drive-byte-is-a-gain-in-front-of-a-fixed-curve",
         "replaced_when": {
           "claim_names": [
@@ -489,13 +489,26 @@
     {
       "type": "01 10",
       "slot": 1,
-      "stage": "saturation.ampSim",
-      "key": "cabModel",
-      "printed_values": "00/01/02/03",
       "printed_name": "Amp Type",
-      "designed": {
+      "enables": {
+        "select": [
+          {
+            "stage": "saturation.ampSim"
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 1
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 2
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 3
+          }
+        ],
         "basis": "invented",
-        "law": "d.enum4",
         "replaced_when": {
           "model_binding": [
             "01 10",
@@ -503,7 +516,7 @@
           ]
         }
       },
-      "form": "designed"
+      "form": "enables"
     },
     {
       "type": "01 10",
@@ -512,6 +525,12 @@
       "key": "cab",
       "printed_values": "00/01",
       "printed_name": "Amp Sw",
+      "ordinal": [
+        0,
+        1,
+        2,
+        3
+      ],
       "designed": {
         "basis": "invented",
         "law": "d.enum2",
@@ -578,14 +597,14 @@
     {
       "type": "01 11",
       "slot": 0,
-      "stage": "saturation.ampSim",
-      "key": "inputDb",
+      "stage": "saturation.distortion",
+      "key": "gainDb",
       "printed_values": "00–7F",
       "printed_mark": "+",
       "printed_name": "Drive",
       "designed": {
         "basis": "carried",
-        "law": "drive.gain",
+        "law": "drive.pedal",
         "from": "0110-a-drive-byte-is-a-gain-in-front-of-a-fixed-curve",
         "replaced_when": {
           "claim_names": [
@@ -599,13 +618,26 @@
     {
       "type": "01 11",
       "slot": 1,
-      "stage": "saturation.ampSim",
-      "key": "cabModel",
-      "printed_values": "00/01/02/03",
       "printed_name": "Amp Type",
-      "designed": {
+      "enables": {
+        "select": [
+          {
+            "stage": "saturation.ampSim"
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 1
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 2
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 3
+          }
+        ],
         "basis": "invented",
-        "law": "d.enum4",
         "replaced_when": {
           "model_binding": [
             "01 11",
@@ -613,7 +645,7 @@
           ]
         }
       },
-      "form": "designed"
+      "form": "enables"
     },
     {
       "type": "01 11",
@@ -622,6 +654,12 @@
       "key": "cab",
       "printed_values": "00/01",
       "printed_name": "Amp Sw",
+      "ordinal": [
+        0,
+        1,
+        2,
+        3
+      ],
       "designed": {
         "basis": "invented",
         "law": "d.enum2",
@@ -4668,13 +4706,13 @@
     {
       "type": "02 00",
       "slot": 0,
-      "stage": "saturation.ampSim",
-      "key": "inputDb",
+      "stage": "saturation.overdrive",
+      "key": "gainDb",
       "printed_values": "00–7F",
       "printed_name": "OD Drive",
       "designed": {
         "basis": "carried",
-        "law": "drive.gain",
+        "law": "drive.pedal",
         "from": "drive-the-orders-reach-their-ceiling-by-the-resting-value",
         "replaced_when": {
           "table_reaches": [
@@ -4709,13 +4747,26 @@
     {
       "type": "02 00",
       "slot": 2,
-      "stage": "saturation.ampSim",
-      "key": "cabModel",
-      "printed_values": "00/01/02/03",
       "printed_name": "OD Amp",
-      "designed": {
+      "enables": {
+        "select": [
+          {
+            "stage": "saturation.ampSim"
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 1
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 2
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 3
+          }
+        ],
         "basis": "invented",
-        "law": "d.enum4",
         "replaced_when": {
           "model_binding": [
             "02 00",
@@ -4723,7 +4774,7 @@
           ]
         }
       },
-      "form": "designed"
+      "form": "enables"
     },
     {
       "type": "02 00",
@@ -4732,6 +4783,12 @@
       "key": "cab",
       "printed_values": "00/01",
       "printed_name": "OD Amp Sw",
+      "ordinal": [
+        0,
+        1,
+        2,
+        3
+      ],
       "designed": {
         "basis": "invented",
         "law": "d.enum2",
@@ -4837,13 +4894,13 @@
     {
       "type": "02 01",
       "slot": 0,
-      "stage": "saturation.ampSim",
-      "key": "inputDb",
+      "stage": "saturation.overdrive",
+      "key": "gainDb",
       "printed_values": "00–7F",
       "printed_name": "OD Drive",
       "designed": {
         "basis": "carried",
-        "law": "drive.gain",
+        "law": "drive.pedal",
         "from": "drive-the-orders-reach-their-ceiling-by-the-resting-value",
         "replaced_when": {
           "table_reaches": [
@@ -4878,13 +4935,26 @@
     {
       "type": "02 01",
       "slot": 2,
-      "stage": "saturation.ampSim",
-      "key": "cabModel",
-      "printed_values": "00/01/02/03",
       "printed_name": "OD Amp",
-      "designed": {
+      "enables": {
+        "select": [
+          {
+            "stage": "saturation.ampSim"
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 1
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 2
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 3
+          }
+        ],
         "basis": "invented",
-        "law": "d.enum4",
         "replaced_when": {
           "model_binding": [
             "02 01",
@@ -4892,7 +4962,7 @@
           ]
         }
       },
-      "form": "designed"
+      "form": "enables"
     },
     {
       "type": "02 01",
@@ -4901,6 +4971,12 @@
       "key": "cab",
       "printed_values": "00/01",
       "printed_name": "OD Amp Sw",
+      "ordinal": [
+        0,
+        1,
+        2,
+        3
+      ],
       "designed": {
         "basis": "invented",
         "law": "d.enum2",
@@ -5021,13 +5097,13 @@
     {
       "type": "02 02",
       "slot": 0,
-      "stage": "saturation.ampSim",
-      "key": "inputDb",
+      "stage": "saturation.overdrive",
+      "key": "gainDb",
       "printed_values": "00–7F",
       "printed_name": "OD Drive",
       "designed": {
         "basis": "carried",
-        "law": "drive.gain",
+        "law": "drive.pedal",
         "from": "drive-the-orders-reach-their-ceiling-by-the-resting-value",
         "replaced_when": {
           "table_reaches": [
@@ -5062,13 +5138,26 @@
     {
       "type": "02 02",
       "slot": 2,
-      "stage": "saturation.ampSim",
-      "key": "cabModel",
-      "printed_values": "00/01/02/03",
       "printed_name": "OD Amp",
-      "designed": {
+      "enables": {
+        "select": [
+          {
+            "stage": "saturation.ampSim"
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 1
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 2
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 3
+          }
+        ],
         "basis": "invented",
-        "law": "d.enum4",
         "replaced_when": {
           "model_binding": [
             "02 02",
@@ -5076,7 +5165,7 @@
           ]
         }
       },
-      "form": "designed"
+      "form": "enables"
     },
     {
       "type": "02 02",
@@ -5085,6 +5174,12 @@
       "key": "cab",
       "printed_values": "00/01",
       "printed_name": "OD Amp Sw",
+      "ordinal": [
+        0,
+        1,
+        2,
+        3
+      ],
       "designed": {
         "basis": "invented",
         "law": "d.enum2",
@@ -5189,13 +5284,13 @@
     {
       "type": "02 03",
       "slot": 0,
-      "stage": "saturation.ampSim",
-      "key": "inputDb",
+      "stage": "saturation.distortion",
+      "key": "gainDb",
       "printed_values": "00–7F",
       "printed_name": "DS Drive",
       "designed": {
         "basis": "carried",
-        "law": "drive.gain",
+        "law": "drive.pedal",
         "from": "drive-the-orders-reach-their-ceiling-by-the-resting-value",
         "replaced_when": {
           "table_reaches": [
@@ -5230,13 +5325,26 @@
     {
       "type": "02 03",
       "slot": 2,
-      "stage": "saturation.ampSim",
-      "key": "cabModel",
-      "printed_values": "00/01/02/03",
       "printed_name": "DS Amp",
-      "designed": {
+      "enables": {
+        "select": [
+          {
+            "stage": "saturation.ampSim"
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 1
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 2
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 3
+          }
+        ],
         "basis": "invented",
-        "law": "d.enum4",
         "replaced_when": {
           "model_binding": [
             "02 03",
@@ -5244,7 +5352,7 @@
           ]
         }
       },
-      "form": "designed"
+      "form": "enables"
     },
     {
       "type": "02 03",
@@ -5253,6 +5361,12 @@
       "key": "cab",
       "printed_values": "00/01",
       "printed_name": "DS Amp Sw",
+      "ordinal": [
+        0,
+        1,
+        2,
+        3
+      ],
       "designed": {
         "basis": "invented",
         "law": "d.enum2",
@@ -5358,13 +5472,13 @@
     {
       "type": "02 04",
       "slot": 0,
-      "stage": "saturation.ampSim",
-      "key": "inputDb",
+      "stage": "saturation.distortion",
+      "key": "gainDb",
       "printed_values": "00–7F",
       "printed_name": "DS Drive",
       "designed": {
         "basis": "carried",
-        "law": "drive.gain",
+        "law": "drive.pedal",
         "from": "drive-the-orders-reach-their-ceiling-by-the-resting-value",
         "replaced_when": {
           "table_reaches": [
@@ -5399,13 +5513,26 @@
     {
       "type": "02 04",
       "slot": 2,
-      "stage": "saturation.ampSim",
-      "key": "cabModel",
-      "printed_values": "00/01/02/03",
       "printed_name": "DS Amp",
-      "designed": {
+      "enables": {
+        "select": [
+          {
+            "stage": "saturation.ampSim"
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 1
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 2
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 3
+          }
+        ],
         "basis": "invented",
-        "law": "d.enum4",
         "replaced_when": {
           "model_binding": [
             "02 04",
@@ -5413,7 +5540,7 @@
           ]
         }
       },
-      "form": "designed"
+      "form": "enables"
     },
     {
       "type": "02 04",
@@ -5422,6 +5549,12 @@
       "key": "cab",
       "printed_values": "00/01",
       "printed_name": "DS Amp Sw",
+      "ordinal": [
+        0,
+        1,
+        2,
+        3
+      ],
       "designed": {
         "basis": "invented",
         "law": "d.enum2",
@@ -5542,13 +5675,13 @@
     {
       "type": "02 05",
       "slot": 0,
-      "stage": "saturation.ampSim",
-      "key": "inputDb",
+      "stage": "saturation.distortion",
+      "key": "gainDb",
       "printed_values": "00–7F",
       "printed_name": "DS Drive",
       "designed": {
         "basis": "carried",
-        "law": "drive.gain",
+        "law": "drive.pedal",
         "from": "drive-the-orders-reach-their-ceiling-by-the-resting-value",
         "replaced_when": {
           "table_reaches": [
@@ -5583,13 +5716,26 @@
     {
       "type": "02 05",
       "slot": 2,
-      "stage": "saturation.ampSim",
-      "key": "cabModel",
-      "printed_values": "00/01/02/03",
       "printed_name": "DS Amp",
-      "designed": {
+      "enables": {
+        "select": [
+          {
+            "stage": "saturation.ampSim"
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 1
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 2
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 3
+          }
+        ],
         "basis": "invented",
-        "law": "d.enum4",
         "replaced_when": {
           "model_binding": [
             "02 05",
@@ -5597,7 +5743,7 @@
           ]
         }
       },
-      "form": "designed"
+      "form": "enables"
     },
     {
       "type": "02 05",
@@ -5606,6 +5752,12 @@
       "key": "cab",
       "printed_values": "00/01",
       "printed_name": "DS Amp Sw",
+      "ordinal": [
+        0,
+        1,
+        2,
+        3
+      ],
       "designed": {
         "basis": "invented",
         "law": "d.enum2",
@@ -6586,14 +6738,14 @@
     {
       "type": "02 0C",
       "slot": 0,
-      "stage": "saturation.ampSim",
-      "key": "inputDb",
+      "stage": "saturation.overdrive",
+      "key": "gainDb",
       "printed_values": "00–7F",
       "printed_mark": "+",
       "printed_name": "OD Drive",
       "designed": {
         "basis": "carried",
-        "law": "drive.gain",
+        "law": "drive.pedal",
         "from": "drive-the-orders-reach-their-ceiling-by-the-resting-value",
         "replaced_when": {
           "table_reaches": [
@@ -6610,6 +6762,9 @@
       "printed_name": "OD Sw",
       "enables": {
         "stages": [
+          {
+            "stage": "saturation.overdrive"
+          },
           {
             "stage": "saturation.ampSim"
           }
@@ -6918,11 +7073,10 @@
       "enables": {
         "select": [
           {
-            "stage": "saturation.ampSim"
+            "stage": "saturation.overdrive"
           },
           {
-            "stage": "saturation.ampSim",
-            "ordinal": 1
+            "stage": "saturation.distortion"
           }
         ],
         "basis": "invented",
@@ -6938,18 +7092,20 @@
     {
       "type": "04 00",
       "slot": 5,
-      "stage": "saturation.ampSim",
-      "key": "inputDb",
+      "stage": "saturation.overdrive",
+      "key": "gainDb",
       "printed_values": "00–7F",
       "printed_mark": "+",
       "printed_name": "OD Drive",
-      "ordinal": [
-        0,
-        1
+      "alternatives": [
+        {
+          "stage": "saturation.distortion",
+          "key": "gainDb"
+        }
       ],
       "designed": {
         "basis": "carried",
-        "law": "drive.gain",
+        "law": "drive.pedal",
         "from": "drive-the-orders-reach-their-ceiling-by-the-resting-value",
         "replaced_when": {
           "table_reaches": [
@@ -6963,17 +7119,26 @@
     {
       "type": "04 00",
       "slot": 6,
-      "stage": "saturation.ampSim",
-      "key": "cabModel",
-      "printed_values": "00/01/02/03",
       "printed_name": "OD Amp",
-      "ordinal": [
-        0,
-        1
-      ],
-      "designed": {
+      "enables": {
+        "select": [
+          {
+            "stage": "saturation.ampSim"
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 1
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 2
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 3
+          }
+        ],
         "basis": "invented",
-        "law": "d.enum4",
         "replaced_when": {
           "model_binding": [
             "04 00",
@@ -6981,7 +7146,7 @@
           ]
         }
       },
-      "form": "designed"
+      "form": "enables"
     },
     {
       "type": "04 00",
@@ -6992,7 +7157,9 @@
       "printed_name": "OD Amp Sw",
       "ordinal": [
         0,
-        1
+        1,
+        2,
+        3
       ],
       "designed": {
         "basis": "invented",
@@ -7016,7 +7183,9 @@
       "printed_name": "OD L Gain",
       "ordinal": [
         0,
-        1
+        1,
+        2,
+        3
       ],
       "form": "translated"
     },
@@ -7030,7 +7199,9 @@
       "printed_name": "OD H Gain",
       "ordinal": [
         0,
-        1
+        1,
+        2,
+        3
       ],
       "form": "translated"
     },
@@ -7041,11 +7212,25 @@
       "enables": {
         "stages": [
           {
+            "stage": "saturation.overdrive"
+          },
+          {
+            "stage": "saturation.distortion"
+          },
+          {
             "stage": "saturation.ampSim"
           },
           {
             "stage": "saturation.ampSim",
             "ordinal": 1
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 2
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 3
           }
         ],
         "on_states": [
@@ -7322,11 +7507,10 @@
       "enables": {
         "select": [
           {
-            "stage": "saturation.ampSim"
+            "stage": "saturation.overdrive"
           },
           {
-            "stage": "saturation.ampSim",
-            "ordinal": 1
+            "stage": "saturation.distortion"
           }
         ],
         "basis": "invented",
@@ -7342,18 +7526,20 @@
     {
       "type": "04 01",
       "slot": 5,
-      "stage": "saturation.ampSim",
-      "key": "inputDb",
+      "stage": "saturation.overdrive",
+      "key": "gainDb",
       "printed_values": "00–7F",
       "printed_mark": "+",
       "printed_name": "OD Drive",
-      "ordinal": [
-        0,
-        1
+      "alternatives": [
+        {
+          "stage": "saturation.distortion",
+          "key": "gainDb"
+        }
       ],
       "designed": {
         "basis": "carried",
-        "law": "drive.gain",
+        "law": "drive.pedal",
         "from": "drive-the-orders-reach-their-ceiling-by-the-resting-value",
         "replaced_when": {
           "table_reaches": [
@@ -7367,17 +7553,26 @@
     {
       "type": "04 01",
       "slot": 6,
-      "stage": "saturation.ampSim",
-      "key": "cabModel",
-      "printed_values": "00/01/02/03",
       "printed_name": "OD Amp",
-      "ordinal": [
-        0,
-        1
-      ],
-      "designed": {
+      "enables": {
+        "select": [
+          {
+            "stage": "saturation.ampSim"
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 1
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 2
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 3
+          }
+        ],
         "basis": "invented",
-        "law": "d.enum4",
         "replaced_when": {
           "model_binding": [
             "04 01",
@@ -7385,7 +7580,7 @@
           ]
         }
       },
-      "form": "designed"
+      "form": "enables"
     },
     {
       "type": "04 01",
@@ -7396,7 +7591,9 @@
       "printed_name": "OD Amp Sw",
       "ordinal": [
         0,
-        1
+        1,
+        2,
+        3
       ],
       "designed": {
         "basis": "invented",
@@ -7417,11 +7614,25 @@
       "enables": {
         "stages": [
           {
+            "stage": "saturation.overdrive"
+          },
+          {
+            "stage": "saturation.distortion"
+          },
+          {
             "stage": "saturation.ampSim"
           },
           {
             "stage": "saturation.ampSim",
             "ordinal": 1
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 2
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 3
           }
         ],
         "on_states": [
@@ -7694,11 +7905,10 @@
       "enables": {
         "select": [
           {
-            "stage": "saturation.ampSim"
+            "stage": "saturation.overdrive"
           },
           {
-            "stage": "saturation.ampSim",
-            "ordinal": 1
+            "stage": "saturation.distortion"
           }
         ],
         "basis": "invented",
@@ -7714,18 +7924,20 @@
     {
       "type": "04 02",
       "slot": 5,
-      "stage": "saturation.ampSim",
-      "key": "inputDb",
+      "stage": "saturation.overdrive",
+      "key": "gainDb",
       "printed_values": "00–7F",
       "printed_mark": "#",
       "printed_name": "OD Drive",
-      "ordinal": [
-        0,
-        1
+      "alternatives": [
+        {
+          "stage": "saturation.distortion",
+          "key": "gainDb"
+        }
       ],
       "designed": {
         "basis": "carried",
-        "law": "drive.gain",
+        "law": "drive.pedal",
         "from": "drive-the-orders-reach-their-ceiling-by-the-resting-value",
         "replaced_when": {
           "table_reaches": [
@@ -7739,17 +7951,26 @@
     {
       "type": "04 02",
       "slot": 6,
-      "stage": "saturation.ampSim",
-      "key": "cabModel",
-      "printed_values": "00/01/02/03",
       "printed_name": "OD Amp",
-      "ordinal": [
-        0,
-        1
-      ],
-      "designed": {
+      "enables": {
+        "select": [
+          {
+            "stage": "saturation.ampSim"
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 1
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 2
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 3
+          }
+        ],
         "basis": "invented",
-        "law": "d.enum4",
         "replaced_when": {
           "model_binding": [
             "04 02",
@@ -7757,7 +7978,7 @@
           ]
         }
       },
-      "form": "designed"
+      "form": "enables"
     },
     {
       "type": "04 02",
@@ -7768,7 +7989,9 @@
       "printed_name": "OD Amp Sw",
       "ordinal": [
         0,
-        1
+        1,
+        2,
+        3
       ],
       "designed": {
         "basis": "invented",
@@ -7792,7 +8015,9 @@
       "printed_name": "OD L Gain",
       "ordinal": [
         0,
-        1
+        1,
+        2,
+        3
       ],
       "form": "translated"
     },
@@ -7806,7 +8031,9 @@
       "printed_name": "OD H Gain",
       "ordinal": [
         0,
-        1
+        1,
+        2,
+        3
       ],
       "form": "translated"
     },
@@ -7817,11 +8044,25 @@
       "enables": {
         "stages": [
           {
+            "stage": "saturation.overdrive"
+          },
+          {
+            "stage": "saturation.distortion"
+          },
+          {
             "stage": "saturation.ampSim"
           },
           {
             "stage": "saturation.ampSim",
             "ordinal": 1
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 2
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 3
           }
         ],
         "on_states": [
@@ -8739,11 +8980,10 @@
       "enables": {
         "select": [
           {
-            "stage": "saturation.ampSim"
+            "stage": "saturation.overdrive"
           },
           {
-            "stage": "saturation.ampSim",
-            "ordinal": 1
+            "stage": "saturation.distortion"
           }
         ],
         "basis": "invented",
@@ -8759,18 +8999,20 @@
     {
       "type": "04 05",
       "slot": 5,
-      "stage": "saturation.ampSim",
-      "key": "inputDb",
+      "stage": "saturation.overdrive",
+      "key": "gainDb",
       "printed_values": "00–7F",
       "printed_mark": "+",
       "printed_name": "OD Drive",
-      "ordinal": [
-        0,
-        1
+      "alternatives": [
+        {
+          "stage": "saturation.distortion",
+          "key": "gainDb"
+        }
       ],
       "designed": {
         "basis": "carried",
-        "law": "drive.gain",
+        "law": "drive.pedal",
         "from": "drive-the-orders-reach-their-ceiling-by-the-resting-value",
         "replaced_when": {
           "table_reaches": [
@@ -8784,17 +9026,22 @@
     {
       "type": "04 05",
       "slot": 6,
-      "stage": "saturation.ampSim",
-      "key": "cabModel",
-      "printed_values": "00/01/02",
       "printed_name": "OD Amp",
-      "ordinal": [
-        0,
-        1
-      ],
-      "designed": {
+      "enables": {
+        "select": [
+          {
+            "stage": "saturation.ampSim"
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 1
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 2
+          }
+        ],
         "basis": "invented",
-        "law": "d.enum3",
         "replaced_when": {
           "model_binding": [
             "04 05",
@@ -8802,7 +9049,7 @@
           ]
         }
       },
-      "form": "designed"
+      "form": "enables"
     },
     {
       "type": "04 05",
@@ -8813,7 +9060,8 @@
       "printed_name": "OD Amp Sw",
       "ordinal": [
         0,
-        1
+        1,
+        2
       ],
       "designed": {
         "basis": "invented",
@@ -8834,11 +9082,21 @@
       "enables": {
         "stages": [
           {
+            "stage": "saturation.overdrive"
+          },
+          {
+            "stage": "saturation.distortion"
+          },
+          {
             "stage": "saturation.ampSim"
           },
           {
             "stage": "saturation.ampSim",
             "ordinal": 1
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 2
           }
         ],
         "on_states": [
@@ -10393,11 +10651,10 @@
       "enables": {
         "select": [
           {
-            "stage": "saturation.ampSim"
+            "stage": "saturation.overdrive"
           },
           {
-            "stage": "saturation.ampSim",
-            "ordinal": 1
+            "stage": "saturation.distortion"
           }
         ],
         "basis": "invented",
@@ -10413,18 +10670,20 @@
     {
       "type": "11 03",
       "slot": 1,
-      "stage": "saturation.ampSim",
-      "key": "inputDb",
+      "stage": "saturation.overdrive",
+      "key": "gainDb",
       "printed_values": "00–7F",
       "printed_mark": "+",
       "printed_name": "OD1 Drive",
-      "ordinal": [
-        0,
-        1
+      "alternatives": [
+        {
+          "stage": "saturation.distortion",
+          "key": "gainDb"
+        }
       ],
       "designed": {
         "basis": "carried",
-        "law": "drive.gain",
+        "law": "drive.pedal",
         "from": "0110-a-drive-byte-is-a-gain-in-front-of-a-fixed-curve",
         "replaced_when": {
           "claim_names": [
@@ -10438,17 +10697,26 @@
     {
       "type": "11 03",
       "slot": 2,
-      "stage": "saturation.ampSim",
-      "key": "cabModel",
-      "printed_values": "00/01/02/03",
       "printed_name": "OD1 Amp",
-      "ordinal": [
-        0,
-        1
-      ],
-      "designed": {
+      "enables": {
+        "select": [
+          {
+            "stage": "saturation.ampSim"
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 1
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 2
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 3
+          }
+        ],
         "basis": "invented",
-        "law": "d.enum4",
         "replaced_when": {
           "model_binding": [
             "11 03",
@@ -10456,7 +10724,7 @@
           ]
         }
       },
-      "form": "designed"
+      "form": "enables"
     },
     {
       "type": "11 03",
@@ -10467,7 +10735,9 @@
       "printed_name": "OD1 Amp Sw",
       "ordinal": [
         0,
-        1
+        1,
+        2,
+        3
       ],
       "designed": {
         "basis": "invented",
@@ -10488,12 +10758,12 @@
       "enables": {
         "select": [
           {
-            "stage": "saturation.ampSim",
-            "ordinal": 2
+            "stage": "saturation.overdrive",
+            "ordinal": 1
           },
           {
-            "stage": "saturation.ampSim",
-            "ordinal": 3
+            "stage": "saturation.distortion",
+            "ordinal": 1
           }
         ],
         "basis": "invented",
@@ -10509,18 +10779,22 @@
     {
       "type": "11 03",
       "slot": 6,
-      "stage": "saturation.ampSim",
-      "key": "inputDb",
+      "stage": "saturation.overdrive",
+      "key": "gainDb",
       "printed_values": "00–7F",
       "printed_mark": "#",
       "printed_name": "OD2 Drive",
-      "ordinal": [
-        2,
-        3
+      "ordinal": 1,
+      "alternatives": [
+        {
+          "stage": "saturation.distortion",
+          "key": "gainDb",
+          "ordinal": 1
+        }
       ],
       "designed": {
         "basis": "carried",
-        "law": "drive.gain",
+        "law": "drive.pedal",
         "from": "0110-a-drive-byte-is-a-gain-in-front-of-a-fixed-curve",
         "replaced_when": {
           "claim_names": [
@@ -10534,17 +10808,27 @@
     {
       "type": "11 03",
       "slot": 7,
-      "stage": "saturation.ampSim",
-      "key": "cabModel",
-      "printed_values": "00/01/02/03",
       "printed_name": "OD2 Amp",
-      "ordinal": [
-        2,
-        3
-      ],
-      "designed": {
+      "enables": {
+        "select": [
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 4
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 5
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 6
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 7
+          }
+        ],
         "basis": "invented",
-        "law": "d.enum4",
         "replaced_when": {
           "model_binding": [
             "11 03",
@@ -10552,7 +10836,7 @@
           ]
         }
       },
-      "form": "designed"
+      "form": "enables"
     },
     {
       "type": "11 03",
@@ -10562,8 +10846,10 @@
       "printed_values": "00/01",
       "printed_name": "OD2 Amp Sw",
       "ordinal": [
-        2,
-        3
+        4,
+        5,
+        6,
+        7
       ],
       "designed": {
         "basis": "invented",
@@ -10677,11 +10963,10 @@
       "enables": {
         "select": [
           {
-            "stage": "saturation.ampSim"
+            "stage": "saturation.overdrive"
           },
           {
-            "stage": "saturation.ampSim",
-            "ordinal": 1
+            "stage": "saturation.distortion"
           }
         ],
         "basis": "invented",
@@ -10697,18 +10982,20 @@
     {
       "type": "11 04",
       "slot": 1,
-      "stage": "saturation.ampSim",
-      "key": "inputDb",
+      "stage": "saturation.overdrive",
+      "key": "gainDb",
       "printed_values": "00–7F",
       "printed_mark": "+",
       "printed_name": "OD Drive",
-      "ordinal": [
-        0,
-        1
+      "alternatives": [
+        {
+          "stage": "saturation.distortion",
+          "key": "gainDb"
+        }
       ],
       "designed": {
         "basis": "carried",
-        "law": "drive.gain",
+        "law": "drive.pedal",
         "from": "0110-a-drive-byte-is-a-gain-in-front-of-a-fixed-curve",
         "replaced_when": {
           "claim_names": [
@@ -10722,17 +11009,26 @@
     {
       "type": "11 04",
       "slot": 2,
-      "stage": "saturation.ampSim",
-      "key": "cabModel",
-      "printed_values": "00/01/02/03",
       "printed_name": "OD Amp",
-      "ordinal": [
-        0,
-        1
-      ],
-      "designed": {
+      "enables": {
+        "select": [
+          {
+            "stage": "saturation.ampSim"
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 1
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 2
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 3
+          }
+        ],
         "basis": "invented",
-        "law": "d.enum4",
         "replaced_when": {
           "model_binding": [
             "11 04",
@@ -10740,7 +11036,7 @@
           ]
         }
       },
-      "form": "designed"
+      "form": "enables"
     },
     {
       "type": "11 04",
@@ -10751,7 +11047,9 @@
       "printed_name": "OD Amp Sw",
       "ordinal": [
         0,
-        1
+        1,
+        2,
+        3
       ],
       "designed": {
         "basis": "invented",
@@ -11008,11 +11306,10 @@
       "enables": {
         "select": [
           {
-            "stage": "saturation.ampSim"
+            "stage": "saturation.overdrive"
           },
           {
-            "stage": "saturation.ampSim",
-            "ordinal": 1
+            "stage": "saturation.distortion"
           }
         ],
         "basis": "invented",
@@ -11028,18 +11325,20 @@
     {
       "type": "11 05",
       "slot": 1,
-      "stage": "saturation.ampSim",
-      "key": "inputDb",
+      "stage": "saturation.overdrive",
+      "key": "gainDb",
       "printed_values": "00–7F",
       "printed_mark": "+",
       "printed_name": "OD Drive",
-      "ordinal": [
-        0,
-        1
+      "alternatives": [
+        {
+          "stage": "saturation.distortion",
+          "key": "gainDb"
+        }
       ],
       "designed": {
         "basis": "carried",
-        "law": "drive.gain",
+        "law": "drive.pedal",
         "from": "0110-a-drive-byte-is-a-gain-in-front-of-a-fixed-curve",
         "replaced_when": {
           "claim_names": [
@@ -11053,17 +11352,26 @@
     {
       "type": "11 05",
       "slot": 2,
-      "stage": "saturation.ampSim",
-      "key": "cabModel",
-      "printed_values": "00/01/02/03",
       "printed_name": "OD Amp",
-      "ordinal": [
-        0,
-        1
-      ],
-      "designed": {
+      "enables": {
+        "select": [
+          {
+            "stage": "saturation.ampSim"
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 1
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 2
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 3
+          }
+        ],
         "basis": "invented",
-        "law": "d.enum4",
         "replaced_when": {
           "model_binding": [
             "11 05",
@@ -11071,7 +11379,7 @@
           ]
         }
       },
-      "form": "designed"
+      "form": "enables"
     },
     {
       "type": "11 05",
@@ -11082,7 +11390,9 @@
       "printed_name": "OD Amp Sw",
       "ordinal": [
         0,
-        1
+        1,
+        2,
+        3
       ],
       "designed": {
         "basis": "invented",
@@ -11283,11 +11593,10 @@
       "enables": {
         "select": [
           {
-            "stage": "saturation.ampSim"
+            "stage": "saturation.overdrive"
           },
           {
-            "stage": "saturation.ampSim",
-            "ordinal": 1
+            "stage": "saturation.distortion"
           }
         ],
         "basis": "invented",
@@ -11303,18 +11612,20 @@
     {
       "type": "11 06",
       "slot": 1,
-      "stage": "saturation.ampSim",
-      "key": "inputDb",
+      "stage": "saturation.overdrive",
+      "key": "gainDb",
       "printed_values": "00–7F",
       "printed_mark": "+",
       "printed_name": "OD Drive",
-      "ordinal": [
-        0,
-        1
+      "alternatives": [
+        {
+          "stage": "saturation.distortion",
+          "key": "gainDb"
+        }
       ],
       "designed": {
         "basis": "carried",
-        "law": "drive.gain",
+        "law": "drive.pedal",
         "from": "0110-a-drive-byte-is-a-gain-in-front-of-a-fixed-curve",
         "replaced_when": {
           "claim_names": [
@@ -11328,17 +11639,26 @@
     {
       "type": "11 06",
       "slot": 2,
-      "stage": "saturation.ampSim",
-      "key": "cabModel",
-      "printed_values": "00/01/02/03",
       "printed_name": "OD Amp",
-      "ordinal": [
-        0,
-        1
-      ],
-      "designed": {
+      "enables": {
+        "select": [
+          {
+            "stage": "saturation.ampSim"
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 1
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 2
+          },
+          {
+            "stage": "saturation.ampSim",
+            "ordinal": 3
+          }
+        ],
         "basis": "invented",
-        "law": "d.enum4",
         "replaced_when": {
           "model_binding": [
             "11 06",
@@ -11346,7 +11666,7 @@
           ]
         }
       },
-      "form": "designed"
+      "form": "enables"
     },
     {
       "type": "11 06",
@@ -11357,7 +11677,9 @@
       "printed_name": "OD Amp Sw",
       "ordinal": [
         0,
-        1
+        1,
+        2,
+        3
       ],
       "designed": {
         "basis": "invented",

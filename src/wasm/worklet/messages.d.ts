@@ -1,5 +1,5 @@
-import type { EngineAutomationPoint, EngineBus, EngineCaptureStatus, EngineClip, EngineMarker, EngineMetronomeConfig, EngineMidiClipSchedule, EngineParameterInfo, EngineTempoSegment, EngineTimeSignatureSegment, EngineTrackLane, EngineTransportState, PlaybackDiagnostics, PlaybackRendererConfig, RealtimeVoiceChangerConfigInput, RealtimeVoiceChangerPodConfig } from '../index';
-import type { AutomationCurve } from '../public_types';
+import type { EngineAutomationPoint, EngineBus, EngineCaptureStatus, EngineClip, EngineMarker, EngineMetronomeConfig, EngineMidiClipSchedule, EngineParameterInfo, EngineTempoSegment, EngineTimeSignatureSegment, EngineTrackLane, EngineTransportState, PlaybackDiagnostics, PlaybackRendererConfig, RealtimeVoiceChangerConfigInput, RealtimeVoiceChangerPodConfig, UmpWords } from '../index';
+import type { AutomationCurve, SurroundPan } from '../public_types';
 import type { SonareEngineCommandRecord, SonareEngineTelemetryRecord, SonareWorkletMeterSnapshot, SonareWorkletScopeSnapshot, SonareWorkletSpectrumSnapshot } from './protocol';
 export interface SonareWorkletProcessorOptions {
     sceneJson: string;
@@ -20,6 +20,18 @@ export interface SonareRealtimeEngineWorkletProcessorOptions {
     initialCommands?: SonareEngineCommandRecord[];
     sampleRate?: number;
     blockSize?: number;
+    /**
+     * Output plane count (default 2). Planes follow the canonical order
+     * L R C LFE Ls Rs [Lss Rss] for 6 (5.1) and 8 (7.1) planes.
+     *
+     * The Web Audio default destination is 2-channel `'speakers'`, so a wider
+     * output is mixed down to stereo unless the app raises
+     * `audioContext.destination.channelCount` (up to its `maxChannelCount`) to
+     * match. Interpretation matters only while the counts differ: `'speakers'`
+     * applies the spec's down-mix for mono, stereo, quad and 5.1 sources only,
+     * and `'discrete'` copies the first planes and drops the rest. With equal
+     * counts the planes pass through unchanged in either mode.
+     */
     channelCount?: number;
     meterIntervalFrames?: number;
     commandSharedBuffer?: SharedArrayBuffer;
@@ -214,7 +226,7 @@ export interface SonareEngineSyncErrorMessage {
 }
 export type SonareWorkletTransportMessage = SonareWorkletMeterSnapshot | SonareWorkletScopeSnapshot | SonareWorkletSpectrumSnapshot | SonareWorkletExternalMidiMessage | SonareEngineClipPageRequestMessage | SonareEngineTelemetryRecord;
 export interface WorkletTransport {
-    postMessage?: (message: SonareWorkletTransportMessage | SonareEngineCaptureResponseMessageInternal | SonareEngineTransportResponseMessage | SonareEngineSyncErrorMessage, transfer?: Transferable[]) => void;
+    postMessage?: (message: SonareWorkletTransportMessage | SonareEngineCaptureResponseMessageInternal | SonareEngineTransportResponseMessage | SonareEngineInsertGainReductionResponseMessage | SonareEngineSyncErrorMessage, transfer?: Transferable[]) => void;
     onMeter?: (meter: SonareWorkletMeterSnapshot) => void;
     onSpectrum?: (spectrum: SonareWorkletSpectrumSnapshot) => void;
 }
@@ -496,6 +508,11 @@ export interface SonareEngineSyncTrackStripDualPanMessage {
     leftPan: number;
     rightPan: number;
 }
+export interface SonareEngineSyncTrackStripSurroundPanMessage {
+    type: 'syncTrackStripSurroundPan';
+    trackId: number;
+    pan: Required<SurroundPan>;
+}
 export interface SonareEngineSyncBusStripPanMessage {
     type: 'syncBusStripPan';
     busId: number;
@@ -574,12 +591,21 @@ export interface SonareEngineSyncMidiCcMessage {
     value: number;
     renderFrame: number;
 }
-export interface SonareEngineSyncMidiUmpMessage {
+export interface SonareEngineSyncMidiUmpWordMessage {
     type: 'syncMidiUmp';
     destinationId: number;
     word0: number;
+    words?: never;
     renderFrame: number;
 }
+export interface SonareEngineSyncMidiUmpWordsMessage {
+    type: 'syncMidiUmp';
+    destinationId: number;
+    word0?: never;
+    words: UmpWords;
+    renderFrame: number;
+}
+export type SonareEngineSyncMidiUmpMessage = SonareEngineSyncMidiUmpWordMessage | SonareEngineSyncMidiUmpWordsMessage;
 /**
  * One of the three per-note expression dimensions, addressed to a destination.
  * `data0`/`data1` carry the dimension's own payload the way the live-input
@@ -634,12 +660,17 @@ export interface SonareEngineSyncMidiInputEventMessage {
     data1: number;
     portTimeSamples: number;
 }
+export interface SonareEngineSyncMidiInputUmpMessage {
+    type: 'syncMidiInputUmp';
+    words: UmpWords;
+    portTimeSamples: number;
+}
 /** Releases the realtime engine and all worklet-owned clip buffers. */
 export interface SonareEngineDestroyMessage {
     type: 'destroy';
 }
 export type SonareEngineInstrumentSyncMessage = SonareEngineSyncBuiltinInstrumentMessage | SonareEngineSyncSynthInstrumentMessage | SonareEngineSyncSf2InstrumentMessage | SonareEngineSyncLoadSoundFontMessage | SonareEngineSyncMidiFxMessage;
-export type SonareEngineSyncMessage = SonareEngineSyncClipsMessage | SonareEngineSyncClipsDeltaMessage | SonareEngineSyncClipPageProviderMessage | SonareEngineSyncClipPageMessage | SonareEngineSyncClipPageClearMessage | SonareEngineSyncClipPagePrefetchFramesMessage | SonareEngineSyncWarpVoiceCapacityMessage | SonareEngineSyncClipPageCommitMessage | SonareEngineSyncClipPageDestroyMessage | SonareEngineSyncMidiClipsMessage | SonareEngineSyncMarkersMessage | SonareEngineSyncMetronomeMessage | SonareEngineSyncAutomationMessage | SonareEngineSyncParametersMessage | SonareEngineSyncTempoMessage | SonareEngineSyncMixerMessage | SonareEngineSyncCaptureMessage | SonareEngineSyncTrackStripEqBandMessage | SonareEngineSyncMasterStripEqBandMessage | SonareEngineSyncBusStripEqBandMessage | SonareEngineSyncTrackStripInsertBypassedMessage | SonareEngineSyncMasterStripInsertBypassedMessage | SonareEngineSyncTrackStripInsertParamByNameMessage | SonareEngineSyncMasterStripInsertParamByNameMessage | SonareEngineSyncBusStripInsertParamByNameMessage | SonareEngineSyncBusStripInsertBypassedMessage | SonareEngineSyncTrackStripPanMessage | SonareEngineSyncTrackStripPanLawMessage | SonareEngineSyncTrackStripPanModeMessage | SonareEngineSyncTrackStripDualPanMessage | SonareEngineSyncBusStripPanMessage | SonareEngineSyncBusStripPanLawMessage | SonareEngineSyncBusStripPanModeMessage | SonareEngineSyncBusStripDualPanMessage | SonareEngineSyncTrackStripChannelDelaySamplesMessage | SonareEngineSyncBuiltinInstrumentMessage | SonareEngineSyncSynthInstrumentMessage | SonareEngineSyncSf2InstrumentMessage | SonareEngineSyncLoadSoundFontMessage | SonareEngineSyncMidiFxMessage | SonareEngineSyncMidiNoteMessage | SonareEngineSyncMidiCcMessage | SonareEngineSyncMidiUmpMessage | SonareEngineSyncMidiExpressionMessage | SonareEngineSyncMidiSysexMessage | SonareEngineSyncMidiPanicMessage | SonareEngineSyncMidiDestinationExternalMessage | SonareEngineSyncExternalMidiClockMessage | SonareEngineSyncMidiInputSourceMessage | SonareEngineSyncMidiCcBindingMessage | SonareEngineSyncMidiInputEventMessage | SonareEngineDestroyMessage;
+export type SonareEngineSyncMessage = SonareEngineSyncClipsMessage | SonareEngineSyncClipsDeltaMessage | SonareEngineSyncClipPageProviderMessage | SonareEngineSyncClipPageMessage | SonareEngineSyncClipPageClearMessage | SonareEngineSyncClipPagePrefetchFramesMessage | SonareEngineSyncWarpVoiceCapacityMessage | SonareEngineSyncClipPageCommitMessage | SonareEngineSyncClipPageDestroyMessage | SonareEngineSyncMidiClipsMessage | SonareEngineSyncMarkersMessage | SonareEngineSyncMetronomeMessage | SonareEngineSyncAutomationMessage | SonareEngineSyncParametersMessage | SonareEngineSyncTempoMessage | SonareEngineSyncMixerMessage | SonareEngineSyncCaptureMessage | SonareEngineSyncTrackStripEqBandMessage | SonareEngineSyncMasterStripEqBandMessage | SonareEngineSyncBusStripEqBandMessage | SonareEngineSyncTrackStripInsertBypassedMessage | SonareEngineSyncMasterStripInsertBypassedMessage | SonareEngineSyncTrackStripInsertParamByNameMessage | SonareEngineSyncMasterStripInsertParamByNameMessage | SonareEngineSyncBusStripInsertParamByNameMessage | SonareEngineSyncBusStripInsertBypassedMessage | SonareEngineSyncTrackStripPanMessage | SonareEngineSyncTrackStripPanLawMessage | SonareEngineSyncTrackStripPanModeMessage | SonareEngineSyncTrackStripDualPanMessage | SonareEngineSyncTrackStripSurroundPanMessage | SonareEngineSyncBusStripPanMessage | SonareEngineSyncBusStripPanLawMessage | SonareEngineSyncBusStripPanModeMessage | SonareEngineSyncBusStripDualPanMessage | SonareEngineSyncTrackStripChannelDelaySamplesMessage | SonareEngineSyncBuiltinInstrumentMessage | SonareEngineSyncSynthInstrumentMessage | SonareEngineSyncSf2InstrumentMessage | SonareEngineSyncLoadSoundFontMessage | SonareEngineSyncMidiFxMessage | SonareEngineSyncMidiNoteMessage | SonareEngineSyncMidiCcMessage | SonareEngineSyncMidiUmpMessage | SonareEngineSyncMidiExpressionMessage | SonareEngineSyncMidiSysexMessage | SonareEngineSyncMidiPanicMessage | SonareEngineSyncMidiDestinationExternalMessage | SonareEngineSyncExternalMidiClockMessage | SonareEngineSyncMidiInputSourceMessage | SonareEngineSyncMidiCcBindingMessage | SonareEngineSyncMidiInputEventMessage | SonareEngineSyncMidiInputUmpMessage | SonareEngineDestroyMessage;
 export interface WorkletPort {
     postMessage?: (message: unknown, transfer?: Transferable[]) => void;
     onmessage?: (event: {
@@ -704,6 +735,20 @@ export interface SonareEngineTransportResponseMessage {
     requestId: number;
     ok: boolean;
     state?: EngineTransportState;
+    error?: string;
+}
+/** Asks the worklet for one target's per-insert gain reduction (any meter delivery mode). */
+export interface SonareEngineInsertGainReductionRequestMessage {
+    type: 'insertGainReductionRequest';
+    requestId: number;
+    targetId: number;
+}
+/** Reply to {@link SonareEngineInsertGainReductionRequestMessage}; `values` is present when `ok`. */
+export interface SonareEngineInsertGainReductionResponseMessage {
+    type: 'insertGainReductionResponse';
+    requestId: number;
+    ok: boolean;
+    values?: number[];
     error?: string;
 }
 export {};

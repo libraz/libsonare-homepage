@@ -1,5 +1,5 @@
 import { type WorkletInput, type WorkletOutput } from './audio_types';
-import { type SonareEngineCaptureRequestMessage, type SonareEngineSyncMessage, type SonareEngineTransportRequestMessage, type SonareRealtimeEngineWorkletProcessorOptions, type WorkletTransport } from './messages';
+import { type SonareEngineCaptureRequestMessage, type SonareEngineInsertGainReductionRequestMessage, type SonareEngineSyncMessage, type SonareEngineTransportRequestMessage, type SonareRealtimeEngineWorkletProcessorOptions, type WorkletTransport } from './messages';
 import { type SonareEngineCommandRecord } from './protocol';
 /**
  * AudioWorklet-style bridge for the DAW realtime engine facade.
@@ -45,6 +45,7 @@ export declare class SonareRealtimeEngineWorkletProcessor {
     private applySync;
     receiveCaptureRequest(message: SonareEngineCaptureRequestMessage): void;
     receiveTransportRequest(message: SonareEngineTransportRequestMessage): void;
+    receiveInsertGainReductionRequest(message: SonareEngineInsertGainReductionRequestMessage): void;
     destroy(): void;
     private drainCommands;
     private safeApplyCommand;

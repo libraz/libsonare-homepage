@@ -1,4 +1,5 @@
-import type { EqBand, PanLawInput, PanMode, RealtimeEngine } from '../index';
+import type { EqBand, PanLawInput, PanMode, RealtimeEngine, UmpWords } from '../index';
+import type { SurroundPan } from '../public_types';
 import type { InsertParamOverrideMap } from './engine-mixer-facade';
 import { type InsertParamOverride, type StripJsonTarget } from './engine-mixer-facade';
 import type { SonareEngineInstrumentSyncMessage, SonareEngineSyncMessage } from './messages';
@@ -30,6 +31,7 @@ export declare function setTrackStripPan(ctx: EngineStripContext, target: string
 export declare function setTrackStripPanLaw(ctx: EngineStripContext, target: string | number, panLaw: PanLawInput): void;
 export declare function setTrackStripPanMode(ctx: EngineStripContext, target: string | number, panMode: PanMode | number): void;
 export declare function setTrackStripDualPan(ctx: EngineStripContext, target: string | number, leftPan: number, rightPan: number): void;
+export declare function setTrackStripSurroundPan(ctx: EngineStripContext, target: string | number, pan: SurroundPan): void;
 export declare function setTrackStripChannelDelaySamples(ctx: EngineStripContext, target: string | number, delaySamples: number): void;
 /**
  * Records a master fader or pan value the parameter path applied, so a master
@@ -52,7 +54,7 @@ export declare function pushMidiCc(ctx: EngineStripContext, trackId: string | nu
 export declare function pushMidiPitchBend(ctx: EngineStripContext, trackId: string | number, group: number, channel: number, bend14: number, renderFrame: number): void;
 export declare function pushMidiChannelPressure(ctx: EngineStripContext, trackId: string | number, group: number, channel: number, pressure: number, renderFrame: number): void;
 export declare function pushMidiPolyPressure(ctx: EngineStripContext, trackId: string | number, group: number, channel: number, note: number, pressure: number, renderFrame: number): void;
-export declare function pushMidiUmp(ctx: EngineStripContext, trackId: string | number, word0: number, renderFrame: number): void;
+export declare function pushMidiUmp(ctx: EngineStripContext, trackId: string | number, word0: number | UmpWords, renderFrame: number): void;
 export declare function setBuiltinInstrument(ctx: EngineStripContext, trackId: string | number, config: {
     destinationId?: number;
 } & Record<string, unknown>): void;

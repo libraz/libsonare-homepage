@@ -33,6 +33,16 @@ export interface SonareWorkletMeterSnapshot {
     inputPeakDbL: number;
     /** Maximum pre-trim input peak for the right channel, in dBFS. */
     inputPeakDbR: number;
+    /**
+     * Per-insert gain reduction in dB (each <= 0) of the target's strip, in combined
+     * pre-to-post insert order, folded to the deepest value across the sub-blocks of the
+     * latest committed host block. It describes that latest block as of the drain, not
+     * necessarily this record's own block, so it is attached only to the newest record per
+     * target within one drain; older backlogged records omit it. Present only on snapshots
+     * delivered over postMessage; the SharedArrayBuffer meter ring has a fixed layout that
+     * does not carry it, so ring hosts read it with `pollInsertGainReduction(targetId)`.
+     */
+    insertGainReductionDb?: number[];
 }
 export interface SonareWorkletSpectrumSnapshot {
     type: 'spectrum';

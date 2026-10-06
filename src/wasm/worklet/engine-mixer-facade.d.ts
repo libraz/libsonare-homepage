@@ -124,7 +124,8 @@ export declare function setTrackOutputBus(ctx: EngineMixerContext, target: strin
 /**
  * Keys one insert of a lane strip from another lane's post-strip pre-fader
  * audio (ducking/sidechainRouter inserts). sourceTarget null removes the
- * binding.
+ * binding. The binding is cached for resync only once the engine has accepted
+ * it, so a refused (self-keyed or cyclic) binding throws and is never replayed.
  */
 export declare function setLaneSidechain(ctx: EngineMixerContext, target: string | number, insertIndex: number, sourceTarget: string | number | null): void;
 /**

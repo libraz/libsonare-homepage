@@ -280,8 +280,8 @@ export declare class Mixer {
     /** Set the strip's pan law (a {@link PanLawName} alias or raw C ABI ordinal). */
     setPanLaw(stripIndex: number, panLaw: PanLawInput): void;
     /**
-     * Set a per-strip channel delay in samples. This changes the strip's reported
-     * latency; recompile to re-run latency compensation.
+     * Set a per-strip channel delay in samples, moving the strip later relative to
+     * the others. It is not latency: latency compensation does not undo it.
      */
     setChannelDelaySamples(stripIndex: number, delaySamples: number): void;
     /** Set the strip's live VCA gain offset in dB (not persisted to the scene). */

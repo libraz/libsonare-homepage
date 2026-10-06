@@ -1,6 +1,7 @@
 import { type OpfsClipStreamOptions } from '../clip_page_streamer';
-import type { EngineAutomationPoint, EngineBus, EngineCaptureStatus, EngineClip, EngineMarker, EngineMetronomeConfig, EngineMidiClipSchedule, EngineParameterInfo, EngineTempoSegment, EngineTimeSignatureSegment, EngineTrackLane, EngineTrackMonitorMode, EngineTrackSend, EngineTransportState, EqBand, MidiCcBindOptions, PanLaw, PanMode, SidechainSourceKind } from '../index';
+import type { EngineAutomationPoint, EngineBus, EngineCaptureStatus, EngineClip, EngineMarker, EngineMetronomeConfig, EngineMidiClipSchedule, EngineParameterInfo, EngineTempoSegment, EngineTimeSignatureSegment, EngineTrackLane, EngineTrackMonitorMode, EngineTrackSend, EngineTransportState, EqBand, MidiCcBindOptions, PanLaw, PanMode, SidechainSourceKind, UmpWords } from '../index';
 import { type OpfsClipPageProviderBinding } from '../opfs_clip_pages';
+import type { SurroundPan } from '../public_types';
 import type { ClipPageProvider } from '../realtime_engine';
 import { type CaptureOptions } from './engine-offline';
 import type { SonareEngineOptions } from './engine-options';
@@ -187,7 +188,9 @@ export declare class SonareEngine {
     /**
      * Keys one insert of a lane strip from another lane's post-strip pre-fader
      * audio (ducking/sidechainRouter inserts). sourceTarget null removes the
-     * binding.
+     * binding. Throws, leaving the existing bindings unchanged, for a lane keying
+     * itself or a binding that would close a cycle over the lane bindings; a
+     * refused binding is never recorded, so it is not replayed on resync.
      */
     setLaneSidechain(target: string | number, insertIndex: number, sourceTarget: string | number | null): void;
     setSends(target: string | number, sends: EngineTrackSend[]): void;
@@ -211,6 +214,12 @@ export declare class SonareEngine {
     setTrackStripPanLaw(target: string | number, panLaw: PanLaw | number): void;
     setTrackStripPanMode(target: string | number, panMode: PanMode | number): void;
     setTrackStripDualPan(target: string | number, leftPan: number, rightPan: number): void;
+    /**
+     * Sets a track lane strip's surround placement (glitch-free, 5 ms placement
+     * glide). Takes effect on a destination wider than stereo, so set `channelCount`
+     * to the layout's plane count. Omitted fields default to a centered point source.
+     */
+    setTrackStripSurroundPan(target: string | number, pan: SurroundPan): void;
     setTrackStripChannelDelaySamples(target: string | number, delaySamples: number): void;
     setStripEq(target: string | number, bandIndex: number, band: EqBand | string): void;
     setStripInsertBypassed(target: string | number, insertIndex: number, bypassed: boolean, resetOnBypass?: boolean): void;
@@ -325,7 +334,7 @@ export declare class SonareEngine {
     pushMidiPitchBend(trackId: string | number, group: number, channel: number, bend14: number, renderFrame?: number): void;
     pushMidiChannelPressure(trackId: string | number, group: number, channel: number, pressure: number, renderFrame?: number): void;
     pushMidiPolyPressure(trackId: string | number, group: number, channel: number, note: number, pressure: number, renderFrame?: number): void;
-    pushMidiUmp(trackId: string | number, word0: number, renderFrame?: number): void;
+    pushMidiUmp(trackId: string | number, words: number | UmpWords, renderFrame?: number): void;
     pushMidiSysex(trackId: string | number, data: Uint8Array, renderFrame?: number): void;
     bindMidiCc(channel: number, controller: number, paramId: number, options?: MidiCcBindOptions): void;
     setMidiInputSource(destinationId?: number): void;
@@ -336,6 +345,7 @@ export declare class SonareEngine {
     pushMidiInputPitchBend(group: number, channel: number, bend14: number, portTimeSamples?: number): void;
     pushMidiInputChannelPressure(group: number, channel: number, pressure: number, portTimeSamples?: number): void;
     pushMidiInputPolyPressure(group: number, channel: number, note: number, pressure: number, portTimeSamples?: number): void;
+    pushMidiInputUmp(words: UmpWords, portTimeSamples?: number): void;
     pushMidiPanic(renderFrame?: number): void;
     configureCapture(options: CaptureOptions): void;
     /**
@@ -377,6 +387,8 @@ export declare class SonareEngine {
     pollTelemetry(): SonareEngineTelemetryRecord[];
     pollMeters(): SonareWorkletMeterSnapshot[];
     pollScope(): SonareWorkletScopeSnapshot[];
+    /** Per-insert gain reduction for a meter target; see {@link SonareRealtimeEngineNode.pollInsertGainReduction}. */
+    pollInsertGainReduction(targetId: number): Promise<number[]>;
     destroy(): void;
     private ensureWorkletClipStreamer;
     /**

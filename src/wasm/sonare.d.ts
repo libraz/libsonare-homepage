@@ -25,6 +25,7 @@ import type {
   SpectralRegionOp,
   SurroundPan,
 } from './public_types';
+import type { VocalWasmExports } from './vocal_edit';
 
 export interface SonareModuleOptions {
   locateFile?: (path: string, prefix: string) => string;
@@ -1288,7 +1289,17 @@ export interface WasmEngineBounceOptions {
   totalFrames: number;
   blockSize?: number;
   numChannels?: number;
+  /**
+   * Output sample rate. Omitting it (or `0`) keeps the source rate, so nothing
+   * is resampled; a different rate resamples. The result's `sampleRate`
+   * reports the rate of the returned audio.
+   */
   targetSampleRate?: number;
+  /**
+   * Rate `totalFrames` is counted in. Omitting it (or `0`) means the engine's
+   * prepared rate; a different value throws an `InvalidParameter` `SonareError`,
+   * because the render always runs at the prepared rate.
+   */
   sourceSampleRate?: number;
   normalizeLufs?: boolean;
   /**
@@ -1413,6 +1424,7 @@ export interface WasmRealtimeEngine {
   clipCount: () => number;
   setTrackLanes: (lanes: Array<number | WasmEngineTrackLane>) => void;
   setLaneSidechain: (trackId: number, insertIndex: number, sourceTrackId: number) => void;
+  applyProjectTimeline: (timelineId: number) => void;
   setTrackBuses: (buses: WasmEngineBus[]) => void;
   setBusSidechain: (
     busId: number,
@@ -1506,6 +1518,7 @@ export interface WasmRealtimeEngine {
   setTrackStripPanLaw: (trackId: number, panLaw: number) => void;
   setTrackStripPanMode: (trackId: number, panMode: number) => void;
   setTrackStripDualPan: (trackId: number, leftPan: number, rightPan: number) => void;
+  setTrackStripSurroundPan: (trackId: number, pan: SurroundPan) => void;
   setBusStripPan: (busId: number, pan: number) => void;
   setBusStripPanLaw: (busId: number, panLaw: number) => void;
   setBusStripPanMode: (busId: number, panMode: number) => void;
@@ -1579,6 +1592,12 @@ export interface WasmRealtimeEngine {
     channel: number,
   ) => import('./instrument_types').Articulation | number;
   legatoFallbackCount: (destinationId: number) => number;
+  setPartRig: (
+    destinationId: number,
+    part: number,
+    mode: import('./instrument_types').PartRigMode | number,
+    insertsJson: string | undefined,
+  ) => void;
   setMidiFx: (destinationId: number, configJson: string) => void;
   clearMidiFx: (destinationId: number) => void;
   setMidiInputSource: (destinationId: number) => void;
@@ -1726,6 +1745,7 @@ export interface WasmRealtimeEngine {
   meterScratchInputPeakDbR: () => number;
   drainMeterTelemetry: (maxRecords: number) => WasmEngineMeterTelemetry[];
   drainMeterTelemetryWide: (maxRecords: number) => WasmEngineMeterTelemetryWide[];
+  meterTargetInsertGainReduction: (targetId: number) => number[];
   configureScopeTelemetry: (intervalFrames: number, bandCount: number) => number;
   drainScopeTelemetry: (maxRecords: number) => WasmEngineScopeTelemetry[];
   popScopeTelemetryToScratch: () => boolean;
@@ -1759,6 +1779,39 @@ export interface WasmSynthEnumTables {
 }
 
 export interface SonareModule {
+  vocalEditApiVersion: VocalWasmExports['vocalEditApiVersion'];
+  vocalEditAvailable: VocalWasmExports['vocalEditAvailable'];
+  vocalEditSessionCreate: VocalWasmExports['vocalEditSessionCreate'];
+  vocalEditSessionRestore: VocalWasmExports['vocalEditSessionRestore'];
+  vocalEditSessionDestroy: VocalWasmExports['vocalEditSessionDestroy'];
+  vocalEditSessionNotes: VocalWasmExports['vocalEditSessionNotes'];
+  vocalEditDraftNotes: VocalWasmExports['vocalEditDraftNotes'];
+  vocalEditSessionToken: VocalWasmExports['vocalEditSessionToken'];
+  vocalEditDraftToken: VocalWasmExports['vocalEditDraftToken'];
+  vocalEditSessionAnalysis: VocalWasmExports['vocalEditSessionAnalysis'];
+  vocalEditSessionCapabilities: VocalWasmExports['vocalEditSessionCapabilities'];
+  vocalEditSessionOutputLength: VocalWasmExports['vocalEditSessionOutputLength'];
+  vocalEditSessionHistory: VocalWasmExports['vocalEditSessionHistory'];
+  vocalEditSessionBeginEdit: VocalWasmExports['vocalEditSessionBeginEdit'];
+  vocalEditDraftApply: VocalWasmExports['vocalEditDraftApply'];
+  vocalEditDraftCommit: VocalWasmExports['vocalEditDraftCommit'];
+  vocalEditDraftCancel: VocalWasmExports['vocalEditDraftCancel'];
+  vocalEditDraftDestroy: VocalWasmExports['vocalEditDraftDestroy'];
+  vocalEditSessionApplyHistory: VocalWasmExports['vocalEditSessionApplyHistory'];
+  vocalEditEvaluatePitch: VocalWasmExports['vocalEditEvaluatePitch'];
+  vocalEditMapCoordinate: VocalWasmExports['vocalEditMapCoordinate'];
+  vocalEditCaptureSnapshot: VocalWasmExports['vocalEditCaptureSnapshot'];
+  vocalEditSnapshotDestroy: VocalWasmExports['vocalEditSnapshotDestroy'];
+  vocalEditSnapshotOutputLength: VocalWasmExports['vocalEditSnapshotOutputLength'];
+  vocalEditSnapshotRender: VocalWasmExports['vocalEditSnapshotRender'];
+  vocalEditRenderJobBegin: VocalWasmExports['vocalEditRenderJobBegin'];
+  vocalEditRenderJobNext: VocalWasmExports['vocalEditRenderJobNext'];
+  vocalEditRenderJobFinalize: VocalWasmExports['vocalEditRenderJobFinalize'];
+  vocalEditRenderJobAbort: VocalWasmExports['vocalEditRenderJobAbort'];
+  vocalEditRenderJobDestroy: VocalWasmExports['vocalEditRenderJobDestroy'];
+  vocalEditSessionExportState: VocalWasmExports['vocalEditSessionExportState'];
+  vocalEditLastErrorDetail: VocalWasmExports['vocalEditLastErrorDetail'];
+
   audioFromMemory: (bytes: Uint8Array) => WasmAudioFromMemoryResult;
 
   // Quick API (high-level)

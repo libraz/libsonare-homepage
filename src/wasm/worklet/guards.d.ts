@@ -1,4 +1,4 @@
-import type { SonareEngineCaptureRequestMessage, SonareEngineCaptureResponseMessageInternal, SonareEngineClipPageRequestMessage, SonareEngineSyncMessage, SonareEngineTransportRequestMessage, SonareEngineTransportResponseMessage, SonarePlaybackMessage, SonareRealtimeVoiceChangerMessage, SonareWorkletExternalMidiMessage, SonareWorkletMessage } from './messages';
+import type { SonareEngineCaptureRequestMessage, SonareEngineCaptureResponseMessageInternal, SonareEngineClipPageRequestMessage, SonareEngineInsertGainReductionRequestMessage, SonareEngineInsertGainReductionResponseMessage, SonareEngineSyncMessage, SonareEngineTransportRequestMessage, SonareEngineTransportResponseMessage, SonarePlaybackMessage, SonareRealtimeVoiceChangerMessage, SonareWorkletExternalMidiMessage, SonareWorkletMessage } from './messages';
 import { type SonareEngineCommandRecord, type SonareEngineTelemetryRecord, type SonareWorkletMeterSnapshot, type SonareWorkletScopeSnapshot } from './protocol';
 export declare function isWorkletMessage(value: unknown): value is SonareWorkletMessage;
 export declare function isEngineCommandRecord(value: unknown): value is SonareEngineCommandRecord;
@@ -25,6 +25,8 @@ export declare function isEngineCaptureResponseMessage(value: unknown): value is
 export declare function isEngineCaptureResponseForOperation(response: SonareEngineCaptureResponseMessageInternal, op: SonareEngineCaptureRequestMessage['op']): boolean;
 export declare function isEngineTransportRequestMessage(value: unknown): value is SonareEngineTransportRequestMessage;
 export declare function isEngineTransportResponseMessage(value: unknown): value is SonareEngineTransportResponseMessage;
+export declare function isEngineInsertGainReductionRequestMessage(value: unknown): value is SonareEngineInsertGainReductionRequestMessage;
+export declare function isEngineInsertGainReductionResponseMessage(value: unknown): value is SonareEngineInsertGainReductionResponseMessage;
 export declare function isRealtimeVoiceChangerMessage(value: unknown): value is SonareRealtimeVoiceChangerMessage;
 export declare function isPlaybackMessage(value: unknown): value is SonarePlaybackMessage;
 export declare function isEngineTelemetryRecord(value: unknown): value is SonareEngineTelemetryRecord;

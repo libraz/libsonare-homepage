@@ -1,5 +1,6 @@
-import type { Articulation, ControllerBinding, MpeDimension, NoteTracking, ProjectMidiCcBinding, SynthPatch } from './project';
-import type { EqBand, PanLawInput, PanMode, SendTiming, SidechainSourceKind, UmpWords } from './public_types';
+import type { Articulation, ControllerBinding, MpeDimension, NoteTracking, PartRigInsert, PartRigMode, ProjectMidiCcBinding, SynthPatch } from './project';
+import type { ProjectTimeline } from './project_class';
+import type { EqBand, PanLawInput, PanMode, SendTiming, SidechainSourceKind, SurroundPan, UmpWords } from './public_types';
 import type { WasmClipPageRequest, WasmEngineAutomationPoint, WasmEngineBounceOptions, WasmEngineBounceResult, WasmEngineCaptureStatus, WasmEngineClip, WasmEngineFreezeOptions, WasmEngineFreezeResult, WasmEngineGraphSpec, WasmEngineMarker, WasmEngineMeterTelemetry, WasmEngineMeterTelemetryWide, WasmEngineMetronomeConfig, WasmEngineParameterInfo, WasmEngineProcessWithMonitorResult, WasmEngineScopeTelemetry, WasmEngineTelemetry, WasmEngineTempoSegment, WasmEngineTimeSignatureSegment, WasmEngineTransportState, WasmExternalMidiEvent } from './sonare.js';
 export type ExternalMidiEvent = WasmExternalMidiEvent;
 export type EngineClip = WasmEngineClip;
@@ -310,6 +311,15 @@ export declare class RealtimeEngine {
      */
     setArticulation(destinationId: number, channel: number, articulation: Articulation | number): void;
     /**
+     * Set the rig of one part (0-15), or of the destination's default when `part`
+     * is `PART_RIG_ALL_PARTS`, on the instrument bound to `destinationId`. A
+     * direct call, not a stored edit: a destination with no instrument is an
+     * invalid parameter, and an instrument without part rigs (a builtin, a
+     * host-callback instrument) is refused as not implemented rather than
+     * succeeding quietly. `'chain'` takes 1-8 `inserts`; no other mode does.
+     */
+    setPartRig(destinationId: number, part: number, mode: PartRigMode | number, inserts?: PartRigInsert[]): void;
+    /**
      * Read back {@link setArticulation} as the canonical name. An ordinal this
      * build cannot spell is handed back as the number, the way every other enum
      * leaves this surface.
@@ -549,8 +559,32 @@ export declare class RealtimeEngine {
     /**
      * Keys one insert of a lane strip from another lane's post-strip audio
      * (ducking/sidechainRouter inserts). sourceTrackId 0 removes the binding.
+     * Lanes are processed in key order and the key is delay-compensated to the
+     * destination strip input, so the result depends on neither the lane order
+     * nor the block size. Throws, leaving the bindings unchanged, for a lane
+     * keying itself, a binding that would close a cycle over the lane bindings,
+     * a full binding table and an alignment past the delay ceiling. Not callable
+     * while a block is being processed.
      */
     setLaneSidechain(trackId: number, insertIndex: number, sourceTrackId: number): void;
+    /**
+     * Installs a compiled project timeline into this stopped engine, all or
+     * nothing: tempo and time-signature segments, markers, track lanes, track
+     * automation, audio and MIDI clips, and the per-track strips of the project's
+     * mixer scene are replaced in full (a later low-level setter on those domains
+     * is overwritten by the next apply). Instruments, buses, the master strip,
+     * metronome, loop and capture are not touched; bind instruments separately.
+     *
+     * Throws while the transport is playing, for a timeline the engine cannot
+     * hold, and for a scene strip routed from several tracks. A validation
+     * failure leaves the engine unchanged. The engine keeps its own reference, so
+     * {@link ProjectTimeline.dispose} may follow immediately.
+     *
+     * Also throws on an unprepared engine and on a timeline whose sample rate
+     * differs from the engine's. Once a timeline is applied, a later prepare at
+     * another rate is refused until the timeline's clips are cleared.
+     */
+    applyProjectTimeline(timeline: ProjectTimeline): void;
     setTrackBuses(buses: EngineBus[]): void;
     /**
      * Keys one insert of a bus strip from a track lane or another bus
@@ -658,12 +692,9 @@ export declare class RealtimeEngine {
      * return `-1`: they resize voice pools or swap DSP topology, which is not
      * audio-thread safe. Rebind the instrument with a new patch instead.
      *
-     * `gain`, `busDrive`, `cutoffHz`, `resonanceQ`, `envToCutoffCents`,
-     * `lfoToPitchCents` and `pitchOffsetCents` reach voices that are already
-     * sounding from the next block; the rest are cached into per-voice state at
-     * note-on and take effect from the next note, so a lane that moves one of
-     * them under a held note looks inert until the next one speaks — that is the
-     * behaviour, not a dropped write.
+     * All automatable parameters of a NativeSynth reach already-sounding voices
+     * from the next processed block. Voices using GM program patches are
+     * unaffected; parameters apply to NativeSynth's own patch only.
      *
      * The id survives an unbind/rebind of the same destination and applies
      * nothing while that destination is unbound.
@@ -678,6 +709,14 @@ export declare class RealtimeEngine {
     /** Sets a track lane strip's dual-pan left/right positions in realtime. */
     setTrackStripDualPan(trackId: number, leftPan: number, rightPan: number): void;
     /**
+     * Sets a track lane strip's surround placement in realtime (glitch-free; a
+     * constant-power 5 ms one-pole glide). Used when the destination has more than
+     * two channels. Omitted fields default to a centered point source
+     * (`distance` 1); a `distance` of 0 or less is treated as 1. Throws for an
+     * unknown track, a track without a lane strip, or a non-finite field.
+     */
+    setTrackStripSurroundPan(trackId: number, pan: SurroundPan): void;
+    /**
      * Sets a bus strip's output pan position in realtime (glitch-free). Throws
      * for an unknown bus or one wider than stereo.
      */
@@ -689,8 +728,9 @@ export declare class RealtimeEngine {
     /** Sets a bus strip's dual-pan left/right positions in realtime. */
     setBusStripDualPan(busId: number, leftPan: number, rightPan: number): void;
     /**
-     * Sets a track lane strip's inter-channel alignment delay (whole samples).
-     * Adjusts strip latency, so PDC and reported graph latency are refreshed.
+     * Sets a track lane strip's alignment delay (whole samples), moving this lane
+     * later relative to every other lane. It is not latency: PDC does not
+     * compensate it and the reported graph latency is unchanged.
      */
     setTrackStripChannelDelaySamples(trackId: number, delaySamples: number): void;
     createClipPageProvider(numChannels: number, numSamples: number, pageFrames: number): ClipPageProvider;
@@ -859,6 +899,13 @@ export declare class RealtimeEngine {
      * surround meters are not delivered over the live worklet meter ring.
      */
     drainMeterTelemetryWide(maxRecords?: number): EngineMeterTelemetryWide[];
+    /**
+     * Per-insert gain reduction in dB (each <= 0) of a meter target's strip from the
+     * last rendered block, in combined pre-to-post insert order. `targetId` uses the
+     * meter-record encoding (0 master, 1..32 lanes, 33..40 buses; 0xFFFF monitor
+     * yields an empty array). Throws for an id outside that range.
+     */
+    meterTargetInsertGainReduction(targetId: number): number[];
     /**
      * Enables per-target spectrum + vectorscope capture. @param intervalFrames is
      * the minimum render-frame gap between snapshots (0 disables). @param bandCount

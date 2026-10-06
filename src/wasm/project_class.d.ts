@@ -1,5 +1,29 @@
-import type { BuiltinSynthBinding, Sf2InstrumentConfig, Sf2ProgramStatus, SynthPatch } from './instrument_types';
-import type { ExternalSeparatedStemImportRequest, ExternalSeparatedStemImportResult, MidiCcLearnOptions, ProjectAssistSidecar, ProjectAssistSidecarInput, ProjectAutomationLaneDesc, ProjectAutomationPoint, ProjectBounceOptions, ProjectChordSymbol, ProjectClip, ProjectClipCompSegment, ProjectClipDesc, ProjectClipFade, ProjectClipTake, ProjectCompileResult, ProjectDeserializeResult, ProjectKeySegment, ProjectLoopMode, ProjectLoopRecordingDesc, ProjectLoopRecordingResult, ProjectMarker, ProjectMidiCcBinding, ProjectMidiClipResult, ProjectMidiEvent, ProjectMidiFxBakeRequest, ProjectMidiFxBakeResult, ProjectMidiFxPreviewRequest, ProjectMidiRouteConfig, ProjectMidiRouteResult, ProjectNotePairValidation, ProjectSource, ProjectTempoCandidate, ProjectTempoOptions, ProjectTempoSegment, ProjectTimeSignatureSegment, ProjectTrack, ProjectTrackDesc, ProjectTrackKind, ProjectTranscribeRequest, ProjectWarpMapDesc, ProjectWarpMode } from './project_types';
+import type { BuiltinSynthBinding, PartRig, PartRigInsert, PartRigMode, Sf2InstrumentConfig, Sf2ProgramStatus, SynthPatch } from './instrument_types';
+import { type WasmProjectTimeline } from './project_internal';
+import type { ExternalSeparatedStemImportRequest, ExternalSeparatedStemImportResult, MidiCcLearnOptions, ProjectAssistSidecar, ProjectAssistSidecarInput, ProjectAutomationLaneDesc, ProjectAutomationPoint, ProjectBounceOptions, ProjectChordSymbol, ProjectClip, ProjectClipCompSegment, ProjectClipDesc, ProjectClipFade, ProjectClipTake, ProjectCompileResult, ProjectCompileTimelineResult, ProjectDeserializeResult, ProjectKeySegment, ProjectLoopMode, ProjectLoopRecordingDesc, ProjectLoopRecordingResult, ProjectMarker, ProjectMidiCcBinding, ProjectMidiClipResult, ProjectMidiEvent, ProjectMidiFxBakeRequest, ProjectMidiFxBakeResult, ProjectMidiFxPreviewRequest, ProjectMidiRouteConfig, ProjectMidiRouteResult, ProjectNotePairValidation, ProjectSource, ProjectTempoCandidate, ProjectTempoOptions, ProjectTempoSegment, ProjectTimeSignatureSegment, ProjectTrack, ProjectTrackDesc, ProjectTrackKind, ProjectTranscribeRequest, ProjectWarpMapDesc, ProjectWarpMode } from './project_types';
+import type { ProjectVocalEditApplyRequest, ProjectVocalEditApplyResult, ProjectVocalEditDependency, ProjectVocalOriginalSource, ProjectVocalRehydrateItem } from './public_types_vocal_project';
+/**
+ * An immutable compiled snapshot of a {@link Project}, produced by
+ * {@link Project.compileTimeline} and installed into a stopped realtime engine
+ * with `RealtimeEngine.applyProjectTimeline`.
+ *
+ * An engine keeps its own reference after an apply, so {@link dispose} may be
+ * called right afterwards. The embind handle is not garbage-collected; release
+ * it when no further apply needs it.
+ */
+export declare class ProjectTimeline {
+    private native;
+    /** @internal */
+    constructor(native: WasmProjectTimeline);
+    /**
+     * Identity an engine names this timeline by, so no raw pointer crosses into JS.
+     *
+     * @internal
+     */
+    get nativeId(): number;
+    /** Release the underlying WASM object. Idempotent. */
+    dispose(): void;
+}
 /**
  * Headless DAW project (control-thread-only arrangement model).
  *
@@ -28,7 +52,12 @@ import type { ExternalSeparatedStemImportRequest, ExternalSeparatedStemImportRes
  */
 export declare class Project {
     private native;
+    applyVocalEdit(request: ProjectVocalEditApplyRequest): ProjectVocalEditApplyResult;
+    getVocalEditDependencies(): ProjectVocalEditDependency[];
+    rehydrateVocalEdits(originals: readonly ProjectVocalOriginalSource[], cancel?: () => boolean): ProjectVocalRehydrateItem[];
     private released;
+    private deleteRequested;
+    private activeVocalRehydrateCalls;
     constructor();
     /** Create a new empty project. */
     static create(): Project;
@@ -195,6 +224,20 @@ export declare class Project {
      * solo are unaffected: a silenced MIDI track schedules no events at all.
      */
     setTrackGain(trackId: number, gain: number): void;
+    /**
+     * Set the rig of one part (0-15), or of the destination's default when `part`
+     * is {@link PART_RIG_ALL_PARTS}, on MIDI destination `destinationId`, via an
+     * undoable edit. `'chain'` takes 1-8 `inserts` and is the only mode that does;
+     * a destination no track references is stored and read back all the same.
+     * Refused: a malformed insert document (invalid format), an out-of-range part,
+     * an unknown mode or processor, or inserts on a non-chain mode (invalid
+     * parameter), and an insert chain in a build without mastering.
+     */
+    setPartRig(destinationId: number, part: number, mode: PartRigMode | number, inserts?: PartRigInsert[]): void;
+    /** The stored rig for `(destinationId, part)`, or null when none is stored. */
+    getPartRig(destinationId: number, part: number): PartRig | null;
+    /** Remove the stored rig for `(destinationId, part)` via an undoable edit (no-op when absent). */
+    clearPartRig(destinationId: number, part: number): void;
     /** Set a track's mute flag via an undoable edit (a muted track is silent). */
     setTrackMute(trackId: number, mute: boolean): void;
     /** Set a track's solo flag via an undoable edit (when any track is soloed, only soloed tracks sound). */
@@ -335,6 +378,13 @@ export declare class Project {
     snapToGrid(ppq: number, strength?: number, division?: number): number;
     /** Compile the project into a renderable timeline, surfacing diagnostics. */
     compile(): ProjectCompileResult;
+    /**
+     * Compile the project and keep the resulting timeline. The result is
+     * {@link compile}'s plus `timeline`: a {@link ProjectTimeline} to install with
+     * `RealtimeEngine.applyProjectTimeline`, or `null` when an error diagnostic
+     * means nothing compiled.
+     */
+    compileTimeline(): ProjectCompileTimelineResult;
     /**
      * Compile + render the project offline to interleaved float audio. MIDI
      * tracks render silently here (no instrument is bound) — use
@@ -554,7 +604,11 @@ export declare class Project {
      * through an error diagnostic and so always reports at least one.
      */
     lastBounceCompileResult(): ProjectCompileResult;
-    /** Release the underlying WASM object. Idempotent, as the Node facade is. */
+    /**
+     * Release the underlying WASM object. Idempotent, as the Node facade is.
+     * Called from a rehydrate cancel callback, the release happens when the
+     * outermost {@link rehydrateVocalEdits} call returns.
+     */
     delete(): void;
     /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
     destroy(): void;

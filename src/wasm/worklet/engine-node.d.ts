@@ -26,6 +26,8 @@ export declare class SonareRealtimeEngineNode {
     private readonly captureRequests;
     private transportRequestId;
     private readonly transportRequests;
+    private insertGainReductionRequestId;
+    private readonly insertGainReductionRequests;
     private resolveReady;
     private rejectReady;
     private destroyed;
@@ -76,6 +78,12 @@ export declare class SonareRealtimeEngineNode {
     private emitMeter;
     private emitMidiOut;
     private emitClipPageRequests;
+    /**
+     * Reads one target's per-insert gain reduction (dB, each <= 0, pre-to-post insert order)
+     * from the worklet. Works in both ring and postMessage meter modes; rejects when the
+     * target is invalid or mixing is not compiled in.
+     */
+    pollInsertGainReduction(targetId: number): Promise<number[]>;
     private emitScope;
     private sendCaptureRequest;
     private sendTransportRequest;

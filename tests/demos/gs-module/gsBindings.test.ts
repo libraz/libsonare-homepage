@@ -28,7 +28,7 @@ describe('efx-bindings.json rows', () => {
     const counted = Object.fromEntries(
       BINDING_FORMS.map((form) => [form, rows.filter((row) => row.form === form).length]),
     );
-    expect(counted).toEqual({ translated: 379, designed: 362, enables: 29 });
+    expect(counted).toEqual({ translated: 379, designed: 345, enables: 46 });
     expect(efxBindings.counts).toEqual(counted);
     expect(EFX_BINDING_COUNTS).toEqual(counted);
     for (const row of rows) expect(BINDING_FORMS).toContain(row.form);

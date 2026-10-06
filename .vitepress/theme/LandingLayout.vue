@@ -331,8 +331,7 @@ const packageLinks = {
 
 const wasmReceiptFields = (() => {
   const fields: { key: string; value: string }[] = [];
-  // Both entries come from the upstream size gate rather than from the copied
-  // artifact, so the two figures are one comparable measurement.
+  // Both entries are measured from the verified upstream build artifacts.
   const entries = wasmMeta.entries;
   if (entries?.full?.gzipKB) {
     fields.push({
@@ -614,7 +613,7 @@ function highlight(code: string, rt: Runtime): string {
 
 const highlightedCode = computed(() => highlight(currentCode.value, runtime.value));
 
-/** Bundle-size note, with the two package entries filled in from the size gate. */
+/** Bundle-size note, with the two entries filled in from the verified build. */
 const quickBundleNote = computed(() =>
   currentLocale.value.quickStart.bundleNote
     .replace('{analysis}', String(wasmMeta.entries?.analysis?.gzipKB ?? ''))

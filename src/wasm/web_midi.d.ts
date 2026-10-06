@@ -6,6 +6,10 @@ export interface WebMidiEngine {
     pushMidiInputNoteOn(group: number, channel: number, note: number, velocity: number, time?: number): void;
     pushMidiInputNoteOff(group: number, channel: number, note: number, velocity?: number, time?: number): void;
     pushMidiInputCc(group: number, channel: number, controller: number, value: number, time?: number): void;
+    pushMidiInputPitchBend?(group: number, channel: number, bend14: number, time?: number): void;
+    pushMidiInputChannelPressure?(group: number, channel: number, pressure: number, time?: number): void;
+    pushMidiInputPolyPressure?(group: number, channel: number, note: number, pressure: number, time?: number): void;
+    pushMidiInputUmp?(words: Uint32Array | readonly number[], time?: number): void;
 }
 type MidiInputState = 'connected' | 'disconnected';
 interface MidiPortLike {

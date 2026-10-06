@@ -264,12 +264,12 @@ export function listFiles(dir) {
 const KiB = 1024;
 const MiB = 1024 * KiB;
 
-// Budgets sit just above the artifact they guard, so growth has to be noticed and
+// Budgets cap the accepted artifacts, so growth has to be noticed and
 // accepted rather than absorbed. Raising one is a decision about what the site is
 // willing to ship, not a formality.
-// libsonare 1.8: bindings/wasm/wasm-size-budget.json, sonare.wasm raw ceiling.
-// Use the core's accepted release budget, not the size of this site's current copy.
-const wasmMaxBytes = 6_691_222;
+// libsonare 1.8.2 full runtime, including offline vocal editing: the verified
+// release artifact is 6,949,147 bytes. Further growth requires an explicit update.
+const wasmMaxBytes = 6_949_147;
 const assetBudgets = [
   { pattern: /^assets\/chunks\/vexflow\./, maxBytes: 1.25 * MiB },
   { pattern: /^assets\/.*\.wasm$/, maxBytes: wasmMaxBytes },

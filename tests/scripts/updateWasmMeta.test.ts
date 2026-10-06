@@ -11,6 +11,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const scriptPath = path.resolve('scripts/update-wasm-meta.sh');
@@ -66,6 +67,9 @@ function writeCopyInputs(libsonare: string, wasmBytes: Buffer, indexSource: stri
     'worklet.js': 'registerProcessor();\n//# sourceMappingURL=worklet.js.map\n',
     'worklet.d.ts': 'export type Worklet = string;\n//# sourceMappingURL=worklet.d.ts.map\n',
     'worker.js': 'self.onmessage = () => {};\n//# sourceMappingURL=worker.js.map\n',
+    'vocal_edit_worker.js':
+      'self.onmessage = () => {};\n//# sourceMappingURL=vocal_edit_worker.js.map\n',
+    'vocal_edit_worker.d.ts': 'export {};\n',
     'worker.d.ts': 'export type Worker = string;\n//# sourceMappingURL=worker.d.ts.map\n',
   };
   const dist = path.join(libsonare, 'bindings/wasm/dist');
@@ -76,49 +80,37 @@ function writeCopyInputs(libsonare: string, wasmBytes: Buffer, indexSource: stri
     path.join(libsonare, 'bindings/wasm/package.json'),
     JSON.stringify({ name: '@libraz/libsonare', version: '1.2.3-test' }),
   );
-  writeSizeBaseline(libsonare);
   writeSourcesManifest(libsonare, wasmBytes);
 }
 
-/**
- * Write the upstream size gate the script reads the published entry sizes from.
- * Raw/gzip are chosen so each rounds to a distinct KB figure.
- */
-function writeSizeBaseline(libsonare: string) {
-  writeFileSync(
-    path.join(libsonare, 'bindings/wasm/wasm-size-baseline.json'),
-    JSON.stringify({
-      artifacts: {
-        'sonare.wasm': { raw: 5_203_886, gzip: 1_729_949 },
-        'sonare-analysis.wasm': { raw: 1_004_364, gzip: 373_840 },
-      },
-      format: 1,
-      toolchain: { emsdk: '5.0.2' },
-    }),
-  );
+const BUILT_AT = '2026-09-21T18:47:44.119Z';
+const ANALYSIS_WASM_BYTES = Buffer.from('fake analysis wasm artifact');
+
+function gzipSize(bytes: Buffer) {
+  return gzipSync(bytes).length;
 }
 
-const BUILT_AT = '2026-09-21T18:47:44.119Z';
-
 /**
- * Write the manifest the emscripten build leaves beside its artifacts. The
- * script takes the build date and the source digest from here, and refuses to
- * record provenance for a binary the manifest does not describe.
+ * Write the artifact and manifest an upstream build leaves in dist/. The
+ * script measures these current files and refuses to record provenance for a
+ * binary the corresponding manifest does not describe.
  */
-function writeSourcesManifest(
+function writeManifest(
   libsonare: string,
-  wasmBytes: Buffer,
+  moduleName: string,
+  artifactName: string,
+  artifactBytes: Buffer,
   overrides: { sha256?: string; builtAt?: string; sources?: Record<string, string> } = {},
 ) {
   writeFileSync(
-    path.join(libsonare, 'bindings/wasm/dist/sonare.sources.json'),
+    path.join(libsonare, 'bindings/wasm/dist', `${moduleName}.sources.json`),
     JSON.stringify({
-      module: 'sonare',
+      module: moduleName,
       builtAt: overrides.builtAt ?? BUILT_AT,
       artifacts: {
-        'sonare.wasm': {
-          sha256: overrides.sha256 ?? createHash('sha256').update(wasmBytes).digest('hex'),
-          bytes: wasmBytes.length,
+        [artifactName]: {
+          sha256: overrides.sha256 ?? createHash('sha256').update(artifactBytes).digest('hex'),
+          bytes: artifactBytes.length,
         },
       },
       sources: overrides.sources ?? {
@@ -127,6 +119,18 @@ function writeSourcesManifest(
       },
     }),
   );
+}
+
+function writeSourcesManifest(
+  libsonare: string,
+  wasmBytes: Buffer,
+  overrides: { sha256?: string; builtAt?: string; sources?: Record<string, string> } = {},
+) {
+  const dist = path.join(libsonare, 'bindings/wasm/dist');
+  writeFileSync(path.join(dist, 'sonare.wasm'), wasmBytes);
+  writeManifest(libsonare, 'sonare', 'sonare.wasm', wasmBytes, overrides);
+  writeFileSync(path.join(dist, 'sonare-analysis.wasm'), ANALYSIS_WASM_BYTES);
+  writeManifest(libsonare, 'sonare-analysis', 'sonare-analysis.wasm', ANALYSIS_WASM_BYTES);
 }
 
 /** Write the worklet asset the script requires alongside the core trio. */
@@ -158,7 +162,6 @@ describe('update-wasm-meta shell script', () => {
         version: '9.8.7-test',
       }),
     );
-    writeSizeBaseline(libsonare);
     writeSourcesManifest(libsonare, wasmBytes);
 
     const result = runScript(root);
@@ -209,11 +212,18 @@ describe('update-wasm-meta shell script', () => {
         meta.assets['sonare.js'].gzipSize + meta.assets['index.js'].gzipSize + meta.gzipSize,
     });
     expect(meta.total.gzipKB).toBe(Math.floor(meta.total.gzipSize / 1024));
-    // Package entries come from the upstream gate, not from the copied artifact,
-    // so they are unrelated to the fake wasm bytes written above.
+    // Package entries come from the current upstream dist artifacts. The full
+    // entry must agree with the copied binary, while analysis is measured from
+    // its own artifact and source manifest.
     expect(meta.entries).toEqual({
-      full: { sizeKB: 5082, gzipKB: 1689 },
-      analysis: { sizeKB: 981, gzipKB: 365 },
+      full: {
+        sizeKB: Math.floor(wasmBytes.length / 1024),
+        gzipKB: Math.floor(gzipSize(wasmBytes) / 1024),
+      },
+      analysis: {
+        sizeKB: Math.floor(ANALYSIS_WASM_BYTES.length / 1024),
+        gzipKB: Math.floor(gzipSize(ANALYSIS_WASM_BYTES) / 1024),
+      },
     });
     // Provenance is the build's own, not this machine's: the date is the
     // manifest's `builtAt` rather than the copied file's mtime, and the sibling
@@ -233,6 +243,9 @@ describe('update-wasm-meta shell script', () => {
     const second = runCopyScript(root);
 
     expect(first.status).toBe(0);
+    expect(readFileSync(path.join(root, 'src/wasm/vocal_edit_worker.js'), 'utf8')).toBe(
+      'self.onmessage = () => {};\n',
+    );
     expect(second.status).toBe(0);
     expect(second.stdout).toContain('No changes detected');
     expect(second.stdout).not.toContain('Copying JS API files');
@@ -277,7 +290,6 @@ describe('update-wasm-meta shell script', () => {
         path.join(libsonare, 'bindings/wasm/package.json'),
         JSON.stringify({ version: '1.0.0' }),
       );
-      writeSizeBaseline(libsonare);
       writeSourcesManifest(libsonare, wasmBytes, { sources });
 
       expect(runScript(root).status).toBe(0);
@@ -302,7 +314,6 @@ describe('update-wasm-meta shell script', () => {
       path.join(libsonare, 'bindings/wasm/package.json'),
       JSON.stringify({ version: '1.0.0' }),
     );
-    writeSizeBaseline(libsonare);
     writeSourcesManifest(libsonare, Buffer.from('a different build'));
 
     const result = runScript(root);
@@ -321,7 +332,7 @@ describe('update-wasm-meta shell script', () => {
       path.join(libsonare, 'bindings/wasm/package.json'),
       JSON.stringify({ version: '1.0.0' }),
     );
-    writeSizeBaseline(libsonare);
+    writeFileSync(path.join(libsonare, 'bindings/wasm/dist/sonare.wasm'), 'upstream wasm');
 
     const result = runScript(root);
 
@@ -361,9 +372,10 @@ describe('update-wasm-meta shell script', () => {
     );
   });
 
-  it('fails when the upstream size baseline is missing', () => {
+  it('fails when the current analysis wasm artifact is missing', () => {
     const { root, libsonare } = createWorkspace();
-    writeFileSync(path.join(root, 'src/wasm/sonare.wasm'), 'wasm');
+    const wasmBytes = Buffer.from('wasm');
+    writeFileSync(path.join(root, 'src/wasm/sonare.wasm'), wasmBytes);
     writeFileSync(path.join(root, 'src/wasm/sonare.js'), 'js');
     writeFileSync(path.join(root, 'src/wasm/index.js'), 'index');
     writeWorkletAsset(root);
@@ -371,12 +383,60 @@ describe('update-wasm-meta shell script', () => {
       path.join(libsonare, 'bindings/wasm/package.json'),
       JSON.stringify({ version: '1.0.0' }),
     );
+    writeSourcesManifest(libsonare, wasmBytes);
+    rmSync(path.join(libsonare, 'bindings/wasm/dist/sonare-analysis.wasm'));
 
     const result = runScript(root);
 
     expect(result.status).toBe(1);
     expect(result.stdout).toContain(
-      'Size baseline not found: ../libsonare/bindings/wasm/wasm-size-baseline.json',
+      'Upstream WASM artifact not found: ../libsonare/bindings/wasm/dist/sonare-analysis.wasm',
+    );
+  });
+
+  it('fails when the current analysis build manifest is missing', () => {
+    const { root, libsonare } = createWorkspace();
+    const wasmBytes = Buffer.from('wasm');
+    writeFileSync(path.join(root, 'src/wasm/sonare.wasm'), wasmBytes);
+    writeFileSync(path.join(root, 'src/wasm/sonare.js'), 'js');
+    writeFileSync(path.join(root, 'src/wasm/index.js'), 'index');
+    writeWorkletAsset(root);
+    writeFileSync(
+      path.join(libsonare, 'bindings/wasm/package.json'),
+      JSON.stringify({ version: '1.0.0' }),
+    );
+    writeSourcesManifest(libsonare, wasmBytes);
+    rmSync(path.join(libsonare, 'bindings/wasm/dist/sonare-analysis.sources.json'));
+
+    const result = runScript(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      'Build manifest not found: ../libsonare/bindings/wasm/dist/sonare-analysis.sources.json',
+    );
+  });
+
+  it('refuses to measure analysis wasm when its manifest hash is stale', () => {
+    const { root, libsonare } = createWorkspace();
+    const wasmBytes = Buffer.from('wasm');
+    writeFileSync(path.join(root, 'src/wasm/sonare.wasm'), wasmBytes);
+    writeFileSync(path.join(root, 'src/wasm/sonare.js'), 'js');
+    writeFileSync(path.join(root, 'src/wasm/index.js'), 'index');
+    writeWorkletAsset(root);
+    writeFileSync(
+      path.join(libsonare, 'bindings/wasm/package.json'),
+      JSON.stringify({ version: '1.0.0' }),
+    );
+    writeSourcesManifest(libsonare, wasmBytes);
+    writeManifest(libsonare, 'sonare-analysis', 'sonare-analysis.wasm', ANALYSIS_WASM_BYTES, {
+      sha256: '0'.repeat(64),
+    });
+
+    const result = runScript(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      'Upstream artifact is not the artifact the build manifest describes',
     );
   });
 });

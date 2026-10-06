@@ -5,6 +5,9 @@ INDEX_JS_FILE="src/wasm/index.js"
 WORKLET_JS_FILE="src/wasm/worklet.js"
 META_FILE="src/wasm/meta.json"
 LIBSONARE_DIR="../libsonare"
+WASM_DIST_DIR="$LIBSONARE_DIR/bindings/wasm/dist"
+UPSTREAM_WASM_FILE="$WASM_DIST_DIR/sonare.wasm"
+ANALYSIS_WASM_FILE="$WASM_DIST_DIR/sonare-analysis.wasm"
 
 file_size() {
   if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -42,6 +45,52 @@ asset_entry() {
   gzip_bytes=$(gzip_size "$path")
   printf '{\n      "size": %s,\n      "sizeKB": %s,\n      "gzipSize": %s,\n      "gzipKB": %s\n    }' \
     "$size" "$((size / 1024))" "$gzip_bytes" "$((gzip_bytes / 1024))"
+}
+
+# Validate that a freshly built upstream artifact is the one described by its
+# source manifest. The copied full artifact is checked separately below so the
+# metadata cannot combine bytes from different builds.
+validate_manifest_artifact() {
+  local artifact="$1"
+  local manifest="$2"
+  local artifact_name="$3"
+  local actual_sha declared_sha
+
+  if [ ! -f "$artifact" ]; then
+    echo "❌ Upstream WASM artifact not found: $artifact"
+    exit 1
+  fi
+  if [ ! -f "$manifest" ]; then
+    echo "❌ Build manifest not found: $manifest"
+    exit 1
+  fi
+
+  actual_sha=$(file_sha256 "$artifact")
+  declared_sha=$(node -e '
+    const fs = require("node:fs");
+    const [manifestPath, artifactName] = process.argv.slice(1);
+    let manifest;
+    try {
+      manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    } catch (error) {
+      console.error(`❌ Could not read build manifest: ${manifestPath}`);
+      process.exit(1);
+    }
+    const declared = manifest.artifacts?.[artifactName]?.sha256;
+    if (typeof declared !== "string" || !/^[0-9a-f]{64}$/.test(declared)) {
+      console.error(`❌ Build manifest declares no valid ${artifactName} artifact: ${manifestPath}`);
+      process.exit(1);
+    }
+    process.stdout.write(declared);
+  ' "$manifest" "$artifact_name") || exit 1
+
+  if [ "$declared_sha" != "$actual_sha" ]; then
+    echo "❌ Upstream artifact is not the artifact the build manifest describes"
+    echo "   manifest: $declared_sha"
+    echo "   upstream: $actual_sha"
+    echo "   artifact: $artifact"
+    exit 1
+  fi
 }
 
 if [ -f "$WASM_FILE" ]; then
@@ -84,32 +133,26 @@ if [ -f "$WASM_FILE" ]; then
     exit 1
   fi
 
-  # Published package-entry sizes, taken from the upstream size gate rather than
-  # from the artifacts copied here. The gate pins its own emsdk and measures both
-  # bundle entries in one run, so `full` and `analysis` are comparable with each
-  # other; the copied `sonare.wasm` above is whatever the sibling checkout last
-  # built and is not.
-  SIZE_BASELINE="$LIBSONARE_DIR/bindings/wasm/wasm-size-baseline.json"
-  if [ ! -f "$SIZE_BASELINE" ]; then
-    echo "❌ Size baseline not found: $SIZE_BASELINE"
-    exit 1
-  fi
-  ENTRIES_JSON=$(node -e '
-    const b = require(process.argv[1]).artifacts;
-    const kb = (n) => Math.round(n / 1024);
-    const entry = (name) => {
-      const a = b[name];
-      if (!a) throw new Error(`size baseline has no ${name}`);
-      return { sizeKB: kb(a.raw), gzipKB: kb(a.gzip) };
-    };
-    process.stdout.write(
-      JSON.stringify({ full: entry("sonare.wasm"), analysis: entry("sonare-analysis.wasm") }),
-    );
-  ' "$(cd "$(dirname "$SIZE_BASELINE")" && pwd)/$(basename "$SIZE_BASELINE")") || exit 1
-  ENTRIES_FULL_SIZE_KB=$(node -pe 'JSON.parse(process.argv[1]).full.sizeKB' "$ENTRIES_JSON")
-  ENTRIES_FULL_GZIP_KB=$(node -pe 'JSON.parse(process.argv[1]).full.gzipKB' "$ENTRIES_JSON")
-  ENTRIES_ANALYSIS_SIZE_KB=$(node -pe 'JSON.parse(process.argv[1]).analysis.sizeKB' "$ENTRIES_JSON")
-  ENTRIES_ANALYSIS_GZIP_KB=$(node -pe 'JSON.parse(process.argv[1]).analysis.gzipKB' "$ENTRIES_JSON")
+  # Package-entry sizes come from the current upstream artifacts, not the
+  # historical size baseline. Each artifact has its own source manifest; the
+  # hash check makes a stale or partially rebuilt dist directory fail loudly.
+  validate_manifest_artifact \
+    "$UPSTREAM_WASM_FILE" \
+    "$WASM_DIST_DIR/sonare.sources.json" \
+    "sonare.wasm"
+  validate_manifest_artifact \
+    "$ANALYSIS_WASM_FILE" \
+    "$WASM_DIST_DIR/sonare-analysis.sources.json" \
+    "sonare-analysis.wasm"
+
+  ENTRIES_FULL_SIZE=$(file_size "$UPSTREAM_WASM_FILE")
+  ENTRIES_FULL_GZIP_SIZE=$(gzip_size "$UPSTREAM_WASM_FILE")
+  ENTRIES_FULL_SIZE_KB=$((ENTRIES_FULL_SIZE / 1024))
+  ENTRIES_FULL_GZIP_KB=$((ENTRIES_FULL_GZIP_SIZE / 1024))
+  ENTRIES_ANALYSIS_SIZE=$(file_size "$ANALYSIS_WASM_FILE")
+  ENTRIES_ANALYSIS_GZIP_SIZE=$(gzip_size "$ANALYSIS_WASM_FILE")
+  ENTRIES_ANALYSIS_SIZE_KB=$((ENTRIES_ANALYSIS_SIZE / 1024))
+  ENTRIES_ANALYSIS_GZIP_KB=$((ENTRIES_ANALYSIS_GZIP_SIZE / 1024))
 
   # Build provenance comes from the manifest the emscripten build writes beside
   # its artifacts, never from the sibling checkout's current HEAD: the checkout

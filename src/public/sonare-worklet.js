@@ -720,6 +720,13 @@ var SampleBank = class {
 };
 
 // src/project_internal.ts
+var projectTimelineHandles = /* @__PURE__ */ new WeakMap();
+function projectTimelineNativeId(owner) {
+  if (owner === null || typeof owner !== "object" && typeof owner !== "function") {
+    return void 0;
+  }
+  return projectTimelineHandles.get(owner)?.id;
+}
 function normalizeSynthInstrument(patch) {
   if (patch === null || typeof patch !== "object") {
     return patch;
@@ -735,6 +742,20 @@ function normalizeSynthInstrument(patch) {
     throw new TypeError("sampleBank is destroyed");
   }
   return { ...rest, sampleBankId: sampleBank.nativeId };
+}
+function partRigInsertsJson(inserts) {
+  if (inserts === void 0 || inserts === null) {
+    return void 0;
+  }
+  if (!Array.isArray(inserts)) {
+    throw new TypeError("inserts must be an array");
+  }
+  return JSON.stringify(
+    inserts.map((insert) => {
+      const { processor, params } = insert;
+      return params === void 0 ? { processor } : { processor, params: typeof params === "string" ? params : JSON.stringify(params) };
+    })
+  );
 }
 function projectModule() {
   const candidate = getSonareModule();
@@ -1150,6 +1171,17 @@ var RealtimeEngine = class _RealtimeEngine {
     this.native.setArticulation(destinationId, channel, articulation);
   }
   /**
+   * Set the rig of one part (0-15), or of the destination's default when `part`
+   * is `PART_RIG_ALL_PARTS`, on the instrument bound to `destinationId`. A
+   * direct call, not a stored edit: a destination with no instrument is an
+   * invalid parameter, and an instrument without part rigs (a builtin, a
+   * host-callback instrument) is refused as not implemented rather than
+   * succeeding quietly. `'chain'` takes 1-8 `inserts`; no other mode does.
+   */
+  setPartRig(destinationId, part, mode, inserts) {
+    this.native.setPartRig(destinationId, part, mode, partRigInsertsJson(inserts));
+  }
+  /**
    * Read back {@link setArticulation} as the canonical name. An ordinal this
    * build cannot spell is handed back as the number, the way every other enum
    * leaves this surface.
@@ -1559,9 +1591,39 @@ var RealtimeEngine = class _RealtimeEngine {
   /**
    * Keys one insert of a lane strip from another lane's post-strip audio
    * (ducking/sidechainRouter inserts). sourceTrackId 0 removes the binding.
+   * Lanes are processed in key order and the key is delay-compensated to the
+   * destination strip input, so the result depends on neither the lane order
+   * nor the block size. Throws, leaving the bindings unchanged, for a lane
+   * keying itself, a binding that would close a cycle over the lane bindings,
+   * a full binding table and an alignment past the delay ceiling. Not callable
+   * while a block is being processed.
    */
   setLaneSidechain(trackId, insertIndex, sourceTrackId) {
     this.native.setLaneSidechain(trackId, insertIndex, sourceTrackId);
+  }
+  /**
+   * Installs a compiled project timeline into this stopped engine, all or
+   * nothing: tempo and time-signature segments, markers, track lanes, track
+   * automation, audio and MIDI clips, and the per-track strips of the project's
+   * mixer scene are replaced in full (a later low-level setter on those domains
+   * is overwritten by the next apply). Instruments, buses, the master strip,
+   * metronome, loop and capture are not touched; bind instruments separately.
+   *
+   * Throws while the transport is playing, for a timeline the engine cannot
+   * hold, and for a scene strip routed from several tracks. A validation
+   * failure leaves the engine unchanged. The engine keeps its own reference, so
+   * {@link ProjectTimeline.dispose} may follow immediately.
+   *
+   * Also throws on an unprepared engine and on a timeline whose sample rate
+   * differs from the engine's. Once a timeline is applied, a later prepare at
+   * another rate is refused until the timeline's clips are cleared.
+   */
+  applyProjectTimeline(timeline) {
+    const timelineId = projectTimelineNativeId(timeline);
+    if (timelineId === void 0) {
+      throw new TypeError("timeline must be a ProjectTimeline instance");
+    }
+    this.native.applyProjectTimeline(timelineId);
   }
   setTrackBuses(buses) {
     this.native.setTrackBuses(
@@ -1764,12 +1826,9 @@ var RealtimeEngine = class _RealtimeEngine {
    * return `-1`: they resize voice pools or swap DSP topology, which is not
    * audio-thread safe. Rebind the instrument with a new patch instead.
    *
-   * `gain`, `busDrive`, `cutoffHz`, `resonanceQ`, `envToCutoffCents`,
-   * `lfoToPitchCents` and `pitchOffsetCents` reach voices that are already
-   * sounding from the next block; the rest are cached into per-voice state at
-   * note-on and take effect from the next note, so a lane that moves one of
-   * them under a held note looks inert until the next one speaks — that is the
-   * behaviour, not a dropped write.
+   * All automatable parameters of a NativeSynth reach already-sounding voices
+   * from the next processed block. Voices using GM program patches are
+   * unaffected; parameters apply to NativeSynth's own patch only.
    *
    * The id survives an unbind/rebind of the same destination and applies
    * nothing while that destination is unbound.
@@ -1794,6 +1853,16 @@ var RealtimeEngine = class _RealtimeEngine {
     this.native.setTrackStripDualPan(trackId, leftPan, rightPan);
   }
   /**
+   * Sets a track lane strip's surround placement in realtime (glitch-free; a
+   * constant-power 5 ms one-pole glide). Used when the destination has more than
+   * two channels. Omitted fields default to a centered point source
+   * (`distance` 1); a `distance` of 0 or less is treated as 1. Throws for an
+   * unknown track, a track without a lane strip, or a non-finite field.
+   */
+  setTrackStripSurroundPan(trackId, pan) {
+    this.native.setTrackStripSurroundPan(trackId, pan);
+  }
+  /**
    * Sets a bus strip's output pan position in realtime (glitch-free). Throws
    * for an unknown bus or one wider than stereo.
    */
@@ -1813,8 +1882,9 @@ var RealtimeEngine = class _RealtimeEngine {
     this.native.setBusStripDualPan(busId, leftPan, rightPan);
   }
   /**
-   * Sets a track lane strip's inter-channel alignment delay (whole samples).
-   * Adjusts strip latency, so PDC and reported graph latency are refreshed.
+   * Sets a track lane strip's alignment delay (whole samples), moving this lane
+   * later relative to every other lane. It is not latency: PDC does not
+   * compensate it and the reported graph latency is unchanged.
    */
   setTrackStripChannelDelaySamples(trackId, delaySamples) {
     this.native.setTrackStripChannelDelaySamples(trackId, delaySamples);
@@ -2081,6 +2151,15 @@ var RealtimeEngine = class _RealtimeEngine {
    */
   drainMeterTelemetryWide(maxRecords = 1024) {
     return this.native.drainMeterTelemetryWide(maxRecords);
+  }
+  /**
+   * Per-insert gain reduction in dB (each <= 0) of a meter target's strip from the
+   * last rendered block, in combined pre-to-post insert order. `targetId` uses the
+   * meter-record encoding (0 master, 1..32 lanes, 33..40 buses; 0xFFFF monitor
+   * yields an empty array). Throws for an id outside that range.
+   */
+  meterTargetInsertGainReduction(targetId) {
+    return this.native.meterTargetInsertGainReduction(targetId);
   }
   /**
    * Enables per-target spectrum + vectorscope capture. @param intervalFrames is
@@ -2509,8 +2588,8 @@ var Mixer = class _Mixer {
     this.mixer.setPanLaw(stripIndex, panLawCode(panLaw));
   }
   /**
-   * Set a per-strip channel delay in samples. This changes the strip's reported
-   * latency; recompile to re-run latency compensation.
+   * Set a per-strip channel delay in samples, moving the strip later relative to
+   * the others. It is not latency: latency compensation does not undo it.
    */
   setChannelDelaySamples(stripIndex, delaySamples) {
     this.mixer.setChannelDelaySamples(stripIndex, delaySamples);
@@ -3979,6 +4058,7 @@ var ENGINE_SYNC_MESSAGE_TYPES = {
   syncMidiInputPitchBend: true,
   syncMidiInputPolyPressure: true,
   syncMidiInputSource: true,
+  syncMidiInputUmp: true,
   syncMidiNoteOff: true,
   syncMidiNoteOn: true,
   syncMidiPanic: true,
@@ -3999,6 +4079,7 @@ var ENGINE_SYNC_MESSAGE_TYPES = {
   syncTrackStripPan: true,
   syncTrackStripPanLaw: true,
   syncTrackStripPanMode: true,
+  syncTrackStripSurroundPan: true,
   syncWarpVoiceCapacity: true
 };
 var engineSyncMessageTypes = new Set(Object.keys(ENGINE_SYNC_MESSAGE_TYPES));
@@ -4068,6 +4149,12 @@ function isEngineTransportRequestMessage(value) {
 }
 function isEngineTransportResponseMessage(value) {
   return isRecord(value) && value.type === "transportResponse" && typeof value.requestId === "number" && typeof value.ok === "boolean";
+}
+function isEngineInsertGainReductionRequestMessage(value) {
+  return isRecord(value) && value.type === "insertGainReductionRequest" && typeof value.requestId === "number" && typeof value.targetId === "number";
+}
+function isEngineInsertGainReductionResponseMessage(value) {
+  return isRecord(value) && value.type === "insertGainReductionResponse" && typeof value.requestId === "number" && typeof value.ok === "boolean";
 }
 function isRealtimeVoiceChangerMessage(value) {
   if (!isRecord(value) || typeof value.type !== "string") {
@@ -5106,6 +5193,8 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
     this.captureRequests = /* @__PURE__ */ new Map();
     this.transportRequestId = 1;
     this.transportRequests = /* @__PURE__ */ new Map();
+    this.insertGainReductionRequestId = 1;
+    this.insertGainReductionRequests = /* @__PURE__ */ new Map();
     this.destroyed = false;
     this.node = node;
     this.capabilities = capabilities;
@@ -5149,6 +5238,16 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
             pending.resolve(event.data);
           } else {
             pending.reject(new Error(event.data.error ?? "Transport request failed"));
+          }
+        }
+      } else if (isEngineInsertGainReductionResponseMessage(event.data)) {
+        const pending = this.insertGainReductionRequests.get(event.data.requestId);
+        if (pending) {
+          this.insertGainReductionRequests.delete(event.data.requestId);
+          if (event.data.ok && Array.isArray(event.data.values)) {
+            pending.resolve(event.data.values);
+          } else {
+            pending.reject(new Error(event.data.error ?? "Insert gain reduction request failed"));
           }
         }
       } else if (isEngineTelemetryRecord(event.data)) {
@@ -5544,6 +5643,10 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
       pending.reject(new Error("Realtime engine node is destroyed."));
     }
     this.transportRequests.clear();
+    for (const pending of this.insertGainReductionRequests.values()) {
+      pending.reject(new Error("Realtime engine node is destroyed."));
+    }
+    this.insertGainReductionRequests.clear();
     this.telemetryListeners.clear();
     this.meterListeners.clear();
     this.scopeListeners.clear();
@@ -5592,6 +5695,29 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
     for (const listener of this.clipPageRequestListeners) {
       listener(message);
     }
+  }
+  /**
+   * Reads one target's per-insert gain reduction (dB, each <= 0, pre-to-post insert order)
+   * from the worklet. Works in both ring and postMessage meter modes; rejects when the
+   * target is invalid or mixing is not compiled in.
+   */
+  pollInsertGainReduction(targetId) {
+    if (this.destroyed) {
+      return Promise.reject(new Error("Realtime engine node is destroyed."));
+    }
+    const requestId = this.insertGainReductionRequestId++;
+    let rejectRequest;
+    const promise = new Promise((resolve, reject) => {
+      rejectRequest = reject;
+      this.insertGainReductionRequests.set(requestId, { resolve, reject });
+    });
+    try {
+      this.node.port.postMessage({ type: "insertGainReductionRequest", requestId, targetId });
+    } catch (error) {
+      this.insertGainReductionRequests.delete(requestId);
+      rejectRequest(error);
+    }
+    return promise;
   }
   emitScope(scope) {
     for (const listener of this.scopeListeners) {
@@ -5810,6 +5936,21 @@ function setTrackStripDualPan(ctx, target, leftPan, rightPan) {
   });
   ctx.postSync({ type: "syncTrackStripDualPan", trackId, leftPan, rightPan });
 }
+function setTrackStripSurroundPan(ctx, target, pan) {
+  const trackId = trackIdFor(ctx, target);
+  ctx.offlineEngine.setTrackStripSurroundPan(trackId, pan);
+  const resolved = {
+    azimuth: pan.azimuth ?? 0,
+    elevation: pan.elevation ?? 0,
+    divergence: pan.divergence ?? 0,
+    lfe: pan.lfe ?? 0,
+    distance: pan.distance === void 0 || pan.distance <= 0 ? 1 : pan.distance
+  };
+  mergeStripJson(ctx, { kind: "track", trackId }, (entry) => {
+    entry.surroundPan = resolved;
+  });
+  ctx.postSync({ type: "syncTrackStripSurroundPan", trackId, pan: resolved });
+}
 function setTrackStripChannelDelaySamples(ctx, target, delaySamples) {
   const trackId = trackIdFor(ctx, target);
   ctx.offlineEngine.setTrackStripChannelDelaySamples(trackId, delaySamples);
@@ -5983,8 +6124,14 @@ function pushMidiPolyPressure(ctx, trackId, group, channel, note, pressure, rend
 }
 function pushMidiUmp(ctx, trackId, word0, renderFrame) {
   const destinationId = ctx.resolveTargetId(trackId);
-  ctx.offlineEngine.pushMidiUmp(destinationId, [word0], renderFrame);
-  ctx.postSync({ type: "syncMidiUmp", destinationId, word0, renderFrame });
+  if (typeof word0 === "number") {
+    ctx.offlineEngine.pushMidiUmp(destinationId, word0, renderFrame);
+    ctx.postSync({ type: "syncMidiUmp", destinationId, word0, renderFrame });
+    return;
+  }
+  const words = word0 instanceof Uint32Array ? new Uint32Array(word0) : word0.slice();
+  ctx.offlineEngine.pushMidiUmp(destinationId, words, renderFrame);
+  ctx.postSync({ type: "syncMidiUmp", destinationId, words, renderFrame });
 }
 function setBuiltinInstrument(ctx, trackId, config) {
   const destinationId = ctx.resolveTargetId(trackId);
@@ -6436,7 +6583,9 @@ var SonareEngine = class _SonareEngine {
   /**
    * Keys one insert of a lane strip from another lane's post-strip pre-fader
    * audio (ducking/sidechainRouter inserts). sourceTarget null removes the
-   * binding.
+   * binding. Throws, leaving the existing bindings unchanged, for a lane keying
+   * itself or a binding that would close a cycle over the lane bindings; a
+   * refused binding is never recorded, so it is not replayed on resync.
    */
   setLaneSidechain(target, insertIndex, sourceTarget) {
     setLaneSidechain(this.mixerContext, target, insertIndex, sourceTarget);
@@ -6503,6 +6652,14 @@ var SonareEngine = class _SonareEngine {
   }
   setTrackStripDualPan(target, leftPan, rightPan) {
     setTrackStripDualPan(this.stripContext, target, leftPan, rightPan);
+  }
+  /**
+   * Sets a track lane strip's surround placement (glitch-free, 5 ms placement
+   * glide). Takes effect on a destination wider than stereo, so set `channelCount`
+   * to the layout's plane count. Omitted fields default to a centered point source.
+   */
+  setTrackStripSurroundPan(target, pan) {
+    setTrackStripSurroundPan(this.stripContext, target, pan);
   }
   setTrackStripChannelDelaySamples(target, delaySamples) {
     setTrackStripChannelDelaySamples(this.stripContext, target, delaySamples);
@@ -6799,8 +6956,8 @@ var SonareEngine = class _SonareEngine {
       renderFrame
     );
   }
-  pushMidiUmp(trackId, word0, renderFrame = -1) {
-    pushMidiUmp(this.stripContext, trackId, word0, renderFrame);
+  pushMidiUmp(trackId, words, renderFrame = -1) {
+    pushMidiUmp(this.stripContext, trackId, words, renderFrame);
   }
   pushMidiSysex(trackId, data, renderFrame = -1) {
     pushMidiSysex(this.stripContext, trackId, data, renderFrame);
@@ -6884,6 +7041,11 @@ var SonareEngine = class _SonareEngine {
       data1: pressure,
       portTimeSamples
     });
+  }
+  pushMidiInputUmp(words, portTimeSamples = 0) {
+    const copiedWords = words instanceof Uint32Array ? new Uint32Array(words) : words.slice();
+    this.offlineEngine.pushMidiInputUmp(copiedWords, portTimeSamples);
+    this.postSync({ type: "syncMidiInputUmp", words: copiedWords, portTimeSamples });
   }
   pushMidiPanic(renderFrame = -1) {
     this.offlineEngine.pushMidiPanic(renderFrame);
@@ -6979,6 +7141,10 @@ var SonareEngine = class _SonareEngine {
   }
   pollScope() {
     return this.realtimeNode.pollScope();
+  }
+  /** Per-insert gain reduction for a meter target; see {@link SonareRealtimeEngineNode.pollInsertGainReduction}. */
+  pollInsertGainReduction(targetId) {
+    return this.realtimeNode.pollInsertGainReduction(targetId);
   }
   destroy() {
     if (this.destroyed) {
@@ -7918,6 +8084,9 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
       case "syncTrackStripDualPan":
         this.engine.setTrackStripDualPan(message.trackId, message.leftPan, message.rightPan);
         break;
+      case "syncTrackStripSurroundPan":
+        this.engine.setTrackStripSurroundPan(message.trackId, message.pan);
+        break;
       case "syncBusStripPan":
         this.engine.setBusStripPan(message.busId, message.pan);
         break;
@@ -8010,7 +8179,11 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
         );
         break;
       case "syncMidiUmp":
-        this.engine.pushMidiUmp(message.destinationId, [message.word0], message.renderFrame);
+        this.engine.pushMidiUmp(
+          message.destinationId,
+          message.words ?? [message.word0],
+          message.renderFrame
+        );
         break;
       case "syncMidiSysex":
         this.engine.pushMidiSysex(message.destinationId, message.data, message.renderFrame);
@@ -8088,6 +8261,9 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           message.portTimeSamples
         );
         break;
+      case "syncMidiInputUmp":
+        this.engine.pushMidiInputUmp(message.words, message.portTimeSamples);
+        break;
     }
   }
   receiveCaptureRequest(message) {
@@ -8155,6 +8331,26 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     } catch (error) {
       this.transport?.postMessage?.({
         type: "transportResponse",
+        requestId: message.requestId,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+  receiveInsertGainReductionRequest(message) {
+    if (this.closed) {
+      return;
+    }
+    try {
+      this.transport?.postMessage?.({
+        type: "insertGainReductionResponse",
+        requestId: message.requestId,
+        ok: true,
+        values: this.engine.meterTargetInsertGainReduction(message.targetId)
+      });
+    } catch (error) {
+      this.transport?.postMessage?.({
+        type: "insertGainReductionResponse",
         requestId: message.requestId,
         ok: false,
         error: error instanceof Error ? error.message : String(error)
@@ -8354,6 +8550,8 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
       }
       return;
     }
+    const delivered = [];
+    const newestByTarget = /* @__PURE__ */ new Map();
     for (const item of this.engine.drainMeterTelemetry(64)) {
       const meter = meterFromEngine(item);
       if (meter.frame !== this.lastMeterFrame && meter.frame - this.lastMeterFrame < this.meterIntervalFrames) {
@@ -8361,6 +8559,13 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
       }
       if (meter.frame !== this.lastMeterFrame) {
         this.lastMeterFrame = meter.frame;
+      }
+      delivered.push(meter);
+      newestByTarget.set(meter.targetId, meter);
+    }
+    for (const meter of delivered) {
+      if (newestByTarget.get(meter.targetId) === meter) {
+        meter.insertGainReductionDb = this.engine.meterTargetInsertGainReduction(meter.targetId);
       }
       if (this.transport?.onMeter) {
         this.transport.onMeter(meter);
@@ -8674,6 +8879,8 @@ function registerSonareRealtimeEngineWorkletProcessor(name = "sonare-realtime-en
         bridge.receiveCaptureRequest(data);
       } else if (isEngineTransportRequestMessage(data)) {
         bridge.receiveTransportRequest(data);
+      } else if (isEngineInsertGainReductionRequestMessage(data)) {
+        bridge.receiveInsertGainReductionRequest(data);
       } else if (isRecord(data) && typeof data.type === "string" && data.type.startsWith("sync")) {
         this.port?.postMessage?.({
           type: "syncError",

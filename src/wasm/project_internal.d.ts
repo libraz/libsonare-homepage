@@ -1,4 +1,4 @@
-import type { BuiltinSynthBinding, SampleDesc, SampleZoneDesc, Sf2InstrumentConfig, Sf2ProgramStatus, SynthEnumTables, SynthPatch } from './instrument_types';
+import type { BuiltinSynthBinding, PartRig, PartRigInsert, PartRigMode, SampleDesc, SampleZoneDesc, Sf2InstrumentConfig, Sf2ProgramStatus, SynthEnumTables, SynthPatch } from './instrument_types';
 import type { AlignTakeToReferenceRequest, AlignTakeToReferenceResult, ProjectAssistSidecar, ProjectAutomationLaneDesc, ProjectAutomationPoint, ProjectAutomationTargetKind, ProjectBounceOptions, ProjectChordSymbol, ProjectClip, ProjectClipCompSegment, ProjectClipDesc, ProjectClipFade, ProjectClipTake, ProjectCompileResult, ProjectKeySegment, ProjectLoopMode, ProjectLoopRecordingDesc, ProjectLoopRecordingResult, ProjectMarker, ProjectMidiCcBinding, ProjectMidiClipResult, ProjectMidiEvent, ProjectMidiRouteConfig, ProjectMidiRouteResult, ProjectNotePairValidation, ProjectSource, ProjectTempoCandidate, ProjectTempoOptions, ProjectTempoSegment, ProjectTimeSignatureSegment, ProjectTrack, ProjectTrackKind, ProjectWarpMapDesc, ProjectWarpMode, TranscribeOptions, TranscribeResult } from './project_types';
 /**
  * A synth binding as the embind layer takes it: the public `sampleBank` handle
@@ -17,6 +17,20 @@ export interface WasmSampleBank {
     setCount: () => number;
     delete: () => void;
 }
+export interface WasmProjectTimeline {
+    readonly id: number;
+    delete: () => void;
+}
+/** Internal: registers the facade object whose identity may cross to the engine. */
+export declare function registerProjectTimeline(owner: object, native: WasmProjectTimeline): void;
+/** Internal: removes a disposed facade from the identity registry. */
+export declare function unregisterProjectTimeline(owner: object): void;
+/** Internal: resolves only a timeline facade created by this module. */
+export declare function projectTimelineNativeId(owner: unknown): number | undefined;
+/** `compileTimeline` as the embind layer returns it, before the facade wraps the handle. */
+export type NativeProjectCompileTimelineResult = ProjectCompileResult & {
+    timeline: WasmProjectTimeline | null;
+};
 /**
  * Swaps a facade {@link SampleBank} in a synth patch descriptor for the id the
  * embind layer looks the native bank up by, leaving every other field alone.
@@ -32,7 +46,20 @@ export interface WasmSampleBank {
  * class with a method the parity tool would then read as a facade op.
  */
 export declare function normalizeSynthInstrument(patch: unknown): NativeSynthBinding | string;
+/**
+ * Serializes a part rig's inserts into the JSON array the native layer reads
+ * (`params` always a JSON object string), or undefined when none were given.
+ */
+export declare function partRigInsertsJson(inserts: PartRigInsert[] | undefined): string | undefined;
+/** Reads a native `{ mode, insertsJson }` part rig back into the public shape. */
+export declare function partRigFromNative(native: {
+    mode: PartRig['mode'];
+    insertsJson: string | null;
+} | null): PartRig | null;
 export interface WasmProject {
+    applyVocalEdit: (request: unknown) => unknown;
+    getVocalEditDependencies: () => unknown;
+    rehydrateVocalEdits: (originals: unknown, cancel?: unknown) => unknown;
     toJson: () => string;
     setSampleRate: (sampleRate: number) => void;
     addTrack: (desc: {
@@ -59,6 +86,12 @@ export interface WasmProject {
     setTrackMute: (trackId: number, mute: boolean) => void;
     setTrackSolo: (trackId: number, solo: boolean) => void;
     setTrackPan: (trackId: number, pan: number) => void;
+    setPartRig: (destinationId: number, part: number, mode: PartRigMode | number, insertsJson: string | undefined) => void;
+    getPartRig: (destinationId: number, part: number) => {
+        mode: PartRigMode;
+        insertsJson: string | null;
+    } | null;
+    clearPartRig: (destinationId: number, part: number) => void;
     undo: () => void;
     redo: () => void;
     clearHistory: () => void;
@@ -81,6 +114,7 @@ export interface WasmProject {
     autoTempo: (audio: Float32Array, sampleRate: number, candidateIndex: number, applyTimeSignatures: boolean, options: ProjectTempoOptions | undefined) => number;
     snapToGrid: (ppq: number, strength: number, division: number) => number;
     compile: () => ProjectCompileResult;
+    compileTimeline: () => NativeProjectCompileTimelineResult;
     bounce: (options: ProjectBounceOptions) => Float32Array;
     bounceWithBuiltinInstrument: (bindings: BuiltinSynthBinding | ReadonlyArray<BuiltinSynthBinding> | undefined, options: ProjectBounceOptions) => Float32Array;
     bounceWithSynthInstrument: (bindings: NativeSynthBinding | string | ReadonlyArray<NativeSynthBinding | string> | undefined, options: ProjectBounceOptions) => Float32Array;

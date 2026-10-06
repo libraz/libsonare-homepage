@@ -1,5 +1,5 @@
 import type { PROJECT_AUTOMATION_CURVE_VALUES } from './codes';
-import type { Project } from './project_class';
+import type { Project, ProjectTimeline } from './project_class';
 /**
  * Expected project ABI version. Mirrors `SONARE_PROJECT_ABI_VERSION` in
  * `src/sonare_c_project.h`; checked against {@link projectAbiVersion} to detect
@@ -646,6 +646,15 @@ export interface ProjectCompileResult {
     /** Newline-joined human-readable detail of every diagnostic. */
     messages: string;
     diagnostics: ProjectDiagnostic[];
+}
+/** Result of {@link Project.compileTimeline}: the compile diagnostics plus the timeline they produced. */
+export interface ProjectCompileTimelineResult extends ProjectCompileResult {
+    /**
+     * The compiled timeline, or `null` when compilation produced none (an error
+     * diagnostic; read {@link ProjectCompileResult.diagnostics}). Release it with
+     * {@link ProjectTimeline.dispose}.
+     */
+    timeline: ProjectTimeline | null;
 }
 export interface ProjectDeserializeResult {
     project: Project;
