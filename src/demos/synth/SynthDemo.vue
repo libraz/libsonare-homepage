@@ -17,6 +17,7 @@ import {
   SYNTH_TERM_SLUGS,
   type SynthTermKey,
 } from '@/demos/synth/synthCopy';
+import { createSynthMidiEngine } from '@/demos/synth/synthMidiEngine';
 import {
   ATTACK_MAX_MS,
   ATTACK_MIN_MS,
@@ -391,27 +392,7 @@ function resetTweaks() {
   sendPatchNow();
 }
 
-/**
- * Main-thread stand-in for the audio-thread engine: `bindWebMidi` only calls
- * the MIDI push methods, which we forward over the worklet port (lighting up
- * the on-screen keys on the way through).
- */
-const midiEngineProxy = {
-  setMidiInputSource: () => {
-    /* the worklet already bound the input source at startup */
-  },
-  clearMidiInputSource: () => {
-    /* called by binding.close() on unmount; engine.dispose() handles the panic */
-  },
-  bindMidiCc: () => {
-    /* no CC-to-parameter bindings in this demo */
-  },
-  pushMidiInputNoteOn: (_group: number, _channel: number, note: number, velocity: number) =>
-    noteOn(note, velocity),
-  pushMidiInputNoteOff: (_group: number, _channel: number, note: number) => noteOff(note),
-  pushMidiInputCc: (_group: number, _channel: number, controller: number, value: number) =>
-    engine.controlChange(controller, value),
-};
+const midiEngineProxy = createSynthMidiEngine(engine, { noteOn, noteOff, mark: markNote });
 
 async function connectMidi() {
   const wasm = wasmModule.value;
@@ -420,7 +401,7 @@ async function connectMidi() {
   midiError.value = false;
   engine.resume();
   try {
-    const binding = await wasm.bindWebMidi(midiEngineProxy as never, {
+    const binding = await wasm.bindWebMidi(midiEngineProxy, {
       destinationId: 0,
       onInputsChanged: (inputs) => {
         midiInputs.value = inputs;
@@ -456,6 +437,13 @@ function noteOn(note: number, velocity = 100) {
   engine.noteOn(note, velocity);
   const next = new Set(activeNotes.value);
   next.add(note);
+  activeNotes.value = next;
+}
+
+function markNote(note: number, on: boolean) {
+  const next = new Set(activeNotes.value);
+  if (on) next.add(note);
+  else next.delete(note);
   activeNotes.value = next;
 }
 

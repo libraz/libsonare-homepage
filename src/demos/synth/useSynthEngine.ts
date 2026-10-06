@@ -14,6 +14,15 @@ const CHANNELS = 2;
 // UMP group / MIDI channel used for every note the demo plays.
 export const SYNTH_GROUP = 0;
 export const SYNTH_CHANNEL = 0;
+
+/** Engine MIDI input methods the worklet runs on behalf of the main thread, beyond note and CC. */
+export const SYNTH_MIDI_PUSH_METHODS = [
+  'pushMidiInputPitchBend',
+  'pushMidiInputChannelPressure',
+  'pushMidiInputPolyPressure',
+  'pushMidiInputUmp',
+] as const;
+export type SynthMidiPushMethod = (typeof SYNTH_MIDI_PUSH_METHODS)[number];
 // Realtime MIDI destination the synth instrument is bound to.
 export const SYNTH_DESTINATION = 0;
 /**
@@ -54,6 +63,7 @@ const GROUP = ${SYNTH_GROUP};
 const CHANNEL = ${SYNTH_CHANNEL};
 const MASTER_STRIP = ${JSON.stringify(SYNTH_MASTER_STRIP_JSON)};
 const GAIN_MAX = ${SYNTH_OUTPUT_GAIN_MAX};
+const MIDI_PUSH = ${JSON.stringify(SYNTH_MIDI_PUSH_METHODS)};
 
 class LibsonareSynthProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -93,6 +103,8 @@ class LibsonareSynthProcessor extends AudioWorkletProcessor {
       if (this.engine) this.engine.pushMidiInputNoteOff(GROUP, CHANNEL, msg.note, 0, 0);
     } else if (msg.type === 'cc') {
       if (this.engine) this.engine.pushMidiInputCc(GROUP, CHANNEL, msg.controller, msg.value, 0);
+    } else if (msg.type === 'midi') {
+      if (this.engine && MIDI_PUSH.includes(msg.method)) this.engine[msg.method](...msg.args);
     } else if (msg.type === 'panic') {
       if (this.engine) this.engine.pushMidiPanic(-1);
     } else if (msg.type === 'patch') {
@@ -295,6 +307,11 @@ export function useSynthEngine(sonareUrl: string, wasmUrl: string) {
     node?.port.postMessage({ type: 'cc', controller, value });
   }
 
+  /** Run an engine MIDI input method (see {@link SYNTH_MIDI_PUSH_METHODS}) on the audio thread. */
+  function pushMidi(method: SynthMidiPushMethod, args: unknown[]): void {
+    node?.port.postMessage({ type: 'midi', method, args });
+  }
+
   function panic(): void {
     node?.port.postMessage({ type: 'panic' });
   }
@@ -367,6 +384,7 @@ export function useSynthEngine(sonareUrl: string, wasmUrl: string) {
     noteOn,
     noteOff,
     controlChange,
+    pushMidi,
     panic,
     setPatch,
     setGain,
