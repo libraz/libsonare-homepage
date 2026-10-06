@@ -2,7 +2,8 @@
 /**
  * The Studio signal-chain rack: repair, the strip EQ and the 13 inserts in
  * signal order. Each insert row carries its bypass switch and a one-line
- * readout; the dynamics rows show the chain's summed gain reduction.
+ * readout; the dynamics rows each show their own gain reduction, and the
+ * footer the chain's deepest.
  */
 import { computed } from 'vue';
 import GainReductionMeter from '@/components/meters/GainReductionMeter.vue';
@@ -17,6 +18,7 @@ import {
 import {
   formatNumber,
   MASTERING_FIXED_SLOTS,
+  MASTERING_GR_SLOTS,
   type MasteringModuleId,
 } from '@/demos/mastering/masteringUi';
 import { fill } from '@/utils/template';
@@ -24,8 +26,10 @@ import { fill } from '@/utils/template';
 const props = defineProps<{
   state: MasteringState;
   selected: MasteringModuleId;
-  /** Lane 1's summed gain reduction, dB ≤ 0. */
+  /** Lane 1's deepest gain reduction, dB ≤ 0. */
   grDb: number;
+  /** Each insert's own gain reduction, dB ≤ 0, indexed by slot. */
+  insertGrDb: readonly number[];
   /** Non-zero while a discrete edit's rebuild is being shown. */
   resetFlash: number;
   /** Repair progress 0..1 while it runs, else null. */
@@ -84,6 +88,8 @@ const rows = computed(() =>
       name: copy.value.modules[entry.id],
       bypassed: insert.bypassed,
       fixed: MASTERING_FIXED_SLOTS.includes(entry.id),
+      reportsGr: MASTERING_GR_SLOTS.includes(entry.id),
+      grDb: props.insertGrDb[slot] ?? 0,
       summary: summary(entry.id, insert.params),
     };
   }),
@@ -158,6 +164,14 @@ const repairSummary = computed(() => {
           <span class="rack__name">{{ row.name }}</span>
           <span class="rack__summary" :title="row.fixed ? copy.rack.driveNote : undefined">{{ row.summary }}</span>
         </button>
+        <GainReductionMeter
+          v-if="row.reportsGr"
+          class="rack__gr"
+          :gr-db="row.grDb"
+          orientation="horizontal"
+          :range-db="12"
+          :labels="{ ...copy.meters.gr, name: `${row.name} · ${copy.meters.gr.name}` }"
+        />
         <button
           v-if="!row.fixed"
           type="button"
@@ -364,6 +378,10 @@ const repairSummary = computed(() => {
 
 .rack__foot {
   border-top: 1px solid var(--demo-border);
+}
+
+.rack__row :deep(.rack__gr) {
+  width: 72px;
 }
 
 .rack__foot :deep(.gr-meter) {

@@ -39,7 +39,7 @@ describe('mastering UI definitions', () => {
     expect(MASTERING_PRESET_TARGETS.liveLarge).toBeLessThan(MASTERING_PRESET_TARGETS.pop);
   });
 
-  it('exposes only parameters the slot carries, and never the tape bias', () => {
+  it('exposes only parameters the slot carries, including tape bias', () => {
     for (const entry of MASTERING_INSERT_LAYOUT) {
       const groups = MASTERING_SLOT_CONTROLS[entry.id];
       const names = groups.flatMap((group) => group.params.map((spec) => spec.name));
@@ -65,7 +65,7 @@ describe('mastering UI definitions', () => {
     const tape = MASTERING_SLOT_CONTROLS.tape.flatMap((group) =>
       group.params.map((spec) => spec.name),
     );
-    expect(tape).not.toContain('bias');
+    expect(tape).toContain('bias');
     expect(MASTERING_SLOT_CONTROLS.drive).toEqual([]);
     expect(MASTERING_FIXED_SLOTS).toEqual(['drive']);
   });

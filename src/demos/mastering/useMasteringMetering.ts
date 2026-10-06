@@ -1,7 +1,8 @@
 /**
  * Live metering for /mastering. Meter telemetry from the engine: the master
  * (what is being heard: peak, RMS, true peak, M/S/I, correlation) and lane 1
- * (the deepest gain reduction among its inserts and its input peak). Spectrum
+ * (the deepest gain reduction among its inserts, each insert's own, and its
+ * input peak). Spectrum
  * and goniometer come from an analyser tap on the engine output; the input
  * spectrum is the program PCM at the playhead, analysed the same way, so the
  * EQ view can lay input and output over each other.
@@ -39,6 +40,11 @@ export interface MasteringMeterReading {
   correlation: number;
   /** The deepest gain reduction among lane 1's inserts, dB ≤ 0. */
   grDb: number;
+  /**
+   * Each lane 1 insert's own gain reduction, dB ≤ 0, indexed by rack slot.
+   * Empty until the engine reports it; the last report is kept between drains.
+   */
+  insertGrDb: readonly number[];
 }
 
 export function silentReading(): MasteringMeterReading {
@@ -52,6 +58,7 @@ export function silentReading(): MasteringMeterReading {
     integratedLufs: Number.NEGATIVE_INFINITY,
     correlation: 1,
     grDb: 0,
+    insertGrDb: [],
   };
 }
 
@@ -81,6 +88,8 @@ export function applyMeterSnapshot(
       ...reading,
       inputPeakDb: [meter.inputPeakDbL, meter.inputPeakDbR],
       grDb: Math.min(0, meter.gainReductionDb),
+      // Only the newest record of a drain carries the per-insert array.
+      insertGrDb: meter.insertGainReductionDb ?? reading.insertGrDb,
     };
   }
   return reading;

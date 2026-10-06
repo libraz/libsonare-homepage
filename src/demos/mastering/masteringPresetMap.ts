@@ -135,9 +135,7 @@ export function chainParamTargets(flat: Readonly<ChainParams>): ChainParamTarget
       continue;
     }
     const param = stage === 'dynamics.multibandComp' ? multibandParam(leaf) : leaf;
-    // Tape bias stays at 0: engine 1.8.1 bounces a non-zero bias differently from live playback.
-    const heldAtDefault = stage === 'saturation.tape' && leaf === 'bias';
-    if (heldAtDefault || param === undefined || !(typeof value === 'boolean' || finite(value))) {
+    if (param === undefined || !(typeof value === 'boolean' || finite(value))) {
       targets.push({ kind: 'unmapped', key });
     } else {
       targets.push({ kind: 'insertParam', key, slot, param, value });

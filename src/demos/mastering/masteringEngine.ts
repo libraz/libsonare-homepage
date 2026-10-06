@@ -101,13 +101,32 @@ export interface MasteringAudio {
 /** `preview` = the three-lane live project; `export` = lane 1 alone at unity. */
 export type MasteringRenderVariant = 'preview' | 'export';
 
+function engineInsertParam(
+  processor: string,
+  name: string,
+  value: number | boolean,
+): number | boolean {
+  // Float32 limiter output can round above its ceiling by a few millionths of a dB.
+  // Keep a 0.0001 dB margin in both initial configuration and live edits.
+  return processor === 'maximizer.truePeakLimiter' &&
+    name === 'ceilingDb' &&
+    typeof value === 'number'
+    ? value - 0.0001
+    : value;
+}
+
 /** Lane 1's strip as strip JSON constructs it. */
 export function afterStripSpec(state: MasteringState): StripSpec {
   return {
     inserts: MASTERING_INSERT_LAYOUT.map((entry, slot) => ({
       slot: 'pre',
       processor: entry.processor,
-      params: { ...state.inserts[slot].params },
+      params: Object.fromEntries(
+        Object.entries(state.inserts[slot].params).map(([name, value]) => [
+          name,
+          engineInsertParam(entry.processor, name, value),
+        ]),
+      ),
     })),
     eqBands: state.eq.map((band) => ({ ...band })),
   };
@@ -245,7 +264,7 @@ export function diff(
         strip: AFTER_STRIP,
         insertIndex: slot,
         name,
-        value: typeof value === 'boolean' ? Number(value) : value,
+        value: Number(engineInsertParam(entry.processor, name, value)),
       });
     }
   });
@@ -334,7 +353,6 @@ export function renderMasteringState(
         'export',
       ),
     );
-    engine.settleParameters();
     engine.play();
     const bounce = engine.bounceOffline({
       totalFrames: frames + latency,

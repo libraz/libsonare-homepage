@@ -69,6 +69,7 @@ describe('validateMasteringPresets', () => {
     const failures = await validateMasteringPresets({
       presetEntries: await entries([
         'pop/studio',
+        'hiphop/studio',
         'aiMusic/livehouseLarge',
         'liveLarge/livehouseSmall',
       ]),
@@ -78,7 +79,7 @@ describe('validateMasteringPresets', () => {
     expect(log[0]).toBe(`libsonare ${wasm.version()}`);
     expect(
       log.filter((line) => /^\w+\/\w+: -\d+\.\d\d LUFS \(target -\d+\), true peak/.test(line)),
-    ).toHaveLength(3);
+    ).toHaveLength(4);
     expect(log.some((line) => line.startsWith('reference match EQ: residual'))).toBe(true);
   });
 

@@ -25,7 +25,9 @@ import {
   type MasteringState,
   masteringMutators as m,
 } from '@/demos/mastering/masteringState';
+import { MASTERING_GR_SLOTS } from '@/demos/mastering/masteringUi';
 import type { MasteringPresetId, MasteringVenueId } from '@/demos/mastering/useMastering';
+import { AFTER_METER_TARGET } from '@/demos/mastering/useMasteringMetering';
 import { applyOps, createFacadeTarget, createRawTarget, type EngineOp } from '@/utils/engineApply';
 import {
   createFacadeLoopback,
@@ -249,7 +251,12 @@ const L9 = [
 
 function edited(state: MasteringState, edit: Edit): MasteringState {
   if (edit === 'rtParam')
-    return m.setMacro(m.setInsertBypassed(state, MASTERING_SLOT.tape, false), 'tone', 1.5);
+    return m.setInsertParam(
+      m.setMacro(m.setInsertBypassed(state, MASTERING_SLOT.tape, false), 'tone', 1.5),
+      MASTERING_SLOT.tape,
+      'bias',
+      0.5,
+    );
   if (edit === 'discrete')
     return m.setInsertParam(state, MASTERING_SLOT.multiband, 'cutoff1Hz', 3000);
   return state;
@@ -301,6 +308,132 @@ describe('facade and raw adapters render the same mastering state', () => {
     },
     60_000,
   );
+});
+
+it('tape bias agrees between plain rendering and bounce and changes the audio', async () => {
+  const wasm = await loadIndexModule();
+  const count = 8192;
+  const source = noise(count / SR, 182, SR, 0.3);
+  const render = (bias: number, bounce: boolean): StereoBuffer => {
+    const engine = new wasm.RealtimeEngine(SR, RENDER_QUANTUM);
+    try {
+      engine.setMasterStripJson(
+        JSON.stringify({
+          version: 1,
+          strips: [
+            {
+              id: 'master',
+              inserts: [
+                {
+                  slot: 'post',
+                  processor: 'saturation.tape',
+                  params: { ...MASTERING_INSERT_LAYOUT[MASTERING_SLOT.tape].params, bias },
+                },
+              ],
+            },
+          ],
+        }),
+      );
+      engine.setClips([{ id: 1, channels: [source, source], startPpq: 0, lengthSamples: count }]);
+      engine.play();
+      if (!bounce) {
+        const [left, right] = engine.renderOffline(
+          [new Float32Array(count), new Float32Array(count)],
+          RENDER_QUANTUM,
+        );
+        return { left, right };
+      }
+      const interleaved = engine.bounceOffline({
+        totalFrames: count,
+        blockSize: RENDER_QUANTUM,
+        numChannels: 2,
+        dither: 0,
+      }).interleaved;
+      return {
+        left: Float32Array.from({ length: count }, (_, i) => interleaved[i * 2]),
+        right: Float32Array.from({ length: count }, (_, i) => interleaved[i * 2 + 1]),
+      };
+    } finally {
+      engine.destroy();
+    }
+  };
+  const plain = render(0.5, false);
+  const bounced = render(0.5, true);
+  expect(maxDiff(plain, bounced)).toBeLessThanOrEqual(1e-7);
+  expect(maxDiff(bounced, render(0, true))).toBeGreaterThan(1e-4);
+});
+
+it('tape bias defaults to the engine default', async () => {
+  const wasm = await loadIndexModule();
+  const info = wasm
+    .masteringInsertParamInfo('saturation.tape')
+    .find((p: { name: string }) => p.name === 'bias');
+  expect(MASTERING_INSERT_LAYOUT[MASTERING_SLOT.tape].params.bias).toBe(info.default);
+});
+
+describe('per-insert gain reduction', () => {
+  /** Settings that push each dynamics slot into reduction on the test program. */
+  const DRIVEN = [
+    ['deesser', 'thresholdDb', -40],
+    ['compressor', 'thresholdDb', -30],
+    ['multiband', 'band0.thresholdDb', -40],
+    ['multiband', 'band1.thresholdDb', -40],
+    ['limiter', 'ceilingDb', -12],
+  ] as const;
+
+  /** Lane 1's per-insert GR with only `slot` active and driven hard. */
+  async function insertGr(slot: number): Promise<number[]> {
+    let state = defaultMasteringState();
+    MASTERING_INSERT_LAYOUT.forEach((_, i) => {
+      state = m.setInsertBypassed(state, i, i !== slot);
+    });
+    for (const [id, name, value] of DRIVEN)
+      state = m.setInsertParam(state, MASTERING_SLOT[id], name, value);
+    const program = programPcm(SECONDS, 7);
+    for (let i = 0; i < program.left.length; i++) {
+      program.left[i] *= 2;
+      program.right[i] *= 2;
+    }
+    const audio: MasteringAudio = {
+      program: { ...program, sampleRate: SR, integratedLufs: -10 },
+      reference: null,
+    };
+    const f = await createFacadeLoopback({ sampleRate: SR });
+    facades.push(f);
+    applyOps(createFacadeTarget(f.engine), buildFull(state, audio, 'preview'));
+    f.engine.transport.play();
+    f.render(frames(SECONDS) - 4 * RENDER_QUANTUM);
+    f.flush();
+    const lane1 = (meter: { targetId: number }) => meter.targetId === AFTER_METER_TARGET;
+    const newest = [...f.meters]
+      .reverse()
+      .find((meter) => lane1(meter) && 'insertGainReductionDb' in meter) as
+      | { insertGainReductionDb: number[]; gainReductionDb: number }
+      | undefined;
+    expect(newest).toBeDefined();
+    return newest?.insertGainReductionDb ?? [];
+  }
+
+  it('reports at the insert index of the slot that is driven, and 0 elsewhere', async () => {
+    const gr = await insertGr(MASTERING_SLOT.compressor);
+    expect(gr).toHaveLength(MASTERING_INSERT_LAYOUT.length);
+    expect(gr[MASTERING_SLOT.compressor]).toBeLessThan(-1);
+    gr.forEach((value, slot) => {
+      if (slot !== MASTERING_SLOT.compressor)
+        expect(value, MASTERING_INSERT_LAYOUT[slot].id).toBe(0);
+    });
+    expect(Math.min(...gr)).toBe(gr[MASTERING_SLOT.compressor]);
+  }, 60_000);
+
+  it('every rack GR slot reports; the transient shaper does not', async () => {
+    for (const id of MASTERING_GR_SLOTS) {
+      const slot = MASTERING_SLOT[id];
+      const gr = await insertGr(slot);
+      expect(gr[slot], id).toBeLessThan(0);
+    }
+    // The transient shaper reports no reduction even when it cuts.
+    expect((await insertGr(MASTERING_SLOT.transient)).every((value) => value === 0)).toBe(true);
+  }, 120_000);
 });
 
 describe('a construction-only edit keeps the bypass flags', () => {

@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CHAIN_STAGE_SLOTS,
+  chainParamTargets,
   fitMatchEqPeaks,
   MATCH_EQ_MAX_GAIN_DB,
   peakingResponseDb,
@@ -224,8 +225,8 @@ describe('Quick presets', () => {
   });
 });
 
-// `masteringAssistantSuggestChainStereo` output for a synthetic kick/bass mix
-// (engine 1.8.1), trimmed to one representative of each kind of key.
+// A suggestion in the shape `masteringAssistantSuggestChainStereo` returns, with
+// one representative of each kind of key the map handles, multiband and dehum included.
 const ASSISTANT = {
   'dynamics.compressor.attackMs': 5,
   'dynamics.compressor.autoMakeup': false,
@@ -328,12 +329,17 @@ describe('assistant suggestion', () => {
 });
 
 describe('tape bias', () => {
-  // Engine 1.8.1 bounces a non-zero tape bias differently from live playback; when this
-  // pin breaks, check whether bounceOffline and renderOffline agree before lifting it.
-  it('is never applied from a chain config', () => {
+  it('is applied from a chain config', () => {
     expect(
       unmappedChainParams({ 'saturation.tape.enabled': true, 'saturation.tape.bias': 0.5 }),
-    ).toEqual(['saturation.tape.bias']);
+    ).toEqual([]);
+    expect(chainParamTargets({ 'saturation.tape.bias': 0.5 })).toContainEqual({
+      kind: 'insertParam',
+      key: 'saturation.tape.bias',
+      slot: 6,
+      param: 'bias',
+      value: 0.5,
+    });
   });
 });
 

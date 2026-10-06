@@ -142,8 +142,7 @@ function bandGroup(band: 0 | 1 | 2): MasteringParamGroup {
 }
 
 /**
- * Controls of each insert slot. Tape bias stays at 0 (it renders differently
- * offline than live), and the drive slot is written only by the loudness fit.
+ * Controls of each insert slot. The drive slot is written only by the loudness fit.
  */
 export const MASTERING_SLOT_CONTROLS: Readonly<Record<MasteringSlotId, MasteringParamGroup[]>> = {
   input: [{ group: 'main', params: [db('levelDb', -24, 24)] }],
@@ -217,6 +216,7 @@ export const MASTERING_SLOT_CONTROLS: Readonly<Record<MasteringSlotId, Mastering
       params: [
         { name: 'speedIps', min: 7.5, max: 30, step: 0.5, unit: 'ips' },
         db('headBumpDb', 0, 6),
+        amount('bias'),
         amount('gapLoss'),
       ],
     },
@@ -272,6 +272,14 @@ export type MasteringModuleId = 'repair' | 'eq' | MasteringSlotId;
 
 /** Slots with no bypass switch in the rack. */
 export const MASTERING_FIXED_SLOTS: readonly MasteringSlotId[] = ['drive'];
+
+/** Slots whose processor reports its own gain reduction under a driven signal. */
+export const MASTERING_GR_SLOTS: readonly MasteringSlotId[] = [
+  'deesser',
+  'compressor',
+  'multiband',
+  'limiter',
+];
 
 /** Glossary page (under `/docs/glossary/`) of each rack module. */
 export const MASTERING_MODULE_GUIDES: Readonly<Record<MasteringModuleId, string>> = {

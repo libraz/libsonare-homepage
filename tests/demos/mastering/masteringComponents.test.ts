@@ -20,6 +20,7 @@ import {
   MASTERING_SLOT,
   masteringMutators,
 } from '@/demos/mastering/masteringState';
+import { MASTERING_GR_SLOTS } from '@/demos/mastering/masteringUi';
 import { silentReading } from '@/demos/mastering/useMasteringMetering';
 
 enableAutoUnmount(afterEach);
@@ -41,6 +42,9 @@ describe('MasteringRack', () => {
     state: masteringMutators.setInsertBypassed(defaultMasteringState(), MASTERING_SLOT.tape, true),
     selected: 'compressor' as const,
     grDb: -3.2,
+    insertGrDb: Array.from({ length: 13 }, (_, slot) =>
+      slot === MASTERING_SLOT.compressor ? -3.2 : 0,
+    ),
     resetFlash: 0,
     repairProgress: null,
     repairFailed: false,
@@ -51,8 +55,17 @@ describe('MasteringRack', () => {
     const rows = wrapper.findAll('.rack__row');
     expect(rows).toHaveLength(15);
     expect(rows[MASTERING_SLOT.compressor + 2].find('[aria-current="true"]').exists()).toBe(true);
-    // The engine reports one GR for the whole lane, so no module row claims it.
-    expect(wrapper.find('.rack__row .gr-meter').exists()).toBe(false);
+    // Only the dynamics rows carry their own GR meter; the footer keeps the chain's deepest.
+    const metered = rows.flatMap((row, index) =>
+      row.find('.gr-meter').exists() ? [index - 2] : [],
+    );
+    expect(metered).toEqual(MASTERING_GR_SLOTS.map((id) => MASTERING_SLOT[id]));
+    expect(rows[MASTERING_SLOT.compressor + 2].find('.gr-meter').attributes('aria-valuenow')).toBe(
+      '-3',
+    );
+    expect(rows[MASTERING_SLOT.limiter + 2].find('.gr-meter').attributes('aria-valuenow')).toBe(
+      '0',
+    );
     expect(wrapper.find('.rack__foot .gr-meter').exists()).toBe(true);
     // The drive slot belongs to the loudness fit and has no switch.
     expect(rows[MASTERING_SLOT.drive + 2].find('button.rack__power').exists()).toBe(false);

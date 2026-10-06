@@ -153,6 +153,20 @@ describe('mastering meter telemetry', () => {
     expect(unchanged).toBe(reading);
   });
 
+  it('keeps the last per-insert gain reduction when a snapshot omits it', () => {
+    let reading = applyMeterSnapshot(
+      silentReading(),
+      meter(AFTER_METER_TARGET, { insertGainReductionDb: [0, -2, -5] }),
+    );
+    expect(reading.insertGrDb).toEqual([0, -2, -5]);
+    reading = applyMeterSnapshot(reading, meter(AFTER_METER_TARGET, { gainReductionDb: -1 }));
+    expect(reading.grDb).toBe(-1);
+    expect(reading.insertGrDb).toEqual([0, -2, -5]);
+    reading = applyMeterSnapshot(reading, meter(MASTER_METER_TARGET));
+    expect(reading.insertGrDb).toEqual([0, -2, -5]);
+    expect(silentReading().insertGrDb).toEqual([]);
+  });
+
   it('holds the true-peak maximum, never below a sample peak, until reset', () => {
     let reading = applyMeterSnapshot(silentReading(), meter(MASTER_METER_TARGET));
     expect(reading.truePeakDb).toBe(-0.9);

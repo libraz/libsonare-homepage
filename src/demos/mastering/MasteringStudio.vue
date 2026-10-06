@@ -119,6 +119,7 @@ const sampleRate = computed(
         :state="state"
         :selected="selected"
         :gr-db="reading.grDb"
+        :insert-gr-db="reading.insertGrDb"
         :reset-flash="resetFlash"
         :repair-progress="repairProgress"
         :repair-failed="prepareFailed"

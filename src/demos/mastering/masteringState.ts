@@ -263,7 +263,6 @@ export const MASTERING_INSERT_LAYOUT: readonly MasteringInsertLayoutEntry[] = [
       outputGainDb: 0,
       speedIps: 15,
       headBumpDb: 1.2,
-      // A non-zero bias renders differently in bounceOffline than live (engine 1.8.1).
       bias: 0,
       gapLoss: 0.25,
       oversampleFactor: 1,
