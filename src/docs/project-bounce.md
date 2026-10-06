@@ -122,7 +122,7 @@ Every field of the options object is optional:
 | `totalFrames` | Render length in output frames | auto-derived (see below) |
 | `blockSize` | Render block size | engine default (128) |
 | `numChannels` | Output channel count: `1`, `2`, `6`, or `8` | 2 |
-| `sampleRate` | Output sample rate (Hz) | the project sample rate |
+| `sampleRate` | Output sample rate (Hz); a positive value must equal the project rate, so this option does not resample | the project sample rate |
 | `instrumentLatencySamples` | Host-instrument PDC (plugin delay compensation) fed to the compiler | 0 |
 
 ::: info `numChannels` cannot exceed the mixer scene's master layout
@@ -139,7 +139,7 @@ An offline bounce **settles** every smoothed gain and effect parameter to its ta
 
 ### Omitting the length
 
-When `totalFrames` is omitted (or `<= 0`) the render length is **auto-derived from the compiled timeline** — the musical end of the arrangement plus the instrument's release tail. A project with content renders without you computing a frame count; an empty project yields an empty buffer. Pass `totalFrames` only when you need a fixed-length buffer.
+When `totalFrames` is omitted (or `<= 0`) the render length is **auto-derived from the compiled timeline** — the musical end of the arrangement plus the instrument's release tail. A project with content renders without you computing a frame count; an empty project yields an empty buffer. An instrument that reports `INT_MAX` (`2^31 - 1`) for `tail_samples` has an unbounded tail, so an auto-length bounce of a non-empty arrangement is refused; pass a positive `totalFrames` when you need a bounded window. Pass `totalFrames` also when you need a fixed-length buffer.
 
 ## Bounce MIDI through the built-in synth
 
@@ -240,7 +240,7 @@ class SineInstrument:
     """A minimal external instrument: one sine voice per held note."""
 
     latency_samples = 0      # PDC (plugin delay compensation) you report to the compiler
-    tail_samples = 4096      # release/effect tail for auto-length bounces
+    tail_samples = 4096      # release/effect tail for auto-length bounces; INT_MAX = unbounded
 
     def prepare(self, sample_rate: float, max_block_size: int) -> None:
         self.sample_rate = sample_rate

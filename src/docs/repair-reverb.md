@@ -51,14 +51,18 @@ The `configForRoom` call reads the room estimate and returns a complete dereverb
 | `t60Sec` | Derived from the mid-band RT60 estimate. If the relevant bands did not converge, the helper uses the documented fallback from the available bands. |
 | `lateDelayMs` | Derived from the estimated volume as a mixing-time delay, which marks the late diffuse region. |
 | `attenuation`, `threshold`, `overSubtraction`, `spectralFloor` | Keep or override these amount and gate controls; they are not replaced by room geometry. `threshold` and `attenuation` are validated in the `[0, 1]` range. |
-| `nFft`, `hopLength` | Set the STFT geometry. |
+| `nFft`, `hopLength` | Set the STFT geometry. `nFft` must be a power of two from `4` through `524288`; `hopLength` must be positive, no greater than `nFft / 2`, and reconstructible with the Hann overlap. |
 | `wpeEnabled`, `wpeIterations`, `wpeTaps`, `wpeStrength` | Enable and shape the optional WPE pre-stage. WPE analysis is otherwise off by default. |
 
 The [Room Acoustics](./acoustic-analysis.md) page explains equivalent-room estimates, RT60 bands, and confidence. Its `roomMorph` effect adds a target-room character; it is a different operation from dereverberation.
 
+The accepted `nFft` values are the powers of two from `4` through `524288`, inclusive. `hopLength` must be in `(0, nFft / 2]`, and the periodic-Hann analysis window with the symmetric-Hann synthesis window must leave every overlap residue covered; a pair with an uncovered residue is rejected. The dereverberator uses this check for offline mono, stereo, and linked repair. An input shorter than `nFft` is padded for dereverb analysis, but padding does not relax the geometry validation.
+
+When WPE is enabled, each STFT bin fits one complex predictor from delayed frames. The covariance accumulates `conj(x_i) * x_j` across predictable frames and, for linked input, across all channels, so it is Hermitian in exact arithmetic. The implementation adds a small diagonal regularizer and solves the full complex system with partial-pivoting Gauss-Jordan elimination; it does not apply a separate Hermitian solver or a post-fit symmetrization. Predictor coefficients are scaled when their L1 norm exceeds `0.98`, and each iteration subtracts that shared predictor from every channel with `wpeStrength`.
+
 ## Keep channels linked
 
-Use the stereo or linked entry point for multichannel material so one mask controls the set. The common mask preserves interchannel level and phase relationships.
+Use the stereo or linked entry point for multichannel material so one mask controls the set. The common spectral mask preserves interchannel level and phase relationships. When WPE is enabled, its shared predictor set is also fitted across the linked channels and applied to each one.
 
 ```ts
 import {

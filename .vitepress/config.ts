@@ -653,6 +653,7 @@ const enDocsSidebar = [
     collapsed: true,
     items: [
       { text: 'Project Editing', link: '/docs/project-editing' },
+      { text: 'Vocal Editing', link: '/docs/vocal-editing' },
       { text: 'Project MIDI', link: '/docs/project-editing-midi' },
       { text: 'Project Save & Load', link: '/docs/project-save-load' },
       { text: 'Recording & Takes', link: '/docs/recording-and-takes' },
@@ -1203,6 +1204,7 @@ export default defineConfig({
               collapsed: true,
               items: [
                 { text: 'プロジェクト編集', link: '/ja/docs/project-editing' },
+                { text: 'ボーカル編集', link: '/ja/docs/vocal-editing' },
                 { text: 'プロジェクトの MIDI', link: '/ja/docs/project-editing-midi' },
                 { text: 'プロジェクトの保存と読み込み', link: '/ja/docs/project-save-load' },
                 { text: '録音とテイク', link: '/ja/docs/recording-and-takes' },

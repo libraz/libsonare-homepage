@@ -332,12 +332,26 @@ Routing does not add an address either. `40 4x 22` PART EFX ASSIGN keeps `00` BY
 
 <GsEfxRoutingFigure
   title="Part, insert, system effects, master EQ"
-  caption="A bypassed part sends to reverb, chorus and delay from the part itself. A part routed into a unit sends after the effect, by the unit's own three send levels, so the wet tail is made from the processed signal instead of the raw one."
+  caption="A part's own rig runs before an EFX unit. A bypassed part sends to reverb, chorus and delay from the part path; a part routed into a unit sends after the effect, by the unit's own three send levels."
 />
 
 **Two different things wear the phrase "what the hardware does", and they must not be merged.** *One unit for the whole module* is a resource limit of the machine that was built, not a property of GS, and it is lifted. *Parts routed to the same unit sum into it* is not a limit at all — it is what an effect is, the way two guitars into one pedal intermodulate — and it is **not** lifted. A unit runs once, over the sum of every part assigned to it. So the unit count changed and the summing did not, and asking to "restore the summing" never means capping the units. [Sound Sources](./sound-sources.md) sets out why the one is a limit and the other is behaviour.
 
 Because a unit's output is one signal, what sits downstream of it belongs to the unit rather than to the parts. Its send to the system effects is the unit's own (`40 3u 17`–`19`), and the part-level CC91/CC93/CC94 send is suppressed for a routed part so the wet tail is not sent twice. Its master-EQ routing follows the parts feeding it only where those parts agree: a bypass at `40 4x 20` holds when every part on the unit asked for it, and otherwise the unit takes the EQ, which is what every part powers on with.
+
+### Part rigs and EFX serial routing
+
+Each part has its own rig stage before a GS EFX unit. The effective path is **voice → part rig → EFX unit → system effects and master EQ**. Routing a part into an EFX unit keeps the instrument's default bank rig ahead of that unit; it does not bypass the amplifier or other stages the bank binds to the part. A host-selected rig replaces the bank rig, while an EFX route alone does not. A part with no EFX assignment still runs its own rig and keeps its part-level system-effect sends.
+
+The three part-rig modes are exposed as `PART_RIG_MODES = ['bank', 'none', 'chain']`:
+
+- `bank` uses the instrument's own rig for the current program. This is the only mode that follows program changes.
+- `none` uses the voice's direct output (DI).
+- `chain` replaces the bank rig with 1–8 named insert stages in signal order. Each stage uses the insert factory's `processor` name and `params` object. A chain stage may report at most 256 samples of latency at the 48 kHz reference rate; invalid processors or parameters are refused.
+
+`part` addresses a GS slot `0`–`15`, or `PART_RIG_ALL_PARTS` (`0xFF`) for the destination default. A specific part entry overrides that default. Projects use `Project.setPartRig(...)`, `getPartRig(...)`, and `clearPartRig(...)`; Node accepts a request object, while WASM exposes the positional form. The Python names are `set_part_rig`, `get_part_rig`, and `clear_part_rig`. Realtime engines use `setPartRig(...)` / `set_part_rig(...)` directly on a bound instrument. The destination must have an instrument, and built-in or callback instruments that do not implement part rigs return `NotSupported`; a chain also returns `NotSupported` when mastering support is absent.
+
+Project entries are stored per destination and part even when no track currently routes to that destination. Project bounces apply them to SoundFont and physical-model destinations; a chain containing an amplifier receives mono input through its last amplifier, then restores the part's pan. SMF export does not write part rigs.
 
 The GS tone controls and equalizers use first-order low and high shelves. Their `slopeDbOct` is `6` dB/octave; each shelf's frequency is where it reaches half its gain change in dB, and its `q` setting does not affect that first-order section. This is also how a host selects a first-order shelf in the parametric EQ band API.
 
@@ -367,8 +381,8 @@ Each EFX type number selects one insertion effect. Type `0` is Thru (no effect).
 | 0x0101 | Spectrum | graphic EQ |
 | 0x0102 | Enhancer | presence enhancer |
 | 0x0103 | Humanizer | vowel filter |
-| 0x0110 | Overdrive | amp-sim (crunch voicing) |
-| 0x0111 | Distortion | amp-sim (high-gain voicing) |
+| 0x0110 | Overdrive | `saturation.overdrive` → `saturation.ampSim` |
+| 0x0111 | Distortion | `saturation.distortion` → `saturation.ampSim` |
 | 0x0120 | Phaser | phaser |
 | 0x0121 | Auto Wah | envelope-following resonant bandpass |
 | 0x0122 | Rotary | dual-rotor rotary-speaker model |
@@ -396,14 +410,16 @@ Each EFX type number selects one insertion effect. Type `0` is Thru (no effect).
 
 Humanizer (`0x0103`) uses a vowel filter with drive and vowel controls. 3D Auto and 3D Manual (`0x0170`, `0x0171`) use binaural positioning. Their parameters reach the mapped controls through translated or designed laws, with separate switches where the effect has optional stages.
 
+In the modern realisation, Overdrive and Distortion types run a `saturation.overdrive` or `saturation.distortion` pedal before the amplifier simulator. Amp Type selects the amplifier, and Amp Sw switches the cabinet on every amplifier stage. The SoundFont player's GM programs 29 (Overdriven Guitar) and 30 (Distortion Guitar) use the same pedal-before-amplifier order.
+
 ### Composite EFX types (multi-stage chains)
 
 A composite EFX type realises as an ordered **chain** of the same DSP inserts running in series, matching the hardware's block structure — a guitar multi-effect, for example, still runs through the individual amp-sim/chorus/delay inserts above, just chained together. The table below is a representative slice; the full map covers the dual-stage `0x0200`–`0x020C` matrix (Overdrive / Distortion / Enhancer feeding Chorus, Flanger, or Delay) and the guitar / bass / Rhodes / keyboard multi presets in the `0x0400`–`0x0500` range.
 
 | EFX type | GS EFX name | Chain (signal order) |
 |---|---|---|
-| 0x0200 | OD → Chorus | amp-sim → chorus |
-| 0x0202 | OD → Delay | amp-sim → stereo delay |
+| 0x0200 | OD → Chorus | overdrive pedal → amp-sim → chorus |
+| 0x0202 | OD → Delay | overdrive pedal → amp-sim → stereo delay |
 | 0x0400 | Guitar Multi 1 | compressor → amp-sim → chorus → delay |
 | 0x0405 | Bass Multi | compressor → amp-sim (bass cab) → EQ → chorus |
 | 0x0406 | Rhodes Multi | enhancer → phaser → chorus → auto-pan |

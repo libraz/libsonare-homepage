@@ -1,13 +1,13 @@
 ---
 title: Project & Arrangement Editing
-description: Beginner-friendly guide to libsonare's headless-DAW edit API — the Project model, clip and track operations, undo/redo, the tempo map and time signatures, warp modes, automation, MIR write-back, compile diagnostics, JSON save/load, and SMF / MIDI 2.0 Clip File import-export, with copy-paste recipes.
+description: Beginner-friendly guide to libsonare's headless-DAW edit API — the Project model, clip and track operations, offline monophonic vocal edits, undo/redo, the tempo map and time signatures, warp modes, automation, MIR write-back, compile diagnostics, JSON save/load, and SMF / MIDI 2.0 Clip File import-export, with copy-paste recipes.
 ---
 
 # Project & Arrangement Editing
 
 **Want to build a song's arrangement in code — without opening a DAW?** That is what `Project` is for. A **project** is the timeline that holds everything a song is made of: audio tracks, MIDI tracks, the clips placed on them, the tempo map, time signatures, and markers. libsonare ships a `Project` model — a small, headless DAW editing API — so you can build, edit, and serialize that timeline **inside your own app**, with no DAW host required.
 
-The workflow is a short loop: you assemble an arrangement, edit it with undoable operations, [compile](./project-save-load.md#compiling-the-arrangement) it into a renderable timeline, save it to JSON, and finally [render audio](./project-bounce.md) — see [Project MIDI](./project-editing-midi.md) and [Project Save & Load](./project-save-load.md) for those parts of the workflow. `Project` is an **offline, control-thread API** (it never runs on the audio thread), and it behaves identically in the browser (WASM), Node, and Python.
+The workflow is a short loop: you assemble an arrangement, edit it with undoable operations, [compile](./project-save-load.md#compiling-the-arrangement) it into a renderable timeline, save it to JSON, and finally [render audio](./project-bounce.md) — see [Project MIDI](./project-editing-midi.md), [Project Save & Load](./project-save-load.md), and [Offline Vocal Editing](./vocal-editing.md) for those parts of the workflow. `Project` is an **offline, control-thread API** (it never runs on the audio thread), and it behaves identically in the browser (WASM), Node, and Python.
 
 ::: info Three words to know first
 A **track** is one lane in the timeline (an audio lane or a MIDI lane). A **clip** is one block of content placed on a track — a slice of recorded audio or a region of MIDI notes. **PPQ** ("pulses per quarter note") is how libsonare measures musical time: every clip start, length, and event position is given in quarter-note units, so `lengthPpq: 4` is four quarter notes long regardless of tempo.
@@ -27,6 +27,7 @@ A project nests a few simple parts, each one a container for the next:
 
 - Each **track** holds **clips** (blocks of content placed on the timeline).
 - An audio clip can carry alternate **takes** plus a **comp** that stitches the best parts of those takes into one performance.
+- An audio clip can carry an offline vocal-edit sidecar that records the original source, derived render, committed revision, and persisted session state.
 - A track can have **automation lanes** — recorded curves that move a parameter (volume, a filter cutoff, …) over time, the way a fader moving on its own would.
 - A MIDI track points at an instrument **destination** — the synth or sampler that will actually make its notes audible (defined just below).
 - Every track routes through a strip in the **mixer scene** — its channel of EQ, fader, pan, and sends — on its way to the master.
@@ -108,6 +109,7 @@ By the end of this page you should be able to:
 - place musical time correctly using PPQ, a tempo map with tempo segments, time signatures, and markers;
 - choose a clip overlap policy and a warp mode (`off` / `repitch` / `tempo-sync` / `time-stretch`) with warp anchors;
 - write key/chord annotations and automation lanes onto the project;
+- analyse and edit a monophonic vocal take, then apply its committed render and persisted state to an audio clip;
 - compile to a renderable timeline and read its structured diagnostics and non-fatal warnings;
 - save and load with deterministic JSON, and exchange MIDI through SMF (Standard MIDI File) and the MIDI 2.0 Clip File format.
 
@@ -574,6 +576,7 @@ Typed lanes use `targetKind: 'track-fader-db'` or `'track-pan'` to target the ow
 - [Editing Basics](./glossary/concepts/editing-basics.md) — the vocabulary, for newcomers
 - [Project Bounce & Rendering](./project-bounce.md) — render the timeline to audio, with or without instruments
 - [Recording & Takes](./recording-and-takes.md) — takes, comp lanes, and loop-recording capture
+- [Offline Monophonic Vocal Editing](./vocal-editing.md) — analyse, edit, render, persist, and apply a mono vocal take
 - [Native Synth](./native-synth.md) · [SoundFont Player](./soundfont-player.md) — make MIDI tracks audible
 - [MIDI Input](./midi-input.md) — play a project live from a controller
 - [Edit MIDI Clips](./midi-editing.md) — edit, validate, route, and bake project MIDI events

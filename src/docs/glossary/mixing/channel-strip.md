@@ -24,8 +24,8 @@ libsonare processes each block of a strip in one fixed order. Reading it top to 
 5. **Pre-fader inserts** — in-series processors that run before the fader.
 6. **Fader (+ VCA offset)** — the balance control you ride against other tracks.
 7. **Pan** — places the track across the stereo field, using the chosen [pan law](./pan-width.md) (the rule that keeps a part's loudness steady as it moves off center).
-8. **Post-fader inserts** — in-series processors after the fader.
-9. **Stereo width** — narrows or widens the stereo image.
+8. **Stereo width** — narrows or widens the stereo image.
+9. **Post-fader inserts** — in-series processors after the fader.
 10. **Meter / goniometer tap** — measurement, not processing. The goniometer is the dot-plot display that shows how wide the stereo image is.
 
 ## Why the order matters
@@ -59,9 +59,9 @@ Cue monitoring is a queueable realtime command: `setTrackMonitorMode(laneIndex, 
 A strip is a `ChannelStrip` configured by `ChannelStripConfig`. A block is processed in this order:
 
 ```text
-trim -> polarity -> channel delay -> EQ -> pre-fader InsertSlot
+trim -> polarity -> channel delay -> EQ (pre, optional) -> pre-fader InsertSlot
   -> fader with VCA offset -> PannerProcessor
-  -> post-fader inserts -> StereoWidthProcessor
+  -> StereoWidthProcessor -> EQ (post, optional) -> post-fader inserts
 ```
 
 `EqPosition` chooses whether the EQ runs pre- or post-fader; `PannerProcessor` takes the strip's `PanLaw`/`PanMode`. `TapPoint` marks where pre- and post-fader sends and the `GoniometerBuffer`/`MeterProcessor` read the signal. All gain and pan changes are parameter-smoothed and the path is real-time-safe (pre-allocated, denormal-guarded), so the same strip runs offline and inside an AudioWorklet.

@@ -1,11 +1,11 @@
 ---
 title: エフェクトインサート
-description: libsonare のミキシング／リアルタイムエンジン向けクリエイティブ FX インサートのカタログ。リバーブ、モジュレーション、ディレイの各インサートとパラメータ表、ビルドフラグによる有効化条件を、名前付きマスタリングプロセッサレジストリとは分けて掲載します。
+description: libsonare のミキシング／リアルタイムエンジン向けクリエイティブ FX インサートのカタログ。リバーブ、モジュレーション、ディレイ、サチュレーションの各インサートとパラメータ表、ビルドフラグによる有効化条件を、名前付きマスタリングプロセッサレジストリとは分けて掲載します。
 ---
 
 # エフェクトインサート
 
-**エフェクトインサート**は、ミキサーのチャンネルストリップやバスのスロット（およびリアルタイムエンジンのインサート）に読み込むクリエイティブ FX プロセッサです。リバーブ、モジュレーション、ディレイが該当します。これらは [ミキシングエンジン](./mixing.md) がチャンネルストリップのインサートに使うものと同じインサートファクトリで構築します。
+**エフェクトインサート**は、ミキサーのチャンネルストリップやバスのスロット（およびリアルタイムエンジンのインサート）に読み込むクリエイティブ FX プロセッサです。リバーブ、モジュレーション、ディレイ、サチュレーションペダルが該当します。これらは [ミキシングエンジン](./mixing.md) がチャンネルストリップのインサートに使うものと同じインサートファクトリで構築します。
 
 ::: info インサートはマスタリングプロセッサではありません
 このページが扱うのは**ミキサー／エンジンのインサート**です。名前付き [マスタリングプロセッサ](./mastering-processors.md) レジストリ — コンプレッサー、EQ、サチュレーション、ステレオ、リペア、ラウドネス／マキシマイザー段 — は別の範囲を持つ別トピックです。両者が重なるのは、一部の FX インサートが単発のマスタリングプロセッサ*としても*公開されている箇所だけです（後述）。マスタリングレジストリを探しているなら、そちらのページから始めてください。
@@ -61,15 +61,17 @@ Python の対応関数は `mastering_insert_names()`、`mastering_insert_param_n
 
 手順は、プロセッサごとに API を呼ぶのではなく、1 つのドキュメントを 3 回参照するだけです。
 
-1. **インサート集合を選ぶ。** `processors` を `realtimeInsertable` で絞ります。92 エントリ中 77 で、`masteringInsertNames()` が返す集合と同一です。残る 15（オフラインプロセッサ 11 とペアプロセッサ 4）は空の `params` 配列を持ちます。`category` はピッカーと同じ切り方で集合を分けます（`effects` がこのページの 19 個のクリエイティブ FX id、その他のカテゴリがマスタリングの各ファミリー）。`channelPolicy` は、ステレオより広いバスでミキサーがそのインサートをどう包むかを示します。リバーブ、モジュレーション、ディレイのインサートは `effects.modulation.ringModulator` を除いて `stereoPairOnly` で、ringModulator は `multichannel` です。
+1. **インサート集合を選ぶ。** `processors` を `realtimeInsertable` で絞ります。94 エントリ中 79 で、`masteringInsertNames()` が返す集合と同一です。残る 15（オフラインプロセッサ 11 とペアプロセッサ 4）は空の `params` 配列を持ちます。`category` はピッカーと同じ切り方で集合を分けます（`effects` がこのページの 19 個のクリエイティブ FX id、その他のカテゴリがマスタリングの各ファミリー）。`channelPolicy` は、ステレオより広いバスでミキサーがそのインサートをどう包むかを示します。リバーブ、モジュレーション、ディレイのインサートは `effects.modulation.ringModulator` を除いて `stereoPairOnly` で、ringModulator は `multichannel` です。
 2. **記述子を読む。** エントリの `params` は、その id に対して `masteringInsertParamInfo(id)` が返すリストと同一で、順序も同じです。カタログを持っているホストは、プロセッサごとの呼び出しを必要としません。`id: null` は構築時専用キーを示し、整数の id は Node／WASM の `Mixer.scheduleInsertAutomation(strip, insertIndex, paramId, samplePos, value)`、Python の `Mixer.schedule_insert_automation(...)`、C ABI の `sonare_strip_schedule_insert_automation` に渡すオートメーション id です。リアルタイムエンジンのセッターは代わりに `name` を取ります（`setTrackStripInsertParamByName` とそのマスター版、バス版）。
 3. **各コントロールを配置する。** `type`、`default`、`min`、`max`、`unit`、`choices` から組みます。構築時専用キーにも記述子があるため、フェイザーの `stages`、オートワウの `attackMs` / `releaseMs`、ロータリーの `stereoSpread`、ルームのジオメトリを構築時フィールドとして表現できます。`slot` で所属するスロット群を特定し、プロセッサの `slots` エントリにある `activation`（`anyKey` または `always`）、内側を包む `parent`、`minCrossoverCutoffs` を組み合わせて、その群の存在を表示・検証します。
+
+カタログには `saturation.overdrive` と `saturation.distortion` も `saturation` カテゴリで含まれます。どちらもマルチチャンネルのリアルタイムインサートで、ソロプロセッサでもあります。そのため、ミキサーのチェーン、リアルタイムエンジン、単発のマスタリング適用で同じ ID を使えます。
 
 同じ記述子経路から、現在インサートとして使えるマキシマイザーのコントロールも取得できます。`maximizer.truePeakLimiter`、`maximizer.maximizer`、`maximizer.adaptiveRelease`、`maximizer.softKneeMax` の `ceilingDb` です。GS に結び付いたリアルタイムコントロールも記述子に載ります。`effects.modulation.pitchShifter` の `windowMs`、`preDelayMs`、`preDelay2Ms`、`effects.modulation.rotary` の `stereoSpread`、`accelTauS`、`decelTauS`、`undershootHz`、`drumUndershootHz`、`effects.reverb.dattorro` の `preDelayMs`、`character`、`saturation.bitcrusher` の `typeLadder` です。別の操作表を持たず、記述子一覧を使ってください。
 
 ```typescript
 const catalog = capabilityCatalog();
-const inserts = catalog.processors.filter((p) => p.realtimeInsertable);   // 92 中 77
+const inserts = catalog.processors.filter((p) => p.realtimeInsertable);   // 94 中 79
 const fx = inserts.filter((p) => p.category === 'effects');               // 下の 19 id
 const chorus = fx.find((p) => p.id === 'effects.modulation.chorus')!;
 for (const param of chorus.params) {
@@ -86,7 +88,7 @@ for (const param of chorus.params) {
 - **`rtSafe: false` はオートメーションを止める。** ヒントではありません。そのパラメータにオートメーションをスケジュールすると `NotSupported`（コード 6）が返ります。構築時専用の行は `id: null` かつ `rtSafe: false` です。GS EFX の raw バイトはすべて id 付きでも `rtSafe: false` で、`modDepthSamples` も同じです。記述子ごとにオートメーションレーンを描く UI は、id の有無にかかわらず `rtSafe` が false の行をすべて無効化する必要があります。
 - **カタログには数値以外の型もあります。** エフェクト系の記述子には `number`、`boolean`、`enum`、`string`、`array` があります。`choices` には enum 値や、間隔のある離散的な数値集合が載ります。名前からトグルを推測せず、`type` を使い、離散値の操作には `choices` を使ってください。
 - **レイテンシとテールはインサートごとで、リバーブでは 0 ではない。** `effects.reverb.convolution`、`effects.reverb.room`、`effects.acoustic.roomMorph` は 256 サンプルのレイテンシを報告します。リバーブのテールは 51,217 サンプル（`room`、`roomMorph`）から 264,000（`fdn`）まで、ステレオディレイは 59,795 で、いずれも代表構成の 48 kHz プローブでの値です。`realtimeCost` はリバーブでは `moderate`、`velvet` だけが `high`、モジュレーションとディレイはすべて `low` で、`null` になるのは非インサートの 15 個だけです。
-- **エフェクト系はパラメータ数が少ない。** 19 プロセッサ合わせて 229 記述子です。全カタログの 5,478 記述子の大半はバンド単位の EQ プロセッサが占めます（`multiband.dynamicEq` だけで 1,019）。記述子の数で自身の大きさを決めるインサート UI は、2 つのファミリーが 1 桁違うことを前提にしてください。
+- **エフェクト系はパラメータ数が少ない。** 19 プロセッサ合わせて 229 記述子です。全カタログの 5,484 記述子の大半はバンド単位の EQ プロセッサが占めます（`multiband.dynamicEq` だけで 1,019）。記述子の数で自身の大きさを決めるインサート UI は、2 つのファミリーが 1 桁違うことを前提にしてください。
 
 ### null と既定値が教えてくれないこと
 
@@ -112,6 +114,8 @@ for (const param of chorus.params) {
 | `effects.reverb.room` | ルームパラメータから合成する幾何ベースのルームリバーブ |
 | `effects.acoustic.roomMorph` | 目標の幾何ベースルームへ寄せるルームモーフィング |
 | `effects.gsEfx` | 選択したタイプと 20 個の raw パラメータバイトを持つ GS インサートエフェクト |
+| `saturation.overdrive` | ゲイン、トーン、出力レベルを持つオーバードライブペダル |
+| `saturation.distortion` | ゲイン、トーン、出力レベルを持つディストーションペダル |
 | `effects.filter.vowel` | 3 つの共鳴帯域とダイレクト経路を持つ母音フィルター |
 | `effects.modulation.ensemble` | Solina 系 BBD ストリングマシンアンサンブル |
 | `effects.modulation.chorus` | ステレオコーラス |
@@ -148,6 +152,21 @@ const processed = masteringProcess('effects.gsEfx', samples, sampleRate, {
 ミキサーやリアルタイムインサートとして構築するときも同じパラメータオブジェクトを使います。現在のビルドが公開する記述子は `masteringInsertParamInfo('effects.gsEfx')` または機能カタログから取得してください。
 
 以下の表は代表的なキーと挙動を取り上げた要約です。完全なビルド別一覧 — chorus／flanger の `preFilterHz` と `preFilterMode`、phaser の `feedback` と `mixMode`、rotary のドラム制御、pitch-shifter の `windowMs`、ステレオディレイの `dampingHz` などの新しいキーを含む — は [`masteringInsertParamInfo(name)`](#パラメータ記述子) または `capabilityCatalog().processors[].params` から取得できます。
+
+### サチュレーションペダル
+
+`saturation.overdrive` と `saturation.distortion` は、リアルタイムで安全に変更できるマルチチャンネルインサートです。名前付きソロプロセッサでもあるため、`masteringProcess(...)` でも同じパラメータマップを使えます。下の値域、既定値、タイミングは capability catalog の値です。
+
+| インサート | パラメータ | 受理範囲 | 既定値 | 単位 |
+|---|---|---|---|---|
+| `saturation.overdrive` | `gainDb` | `0`〜`41` | `20` | dB |
+|  | `toneHz` | `500`〜`8000` | `3000` | Hz |
+|  | `levelDb` | カタログ上の最小値なし、最大値 `770.637` | `0` | dB |
+| `saturation.distortion` | `gainDb` | `0`〜`60` | `30` | dB |
+|  | `toneHz` | `475`〜`20000` | `4000` | Hz |
+|  | `levelDb` | カタログ上の最小値なし、最大値 `770.637` | `0` | dB |
+
+どちらもレイテンシを `48` samples、テールを `0` samples と報告します。3 つのパラメータにはリアルタイムオートメーション ID があり、動作中に変更できます。`levelDb` の大きな最大値は、カタログが測定した有限ゲインの上限であり、音楽的に推奨する範囲ではありません。
 
 ### 母音フィルター
 
@@ -199,7 +218,7 @@ Solina 系の BBD ストリングマシンアンサンブルで、ビンテー�
 
 ## 単発マスタリングプロセッサでもあるインサート
 
-これらは [ミキシングシーン JSON](./mixing-scene-json.md) の `insert.processor` フィールドで使います。出荷される FX 有効の WASM ビルドでは、一部は単発マスタリングプロセッサでもあります。`effects.reverb.plate`、`effects.reverb.dattorro`、`effects.reverb.fdn`、`effects.reverb.velvet`、`effects.reverb.convolution`、`effects.filter.vowel`、`effects.modulation.chorus`、`effects.modulation.flanger`、`effects.modulation.phaser`、`stereo.binaural`、`effects.delay.stereo` は `masteringProcessorNames()` から返り、単発適用パスで動作します。一方、幾何ベースのインサートと新しいモジュレーションインサート — `effects.reverb.room`、`effects.acoustic.roomMorph`、`effects.modulation.ensemble`、`effects.modulation.wah`、`effects.modulation.autoWah`、`effects.modulation.rotary`、`effects.modulation.ringModulator`、`effects.modulation.pitchShifter` — はインサート専用で、`masteringProcessorNames()` には**現れません**。これらは `masteringInsertNames()` とシーンインサート経由で使ってください。
+これらは [ミキシングシーン JSON](./mixing-scene-json.md) の `insert.processor` フィールドで使います。出荷される FX 有効の WASM ビルドでは、一部は単発マスタリングプロセッサでもあります。`effects.reverb.plate`、`effects.reverb.dattorro`、`effects.reverb.fdn`、`effects.reverb.velvet`、`effects.reverb.convolution`、`effects.filter.vowel`、`effects.modulation.chorus`、`effects.modulation.flanger`、`effects.modulation.phaser`、`saturation.overdrive`、`saturation.distortion`、`stereo.binaural`、`effects.delay.stereo` は `masteringProcessorNames()` から返り、単発適用パスで動作します。一方、幾何ベースのインサートと新しいモジュレーションインサート — `effects.reverb.room`、`effects.acoustic.roomMorph`、`effects.modulation.ensemble`、`effects.modulation.wah`、`effects.modulation.autoWah`、`effects.modulation.rotary`、`effects.modulation.ringModulator`、`effects.modulation.pitchShifter` — はインサート専用で、`masteringProcessorNames()` には**現れません**。これらは `masteringInsertNames()` とシーンインサート経由で使ってください。
 
 ## 関連
 

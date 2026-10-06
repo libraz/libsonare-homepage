@@ -105,7 +105,7 @@ This table says what exists, not how evenly each runtime exposes it. For a measu
 
 The build can describe its own processor surface. `capabilityCatalog()` on Node and WASM, `capability_catalog()` on Python, and `sonare_capability_catalog_json` on the C ABI return the same JSON document: the build's version and ABI numbers, every named processor with its parameters and slot metadata, the built-in preset name lists, and mastering-preset metadata. Neither CLI exposes it; `doctor` prints the separate build-diagnostics report.
 
-The current build publishes **92 processors and 5,478 parameter descriptors**. Both numbers can be recounted rather than taken on trust: the libsonare repository tracks the generated document as `tools/capability-catalog.json`, `make capability-catalog-check` fails when that file drifts from what the shared library actually answers, and `schemas/capability-catalog.schema.json` fixes the shape.
+The current build publishes **94 processors and 5,484 parameter descriptors**. Both numbers can be recounted rather than taken on trust: the libsonare repository tracks the generated document as `tools/capability-catalog.json`, `make capability-catalog-check` fails when that file drifts from what the shared library actually answers, and `schemas/capability-catalog.schema.json` fixes the shape.
 
 Every parameter descriptor carries the same ten fields:
 

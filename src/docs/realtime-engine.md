@@ -90,6 +90,34 @@ const playhead = `${barCount + 1}:${beat}`; // for example, "3:2"
 // beatFraction is the progress through that beat; use it for a smooth indicator.
 ```
 
+### Install a compiled Project timeline
+`Project.compileTimeline()` returns the compile result plus a `timeline` handle. Check `hasTimeline` and the diagnostics before applying it; an error result has `timeline: null`. `RealtimeEngine.applyProjectTimeline(timeline)` is a control-thread operation for a **stopped, prepared** engine, and the timeline's project sample rate must equal the prepared rate. It replaces the tempo and time-signature segments, markers, track lanes, track automation, audio and MIDI clips, and the per-track strips from the project's mixer scene. Instruments, buses, the master strip, metronome, loop, and capture remain as configured on the engine, so bind instruments separately.
+
+The apply is all-or-nothing. A disposed timeline, an invalid scene or timeline, or a scene strip routed from several tracks is rejected without publishing a replacement. In WASM, the timeline must be a `ProjectTimeline` created by the same initialized module; a handle from another module instance or a released handle cannot be applied. After a successful apply the engine owns its reference, so dispose the timeline immediately. Once a timeline is installed, preparing the engine at another sample rate is refused until both timeline clip domains have been cleared with `setClips([])` and `setMidiClips([])`.
+
+```typescript
+const project = new Project();
+project.setSampleRate(48000);
+project.setTempoSegments([{ startPpq: 0, bpm: 120 }]);
+const { clipId } = project.addMidiClip(0, 4);
+project.setMidiEvents(clipId, [
+  Project.midiNoteOn(0, 0, 0, 60, 100),
+  Project.midiNoteOff(2, 0, 0, 60, 0),
+]);
+
+const compiled = project.compileTimeline();
+if (!compiled.hasTimeline || compiled.timeline === null) {
+  throw new Error(compiled.messages);
+}
+const engine = new RealtimeEngine(48000, 128);
+try {
+  engine.applyProjectTimeline(compiled.timeline);
+  compiled.timeline.dispose(); // the engine retains its own reference
+} finally {
+  engine.destroy();
+  project.delete();
+}
+```
 Beyond transport, `RealtimeEngine` also registers parameter metadata, sets automation lanes, seeks to markers, configures metronome clicks, processes with monitor output, captures audio, runs offline bounces, and freezes clips. Two telemetry families matter when wiring a UI:
 
 - **Meters** — `drainMeterTelemetry()` for the stereo fast path, and `drainMeterTelemetryWide()` for per-plane records on surround/offline targets.
@@ -98,6 +126,9 @@ Beyond transport, `RealtimeEngine` also registers parameter metadata, sets autom
   - `bandCount` — the FFT band resolution, clamped to `1..64`; the call returns the band count actually applied.
 
 Meter records include pre-trim input peaks as `inputPeakDbL` and `inputPeakDbR` on the stereo path, or `inputPeakDb` as one value per valid plane on the wide path. `gainReductionDb` reports reduction from the target strip or bus as well as the master path.
+
+For the individual insert values behind that aggregate, call `meterTargetInsertGainReduction(targetId)`. It returns the last rendered block's reduction in dB (each value is `<= 0`) in combined pre-fader-then-post-fader insert order; bypassed and non-dynamics inserts return `0`, and the meter record's `gainReductionDb` is the minimum. Target `0` is the master, `1..32` are lanes, `33..40` are buses, and the input monitor target returns an empty array.
+In an AudioWorklet, a structured postMessage meter snapshot can include `insertGainReductionDb` only on the newest record for each target in one drain, and it describes the latest committed host block. The fixed SharedArrayBuffer meter ring has no room for this optional field: call `SonareEngine.pollInsertGainReduction(targetId)` (or the lower-level `SonareRealtimeEngineNode` method) when the ring path is in use.
 
 The AudioWorklet raw meter ring uses a 16-float record. Code that reads its `SharedArrayBuffer` directly must size and stride records with the exported `SONARE_METER_RING_RECORD_FLOATS` constant and read the record count/header instead of hard-coding the record layout.
 
@@ -111,12 +142,14 @@ All dB-valued level and loudness fields in a meter record — `peakDbL`/`R`, `rm
 
 Scheduled clips and sequenced MIDI only sound while the transport is rolling — on a stopped engine they stay silent rather than leaking audio. The offline helpers (`renderOffline`, `bounceOffline`, `freezeOffline`) roll the transport for the render duration and restore the prior state afterwards, so offline clip and MIDI rendering needs no manual `play()`.
 
-For a **manual** offline render — when you drive `process()` yourself instead of using those helpers — run one priming `process()` block after seeking (it drains queued commands and applies automation at the seek position), then call `engine.settleParameters()` to snap every in-flight parameter ramp (engine-level smoothed params, mixer lane fader/pan/gate, and bus gains) to its target value, so the first audible block renders at settled values instead of ramping in from defaults. `settleParameters()` must not run concurrently with a live audio thread — it is offline / main-thread only.
+`bounceOffline` renders at the prepared engine rate. A zero or omitted `sourceSampleRate` selects that rate; a non-zero source rate must match it or the call is refused. `totalFrames` is counted at the source rate. A zero or omitted `targetSampleRate` keeps the source rate, while a different target rate resamples the returned buffer and is reported in `result.sampleRate`.
+
+`bounceOffline` and `freezeOffline` perform a non-rendering offline prime before the audible render: they drain queued commands, adopt published tempo/graph/lane/automation snapshots, apply start-position automation, and settle parameter ramps. The prime keeps transport stopped, so it does not advance the playhead or processor state; no user `play()` or priming `process()` is needed.
+
+`renderOffline` is the chunkable lower-level renderer: it preserves the engine's current lifecycle and ramps, rolls a stopped transport only for the render, then restores it. A stopped `process()` quantum still advances processor state and is not an equivalent prime; `settleParameters()` only snaps known targets and does not adopt pending lane/graph/tempo snapshots. Use it only off the live audio thread.
 
 ```typescript
-// Prime: drains queued commands and applies automation at the seek position.
-engine.process([new Float32Array(blockSize), new Float32Array(blockSize)]);
-engine.settleParameters(); // snap all smoothed ramps to target before the first audible block
+engine.renderOffline({ channels: [new Float32Array(totalFrames), new Float32Array(totalFrames)], blockSize: 128 });
 ```
 
 For recording, the capture API adds a few controls:
@@ -256,6 +289,8 @@ Beyond the lane/send graph, a few realtime-safe controls reshape routing and pan
 `setTrackStripInsertParamByName(...)` is the realtime automation entry point — it addresses a parameter by the JSON key reported by [`masteringInsertParamInfo(name)`](./mastering-processors.md), so a host can change an insert's automatable parameters live without rebuilding the strip JSON. On the worklet API, `target` is a track id *or name*.
 
 `sourceKind` for a bus or master sidechain key is `'track'` (a lane's post-strip signal, before its lane fader) or `'bus'` (a bus's processed signal, before its own `gainDb`, folded to stereo when it is wider); Python takes the same names, or the matching `0`/`1` ordinal, on `set_bus_sidechain` / `set_master_sidechain`. A master `insertIndex` counts its pre-fader inserts first, then its post-fader ones, the same order every other master insert setter uses. Both keys share the lane sidechain binding table (32 entries) and are control-thread-only, like `setTrackBuses` itself.
+
+A lane sidechain key is taken from the source lane after its strip and before its lane fader, then delay-compensated to the destination strip input. The engine renders lanes in sidechain-key order, so the result is independent of the order passed to `setTrackLanes(...)` and of the render block size. A self-key, a cycle, a full binding table, or an alignment beyond the delay ceiling is refused and leaves the binding unchanged. The compensation is included in the reported engine latency. `setTrackStripChannelDelaySamples(...)` shifts only that strip; it does not become PDC or change the reported latency.
 
 ```typescript
 // Route bus 2's output into bus 1, with a pre-fader send to the same bus,
@@ -428,6 +463,10 @@ engine.setTrackStripJson(1, JSON.stringify({
 ```
 
 `sourceChannelLayout` on `EngineTrackLane` is currently descriptive/serialized only: the lane render still consumes mono or stereo input and folds stereo to a point source before surround placement. Do not use it as a promise that an existing 5.1/7.1 source stays discrete.
+
+Move a lane's placement live with `setTrackStripSurroundPan(trackId, { azimuth, divergence, lfe })` (on `RealtimeEngine` and, with a track id or name, on the `SonareEngine` worklet facade). Omitted fields default to a centered point source, a non-finite field or a track without a lane strip throws, and the placement glides with a time constant of about 5 ms rather than clicking, holding total power constant through the move.
+
+Output plane order is the canonical `L R C LFE Ls Rs` for 5.1 and `L R C LFE Ls Rs Lss Rss` for 7.1. A `SonareEngine` with `channelCount` 6 or 8 renders that many planes, but the Web Audio default destination is 2-channel `'speakers'`, so the browser mixes them down to stereo unless the app first raises `audioContext.destination.channelCount` (up to `destination.maxChannelCount`). The interpretation only matters while the counts differ: `'speakers'` has defined down-mixes for mono, stereo, quad and 5.1 sources and falls back to `'discrete'` for any other count such as 8, and `'discrete'` copies the leading planes and drops the rest. With equal counts the planes pass through unchanged in either mode.
 
 Set `outputBusId: 0` in `setTrackLanes` — or call `setTrackOutputBus(1, 0)` on the `SonareEngine` worklet facade, which owns that method — to fold the lane back onto the master mix.
 

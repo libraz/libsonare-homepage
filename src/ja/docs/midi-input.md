@@ -110,9 +110,9 @@ engine.setSf2Instrument({ destinationId: 1, gain: 1 }, 1);
 キューイングの経路は 2 つあり、デスティネーションごとにどちらかを選びます。目安として、イベントを自分のコードで生成する場合（シーケンサーのステップ、オンスクリーンキーボード）は**即時コマンド**を使い、ハードウェアキーボードのように外部から独自のタイムスタンプ付きでイベントが届く場合（`bindWebMidi` 経由）は**入力ソース**を使います。後者のレーンは、Web MIDI ブリッジが必要とするポートごとのタイムスタンプを運ぶためです。
 
 - **即時エンジンコマンド** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` はそれぞれ `destinationId` と `renderFrame`（または「できるだけ早く」を表す `-1`）を取ります。`pushMidiPanic(renderFrame)` は `renderFrame` のみを取り、すべてのデスティネーションの発音中ノートを一括で解放します。
-- **エンジン側のライブ入力ソース** — `setMidiInputSource(destinationId)` で専用の入力レーンを開き、`pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` で `portTimeSamples` タイムスタンプ付きのイベントを送ります。Web MIDI ブリッジはこのレーンへイベントを流します。
+- **エンジン側のライブ入力ソース** — `setMidiInputSource(destinationId)` で専用の入力レーンを開き、`pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` で `portTimeSamples` タイムスタンプ付きのイベントを送ります。`pushMidiInputPitchBend`、`pushMidiInputChannelPressure`、`pushMidiInputPolyPressure`、`pushMidiInputUmp` で表現情報や完全な UMP パケットも送れます。Web MIDI ブリッジはこのレーンへイベントを流します。
 - **ライブ SysEx** — `pushMidiSysex(destinationId, data, renderFrame = -1)` は、デスティネーションへ完全な SysEx（System Exclusive。メーカー独自の自由形式メッセージ）フレームをキューイングします。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なメッセージ（1〜512 バイト）で、`renderFrame` はほかの `pushMidi*` 呼び出しと同じ即時／スケジュール規約に従います。主な用途は、再生を止めずに、ライブの SF2 バインド済みデスティネーションへ GS/GM リセットや GS インサーションエフェクト（EFX）の選択を届けることです。そのバイト列が何を選ぶかは [SoundFont プレイヤー](./soundfont-player.md) を参照してください。
-- **UMP メッセージ** — `pushMidiUmp(destinationId, words, renderFrame = -1)` は、1〜4 個の 32 ビットワードからなる配列または `Uint32Array` を最上位ワードから順に受け取ります。個数は先頭ワードのメッセージ種別と一致させます。MIDI 2.0 チャンネルボイス（MT `0x4`）は値の幅を保ったまま処理し、SysEx7／データメッセージ（MT `0x3`／`0x5`）は拒否するため `pushMidiSysex` を使います。`SonareEngine` の worklet ファサードは引き続き 1 ワード用の `pushMidiUmp(trackId, word0, renderFrame = -1)` を公開するため、複数ワード UMP は `RealtimeEngine` に送ります。
+- **UMP メッセージ** — `pushMidiUmp(destinationId, words, renderFrame = -1)` は、1〜4 個の 32 ビットワードからなる配列または `Uint32Array` を最上位ワードから順に受け取ります。個数は先頭ワードのメッセージ種別と一致させます。MIDI 2.0 チャンネルボイス（MT `0x4`）は値の幅を保ったまま処理し、SysEx7／データメッセージ（MT `0x3`／`0x5`）は拒否するため `pushMidiSysex` を使います。`SonareEngine` の worklet ファサードも `pushMidiUmp(trackId, words, renderFrame = -1)` で同じ完全なパケットを受け付けます（従来の 1 ワードの数値指定も使えます）。`pushMidiInputUmp(words, portTimeSamples = 0)` はエンジン側のライブ入力ソースへ送ります。
 
 同じ SysEx 呼び出しはどのバインディングにもあり、名前の付け方だけが変わります。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なフレーム（1〜512 バイト）で、最後の引数はほかの `pushMidi*` 呼び出しと同じく「即時」を表す `-1` のレンダーフレームです。
 
@@ -256,7 +256,7 @@ engine.pushMidiPanic(-1);   // -1 = 即時。renderFrame を渡せばスケジ�
 **UMP**（Universal MIDI Packet）は MIDI 2.0 のメッセージ形式です。ブリッジは従来の MIDI 1.0 バイトに加えてこれも受け付けます。**SysEx**（システムエクスクルーシブ）は自由形式でメーカー固有のメッセージで、GS Reset などに使われ、ブラウザでは使うのに別の権限が要ります。**RPN／NRPN**（登録／非登録パラメータナンバー）は CC を介して追加パラメータを指定するもので、たとえば RPN 0 はピッチベンドレンジを設定します。
 :::
 
-ブラウザでは、`bindWebMidi(engine, options)` が配線を担います。MIDI アクセスを要求し、エンジンのライブ入力ソースを有効化し、一致する全入力ポートにリスナーを取り付け、受信バイト（ランニングステータスや UMP を含む）を解析し、サンプルタイムスタンプ付きでエンジンへキューイングします。
+ブラウザでは、`bindWebMidi(engine, options)` が配線を担います。MIDI アクセスを要求し、エンジンのライブ入力ソースを有効化し、一致する全入力ポートにリスナーを取り付け、受信バイト（ランニングステータスやデータが 1 バイトのメッセージを含む）を解析し、サンプルタイムスタンプ付きでエンジンへキューイングします。`Uint32Array` のデータ、または先頭値が `0xff` より大きいデータは UMP パケット列として読み、各メッセージ種別に応じて分割します。エンジンが `pushMidiInputUmp` を持つ場合、1〜4 ワードの完全なチャンネルボイスパケットは MIDI 2.0 の値の幅を保持します。MT `0x3` と MT `0x5` のデータパケットは SysEx 用の経路で扱います。簡易メソッドしか持たないエンジンでは、MIDI 2.0 チャンネルボイスを対応する 7 ビットのノート／CC／プレッシャー、または 14 ビットのピッチベンドへ縮小します。
 
 ```typescript
 import { init, RealtimeEngine, isWebMidiAvailable, bindWebMidi } from '@libraz/libsonare';
@@ -332,7 +332,7 @@ Web MIDI の対応はまちまちなので、`isWebMidiAvailable()` で実行時
 - **メインスレッド** — Web MIDI アクセス（`bindWebMidi`）を持ち、すべてのイベントをノードのポート経由でワークレットへ転送します。
 
 ::: info 代役オブジェクトが bindWebMidi を満たせる理由
-`bindWebMidi` が渡されたエンジンに対して呼ぶのは、ライブ入力に必要な小さな部分だけです。`setMidiInputSource`、`bindMidiCc`、3 つの `pushMidiInput*` メソッド、そして close 時の `clearMidiInputSource`。この 6 メソッドを実装したオブジェクトなら、エンジンの代役になれます。つまり、各イベントをワークレットのポートへ post する小さな*フォワーダー*が、バインディングをスレッド境界の向こうへ運びます。
+`bindWebMidi` は、渡されたエンジンのライブ入力メソッドだけを呼びます。必須なのは `setMidiInputSource`、`bindMidiCc`、3 つの `pushMidiInput*` メソッド、close 時の `clearMidiInputSource` です。ピッチベンド、チャンネルプレッシャー、ポリプレッシャー、完全な UMP パケット用のメソッドがあれば、それらも使います。必須メソッドを実装したフォワーダーで各イベントをワークレットのポートへ送れます。MIDI 2.0 の値の幅を保持する場合は、フォワーダーにも `pushMidiInputUmp` を実装します。省略すると 7 ビット／14 ビットの簡易メソッドへ縮小されます。
 :::
 
 ### 音声スレッド: ワークレットがエンジンをホストする
@@ -384,6 +384,14 @@ class KeyboardSynthProcessor extends AudioWorkletProcessor {
       engine.pushMidiInputNoteOff(msg.group, msg.channel, msg.note, msg.velocity, 0);
     } else if (msg.type === 'cc') {
       engine.pushMidiInputCc(msg.group, msg.channel, msg.controller, msg.value, 0);
+    } else if (msg.type === 'pitchBend') {
+      engine.pushMidiInputPitchBend(msg.group, msg.channel, msg.bend14, 0);
+    } else if (msg.type === 'channelPressure') {
+      engine.pushMidiInputChannelPressure(msg.group, msg.channel, msg.pressure, 0);
+    } else if (msg.type === 'polyPressure') {
+      engine.pushMidiInputPolyPressure(msg.group, msg.channel, msg.note, msg.pressure, 0);
+    } else if (msg.type === 'ump') {
+      engine.pushMidiInputUmp(msg.words, 0);
     } else if (msg.type === 'panic') {
       engine.pushMidiPanic(-1);
     }
@@ -416,7 +424,7 @@ registerProcessor('keyboard-synth', KeyboardSynthProcessor);
 
 ### メインスレッド: Web MIDI がワークレットへ流し込む
 
-ここに `init()` はありません。この構成では WASM は音声スレッドだけで動きます。メインスレッドはワークレットを起動し、6 メソッドをポートへ post するフォワーダーを `bindWebMidi` に渡します。
+ここに `init()` はありません。この構成では WASM は音声スレッドだけで動きます。メインスレッドはワークレットを起動し、ライブ入力メソッドの呼び出しをポートへ送るフォワーダーを `bindWebMidi` に渡します。
 
 ```typescript
 import { bindWebMidi, isWebMidiAvailable, type RealtimeEngine } from '@libraz/libsonare';
@@ -459,6 +467,14 @@ async function startKeyboardSynth() {
       node.port.postMessage({ type: 'noteOff', group, channel, note, velocity }),
     pushMidiInputCc: (group: number, channel: number, controller: number, value: number) =>
       node.port.postMessage({ type: 'cc', group, channel, controller, value }),
+    pushMidiInputPitchBend: (group: number, channel: number, bend14: number) =>
+      node.port.postMessage({ type: 'pitchBend', group, channel, bend14 }),
+    pushMidiInputChannelPressure: (group: number, channel: number, pressure: number) =>
+      node.port.postMessage({ type: 'channelPressure', group, channel, pressure }),
+    pushMidiInputPolyPressure: (group: number, channel: number, note: number, pressure: number) =>
+      node.port.postMessage({ type: 'polyPressure', group, channel, note, pressure }),
+    pushMidiInputUmp: (words: Uint32Array | readonly number[]) =>
+      node.port.postMessage({ type: 'ump', words }),
   };
 
   const binding = await bindWebMidi(forwarder as unknown as RealtimeEngine, {

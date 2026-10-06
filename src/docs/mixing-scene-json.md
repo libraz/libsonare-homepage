@@ -81,7 +81,7 @@ Each strip object describes one channel lane. All numeric fields have sensible d
 | `polarityInvertLeft` | boolean | `false` | Inverts the left channel polarity |
 | `polarityInvertRight` | boolean | `false` | Inverts the right channel polarity |
 | `panLaw` | integer | `0` | `0` = const 3 dB, `1` = const 4.5 dB, `2` = const 6 dB, `3` = linear 0 dB. Anything else is **rejected** at load |
-| `channelDelaySamples` | integer | `0` | Per-strip delay, `0` … `192000`; also feeds [PDC](./mixing.md#latency-and-plugin-delay-compensation-pdc). Out of range is rejected at load |
+| `channelDelaySamples` | integer | `0` | Per-strip delay, `0` … `192000`; delays only this strip and is excluded from [PDC](./mixing.md#latency-and-plugin-delay-compensation-pdc). Out of range is rejected at load |
 | `inserts` | array | `[]` | In-series processors (see [Insert](#insert)) |
 | `sends` | array | `[]` | Parallel sends to buses (see [Send](#send)) |
 
@@ -110,7 +110,7 @@ Validate a scene before you hand it to a mixer rather than relying on the except
 - **Dual pan** (`panMode: 2`) — pans the left and right channels to *independent* positions instead of moving the whole signal together. Useful for narrowing or re-placing an already-stereo source.
 - **Polarity invert** — multiplies a channel by −1, flipping the waveform. Used to fix a track recorded out of phase with another; it changes phase relationships, not perceived loudness on its own.
 - **Pan law** — how much the center is attenuated relative to hard-left/right so loudness stays even as you pan. `const 3/4.5/6 dB` are constant-power options; `linear 0 dB` keeps the summed level steady instead. See [Mixing Engine](./mixing.md#pan-modes-and-pan-laws).
-- **PDC (plugin-delay compensation)** — when one path is delayed by a lookahead processor, the engine delays the shorter paths to match so everything lines up at the master. `channelDelaySamples` feeds into that calculation.
+- **PDC (plugin-delay compensation)** — when one path is delayed by a lookahead processor, the engine delays the shorter paths to match so everything lines up at the master. `channelDelaySamples` is excluded from that calculation.
 :::
 
 ## Insert

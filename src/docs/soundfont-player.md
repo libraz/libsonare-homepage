@@ -247,6 +247,8 @@ That fallback is broad enough for practical previews: pianos use the tuned exten
 | `gain` | Master output gain, linear | `0.5` |
 | `polyphony` | Max simultaneous voices, clamped to `[1, 64]` | `48` |
 | `preferModelForModeledFamilies` / `prefer_model_for_modeled_families` | Route covered melodic GM programs to the dedicated physical model instead of the SoundFont | `false` |
+| `clearBankRig` / `clear_bank_rig` | Remove the bank's default part rig, including the guitar amplifier and cabinet, for a direct render | `false` |
+| `gsEfxRealization` / `gs_efx_realization` | Realise GS insertion effects with the `modern` or `classic` path | `modern` |
 
 When the player runs out of voices it uses **deterministic voice stealing**, so a dense passage degrades the same way on every render.
 
@@ -255,6 +257,8 @@ turning on when your SoundFont's samples for a family are weaker than the
 built-in model for it — a thin plucked-string or reed set, say. Drums stay
 SoundFont-first either way, so a good kit is never traded away for the modelled
 percussion voice.
+
+`clearBankRig` is a whole-player option for a direct comparison. For per-part control, use the project or engine part-rig API described in [GM and GS](./gm-gs.md#part-rigs-and-efx-serial-routing): `bank` keeps the current bank rig, `none` selects the direct voice, and `chain` supplies 1–8 inserts. A GS EFX assignment runs after the part rig, so routing a part into an EFX unit does not remove its default amplifier or cabinet.
 
 ## What the player implements
 
@@ -272,6 +276,7 @@ The player is a faithful SF2 synthesis core with a Roland-GS architecture layer 
 - **Low-pass filter with velocity tracking** — initial cutoff and resonance, with velocity influencing brightness.
 - **The SF2 default modulator set** — velocity, **CC7** (channel volume), and **CC11** (expression) apply a square-law gain; **CC1** (modulation wheel) changes vibrato depth; **CC91** (reverb send), **CC93** (chorus send), and **CC94** (delay send) feed the GS system-effects sends (see [the GS architecture layer](./gm-gs.md#the-gs-architecture-layer)). (A **CC** is one of MIDI's continuous "knob" control-change messages — see [MIDI Input](./midi-input.md).)
 - **Pitch bend** — honored, with the bend range set by **RPN 0** (entered via Data Entry / RPN), so a part can request its own semitone range.
+- **Part rigs and GS EFX** — the bank's default rig, a direct output, or a host-supplied insert chain runs on each part before a routed GS EFX unit. Programs 29 and 30 put their overdrive or distortion pedal before the amplifier stage, so their fallback audio includes the pedal and amplifier in series.
 
 The GS side of the player — the variation-bank and drum-kit architecture, the NRPN and SysEx part edits, the send-return system effects, and the sixteen insertion-effect units (EFX) — is documented with the rest of the GS material on [GM and GS Fallback Bank](./gm-gs.md#the-gs-architecture-layer).
 

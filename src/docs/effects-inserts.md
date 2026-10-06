@@ -1,11 +1,11 @@
 ---
 title: Effects Inserts
-description: The creative-FX insert catalog for the libsonare mixing and realtime engine — reverb, modulation, and delay inserts with their parameter tables and build-flag gating, distinct from the named mastering processor registry.
+description: The creative-FX insert catalog for the libsonare mixing and realtime engine — reverb, modulation, delay, and saturation inserts with their parameter tables and build-flag gating, distinct from the named mastering processor registry.
 ---
 
 # Effects Inserts
 
-**Effects inserts** are the creative-FX processors you load into mixer channel-strip and bus slots (and realtime engine inserts): reverbs, modulation effects, and delays. They are built through the same insert factory that the [Mixing Engine](./mixing.md) uses for every channel-strip insert.
+**Effects inserts** are the creative-FX processors you load into mixer channel-strip and bus slots (and realtime engine inserts): reverbs, modulation effects, delays, and saturation pedals. They are built through the same insert factory that the [Mixing Engine](./mixing.md) uses for every channel-strip insert.
 
 ::: info Inserts are not mastering processors
 This page catalogs **mixer/engine inserts**. The named [Mastering Processors](./mastering-processors.md) registry — compressors, EQ, saturation, stereo, repair, and the loudness/maximizer stages — is a separate topic with its own scope. The two overlap only where noted: a few FX inserts are *also* exposed as one-shot mastering processors. If you are looking for the mastering registry, start on that page instead.
@@ -61,15 +61,17 @@ Keys outside an insert's list are ignored by the processor and reported through 
 
 The route is three lookups in the one document rather than a call per processor:
 
-1. **Pick the insert set.** Filter `processors` on `realtimeInsertable`. That is 77 of the 92 entries, and it is the same set `masteringInsertNames()` returns; the other 15 — the 11 offline processors and the 4 pair processors — carry an empty `params` array. `category` groups the set the way a picker does (`effects` is the 19 creative-FX ids on this page; the other categories are the mastering families), and `channelPolicy` says how the mixer wraps the insert on a bus wider than stereo — every reverb, modulation and delay insert is `stereoPairOnly` except `effects.modulation.ringModulator`, which is `multichannel`.
+1. **Pick the insert set.** Filter `processors` on `realtimeInsertable`. That is 79 of the 94 entries, and it is the same set `masteringInsertNames()` returns; the other 15 — the 11 offline processors and the 4 pair processors — carry an empty `params` array. `category` groups the set the way a picker does (`effects` is the 19 creative-FX ids on this page; the other categories are the mastering families), and `channelPolicy` says how the mixer wraps the insert on a bus wider than stereo — every reverb, modulation and delay insert is `stereoPairOnly` except `effects.modulation.ringModulator`, which is `multichannel`.
 2. **Read the descriptors.** An entry's `params` is exactly the list `masteringInsertParamInfo(id)` returns for that id, in the same order, so a host holding the catalog never needs the per-processor call. Entries with `id: null` are construction-only; non-null ids are the automation ids used by `Mixer.scheduleInsertAutomation(strip, insertIndex, paramId, samplePos, value)` on Node and WASM, `Mixer.schedule_insert_automation(...)` on Python, and `sonare_strip_schedule_insert_automation` on the C ABI. The realtime engine's setters take the `name` instead (`setTrackStripInsertParamByName` and its master and bus variants).
 3. **Lay out each control** from `type`, `default`, `min`, `max`, `unit`, and `choices`. Construction-only keys now have descriptors too, so `stages` on the phaser, `attackMs` / `releaseMs` on the auto-wah, `stereoSpread` on the rotary, and room geometry can be represented as build-time fields. Use `slot` to identify a slot group, then read the processor's `slots` entry: `activation` (`anyKey` or `always`), the enclosing `parent`, and `minCrossoverCutoffs` determine whether that group is present.
+
+The catalog also exposes `saturation.overdrive` and `saturation.distortion` in the `saturation` category. Both are multichannel realtime inserts and solo processors, so the same ids work in a mixer chain, a realtime engine, or the one-shot mastering apply path.
 
 The same descriptor route covers the current insertable maximizer controls: `ceilingDb` on `maximizer.truePeakLimiter`, `maximizer.maximizer`, `maximizer.adaptiveRelease`, and `maximizer.softKneeMax`. GS-bound realtime controls are also published there: `windowMs`, `preDelayMs`, and `preDelay2Ms` on `effects.modulation.pitchShifter`; `stereoSpread`, `accelTauS`, `decelTauS`, `undershootHz`, and `drumUndershootHz` on `effects.modulation.rotary`; `preDelayMs` and `character` on `effects.reverb.dattorro`; and `typeLadder` on `saturation.bitcrusher`. Use the descriptor list instead of maintaining a second control table.
 
 ```typescript
 const catalog = capabilityCatalog();
-const inserts = catalog.processors.filter((p) => p.realtimeInsertable);   // 77 of 92
+const inserts = catalog.processors.filter((p) => p.realtimeInsertable);   // 79 of 94
 const fx = inserts.filter((p) => p.category === 'effects');               // the 19 ids below
 const chorus = fx.find((p) => p.id === 'effects.modulation.chorus')!;
 for (const param of chorus.params) {
@@ -86,7 +88,7 @@ Four things the effects family reports that a general reading of the document wo
 - **`rtSafe: false` is a hard stop for automation, not a hint.** Scheduling automation on such a parameter returns `NotSupported` (code 6). Construction-only rows are marked with `id: null` and `rtSafe: false`; this page also contains id-bearing targets that remain unsafe, including every GS EFX raw byte and `modDepthSamples`. A UI that draws an automation lane per descriptor has to disable every row whose `rtSafe` is false, including an id-bearing row.
 - **The catalog has more than numeric toggles.** Effects descriptors include `number`, `boolean`, `enum`, `string`, and `array` types. `choices` can describe enum values or a closed numeric set with gaps. Do not infer a toggle from a name; use `type`, and use `choices` for discrete controls.
 - **Latency and tail are per insert, and non-zero for the reverbs.** `effects.reverb.convolution`, `effects.reverb.room` and `effects.acoustic.roomMorph` report 256 samples of latency; the reverbs report tails from 51,217 samples (`room`, `roomMorph`) up to 264,000 (`fdn`), and the stereo delay 59,795, all at the representative 48 kHz probe. `realtimeCost` is `moderate` for every reverb except `velvet`, which is `high`, and `low` for every modulation and delay insert; it is `null` only on the 15 non-inserts.
-- **The effects family is small in parameters.** Its 19 processors publish 229 descriptors between them; the per-band EQ processors account for most of the 5,478 descriptors in the full catalog (`multiband.dynamicEq` alone has 1,019). An insert UI that sizes itself by descriptor count should expect the two families to differ by an order of magnitude.
+- **The effects family is small in parameters.** Its 19 processors publish 229 descriptors between them; the per-band EQ processors account for most of the 5,484 descriptors in the full catalog (`multiband.dynamicEq` alone has 1,019). An insert UI that sizes itself by descriptor count should expect the two families to differ by an order of magnitude.
 
 ### Two things a null and a default do not tell you
 
@@ -112,6 +114,8 @@ The `effects` category contains 19 entries; `stereo.binaural` is listed alongsid
 | `effects.reverb.room` | Geometric room reverb synthesized from room parameters |
 | `effects.acoustic.roomMorph` | Room-character morph toward a target geometric room |
 | `effects.gsEfx` | GS insertion-effect unit with a selected type and 20 raw parameter bytes |
+| `saturation.overdrive` | Overdrive pedal with gain, tone, and output level |
+| `saturation.distortion` | Distortion pedal with gain, tone, and output level |
 | `effects.filter.vowel` | Three-band resonant vowel filter with a direct path |
 | `effects.modulation.ensemble` | Solina-style BBD string-machine ensemble |
 | `effects.modulation.chorus` | Stereo chorus |
@@ -148,6 +152,21 @@ const processed = masteringProcess('effects.gsEfx', samples, sampleRate, {
 The same parameter object is used when the processor is constructed as a mixer or realtime insert. Use `masteringInsertParamInfo('effects.gsEfx')` or the capability catalog for the descriptors published by the current build.
 
 The table below highlights representative keys and behavior; it is intentionally abbreviated. The complete, build-specific list — including newer keys such as chorus/flanger `preFilterHz` and `preFilterMode`, phaser `feedback` and `mixMode`, rotary drum controls, pitch-shifter `windowMs`, and stereo-delay `dampingHz` — is available through [`masteringInsertParamInfo(name)`](#the-parameter-descriptor) or `capabilityCatalog().processors[].params`.
+
+### Saturation pedals
+
+`saturation.overdrive` and `saturation.distortion` are realtime-safe, multichannel inserts. They are also named solo processors, so a host can use the same parameter map with `masteringProcess(...)`. The bounds, defaults, and timing below are the values in the capability catalog.
+
+| Insert | Parameter | Accepted range | Default | Unit |
+|--------|-----------|----------------|---------|------|
+| `saturation.overdrive` | `gainDb` | `0`–`41` | `20` | dB |
+|  | `toneHz` | `500`–`8000` | `3000` | Hz |
+|  | `levelDb` | no catalog minimum; maximum `770.637` | `0` | dB |
+| `saturation.distortion` | `gainDb` | `0`–`60` | `30` | dB |
+|  | `toneHz` | `475`–`20000` | `4000` | Hz |
+|  | `levelDb` | no catalog minimum; maximum `770.637` | `0` | dB |
+
+Each reports `48` samples of latency and a `0`-sample tail. All three parameters have realtime automation ids and are safe to change while the insert runs. The large `levelDb` maximum is the finite-gain limit measured by the catalog; it is not a useful musical range.
 
 ### Vowel filter
 
@@ -199,7 +218,7 @@ A Solina-style BBD string-machine ensemble — the lush, chorused tone of vintag
 
 ## Inserts that are also one-shot mastering processors
 
-Use these in [Mixing Scene JSON](./mixing-scene-json.md) `insert.processor` fields. In the shipped FX-enabled WASM build, some of them are also one-shot mastering processors: `effects.reverb.plate`, `effects.reverb.dattorro`, `effects.reverb.fdn`, `effects.reverb.velvet`, `effects.reverb.convolution`, `effects.filter.vowel`, `effects.modulation.chorus`, `effects.modulation.flanger`, `effects.modulation.phaser`, `stereo.binaural`, and `effects.delay.stereo` are returned by `masteringProcessorNames()` and run through the one-shot apply path. The geometry-driven insert and the newer modulation inserts — `effects.reverb.room`, `effects.acoustic.roomMorph`, `effects.modulation.ensemble`, `effects.modulation.wah`, `effects.modulation.autoWah`, `effects.modulation.rotary`, `effects.modulation.ringModulator`, and `effects.modulation.pitchShifter` — are insert-only and do **not** appear in `masteringProcessorNames()`; reach them through `masteringInsertNames()` and scene inserts.
+Use these in [Mixing Scene JSON](./mixing-scene-json.md) `insert.processor` fields. In the shipped FX-enabled WASM build, some of them are also one-shot mastering processors: `effects.reverb.plate`, `effects.reverb.dattorro`, `effects.reverb.fdn`, `effects.reverb.velvet`, `effects.reverb.convolution`, `effects.filter.vowel`, `effects.modulation.chorus`, `effects.modulation.flanger`, `effects.modulation.phaser`, `saturation.overdrive`, `saturation.distortion`, `stereo.binaural`, and `effects.delay.stereo` are returned by `masteringProcessorNames()` and run through the one-shot apply path. The geometry-driven insert and the newer modulation inserts — `effects.reverb.room`, `effects.acoustic.roomMorph`, `effects.modulation.ensemble`, `effects.modulation.wah`, `effects.modulation.autoWah`, `effects.modulation.rotary`, `effects.modulation.ringModulator`, and `effects.modulation.pitchShifter` — are insert-only and do **not** appear in `masteringProcessorNames()`; reach them through `masteringInsertNames()` and scene inserts.
 
 ## Related
 

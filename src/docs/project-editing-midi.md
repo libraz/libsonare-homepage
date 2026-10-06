@@ -135,7 +135,7 @@ The two interchange formats have different jobs. The [MIDI 2.0 guide](./midi2.md
 
 ### Standard MIDI File (SMF)
 
-`exportSmf` always writes a format-1 (multi-track) file: track 0 carries the tempo + time-signature map, then one MTrk per clip, quantized to 480 ticks per quarter note.
+`exportSmf` always writes a format-1 (multi-track) file: track 0 carries the tempo + time-signature map, then one MTrk per clip, quantized to 480 ticks per quarter note. At the lower-level SMF exporter, a nonzero PPQN must fit the positive 15-bit range `0x0001`–`0x7fff`; zero selects the default 480. The importer accepts formats 0 and 1, but a format-0 header must declare exactly one track; format 2, SMPTE timing, and zero PPQN in an input header are rejected.
 
 ```typescript
 const smf = project.exportSmf();        // Uint8Array<ArrayBuffer> — SMF format-1, 480 PPQN
@@ -150,6 +150,8 @@ try {
 ```
 
 `exportSmf()` and `exportClipFile()` are declared `Uint8Array<ArrayBuffer>`, the type the `Blob` and `File` constructors accept, so `new Blob([project.exportSmf()])` compiles with no intermediate `new Uint8Array(...)` copy.
+
+On import, a key-signature meta event is kept only when its fifths value is in `-7..7` and its minor flag is `0` or `1`. A missing or invalid key-signature payload is skipped and counted in `skipped_events`; parsing of the rest of the track continues.
 
 The importer contains damage locally: if one SMF track has an overlong variable-length quantity or payload, parsing resynchronizes at that track's declared boundary so later valid tracks can still import instead of the whole file failing.
 

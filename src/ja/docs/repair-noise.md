@@ -66,12 +66,14 @@ const cleaned = masteringRepairDenoiseClassical({
 |---|---|---|
 | `mode` | 既定は `logMmse`、ほかに `mmseStsa`、`spectralSubtraction` | ゲイン関数を選ぶ。スペクトルサブトラクションでは `overSubtraction` と `spectralFloor` も読む。 |
 | `noiseEstimator` | 既定は `quantile`、ほかに `mcra`、`imcra`、`spp` | ノイズスペクトルの追跡方法を選ぶ。 |
-| `nFft` / `hopLength` | 既定は `1024` / `256` | STFT の幾何を設定する。`nFft` は正の 2 のべき乗。 |
+| `nFft` / `hopLength` | 既定は `1024` / `256` | STFT の幾何を設定する。`nFft` は `4` から `524288` までの 2 のべき乗、`hopLength` は正で `nFft / 2` 以下とし、Hann のオーバーラップで再構成できる組み合わせにする。 |
 | `reductionDb` | 既定は `26`、有限で 0 以上 | ゲインマスクの各ビンに許す最大減衰を設定する。ラウドネス目標ではなく残留ノイズの下限。 |
 | `noiseEstimationQuantile` | 既定は `0.1` | ノイズスペクトルの推定に使う、静かなフレームの割合。 |
 | `ddAlpha`、`speechPresenceGain`、`gainSmoothing` | API 型を参照 | decision-directed 平滑化と MMSE ゲイン経路を制御する。 |
 
 `reductionDb: 26` のとき、マスクのゲイン下限は約 `0.0501`、つまりビンごとの最大減衰量 26 dB です。広帯域ノイズ自体が 26 dB 下がることを保証する値ではありません。大きな値ならより深く減衰できますが、推定の信頼性が上がるわけではありません。レポートの `maxReductionDb` と `floorLimitedFraction` で、この上限が結果を決めたかを確認できます。
+
+指定できる `nFft` は `4` から `524288` までの 2 のべき乗です。`hopLength` は `(0, nFft / 2]` に入り、周期 Hann の解析窓と対称 Hann の合成窓の積で、すべてのオーバーラップ位置が覆われることも検証されます。未カバーの位置を残す組み合わせは拒否されます。この幾何と再構成チェックは、オフラインのモノラル、ステレオ、リンク形式のリペアと `StreamingDenoise`、`StreamingMasteringChain` のライブ経路で共通です。ストリーミングでは再帰的な `mcra`、`imcra`、`spp` のいずれかを使い、全信号を必要とする `quantile` は拒否されます。
 
 ## チャンネルの扱い
 
@@ -99,7 +101,7 @@ const linked = masteringRepairDenoiseClassicalLinked({
 
 ステレオ形式とリンク形式はチャンネルの合算パワーからマスクを作り、すべてのチャンネルへ同じマスクを適用します。そのためチャンネル間のレベル差と位相差は動きません。レポートはペアまたは集合について 1 つです。`floorDbfs` は絶対レベルで、同じチャンネルを 2 本入れるとモノラルより約 3.01 dB、3 本なら約 4.77 dB 高くなります。同じチャンネル数で測った値どうしだけを比較してください。すべての入力チャンネルは同じ長さで、`nFft` サンプル以上必要です。
 
-`masteringRepairDehumStereo` はチャンネルごとにフィルター状態を持ちます。`adaptive: true` なら両チャンネルが 1 つの追跡基音に従い、既定の `adaptive: false` なら各チャンネルが設定した周波数を独立に処理します。
+ステレオのリンク経路である `masteringRepairDehumStereo` は、チャンネルごとに独立したフィルターまたはキャンセラー状態を持ちます。`adaptive: true` では、ハムが強いチャンネルを追跡の参照に選び、元の左右チャンネルの投影エネルギーを合算して周波数を探索し、追跡した 1 つの基音を両方の経路へ渡します。そのため片側だけのハムや逆位相のハムも追跡器に見え、各チャンネルの振幅と位相はそれぞれの状態で処理されます。既定の `adaptive: false` では、各チャンネルが設定した周波数を独立に処理します。
 
 ## 結果を読む
 
@@ -119,4 +121,4 @@ const linked = masteringRepairDenoiseClassicalLinked({
 
 ## 限界
 
-デノイザーはバッファ自身からノイズを推定します。キャリブレーション音、ドローン、長く伸ばした音はノイズと見なされ、ノイズフロアと一緒に減衰することがあります。古典的デノイズは DNN リペアでも音源分離でもありません。検出とリペアはオフラインで、`nFft` 未満の入力はパディングせず拒否します。共通の順序は [オーディオリペアの流れ](./audio-repair.md)、正確なレポート型は [JavaScript マスタリング API](./js-api-mastering.md) を参照してください。
+デノイザーはバッファ自身からノイズを推定します。キャリブレーション音、ドローン、長く伸ばした音はノイズと見なされ、ノイズフロアと一緒に減衰することがあります。古典的デノイズは DNN リペアでも音源分離でもありません。検出器と古典的なヘルパー呼び出しはオフラインです。`StreamingDenoise` と `StreamingMasteringChain` では `mcra`、`imcra`、`spp` によるデノイズをブロック処理できますが、全信号を必要とする `quantile` は拒否されます。オフラインのデノイズ呼び出しで `nFft` 未満の入力を渡すと、パディングせず拒否します。共通の順序は [オーディオリペアの流れ](./audio-repair.md)、正確なレポート型は [JavaScript マスタリング API](./js-api-mastering.md) を参照してください。

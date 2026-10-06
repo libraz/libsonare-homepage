@@ -76,9 +76,9 @@ libsonare processes each block of a strip in this exact order:
     { id: 'tap1', label: 'Pre-fader tap', col: 6, row: 0, variant: 'warning' },
     { id: 'fader', label: 'Fader + VCA', col: 0, row: 1, variant: 'accent' },
     { id: 'pan', label: 'Pan', col: 1, row: 1 },
-    { id: 'eqPost', label: 'EQ (post)', col: 2, row: 1 },
-    { id: 'postIns', label: 'Post inserts', col: 3, row: 1 },
-    { id: 'width', label: 'Stereo width', col: 4, row: 1 },
+    { id: 'eqPost', label: 'EQ (post)', col: 3, row: 1 },
+    { id: 'postIns', label: 'Post inserts', col: 4, row: 1 },
+    { id: 'width', label: 'Stereo width', col: 2, row: 1 },
     { id: 'tap2', label: 'Post-fader tap', col: 5, row: 1, variant: 'warning' },
     { id: 'out', label: 'To bus / master', col: 6, row: 1, variant: 'success' },
     { id: 'send2', label: 'Post send + meter', col: 5, row: 2, variant: 'muted' }
@@ -93,28 +93,28 @@ libsonare processes each block of a strip in this exact order:
     { from: 'tap1', to: 'send1', style: 'dashed' },
     { from: 'tap1', to: 'fader' },
     { from: 'fader', to: 'pan' },
-    { from: 'pan', to: 'eqPost' },
+    { from: 'pan', to: 'width' },
     { from: 'eqPost', to: 'postIns' },
-    { from: 'postIns', to: 'width' },
-    { from: 'width', to: 'tap2' },
+    { from: 'width', to: 'eqPost' },
+    { from: 'postIns', to: 'tap2' },
     { from: 'tap2', to: 'send2', style: 'dashed' },
     { from: 'tap2', to: 'out' }
   ]"
-  caption="Signal order: trim -> polarity -> delay -> EQ (pre) -> pre-fader inserts -> fader -> pan -> EQ (post, optional) -> post-fader inserts -> width -> bus. The two taps branch a copy to sends/meters without altering the main chain."
+  caption="Signal order: trim -> polarity -> delay -> EQ (pre) -> pre-fader inserts -> fader -> pan -> width -> EQ (post, optional) -> post-fader inserts -> bus. The two taps branch a copy to sends/meters without altering the main chain."
 />
 
 Reading the chain top to bottom:
 
 1. **Input trim** — a clean gain stage *before* anything else, used to set a sensible working level (see [gain staging](./glossary/concepts/gain-staging.md)). This is not the fader; trim is for "get the level right going in", the fader is for "balance against other tracks".
 2. **Polarity invert** — flips the sign of the left and/or right channel. Used to fix a track recorded out of phase with another.
-3. **Channel delay** — a per-strip sample delay. It both time-aligns a track and contributes to the engine's [delay compensation](#latency-and-plugin-delay-compensation-pdc).
+3. **Channel delay** — a per-strip sample delay. It delays only this strip; it is excluded from the engine's [delay compensation](#latency-and-plugin-delay-compensation-pdc).
 4. **EQ** — a built-in parametric EQ. It sits **pre-fader by default** (so the fader rides the EQ'd signal), but can be moved post-fader.
 5. **Pre-fader inserts** — your named processors (compressor, de-esser, …) running *before* the fader.
 6. **Pre-fader tap** — the point a *pre-fader* send and the pre-fader meter read from. Because it is before the fader, moving the fader does **not** change a pre-fader send level.
 7. **Fader (+ VCA offset)** — the main level control. A [VCA group](#vca-groups) (one fader that trims several strips at once) adds its offset here, so a single group fader can ride many strips without re-routing their audio.
 8. **Pan** — places the signal in the stereo field using the strip's [pan mode and pan law](#pan-modes-and-pan-laws).
-9. **Post-fader inserts** (and EQ, if you moved it post-fader) — processors that should react to the post-fader level.
-10. **Stereo width** — narrows or widens the side signal (see [mono compatibility](./glossary/concepts/mono-compatibility.md)).
+9. **Stereo width** — narrows or widens the side signal (see [mono compatibility](./glossary/concepts/mono-compatibility.md)).
+10. **Post-fader inserts** (and EQ, if you moved it post-fader) — processors that should react to the post-fader level.
 11. **Post-fader tap + goniometer** — passes signal to *post-fader* sends, the output meter, and the goniometer history buffer.
 
 ::: warning Pre-fader vs post-fader is not cosmetic
@@ -128,8 +128,8 @@ The order above is exactly `ChannelStrip::process_segment`:
 
 ```text
 input_trim -> polarity -> alignment_delay -> eq(pre) -> pre-inserts
-  -> [pre tap] -> fader(+VCA) -> panner -> eq(post)
-  -> post-inserts -> width -> [goniometer + post tap]
+  -> [pre tap] -> fader(+VCA) -> panner -> width -> eq(post)
+  -> post-inserts -> [goniometer + post tap]
 ```
 
 The pre/post taps are pre-allocated scratch buffers, so a send never allocates on the audio thread. Each scheduled automation event (fader, pan, width, send, insert) is applied at its sample position inside this same per-segment loop, which is what makes automation sample-accurate.
@@ -506,7 +506,7 @@ Plugin-delay compensation (PDC) fixes that alignment problem:
 2. It delays the shorter paths to match the longest path.
 3. The paths line up again at the master.
 
-Per-strip `channelDelaySamples` feeds into the same calculation. Recompile after changing it so PDC runs again.
+Per-strip `channelDelaySamples` is an intentional timing offset. It delays only that strip and does not increase reported latency or delay the other paths through PDC.
 
 ## Recipes
 

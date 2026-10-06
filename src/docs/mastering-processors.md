@@ -181,7 +181,7 @@ The same knob is also accepted as a linear floor. A `repair.denoise.gainFloor` k
 | Maximizer | `maximizer.adaptiveRelease`, `maximizer.loudnessOptimize`, `maximizer.maximizer`, `maximizer.softKneeMax`, `maximizer.truePeakLimiter` |
 | Multiband | `multiband.compressor`, `multiband.dynamicEq`, `multiband.expander`, `multiband.imager`, `multiband.limiter`, `multiband.saturation` |
 | Repair | `repair.declick`, `repair.declip`, `repair.decrackle`, `repair.dehum`, `repair.denoiseClassical`, `repair.dereverbClassical`, `repair.trimSilence` |
-| Saturation | `saturation.ampSim`, `saturation.bitcrusher`, `saturation.exciter`, `saturation.hardClipper`, `saturation.multibandExciter`, `saturation.softClipper`, `saturation.tape`, `saturation.transformer`, `saturation.tube`, `saturation.waveshaper` |
+| Saturation | `saturation.ampSim`, `saturation.bitcrusher`, `saturation.distortion`, `saturation.exciter`, `saturation.hardClipper`, `saturation.multibandExciter`, `saturation.overdrive`, `saturation.softClipper`, `saturation.tape`, `saturation.transformer`, `saturation.tube`, `saturation.waveshaper` |
 | Spectral | `spectral.airBand`, `spectral.lowEndFocus`, `spectral.presenceEnhancer`, `spectral.spectralShaper` |
 | Stereo | `stereo.autoPan`, `stereo.binaural`, `stereo.haasEnhancer`, `stereo.imager`, `stereo.monoMaker`, `stereo.phaseAlign`, `stereo.stereoBalance` |
 
@@ -221,6 +221,21 @@ These are classical denoising methods.
 3. **MMSE-STSA** and **LogMMSE** are statistical versions that estimate how much of each frequency bin is signal versus noise before subtracting.
 
 This reduces the warbly "musical noise" that naive subtraction can leave. These methods do not separate instruments; they only attenuate noise.
+:::
+
+::: details `saturation.overdrive` and `saturation.distortion`
+These two realtime-safe, multichannel processors model drive pedals. They are also usable as mixer or realtime inserts. The capability catalog reports the following construction bounds and defaults:
+
+| Processor | Parameter | Accepted range | Default | Unit |
+|-----------|-----------|----------------|---------|------|
+| `saturation.overdrive` | `gainDb` | `0`–`41` | `20` | dB |
+|  | `toneHz` | `500`–`8000` | `3000` | Hz |
+|  | `levelDb` | no catalog minimum; maximum `770.637` | `0` | dB |
+| `saturation.distortion` | `gainDb` | `0`–`60` | `30` | dB |
+|  | `toneHz` | `475`–`20000` | `4000` | Hz |
+|  | `levelDb` | no catalog minimum; maximum `770.637` | `0` | dB |
+
+Both report `48` samples of latency and `0` tail samples in the catalog. All three parameters are realtime-safe automation targets. The `levelDb` maximum is the finite-gain acceptance limit, not a recommended operating range.
 :::
 
 ::: details What is `saturation.ampSim`?

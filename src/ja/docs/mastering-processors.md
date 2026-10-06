@@ -197,7 +197,7 @@ description: libsonare の名前付きマスタリング API、プリセット�
 | Maximizer | `maximizer.adaptiveRelease`, `maximizer.loudnessOptimize`, `maximizer.maximizer`, `maximizer.softKneeMax`, `maximizer.truePeakLimiter` |
 | Multiband | `multiband.compressor`, `multiband.dynamicEq`, `multiband.expander`, `multiband.imager`, `multiband.limiter`, `multiband.saturation` |
 | Repair | `repair.declick`, `repair.declip`, `repair.decrackle`, `repair.dehum`, `repair.denoiseClassical`, `repair.dereverbClassical`, `repair.trimSilence` |
-| Saturation | `saturation.ampSim`, `saturation.bitcrusher`, `saturation.exciter`, `saturation.hardClipper`, `saturation.multibandExciter`, `saturation.softClipper`, `saturation.tape`, `saturation.transformer`, `saturation.tube`, `saturation.waveshaper` |
+| Saturation | `saturation.ampSim`, `saturation.bitcrusher`, `saturation.distortion`, `saturation.exciter`, `saturation.hardClipper`, `saturation.multibandExciter`, `saturation.overdrive`, `saturation.softClipper`, `saturation.tape`, `saturation.transformer`, `saturation.tube`, `saturation.waveshaper` |
 | Spectral | `spectral.airBand`, `spectral.lowEndFocus`, `spectral.presenceEnhancer`, `spectral.spectralShaper` |
 | Stereo | `stereo.autoPan`, `stereo.binaural`, `stereo.haasEnhancer`, `stereo.imager`, `stereo.monoMaker`, `stereo.phaseAlign`, `stereo.stereoBalance` |
 
@@ -237,6 +237,21 @@ DNN 音源分離やニューラルなスペクトル修復**ではありませ�
 3. **MMSE-STSA** と **LogMMSE** は、周波数ビンごとに信号とノイズの割合を推定してから差し引く統計的手法です。
 
 これにより、素朴な減算で残る「ミュージカルノイズ」のようなざらつきを抑えます。楽器を分離するものではなく、ノイズを減衰させるだけです。
+:::
+
+::: details `saturation.overdrive` と `saturation.distortion` とは？
+この 2 つはリアルタイムで安全に変更できるマルチチャンネルプロセッサで、ドライブペダルをモデル化します。ミキサーやリアルタイムのインサートとしても使えます。capability catalog が返す構築時の値域と既定値は次のとおりです。
+
+| プロセッサ | パラメータ | 受理範囲 | 既定値 | 単位 |
+|---|---|---|---|---|
+| `saturation.overdrive` | `gainDb` | `0`〜`41` | `20` | dB |
+|  | `toneHz` | `500`〜`8000` | `3000` | Hz |
+|  | `levelDb` | カタログ上の最小値なし、最大値 `770.637` | `0` | dB |
+| `saturation.distortion` | `gainDb` | `0`〜`60` | `30` | dB |
+|  | `toneHz` | `475`〜`20000` | `4000` | Hz |
+|  | `levelDb` | カタログ上の最小値なし、最大値 `770.637` | `0` | dB |
+
+どちらもカタログ上のレイテンシは `48` samples、テールは `0` samples です。3 つのパラメータはすべてリアルタイムオートメーションの対象です。`levelDb` の最大値は有限ゲインの受理上限であり、推奨する操作範囲ではありません。
 :::
 
 ::: details `saturation.ampSim` とは？
