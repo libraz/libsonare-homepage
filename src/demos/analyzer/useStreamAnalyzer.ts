@@ -1,5 +1,4 @@
 import { onUnmounted, ref } from 'vue';
-import { NOTE_NAMES } from '@/utils/pitch';
 import type { BarChord, ProgressiveEstimate, StreamAnalyzer, StreamConfig } from '@/wasm/index';
 
 export interface BarChordInfo {
@@ -32,45 +31,10 @@ export interface StreamEstimate {
   accumulatedSeconds: number;
 }
 
-// ChordQuality: Major=0, Minor=1, Diminished=2, Augmented=3, Dominant7=4, Major7=5,
-// Minor7=6, Sus2=7, Sus4=8, Unknown=9, Add9=10, MinorAdd9=11, Dim7=12, HalfDim7=13,
-// Major9=14, Dominant9=15, Sus2Add4=16
-const CHORD_QUALITY_NAMES = [
-  '',
-  'm',
-  'dim',
-  'aug',
-  '7',
-  'M7',
-  'm7',
-  'sus2',
-  'sus4',
-  '',
-  'add9',
-  'm(add9)',
-  'dim7',
-  'm7b5',
-  'M9',
-  '9',
-  'sus2add4',
-];
-
-function keyToName(keyIndex: number, isMinor: boolean): string {
-  const note = NOTE_NAMES[keyIndex % 12];
-  return isMinor ? `${note}m` : note;
-}
-
-function chordToName(root: number, quality: number): string {
-  if (root < 0 || root > 11) return '-';
-  const note = NOTE_NAMES[root];
-  const suffix = CHORD_QUALITY_NAMES[quality] || '';
-  return `${note}${suffix}`;
-}
-
 function barChordToInfo(bc: BarChord): BarChordInfo {
   return {
     barIndex: bc.barIndex,
-    chord: chordToName(bc.root, bc.quality),
+    chord: bc.name,
     startTime: bc.startTime,
     confidence: bc.confidence,
   };
@@ -362,9 +326,7 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
     const keyRoot = progressiveEstimate.key;
 
     // Get C++ computed voted pattern
-    const votedPatternFromCpp = (progressiveEstimate.votedPattern || []).map((bc) =>
-      chordToName(bc.root, bc.quality),
-    );
+    const votedPatternFromCpp = (progressiveEstimate.votedPattern || []).map((bc) => bc.name);
 
     // Fallback: Detect chord progression pattern in JS (if C++ pattern not available)
     const pattern = detectProgressionPattern(
@@ -376,14 +338,11 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
       bpm: Math.round(progressiveEstimate.bpm * 10) / 10,
       bpmConfidence: progressiveEstimate.bpmConfidence,
       key:
-        progressiveEstimate.keyConfidence > 0.3
-          ? keyToName(progressiveEstimate.key, progressiveEstimate.keyMinor)
+        progressiveEstimate.keyConfidence > 0.3 && progressiveEstimate.keyShortName
+          ? progressiveEstimate.keyShortName
           : '-',
       keyConfidence: progressiveEstimate.keyConfidence,
-      chord:
-        progressiveEstimate.chordConfidence > 0.3
-          ? chordToName(progressiveEstimate.chordRoot, progressiveEstimate.chordQuality)
-          : '-',
+      chord: progressiveEstimate.chordConfidence > 0.3 ? progressiveEstimate.chordName : '-',
       chordConfidence: progressiveEstimate.chordConfidence,
       barChordProgression: barChords.map(barChordToInfo),
       votedPattern: votedPatternFromCpp,

@@ -5,7 +5,7 @@ export interface AnalysisResult {
   bpmConfidence: number;
   key: {
     root: number;
-    mode: number;
+    mode: string;
     confidence: number;
     name: string;
     shortName: string;

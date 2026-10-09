@@ -161,7 +161,7 @@ describe('wasm package integration', () => {
     expect(wasm.detectBpm(pulses, SAMPLE_RATE)).toBeGreaterThan(80);
 
     const key = wasm.detectKey(tone, SAMPLE_RATE, { modes: 'major-minor', profile: 'ks' });
-    expect(key).toMatchObject({ root: expect.any(Number), mode: expect.any(Number) });
+    expect(key).toMatchObject({ root: expect.any(Number), mode: expect.any(String) });
     expect(key.confidence).toBeGreaterThanOrEqual(0);
     expect(key.name).toBeTruthy();
 
@@ -615,10 +615,11 @@ describe('wasm package integration', () => {
 
       const serialized = JSON.parse(mixer.toSceneJson());
       expect(serialized.buses.map((bus: { id: string }) => bus.id)).toContain('verb');
+      // Scene export writes the live send level, where the automation left it.
       expect(serialized.strips[0].sends[0]).toMatchObject({
         id: 's1',
         destinationBusId: 'verb',
-        sendDb: -6,
+        sendDb: -9,
         timing: 'pre',
       });
       expect(serialized.vcaGroups[0]).toMatchObject({ id: 'band', gainDb: -3 });

@@ -3,10 +3,11 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import * as wasm from '@/wasm/index.js';
 
 /**
- * The analysis pages say `chordFunctionalAnalysis` labels line up with
- * `detectChords` one for one only under the same options, while chords inside
- * `analyze` carry their own Roman numeral relative to the result key. This
- * holds those sentences to the engine.
+ * The analysis pages say `chordFunctionalAnalysis` returns the chords
+ * `detectChords` finds under the same options, each timed and carrying its
+ * Roman numeral and harmonic function, while chords inside `analyze` carry
+ * their own Roman numeral relative to the result key. This holds those
+ * sentences to the engine.
  */
 
 const SAMPLE_RATE = 22_050;
@@ -63,21 +64,29 @@ describe('chordFunctionalAnalysis alignment', () => {
     analyzed = wasm.analyze(samples, SAMPLE_RATE);
   }, 30_000);
 
-  it('labels detectChords one for one under the same options', () => {
+  it('returns the chords detectChords finds under the same options', () => {
     expect(tunedRoman).toHaveLength(tunedChords.chords.length);
-    // A chord rooted on the tonic reads as a I-family label.
-    expect(tunedChords.chords.some(({ root }) => root === 0)).toBe(true);
     tunedChords.chords.forEach((chord, i) => {
-      if (chord.root === 0) expect(tunedRoman[i]).toMatch(/^I(?![IV])/);
+      expect(tunedRoman[i]).toMatchObject({ root: chord.root, start: chord.start, end: chord.end });
     });
   });
 
-  it('gives a list of another length under other options', () => {
-    expect(bareRoman.length).not.toBe(tunedRoman.length);
+  it('labels each chord with a Roman numeral and a harmonic function', () => {
+    // A chord rooted on the tonic reads as a I-family label.
+    expect(tunedRoman.some(({ root }) => root === 0)).toBe(true);
+    for (const entry of tunedRoman) {
+      if (entry.root === 0)
+        expect(entry).toMatchObject({
+          roman: expect.stringMatching(/^I(?![IV])/),
+          function: 'tonic',
+        });
+      if (entry.root === 7) expect(entry.function).toBe('dominant');
+    }
+    expect(bareRoman.every(({ roman }) => roman !== '')).toBe(true);
   });
 
   it('attaches Roman numerals to the chords returned by analyze', () => {
-    expect(analyzed.key).toMatchObject({ root: 0, mode: 0 });
+    expect(analyzed.key).toMatchObject({ root: 0, mode: 'major' });
     expect(analyzed.chords).toContainEqual(expect.objectContaining({ root: 0, romanNumeral: 'I' }));
     expect(analyzed.chords).toContainEqual(expect.objectContaining({ root: 7, romanNumeral: 'V' }));
     expect(analyzed.chords).toContainEqual(
