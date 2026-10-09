@@ -1,6 +1,6 @@
-import type { EngineCaptureStatus, EngineTransportState } from '../index';
-import type { SonareEngineClipPageRequestMessage, SonareEngineSyncErrorMessage, SonareRealtimeEngineNodeCapabilities, SonareRealtimeEngineNodeOptions, SonareWorkletExternalMidiEvent } from './messages';
-import { type SonareClipPageRequestRingBuffer, type SonareEngineCommandRecord, type SonareEngineCommandRingBuffer, type SonareEngineTelemetryRecord, type SonareEngineTelemetryRingBuffer, type SonareExternalMidiRingBuffer, type SonareMeterRingBuffer, type SonareScopeRingBuffer, type SonareWorkletMeterSnapshot, type SonareWorkletScopeSnapshot } from './protocol';
+import type { EngineCaptureStatus, EngineTransportState } from '../index.js';
+import type { SonareEngineClipPageRequestMessage, SonareEngineSyncErrorMessage, SonareRealtimeEngineNodeCapabilities, SonareRealtimeEngineNodeOptions, SonareWorkletExternalMidiEvent } from './messages.js';
+import { type SonareClipPageRequestRingBuffer, type SonareEngineCommandRecord, type SonareEngineCommandRingBuffer, type SonareEngineTelemetryRecord, type SonareEngineTelemetryRingBuffer, type SonareExternalMidiRingBuffer, type SonareMeterRingBuffer, type SonareScopeRingBuffer, type SonareWorkletMeterSnapshot, type SonareWorkletScopeSnapshot } from './protocol.js';
 export declare class SonareRealtimeEngineNode {
     readonly node: AudioWorkletNode;
     readonly capabilities: SonareRealtimeEngineNodeCapabilities;
@@ -30,7 +30,7 @@ export declare class SonareRealtimeEngineNode {
     private readonly insertGainReductionRequests;
     private resolveReady;
     private rejectReady;
-    private destroyed;
+    private readonly epoch;
     private constructor();
     /** Subscribes to control-plane sync rejections reported by the worklet. */
     onSyncError(listener: (message: SonareEngineSyncErrorMessage) => void): () => void;
@@ -38,9 +38,13 @@ export declare class SonareRealtimeEngineNode {
     play(sampleTime?: number): boolean;
     /** Queues a reset of the master's integrated-loudness accumulator. */
     resetMasterLoudnessMeter(sampleTime?: number): boolean;
+    /** Queues a reset of every mixer and effect processor to its prepared state. */
+    resetProcessorState(sampleTime?: number): boolean;
     stop(sampleTime?: number): boolean;
     seekSample(timelineSample: number, sampleTime?: number): boolean;
     seekPpq(ppq: number, sampleTime?: number): boolean;
+    /** Whether the node could queue one more well-formed command now; queues nothing. */
+    hasCommandRoom(): boolean;
     sendCommand(command: SonareEngineCommandRecord): boolean;
     requestCaptureStatus(): Promise<EngineCaptureStatus>;
     requestCapturedAudio(): Promise<Float32Array[]>;
@@ -61,9 +65,14 @@ export declare class SonareRealtimeEngineNode {
     onMeter(callback: (meter: SonareWorkletMeterSnapshot) => void): () => void;
     onScope(callback: (scope: SonareWorkletScopeSnapshot) => void): () => void;
     /**
-     * Subscribe to external-MIDI batches drained from the engine (one call per
-     * render block that produced events), already lowered to MIDI 1.0 bytes for a
-     * Web MIDI output port. Returns an unsubscribe function.
+     * Subscribe to batches of external-MIDI events drained from the engine,
+     * already lowered to MIDI 1.0 bytes for a Web MIDI output port. Each event
+     * carries its absolute `renderFrame`; a batch is not a render block. With
+     * postMessage transport a batch holds one block's events; with the SAB ring
+     * it holds whatever accumulated since the previous poll (every 16 ms), which
+     * may span many blocks. While subscribed, the poll consumes the ring, so a
+     * manual {@link pollMidiOut} sees only what arrived since. Returns an
+     * unsubscribe function.
      */
     onMidiOut(callback: (events: SonareWorkletExternalMidiEvent[]) => void): () => void;
     /**

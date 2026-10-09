@@ -1,4 +1,4 @@
-import type { MixOptions, MixResult } from './public_types';
+import type { MixOptions, MixResult } from './public_types.js';
 export declare function mixingScenePresetNames(): string[];
 /**
  * Get a built-in mixing scene preset serialized as JSON. This is the canonical
@@ -26,13 +26,13 @@ export interface MixStereoRequest extends MixOptions {
  *
  * The true-peak fields are not integrators and need no streaming: each is a
  * max-hold over the block just processed and is valid from the first one,
- * flooring only on silence. This facade mixes the whole input as a single block,
- * which is the whole-signal case, so the block-edge under-read documented on
- * `MixMeterSnapshot.truePeakDbL` does not apply to the reading here.
+ * flooring only on silence. This facade mixes the whole input as a single block
+ * and flushes the meters after it, so the reading matches `meteringTruePeakDb`
+ * over the same signal exactly.
  *
  * @param leftChannels - Per-strip left input buffers (all the same length)
  * @param rightChannels - Per-strip right input buffers (all the same length)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz, `[8000, 384000]` (default: 48000)
  * @param options - Per-strip mix options (trim, fader, pan, width, mute)
  */
 export declare function mixStereo(request: MixStereoRequest): MixResult;

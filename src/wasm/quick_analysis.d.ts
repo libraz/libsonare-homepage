@@ -1,7 +1,7 @@
-import type { AcousticOptions, AcousticResult, AnalysisResult, AnalyzeBpmOptions, AnalyzeDynamicsOptions, AnalyzeRhythmOptions, AnalyzeTimbreOptions, ChordAnalysisResult, ChordDetectionOptions, Key, KeyCandidate, KeyDetectionOptions, MeterEstimate, RirResult, RirSynthOptions, RoomEstimateOptions, RoomEstimateResult, RoomMorphOptions, RoomMorphResult } from './public_types';
-import { Mode, PitchClass } from './public_types';
+import type { AcousticOptions, AcousticResult, AnalysisResult, AnalyzeBpmOptions, AnalyzeDynamicsOptions, AnalyzeRhythmOptions, AnalyzeTimbreOptions, Chord, ChordAnalysisResult, ChordDetectionOptions, ChordFunctionsInput, ChordFunctionsKey, DetectKeyOptions, FunctionalChord, KeyCandidate, KeyDetection, KeyDetectionOptions, MeterEstimate, RirResult, RirSynthOptions, RoomEstimateOptions, RoomEstimateResult, RoomGeometryFromEstimateOptions, RoomGeometryOptions, RoomMorphOptions, RoomMorphResult } from './public_types.js';
+import { Mode, PitchClass } from './public_types.js';
 import type { ProgressCallback } from './sonare.js';
-import type { ValidateOptions } from './validation';
+import type { ValidateOptions } from './validation.js';
 type GuardedOptions = ValidateOptions;
 /** Canonical request form for one-shot analysis functions. */
 export interface SamplesRequest extends GuardedOptions {
@@ -25,7 +25,9 @@ export interface OnsetDetectOptions {
 export interface DetectOnsetsRequest extends SamplesRequest, OnsetDetectOptions {
 }
 /** Canonical request form for key detection functions. */
-export interface DetectKeyRequest extends KeyDetectionOptions, SamplesRequest {
+export interface DetectKeyRequest extends DetectKeyOptions, SamplesRequest {
+}
+export interface DetectKeyCandidatesRequest extends KeyDetectionOptions, SamplesRequest {
 }
 /** Canonical request form for analysis with synchronous progress reporting. */
 export interface AnalyzeWithProgressRequest extends SamplesRequest {
@@ -43,6 +45,14 @@ export interface ChordFunctionalAnalysisRequest extends DetectChordsRequest {
     /** Musical mode; defaults to {@link Mode.Major}. */
     keyMode?: Mode;
 }
+/** Canonical request form for labelling known chords with their function in a key. */
+export interface ChordFunctionsRequest<T extends ChordFunctionsInput = Chord> {
+    /** `detectChords`' timed result or its `chords` array, or the same shape built by hand. */
+    chords: readonly T[] | {
+        chords: readonly T[];
+    };
+    key: ChordFunctionsKey;
+}
 /** Canonical request form for impulse-response analysis. */
 export interface AnalyzeImpulseResponseRequest extends SamplesRequest {
     nOctaveBands?: number;
@@ -53,6 +63,14 @@ export interface DetectAcousticRequest extends AcousticOptions, SamplesRequest {
 }
 /** Canonical request form for equivalent-room estimation. */
 export interface EstimateRoomRequest extends RoomEstimateOptions, SamplesRequest {
+}
+/** The room fields of an estimate that {@link roomGeometryFromEstimate} reads. */
+export type RoomGeometryEstimate = Pick<RoomEstimateResult, 'lengthM' | 'widthM' | 'heightM'> & {
+    bandAbsorption?: Float32Array | number[];
+};
+/** Canonical request form for {@link roomGeometryFromEstimate}. */
+export interface RoomGeometryFromEstimateRequest extends RoomGeometryFromEstimateOptions {
+    estimate: RoomGeometryEstimate;
 }
 /** Canonical request form for room-reverb morphing. */
 export interface RoomMorphRequest extends RoomMorphOptions, GuardedOptions {
@@ -80,16 +98,17 @@ export declare function detectBpm(samples: Float32Array, sampleRate?: number, op
 /**
  * Detect musical key from audio samples.
  *
- * The chroma is read at concert A440; a tuning offset is applied through
- * {@link analyze}'s `tuning` option (and to chords through {@link detectChords}).
+ * The chroma is read at concert A440 unless `tuning` says otherwise: a semitone
+ * fraction in `[-0.5, 0.5)`, or `'auto'` to measure it from the audio. The
+ * result reports the tuning used.
  *
  * @param samples - Audio samples (mono, float32)
  * @param sampleRate - Sample rate in Hz (default: 22050)
- * @returns Detected key
+ * @returns Detected key and the tuning its chroma was built with
  */
-export declare function detectKey(request: DetectKeyRequest): Key;
-export declare function detectKey(samples: Float32Array, sampleRate?: number, options?: KeyDetectionOptions): Key;
-export declare function detectKeyCandidates(request: DetectKeyRequest): KeyCandidate[];
+export declare function detectKey(request: DetectKeyRequest): KeyDetection;
+export declare function detectKey(samples: Float32Array, sampleRate?: number, options?: DetectKeyOptions): KeyDetection;
+export declare function detectKeyCandidates(request: DetectKeyCandidatesRequest): KeyCandidate[];
 export declare function detectKeyCandidates(samples: Float32Array, sampleRate?: number, options?: KeyDetectionOptions): KeyCandidate[];
 /**
  * Detect onset times from audio samples.
@@ -129,14 +148,31 @@ export declare function detectDownbeats(samples: Float32Array, sampleRate?: numb
 export declare function detectChords(request: DetectChordsRequest): ChordAnalysisResult;
 export declare function detectChords(samples: Float32Array, sampleRate?: number, options?: ChordDetectionOptions): ChordAnalysisResult;
 /**
+ * Label chords that are already known with their Roman numeral and harmonic
+ * function in a key. Nothing is re-detected.
+ *
+ * `chords` is {@link detectChords}' result or its `chords` array, or the same
+ * shape built by hand (only `root` and `quality` are read). `key` is
+ * `{ root, mode }`, e.g. {@link detectKey}'s result. Returns the same timed
+ * entries with `roman` (`'I'`, `'V7'`, `'vi'`; `'N.C.'` for an unknown chord)
+ * and `function` (`'tonic'`, `'subdominant'`, `'dominant'`, `'chromatic'` for a
+ * root outside the key's scale, `'none'` for an unknown chord) added. Every mode
+ * other than minor reads the major scale.
+ */
+export declare function chordFunctions(request: ChordFunctionsRequest): FunctionalChord[];
+export declare function chordFunctions<T extends ChordFunctionsInput>(request: ChordFunctionsRequest<T>): FunctionalChord<T>[];
+/**
  * Functional (Roman-numeral) harmonic analysis of the detected chord
  * progression, relative to the given key. Mirrors the C-ABI
  * `sonare_chord_functional_analysis` and the Node/Python `chordFunctionalAnalysis`.
  *
- * @returns One Roman-numeral label (e.g. "I", "IV", "V", "vi") per detected chord
+ * Runs {@link detectChords} followed by {@link chordFunctions} in the given key.
+ *
+ * @returns The timed chord entries with `roman` (e.g. "I", "IV", "V", "vi") and
+ *   `function` added
  */
-export declare function chordFunctionalAnalysis(request: ChordFunctionalAnalysisRequest): string[];
-export declare function chordFunctionalAnalysis(samples: Float32Array, keyRoot: PitchClass, keyMode?: Mode, sampleRate?: number, options?: ChordDetectionOptions): string[];
+export declare function chordFunctionalAnalysis(request: ChordFunctionalAnalysisRequest): FunctionalChord[];
+export declare function chordFunctionalAnalysis(samples: Float32Array, keyRoot: PitchClass, keyMode?: Mode, sampleRate?: number, options?: ChordDetectionOptions): FunctionalChord[];
 /**
  * Options for {@link analyze}. Every field is optional and falls back to the
  * core default when omitted.
@@ -193,13 +229,14 @@ export interface MusicAnalyzeOptions {
      */
     meterDenominator?: number;
     /**
-     * Tuning offset of the recording in fractions of a semitone, the unit
-     * `estimateTuning` returns; must be in `[-0.5, 0.5)`. Every chroma the
-     * analysis builds (key, chords, sections) is shifted by it, so a recording
-     * that is not at A440 reads its key and chords on its own pitch grid.
-     * Default 0 (concert A440).
+     * Tuning offset of the recording in fractions of a semitone; must be in
+     * `[-0.5, 0.5)`. Every chroma the analysis builds (key, chords, sections) is
+     * shifted by it, so a recording that is not at A440 reads its key and chords
+     * on its own pitch grid. `'auto'` measures it from the audio. The value used,
+     * given or measured, is the result's `tuning`; {@link referenceHzToTuning}
+     * converts a reference pitch to this unit. Default 0 (concert A440).
      */
-    tuning?: number;
+    tuning?: number | 'auto';
 }
 export interface MusicAnalyzeRequest extends SamplesRequest, MusicAnalyzeOptions {
 }
@@ -313,8 +350,11 @@ export declare function analyzeImpulseResponse(samples: Float32Array, sampleRate
 export declare function detectAcoustic(request: DetectAcousticRequest): AcousticResult;
 export declare function detectAcoustic(samples: Float32Array, sampleRate?: number, options?: AcousticOptions): AcousticResult;
 /**
- * Synthesize a room impulse response from shoebox geometry. `hasError` is true
- * when the source/listener falls outside the room (the RIR is then empty).
+ * Synthesize a room impulse response from shoebox geometry.
+ *
+ * @throws SonareError when the geometry, placement or timing is unusable (for
+ *   example a source outside the room); the message leads with the diagnostic
+ *   code, such as `acoustic.source_outside_room`.
  */
 export declare function synthesizeRir(options?: RirSynthOptions): RirResult;
 /**
@@ -323,6 +363,21 @@ export declare function synthesizeRir(options?: RirSynthOptions): RirResult;
  */
 export declare function estimateRoom(request: EstimateRoomRequest): RoomEstimateResult;
 export declare function estimateRoom(samples: Float32Array, sampleRate?: number, options?: RoomEstimateOptions): RoomEstimateResult;
+/**
+ * Turn a room estimate into the geometry {@link synthesizeRir} takes.
+ *
+ * The pair to {@link estimateRoom}: the estimate's `lengthM`, `widthM`,
+ * `heightM` and `bandAbsorption` are already `synthesizeRir`'s names, so this
+ * merges the placement in and drops what the estimate does not converge on. The
+ * estimate carries no placement, so `source` and `listener` are set only when
+ * given; an omitted one is left to `synthesizeRir`'s own default, which may fall
+ * outside a small estimated room. Absorption bands that did not converge are
+ * left out, so the scalar `absorption` applies.
+ *
+ * @throws RangeError when the estimate has no measurable dimensions (NaN).
+ */
+export declare function roomGeometryFromEstimate(request: RoomGeometryFromEstimateRequest): RoomGeometryOptions;
+export declare function roomGeometryFromEstimate(estimate: RoomGeometryEstimate, options?: RoomGeometryFromEstimateOptions): RoomGeometryOptions;
 /**
  * Morph a recording's reverberation toward a target room (creative FX, not
  * dereverberation).
@@ -369,7 +424,8 @@ export interface RhythmAnalysisResult {
      * third figure rather than either tempo entry point's: measured against
      * synthesized click trains it differs from both at every sample rate, and
      * lands closer to the known tempo than either. Analysed at the sample rate
-     * you pass, so `nFft` and `hopLength` are in samples of your buffer.
+     * you pass: `nFft` is a window length in samples at 22050 Hz, rescaled to
+     * that rate, and `hopLength` is in samples of your buffer.
      */
     bpm: number;
     beatIntervals: Float32Array;

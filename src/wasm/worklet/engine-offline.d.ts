@@ -1,5 +1,6 @@
-import type { EngineCaptureStatus, EngineMarker, EngineTrackLane, RealtimeEngine } from '../index';
-import type { SonareEngineSyncCaptureMessage, SonareEngineTransportFacade } from './messages';
+import type { EngineCaptureStatus, EngineMarker, EngineTrackLane, RealtimeEngine } from '../index.js';
+import { type EngineCommitContext } from './engine-commit.js';
+import type { SonareEngineSyncCaptureMessage, SonareEngineTransportFacade } from './messages.js';
 /** Capture configuration options accepted by the engine's `configureCapture`. */
 export interface CaptureOptions {
     bufferFrames: number;
@@ -13,11 +14,15 @@ export interface CaptureOptions {
 }
 /**
  * Normalizes capture options into the resolved config carried by the
- * `syncCapture` message, applying defaults and refusing a non-integer count.
+ * `syncCapture` message, applying defaults and refusing every value either
+ * engine would refuse, so both can apply it without failing halfway after the
+ * capture buffer was already replaced.
  *
  * @param options Raw capture options.
  * @param defaultChannels Channel count to use when `options.channels` is unset.
- * @throws RangeError if a frame count, channel count or offset is not an integer.
+ * @throws RangeError if a frame count, channel count or offset is not an
+ *   integer, the source is not 'output' or 'input', or the monitor gain is not
+ *   a finite 32-bit float.
  */
 export declare function buildCaptureConfig(options: CaptureOptions, defaultChannels: number): Omit<SonareEngineSyncCaptureMessage, 'type'>;
 /**
@@ -25,16 +30,13 @@ export declare function buildCaptureConfig(options: CaptureOptions, defaultChann
  * realtime node (sample-accurate command transport), the offline engine it
  * mirrors, and the tempo/loop setters plus playing-state bookkeeping.
  */
-export interface EngineTransportContext {
+export interface EngineTransportContext extends EngineCommitContext {
     readonly sampleRate: number;
     realtimeNode: {
         play(sampleTime?: number): boolean;
         stop(sampleTime?: number): boolean;
-        seekPpq(ppq: number, sampleTime?: number): boolean;
-        seekSample(timelineSample: number, sampleTime?: number): boolean;
     };
     offlineEngine: RealtimeEngine;
-    flushOfflineMirror(): void;
     setTransportPlaying(playing: boolean): void;
     flushPendingInstrumentSync(): void;
     setTempo(bpm: number): void;

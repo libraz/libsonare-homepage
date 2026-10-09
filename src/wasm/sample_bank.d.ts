@@ -1,4 +1,4 @@
-import type { SampleDesc, SampleZoneDesc } from './instrument_types';
+import type { SampleDesc, SampleZoneDesc } from './instrument_types.js';
 /**
  * Host-supplied PCM for the sample synthesis engine: a bank of float samples
  * plus key/velocity keymaps, bound alongside a {@link SynthPatch} whose
@@ -80,4 +80,6 @@ export declare class SampleBank {
     delete(): void;
     /** Alias for {@link SampleBank.delete}, provided for cross-binding (Node) compatibility. */
     destroy(): void;
+    /** Releases the handle through {@link delete}, so the instance works with `using`. */
+    [Symbol.dispose](): void;
 }

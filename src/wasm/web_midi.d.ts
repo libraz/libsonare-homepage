@@ -1,4 +1,4 @@
-import type { MidiCcBindOptions } from './realtime_engine';
+import type { MidiCcBindOptions } from './realtime_engine.js';
 export interface WebMidiEngine {
     bindMidiCc(channel: number, controller: number, paramId: number, options?: MidiCcBindOptions): void;
     setMidiInputSource(destinationId?: number): void;

@@ -1,4 +1,4 @@
-import type { TempogramMode } from './public_types';
+import type { TempogramMode } from './public_types.js';
 import type { WasmCyclicTempogramResult, WasmFrameResult, WasmTempogramResult, WasmTrimResult } from './sonare.js';
 export declare function tone(request?: ToneRequest): Float32Array;
 export declare function tone(frequency?: number, sampleRate?: number, duration?: number, phase?: number, amplitude?: number): Float32Array;
@@ -129,6 +129,7 @@ export interface FixLengthRequest {
 export interface FixFramesRequest {
     frames: Int32Array;
     xMin?: number;
+    /** Upper bound; omit for none. Negative is refused. */
     xMax?: number;
     pad?: boolean;
 }
@@ -241,13 +242,13 @@ export declare function midiToHz(midi: number): number;
 /**
  * Convert frequency in Hz to note name.
  *
- * Every frequency with no note answers `"?"` rather than throwing: zero,
- * negative, past the representable MIDI range, and non-finite alike. A default
- * `pitchPyin` track fills unvoiced frames with NaN, so mapping one through this
- * yields `"?"` at those frames.
+ * A default `pitchPyin` track fills unvoiced frames with NaN, so drop those
+ * frames before mapping the track through this.
  *
  * @param hz - Frequency in Hz
  * @returns Note name (e.g., "A4", "C#5")
+ * @throws {@link SonareError} with `InvalidParameter` for a frequency with no
+ * note: zero, negative, past the representable MIDI range, and non-finite alike.
  */
 export declare function hzToNote(hz: number): string;
 /**
@@ -255,6 +256,8 @@ export declare function hzToNote(hz: number): string;
  *
  * @param note - Note name (e.g., "A4", "C#5")
  * @returns Frequency in Hz
+ * @throws {@link SonareError} with `InvalidParameter` for a name that does not
+ * parse or whose octave is out of range.
  */
 export declare function noteToHz(note: string): number;
 /**

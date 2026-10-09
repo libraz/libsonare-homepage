@@ -1,8 +1,6 @@
-import type { EngineMeterTelemetry, EngineTelemetry } from '../index';
+import type { EngineMeterTelemetryWide, EngineTelemetry } from '../index.js';
 export declare const ENGINE_MIXER_PARAM_FADER_DB = 1;
 export declare const ENGINE_MIXER_PARAM_PAN = 2;
-export declare function engineMixerLaneTarget(laneIndex: number, paramKind: number): number;
-export declare function engineMixerBusTarget(busIndex: number, paramKind: number): number;
 export declare function engineMixerMasterTarget(paramKind: number): number;
 export interface SonareWorkletMeterSnapshot {
     type: 'meter';
@@ -14,13 +12,10 @@ export interface SonareWorkletMeterSnapshot {
     rmsDbR: number;
     correlation: number;
     /**
-     * Left-channel inter-sample (true) peak in dB, from the ITU-R BS.1770-4
-     * polyphase reconstruction at 4x. A streaming measurement, and the render
-     * quantum makes that visible here: the centered reconstruction stencil needs a
-     * few future samples a realtime path does not have, so each block's last
-     * samples read marginally low (about 0.1 dB across 64..8192-sample blocks on a
-     * near-Nyquist tone, always under-reading). Use `meteringTruePeakDb` over the
-     * whole signal for an exact dBTP number.
+     * Left-channel inter-sample (true) peak in dB, from the ITU-R BS.1770-4 polyphase reconstruction
+     * at 4x. A streaming measurement that runs one reconstruction-filter group delay (a few samples)
+     * behind the block, so every value has its whole stencil and the reading does not depend on the
+     * block size. Use `meteringTruePeakDb` over the whole signal for an exact dBTP number.
      */
     truePeakDbL: number;
     /** Right-channel inter-sample (true) peak in dB. See {@link truePeakDbL}. */
@@ -43,6 +38,20 @@ export interface SonareWorkletMeterSnapshot {
      * does not carry it, so ring hosts read it with `pollInsertGainReduction(targetId)`.
      */
     insertGainReductionDb?: number[];
+    /**
+     * Number of metered planes of the target, present together with the per-channel
+     * arrays below only when it exceeds 2 (a 5.1 or 7.1 bus). The stereo fields
+     * above always hold planes 0 and 1.
+     */
+    channelCount?: number;
+    /** Per-plane peak in dBFS (length `channelCount`), canonical WAVE order. */
+    peakDb?: number[];
+    /** Per-plane RMS in dBFS (length `channelCount`). */
+    rmsDb?: number[];
+    /** Per-plane inter-sample (true) peak in dB (length `channelCount`). See {@link truePeakDbL}. */
+    truePeakDb?: number[];
+    /** Per-plane pre-trim input peak in dBFS (length `channelCount`). */
+    inputPeakDb?: number[];
 }
 export interface SonareWorkletSpectrumSnapshot {
     type: 'spectrum';
@@ -50,7 +59,11 @@ export interface SonareWorkletSpectrumSnapshot {
     bands: Float32Array;
 }
 export declare const SONARE_METER_RING_HEADER_INTS = 4;
-export declare const SONARE_METER_RING_RECORD_FLOATS = 16;
+export declare const SONARE_METER_RING_PROTOCOL_VERSION = 2;
+export declare const SONARE_METER_RING_MAX_CHANNELS = 8;
+export declare const SONARE_METER_RING_CHANNEL_COUNT_OFFSET = 16;
+export declare const SONARE_METER_RING_PLANES_OFFSET = 17;
+export declare const SONARE_METER_RING_RECORD_FLOATS: number;
 export declare const SONARE_SPECTRUM_RING_HEADER_INTS = 5;
 export declare const SONARE_SCOPE_RING_HEADER_INTS = 6;
 export declare const SONARE_SCOPE_RING_RECORD_PREFIX_FLOATS = 5;
@@ -69,7 +82,7 @@ export declare const SONARE_ENGINE_TELEMETRY_RECORD_BYTES = 48;
 export declare const SONARE_CLIP_PAGE_REQUEST_RING_HEADER_INTS = 5;
 export declare const SONARE_CLIP_PAGE_REQUEST_RING_RECORD_UINT32S = 2;
 export declare const SONARE_EXTERNAL_MIDI_RING_HEADER_INTS = 5;
-export declare const SONARE_EXTERNAL_MIDI_RING_RECORD_UINT32S = 4;
+export declare const SONARE_EXTERNAL_MIDI_RING_RECORD_UINT32S = 5;
 export declare enum SonareEngineCommandType {
     SetParam = 0,
     SetParamSmoothed = 1,
@@ -90,7 +103,8 @@ export declare enum SonareEngineCommandType {
     SetMarker = 16,
     SeekMarker = 17,
     SetTrackMonitorMode = 26,
-    ResetMasterLoudnessMeter = 28
+    ResetMasterLoudnessMeter = 28,
+    ResetProcessorState = 29
 }
 export declare enum SonareEngineTelemetryType {
     ProcessBlock = 0,
@@ -278,6 +292,14 @@ export declare const SONARE_FLOOR_DB = -120;
  * silence.
  */
 export declare function toDb(value: number): number;
+/** Loads the cursor held in header `slot` of a ring with `capacity` records. */
+export declare function loadSonareRingCursor(header: Int32Array, slot: number, capacity: number): number;
+/** Publishes `cursor` advanced by `count` records into header `slot`. */
+export declare function storeSonareRingCursor(header: Int32Array, slot: number, cursor: number, capacity: number, count?: number): void;
+/** Number of records from cursor `from` up to cursor `to`. */
+export declare function sonareRingCursorDistance(from: number, to: number, capacity: number): number;
+/** Record index of `cursor` within the ring. */
+export declare function sonareRingCursorSlot(cursor: number, capacity: number): number;
 export declare function isRecord(value: unknown): value is Record<string, unknown>;
 export declare function sonareMeterRingBufferByteLength(capacity: number): number;
 export declare function createSonareMeterRingBuffer(capacity?: number): SonareMeterRingBuffer;
@@ -296,6 +318,8 @@ export declare function sonareClipPageRequestRingBufferByteLength(capacity: numb
 export declare function sonareExternalMidiRingBufferByteLength(capacity: number): number;
 export declare function externalMidiRingFromSharedBuffer(sharedBuffer: SharedArrayBuffer, fallbackCapacity?: number): SharedExternalMidiRingWriter;
 export declare function createSonareExternalMidiRingBuffer(capacity?: number): SonareExternalMidiRingBuffer;
+/** Whether one more external-MIDI record fits the ring now. */
+export declare function sonareExternalMidiRingHasRoom(ring: SharedExternalMidiRingWriter): boolean;
 /** Write one lowered MIDI-1 event without allocations from the audio worklet. */
 export declare function pushSonareExternalMidiRingBuffer(ring: SharedExternalMidiRingWriter, destinationId: number, renderFrame: number, byteWord: number, byteCount: number): boolean;
 /** Main-thread drain. It is intentionally the only place MIDI byte arrays are built. */
@@ -313,7 +337,16 @@ export declare function createSonareEngineCommandRingBuffer(capacity?: number): 
 export declare function createSonareEngineTelemetryRingBuffer(capacity?: number): SonareEngineTelemetryRingBuffer;
 export declare function pushSonareEngineCommandRingBuffer(ring: SonareEngineCommandRingBuffer, command: SonareEngineCommandRecord): boolean;
 export declare function popSonareEngineCommandRingBuffer(ring: SonareEngineCommandRingBuffer): SonareEngineCommandRecord | null;
+/** Whether one more command fits the ring now. */
+export declare function sonareEngineCommandRingHasRoom(ring: SonareEngineCommandRingBuffer): boolean;
+/** Commands published to the ring and not yet popped. */
+export declare function pendingSonareEngineCommandCount(ring: SonareEngineCommandRingBuffer): number;
 export declare function writeSonareEngineTelemetryRingBuffer(ring: SonareEngineTelemetryRingBuffer, telemetry: SonareEngineTelemetryRecord): void;
+/**
+ * Publishes the telemetry record written at `writeIndex` and counts, in header
+ * slot 4, every record that overwrote one a reader could no longer reach.
+ */
+export declare function commitSonareEngineTelemetryRingWrite(ring: Pick<SonareEngineTelemetryRingBuffer, 'header' | 'capacity'>, writeIndex: number): void;
 export declare function readSonareEngineTelemetryRingBuffer(ring: SonareEngineTelemetryRingBuffer, readIndex?: number): SonareEngineTelemetryRingReadResult;
 export declare function meterRingFromSharedBuffer(sharedBuffer: SharedArrayBuffer, fallbackCapacity?: number): SharedMeterRingWriter;
 export declare function spectrumRingFromSharedBuffer(sharedBuffer: SharedArrayBuffer, fallbackCapacity?: number, fallbackBands?: number): SharedSpectrumRingWriter;
@@ -336,5 +369,5 @@ export declare function writeInt64Words(view: DataView, offset: number, value: n
 /** Reconstruct a signed 64-bit safe integer stored by {@link writeInt64Words}. */
 export declare function readInt64Words(view: DataView, offset: number): number;
 export declare function telemetryFromEngine(telemetry: EngineTelemetry): SonareEngineTelemetryRecord;
-export declare function meterFromEngine(meter: EngineMeterTelemetry): SonareWorkletMeterSnapshot;
+export declare function meterFromEngine(meter: EngineMeterTelemetryWide): SonareWorkletMeterSnapshot;
 export declare function magnitudeToDb(value: number): number;

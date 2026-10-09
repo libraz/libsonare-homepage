@@ -1,4 +1,4 @@
-import type { HrtfSet } from './playback_renderer';
+import type { HrtfSet } from './playback_renderer.js';
 /**
  * The playback renderer configuration document, in the schema
  * `schemas/playback-renderer-config.schema.json` (also shipped as the

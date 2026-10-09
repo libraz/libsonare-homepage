@@ -1,4 +1,4 @@
-import type { VocalAnalysis, VocalApplyRequest, VocalCapabilities, VocalCreateRequest, VocalEditResult, VocalHistoryState, VocalNotesResult, VocalPitchEvaluation, VocalRenderRequest, VocalRenderResult, VocalRestoreRequest, VocalStateBytes, VocalStateToken, VocalUint64 } from './public_types_vocal_edit';
+import type { VocalAnalysis, VocalApplyRequest, VocalCapabilities, VocalCreateRequest, VocalEditResult, VocalHistoryState, VocalNotesResult, VocalPitchEvaluation, VocalRenderRequest, VocalRenderResult, VocalRestoreRequest, VocalStateBytes, VocalStateToken, VocalUint64 } from './public_types_vocal_edit.js';
 export type VocalWorkerMutation = {
     kind: 'beginEdit';
     expectedRevision?: VocalUint64;

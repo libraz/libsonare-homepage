@@ -1,8 +1,8 @@
-import type { EngineCaptureStatus, RealtimeEngine } from '../index';
-import type { SonareRealtimeEngineNode } from './engine-node';
-import { type CaptureOptions } from './engine-offline';
-import type { SonareEngineSyncCaptureMessage, SonareEngineSyncMessage } from './messages';
-import { SonareEngineCommandType } from './protocol';
+import type { EngineCaptureStatus, RealtimeEngine } from '../index.js';
+import { type EngineCommitContext } from './engine-commit.js';
+import type { SonareRealtimeEngineNode } from './engine-node.js';
+import { type CaptureOptions } from './engine-offline.js';
+import type { SonareEngineSyncCaptureMessage, SonareEngineSyncMessage } from './messages.js';
 type CaptureConfig = Omit<SonareEngineSyncCaptureMessage, 'type'>;
 /**
  * Collaborator surface the capture/record/punch setters need from the owning
@@ -10,16 +10,9 @@ type CaptureConfig = Omit<SonareEngineSyncCaptureMessage, 'type'>;
  * they command and query, the channel count, the out-of-band sync poster, the
  * capture-config accessor, and the target-id resolver.
  */
-export interface EngineCaptureContext {
+export interface EngineCaptureContext extends EngineCommitContext {
     readonly offlineEngine: RealtimeEngine;
     readonly realtimeNode: SonareRealtimeEngineNode;
-    sendCommand(command: {
-        type: SonareEngineCommandType;
-        targetId?: number;
-        sampleTime?: number;
-        argFloat?: number;
-        argInt?: number;
-    }): boolean;
     readonly offlineChannelCount: number;
     postSync(message: SonareEngineSyncMessage): void;
     getCaptureConfig(): CaptureConfig | undefined;

@@ -1,4 +1,4 @@
-import type { AlignTakeToReferenceRequest, AlignTakeToReferenceResult } from './project_types';
+import type { AlignTakeToReferenceRequest, AlignTakeToReferenceResult } from './project_types.js';
 /**
  * Aligns one take to a reference timeline and returns the warp anchors that place
  * the take under it.

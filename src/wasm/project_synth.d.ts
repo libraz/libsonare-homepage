@@ -1,4 +1,4 @@
-import type { SynthEnumTables, SynthPatch } from './instrument_types';
+import type { SynthEnumTables, SynthPatch } from './instrument_types.js';
 /**
  * Runtime ABI version of the flat project POD layout exposed by this WASM
  * build. Equals {@link EXPECTED_PROJECT_ABI_VERSION} when the arrangement

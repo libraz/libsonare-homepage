@@ -7,8 +7,8 @@
  * rather than a stale artifact waiting on a rebuild.
  */
 
-import type { SplitSilenceCommonWithReportResult } from './feature_core';
-import type { StripMeteringOptions } from './mixer';
+import type { SplitSilenceCommonWithReportResult } from './feature_core.js';
+import type { StripMeteringOptions } from './mixer.js';
 import type {
   NoteEditInput,
   NoteObject,
@@ -24,8 +24,8 @@ import type {
   SonareCapabilities,
   SpectralRegionOp,
   SurroundPan,
-} from './public_types';
-import type { VocalWasmExports } from './vocal_edit';
+} from './public_types.js';
+import type { VocalWasmExports } from './vocal_edit.js';
 
 export interface SonareModuleOptions {
   locateFile?: (path: string, prefix: string) => string;
@@ -42,6 +42,11 @@ export interface WasmKeyResult {
   confidence: number;
   name: string;
   shortName: string;
+}
+
+/** A detected key with the tuning its chroma was built with. */
+export interface WasmKeyDetectionResult extends WasmKeyResult {
+  tuning: number;
 }
 
 export interface WasmKeyCandidateResult {
@@ -63,6 +68,7 @@ export interface WasmRealtimeVoiceChangerPodConfig {
   formantBody: number;
   formantBrightness: number;
   formantNasal: number;
+  formantMode: 'relative' | 'absolute';
   eqHighpassHz: number;
   eqBodyDb: number;
   eqPresenceDb: number;
@@ -134,6 +140,7 @@ export interface WasmSectionResult {
   type: number;
   start: number;
   end: number;
+  /** Median frame RMS in the section over the loudest section's, in `[0, 1]`. */
   energyLevel: number;
   confidence: number;
   name: string;
@@ -197,6 +204,7 @@ export interface WasmAnalysisResult {
   rhythm: WasmRhythmResult;
   melody: WasmMelodyContourResult;
   form: string;
+  tuning: number;
 }
 
 export interface WasmBpmHypothesis {
@@ -241,6 +249,7 @@ export interface WasmDynamicsAnalysisResult {
 
 export interface WasmStreamConfigDefaults {
   sampleRate: number;
+  /** Window in samples at 44100 Hz; rescaled below that rate, never shorter than `hopLength`. */
   nFft: number;
   hopLength: number;
   nMels: number;
@@ -284,6 +293,7 @@ export interface WasmTimbreAnalysisResult {
 
 export interface WasmChordAnalysisResult {
   chords: WasmChordResult[];
+  tuning: number;
 }
 
 export interface WasmAcousticResult {
@@ -344,8 +354,6 @@ export interface WasmRoomMorphResult {
 export interface WasmRirResult {
   rir: Float32Array;
   sampleRate: number;
-  hasError: boolean;
-  errorMessage: string;
   diagnostics: WasmRirDiagnostic[];
 }
 
@@ -362,12 +370,12 @@ export interface WasmRoomEstimateOptions {
 
 export interface WasmRoomEstimateResult {
   volume: number;
-  length: number;
-  width: number;
-  height: number;
+  lengthM: number;
+  widthM: number;
+  heightM: number;
   drrDb: number;
   confidence: number;
-  absorptionBands: Float32Array;
+  bandAbsorption: Float32Array;
   rt60Bands: Float32Array;
 }
 
@@ -420,6 +428,7 @@ export interface WasmClipDetection {
   flatRunCount: number;
   longestFlatRunSamples: number;
   flatSampleCount: number;
+  /** Largest run level once the two highest runs are set aside; 0 when there are none. */
   flatLevel: number;
 }
 
@@ -626,6 +635,11 @@ export interface WasmMelResult {
   nFrames: number;
   sampleRate: number;
   hopLength: number;
+  nFft: number;
+  fmin: number;
+  fmax: number;
+  htk: boolean;
+  isDb: boolean;
   power: Float32Array;
   db: Float32Array;
 }
@@ -633,6 +647,15 @@ export interface WasmMelResult {
 export interface WasmMfccResult {
   nMfcc: number;
   nFrames: number;
+  sampleRate: number;
+  hopLength: number;
+  nFft: number;
+  nMels: number;
+  fmin: number;
+  fmax: number;
+  htk: boolean;
+  isDb: boolean;
+  lifter: number;
   coefficients: Float32Array;
 }
 
@@ -743,6 +766,7 @@ export interface WasmBoundaryOptions {
   nMfcc?: number;
   nChroma?: number;
   peakDistance?: number;
+  referenceWindow?: number;
   useMfcc?: boolean;
   useChroma?: boolean;
 }
@@ -819,6 +843,12 @@ export interface WasmMasteringResult {
    * with, not because nothing needed replacing.
    */
   nonFiniteSubstitutionCount: number;
+}
+
+export interface WasmStreamingLoudnessGainResult {
+  loudnessStaticGainDb: number;
+  truePeakDb: number;
+  integratedLufs: number;
 }
 
 export interface WasmLoudnessMatchResult {
@@ -924,12 +954,10 @@ export interface WasmMixMeterSnapshot {
   integratedLufs: number;
   gainReductionDb: number;
   /**
-   * Left-channel inter-sample (true) peak in dB, from the ITU-R BS.1770-4
-   * polyphase reconstruction at 4x. A streaming measurement: the centered
-   * reconstruction stencil needs a few future samples a realtime path does not
-   * have, so each block's last samples read marginally low (about 0.1 dB across
-   * 64..8192-sample blocks on a near-Nyquist tone, always under-reading). Use
-   * `meteringTruePeakDb` over the whole signal for an exact dBTP number.
+   * Left-channel inter-sample (true) peak in dB, from the ITU-R BS.1770-4 polyphase reconstruction
+   * at 4x. A streaming measurement that runs one reconstruction-filter group delay (a few samples)
+   * behind the block, so every value has its whole stencil and the reading does not depend on the
+   * block size. Use `meteringTruePeakDb` over the whole signal for an exact dBTP number.
    */
   truePeakDbL: number;
   /** Right-channel inter-sample (true) peak in dB. See {@link truePeakDbL}. */
@@ -1155,12 +1183,10 @@ export interface WasmEngineMeterTelemetry {
   rmsDbL: number;
   rmsDbR: number;
   /**
-   * Left-channel inter-sample (true) peak in dB, from the ITU-R BS.1770-4
-   * polyphase reconstruction at 4x. A streaming measurement: the centered
-   * reconstruction stencil needs a few future samples a realtime path does not
-   * have, so each block's last samples read marginally low (about 0.1 dB across
-   * 64..8192-sample blocks on a near-Nyquist tone, always under-reading). Use
-   * `meteringTruePeakDb` over the whole signal for an exact dBTP number.
+   * Left-channel inter-sample (true) peak in dB, from the ITU-R BS.1770-4 polyphase reconstruction
+   * at 4x. A streaming measurement that runs one reconstruction-filter group delay (a few samples)
+   * behind the block, so every value has its whole stencil and the reading does not depend on the
+   * block size. Use `meteringTruePeakDb` over the whole signal for an exact dBTP number.
    */
   truePeakDbL: number;
   /** Right-channel inter-sample (true) peak in dB. See {@link truePeakDbL}. */
@@ -1194,13 +1220,11 @@ export interface WasmEngineMeterTelemetryWide {
   peakDb: number[];
   rmsDb: number[];
   /**
-   * Per-plane inter-sample (true) peak in dB (length `channelCount`), from the
-   * ITU-R BS.1770-4 polyphase reconstruction at 4x. A streaming measurement: the
-   * centered reconstruction stencil needs a few future samples a realtime path
-   * does not have, so each block's last samples read marginally low (about
-   * 0.1 dB across 64..8192-sample blocks on a near-Nyquist tone, always
-   * under-reading). Use `meteringTruePeakDb` over the whole signal for an exact
-   * dBTP number.
+   * Per-plane inter-sample (true) peak in dB (length `channelCount`), from the ITU-R BS.1770-4
+   * polyphase reconstruction at 4x. A streaming measurement that runs one reconstruction-filter
+   * group delay (a few samples) behind the block, so every value has its whole stencil and the
+   * reading does not depend on the block size. Use `meteringTruePeakDb` over the whole signal for
+   * an exact dBTP number.
    */
   truePeakDb: number[];
   /** Maximum inter-sample peak across channels in dB. See {@link truePeakDb}. */
@@ -1366,7 +1390,7 @@ export interface WasmExternalMidiEvent {
    * every external port.
    */
   destinationId: number;
-  /** Sample position within the producing block at which the event fires. */
+  /** Absolute engine device frame at which the event fires, never an offset within a block. */
   renderFrame: number;
   /** MIDI 1.0 status + data bytes (1..3 entries). */
   bytes: number[];
@@ -1391,6 +1415,10 @@ export interface WasmRealtimeEngine {
   insertParameterConstructedValue: (paramId: number) => number;
   seekSample: (timelineSample: number, renderFrame?: number) => void;
   settleParameters: () => void;
+  primeOfflineParameters: (numChannels: number, blockSize: number) => void;
+  resetProcessorState: (renderFrame?: number) => void;
+  tailSamples: () => number;
+  graphLatencySamplesQ8: () => number;
   settleInsertParameters: () => void;
   flushControlCommands: () => void;
   applyCommandsDueNowPreservingFuture: () => void;
@@ -1420,10 +1448,20 @@ export interface WasmRealtimeEngine {
   graphNodeCount: () => number;
   graphConnectionCount: () => number;
   setClips: (clips: WasmEngineClip[]) => void;
+  upsertClip: (clip: WasmEngineClip) => void;
+  removeClip: (clipId: number) => void;
   prebakedClipChannels: (clipId: number) => Float32Array[] | null;
   clipCount: () => number;
   setTrackLanes: (lanes: Array<number | WasmEngineTrackLane>) => void;
   setLaneSidechain: (trackId: number, insertIndex: number, sourceTrackId: number) => void;
+  canSetLaneSidechain: (trackId: number, insertIndex: number, sourceTrackId: number) => number;
+  canSetBusSidechain: (
+    busId: number,
+    insertIndex: number,
+    sourceKind: number,
+    sourceId: number,
+  ) => number;
+  canSetMasterSidechain: (insertIndex: number, sourceKind: number, sourceId: number) => number;
   applyProjectTimeline: (timelineId: number) => void;
   setTrackBuses: (buses: WasmEngineBus[]) => void;
   setBusSidechain: (
@@ -1511,6 +1549,8 @@ export interface WasmRealtimeEngine {
     insertIndex: number,
     paramName: string,
   ) => number;
+  resolveTrackLaneAutomationId: (trackId: number, paramName: string) => number;
+  resolveBusAutomationId: (busId: number, paramName: string) => number;
   resolveMasterInsertAutomationId: (insertIndex: number, paramName: string) => number;
   resolveBusInsertAutomationId: (busId: number, insertIndex: number, paramName: string) => number;
   resolveInstrumentAutomationId: (destinationId: number, paramName: string) => number;
@@ -1561,13 +1601,13 @@ export interface WasmRealtimeEngine {
     minValue: number,
     maxValue: number,
   ) => void;
-  bindMidiCcBinding: (binding: import('./project_types').ProjectMidiCcBinding) => void;
+  bindMidiCcBinding: (binding: import('./project_types.js').ProjectMidiCcBinding) => void;
   clearMidiCcBindings: () => void;
   midiCcBindingCount: () => number;
   setControllerProfile: (destinationId: number, presetName: string) => void;
   bindController: (
     destinationId: number,
-    binding: import('./instrument_types').ControllerBinding,
+    binding: import('./instrument_types.js').ControllerBinding,
   ) => void;
   clearControllerBindings: (destinationId: number) => void;
   controllerBindingCount: (destinationId: number) => number;
@@ -1575,27 +1615,27 @@ export interface WasmRealtimeEngine {
   controllerVelocityMeaningful: (destinationId: number) => boolean;
   setControllerNoteTracking: (
     destinationId: number,
-    dimension: import('./instrument_types').MpeDimension | number,
-    tracking: import('./instrument_types').NoteTracking | number,
+    dimension: import('./instrument_types.js').MpeDimension | number,
+    tracking: import('./instrument_types.js').NoteTracking | number,
   ) => void;
   controllerNoteTracking: (
     destinationId: number,
-    dimension: import('./instrument_types').MpeDimension | number,
-  ) => import('./instrument_types').NoteTracking | number;
+    dimension: import('./instrument_types.js').MpeDimension | number,
+  ) => import('./instrument_types.js').NoteTracking | number;
   setArticulation: (
     destinationId: number,
     channel: number,
-    articulation: import('./instrument_types').Articulation | number,
+    articulation: import('./instrument_types.js').Articulation | number,
   ) => void;
   articulation: (
     destinationId: number,
     channel: number,
-  ) => import('./instrument_types').Articulation | number;
+  ) => import('./instrument_types.js').Articulation | number;
   legatoFallbackCount: (destinationId: number) => number;
   setPartRig: (
     destinationId: number,
     part: number,
-    mode: import('./instrument_types').PartRigMode | number,
+    mode: import('./instrument_types.js').PartRigMode | number,
     insertsJson: string | undefined,
   ) => void;
   setMidiFx: (destinationId: number, configJson: string) => void;
@@ -1759,7 +1799,7 @@ export interface WasmRealtimeEngine {
   delete: () => void;
 }
 
-export type { ProgressCallback } from './public_types';
+export type { ProgressCallback } from './public_types.js';
 export type TempogramMode = 'autocorrelation' | 'auto' | 'ac' | 'cosine' | 0 | 1;
 
 export interface WasmSynthEnumTables {
@@ -1813,6 +1853,8 @@ export interface SonareModule {
   vocalEditLastErrorDetail: VocalWasmExports['vocalEditLastErrorDetail'];
 
   audioFromMemory: (bytes: Uint8Array) => WasmAudioFromMemoryResult;
+  decodeChannels: (bytes: Uint8Array) => { sampleRate: number; channels: Float32Array[] };
+  downmix: (channels: Float32Array[], targetLayout: number) => Float32Array[];
 
   // Quick API (high-level)
   detectBpm: (samples: Float32Array, sampleRate: number) => number;
@@ -1828,7 +1870,8 @@ export interface SonareModule {
     modes: number[],
     profileType: number,
     genreHint: string,
-  ) => WasmKeyResult;
+    tuning: number | 'auto',
+  ) => WasmKeyDetectionResult;
   _detectKeyCandidates: (
     samples: Float32Array,
     sampleRate: number,
@@ -1861,7 +1904,7 @@ export interface SonareModule {
     keyMode: number,
     detectInversions: boolean,
     chromaMethod: number,
-    tuning: number,
+    tuning: number | 'auto',
   ) => WasmChordAnalysisResult;
   chordFunctionalAnalysis: (
     samples: Float32Array,
@@ -1880,8 +1923,14 @@ export interface SonareModule {
     useKeyContext: boolean,
     detectInversions: boolean,
     chromaMethod: number,
-    tuning: number,
-  ) => string[];
+    tuning: number | 'auto',
+  ) => WasmChordAnalysisResult & { roman: string[]; functions: string[] };
+  chordFunctions: (
+    chords: ArrayLike<{ root: number; quality: number }>,
+    keyRoot: number,
+    keyMode: number,
+  ) => { roman: string[]; functions: string[] };
+  acousticSelectorNames: () => { materialPreset: string[]; mode: string[] };
   analyze: (samples: Float32Array, sampleRate: number, options: object) => WasmAnalysisResult;
   estimateMeter: (
     beatTimes: ArrayLike<number>,
@@ -1984,6 +2033,12 @@ export interface SonareModule {
     sampleRate: number,
     options: WasmRoomMorphOptions,
   ) => WasmRoomMorphResult;
+  roomGeometryFromEstimate?: (estimate: {
+    lengthM: number;
+    widthM: number;
+    heightM: number;
+    bandAbsorption?: Float32Array | number[];
+  }) => Omit<WasmRoomGeometryOptions, 'materialPreset'>;
   analyzeWithProgress: (
     samples: Float32Array,
     sampleRate: number,
@@ -2187,6 +2242,7 @@ export interface SonareModule {
     samplesPerBucket: number;
   }>;
 
+  scaleMaskForMode: (root: number, mode: number | string) => number;
   scaleQuantizeMidi: (
     root: number,
     modeMask: number,
@@ -2354,7 +2410,7 @@ export interface SonareModule {
       mode?: string;
       targetMidi?: number;
       scaleRoot?: number;
-      scaleModeMask?: number;
+      scaleModeMask?: number | string;
       referenceMidi?: number;
       retuneAmount?: number;
       maxCorrectionSemitones?: number;
@@ -2364,6 +2420,27 @@ export interface SonareModule {
       voicedProb?: Float32Array;
     },
   ) => Float32Array;
+  autoTune: (
+    samples: Float32Array,
+    sampleRate: number,
+    key: { root: number; mode: number | string } | null,
+    options: {
+      strength?: number;
+      retuneSpeedMs?: number;
+      vibratoThresholdCents?: number;
+      maxCorrectionSemitones?: number;
+      referenceMidi?: number;
+    },
+  ) => {
+    samples: Float32Array;
+    key: {
+      root: number;
+      mode: number;
+      confidence: number;
+      name: string;
+      shortName: string;
+    };
+  };
   noteStretch: (
     samples: Float32Array,
     sampleRate: number,
@@ -2493,6 +2570,7 @@ export interface SonareModule {
     sampleRate: number,
     pitchSemitones: number,
     formantFactor: number,
+    formantMode: string,
   ) => Float32Array;
   voiceChangeRealtime: (
     samples: Float32Array,
@@ -2531,6 +2609,7 @@ export interface SonareModule {
   masteringInsertParamNames: (name: string) => string[];
   // These return JSON the facade parses; the raw module has no object shape here.
   masteringInsertParamInfo: (name: string) => string;
+  masteringInsertParamInfoAtRate: (name: string, sampleRate: number) => string;
   masteringProcessorCatalog: () => string;
   masteringAmpPresetCatalog: () => string;
   masteringInsertTiming: (
@@ -2664,6 +2743,18 @@ export interface SonareModule {
     sampleRate: number,
     options: object,
   ) => WasmDenoiseLinkedResult;
+  masteringRepairAnalyze: (
+    channels: Float32Array[],
+    sampleRate: number,
+    requestJson: string,
+  ) => string;
+  masteringRepairApply: (
+    channels: Float32Array[],
+    sampleRate: number,
+    stagesJson: string,
+    progressCallback: ProgressCallback | null,
+    cancelCallback: (() => boolean) | null,
+  ) => { channels: Float32Array[]; reportsJson: string };
   masteringRepairDeclip: (
     samples: Float32Array,
     sampleRate: number,
@@ -2796,6 +2887,17 @@ export interface SonareModule {
     sampleRate: number,
     config: Record<string, unknown>,
   ) => WasmMasteringStereoChainResult;
+  masteringStreamingLoudnessGain: (
+    samples: Float32Array,
+    sampleRate: number,
+    config: Record<string, unknown>,
+  ) => WasmStreamingLoudnessGainResult;
+  masteringStreamingLoudnessGainStereo: (
+    left: Float32Array,
+    right: Float32Array,
+    sampleRate: number,
+    config: Record<string, unknown>,
+  ) => WasmStreamingLoudnessGainResult;
   masteringChainWithProgress: (
     samples: Float32Array,
     sampleRate: number,
@@ -2998,7 +3100,7 @@ export interface SonareModule {
 
   // Features - Inverse reconstruction
   melToStft: (
-    melPower: Float32Array,
+    power: Float32Array,
     nMels: number,
     nFrames: number,
     sampleRate: number,
@@ -3008,7 +3110,7 @@ export interface SonareModule {
     htk: boolean,
   ) => WasmStftPowerResult;
   melToAudio: (
-    melPower: Float32Array,
+    power: Float32Array,
     nMels: number,
     nFrames: number,
     sampleRate: number,
@@ -3129,6 +3231,8 @@ export interface SonareModule {
     zeroPos: boolean,
   ) => Int32Array;
   pitchTuning: (frequencies: Float32Array, resolution: number, binsPerOctave: number) => number;
+  tuningToReferenceHz: (tuning: number, a4: number) => number;
+  referenceHzToTuning: (hz: number, a4: number) => number;
   estimateTuning: (
     samples: Float32Array,
     sampleRate: number,
@@ -3190,7 +3294,9 @@ export interface SonareModule {
   melToHz: (mel: number) => number;
   hzToMidi: (hz: number) => number;
   midiToHz: (midi: number) => number;
+  /** Throws a `SonareError` (`InvalidParameter`) for a frequency that is not finite and positive. */
   hzToNote: (hz: number) => string;
+  /** Throws a `SonareError` (`InvalidParameter`) for a name that does not parse or an octave out of range. */
   noteToHz: (note: string) => number;
   framesToTime: (frames: number, sr: number, hopLength: number) => number;
   timeToFrames: (time: number, sr: number, hopLength: number) => number;
@@ -3742,12 +3848,10 @@ export interface WasmMixerMeterSnapshot {
   rmsDbR: number;
   correlation: number;
   /**
-   * Left-channel inter-sample (true) peak in dB, from the ITU-R BS.1770-4
-   * polyphase reconstruction at 4x. A streaming measurement: the centered
-   * reconstruction stencil needs a few future samples a realtime path does not
-   * have, so each block's last samples read marginally low (about 0.1 dB across
-   * 64..8192-sample blocks on a near-Nyquist tone, always under-reading). Use
-   * `meteringTruePeakDb` over the whole signal for an exact dBTP number.
+   * Left-channel inter-sample (true) peak in dB, from the ITU-R BS.1770-4 polyphase reconstruction
+   * at 4x. A streaming measurement that runs one reconstruction-filter group delay (a few samples)
+   * behind the block, so every value has its whole stencil and the reading does not depend on the
+   * block size. Use `meteringTruePeakDb` over the whole signal for an exact dBTP number.
    */
   truePeakDbL: number;
   /** Right-channel inter-sample (true) peak in dB. See {@link truePeakDbL}. */
@@ -3857,6 +3961,7 @@ export interface WasmMixer {
     right: Float32Array;
     sampleRate: number;
   };
+  flushMeters: () => void;
   delete: () => void;
 }
 
@@ -3869,6 +3974,7 @@ export interface WasmGoniometerPoint {
 export interface WasmChordChange {
   root: number;
   quality: number;
+  name: string;
   startTime: number;
   confidence: number;
 }
@@ -3877,6 +3983,7 @@ export interface WasmBarChord {
   barIndex: number;
   root: number;
   quality: number;
+  name: string;
   startTime: number;
   confidence: number;
 }
@@ -3893,8 +4000,11 @@ export interface WasmProgressiveEstimate {
   key: number;
   keyMinor: boolean;
   keyConfidence: number;
+  keyName: string | null;
+  keyShortName: string | null;
   chordRoot: number;
   chordQuality: number;
+  chordName: string;
   chordConfidence: number;
   chordStartTime: number;
   chordProgression: WasmChordChange[];

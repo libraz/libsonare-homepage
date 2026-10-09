@@ -2,8 +2,8 @@
  * Harmonic/percussive separation: the masked split and the two shortcuts
  * that return a single component.
  */
-import type { HpssResult } from './public_types';
-import type { ValidateOptions } from './validation';
+import type { HpssResult } from './public_types.js';
+import type { ValidateOptions } from './validation.js';
 /** Canonical request form for HPSS. */
 export interface HpssRequest {
     samples: Float32Array;

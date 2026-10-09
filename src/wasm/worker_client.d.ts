@@ -1,6 +1,6 @@
-import { ErrorCode } from './errors';
-import type { MasterAudioRequest, MasterAudioStereoRequest } from './mastering_chain';
-import type { DetectChordsRequest, DetectKeyRequest, MusicAnalyzeRequest, SamplesRequest } from './quick_analysis';
+import { ErrorCode } from './errors.js';
+import type { MasterAudioRequest, MasterAudioStereoRequest } from './mastering_chain.js';
+import type { DetectChordsRequest, DetectKeyRequest, MusicAnalyzeRequest, SamplesRequest } from './quick_analysis.js';
 type WorkerRequest<T> = Omit<T, 'onProgress'>;
 /** Progress relayed from the Worker at the core's native progress boundaries. */
 export interface OfflineWorkerProgress {
@@ -73,17 +73,17 @@ export declare class OfflineWorkerClient {
     private usesEventTarget;
     constructor(options?: OfflineWorkerClientOptions);
     /** Dispatch full music analysis to the Worker. */
-    analyze(request: WorkerRequest<MusicAnalyzeRequest>, options?: OfflineWorkerCallOptions): OfflineWorkerTask<ReturnType<typeof import('./quick_analysis').analyze>>;
+    analyze(request: WorkerRequest<MusicAnalyzeRequest>, options?: OfflineWorkerCallOptions): OfflineWorkerTask<ReturnType<typeof import('./quick_analysis.js').analyze>>;
     /** Dispatch BPM detection to the Worker. */
     detectBpm(request: SamplesRequest, options?: OfflineWorkerCallOptions): OfflineWorkerTask<number>;
     /** Dispatch key detection to the Worker. */
-    detectKey(request: DetectKeyRequest, options?: OfflineWorkerCallOptions): OfflineWorkerTask<ReturnType<typeof import('./quick_analysis').detectKey>>;
+    detectKey(request: DetectKeyRequest, options?: OfflineWorkerCallOptions): OfflineWorkerTask<ReturnType<typeof import('./quick_analysis.js').detectKey>>;
     /** Dispatch chord detection to the Worker. */
-    detectChords(request: DetectChordsRequest, options?: OfflineWorkerCallOptions): OfflineWorkerTask<ReturnType<typeof import('./quick_analysis').detectChords>>;
+    detectChords(request: DetectChordsRequest, options?: OfflineWorkerCallOptions): OfflineWorkerTask<ReturnType<typeof import('./quick_analysis.js').detectChords>>;
     /** Dispatch mono preset mastering to the Worker. */
-    masterAudio(request: WorkerRequest<MasterAudioRequest>, options?: OfflineWorkerCallOptions): OfflineWorkerTask<ReturnType<typeof import('./mastering_chain').masterAudio>>;
+    masterAudio(request: WorkerRequest<MasterAudioRequest>, options?: OfflineWorkerCallOptions): OfflineWorkerTask<ReturnType<typeof import('./mastering_chain.js').masterAudio>>;
     /** Dispatch stereo preset mastering to the Worker. */
-    masterAudioStereo(request: WorkerRequest<MasterAudioStereoRequest>, options?: OfflineWorkerCallOptions): OfflineWorkerTask<ReturnType<typeof import('./mastering_chain').masterAudioStereo>>;
+    masterAudioStereo(request: WorkerRequest<MasterAudioStereoRequest>, options?: OfflineWorkerCallOptions): OfflineWorkerTask<ReturnType<typeof import('./mastering_chain.js').masterAudioStereo>>;
     /** Stop accepting calls, reject outstanding work, and release the Worker if owned. */
     dispose(): void;
     private call;

@@ -1,11 +1,11 @@
 {
   "_sources": {
-    "src/wasm/sonare.wasm": "c8da8a74b1359ac46229d60ca5eb1c4b"
+    "src/wasm/sonare.wasm": "74b33991904a10438174e8120a52d5cd"
   },
   "measured_against": {
     "version": "1.8.2",
-    "md5": "c8da8a74b1359ac46229d60ca5eb1c4b",
-    "buildDate": "2026-10-06T08:12:33.826Z"
+    "md5": "74b33991904a10438174e8120a52d5cd",
+    "buildDate": "2026-10-09T08:06:10.126Z"
   },
   "probe": {
     "chord": [
@@ -33,7 +33,7 @@
     {
       "type": "01 00",
       "changes_signal": true,
-      "distance": 0.03078,
+      "distance": 0.03079,
       "level_ratio": 1.017,
       "live_slots": [
         0,
@@ -50,7 +50,7 @@
     {
       "type": "01 01",
       "changes_signal": true,
-      "distance": 0.06827,
+      "distance": 0.06835,
       "level_ratio": 1.175,
       "live_slots": [
         0,
@@ -69,8 +69,8 @@
     {
       "type": "01 02",
       "changes_signal": true,
-      "distance": 0.0121,
-      "level_ratio": 1.1,
+      "distance": 0.01341,
+      "level_ratio": 1.097,
       "live_slots": [
         0,
         1,
@@ -82,7 +82,7 @@
     {
       "type": "01 03",
       "changes_signal": true,
-      "distance": 0.1494,
+      "distance": 0.1497,
       "level_ratio": 1.571,
       "live_slots": [
         0,
@@ -96,8 +96,8 @@
     {
       "type": "01 10",
       "changes_signal": true,
-      "distance": 0.3801,
-      "level_ratio": 0.05711,
+      "distance": 0.3793,
+      "level_ratio": 0.0571,
       "live_slots": [
         0,
         1,
@@ -111,8 +111,8 @@
     {
       "type": "01 11",
       "changes_signal": true,
-      "distance": 0.2849,
-      "level_ratio": 0.0316,
+      "distance": 0.2847,
+      "level_ratio": 0.03155,
       "live_slots": [
         0,
         1,
@@ -126,8 +126,8 @@
     {
       "type": "01 20",
       "changes_signal": true,
-      "distance": 0.1878,
-      "level_ratio": 0.7179,
+      "distance": 0.1881,
+      "level_ratio": 0.7178,
       "live_slots": [
         0,
         1,
@@ -142,8 +142,8 @@
     {
       "type": "01 21",
       "changes_signal": true,
-      "distance": 0.0371,
-      "level_ratio": 0.7705,
+      "distance": 0.03709,
+      "level_ratio": 0.7704,
       "live_slots": [
         0,
         1,
@@ -161,8 +161,8 @@
     {
       "type": "01 22",
       "changes_signal": true,
-      "distance": 0.1393,
-      "level_ratio": 0.6672,
+      "distance": 0.1394,
+      "level_ratio": 0.6667,
       "live_slots": [
         0,
         3,
@@ -179,7 +179,7 @@
       "type": "01 23",
       "changes_signal": true,
       "distance": 0.1099,
-      "level_ratio": 0.4639,
+      "level_ratio": 0.9272,
       "live_slots": [
         2,
         3,
@@ -196,7 +196,7 @@
       "type": "01 24",
       "changes_signal": true,
       "distance": 0.08817,
-      "level_ratio": 0.4774,
+      "level_ratio": 0.9544,
       "live_slots": [
         0,
         1,
@@ -213,8 +213,8 @@
     {
       "type": "01 25",
       "changes_signal": true,
-      "distance": 0.04835,
-      "level_ratio": 0.795,
+      "distance": 0.04842,
+      "level_ratio": 0.7947,
       "live_slots": [
         0,
         1,
@@ -227,8 +227,8 @@
     {
       "type": "01 26",
       "changes_signal": true,
-      "distance": 0.028,
-      "level_ratio": 0.8663,
+      "distance": 0.02799,
+      "level_ratio": 0.8662,
       "live_slots": [
         0,
         1,
@@ -241,8 +241,8 @@
     {
       "type": "01 30",
       "changes_signal": true,
-      "distance": 0.02201,
-      "level_ratio": 0.6067,
+      "distance": 0.02204,
+      "level_ratio": 0.6066,
       "live_slots": [
         0,
         1,
@@ -255,8 +255,8 @@
     {
       "type": "01 31",
       "changes_signal": true,
-      "distance": 0.361,
-      "level_ratio": 0.3435,
+      "distance": 0.3615,
+      "level_ratio": 0.3432,
       "live_slots": [
         0,
         1,
@@ -270,8 +270,8 @@
     {
       "type": "01 40",
       "changes_signal": true,
-      "distance": 0.02734,
-      "level_ratio": 0.5334,
+      "distance": 0.02737,
+      "level_ratio": 1.067,
       "live_slots": [
         0,
         1,
@@ -288,8 +288,8 @@
     {
       "type": "01 41",
       "changes_signal": true,
-      "distance": 0.1722,
-      "level_ratio": 0.5089,
+      "distance": 0.1724,
+      "level_ratio": 0.5088,
       "live_slots": [
         0,
         1,
@@ -306,8 +306,8 @@
     {
       "type": "01 42",
       "changes_signal": true,
-      "distance": 0.06491,
-      "level_ratio": 0.6064,
+      "distance": 0.06499,
+      "level_ratio": 1.213,
       "live_slots": [
         2,
         3,
@@ -322,8 +322,8 @@
     {
       "type": "01 43",
       "changes_signal": true,
-      "distance": 0.07242,
-      "level_ratio": 0.5258,
+      "distance": 0.07245,
+      "level_ratio": 1.051,
       "live_slots": [
         0,
         1,
@@ -338,8 +338,8 @@
     {
       "type": "01 44",
       "changes_signal": true,
-      "distance": 0.182,
-      "level_ratio": 0.2655,
+      "distance": 0.1819,
+      "level_ratio": 0.5306,
       "live_slots": [
         0,
         1,
@@ -353,8 +353,8 @@
     {
       "type": "01 50",
       "changes_signal": true,
-      "distance": 0.04057,
-      "level_ratio": 0.6418,
+      "distance": 0.04063,
+      "level_ratio": 1.078,
       "live_slots": [
         0,
         1,
@@ -370,8 +370,8 @@
     {
       "type": "01 51",
       "changes_signal": true,
-      "distance": 0.07476,
-      "level_ratio": 0.7969,
+      "distance": 0.08469,
+      "level_ratio": 1.266,
       "live_slots": [
         0,
         1,
@@ -390,8 +390,8 @@
     {
       "type": "01 52",
       "changes_signal": true,
-      "distance": 0.06297,
-      "level_ratio": 0.7256,
+      "distance": 0.06301,
+      "level_ratio": 1.218,
       "live_slots": [
         0,
         1,
@@ -410,8 +410,8 @@
     {
       "type": "01 53",
       "changes_signal": true,
-      "distance": 0.09409,
-      "level_ratio": 0.7685,
+      "distance": 0.09436,
+      "level_ratio": 1.29,
       "live_slots": [
         0,
         1,
@@ -432,8 +432,8 @@
     {
       "type": "01 54",
       "changes_signal": true,
-      "distance": 0.07071,
-      "level_ratio": 0.7084,
+      "distance": 0.07077,
+      "level_ratio": 1.189,
       "live_slots": [
         0,
         2,
@@ -448,8 +448,8 @@
     {
       "type": "01 55",
       "changes_signal": true,
-      "distance": 0.2839,
-      "level_ratio": 1.461,
+      "distance": 0.2837,
+      "level_ratio": 2.924,
       "live_slots": [
         0,
         1,
@@ -464,8 +464,8 @@
     {
       "type": "01 56",
       "changes_signal": true,
-      "distance": 0.07802,
-      "level_ratio": 0.7364,
+      "distance": 0.07816,
+      "level_ratio": 1.145,
       "live_slots": [
         1,
         15,
@@ -477,8 +477,8 @@
     {
       "type": "01 57",
       "changes_signal": true,
-      "distance": 0.1756,
-      "level_ratio": 0.4345,
+      "distance": 0.1754,
+      "level_ratio": 0.7297,
       "live_slots": [
         0,
         1,
@@ -497,8 +497,8 @@
     {
       "type": "01 60",
       "changes_signal": true,
-      "distance": 0.0447,
-      "level_ratio": 0.4357,
+      "distance": 0.05422,
+      "level_ratio": 0.7526,
       "live_slots": [
         0,
         1,
@@ -519,8 +519,8 @@
     {
       "type": "01 61",
       "changes_signal": true,
-      "distance": 0.1084,
-      "level_ratio": 0.7465,
+      "distance": 0.105,
+      "level_ratio": 1.47,
       "live_slots": [
         0,
         1,
@@ -537,8 +537,8 @@
     {
       "type": "01 70",
       "changes_signal": true,
-      "distance": 0.1622,
-      "level_ratio": 0.602,
+      "distance": 0.1621,
+      "level_ratio": 0.6014,
       "live_slots": [
         0,
         1,
@@ -550,8 +550,8 @@
     {
       "type": "01 71",
       "changes_signal": true,
-      "distance": 0.1782,
-      "level_ratio": 0.6991,
+      "distance": 0.1781,
+      "level_ratio": 0.6988,
       "live_slots": [
         0,
         19
@@ -560,7 +560,7 @@
     {
       "type": "01 72",
       "changes_signal": true,
-      "distance": 0.02606,
+      "distance": 0.02608,
       "level_ratio": 0.9955,
       "live_slots": [
         0,
@@ -576,8 +576,8 @@
     {
       "type": "01 73",
       "changes_signal": true,
-      "distance": 0.06569,
-      "level_ratio": 0.8494,
+      "distance": 0.06579,
+      "level_ratio": 0.8493,
       "live_slots": [
         0,
         1,
@@ -597,8 +597,8 @@
     {
       "type": "02 00",
       "changes_signal": true,
-      "distance": 0.3463,
-      "level_ratio": 0.03175,
+      "distance": 0.3461,
+      "level_ratio": 0.06351,
       "live_slots": [
         0,
         1,
@@ -615,8 +615,8 @@
     {
       "type": "02 01",
       "changes_signal": true,
-      "distance": 0.2932,
-      "level_ratio": 0.04016,
+      "distance": 0.2931,
+      "level_ratio": 0.05462,
       "live_slots": [
         0,
         1,
@@ -634,8 +634,8 @@
     {
       "type": "02 02",
       "changes_signal": true,
-      "distance": 0.3183,
-      "level_ratio": 0.03009,
+      "distance": 0.3182,
+      "level_ratio": 0.05049,
       "live_slots": [
         0,
         1,
@@ -652,8 +652,8 @@
     {
       "type": "02 03",
       "changes_signal": true,
-      "distance": 0.3766,
-      "level_ratio": 0.03289,
+      "distance": 0.3753,
+      "level_ratio": 0.06576,
       "live_slots": [
         0,
         1,
@@ -670,8 +670,8 @@
     {
       "type": "02 04",
       "changes_signal": true,
-      "distance": 0.311,
-      "level_ratio": 0.03532,
+      "distance": 0.31,
+      "level_ratio": 0.04795,
       "live_slots": [
         0,
         1,
@@ -689,8 +689,8 @@
     {
       "type": "02 05",
       "changes_signal": true,
-      "distance": 0.3205,
-      "level_ratio": 0.0314,
+      "distance": 0.3196,
+      "level_ratio": 0.05264,
       "live_slots": [
         0,
         1,
@@ -707,8 +707,8 @@
     {
       "type": "02 06",
       "changes_signal": true,
-      "distance": 0.07518,
-      "level_ratio": 0.351,
+      "distance": 0.07508,
+      "level_ratio": 0.7001,
       "live_slots": [
         0,
         1,
@@ -724,8 +724,8 @@
     {
       "type": "02 07",
       "changes_signal": true,
-      "distance": 0.07189,
-      "level_ratio": 0.4423,
+      "distance": 0.0719,
+      "level_ratio": 0.7398,
       "live_slots": [
         0,
         1,
@@ -742,8 +742,8 @@
     {
       "type": "02 08",
       "changes_signal": true,
-      "distance": 0.07295,
-      "level_ratio": 0.4631,
+      "distance": 0.07327,
+      "level_ratio": 0.7754,
       "live_slots": [
         0,
         1,
@@ -759,8 +759,8 @@
     {
       "type": "02 09",
       "changes_signal": true,
-      "distance": 0.1872,
-      "level_ratio": 0.6618,
+      "distance": 0.1891,
+      "level_ratio": 2.3,
       "live_slots": [
         0,
         1,
@@ -778,8 +778,8 @@
     {
       "type": "02 0A",
       "changes_signal": true,
-      "distance": 0.1844,
-      "level_ratio": 0.5979,
+      "distance": 0.1899,
+      "level_ratio": 2.084,
       "live_slots": [
         0,
         1,
@@ -799,7 +799,7 @@
       "type": "02 0B",
       "changes_signal": true,
       "distance": 0.1178,
-      "level_ratio": 0.3689,
+      "level_ratio": 1.475,
       "live_slots": [
         0,
         1,
@@ -818,8 +818,8 @@
     {
       "type": "03 00",
       "changes_signal": true,
-      "distance": 0.2309,
-      "level_ratio": 0.03415,
+      "distance": 0.2311,
+      "level_ratio": 0.03413,
       "live_slots": [
         0,
         1,
@@ -838,8 +838,8 @@
     {
       "type": "04 00",
       "changes_signal": true,
-      "distance": 0.2441,
-      "level_ratio": 0.01119,
+      "distance": 0.2455,
+      "level_ratio": 0.01118,
       "live_slots": [
         0,
         1,
@@ -863,8 +863,8 @@
     {
       "type": "04 01",
       "changes_signal": true,
-      "distance": 0.4207,
-      "level_ratio": 0.06989,
+      "distance": 0.4221,
+      "level_ratio": 0.06986,
       "live_slots": [
         0,
         1,
@@ -886,8 +886,8 @@
     {
       "type": "04 02",
       "changes_signal": true,
-      "distance": 0.3019,
-      "level_ratio": 0.03408,
+      "distance": 0.302,
+      "level_ratio": 0.03402,
       "live_slots": [
         0,
         1,
@@ -913,7 +913,7 @@
       "type": "04 03",
       "changes_signal": true,
       "distance": 0.1407,
-      "level_ratio": 0.2098,
+      "level_ratio": 0.2094,
       "live_slots": [
         0,
         1,
@@ -939,7 +939,7 @@
       "type": "04 04",
       "changes_signal": true,
       "distance": 0.1594,
-      "level_ratio": 0.6511,
+      "level_ratio": 0.6514,
       "live_slots": [
         0,
         1,
@@ -964,7 +964,7 @@
       "type": "04 05",
       "changes_signal": true,
       "distance": 0.1916,
-      "level_ratio": 0.005962,
+      "level_ratio": 0.005964,
       "live_slots": [
         0,
         1,
@@ -988,7 +988,7 @@
       "type": "04 06",
       "changes_signal": true,
       "distance": 0.1936,
-      "level_ratio": 0.9365,
+      "level_ratio": 0.9338,
       "live_slots": [
         0,
         1,
@@ -1013,8 +1013,8 @@
     {
       "type": "05 00",
       "changes_signal": true,
-      "distance": 0.1289,
-      "level_ratio": 0.2248,
+      "distance": 0.129,
+      "level_ratio": 0.3763,
       "live_slots": [
         0,
         1,
@@ -1040,8 +1040,8 @@
     {
       "type": "11 00",
       "changes_signal": true,
-      "distance": 0.05941,
-      "level_ratio": 0.492,
+      "distance": 0.0641,
+      "level_ratio": 0.85,
       "live_slots": [
         0,
         1,
@@ -1061,8 +1061,8 @@
     {
       "type": "11 01",
       "changes_signal": true,
-      "distance": 0.08841,
-      "level_ratio": 0.5219,
+      "distance": 0.09302,
+      "level_ratio": 0.9622,
       "live_slots": [
         0,
         1,
@@ -1083,8 +1083,8 @@
     {
       "type": "11 02",
       "changes_signal": true,
-      "distance": 0.07301,
-      "level_ratio": 0.3348,
+      "distance": 0.07307,
+      "level_ratio": 0.6694,
       "live_slots": [
         0,
         1,
@@ -1105,8 +1105,8 @@
     {
       "type": "11 03",
       "changes_signal": true,
-      "distance": 0.276,
-      "level_ratio": 0.03915,
+      "distance": 0.2771,
+      "level_ratio": 0.03922,
       "live_slots": [
         1,
         2,
@@ -1125,8 +1125,8 @@
     {
       "type": "11 04",
       "changes_signal": true,
-      "distance": 0.1328,
-      "level_ratio": 0.3857,
+      "distance": 0.1318,
+      "level_ratio": 0.3855,
       "live_slots": [
         1,
         2,
@@ -1147,8 +1147,8 @@
     {
       "type": "11 05",
       "changes_signal": true,
-      "distance": 0.1759,
-      "level_ratio": 0.5792,
+      "distance": 0.1752,
+      "level_ratio": 0.5788,
       "live_slots": [
         1,
         2,
@@ -1168,8 +1168,8 @@
     {
       "type": "11 06",
       "changes_signal": true,
-      "distance": 0.1417,
-      "level_ratio": 0.6924,
+      "distance": 0.1437,
+      "level_ratio": 0.6914,
       "live_slots": [
         1,
         2,
@@ -1191,8 +1191,8 @@
     {
       "type": "11 07",
       "changes_signal": true,
-      "distance": 0.1761,
-      "level_ratio": 0.6601,
+      "distance": 0.1764,
+      "level_ratio": 0.6599,
       "live_slots": [
         0,
         1,
@@ -1215,8 +1215,8 @@
     {
       "type": "11 08",
       "changes_signal": true,
-      "distance": 0.1164,
-      "level_ratio": 0.7265,
+      "distance": 0.1166,
+      "level_ratio": 0.7257,
       "live_slots": [
         0,
         1,

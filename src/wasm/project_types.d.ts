@@ -1,5 +1,5 @@
-import type { PROJECT_AUTOMATION_CURVE_VALUES } from './codes';
-import type { Project, ProjectTimeline } from './project_class';
+import type { PROJECT_AUTOMATION_CURVE_VALUES } from './codes.js';
+import type { Project, ProjectTimeline } from './project_class.js';
 /**
  * Expected project ABI version. Mirrors `SONARE_PROJECT_ABI_VERSION` in
  * `src/sonare_c_project.h`; checked against {@link projectAbiVersion} to detect
@@ -135,14 +135,30 @@ export interface ProjectClipCompSegment {
     /** Equal-power crossfade from the preceding segment, in PPQ (default 0 = butt join). */
     crossfadePpq?: number;
 }
-/** Descriptor for {@link Project.addLoopRecordingTakes}. */
+/**
+ * Descriptor for {@link Project.addLoopRecordingTakes}.
+ *
+ * Each loop-length span of the capture becomes a take and the last take is made
+ * active, except that a partial last take (the capture does not fill the last
+ * loop) is kept but not made active when an earlier complete take exists. A
+ * capture shorter than one loop has only the partial take, which stays active.
+ * A partial take is marked `"partial": true` in its `takes[]` entry of the project
+ * JSON (`toJson()`).
+ */
 export interface ProjectLoopRecordingDesc {
     trackId: number;
     startPpq?: number;
     loopLengthPpq: number;
-    audio: Float32Array;
+    /**
+     * Interleaved capture (with `audioChannels`), or planar: one `Float32Array`
+     * per channel, all the same length, whose count is the channel count and
+     * makes `audioChannels` irrelevant.
+     */
+    audio: Float32Array | Float32Array[];
     audioChannels?: number;
     audioSampleRate?: number;
+    /** `'keep'` (default) keeps a partial last take; `'drop'` does not create it. */
+    partialTail?: 'keep' | 'drop';
 }
 /** Result returned by {@link Project.addLoopRecordingTakes}. */
 export interface ProjectLoopRecordingResult {
@@ -550,16 +566,13 @@ export interface TranscribeOptions {
      */
     polyphonic?: boolean;
     /**
-     * Tuning reference in Hz the MIDI note numbers are measured against.
-     * Default `440`; must be finite and positive.
-     *
-     * **It is not measured for you.** A take recorded away from A440 should have
-     * its reference measured first — run `pitchPyin` and feed its F0 array to
-     * `pitchTuning` — and the answer passed in here. Measuring it internally
-     * would track the pitch twice and hide which of the two answers a wrong
-     * transcription came from.
+     * Tuning reference in Hz the MIDI note numbers are measured against, or
+     * `'auto'` to measure it from the audio before any pitch is tracked. Default
+     * `440`; a number must be finite and positive. {@link tuningToReferenceHz}
+     * converts a measured tuning to Hz, and {@link TranscribeResult.tuning}
+     * reports what was used either way, so a wrong transcription can be traced to it.
      */
-    referenceHz?: number;
+    referenceHz?: number | 'auto';
     /**
      * F0 tracker range in Hz. Both paths use these bounds; the polyphonic path
      * applies them to the salience estimator's F0 axis while its cent-spectrum
@@ -611,6 +624,12 @@ export interface TranscribeResult {
     noteCount: number;
     /** The tempo the PPQ coordinates were built on — yours when you gave one, the detected one otherwise. */
     tempoBpm: number;
+    /**
+     * Tuning the note numbers were measured against, in fractions of a semitone
+     * from concert A440: the measured value under `referenceHz: 'auto'`,
+     * otherwise the one `referenceHz` amounts to ({@link referenceHzToTuning}).
+     */
+    tuning: number;
 }
 /**
  * Request form of {@link Project.transcribeToClip}.

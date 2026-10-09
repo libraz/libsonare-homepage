@@ -1,8 +1,8 @@
 /**
  * Reverberation repair, with its detector and the room-driven configuration.
  */
-import type { RoomEstimateResult } from './public_types_acoustic';
-import type { MasteringRepairDereverbClassicalLinkedResult, MasteringRepairDereverbClassicalStereoResult, ReverbDetection } from './public_types_repair';
+import type { RoomEstimateResult } from './public_types_acoustic.js';
+import type { MasteringRepairDereverbClassicalLinkedResult, MasteringRepairDereverbClassicalStereoResult, ReverbDetection } from './public_types_repair.js';
 /** Options for `masteringRepairDereverbClassical`. */
 export interface DereverbClassicalOptions {
     threshold?: number;
@@ -21,7 +21,7 @@ export interface DereverbClassicalOptions {
 }
 export interface MasteringRepairDereverbClassicalRequest extends DereverbClassicalOptions {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
 }
 /** Request form of `masteringRepairDereverbClassicalStereo`. */
 export interface MasteringRepairDereverbClassicalStereoRequest extends DereverbClassicalOptions {
@@ -42,7 +42,7 @@ export interface MasteringRepairDereverbConfigForRoomRequest extends DereverbCla
 }
 /** Offline classical dereverberator (spectral subtraction + optional WPE). */
 export declare function masteringRepairDereverbClassical(request: MasteringRepairDereverbClassicalRequest): Float32Array;
-export declare function masteringRepairDereverbClassical(samples: Float32Array, sampleRate: number, options?: DereverbClassicalOptions): Float32Array;
+export declare function masteringRepairDereverbClassical(samples: Float32Array, sampleRate?: number, options?: DereverbClassicalOptions): Float32Array;
 /**
  * Offline classical dereverberator for a stereo pair (spectral subtraction plus an optional
  * WPE pre-stage), driven by one channel-linked mask.
@@ -55,8 +55,8 @@ export declare function masteringRepairDereverbClassical(samples: Float32Array, 
  * Every field of that report is a ratio or a fraction, so unlike the denoise pair nothing in
  * it shifts with the channel count: a stereo figure here is comparable against a mono one.
  *
- * An input shorter than `nFft` is PADDED for analysis rather than rejected, the opposite of
- * {@link masteringRepairDenoiseClassicalStereo}.
+ * An input shorter than `nFft` is padded for analysis and the output trimmed back to the input
+ * length, as {@link masteringRepairDenoiseClassicalStereo} does.
  *
  * Two report fields are gated on the WPE stage, which is off unless `wpeEnabled` is set:
  * `detected.latePredictability` and `wpePredictorNorm` are then both exactly 0, which is the
@@ -79,7 +79,7 @@ export declare function masteringRepairDereverbClassical(samples: Float32Array, 
  * ```
  */
 export declare function masteringRepairDereverbClassicalStereo(request: MasteringRepairDereverbClassicalStereoRequest): MasteringRepairDereverbClassicalStereoResult;
-export declare function masteringRepairDereverbClassicalStereo(left: Float32Array, right: Float32Array, sampleRate: number, config?: DereverbClassicalOptions): MasteringRepairDereverbClassicalStereoResult;
+export declare function masteringRepairDereverbClassicalStereo(left: Float32Array, right: Float32Array, sampleRate?: number, config?: DereverbClassicalOptions): MasteringRepairDereverbClassicalStereoResult;
 /**
  * Offline classical dereverberator for any number of channels (spectral subtraction plus an
  * optional WPE pre-stage), driven by one channel-linked mask.
@@ -99,8 +99,8 @@ export declare function masteringRepairDereverbClassicalStereo(left: Float32Arra
  * {@link masteringRepairDenoiseClassicalLinked}, whose `detected` levels are absolute and move by
  * `10*log10(N)`.
  *
- * An input shorter than `nFft` is PADDED for analysis rather than rejected — again the opposite
- * of that entry, which refuses one.
+ * An input shorter than `nFft` is padded for analysis and the output trimmed back to the input
+ * length, as that entry does.
  *
  * Two report fields are gated on the WPE stage, which is off unless `wpeEnabled` is set:
  * `detected.latePredictability` and `wpePredictorNorm` are then both exactly 0, which is the
@@ -117,7 +117,7 @@ export declare function masteringRepairDereverbClassicalStereo(left: Float32Arra
  * ```
  */
 export declare function masteringRepairDereverbClassicalLinked(request: MasteringRepairDereverbClassicalLinkedRequest): MasteringRepairDereverbClassicalLinkedResult;
-export declare function masteringRepairDereverbClassicalLinked(channels: Float32Array[], sampleRate: number, config?: DereverbClassicalOptions): MasteringRepairDereverbClassicalLinkedResult;
+export declare function masteringRepairDereverbClassicalLinked(channels: Float32Array[], sampleRate?: number, config?: DereverbClassicalOptions): MasteringRepairDereverbClassicalLinkedResult;
 /**
  * Point a dereverb config at a measured room.
  *
@@ -168,7 +168,7 @@ export declare function masteringRepairDereverbConfigForRoom(estimate: RoomEstim
 /** Request form of `masteringRepairDetectReverb`. */
 export interface MasteringRepairDetectReverbRequest extends DereverbClassicalOptions {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
 }
 /**
  * Measures reverberation without dereverberating.
@@ -176,12 +176,12 @@ export interface MasteringRepairDetectReverbRequest extends DereverbClassicalOpt
  * NOT an ISO 3382 reverberation time — use `estimateRoom` for a graded RT60. This reports what
  * {@link masteringRepairDereverbClassical} itself measures while deciding how much to subtract.
  *
- * A buffer shorter than `nFft` is PADDED for analysis, as the repair pads it, which is the
- * opposite of {@link masteringRepairDetectNoiseFloor}.
+ * A buffer shorter than `nFft` is padded for analysis, as the repair pads it and as
+ * {@link masteringRepairDetectNoiseFloor} does.
  *
  * `latePredictability` comes from the WPE stage, which runs only under `wpeEnabled` — clear by
  * default — and then only its covariance and solve; the prediction is never subtracted. A
  * default-config call therefore reports exactly 0 there as its measurement.
  */
 export declare function masteringRepairDetectReverb(request: MasteringRepairDetectReverbRequest): ReverbDetection;
-export declare function masteringRepairDetectReverb(samples: Float32Array, sampleRate: number, options?: DereverbClassicalOptions): ReverbDetection;
+export declare function masteringRepairDetectReverb(samples: Float32Array, sampleRate?: number, options?: DereverbClassicalOptions): ReverbDetection;

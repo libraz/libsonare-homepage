@@ -36,11 +36,6 @@ export declare function assertSamples(fnName: string, samples: ArrayLike<number>
  */
 export declare function assertSamplesInWindow(fnName: string, samples: ArrayLike<number>, validate: boolean, windowStart: number, windowLength: number, argName?: string): void;
 export declare function assertFiniteScalar(fnName: string, value: number, argName: string): void;
-/**
- * A NaN gamma is the automatic-bandwidth sentinel the variable-Q transform
- * documents, alongside a negative value, so only an infinity is out of domain.
- */
-export declare function assertVqtGamma(fnName: string, gamma: number): void;
 export declare function assertSampleRate(fnName: string, sampleRate: number, argName?: string): void;
 /** Validate and retain the public Audio.fromBuffer construction contract. */
 export declare function validateAudioBuffer(samples: Float32Array, sampleRate: number): void;
@@ -137,3 +132,33 @@ export declare function assertU32(fnName: string, value: number, argName: string
  */
 export declare function toInt32Array(fnName: string, values: Int32Array | ArrayLike<number>, argName: string): Int32Array;
 export declare function assertInterleavedSamples(fnName: string, samples: ArrayLike<number>, channels: number, validate: boolean): void;
+/**
+ * Convert a time in seconds to the nearest whole sample at `sampleRate`.
+ *
+ * Refuses a non-finite time, and one too large for the result to stay an exact
+ * JS integer.
+ */
+export declare function secondsToSampleCount(fnName: string, seconds: number, sampleRate: number, argName: string): number;
+/** How {@link resolveSampleBound} treats the sign of the value it resolves. */
+export type SampleBoundSign = 'non-negative' | 'signed';
+/**
+ * Resolve one time bound that is spelled either in samples or in seconds.
+ *
+ * `undefined` / `null` on both spellings is absence, and the result is
+ * `undefined` so the caller applies its own default (an end bound's default is
+ * the end of the signal). Giving both spellings is refused by name. A position
+ * is `'non-negative'`; a displacement (a time offset, which may move a note
+ * earlier) is `'signed'`. A negative value is refused, never read as "absent".
+ */
+export declare function resolveSampleBound(fnName: string, sampleValue: number | null | undefined, secValue: number | null | undefined, sampleRate: number, sampleName: string, secName: string, sign?: SampleBoundSign): number | undefined;
+/**
+ * Map an optional numeric argument onto the C value: absence (`undefined` /
+ * `null`) is the C ABI's `-1` "not given", and an explicit negative or
+ * non-finite value is refused rather than read as the same thing.
+ */
+export declare function resolveOptionalNonNegative(fnName: string, value: number | null | undefined, argName: string): number;
+/**
+ * Map an optional engine `renderFrame` onto the C value: absence is "immediate"
+ * (-1), and a negative frame is refused rather than read as the same thing.
+ */
+export declare function resolveRenderFrame(fnName: string, renderFrame: number | null | undefined): number;

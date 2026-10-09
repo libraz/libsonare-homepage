@@ -1,7 +1,7 @@
-import type { EngineTempoSegment, EngineTimeSignatureSegment, EngineTransportState, RealtimeEngine } from '../index';
-import type { SonareRealtimeEngineNode } from './engine-node';
-import type { SonareEngineSyncMessage } from './messages';
-import { SonareEngineCommandType } from './protocol';
+import type { EngineTempoSegment, EngineTimeSignatureSegment, EngineTransportState, RealtimeEngine } from '../index.js';
+import { type EngineCommitContext } from './engine-commit.js';
+import type { SonareRealtimeEngineNode } from './engine-node.js';
+import type { SonareEngineSyncMessage } from './messages.js';
 interface TimeSignature {
     numerator: number;
     denominator: number;
@@ -13,16 +13,9 @@ interface TimeSignature {
  * and getters/setters for the tempo-map and cached-transport state the engine
  * holds (so the helpers mutate it by reference).
  */
-export interface EngineTempoContext {
+export interface EngineTempoContext extends EngineCommitContext {
     readonly offlineEngine: RealtimeEngine;
     readonly realtimeNode: SonareRealtimeEngineNode;
-    sendCommand(command: {
-        type: SonareEngineCommandType;
-        targetId?: number;
-        sampleTime?: number;
-        argFloat?: number;
-        argInt?: number;
-    }): boolean;
     postSync(message: SonareEngineSyncMessage): void;
     getTempoBpm(): number;
     setTempoBpm(bpm: number): void;

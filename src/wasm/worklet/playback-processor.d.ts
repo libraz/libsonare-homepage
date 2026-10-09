@@ -1,5 +1,5 @@
-import { type WorkletInput, type WorkletOutput } from './audio_types';
-import type { SonarePlaybackDiagnosticsReplyMessage, SonarePlaybackMessage, SonarePlaybackNodeOptions, SonarePlaybackWorkletProcessorOptions, WorkletPort } from './messages';
+import { type WorkletInput, type WorkletOutput } from './audio_types.js';
+import type { SonarePlaybackDiagnosticsReplyMessage, SonarePlaybackMessage, SonarePlaybackNodeOptions, SonarePlaybackWorkletProcessorOptions, WorkletPort } from './messages.js';
 /**
  * The playback renderer inside an AudioWorklet.
  *

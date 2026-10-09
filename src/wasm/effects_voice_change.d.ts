@@ -1,11 +1,25 @@
-import type { RealtimeVoiceChangerConfigInput } from './public_types';
-import type { ValidateOptions } from './validation';
+import type { RealtimeVoiceChangerConfigInput } from './public_types.js';
+import type { ValidateOptions } from './validation.js';
+/** How `formantFactor` relates to the pitch shift in {@link voiceChange}. */
+export type FormantMode = 'relative' | 'absolute';
 /** Options for {@link voiceChange}. All fields are optional. */
 export interface VoiceChangeOptions extends ValidateOptions {
     /** Pitch shift in semitones (negative = down). Default 0. */
     pitchSemitones?: number;
     /** Formant scale factor (>1 brightens, <1 darkens). Default 1. */
     formantFactor?: number;
+    /**
+     * How `formantFactor` relates to the pitch shift. Default `'relative'`.
+     *
+     * - `'relative'`: `formantFactor` is the warp applied after the pitch shift, so the
+     *   formants end up at `formantFactor * 2^(pitchSemitones / 12)` of the input's.
+     * - `'absolute'`: `formantFactor` is the formant shift relative to the input (1 keeps
+     *   the formants where they were); the warp applied is
+     *   `formantFactor / 2^(pitchSemitones / 12)`. A request whose warp falls outside
+     *   [0.55, 1.65] throws a `RangeError` naming the reachable `formantFactor` range for
+     *   the given `pitchSemitones`; it is never clamped.
+     */
+    formantMode?: FormantMode;
 }
 /** Canonical request form for one-shot voice changing. */
 export interface VoiceChangeRequest extends VoiceChangeOptions {

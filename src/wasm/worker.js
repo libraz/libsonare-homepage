@@ -1,29 +1,48 @@
-// src/errors.ts
-var SonareError = class extends Error {
-  constructor(code, codeName, message) {
-    super(message);
-    this.name = "SonareError";
-    this.code = code;
-    this.codeName = codeName;
-  }
-  /**
-   * Brand-based `instanceof`: an error that carries the shape narrows here even
-   * when it is not literally an instance of this class. That is not a
-   * hypothetical — an error posted from the analysis worker arrives as a
-   * structured clone with its prototype gone, which a prototype-based
-   * `instanceof` would silently miss. Delegates to {@link isSonareError} so the
-   * two never disagree.
-   */
-  static [Symbol.hasInstance](value) {
-    return isSonareError(value);
-  }
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
 };
+
+// src/errors.ts
 function isSonareError(value) {
   return value instanceof Error && value.name === "SonareError" && typeof value.code === "number";
 }
+var SonareError;
+var init_errors = __esm({
+  "src/errors.ts"() {
+    "use strict";
+    SonareError = class extends Error {
+      constructor(code, codeName, message) {
+        super(message);
+        this.name = "SonareError";
+        this.code = code;
+        this.codeName = codeName;
+      }
+      /**
+       * Brand-based `instanceof`: an error that carries the shape narrows here even
+       * when it is not literally an instance of this class. That is not a
+       * hypothetical — an error posted from the analysis worker arrives as a
+       * structured clone with its prototype gone, which a prototype-based
+       * `instanceof` would silently miss. Delegates to {@link isSonareError} so the
+       * two never disagree.
+       */
+      static [Symbol.hasInstance](value) {
+        return isSonareError(value);
+      }
+    };
+  }
+});
+
+// src/abi.ts
+var EXPECTED_ABI_VERSION;
+var init_abi = __esm({
+  "src/abi.ts"() {
+    "use strict";
+    EXPECTED_ABI_VERSION = 67305991;
+  }
+});
 
 // src/module_state.ts
-var wrappedModule = null;
 function nativeExceptionPtr(error) {
   if (typeof error === "number") {
     return error;
@@ -39,6 +58,7 @@ function nativeExceptionPtr(error) {
 function makeSonareError(raw, thrown) {
   let code = 99 /* Unknown */;
   let codeName = "Unknown";
+  let kind;
   let message = `libsonare native exception (${thrown})`;
   try {
     const info = raw.sonareExceptionInfo?.(thrown);
@@ -46,6 +66,7 @@ function makeSonareError(raw, thrown) {
       code = info.code ?? code;
       codeName = info.codeName ?? codeName;
       message = info.message || message;
+      kind = info.kind;
     }
   } catch {
   } finally {
@@ -53,6 +74,12 @@ function makeSonareError(raw, thrown) {
       raw.sonareReleaseException(thrown);
     } catch {
     }
+  }
+  if (kind === "TypeError") {
+    return new TypeError(message);
+  }
+  if (kind === "RangeError") {
+    return new RangeError(message);
   }
   return new SonareError(code, codeName, message);
 }
@@ -63,6 +90,9 @@ function wrapModuleErrors(raw) {
     const ptr = nativeExceptionPtr(error);
     if (ptr !== null) {
       throw makeSonareError(raw, ptr);
+    }
+    if (error instanceof Error && EMBIND_DELETED_PATTERN.test(error.message)) {
+      throw new SonareError(7 /* InvalidState */, "InvalidState", error.message);
     }
     throw error;
   };
@@ -163,15 +193,63 @@ function wrapModuleErrors(raw) {
     }
   });
 }
+function notInitializedError() {
+  return new SonareError(
+    7 /* InvalidState */,
+    "InvalidState",
+    "Module not initialized. Call init() first."
+  );
+}
+function hexAbi(version) {
+  return `0x${(version >>> 0).toString(16).padStart(8, "0")}`;
+}
+function assertAbiCompatible(created) {
+  const actual = typeof created.abiVersion === "function" ? created.abiVersion() : void 0;
+  if (actual === EXPECTED_ABI_VERSION) {
+    return;
+  }
+  throw new SonareError(
+    10 /* AbiMismatch */,
+    "AbiMismatch",
+    `libsonare ABI mismatch: wasm module reports ${actual === void 0 ? "no ABI version" : hexAbi(actual)}, this package expects ${hexAbi(EXPECTED_ABI_VERSION)}. The JS glue and the .wasm binary come from different builds; check the wasmBinary, locateFile and moduleFactory options and any cached copy of sonare.wasm.`
+  );
+}
+function assertSameInitOptions(first, next) {
+  if (next === void 0) {
+    return;
+  }
+  const a = first ?? {};
+  const b = next;
+  const keys = /* @__PURE__ */ new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const key of keys) {
+    if (a[key] !== b[key]) {
+      throw new SonareError(
+        7 /* InvalidState */,
+        "InvalidState",
+        `init() options differ from the first call (${key}); options apply on the first call only.`
+      );
+    }
+  }
+}
 function setSonareModule(module2) {
   wrappedModule = wrapModuleErrors(module2);
 }
 function getSonareModule() {
   if (!wrappedModule) {
-    throw new Error("Module not initialized. Call init() first.");
+    throw notInitializedError();
   }
   return wrappedModule;
 }
+var wrappedModule, EMBIND_DELETED_PATTERN;
+var init_module_state = __esm({
+  "src/module_state.ts"() {
+    "use strict";
+    init_abi();
+    init_errors();
+    wrappedModule = null;
+    EMBIND_DELETED_PATTERN = / instance already deleted$|^Cannot pass deleted object as a pointer of type /;
+  }
+});
 
 // src/codes.ts
 function resolveOrdinalInRange(value, min, max, enumName) {
@@ -202,20 +280,24 @@ function resolveEnumOrdinal(value, values, enumName) {
   }
   throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
 }
-var AUTOMATION_CURVE_VALUES = {
-  linear: 0,
-  exponential: 1,
-  hold: 2,
-  "s-curve": 3
-};
-var PROJECT_AUTOMATION_CURVE_VALUES = {
-  ...AUTOMATION_CURVE_VALUES,
-  scurve: 3
-};
+var AUTOMATION_CURVE_VALUES, PROJECT_AUTOMATION_CURVE_VALUES;
+var init_codes = __esm({
+  "src/codes.ts"() {
+    "use strict";
+    AUTOMATION_CURVE_VALUES = {
+      linear: 0,
+      exponential: 1,
+      hold: 2,
+      "s-curve": 3
+    };
+    PROJECT_AUTOMATION_CURVE_VALUES = {
+      ...AUTOMATION_CURVE_VALUES,
+      scurve: 3
+    };
+  }
+});
 
 // src/validation.ts
-var MIN_AUDIO_SAMPLE_RATE = 8e3;
-var MAX_AUDIO_SAMPLE_RATE = 384e3;
 function assertNonEmptySamples(fnName, samples, argName = "samples") {
   if (samples.length === 0) {
     throw new RangeError(`${fnName}: ${argName} must not be empty`);
@@ -246,6 +328,294 @@ function assertSampleRate(fnName, sampleRate, argName = "sampleRate") {
     );
   }
 }
+var MIN_AUDIO_SAMPLE_RATE, MAX_AUDIO_SAMPLE_RATE;
+var init_validation = __esm({
+  "src/validation.ts"() {
+    "use strict";
+    MIN_AUDIO_SAMPLE_RATE = 8e3;
+    MAX_AUDIO_SAMPLE_RATE = 384e3;
+  }
+});
+
+// src/public_types_acoustic.ts
+var init_public_types_acoustic = __esm({
+  "src/public_types_acoustic.ts"() {
+    "use strict";
+  }
+});
+
+// src/public_types_mastering.ts
+var init_public_types_mastering = __esm({
+  "src/public_types_mastering.ts"() {
+    "use strict";
+  }
+});
+
+// src/public_types_mixing.ts
+var init_public_types_mixing = __esm({
+  "src/public_types_mixing.ts"() {
+    "use strict";
+  }
+});
+
+// src/public_types_music.ts
+var PitchClass, Mode, KeyProfile;
+var init_public_types_music = __esm({
+  "src/public_types_music.ts"() {
+    "use strict";
+    PitchClass = {
+      C: 0,
+      Cs: 1,
+      D: 2,
+      Ds: 3,
+      E: 4,
+      F: 5,
+      Fs: 6,
+      G: 7,
+      Gs: 8,
+      A: 9,
+      As: 10,
+      B: 11
+    };
+    Mode = {
+      Major: 0,
+      Minor: 1,
+      Dorian: 2,
+      Phrygian: 3,
+      Lydian: 4,
+      Mixolydian: 5,
+      Locrian: 6
+    };
+    KeyProfile = {
+      KrumhanslSchmuckler: 0,
+      Temperley: 1,
+      Shaath: 2,
+      FaraldoEDMT: 3,
+      FaraldoEDMA: 4,
+      FaraldoEDMM: 5,
+      BellmanBudge: 6
+    };
+  }
+});
+
+// src/public_types_playback.ts
+var init_public_types_playback = __esm({
+  "src/public_types_playback.ts"() {
+    "use strict";
+  }
+});
+
+// src/public_types_realtime.ts
+var init_public_types_realtime = __esm({
+  "src/public_types_realtime.ts"() {
+    "use strict";
+  }
+});
+
+// src/public_types_repair.ts
+var init_public_types_repair = __esm({
+  "src/public_types_repair.ts"() {
+    "use strict";
+  }
+});
+
+// src/public_types_spectral.ts
+var init_public_types_spectral = __esm({
+  "src/public_types_spectral.ts"() {
+    "use strict";
+  }
+});
+
+// src/public_types.ts
+var init_public_types = __esm({
+  "src/public_types.ts"() {
+    "use strict";
+    init_public_types_acoustic();
+    init_public_types_mastering();
+    init_public_types_mixing();
+    init_public_types_music();
+    init_public_types_playback();
+    init_public_types_realtime();
+    init_public_types_repair();
+    init_public_types_spectral();
+  }
+});
+
+// src/analysis_helpers.ts
+function pitchClassName(value) {
+  return PITCH_CLASS_NAMES[value] ?? "C";
+}
+function keyModeName(ordinal) {
+  const name = KEY_MODE_NAMES[ordinal];
+  if (name === void 0) {
+    throw new RangeError(`Invalid key mode: ${String(ordinal)}`);
+  }
+  return name;
+}
+function keyModeValues(modes) {
+  if (!modes) {
+    return [];
+  }
+  if (modes === "major-minor") {
+    return [Mode.Major, Mode.Minor];
+  }
+  if (modes === "all" || modes === "modal") {
+    return [
+      Mode.Major,
+      Mode.Minor,
+      Mode.Dorian,
+      Mode.Phrygian,
+      Mode.Lydian,
+      Mode.Mixolydian,
+      Mode.Locrian
+    ];
+  }
+  return modes.map((mode) => resolveEnumOrdinal(mode, KEY_MODE_VALUES, "key mode"));
+}
+function keyProfileValue(profile) {
+  if (profile === void 0) {
+    return -1;
+  }
+  return resolveEnumOrdinal(profile, KEY_PROFILE_VALUES, "key profile");
+}
+function convertChordAnalysisResult(wasm) {
+  return {
+    chords: wasm.chords.map((c) => ({
+      root: c.root,
+      bass: c.bass,
+      rootName: pitchClassName(c.root),
+      bassName: pitchClassName(c.bass),
+      quality: c.quality,
+      start: c.start,
+      end: c.end,
+      duration: c.end - c.start,
+      confidence: c.confidence,
+      name: c.name
+    })),
+    tuning: wasm.tuning
+  };
+}
+function chordChromaMethodValue(method) {
+  if (method === "stft") {
+    return 0;
+  }
+  if (method === "nnls") {
+    return 1;
+  }
+  throw new Error(`Invalid chord chroma method: ${method}`);
+}
+function convertAnalysisResult(wasm) {
+  const beatTimes = new Float32Array(wasm.beats.length);
+  for (let i = 0; i < wasm.beats.length; i++) {
+    beatTimes[i] = wasm.beats[i].time;
+  }
+  return {
+    bpm: wasm.bpm,
+    bpmConfidence: wasm.bpmConfidence,
+    bpmCandidates: wasm.bpmCandidates.map((candidate) => ({
+      value: candidate.value,
+      confidence: candidate.confidence,
+      relation: candidate.relation
+    })),
+    key: {
+      root: wasm.key.root,
+      mode: keyModeName(wasm.key.mode),
+      confidence: wasm.key.confidence,
+      name: wasm.key.name,
+      shortName: wasm.key.shortName
+    },
+    timeSignature: wasm.timeSignature,
+    timeSignatureCandidates: wasm.timeSignatureCandidates,
+    beatTimes,
+    beats: wasm.beats,
+    downbeatIndices: wasm.downbeatIndices,
+    downbeatPhase: wasm.downbeatPhase,
+    beatObservations: wasm.beatObservations,
+    beatLocalBpm: wasm.beatLocalBpm,
+    chords: wasm.chords.map((c) => ({
+      root: c.root,
+      bass: c.bass,
+      rootName: pitchClassName(c.root),
+      bassName: pitchClassName(c.bass),
+      quality: c.quality,
+      start: c.start,
+      end: c.end,
+      duration: c.end - c.start,
+      confidence: c.confidence,
+      name: c.name,
+      romanNumeral: c.romanNumeral
+    })),
+    sections: wasm.sections.map((s) => ({
+      type: s.type,
+      start: s.start,
+      end: s.end,
+      energyLevel: s.energyLevel,
+      confidence: s.confidence,
+      name: s.name
+    })),
+    timbre: wasm.timbre,
+    dynamics: wasm.dynamics,
+    rhythm: wasm.rhythm,
+    melody: wasm.melody,
+    form: wasm.form,
+    tuning: wasm.tuning
+  };
+}
+var PITCH_CLASS_NAMES, KEY_MODE_NAMES, KEY_MODE_VALUES, KEY_PROFILE_VALUES;
+var init_analysis_helpers = __esm({
+  "src/analysis_helpers.ts"() {
+    "use strict";
+    init_codes();
+    init_public_types();
+    PITCH_CLASS_NAMES = [
+      "C",
+      "C#",
+      "D",
+      "D#",
+      "E",
+      "F",
+      "F#",
+      "G",
+      "G#",
+      "A",
+      "A#",
+      "B"
+    ];
+    KEY_MODE_NAMES = [
+      "major",
+      "minor",
+      "dorian",
+      "phrygian",
+      "lydian",
+      "mixolydian",
+      "locrian"
+    ];
+    KEY_MODE_VALUES = {
+      major: Mode.Major,
+      minor: Mode.Minor,
+      dorian: Mode.Dorian,
+      phrygian: Mode.Phrygian,
+      lydian: Mode.Lydian,
+      mixolydian: Mode.Mixolydian,
+      locrian: Mode.Locrian
+    };
+    KEY_PROFILE_VALUES = {
+      ks: KeyProfile.KrumhanslSchmuckler,
+      krumhansl: KeyProfile.KrumhanslSchmuckler,
+      temperley: KeyProfile.Temperley,
+      shaath: KeyProfile.Shaath,
+      keyfinder: KeyProfile.Shaath,
+      "faraldo-edmt": KeyProfile.FaraldoEDMT,
+      edmt: KeyProfile.FaraldoEDMT,
+      "faraldo-edma": KeyProfile.FaraldoEDMA,
+      edma: KeyProfile.FaraldoEDMA,
+      "faraldo-edmm": KeyProfile.FaraldoEDMM,
+      edmm: KeyProfile.FaraldoEDMM,
+      "bellman-budge": KeyProfile.BellmanBudge,
+      bellman: KeyProfile.BellmanBudge
+    };
+  }
+});
 
 // src/_chain_config.ts
 function flattenChainConfig(config) {
@@ -265,6 +635,11 @@ function flattenChainConfig(config) {
   walk(config, "");
   return out;
 }
+var init_chain_config = __esm({
+  "src/_chain_config.ts"() {
+    "use strict";
+  }
+});
 
 // src/mastering_chain.ts
 function requireModule() {
@@ -327,7 +702,7 @@ function masterAudioStereo(left, right = void 0, sampleRate = 22050, presetName 
   );
   const flat = flattenChainConfig(request.overrides ?? {});
   if (request.left.length !== request.right.length) {
-    throw new Error("Stereo channel lengths must match.");
+    throw new RangeError("Stereo channel lengths must match.");
   }
   if (request.onProgress || request.cancel) {
     return requireModule().masterAudioStereoWithProgress(
@@ -349,190 +724,13 @@ function masterAudioStereo(left, right = void 0, sampleRate = 22050, presetName 
     flat
   );
 }
-
-// src/public_types_music.ts
-var PitchClass = {
-  C: 0,
-  Cs: 1,
-  D: 2,
-  Ds: 3,
-  E: 4,
-  F: 5,
-  Fs: 6,
-  G: 7,
-  Gs: 8,
-  A: 9,
-  As: 10,
-  B: 11
-};
-var Mode = {
-  Major: 0,
-  Minor: 1,
-  Dorian: 2,
-  Phrygian: 3,
-  Lydian: 4,
-  Mixolydian: 5,
-  Locrian: 6
-};
-var KeyProfile = {
-  KrumhanslSchmuckler: 0,
-  Temperley: 1,
-  Shaath: 2,
-  FaraldoEDMT: 3,
-  FaraldoEDMA: 4,
-  FaraldoEDMM: 5,
-  BellmanBudge: 6
-};
-
-// src/analysis_helpers.ts
-var PITCH_CLASS_NAMES = [
-  "C",
-  "C#",
-  "D",
-  "D#",
-  "E",
-  "F",
-  "F#",
-  "G",
-  "G#",
-  "A",
-  "A#",
-  "B"
-];
-function pitchClassName(value) {
-  return PITCH_CLASS_NAMES[value] ?? "C";
-}
-var KEY_MODE_VALUES = {
-  major: Mode.Major,
-  minor: Mode.Minor,
-  dorian: Mode.Dorian,
-  phrygian: Mode.Phrygian,
-  lydian: Mode.Lydian,
-  mixolydian: Mode.Mixolydian,
-  locrian: Mode.Locrian
-};
-var KEY_PROFILE_VALUES = {
-  ks: KeyProfile.KrumhanslSchmuckler,
-  krumhansl: KeyProfile.KrumhanslSchmuckler,
-  temperley: KeyProfile.Temperley,
-  shaath: KeyProfile.Shaath,
-  keyfinder: KeyProfile.Shaath,
-  "faraldo-edmt": KeyProfile.FaraldoEDMT,
-  edmt: KeyProfile.FaraldoEDMT,
-  "faraldo-edma": KeyProfile.FaraldoEDMA,
-  edma: KeyProfile.FaraldoEDMA,
-  "faraldo-edmm": KeyProfile.FaraldoEDMM,
-  edmm: KeyProfile.FaraldoEDMM,
-  "bellman-budge": KeyProfile.BellmanBudge,
-  bellman: KeyProfile.BellmanBudge
-};
-function keyModeValues(modes) {
-  if (!modes) {
-    return [];
+var init_mastering_chain = __esm({
+  "src/mastering_chain.ts"() {
+    "use strict";
+    init_chain_config();
+    init_module_state();
   }
-  if (modes === "major-minor") {
-    return [Mode.Major, Mode.Minor];
-  }
-  if (modes === "all" || modes === "modal") {
-    return [
-      Mode.Major,
-      Mode.Minor,
-      Mode.Dorian,
-      Mode.Phrygian,
-      Mode.Lydian,
-      Mode.Mixolydian,
-      Mode.Locrian
-    ];
-  }
-  return modes.map((mode) => resolveEnumOrdinal(mode, KEY_MODE_VALUES, "key mode"));
-}
-function keyProfileValue(profile) {
-  if (profile === void 0) {
-    return -1;
-  }
-  return resolveEnumOrdinal(profile, KEY_PROFILE_VALUES, "key profile");
-}
-function convertChordAnalysisResult(wasm) {
-  return {
-    chords: wasm.chords.map((c) => ({
-      root: c.root,
-      bass: c.bass,
-      rootName: pitchClassName(c.root),
-      bassName: pitchClassName(c.bass),
-      quality: c.quality,
-      start: c.start,
-      end: c.end,
-      duration: c.end - c.start,
-      confidence: c.confidence,
-      name: c.name
-    }))
-  };
-}
-function chordChromaMethodValue(method) {
-  if (method === "stft") {
-    return 0;
-  }
-  if (method === "nnls") {
-    return 1;
-  }
-  throw new Error(`Invalid chord chroma method: ${method}`);
-}
-function convertAnalysisResult(wasm) {
-  const beatTimes = new Float32Array(wasm.beats.length);
-  for (let i = 0; i < wasm.beats.length; i++) {
-    beatTimes[i] = wasm.beats[i].time;
-  }
-  return {
-    bpm: wasm.bpm,
-    bpmConfidence: wasm.bpmConfidence,
-    bpmCandidates: wasm.bpmCandidates.map((candidate) => ({
-      value: candidate.value,
-      confidence: candidate.confidence,
-      relation: candidate.relation
-    })),
-    key: {
-      root: wasm.key.root,
-      mode: wasm.key.mode,
-      confidence: wasm.key.confidence,
-      name: wasm.key.name,
-      shortName: wasm.key.shortName
-    },
-    timeSignature: wasm.timeSignature,
-    timeSignatureCandidates: wasm.timeSignatureCandidates,
-    beatTimes,
-    beats: wasm.beats,
-    downbeatIndices: wasm.downbeatIndices,
-    downbeatPhase: wasm.downbeatPhase,
-    beatObservations: wasm.beatObservations,
-    beatLocalBpm: wasm.beatLocalBpm,
-    chords: wasm.chords.map((c) => ({
-      root: c.root,
-      bass: c.bass,
-      rootName: pitchClassName(c.root),
-      bassName: pitchClassName(c.bass),
-      quality: c.quality,
-      start: c.start,
-      end: c.end,
-      duration: c.end - c.start,
-      confidence: c.confidence,
-      name: c.name,
-      romanNumeral: c.romanNumeral
-    })),
-    sections: wasm.sections.map((s) => ({
-      type: s.type,
-      start: s.start,
-      end: s.end,
-      energyLevel: s.energyLevel,
-      confidence: s.confidence,
-      name: s.name
-    })),
-    timbre: wasm.timbre,
-    dynamics: wasm.dynamics,
-    rhythm: wasm.rhythm,
-    melody: wasm.melody,
-    form: wasm.form
-  };
-}
+});
 
 // src/quick_analysis.ts
 function requireModule2() {
@@ -560,14 +758,16 @@ function detectKey(samples, sampleRate = 22050, options = {}) {
     request.highPassHz ?? 0,
     keyModeValues(request.modes),
     keyProfileValue(request.profile),
-    request.genreHint ?? ""
+    request.genreHint ?? "",
+    request.tuning ?? 0
   );
   return {
     root: result.root,
-    mode: result.mode,
+    mode: keyModeName(result.mode),
     confidence: result.confidence,
     name: result.name,
-    shortName: result.shortName
+    shortName: result.shortName,
+    tuning: result.tuning
   };
 }
 function detectChords(samples, sampleRate = 22050, options = {}) {
@@ -612,24 +812,48 @@ function analyzeWithProgress(samples, sampleRate = 22050, onProgress, options) {
   );
   return convertAnalysisResult(result);
 }
+var init_quick_analysis = __esm({
+  "src/quick_analysis.ts"() {
+    "use strict";
+    init_analysis_helpers();
+    init_module_state();
+    init_public_types();
+    init_validation();
+  }
+});
+
+// src/lifetime.ts
+var symbolCtor = Symbol;
+symbolCtor.dispose ?? (symbolCtor.dispose = /* @__PURE__ */ Symbol.for("Symbol.dispose"));
+
+// src/worker.ts
+init_errors();
 
 // src/index.ts
+init_module_state();
 var module = null;
 var initPromise = null;
+var firstInitOptions;
 async function init(options) {
   if (module) {
+    assertSameInitOptions(firstInitOptions, options);
     return;
   }
   if (initPromise) {
+    assertSameInitOptions(firstInitOptions, options);
     return initPromise;
   }
+  firstInitOptions = options && { ...options };
   initPromise = (async () => {
     try {
       const createModule = options?.moduleFactory ?? (await import("./sonare.js")).default;
-      module = await createModule(options);
+      const created = await createModule(options);
+      assertAbiCompatible(created);
+      module = created;
       setSonareModule(module);
     } catch (error) {
       initPromise = null;
+      firstInitOptions = void 0;
       throw error;
     }
   })();
@@ -637,6 +861,8 @@ async function init(options) {
 }
 
 // src/worker.ts
+init_mastering_chain();
+init_quick_analysis();
 function transferableBuffers(value, seen = /* @__PURE__ */ new Set()) {
   const buffers = [];
   const seenBuffers = /* @__PURE__ */ new Set();

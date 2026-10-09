@@ -1,6 +1,6 @@
-import type { EngineAutomationPoint, EngineBus, EngineCaptureStatus, EngineClip, EngineMarker, EngineMetronomeConfig, EngineMidiClipSchedule, EngineParameterInfo, EngineTempoSegment, EngineTimeSignatureSegment, EngineTrackLane, EngineTransportState, PlaybackDiagnostics, PlaybackRendererConfig, RealtimeVoiceChangerConfigInput, RealtimeVoiceChangerPodConfig, UmpWords } from '../index';
-import type { AutomationCurve, SurroundPan } from '../public_types';
-import type { SonareEngineCommandRecord, SonareEngineTelemetryRecord, SonareWorkletMeterSnapshot, SonareWorkletScopeSnapshot, SonareWorkletSpectrumSnapshot } from './protocol';
+import type { EngineAutomationPoint, EngineBus, EngineCaptureStatus, EngineClip, EngineMarker, EngineMetronomeConfig, EngineMidiClipSchedule, EngineParameterInfo, EngineTempoSegment, EngineTimeSignatureSegment, EngineTrackLane, EngineTransportState, PlaybackDiagnostics, PlaybackRendererConfig, RealtimeVoiceChangerConfigInput, RealtimeVoiceChangerPodConfig, StreamConfig, UmpWords } from '../index.js';
+import type { AutomationCurve, SurroundPan } from '../public_types.js';
+import type { SonareEngineCommandRecord, SonareEngineTelemetryRecord, SonareWorkletMeterSnapshot, SonareWorkletScopeSnapshot, SonareWorkletSpectrumSnapshot } from './protocol.js';
 export interface SonareWorkletProcessorOptions {
     sceneJson: string;
     sampleRate?: number;
@@ -18,6 +18,10 @@ export interface SonareRealtimeEngineWorkletProcessorOptions {
     wasmBinary?: ArrayBuffer | Uint8Array;
     initialSyncMessages?: SonareEngineSyncMessage[];
     initialCommands?: SonareEngineCommandRecord[];
+    /**
+     * Engine rate. Node creation defaults it to the AudioContext's and throws a
+     * RangeError for any other value, since nothing resamples the context's quanta.
+     */
     sampleRate?: number;
     blockSize?: number;
     /**
@@ -80,6 +84,38 @@ export interface SonareRealtimeVoiceChangerDestroyMessage {
     type: 'destroy';
 }
 export type SonareRealtimeVoiceChangerMessage = SonareRealtimeVoiceChangerSetConfigMessage | SonareRealtimeVoiceChangerResetMessage | SonareRealtimeVoiceChangerDestroyMessage;
+export interface SonareStreamAnalyzerWorkletProcessorOptions {
+    /** Mono samples per posted chunk. Integer of at least 128. Default 4096. */
+    chunkFrames?: number;
+}
+export interface SonareStreamAnalyzerNodeOptions extends SonareStreamAnalyzerWorkletProcessorOptions {
+    /**
+     * Analyzer configuration, passed to `StreamAnalyzer` as given. `sampleRate`
+     * defaults to the context's; any other value throws a RangeError.
+     */
+    config?: StreamConfig;
+    processorName?: string;
+    moduleUrl?: string | URL;
+    nodeFactory?: (context: BaseAudioContext, processorName: string, options: AudioWorkletNodeOptions) => AudioWorkletNode;
+}
+/** Returns a consumed chunk buffer to the processor's pool. */
+export interface SonareStreamAnalyzerRecycleMessage {
+    type: 'recycle';
+    samples: Float32Array;
+}
+export interface SonareStreamAnalyzerDestroyMessage {
+    type: 'destroy';
+}
+export type SonareStreamAnalyzerMessage = SonareStreamAnalyzerRecycleMessage | SonareStreamAnalyzerDestroyMessage;
+/** One chunk of the mono downmix, transferred from the processor. */
+export interface SonareStreamAnalyzerChunkMessage {
+    type: 'chunk';
+    samples: Float32Array;
+    /** Samples the processor has produced before this chunk, dropped chunks included. */
+    startSample: number;
+    /** True when audio before this chunk was lost, so it does not continue the previous one. */
+    discontinuity: boolean;
+}
 export interface SonarePlaybackWorkletProcessorOptions {
     /** Renderer configuration; parsed once, in the processor constructor. Default `{}`. */
     config?: PlaybackRendererConfig | string;
@@ -90,7 +126,11 @@ export interface SonarePlaybackWorkletProcessorOptions {
     hrtf?: ArrayBuffer | Uint8Array;
     /** Largest render quantum the processor accepts. Default 128. */
     maxBlockSize?: number;
-    /** Defaults to the AudioWorkletGlobalScope `sampleRate`, then 48000. */
+    /**
+     * Defaults to the AudioWorkletGlobalScope `sampleRate`, then 48000.
+     * `createSonarePlaybackNode` defaults it to the AudioContext's and throws a
+     * RangeError for any other value.
+     */
     sampleRate?: number;
 }
 export interface SonarePlaybackNodeOptions extends SonarePlaybackWorkletProcessorOptions {
@@ -202,7 +242,7 @@ export type SonareWorkletMessage = SonareWorkletScheduleInsertAutomationMessage 
 export interface SonareWorkletExternalMidiEvent {
     /** Originating track lane, or 0xFFFFFFFF for transport/clock bytes. */
     destinationId: number;
-    /** Sample position within the producing block. */
+    /** Absolute engine device frame at which the event fires, never an offset within a block. */
     renderFrame: number;
     /** MIDI 1.0 status + data bytes (1..3 entries). */
     bytes: number[];
@@ -251,6 +291,11 @@ export interface SonareEngineSyncClipsDeltaMessage {
 export interface SonareEngineSyncClipPageProviderMessage {
     type: 'syncClipPageProvider';
     clipId: number;
+    /**
+     * Identity of the OPFS stream that owns the provider. A message whose key
+     * differs from the provider's is ignored; omitted for pre-baked transfers.
+     */
+    streamKey?: number;
     /** Omitted when an OPFS stream is primed before its clip is scheduled. */
     clip?: EngineClip;
     numChannels: number;
@@ -261,6 +306,8 @@ export interface SonareEngineSyncClipPageProviderMessage {
 export interface SonareEngineSyncClipPageMessage {
     type: 'syncClipPage';
     clipId: number;
+    /** Owning OPFS stream; see {@link SonareEngineSyncClipPageProviderMessage.streamKey}. */
+    streamKey?: number;
     pageIndex: number;
     channels: Float32Array[];
 }
@@ -287,17 +334,23 @@ export interface SonareEngineSyncWarpVoiceCapacityMessage {
 export interface SonareEngineSyncClipPageClearMessage {
     type: 'syncClipPageClear';
     clipId: number;
+    /** Owning OPFS stream; see {@link SonareEngineSyncClipPageProviderMessage.streamKey}. */
+    streamKey?: number;
     pageIndex: number;
 }
 /** Releases a provider whose clip was removed or whose stream was closed. */
 export interface SonareEngineSyncClipPageDestroyMessage {
     type: 'syncClipPageDestroy';
     clipId: number;
+    /** Owning OPFS stream; see {@link SonareEngineSyncClipPageProviderMessage.streamKey}. */
+    streamKey?: number;
 }
 /** Makes a fully supplied paged clip visible to the audio engine. */
 export interface SonareEngineSyncClipPageCommitMessage {
     type: 'syncClipPageCommit';
     clipId: number;
+    /** Owning OPFS stream; see {@link SonareEngineSyncClipPageProviderMessage.streamKey}. */
+    streamKey?: number;
     /**
      * Clip schedule to publish with a provider that was primed before its
      * schedule was known. The original pre-baked push path supplies it on the

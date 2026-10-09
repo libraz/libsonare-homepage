@@ -2,7 +2,7 @@
  * Source decomposition and self-similarity segmentation: NMF factorisation and
  * the masks built over it, and the recurrence structure of a track.
  */
-import type { SegmentMatrix } from './public_types';
+import type { SegmentMatrix } from './public_types.js';
 import type { WasmDecomposeResult, WasmHpssWithResidualResult, WasmMatrix2dResult } from './sonare.js';
 export interface DecomposeRequest {
     s: Float32Array;

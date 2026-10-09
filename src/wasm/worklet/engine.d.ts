@@ -1,12 +1,13 @@
-import { type OpfsClipStreamOptions } from '../clip_page_streamer';
-import type { EngineAutomationPoint, EngineBus, EngineCaptureStatus, EngineClip, EngineMarker, EngineMetronomeConfig, EngineMidiClipSchedule, EngineParameterInfo, EngineTempoSegment, EngineTimeSignatureSegment, EngineTrackLane, EngineTrackMonitorMode, EngineTrackSend, EngineTransportState, EqBand, MidiCcBindOptions, PanLaw, PanMode, SidechainSourceKind, UmpWords } from '../index';
-import { type OpfsClipPageProviderBinding } from '../opfs_clip_pages';
-import type { SurroundPan } from '../public_types';
-import type { ClipPageProvider } from '../realtime_engine';
-import { type CaptureOptions } from './engine-offline';
-import type { SonareEngineOptions } from './engine-options';
-import type { SonareEngineTransportFacade, SonareRealtimeEngineNodeCapabilities, SonareWorkletExternalMidiEvent } from './messages';
-import { type SonareEngineTelemetryRecord, type SonareWorkletMeterSnapshot, type SonareWorkletScopeSnapshot } from './protocol';
+import { type OpfsClipStreamOptions } from '../clip_page_streamer.js';
+import type { EngineAutomationPoint, EngineBounceOptions, EngineBounceResult, EngineBus, EngineCaptureStatus, EngineClip, EngineFreezeOptions, EngineFreezeResult, EngineMarker, EngineMetronomeConfig, EngineMidiClipSchedule, EngineParameterInfo, EngineTempoSegment, EngineTimeSignatureSegment, EngineTrackLane, EngineTrackMonitorMode, EngineTrackSend, EngineTransportState, EqBand, MidiCcBindOptions, PanLaw, PanMode, SidechainCheck, SidechainSourceKind, UmpWords } from '../index.js';
+import { type OpfsClipPageProviderBinding } from '../opfs_clip_pages.js';
+import type { SurroundPan } from '../public_types.js';
+import type { ClipPageProvider } from '../realtime_engine.js';
+import type { SonareRenderOfflineRequest } from './engine-export.js';
+import { type CaptureOptions } from './engine-offline.js';
+import type { SonareEngineOptions } from './engine-options.js';
+import type { SonareEngineTransportFacade, SonareRealtimeEngineNodeCapabilities, SonareWorkletExternalMidiEvent } from './messages.js';
+import { type SonareEngineTelemetryRecord, type SonareWorkletMeterSnapshot, type SonareWorkletScopeSnapshot } from './protocol.js';
 export declare class SonareEngine {
     readonly node: AudioWorkletNode;
     readonly capabilities: SonareRealtimeEngineNodeCapabilities;
@@ -46,11 +47,14 @@ export declare class SonareEngine {
     private readonly pendingInstrumentSync;
     private readonly workletClipPageRequests;
     private readonly workletPageProviderClipIds;
+    private nextClipStreamKey;
+    private readonly opfsExportSources;
+    private readonly exportSession;
     private workletClipStreamer;
     private workletClipPump;
     private workletClipPagePollTimer;
     private unsubscribeWorkletClipRequests;
-    private destroyed;
+    private readonly epoch;
     private constructor();
     static create(context: BaseAudioContext, options?: SonareEngineOptions): Promise<SonareEngine>;
     suspend(): Promise<void>;
@@ -90,7 +94,9 @@ export declare class SonareEngine {
      */
     automationParamId(target: string | number, kind: 'faderDb' | 'pan'): number;
     /**
-     * Returns the automation target id for a bus fader.
+     * Returns the automation target id for a bus fader. The id names the bus, so
+     * it keeps driving that bus across bus reorders and the removal of other
+     * buses, and applies nothing once the bus is removed.
      *
      * @param busId Bus id (declares the mixer bus on first use).
      * @returns Reserved engine parameter id for the bus fader gain (dB).
@@ -99,17 +105,19 @@ export declare class SonareEngine {
     /**
      * Resolves a track-lane insert parameter (JSON-key name) to the reserved
      * insert-automation id fed straight to setAutomationLane. Declares the track's
-     * mixer lane first (like automationParamId) so the offline engine resolves the
-     * same strip selector the realtime engine uses.
+     * mixer lane first (like automationParamId). The offline engine and the
+     * worklet's engine receive the same mixer configuration in the same order, so
+     * they number insert ids identically and an id resolved here drives the
+     * worklet.
      *
-     * The returned id uses the track's current positional lane selector. When
-     * setTrackLanes successfully changes lane order or membership, the engine
-     * remaps already queued and published track automation by track id, but it
-     * cannot update a numeric id retained by the caller. Re-resolve every track
-     * insert id after such a topology change before passing it to
-     * setAutomationLane. Use setTrackStripInsertParamByName when the operation
-     * needs a stable track identity. Master and bus insert ids are separate and
-     * are not invalidated by track-lane changes.
+     * Track, bus and master insert ids share one lifetime rule: an id names its
+     * strip by identity and the kind of processor in its slot (for
+     * `effects.gsEfx`, its EFX type too), so it survives lane and bus reorders
+     * and the removal of other strips, and stays valid until its track or bus is
+     * removed or its slot comes to hold another kind of processor. After that it
+     * applies nothing, its queued edits are dropped, and it is never reissued;
+     * resolve again for the new processor. A change that would take the engine
+     * past its 8192 insert-id entries is refused.
      *
      * @param target Track id (declares a mixer lane on first use).
      * @param insertIndex Index into the strip's combined insert sequence.
@@ -158,7 +166,7 @@ export declare class SonareEngine {
     listParameters(): EngineParameterInfo[];
     /** Registers a custom parameter on the offline mirror and worklet engine. */
     addParameter(info: EngineParameterInfo): void;
-    /** Clears custom parameters and their automation lanes on both engines. */
+    /** Clears custom parameters on both engines; automation lanes stay in place. */
     clearParameters(): void;
     setSoloMute(target: string | number, solo: boolean, mute: boolean): boolean;
     /** Queues a per-track PFL/AFL monitor tap mode change. */
@@ -168,12 +176,23 @@ export declare class SonareEngine {
     /** Resets the master's integrated loudness accumulator in both engine mirrors. */
     resetMasterLoudnessMeter(renderFrame?: number): boolean;
     /**
+     * Queues a reset of every mixer and effect processor to its prepared state,
+     * applied to the offline mirror immediately and to the live engine at
+     * `renderFrame` (omitted: the next block head). The same command that
+     * follows it on the queue, such as `play()`, starts from the state an offline
+     * render starts from. Instruments are not reset. During playback it cuts
+     * running insert tails and delay lines mid-sound, like a seek.
+     *
+     * @returns Whether the live command was queued
+     */
+    resetProcessorState(renderFrame?: number): boolean;
+    /**
      * Declares the mixer track lanes in an explicit order.
      *
      * A successful call may reorder existing track ids, remove track ids, or add
      * new ones. Existing queued and published track automation follows the track
-     * id, while numeric track-insert automation ids retained by the caller do
-     * not; re-resolve those ids after every topology change. Entries carrying
+     * id, and so do track insert automation ids (see
+     * resolveTrackInsertAutomationId). Entries carrying
      * `sends` replace that track's send list; entries without `sends` leave
      * existing sends untouched.
      *
@@ -205,6 +224,27 @@ export declare class SonareEngine {
      * source rules as {@link setBusSidechain}.
      */
     setMasterSidechain(insertIndex: number, sourceKind: SidechainSourceKind | number, sourceId: number): void;
+    /**
+     * Reports whether {@link setBusSidechain} would accept the binding, without
+     * changing anything. Answers from the offline mirror, which holds the same
+     * configuration as the live engine, and never declares a missing lane or bus.
+     */
+    canSetBusSidechain(busId: number, insertIndex: number, sourceKind: SidechainSourceKind | number, sourceId: number): SidechainCheck;
+    /** Reports whether {@link setMasterSidechain} would accept the binding, without changing anything. */
+    canSetMasterSidechain(insertIndex: number, sourceKind: SidechainSourceKind | number, sourceId: number): SidechainCheck;
+    /**
+     * Reports whether {@link setLaneSidechain} would accept the binding, without
+     * changing anything. Takes numeric track ids and, unlike the setter, never
+     * declares a missing lane or bus; `sourceTrackId` 0 asks about an unbind.
+     */
+    canSetLaneSidechain(trackId: number, insertIndex: number, sourceTrackId: number): SidechainCheck;
+    /**
+     * Longest audible tail in samples (an upper bound; `2147483647` is
+     * unbounded), answered from the offline mirror.
+     */
+    tailSamples(): number;
+    /** Processing latency in 1/256 samples, answered from the offline mirror. */
+    graphLatencySamplesQ8(): number;
     setBusGain(busId: number, db: number): boolean;
     setTrackStripJson(target: string | number, sceneJson: string): void;
     setTrackStripEqBand(target: string | number, bandIndex: number, band: EqBand | string): void;
@@ -357,7 +397,12 @@ export declare class SonareEngine {
     captureStatus(): Promise<EngineCaptureStatus>;
     capturedAudio(): Promise<Float32Array[]>;
     resetCapture(): Promise<void>;
-    setMetronome(opts: EngineMetronomeConfig): void;
+    /**
+     * Configures the metronome on both engines.
+     *
+     * @returns Whether the live command was queued; on false neither engine changed.
+     */
+    setMetronome(opts: EngineMetronomeConfig): boolean;
     addMarker(ppq: number, name?: string): number;
     /**
      * Replaces the whole marker set in one call. Entries without an `id` are
@@ -374,11 +419,50 @@ export declare class SonareEngine {
     marker(markerId: number): EngineMarker;
     seekMarker(markerId: number): boolean;
     setLoopFromMarkers(startMarkerId: number, endMarkerId: number): boolean;
-    renderOffline(totalFrames: number): Promise<Float32Array[]>;
     /**
-     * Subscribe to external-MIDI batches (already lowered to MIDI 1.0 bytes) for
-     * delivery to Web MIDI output ports. Fires once per render block that
-     * produced events. Returns an unsubscribe function.
+     * Renders the timeline offline through this thread's mirror engine, from the
+     * current transport position, and returns one planar buffer per offline
+     * channel. Primes the mirror first, so the result equals a bounce of the same
+     * span. Runs synchronously on the calling thread: the thread is blocked for
+     * the whole render.
+     *
+     * The request form takes `blockSize` (default and ceiling: the offline block
+     * size; a larger value throws `RangeError`) and `finalize`. With
+     * `finalize: false` a chunk leaves held notes and delay tails running into
+     * the next call, which does not prime again; end the series with
+     * {@link finishOfflineRender}. The mirror's transport position is restored
+     * when the timeline ends.
+     */
+    renderOffline(request: number | SonareRenderOfflineRequest): Promise<Float32Array[]>;
+    /**
+     * Ends a chunked {@link renderOffline} series: releases every held note,
+     * flushes the delay lines and restores the mirror's transport position.
+     */
+    finishOfflineRender(): void;
+    /**
+     * Bounces the timeline to an interleaved buffer with the options, defaults
+     * and result of {@link RealtimeEngine.bounceOffline}; `blockSize` defaults to
+     * the offline block size and must not exceed it (`RangeError`). Runs
+     * synchronously on the calling thread. The mirror's transport position is
+     * restored afterwards. OPFS-streamed clips are paged in for the span first.
+     */
+    bounceOffline(options: EngineBounceOptions): Promise<EngineBounceResult>;
+    /**
+     * Freezes the source layer with the options, defaults and result of
+     * {@link RealtimeEngine.freezeOffline}: master, monitor, graph, capture and
+     * metronome stay live. As there, the frozen clip replaces the clip set and the
+     * MIDI clips are withdrawn: the facade, the mirror and the worklet all end up
+     * holding only that clip. `blockSize` defaults to the offline block size and must not
+     * exceed it (`RangeError`). Runs synchronously on the calling thread.
+     */
+    freezeOffline(options: EngineFreezeOptions): Promise<EngineFreezeResult>;
+    /**
+     * Subscribe to batches of external-MIDI events (already lowered to MIDI 1.0
+     * bytes) for delivery to Web MIDI output ports. Each event carries its
+     * absolute `renderFrame`; a batch is not a render block. With postMessage
+     * transport a batch holds one block's events; with the SAB ring it holds what
+     * accumulated since the previous poll, which may span many blocks. Returns an
+     * unsubscribe function.
      */
     onMidiOut(callback: (events: SonareWorkletExternalMidiEvent[]) => void): () => void;
     onMeter(callback: (meter: SonareWorkletMeterSnapshot) => void): () => void;
@@ -400,7 +484,11 @@ export declare class SonareEngine {
     private pumpWorkletClipPages;
     private enqueueWorkletClipPageRequest;
     private popWorkletClipPageRequest;
-    private commitWorkletClipPageProvider;
+    /**
+     * The attached OPFS stream `clip` schedules, or undefined when its page
+     * provider is not one; throws when the clip id differs from the stream's.
+     */
+    private workletClipStream;
     private mixerLanes;
     private syncMixer;
     private insertAutomationTargetKey;
@@ -417,10 +505,11 @@ export declare class SonareEngine {
     private get captureContext();
     private get parameterContext();
     private get tempoContext();
+    private get exportContext();
     private get clipContext();
     private get markerContext();
-    private stripParamId;
     private sendSmoothedParam;
+    private get commitContext();
     private resolveParamId;
     private syncParameters;
     private resolveTargetId;

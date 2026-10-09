@@ -1,4 +1,4 @@
-import type { MasteringChainConfig } from './public_types';
+import type { MasteringChainConfig } from './public_types.js';
 /**
  * Flattens a nested {@link MasteringChainConfig} into the dot-notation
  * `{ "module.processor.param": value }` map the core consumes. Internal helper

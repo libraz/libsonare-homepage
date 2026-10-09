@@ -1,21 +1,14 @@
-import type { EngineAutomationPoint, EngineParameterInfo, EngineTrackMonitorMode, RealtimeEngine } from '../index';
-import type { SonareEngineSyncMessage } from './messages';
-import { SonareEngineCommandType } from './protocol';
+import type { EngineAutomationPoint, EngineParameterInfo, EngineTrackMonitorMode, RealtimeEngine } from '../index.js';
+import { type EngineCommitContext } from './engine-commit.js';
+import type { SonareEngineSyncMessage } from './messages.js';
 /**
  * Collaborator surface the parameter / automation-id resolution helpers need
  * from the owning {@link SonareEngine}: the offline engine they mirror into and
  * query, the realtime node they command, the lane/bus declaration helpers, and
  * the declared track-lane id store used to resolve insert-automation ids.
  */
-export interface EngineParameterContext {
+export interface EngineParameterContext extends EngineCommitContext {
     readonly offlineEngine: RealtimeEngine;
-    sendCommand(command: {
-        type: SonareEngineCommandType;
-        targetId?: number;
-        sampleTime?: number;
-        argFloat?: number;
-        argInt?: number;
-    }): boolean;
     postSync(message: SonareEngineSyncMessage): void;
     readonly automationLanes: Map<number, EngineAutomationPoint[]>;
     readonly trackLaneIds: number[];
@@ -31,7 +24,9 @@ export declare function setTrackMonitorMode(ctx: EngineParameterContext, target:
  *
  * The id addresses the engine's reserved mixer namespace, so it can be fed
  * straight to setAutomationLane to automate a fader or pan without
- * registering a parameter.
+ * registering a parameter. A track's id is resolved on the offline engine,
+ * which numbers it as the worklet engine does, and keeps naming that track
+ * across lane reorders (see `resolveTrackLaneAutomationId`).
  *
  * @param target Track id (declares a mixer lane on first use) or 'master'.
  * @param kind Strip parameter to address.
@@ -39,7 +34,9 @@ export declare function setTrackMonitorMode(ctx: EngineParameterContext, target:
  */
 export declare function automationParamId(ctx: EngineParameterContext, target: string | number, kind: 'faderDb' | 'pan'): number;
 /**
- * Returns the automation target id for a bus fader.
+ * Returns the automation target id for a bus fader. The id is resolved on the
+ * offline engine, which numbers it as the worklet engine does, and keeps naming
+ * that bus across bus reorders (see `resolveBusAutomationId`).
  *
  * @param busId Bus id (declares the mixer bus on first use).
  * @returns Reserved engine parameter id for the bus fader gain (dB).
@@ -84,7 +81,8 @@ export declare function resolveBusInsertAutomationId(ctx: EngineParameterContext
  *
  * The instrument must already be bound on the offline engine for the
  * destination (the worklet mirrors every instrument sync onto it), otherwise
- * the resolve returns -1.
+ * the resolve returns -1. Both engines number the id when the instrument is
+ * bound, so the worklet engine applies it without resolving.
  *
  * @param destinationId MIDI destination the instrument is bound to.
  * @param paramName Instrument JSON-key parameter name (e.g. `cutoffHz`).
@@ -101,5 +99,5 @@ export declare function automationLaneCount(ctx: EngineParameterContext): number
 export declare function listParameters(ctx: EngineParameterContext): EngineParameterInfo[];
 /** Registers a parameter on both the offline mirror and live worklet engine. */
 export declare function addParameter(ctx: EngineParameterContext, info: EngineParameterInfo): void;
-/** Clears registered parameters and their automation lanes on both engines. */
+/** Clears registered parameters on both engines; automation lanes stay in place. */
 export declare function clearParameters(ctx: EngineParameterContext): void;

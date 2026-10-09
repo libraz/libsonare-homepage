@@ -1,29 +1,48 @@
-// src/errors.ts
-var SonareError = class extends Error {
-  constructor(code, codeName, message) {
-    super(message);
-    this.name = "SonareError";
-    this.code = code;
-    this.codeName = codeName;
-  }
-  /**
-   * Brand-based `instanceof`: an error that carries the shape narrows here even
-   * when it is not literally an instance of this class. That is not a
-   * hypothetical — an error posted from the analysis worker arrives as a
-   * structured clone with its prototype gone, which a prototype-based
-   * `instanceof` would silently miss. Delegates to {@link isSonareError} so the
-   * two never disagree.
-   */
-  static [Symbol.hasInstance](value) {
-    return isSonareError(value);
-  }
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
 };
+
+// src/abi.ts
+var EXPECTED_ABI_VERSION;
+var init_abi = __esm({
+  "src/abi.ts"() {
+    "use strict";
+    EXPECTED_ABI_VERSION = 67305991;
+  }
+});
+
+// src/errors.ts
 function isSonareError(value) {
   return value instanceof Error && value.name === "SonareError" && typeof value.code === "number";
 }
+var SonareError;
+var init_errors = __esm({
+  "src/errors.ts"() {
+    "use strict";
+    SonareError = class extends Error {
+      constructor(code, codeName, message) {
+        super(message);
+        this.name = "SonareError";
+        this.code = code;
+        this.codeName = codeName;
+      }
+      /**
+       * Brand-based `instanceof`: an error that carries the shape narrows here even
+       * when it is not literally an instance of this class. That is not a
+       * hypothetical — an error posted from the analysis worker arrives as a
+       * structured clone with its prototype gone, which a prototype-based
+       * `instanceof` would silently miss. Delegates to {@link isSonareError} so the
+       * two never disagree.
+       */
+      static [Symbol.hasInstance](value) {
+        return isSonareError(value);
+      }
+    };
+  }
+});
 
 // src/module_state.ts
-var wrappedModule = null;
 function nativeExceptionPtr(error) {
   if (typeof error === "number") {
     return error;
@@ -39,6 +58,7 @@ function nativeExceptionPtr(error) {
 function makeSonareError(raw, thrown) {
   let code = 99 /* Unknown */;
   let codeName = "Unknown";
+  let kind;
   let message = `libsonare native exception (${thrown})`;
   try {
     const info = raw.sonareExceptionInfo?.(thrown);
@@ -46,6 +66,7 @@ function makeSonareError(raw, thrown) {
       code = info.code ?? code;
       codeName = info.codeName ?? codeName;
       message = info.message || message;
+      kind = info.kind;
     }
   } catch {
   } finally {
@@ -53,6 +74,12 @@ function makeSonareError(raw, thrown) {
       raw.sonareReleaseException(thrown);
     } catch {
     }
+  }
+  if (kind === "TypeError") {
+    return new TypeError(message);
+  }
+  if (kind === "RangeError") {
+    return new RangeError(message);
   }
   return new SonareError(code, codeName, message);
 }
@@ -63,6 +90,9 @@ function wrapModuleErrors(raw) {
     const ptr = nativeExceptionPtr(error);
     if (ptr !== null) {
       throw makeSonareError(raw, ptr);
+    }
+    if (error instanceof Error && EMBIND_DELETED_PATTERN.test(error.message)) {
+      throw new SonareError(7 /* InvalidState */, "InvalidState", error.message);
     }
     throw error;
   };
@@ -163,17 +193,117 @@ function wrapModuleErrors(raw) {
     }
   });
 }
+function notInitializedError() {
+  return new SonareError(
+    7 /* InvalidState */,
+    "InvalidState",
+    "Module not initialized. Call init() first."
+  );
+}
+function hexAbi(version) {
+  return `0x${(version >>> 0).toString(16).padStart(8, "0")}`;
+}
+function assertAbiCompatible(created) {
+  const actual = typeof created.abiVersion === "function" ? created.abiVersion() : void 0;
+  if (actual === EXPECTED_ABI_VERSION) {
+    return;
+  }
+  throw new SonareError(
+    10 /* AbiMismatch */,
+    "AbiMismatch",
+    `libsonare ABI mismatch: wasm module reports ${actual === void 0 ? "no ABI version" : hexAbi(actual)}, this package expects ${hexAbi(EXPECTED_ABI_VERSION)}. The JS glue and the .wasm binary come from different builds; check the wasmBinary, locateFile and moduleFactory options and any cached copy of sonare.wasm.`
+  );
+}
+function assertSameInitOptions(first, next) {
+  if (next === void 0) {
+    return;
+  }
+  const a = first ?? {};
+  const b = next;
+  const keys = /* @__PURE__ */ new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const key of keys) {
+    if (a[key] !== b[key]) {
+      throw new SonareError(
+        7 /* InvalidState */,
+        "InvalidState",
+        `init() options differ from the first call (${key}); options apply on the first call only.`
+      );
+    }
+  }
+}
 function setSonareModule(module3) {
   wrappedModule = wrapModuleErrors(module3);
 }
 function getSonareModule() {
   if (!wrappedModule) {
-    throw new Error("Module not initialized. Call init() first.");
+    throw notInitializedError();
   }
   return wrappedModule;
 }
+var wrappedModule, EMBIND_DELETED_PATTERN;
+var init_module_state = __esm({
+  "src/module_state.ts"() {
+    "use strict";
+    init_abi();
+    init_errors();
+    wrappedModule = null;
+    EMBIND_DELETED_PATTERN = / instance already deleted$|^Cannot pass deleted object as a pointer of type /;
+  }
+});
+
+// src/validation.ts
+function assertFiniteScalar(fnName, value, argName) {
+  if (!Number.isFinite(value)) {
+    throw new RangeError(`${fnName}: ${argName} must be a finite number`);
+  }
+}
+function secondsToSampleCount(fnName, seconds, sampleRate, argName) {
+  if (typeof seconds !== "number") {
+    throw new TypeError(`${fnName}: ${argName} must be a number`);
+  }
+  assertFiniteScalar(fnName, seconds, argName);
+  const samples = Math.round(seconds * sampleRate);
+  if (!Number.isSafeInteger(samples)) {
+    throw new RangeError(`${fnName}: ${argName} is out of range at ${sampleRate} Hz`);
+  }
+  return samples;
+}
+function resolveSampleBound(fnName, sampleValue, secValue, sampleRate, sampleName, secName, sign = "non-negative") {
+  const hasSample = sampleValue !== void 0 && sampleValue !== null;
+  const hasSec = secValue !== void 0 && secValue !== null;
+  if (hasSample && hasSec) {
+    throw new RangeError(`${fnName}: give ${sampleName} or ${secName}, not both`);
+  }
+  if (!hasSample && !hasSec) {
+    return void 0;
+  }
+  const value = hasSec ? secondsToSampleCount(fnName, secValue, sampleRate, secName) : sampleValue;
+  const name = hasSec ? secName : sampleName;
+  if (typeof value !== "number" || !hasSec && !Number.isFinite(value)) {
+    return value;
+  }
+  if (sign === "non-negative" && value < 0) {
+    throw new RangeError(`${fnName}: ${name} must be non-negative`);
+  }
+  return value === 0 ? 0 : value;
+}
+var init_validation = __esm({
+  "src/validation.ts"() {
+    "use strict";
+  }
+});
+
+// src/lifetime.ts
+var symbolCtor = Symbol;
+symbolCtor.dispose ?? (symbolCtor.dispose = /* @__PURE__ */ Symbol.for("Symbol.dispose"));
+
+// src/index.ts
+init_module_state();
 
 // src/vocal_edit.ts
+init_errors();
+init_module_state();
+init_validation();
 var vocalErrorFields = [
   "reason",
   "field",
@@ -254,7 +384,11 @@ function module() {
 }
 function requireHandle(handle, subject) {
   if (!Number.isSafeInteger(handle) || handle <= 0) {
-    throw new TypeError(`${subject} has already been disposed`);
+    throw new SonareError(
+      7 /* InvalidState */,
+      "InvalidState",
+      `${subject} has already been disposed`
+    );
   }
 }
 function requireFinite(value, field) {
@@ -298,16 +432,85 @@ function resolveRevision(argument, fallback) {
   const value = typeof argument === "string" ? argument : argument?.expectedRevision;
   return requireToken(value, "expectedRevision", fallback);
 }
-function requireRange(range) {
+function resolveRange(range, sampleRate, outputLengthSamples) {
   if (!range || typeof range !== "object") {
     throw new TypeError("range must be an object");
   }
-  const startSample = requireSample(range.startSample, "range.startSample");
-  const endSample = requireSample(range.endSample, "range.endSample");
+  const fn = "VocalRenderSnapshot.render";
+  const start = resolveSampleBound(
+    fn,
+    range.startSample,
+    range.startSec,
+    sampleRate,
+    "range.startSample",
+    "range.startSec"
+  ) ?? 0;
+  const end = resolveSampleBound(
+    fn,
+    range.endSample,
+    range.endSec,
+    sampleRate,
+    "range.endSample",
+    "range.endSec"
+  ) ?? outputLengthSamples;
+  const startSample = requireSample(start, "range.startSample");
+  const endSample = requireSample(end, "range.endSample");
   if (endSample < startSample) {
     throw new RangeError("range.endSample must be >= startSample");
   }
   return { startSample, endSample };
+}
+function resolveOperationTimes(operations, sampleRate) {
+  const fn = "VocalEditDraft.apply";
+  return operations.map((operation, index) => {
+    const at = `operations[${index}]`;
+    if (operation?.kind === "setSourceSpan") {
+      const { sourceStartSec, sourceEndSec, destinationStartSec, destinationLengthSec, ...rest } = operation;
+      const bound = (sample, sec, sampleName, secName) => resolveSampleBound(fn, sample, sec, sampleRate, `${at}.${sampleName}`, `${at}.${secName}`);
+      return {
+        ...rest,
+        sourceStartSample: bound(
+          rest.sourceStartSample,
+          sourceStartSec,
+          "sourceStartSample",
+          "sourceStartSec"
+        ),
+        sourceEndSample: bound(
+          rest.sourceEndSample,
+          sourceEndSec,
+          "sourceEndSample",
+          "sourceEndSec"
+        ),
+        destinationStartSample: bound(
+          rest.destinationStartSample,
+          destinationStartSec,
+          "destinationStartSample",
+          "destinationStartSec"
+        ),
+        destinationLengthSamples: bound(
+          rest.destinationLengthSamples,
+          destinationLengthSec,
+          "destinationLengthSamples",
+          "destinationLengthSec"
+        )
+      };
+    }
+    if (operation?.kind === "split") {
+      const { sourceSec, ...rest } = operation;
+      return {
+        ...rest,
+        sourceSample: resolveSampleBound(
+          fn,
+          rest.sourceSample,
+          sourceSec,
+          sampleRate,
+          `${at}.sourceSample`,
+          `${at}.sourceSec`
+        )
+      };
+    }
+    return operation;
+  });
 }
 function copyToken(token) {
   return {
@@ -452,8 +655,12 @@ function validateCreate(request) {
     }
   }
 }
-function normalizeRequest(request, outputLengthSamples) {
-  const range = request.range === void 0 ? { startSample: 0, endSample: requireSample(outputLengthSamples, "outputLengthSamples") } : requireRange(request.range);
+function normalizeRequest(request, outputLengthSamples, sampleRate) {
+  const range = request.range === void 0 ? { startSample: 0, endSample: requireSample(outputLengthSamples, "outputLengthSamples") } : resolveRange(
+    request.range,
+    sampleRate,
+    requireSample(outputLengthSamples, "outputLengthSamples")
+  );
   const requestId = requireToken(request.requestId, "requestId");
   return { range, requestId };
 }
@@ -464,10 +671,15 @@ function vocalEditAvailable() {
 function createVocalEditSession(request) {
   validateCreate(request);
   if (!vocalEditAvailable()) {
-    throw new Error("vocal edit is unavailable in this WASM build");
+    throw new SonareError(
+      6 /* NotSupported */,
+      "NotSupported",
+      "vocal edit is unavailable in this WASM build"
+    );
   }
   return new VocalEditSession(
-    module().vocalEditSessionCreate(request.samples, request.sampleRate, request)
+    module().vocalEditSessionCreate(request.samples, request.sampleRate, request),
+    request.sampleRate
   );
 }
 function restoreVocalEditSession(request) {
@@ -483,19 +695,25 @@ function restoreVocalEditSession(request) {
   requireSampleRate(request.sampleRate);
   validateSessionLimits(request.limits);
   if (!vocalEditAvailable()) {
-    throw new Error("vocal edit is unavailable in this WASM build");
+    throw new SonareError(
+      6 /* NotSupported */,
+      "NotSupported",
+      "vocal edit is unavailable in this WASM build"
+    );
   }
   return new VocalEditSession(
-    module().vocalEditSessionRestore(request.samples, request.sampleRate, request.state, request)
+    module().vocalEditSessionRestore(request.samples, request.sampleRate, request.state, request),
+    request.sampleRate
   );
 }
 var VocalEditSession = class {
   /** @internal Instances are created by {@link createVocalEditSession} and {@link restoreVocalEditSession}. */
-  constructor(handle) {
+  constructor(handle, sampleRate) {
     this.drafts = /* @__PURE__ */ new Set();
     this.disposed = false;
     requireHandle(handle, "session");
     this.handle = handle;
+    this.sampleRate = sampleRate;
   }
   dispose() {
     if (this.disposed) {
@@ -515,9 +733,17 @@ var VocalEditSession = class {
   destroy() {
     this.dispose();
   }
+  /** Releases the handle through {@link dispose}, so the instance works with `using`. */
+  [Symbol.dispose]() {
+    this.dispose();
+  }
   native() {
     if (this.disposed) {
-      throw new TypeError("session has already been disposed");
+      throw new SonareError(
+        7 /* InvalidState */,
+        "InvalidState",
+        "session has already been disposed"
+      );
     }
     requireHandle(this.handle, "session");
     return this.handle;
@@ -550,7 +776,8 @@ var VocalEditSession = class {
   beginEdit(options = {}) {
     const draft = new VocalEditDraft(
       module().vocalEditSessionBeginEdit(this.native(), resolveRevision(options, this.revision())),
-      this
+      this,
+      this.sampleRate
     );
     this.drafts.add(draft);
     return draft;
@@ -599,7 +826,10 @@ var VocalEditSession = class {
     );
   }
   captureRenderSnapshot() {
-    return new VocalRenderSnapshot(module().vocalEditCaptureSnapshot(this.native(), false));
+    return new VocalRenderSnapshot(
+      module().vocalEditCaptureSnapshot(this.native(), false),
+      this.sampleRate
+    );
   }
   exportState() {
     return new Uint8Array(module().vocalEditSessionExportState(this.native()));
@@ -611,15 +841,20 @@ var VocalEditSession = class {
 };
 var VocalEditDraft = class {
   /** @internal Instances are created by {@link VocalEditSession.beginEdit}. */
-  constructor(handle, owner) {
+  constructor(handle, owner, sampleRate) {
     this.disposed = false;
     requireHandle(handle, "draft");
     this.handle = handle;
     this.owner = owner;
+    this.sampleRate = sampleRate;
   }
   native() {
     if (this.disposed) {
-      throw new TypeError("draft has already been disposed");
+      throw new SonareError(
+        7 /* InvalidState */,
+        "InvalidState",
+        "draft has already been disposed"
+      );
     }
     requireHandle(this.handle, "draft");
     return this.handle;
@@ -639,7 +874,11 @@ var VocalEditDraft = class {
       throw new TypeError("operations must be an array");
     }
     return copyEditResult(
-      module().vocalEditDraftApply(this.native(), generation, request.operations)
+      module().vocalEditDraftApply(
+        this.native(),
+        generation,
+        resolveOperationTimes(request.operations, this.sampleRate)
+      )
     );
   }
   commit(options = {}) {
@@ -682,7 +921,10 @@ var VocalEditDraft = class {
     );
   }
   captureRenderSnapshot() {
-    return new VocalRenderSnapshot(module().vocalEditCaptureSnapshot(this.native(), true));
+    return new VocalRenderSnapshot(
+      module().vocalEditCaptureSnapshot(this.native(), true),
+      this.sampleRate
+    );
   }
   dispose() {
     if (this.disposed) {
@@ -699,17 +941,26 @@ var VocalEditDraft = class {
   destroy() {
     this.dispose();
   }
+  /** Releases the handle through {@link dispose}, so the instance works with `using`. */
+  [Symbol.dispose]() {
+    this.dispose();
+  }
 };
 var VocalRenderSnapshot = class {
   /** @internal Instances are created by a session or draft. */
-  constructor(handle) {
+  constructor(handle, sampleRate) {
     this.disposed = false;
     requireHandle(handle, "snapshot");
     this.handle = handle;
+    this.sampleRate = sampleRate;
   }
   native() {
     if (this.disposed) {
-      throw new TypeError("snapshot has already been disposed");
+      throw new SonareError(
+        7 /* InvalidState */,
+        "InvalidState",
+        "snapshot has already been disposed"
+      );
     }
     requireHandle(this.handle, "snapshot");
     return this.handle;
@@ -725,7 +976,7 @@ var VocalRenderSnapshot = class {
     if (request.signal?.aborted) {
       throw new DOMException("The render was aborted", "AbortError");
     }
-    const normalized = normalizeRequest(request, this.outputLengthSamples());
+    const normalized = normalizeRequest(request, this.outputLengthSamples(), this.sampleRate);
     return copyRender(
       module().vocalEditSnapshotRender(
         handle,
@@ -740,7 +991,7 @@ var VocalRenderSnapshot = class {
     if (request.signal?.aborted) {
       throw new DOMException("The render was aborted", "AbortError");
     }
-    const normalized = normalizeRequest(request, this.outputLengthSamples());
+    const normalized = normalizeRequest(request, this.outputLengthSamples(), this.sampleRate);
     return new VocalRenderJob(
       module().vocalEditRenderJobBegin(
         handle,
@@ -795,6 +1046,10 @@ var VocalRenderSnapshot = class {
   destroy() {
     this.dispose();
   }
+  /** Releases the handle through {@link dispose}, so the instance works with `using`. */
+  [Symbol.dispose]() {
+    this.dispose();
+  }
 };
 var VocalRenderJob = class {
   /** @internal Instances are created by {@link VocalRenderSnapshot.beginRenderJob}. */
@@ -805,7 +1060,11 @@ var VocalRenderJob = class {
   }
   native() {
     if (this.disposed) {
-      throw new TypeError("render job has already been disposed");
+      throw new SonareError(
+        7 /* InvalidState */,
+        "InvalidState",
+        "render job has already been disposed"
+      );
     }
     requireHandle(this.handle, "render job");
     return this.handle;
@@ -837,6 +1096,10 @@ var VocalRenderJob = class {
   destroy() {
     this.dispose();
   }
+  /** Releases the handle through {@link dispose}, so the instance works with `using`. */
+  [Symbol.dispose]() {
+    this.dispose();
+  }
 };
 
 // src/vocal_edit_worker_protocol.ts
@@ -855,20 +1118,27 @@ function compareUint64(a, b) {
 // src/index.ts
 var module2 = null;
 var initPromise = null;
+var firstInitOptions;
 async function init(options) {
   if (module2) {
+    assertSameInitOptions(firstInitOptions, options);
     return;
   }
   if (initPromise) {
+    assertSameInitOptions(firstInitOptions, options);
     return initPromise;
   }
+  firstInitOptions = options && { ...options };
   initPromise = (async () => {
     try {
       const createModule = options?.moduleFactory ?? (await import("./sonare.js")).default;
-      module2 = await createModule(options);
+      const created = await createModule(options);
+      assertAbiCompatible(created);
+      module2 = created;
       setSonareModule(module2);
     } catch (error) {
       initPromise = null;
+      firstInitOptions = void 0;
       throw error;
     }
   })();

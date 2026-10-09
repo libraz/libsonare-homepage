@@ -1,5 +1,5 @@
-import { type OpfsClipPageProviderBinding, type OpfsClipPageProviderOptions } from './opfs_clip_pages';
-import type { ClipPageProvider, RealtimeEngine } from './realtime_engine';
+import { type OpfsClipPageProviderBinding, type OpfsClipPageProviderOptions } from './opfs_clip_pages.js';
+import type { ClipPageProvider, RealtimeEngine } from './realtime_engine.js';
 /**
  * Minimal engine surface the streamer drives. {@link RealtimeEngine} satisfies
  * this structurally; tests can supply a lightweight stand-in.
@@ -67,12 +67,14 @@ export declare class ClipPageStreamer {
     private readonly retainBehindPages;
     private readonly maxRequestsPerPump;
     private readonly sources;
-    private closed;
+    private readonly epoch;
+    private nextFetchToken;
     constructor(engine: ClipPageStreamerEngine, options?: ClipPageStreamerOptions);
     /**
      * Register a paged clip. Pages already supplied to the provider before
      * registration (for example a primed first page) should be passed in
-     * `initialResidentPages` so they participate in eviction.
+     * `initialResidentPages` so they participate in eviction. Throws
+     * `InvalidState` once the streamer is closed.
      */
     addSource(source: ClipPageStreamSource, initialResidentPages?: Iterable<number>): void;
     /** Stop tracking a clip. Does not close its binding (the caller owns that). */
@@ -91,6 +93,12 @@ export declare class ClipPageStreamer {
     pump(): Promise<void>;
     /** Close every registered clip's binding and stop tracking. */
     close(): void;
+    /** Alias for {@link close}, provided for cross-binding compatibility. */
+    delete(): void;
+    /** Alias for {@link close}, provided for cross-binding compatibility. */
+    destroy(): void;
+    /** Releases the streamer through {@link close}, so the instance works with `using`. */
+    [Symbol.dispose](): void;
     private serviceFrontier;
     private resetState;
     private clearPage;

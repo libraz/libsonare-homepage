@@ -1,4 +1,4 @@
-import type { ProjectVocalEditApplyRequest, ProjectVocalEditApplyResult, ProjectVocalEditDependency, ProjectVocalOriginalSource, ProjectVocalRehydrateItem } from './public_types_vocal_project';
+import type { ProjectVocalEditApplyRequest, ProjectVocalEditApplyResult, ProjectVocalEditDependency, ProjectVocalOriginalSource, ProjectVocalRehydrateItem } from './public_types_vocal_project.js';
 /** The embind Project object is deliberately structural here. */
 export interface VocalProjectNative {
     applyVocalEdit: (request: unknown) => unknown;

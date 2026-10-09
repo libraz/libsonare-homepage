@@ -1,10 +1,14 @@
-import type { MasteringChainConfig, MasteringChainResult, MasteringChainStereoResult, MasteringPreset } from './public_types';
+import type { MasteringChainConfig, MasteringChainResult, MasteringChainStereoResult, MasteringPreset, StreamingLoudnessGainResult } from './public_types.js';
 import type { ProgressCallback } from './sonare.js';
-import type { ValidateOptions } from './validation';
+import type { ValidateOptions } from './validation.js';
 export type NormalizeMode = 'peak' | 'rms';
 export interface NormalizeRequest extends ValidateOptions {
     samples: Float32Array;
     sampleRate?: number;
+    /**
+     * Finite target level at or below 0 dBFS. Defaults to 0 for `mode: 'peak'` and
+     * -20 for `mode: 'rms'`.
+     */
     targetDb?: number;
     mode?: NormalizeMode;
 }
@@ -13,8 +17,9 @@ export interface NormalizeRequest extends ValidateOptions {
  *
  * @param samples - Audio samples (mono, float32)
  * @param sampleRate - Sample rate in Hz (default: 22050)
- * @param targetDb - Finite target at or below 0 dBFS (default: 0 dB = full scale).
- *   For `mode: 'peak'`, this is the peak target; for `mode: 'rms'`, this is the RMS target.
+ * @param targetDb - Finite target at or below 0 dBFS. For `mode: 'peak'`, this is the
+ *   peak target (default 0 dB = full scale); for `mode: 'rms'`, this is the RMS target
+ *   (default -20 dB).
  * @param mode - Normalization mode: `'peak'` (default) or `'rms'`.
  * @returns Normalized audio
  */
@@ -86,6 +91,40 @@ export interface MasteringChainStereoRequest {
     onProgress?: ProgressCallback;
     cancel?: () => boolean;
 }
+/** Request for {@link streamingLoudnessGain}. */
+export interface StreamingLoudnessGainRequest {
+    samples: Float32Array;
+    sampleRate?: number;
+    /** The chain config the streaming chain will run; read like {@link masteringChain}'s. */
+    config?: MasteringChainConfig;
+}
+/** Request for {@link streamingLoudnessGainStereo}. */
+export interface StreamingLoudnessGainStereoRequest {
+    left: Float32Array;
+    right: Float32Array;
+    sampleRate?: number;
+    config?: MasteringChainConfig;
+}
+/**
+ * Measures the loudness numbers a {@link StreamingMasteringChain} needs.
+ *
+ * Runs the offline chain described by `config` up to its loudness stage and
+ * measures there, so `loudnessStaticGainDb` equals the gain
+ * {@link masteringChain} applies (ceiling clamp included) and `truePeakDb` is
+ * the peak that clamp used. The gain is computed from `config.loudness` whether
+ * or not the stage is enabled; a silent or below-gate stage input yields 0 dB.
+ *
+ * @example
+ * const { loudnessStaticGainDb, truePeakDb } = streamingLoudnessGain({ samples, sampleRate, config });
+ * const chain = new StreamingMasteringChain({
+ *   ...config,
+ *   loudnessStaticGainDb,
+ *   loudnessStaticGainPeakDb: truePeakDb,
+ * });
+ */
+export declare function streamingLoudnessGain(request: StreamingLoudnessGainRequest): StreamingLoudnessGainResult;
+/** Stereo counterpart of {@link streamingLoudnessGain}, with BS.1770 channel summing. */
+export declare function streamingLoudnessGainStereo(request: StreamingLoudnessGainStereoRequest): StreamingLoudnessGainResult;
 /** Canonical request form for one-shot preset mastering. */
 export interface MasterAudioRequest {
     samples: Float32Array;

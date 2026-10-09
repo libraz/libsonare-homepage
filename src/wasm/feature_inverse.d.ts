@@ -2,11 +2,11 @@
  * Inverse transforms: reconstructing a linear spectrogram or audio from a mel
  * or MFCC representation, and the phase reconstruction they share.
  */
-import type { GuardedOptions } from './_feature_validation';
-import type { SpectralFrameRequest } from './feature_spectral';
-import type { MelPowerResult, StftPowerResult } from './public_types';
+import type { GuardedOptions } from './_feature_validation.js';
+import type { SpectralFrameRequest } from './feature_spectral.js';
+import type { MelPowerResult, MelSpectrogramResult, MfccResult, StftPowerResult } from './public_types.js';
 export interface MfccToMelRequest extends GuardedOptions {
-    mfccCoefficients: Float32Array;
+    coefficients: Float32Array;
     nMfcc: number;
     nFrames: number;
     nMels?: number;
@@ -15,7 +15,7 @@ export interface MfccToMelRequest extends GuardedOptions {
 }
 /** Canonical request form for reconstruction from a Mel power spectrogram. */
 export interface MelToStftRequest extends GuardedOptions {
-    melPower: Float32Array;
+    power: Float32Array;
     nMels: number;
     nFrames: number;
     sampleRate?: number;
@@ -27,6 +27,52 @@ export interface MelToStftRequest extends GuardedOptions {
 /** Canonical request form for Griffin-Lim reconstruction from Mel power. */
 export interface MelToAudioRequest extends MelToStftRequest {
     hopLength?: number;
+    nIter?: number;
+}
+/**
+ * Request form of {@link melToStft} that takes the forward result and reads the
+ * Mel matrix and every parameter from it. A field set here as well must agree
+ * with the result's value, or the call is refused with a `RangeError`; a result
+ * in dB is refused too, with a message naming `dbToPower`.
+ */
+export interface MelResultToStftRequest extends GuardedOptions {
+    result: MelSpectrogramResult;
+    nMels?: number;
+    nFrames?: number;
+    sampleRate?: number;
+    nFft?: number;
+    fmin?: number;
+    fmax?: number;
+    htk?: boolean;
+}
+/** Request form of {@link melToAudio} over a forward result; see {@link MelResultToStftRequest}. */
+export interface MelResultToAudioRequest extends MelResultToStftRequest {
+    /** Hop of the reconstruction; must agree with the result's when set. */
+    hopLength?: number;
+    /** Griffin-Lim iterations. Default 32. */
+    nIter?: number;
+}
+/**
+ * Request form of {@link mfccToMel} that takes the forward result and reads the
+ * coefficients, Mel band count and lifter from it. A field set here as well must
+ * agree with the result's value, or the call is refused with a `RangeError`.
+ */
+export interface MfccResultToMelRequest extends GuardedOptions {
+    result: MfccResult;
+    nMfcc?: number;
+    nFrames?: number;
+    nMels?: number;
+    lifter?: number;
+}
+/** Request form of {@link mfccToAudio} over a forward result; see {@link MfccResultToMelRequest}. */
+export interface MfccResultToAudioRequest extends MfccResultToMelRequest {
+    sampleRate?: number;
+    nFft?: number;
+    hopLength?: number;
+    fmin?: number;
+    fmax?: number;
+    htk?: boolean;
+    /** Griffin-Lim iterations. Default 32. */
     nIter?: number;
 }
 export interface GriffinLimRequest extends GuardedOptions {
@@ -53,7 +99,7 @@ export interface MfccToAudioRequest extends MfccToMelRequest {
  * Approximate inverse of a Mel filterbank: Mel power spectrogram -> STFT power
  * spectrogram. Mirrors `feature::mel_to_stft`.
  *
- * @param melPower - Mel power spectrogram [nMels x nFrames] row-major
+ * @param power - Mel power spectrogram [nMels x nFrames] row-major
  * @param nMels - Number of Mel bands
  * @param nFrames - Number of time frames
  * @param sampleRate - Sample rate in Hz
@@ -63,13 +109,13 @@ export interface MfccToAudioRequest extends MfccToMelRequest {
  * @param htk - Use the HTK Mel formula instead of Slaney (default: false)
  * @returns STFT power spectrogram result
  */
-export declare function melToStft(request: MelToStftRequest): StftPowerResult;
-export declare function melToStft(melPower: Float32Array, nMels: number, nFrames: number, sampleRate?: number, nFft?: number, fmin?: number, fmax?: number, htk?: boolean, options?: GuardedOptions): StftPowerResult;
+export declare function melToStft(request: MelToStftRequest | MelResultToStftRequest): StftPowerResult;
+export declare function melToStft(power: Float32Array, nMels: number, nFrames: number, sampleRate?: number, nFft?: number, fmin?: number, fmax?: number, htk?: boolean, options?: GuardedOptions): StftPowerResult;
 /**
  * Reconstruct audio from a Mel power spectrogram via Griffin-Lim. Mirrors
  * `feature::mel_to_audio`.
  *
- * @param melPower - Mel power spectrogram [nMels x nFrames] row-major
+ * @param power - Mel power spectrogram [nMels x nFrames] row-major
  * @param nMels - Number of Mel bands
  * @param nFrames - Number of time frames
  * @param sampleRate - Sample rate in Hz
@@ -81,8 +127,8 @@ export declare function melToStft(melPower: Float32Array, nMels: number, nFrames
  * @param htk - Use the HTK Mel formula instead of Slaney (default: false)
  * @returns Reconstructed audio samples (mono, float32)
  */
-export declare function melToAudio(request: MelToAudioRequest): Float32Array;
-export declare function melToAudio(melPower: Float32Array, nMels: number, nFrames: number, sampleRate?: number, nFft?: number, hopLength?: number, fmin?: number, fmax?: number, nIter?: number, htk?: boolean, options?: GuardedOptions): Float32Array;
+export declare function melToAudio(request: MelToAudioRequest | MelResultToAudioRequest): Float32Array;
+export declare function melToAudio(power: Float32Array, nMels: number, nFrames: number, sampleRate?: number, nFft?: number, hopLength?: number, fmin?: number, fmax?: number, nIter?: number, htk?: boolean, options?: GuardedOptions): Float32Array;
 /** Reconstruct audio from an STFT magnitude matrix via Griffin-Lim. */
 export declare function griffinLim(request: GriffinLimRequest): Float32Array;
 export declare function griffinLim(magnitude: Float32Array, nBins: number, nFrames: number, sampleRate?: number, nFft?: number, hopLength?: number, nIter?: number, momentum?: number, options?: GuardedOptions): Float32Array;
@@ -90,19 +136,19 @@ export declare function griffinLim(magnitude: Float32Array, nBins: number, nFram
  * Invert MFCC coefficients back to a Mel power spectrogram. Mirrors
  * `feature::mfcc_to_mel`.
  *
- * @param mfccCoefficients - MFCC matrix [nMfcc x nFrames] row-major
+ * @param coefficients - MFCC matrix [nMfcc x nFrames] row-major
  * @param nMfcc - Number of MFCC coefficients
  * @param nFrames - Number of time frames
  * @param nMels - Number of Mel bins to reconstruct (default: 128)
  * @returns Mel power spectrogram result
  */
-export declare function mfccToMel(request: MfccToMelRequest): MelPowerResult;
-export declare function mfccToMel(mfccCoefficients: Float32Array, nMfcc: number, nFrames: number, nMels?: number, lifter?: number, options?: GuardedOptions): MelPowerResult;
+export declare function mfccToMel(request: MfccToMelRequest | MfccResultToMelRequest): MelPowerResult;
+export declare function mfccToMel(coefficients: Float32Array, nMfcc: number, nFrames: number, nMels?: number, lifter?: number, options?: GuardedOptions): MelPowerResult;
 /**
  * Reconstruct audio directly from MFCC coefficients via Griffin-Lim. Mirrors
  * `feature::mfcc_to_audio`.
  *
- * @param mfccCoefficients - MFCC matrix [nMfcc x nFrames] row-major
+ * @param coefficients - MFCC matrix [nMfcc x nFrames] row-major
  * @param nMfcc - Number of MFCC coefficients
  * @param nFrames - Number of time frames
  * @param nMels - Number of Mel bins (default: 128)
@@ -115,13 +161,14 @@ export declare function mfccToMel(mfccCoefficients: Float32Array, nMfcc: number,
  * @param htk - Use the HTK Mel formula instead of Slaney (default: false)
  * @returns Reconstructed audio samples (mono, float32)
  */
-export declare function mfccToAudio(request: MfccToAudioRequest): Float32Array;
-export declare function mfccToAudio(mfccCoefficients: Float32Array, nMfcc: number, nFrames: number, nMels?: number, sampleRate?: number, nFft?: number, hopLength?: number, fmin?: number, fmax?: number, nIter?: number, htk?: boolean, lifter?: number, options?: GuardedOptions): Float32Array;
+export declare function mfccToAudio(request: MfccToAudioRequest | MfccResultToAudioRequest): Float32Array;
+export declare function mfccToAudio(coefficients: Float32Array, nMfcc: number, nFrames: number, nMels?: number, sampleRate?: number, nFft?: number, hopLength?: number, fmin?: number, fmax?: number, nIter?: number, htk?: boolean, lifter?: number, options?: GuardedOptions): Float32Array;
 export interface PhaseVocoderRequest extends SpectralFrameRequest {
     rate: number;
 }
 /**
- * Phase-vocoder time-scale modification (rate > 1 faster, < 1 slower).
+ * Phase-vocoder time-scale modification. `rate` is a speed (> 1 faster and
+ * shorter, < 1 slower and longer), the opposite sense of a note's `stretchRatio`.
  */
 export declare function phaseVocoder(request: PhaseVocoderRequest): Float32Array;
 export declare function phaseVocoder(samples: Float32Array, sampleRate: number, rate: number, nFft?: number, hopLength?: number): Float32Array;

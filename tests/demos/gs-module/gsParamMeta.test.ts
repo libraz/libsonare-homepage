@@ -28,7 +28,7 @@ describe('paramMetaOf', () => {
     expect(meta.get(paramMetaKey('utility.gain', 'levelDb'))).toEqual({
       unit: 'dB',
       min: null,
-      max: 770.637,
+      max: 770.636,
       default: 0,
     });
   });

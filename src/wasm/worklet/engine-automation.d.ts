@@ -1,5 +1,5 @@
-import type { EngineAutomationPoint, RealtimeEngine } from '../index';
-import type { SonareEngineSyncMessage } from './messages';
+import type { EngineAutomationPoint, RealtimeEngine } from '../index.js';
+import type { SonareEngineSyncMessage } from './messages.js';
 /**
  * Collaborator surface the automation-lane helpers need from the owning
  * {@link SonareEngine}: the lane store they mutate, the offline engine they

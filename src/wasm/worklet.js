@@ -1,423 +1,48 @@
-// src/opfs_clip_pages.ts
-var opfsClipPageWorkerSource = `
-const sonareClipPageReadQueues = new Map();
-
-function sonareEnqueueClipPageRead(key, task) {
-  const previous = sonareClipPageReadQueues.get(key) || Promise.resolve();
-  const next = previous.catch(() => undefined).then(task);
-  const queued = next.finally(() => {
-    if (sonareClipPageReadQueues.get(key) === queued) {
-      sonareClipPageReadQueues.delete(key);
-    }
-  });
-  sonareClipPageReadQueues.set(key, queued);
-  return next;
-}
-
-self.onmessage = async (event) => {
-  const message = event.data;
-  if (!message || message.type !== 'sonare:read-clip-page') return;
-  const { requestId, path, pageIndex, numChannels, numSamples, pageFrames, dataOffsetBytes = 0 } = message;
-  await sonareEnqueueClipPageRead(String(path), async () => {
-  try {
-    if (pageIndex < 0) {
-      self.postMessage({ type: 'sonare:clip-page', requestId, pageIndex, ok: false });
-      return;
-    }
-    const startFrame = pageIndex * pageFrames;
-    if (startFrame >= numSamples) {
-      self.postMessage({ type: 'sonare:clip-page', requestId, pageIndex, ok: false });
-      return;
-    }
-    const root = await self.navigator.storage.getDirectory();
-    let dir = root;
-    const parts = String(path).split('/').filter(Boolean);
-    for (let i = 0; i < parts.length - 1; ++i) {
-      dir = await dir.getDirectoryHandle(parts[i]);
-    }
-    const fileHandle = await dir.getFileHandle(parts[parts.length - 1]);
-    const access = await fileHandle.createSyncAccessHandle();
-    try {
-      const frames = Math.min(pageFrames, numSamples - startFrame);
-      const frameBytes = numChannels * 4;
-      const bytes = new Uint8Array(frames * frameBytes);
-      let bytesReadTotal = 0;
-      const readOffset = dataOffsetBytes + startFrame * frameBytes;
-      while (bytesReadTotal < bytes.byteLength) {
-        const bytesRead = access.read(bytes.subarray(bytesReadTotal), {
-          at: readOffset + bytesReadTotal,
-        });
-        if (bytesRead <= 0) {
-          break;
-        }
-        bytesReadTotal += bytesRead;
-      }
-      if (bytesReadTotal !== bytes.byteLength || bytesReadTotal % frameBytes !== 0) {
-        self.postMessage({ type: 'sonare:clip-page', requestId, pageIndex, ok: false });
-        return;
-      }
-      const framesRead = bytesReadTotal / frameBytes;
-      const view = new DataView(bytes.buffer, 0, framesRead * frameBytes);
-      const channelBuffers = Array.from({ length: numChannels }, () => new ArrayBuffer(framesRead * 4));
-      for (let ch = 0; ch < numChannels; ++ch) {
-        const channel = new Float32Array(channelBuffers[ch]);
-        for (let frame = 0; frame < framesRead; ++frame) {
-          channel[frame] = view.getFloat32((frame * numChannels + ch) * 4, true);
-        }
-      }
-      self.postMessage(
-        { type: 'sonare:clip-page', requestId, pageIndex, ok: true, frames: framesRead, channelBuffers },
-        channelBuffers,
-      );
-    } finally {
-      access.close();
-    }
-  } catch (error) {
-    self.postMessage({
-      type: 'sonare:clip-page',
-      requestId,
-      pageIndex,
-      ok: false,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-  });
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
 };
-`;
-function createOpfsClipPageWorker() {
-  const blob = new Blob([opfsClipPageWorkerSource], { type: "text/javascript" });
-  const url = URL.createObjectURL(blob);
-  try {
-    return new Worker(url);
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-function createOpfsClipPageProvider(engine, options) {
-  if (options.numChannels <= 0 || options.numSamples <= 0 || options.pageFrames <= 0) {
-    throw new Error("numChannels, numSamples, and pageFrames must be positive");
-  }
-  const provider = engine.createClipPageProvider(
-    options.numChannels,
-    options.numSamples,
-    options.pageFrames
-  );
-  const worker = options.worker ?? createOpfsClipPageWorker();
-  const ownsWorker = options.worker === void 0 || options.terminateWorkerOnClose === true;
-  let nextRequestId = 1;
-  let closed = false;
-  let readQueue = Promise.resolve();
-  const pending = /* @__PURE__ */ new Map();
-  const onMessage = (event) => {
-    const response = event.data;
-    if (response?.type !== "sonare:clip-page") {
-      return;
-    }
-    const entry = pending.get(response.requestId);
-    if (!entry) {
-      return;
-    }
-    pending.delete(response.requestId);
-    if (!response.ok) {
-      entry.resolve(false);
-      return;
-    }
-    const channels = response.channels ?? response.channelBuffers?.map(
-      (buffer) => new Float32Array(buffer, 0, response.frames ?? buffer.byteLength / 4)
-    );
-    if (!channels || channels.length === 0) {
-      entry.resolve(false);
-      return;
-    }
-    try {
-      provider.supply(response.pageIndex, channels);
-      options.onPageSupplied?.(response.pageIndex, channels);
-    } catch {
-      entry.resolve(false);
-      return;
-    }
-    entry.resolve(true);
-  };
-  worker.addEventListener("message", onMessage);
-  const supplyPage = (pageIndex) => {
-    if (closed) {
-      return Promise.reject(new Error("OpfsClipPageProvider is closed"));
-    }
-    const requestId = nextRequestId++;
-    const promise = new Promise((resolve, reject) => {
-      pending.set(requestId, { resolve, reject });
-    });
-    readQueue = readQueue.catch(() => void 0).then(() => {
-      if (closed) {
-        const entry = pending.get(requestId);
-        pending.delete(requestId);
-        entry?.reject(new Error("OpfsClipPageProvider is closed"));
-        return;
-      }
-      worker.postMessage({
-        type: "sonare:read-clip-page",
-        requestId,
-        path: options.path,
-        pageIndex,
-        numChannels: options.numChannels,
-        numSamples: options.numSamples,
-        pageFrames: options.pageFrames,
-        dataOffsetBytes: options.dataOffsetBytes ?? 0
-      });
-      return promise.then(
-        () => void 0,
-        () => void 0
-      );
-    });
-    readQueue.catch(() => {
-    });
-    return promise;
-  };
-  return {
-    provider,
-    supplyPage,
-    supplyRequest(request) {
-      return supplyPage(Math.floor(request.sample / options.pageFrames));
-    },
-    clearPage(pageIndex) {
-      if (closed) {
-        return;
-      }
-      provider.clear(pageIndex);
-      options.onPageCleared?.(pageIndex);
-    },
-    close() {
-      if (closed) {
-        return;
-      }
-      closed = true;
-      worker.removeEventListener("message", onMessage);
-      for (const entry of pending.values()) {
-        entry.reject(new Error("OpfsClipPageProvider is closed"));
-      }
-      pending.clear();
-      provider.destroy();
-      options.onClose?.();
-      if (ownsWorker) {
-        worker.terminate();
-      }
-    }
-  };
-}
-
-// src/clip_page_streamer.ts
-var ClipPageStreamer = class {
-  constructor(engine, options = {}) {
-    this.sources = /* @__PURE__ */ new Map();
-    this.closed = false;
-    this.engine = engine;
-    this.readAheadPages = Math.max(0, Math.floor(options.readAheadPages ?? 2));
-    this.retainBehindPages = Math.max(0, Math.floor(options.retainBehindPages ?? 1));
-    this.maxRequestsPerPump = Math.max(1, Math.floor(options.maxRequestsPerPump ?? 256));
-  }
-  /**
-   * Register a paged clip. Pages already supplied to the provider before
-   * registration (for example a primed first page) should be passed in
-   * `initialResidentPages` so they participate in eviction.
-   */
-  addSource(source, initialResidentPages = []) {
-    if (source.pageFrames <= 0 || source.numSamples <= 0) {
-      throw new Error("pageFrames and numSamples must be positive");
-    }
-    const lastPage = Math.ceil(source.numSamples / source.pageFrames) - 1;
-    const previous = this.sources.get(source.clipId);
-    if (previous) {
-      this.resetState(previous);
-    }
-    this.sources.set(source.clipId, {
-      source,
-      lastPage,
-      generation: 0,
-      lastFrontier: null,
-      resident: new Map(Array.from(initialResidentPages, (page) => [page, 0]))
-    });
-  }
-  /** Stop tracking a clip. Does not close its binding (the caller owns that). */
-  removeSource(clipId) {
-    const state = this.sources.get(clipId);
-    if (state) {
-      this.resetState(state);
-    }
-    this.sources.delete(clipId);
-  }
-  /**
-   * Explicitly start a new playback generation after a host seek/loop. Resident
-   * pages are evicted and any older in-flight fetch is cleared when it settles.
-   * The next miss establishes the new bounded window.
-   */
-  resetSource(clipId) {
-    const state = this.sources.get(clipId);
-    if (state) {
-      this.resetState(state);
-    }
-  }
-  /**
-   * Drain pending page-miss requests, fetch the missing pages plus their
-   * read-ahead window, and evict out-of-window pages. Resolves once this round's
-   * fetches settle. Concurrent fetches are serialized inside each binding.
-   */
-  async pump() {
-    if (this.closed) {
-      return;
-    }
-    const frontiers = /* @__PURE__ */ new Map();
-    for (let drained = 0; drained < this.maxRequestsPerPump; ++drained) {
-      const request = this.engine.popClipPageRequest();
-      if (!request) {
-        break;
-      }
-      const state = this.sources.get(request.clipId);
-      if (!state) {
-        continue;
-      }
-      const page = request.pageIndex !== void 0 ? request.pageIndex : Math.floor((request.sample ?? Number.NaN) / state.source.pageFrames);
-      if (!Number.isInteger(page) || page < 0 || page > state.lastPage) {
-        continue;
-      }
-      frontiers.set(request.clipId, page);
-    }
-    const fetches = [];
-    for (const [clipId, frontier] of frontiers) {
-      const state = this.sources.get(clipId);
-      if (!state) {
-        continue;
-      }
-      fetches.push(...this.serviceFrontier(state, frontier));
-    }
-    await Promise.all(fetches);
-  }
-  /** Close every registered clip's binding and stop tracking. */
-  close() {
-    if (this.closed) {
-      return;
-    }
-    this.closed = true;
-    for (const state of this.sources.values()) {
-      this.resetState(state);
-      state.source.binding.close();
-    }
-    this.sources.clear();
-  }
-  serviceFrontier(state, frontier) {
-    if (state.lastFrontier !== null && frontier < state.lastFrontier) {
-      this.resetState(state);
-    }
-    state.lastFrontier = frontier;
-    const generation = state.generation;
-    const low = Math.max(0, frontier - this.retainBehindPages);
-    const high = Math.min(state.lastPage, frontier + this.readAheadPages);
-    for (const page of state.resident.keys()) {
-      if (page < low || page > high) {
-        this.clearPage(state, page);
-        state.resident.delete(page);
-      }
-    }
-    const fetches = [];
-    for (let page = low; page <= high; ++page) {
-      if (state.resident.get(page) === generation) {
-        continue;
-      }
-      state.resident.set(page, generation);
-      const pageIndex = page;
-      fetches.push(
-        state.source.binding.supplyPage(pageIndex).then(
-          (ok) => {
-            if (state.generation !== generation) {
-              this.clearPage(state, pageIndex);
-            } else if (!ok && state.resident.get(pageIndex) === generation) {
-              state.resident.delete(pageIndex);
-            }
-            return ok;
-          },
-          (error) => {
-            if (state.resident.get(pageIndex) === generation) {
-              state.resident.delete(pageIndex);
-            }
-            throw error;
-          }
-        )
-      );
-    }
-    return fetches;
-  }
-  resetState(state) {
-    state.generation += 1;
-    state.lastFrontier = null;
-    for (const page of state.resident.keys()) {
-      this.clearPage(state, page);
-    }
-    state.resident.clear();
-  }
-  clearPage(state, pageIndex) {
-    if (state.source.binding.clearPage) {
-      state.source.binding.clearPage(pageIndex);
-    } else {
-      state.source.binding.provider.clear(pageIndex);
-    }
-  }
-};
-async function attachOpfsClipStream(streamerOrEngine, engineOrOptions, maybeOptions) {
-  if (!(streamerOrEngine instanceof ClipPageStreamer)) {
-    return streamerOrEngine.attachOpfsClipStream(engineOrOptions);
-  }
-  const streamer = streamerOrEngine;
-  const engine = engineOrOptions;
-  const options = maybeOptions;
-  if (!options) {
-    throw new Error("attachOpfsClipStream requires options.");
-  }
-  const { clipId, primePages = 1, ...providerOptions } = options;
-  const binding = createOpfsClipPageProvider(engine, providerOptions);
-  const lastPage = Math.ceil(providerOptions.numSamples / providerOptions.pageFrames) - 1;
-  const primed = [];
-  for (let page = 0; page < primePages && page <= lastPage; ++page) {
-    if (await binding.supplyPage(page)) {
-      primed.push(page);
-    }
-  }
-  streamer.addSource(
-    {
-      clipId,
-      binding,
-      pageFrames: providerOptions.pageFrames,
-      numSamples: providerOptions.numSamples
-    },
-    primed
-  );
-  return { binding, provider: binding.provider };
-}
 
 // src/errors.ts
-var SonareError = class extends Error {
-  constructor(code, codeName, message) {
-    super(message);
-    this.name = "SonareError";
-    this.code = code;
-    this.codeName = codeName;
-  }
-  /**
-   * Brand-based `instanceof`: an error that carries the shape narrows here even
-   * when it is not literally an instance of this class. That is not a
-   * hypothetical — an error posted from the analysis worker arrives as a
-   * structured clone with its prototype gone, which a prototype-based
-   * `instanceof` would silently miss. Delegates to {@link isSonareError} so the
-   * two never disagree.
-   */
-  static [Symbol.hasInstance](value) {
-    return isSonareError(value);
-  }
-};
 function isSonareError(value) {
   return value instanceof Error && value.name === "SonareError" && typeof value.code === "number";
 }
+var SonareError;
+var init_errors = __esm({
+  "src/errors.ts"() {
+    "use strict";
+    SonareError = class extends Error {
+      constructor(code, codeName, message) {
+        super(message);
+        this.name = "SonareError";
+        this.code = code;
+        this.codeName = codeName;
+      }
+      /**
+       * Brand-based `instanceof`: an error that carries the shape narrows here even
+       * when it is not literally an instance of this class. That is not a
+       * hypothetical — an error posted from the analysis worker arrives as a
+       * structured clone with its prototype gone, which a prototype-based
+       * `instanceof` would silently miss. Delegates to {@link isSonareError} so the
+       * two never disagree.
+       */
+      static [Symbol.hasInstance](value) {
+        return isSonareError(value);
+      }
+    };
+  }
+});
+
+// src/abi.ts
+var EXPECTED_ABI_VERSION;
+var init_abi = __esm({
+  "src/abi.ts"() {
+    "use strict";
+    EXPECTED_ABI_VERSION = 67305991;
+  }
+});
 
 // src/module_state.ts
-var wrappedModule = null;
 function nativeExceptionPtr(error) {
   if (typeof error === "number") {
     return error;
@@ -433,6 +58,7 @@ function nativeExceptionPtr(error) {
 function makeSonareError(raw, thrown) {
   let code = 99 /* Unknown */;
   let codeName = "Unknown";
+  let kind;
   let message = `libsonare native exception (${thrown})`;
   try {
     const info = raw.sonareExceptionInfo?.(thrown);
@@ -440,6 +66,7 @@ function makeSonareError(raw, thrown) {
       code = info.code ?? code;
       codeName = info.codeName ?? codeName;
       message = info.message || message;
+      kind = info.kind;
     }
   } catch {
   } finally {
@@ -447,6 +74,12 @@ function makeSonareError(raw, thrown) {
       raw.sonareReleaseException(thrown);
     } catch {
     }
+  }
+  if (kind === "TypeError") {
+    return new TypeError(message);
+  }
+  if (kind === "RangeError") {
+    return new RangeError(message);
   }
   return new SonareError(code, codeName, message);
 }
@@ -457,6 +90,9 @@ function wrapModuleErrors(raw) {
     const ptr = nativeExceptionPtr(error);
     if (ptr !== null) {
       throw makeSonareError(raw, ptr);
+    }
+    if (error instanceof Error && EMBIND_DELETED_PATTERN.test(error.message)) {
+      throw new SonareError(7 /* InvalidState */, "InvalidState", error.message);
     }
     throw error;
   };
@@ -557,15 +193,63 @@ function wrapModuleErrors(raw) {
     }
   });
 }
+function notInitializedError() {
+  return new SonareError(
+    7 /* InvalidState */,
+    "InvalidState",
+    "Module not initialized. Call init() first."
+  );
+}
+function hexAbi(version) {
+  return `0x${(version >>> 0).toString(16).padStart(8, "0")}`;
+}
+function assertAbiCompatible(created) {
+  const actual = typeof created.abiVersion === "function" ? created.abiVersion() : void 0;
+  if (actual === EXPECTED_ABI_VERSION) {
+    return;
+  }
+  throw new SonareError(
+    10 /* AbiMismatch */,
+    "AbiMismatch",
+    `libsonare ABI mismatch: wasm module reports ${actual === void 0 ? "no ABI version" : hexAbi(actual)}, this package expects ${hexAbi(EXPECTED_ABI_VERSION)}. The JS glue and the .wasm binary come from different builds; check the wasmBinary, locateFile and moduleFactory options and any cached copy of sonare.wasm.`
+  );
+}
+function assertSameInitOptions(first, next) {
+  if (next === void 0) {
+    return;
+  }
+  const a = first ?? {};
+  const b = next;
+  const keys = /* @__PURE__ */ new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const key of keys) {
+    if (a[key] !== b[key]) {
+      throw new SonareError(
+        7 /* InvalidState */,
+        "InvalidState",
+        `init() options differ from the first call (${key}); options apply on the first call only.`
+      );
+    }
+  }
+}
 function setSonareModule(module2) {
   wrappedModule = wrapModuleErrors(module2);
 }
 function getSonareModule() {
   if (!wrappedModule) {
-    throw new Error("Module not initialized. Call init() first.");
+    throw notInitializedError();
   }
   return wrappedModule;
 }
+var wrappedModule, EMBIND_DELETED_PATTERN;
+var init_module_state = __esm({
+  "src/module_state.ts"() {
+    "use strict";
+    init_abi();
+    init_errors();
+    wrappedModule = null;
+    EMBIND_DELETED_PATTERN = / instance already deleted$|^Cannot pass deleted object as a pointer of type /;
+  }
+});
 
 // src/codes.ts
 function resolveOrdinalInRange(value, min, max, enumName) {
@@ -596,43 +280,6 @@ function resolveEnumOrdinal(value, values, enumName) {
   }
   throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
 }
-var AUTOMATION_CURVE_VALUES = {
-  linear: 0,
-  exponential: 1,
-  hold: 2,
-  "s-curve": 3
-};
-var PROJECT_AUTOMATION_CURVE_VALUES = {
-  ...AUTOMATION_CURVE_VALUES,
-  scurve: 3
-};
-var PAN_LAW_VALUES = {
-  const3db: 0,
-  "const-3db": 0,
-  "-3db": 0,
-  "const4.5db": 1,
-  "const-4.5db": 1,
-  "-4.5db": 1,
-  const6db: 2,
-  "const-6db": 2,
-  "-6db": 2,
-  linear0db: 3,
-  "linear-0db": 3,
-  linear: 3,
-  "0db": 3
-};
-var PAN_MODE_VALUES = {
-  balance: 0,
-  pan: 1,
-  stereopan: 1,
-  "stereo-pan": 1,
-  dualpan: 2,
-  "dual-pan": 2
-};
-var METER_TAP_VALUES = { preFader: 0, postFader: 1 };
-var SEND_TIMING_VALUES = { postFader: 0, preFader: 1 };
-var SIDECHAIN_SOURCE_KIND_VALUES = { track: 0, bus: 1 };
-var TRACK_MONITOR_MODE_VALUES = { off: 0, pfl: 1, afl: 2 };
 function automationCurveCode(curve) {
   return resolveEnumOrdinal(curve, AUTOMATION_CURVE_VALUES, "automation curve");
 }
@@ -653,9 +300,751 @@ function sendTimingCode(timing) {
 function sidechainSourceKindCode(kind) {
   return resolveEnumOrdinal(kind, SIDECHAIN_SOURCE_KIND_VALUES, "sidechain source kind");
 }
+function sidechainCheckFromCode(code) {
+  if (code === 0) {
+    return { ok: true, reason: null };
+  }
+  const reason = SIDECHAIN_REFUSALS[code - 1];
+  if (reason === void 0) {
+    throw new RangeError(`Unknown sidechain refusal: ${code}`);
+  }
+  return { ok: false, reason };
+}
 function trackMonitorModeCode(mode) {
   return resolveEnumOrdinal(mode, TRACK_MONITOR_MODE_VALUES, "track monitor mode");
 }
+var AUTOMATION_CURVE_VALUES, PROJECT_AUTOMATION_CURVE_VALUES, PAN_LAW_VALUES, PAN_MODE_VALUES, METER_TAP_VALUES, SEND_TIMING_VALUES, SIDECHAIN_SOURCE_KIND_VALUES, TRACK_MONITOR_MODE_VALUES, SIDECHAIN_REFUSALS;
+var init_codes = __esm({
+  "src/codes.ts"() {
+    "use strict";
+    AUTOMATION_CURVE_VALUES = {
+      linear: 0,
+      exponential: 1,
+      hold: 2,
+      "s-curve": 3
+    };
+    PROJECT_AUTOMATION_CURVE_VALUES = {
+      ...AUTOMATION_CURVE_VALUES,
+      scurve: 3
+    };
+    PAN_LAW_VALUES = {
+      const3db: 0,
+      "const-3db": 0,
+      "-3db": 0,
+      "const4.5db": 1,
+      "const-4.5db": 1,
+      "-4.5db": 1,
+      const6db: 2,
+      "const-6db": 2,
+      "-6db": 2,
+      linear0db: 3,
+      "linear-0db": 3,
+      linear: 3,
+      "0db": 3
+    };
+    PAN_MODE_VALUES = {
+      balance: 0,
+      pan: 1,
+      stereopan: 1,
+      "stereo-pan": 1,
+      dualpan: 2,
+      "dual-pan": 2
+    };
+    METER_TAP_VALUES = { preFader: 0, postFader: 1 };
+    SEND_TIMING_VALUES = { postFader: 0, preFader: 1 };
+    SIDECHAIN_SOURCE_KIND_VALUES = { track: 0, bus: 1 };
+    TRACK_MONITOR_MODE_VALUES = { off: 0, pfl: 1, afl: 2 };
+    SIDECHAIN_REFUSALS = [
+      "invalidTarget",
+      "insertOutOfRange",
+      "undeclaredSource",
+      "invalidSourceKind",
+      "selfKey",
+      "cycle",
+      "tableFull",
+      "planRefused"
+    ];
+  }
+});
+
+// src/validation.ts
+function assertFiniteScalar(fnName, value, argName) {
+  if (!Number.isFinite(value)) {
+    throw new RangeError(`${fnName}: ${argName} must be a finite number`);
+  }
+}
+function assertSampleRate(fnName, sampleRate, argName = "sampleRate") {
+  if (!Number.isInteger(sampleRate)) {
+    throw new RangeError(`${fnName}: ${argName} must be an integer`);
+  }
+  if (sampleRate < MIN_AUDIO_SAMPLE_RATE || sampleRate > MAX_AUDIO_SAMPLE_RATE) {
+    throw new RangeError(
+      `${fnName}: ${argName} out of supported range [${MIN_AUDIO_SAMPLE_RATE}, ${MAX_AUDIO_SAMPLE_RATE}]`
+    );
+  }
+}
+function secondsToSampleCount(fnName, seconds, sampleRate, argName) {
+  if (typeof seconds !== "number") {
+    throw new TypeError(`${fnName}: ${argName} must be a number`);
+  }
+  assertFiniteScalar(fnName, seconds, argName);
+  const samples = Math.round(seconds * sampleRate);
+  if (!Number.isSafeInteger(samples)) {
+    throw new RangeError(`${fnName}: ${argName} is out of range at ${sampleRate} Hz`);
+  }
+  return samples;
+}
+function resolveSampleBound(fnName, sampleValue, secValue, sampleRate, sampleName, secName, sign = "non-negative") {
+  const hasSample = sampleValue !== void 0 && sampleValue !== null;
+  const hasSec = secValue !== void 0 && secValue !== null;
+  if (hasSample && hasSec) {
+    throw new RangeError(`${fnName}: give ${sampleName} or ${secName}, not both`);
+  }
+  if (!hasSample && !hasSec) {
+    return void 0;
+  }
+  const value = hasSec ? secondsToSampleCount(fnName, secValue, sampleRate, secName) : sampleValue;
+  const name = hasSec ? secName : sampleName;
+  if (typeof value !== "number" || !hasSec && !Number.isFinite(value)) {
+    return value;
+  }
+  if (sign === "non-negative" && value < 0) {
+    throw new RangeError(`${fnName}: ${name} must be non-negative`);
+  }
+  return value === 0 ? 0 : value;
+}
+function resolveRenderFrame(fnName, renderFrame) {
+  if (renderFrame === void 0 || renderFrame === null) {
+    return C_ABSENT;
+  }
+  if (typeof renderFrame !== "number") {
+    throw new TypeError(`${fnName}: renderFrame must be a number`);
+  }
+  assertFiniteScalar(fnName, renderFrame, "renderFrame");
+  if (renderFrame < 0) {
+    throw new RangeError(
+      `${fnName}: renderFrame must not be negative (omit it to apply immediately)`
+    );
+  }
+  return renderFrame;
+}
+var MIN_AUDIO_SAMPLE_RATE, MAX_AUDIO_SAMPLE_RATE, C_ABSENT;
+var init_validation = __esm({
+  "src/validation.ts"() {
+    "use strict";
+    MIN_AUDIO_SAMPLE_RATE = 8e3;
+    MAX_AUDIO_SAMPLE_RATE = 384e3;
+    C_ABSENT = -1;
+  }
+});
+
+// src/_chain_config.ts
+function flattenChainConfig(config) {
+  const out = {};
+  const walk = (node, prefix) => {
+    for (const [key, value] of Object.entries(node)) {
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (typeof value === "number" || typeof value === "boolean") {
+        out[path] = value;
+      } else if (value !== null && typeof value === "object") {
+        walk(value, path);
+      } else if (value !== void 0) {
+        throw new TypeError(`Mastering override '${path}' must be a number or boolean.`);
+      }
+    }
+  };
+  walk(config, "");
+  return out;
+}
+var init_chain_config = __esm({
+  "src/_chain_config.ts"() {
+    "use strict";
+  }
+});
+
+// src/lifetime.ts
+var symbolCtor = Symbol;
+symbolCtor.dispose ?? (symbolCtor.dispose = /* @__PURE__ */ Symbol.for("Symbol.dispose"));
+
+// src/clip_page_streamer.ts
+init_errors();
+
+// src/opfs_clip_pages.ts
+var opfsClipPageWorkerSource = `
+const sonareClipPageReadQueues = new Map();
+
+function sonareEnqueueClipPageRead(key, task) {
+  const previous = sonareClipPageReadQueues.get(key) || Promise.resolve();
+  const next = previous.catch(() => undefined).then(task);
+  const queued = next.finally(() => {
+    if (sonareClipPageReadQueues.get(key) === queued) {
+      sonareClipPageReadQueues.delete(key);
+    }
+  });
+  sonareClipPageReadQueues.set(key, queued);
+  return next;
+}
+
+async function sonareOpenClipFile(path, create) {
+  const root = await self.navigator.storage.getDirectory();
+  let dir = root;
+  const parts = String(path).split('/').filter(Boolean);
+  for (let i = 0; i < parts.length - 1; ++i) {
+    dir = await dir.getDirectoryHandle(parts[i], { create });
+  }
+  return dir.getFileHandle(parts[parts.length - 1], { create });
+}
+
+async function sonareWriteClipChunk(message) {
+  const { requestId, path, at, bytes, first } = message;
+  try {
+    const fileHandle = await sonareOpenClipFile(path, true);
+    const access = await fileHandle.createSyncAccessHandle();
+    try {
+      if (first) {
+        access.truncate(0);
+      }
+      const view = new Uint8Array(bytes);
+      let written = 0;
+      while (written < view.byteLength) {
+        const n = access.write(view.subarray(written), { at: at + written });
+        if (n <= 0) {
+          throw new Error('short write');
+        }
+        written += n;
+      }
+      access.flush();
+    } finally {
+      access.close();
+    }
+    self.postMessage({ type: 'sonare:write-clip-result', requestId, ok: true });
+  } catch (error) {
+    self.postMessage({
+      type: 'sonare:write-clip-result',
+      requestId,
+      ok: false,
+      busy: !!error && error.name === 'NoModificationAllowedError',
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+self.onmessage = async (event) => {
+  const message = event.data;
+  if (message && message.type === 'sonare:write-clip') {
+    await sonareEnqueueClipPageRead(String(message.path), () => sonareWriteClipChunk(message));
+    return;
+  }
+  if (!message || message.type !== 'sonare:read-clip-page') return;
+  const { requestId, path, pageIndex, numChannels, numSamples, pageFrames, dataOffsetBytes = 0 } = message;
+  await sonareEnqueueClipPageRead(String(path), async () => {
+  try {
+    if (pageIndex < 0) {
+      self.postMessage({ type: 'sonare:clip-page', requestId, pageIndex, ok: false });
+      return;
+    }
+    const startFrame = pageIndex * pageFrames;
+    if (startFrame >= numSamples) {
+      self.postMessage({ type: 'sonare:clip-page', requestId, pageIndex, ok: false });
+      return;
+    }
+    const root = await self.navigator.storage.getDirectory();
+    let dir = root;
+    const parts = String(path).split('/').filter(Boolean);
+    for (let i = 0; i < parts.length - 1; ++i) {
+      dir = await dir.getDirectoryHandle(parts[i]);
+    }
+    const fileHandle = await dir.getFileHandle(parts[parts.length - 1]);
+    const access = await fileHandle.createSyncAccessHandle();
+    try {
+      const frames = Math.min(pageFrames, numSamples - startFrame);
+      const frameBytes = numChannels * 4;
+      const bytes = new Uint8Array(frames * frameBytes);
+      let bytesReadTotal = 0;
+      const readOffset = dataOffsetBytes + startFrame * frameBytes;
+      while (bytesReadTotal < bytes.byteLength) {
+        const bytesRead = access.read(bytes.subarray(bytesReadTotal), {
+          at: readOffset + bytesReadTotal,
+        });
+        if (bytesRead <= 0) {
+          break;
+        }
+        bytesReadTotal += bytesRead;
+      }
+      if (bytesReadTotal !== bytes.byteLength || bytesReadTotal % frameBytes !== 0) {
+        self.postMessage({ type: 'sonare:clip-page', requestId, pageIndex, ok: false });
+        return;
+      }
+      const framesRead = bytesReadTotal / frameBytes;
+      const view = new DataView(bytes.buffer, 0, framesRead * frameBytes);
+      const channelBuffers = Array.from({ length: numChannels }, () => new ArrayBuffer(framesRead * 4));
+      for (let ch = 0; ch < numChannels; ++ch) {
+        const channel = new Float32Array(channelBuffers[ch]);
+        for (let frame = 0; frame < framesRead; ++frame) {
+          channel[frame] = view.getFloat32((frame * numChannels + ch) * 4, true);
+        }
+      }
+      self.postMessage(
+        { type: 'sonare:clip-page', requestId, pageIndex, ok: true, frames: framesRead, channelBuffers },
+        channelBuffers,
+      );
+    } finally {
+      access.close();
+    }
+  } catch (error) {
+    self.postMessage({
+      type: 'sonare:clip-page',
+      requestId,
+      pageIndex,
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  });
+};
+`;
+var heldOpfsClipPaths = /* @__PURE__ */ new Map();
+var nextOpfsWorkerRequestId = 1;
+function allocateOpfsWorkerRequestId() {
+  return nextOpfsWorkerRequestId++;
+}
+function opfsClipPathKey(path) {
+  return path.split("/").filter(Boolean).join("/");
+}
+function createOpfsClipPageWorker() {
+  const blob = new Blob([opfsClipPageWorkerSource], { type: "text/javascript" });
+  const url = URL.createObjectURL(blob);
+  try {
+    return new Worker(url);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+function createOpfsClipPageProvider(engine, options) {
+  if (options.numChannels <= 0 || options.numSamples <= 0 || options.pageFrames <= 0) {
+    throw new Error("numChannels, numSamples, and pageFrames must be positive");
+  }
+  const provider = engine.createClipPageProvider(
+    options.numChannels,
+    options.numSamples,
+    options.pageFrames
+  );
+  const worker = options.worker ?? createOpfsClipPageWorker();
+  const heldKey = opfsClipPathKey(options.path);
+  heldOpfsClipPaths.set(heldKey, (heldOpfsClipPaths.get(heldKey) ?? 0) + 1);
+  const ownsWorker = options.worker === void 0 || options.terminateWorkerOnClose === true;
+  let closed = false;
+  let readQueue = Promise.resolve();
+  const pending = /* @__PURE__ */ new Map();
+  const onMessage = (event) => {
+    const response = event.data;
+    if (response?.type !== "sonare:clip-page") {
+      return;
+    }
+    const entry = pending.get(response.requestId);
+    if (!entry) {
+      return;
+    }
+    pending.delete(response.requestId);
+    if (!response.ok) {
+      entry.resolve(false);
+      return;
+    }
+    const channels = response.channels ?? response.channelBuffers?.map(
+      (buffer) => new Float32Array(buffer, 0, response.frames ?? buffer.byteLength / 4)
+    );
+    if (!channels || channels.length === 0) {
+      entry.resolve(false);
+      return;
+    }
+    try {
+      provider.supply(response.pageIndex, channels);
+      options.onPageSupplied?.(response.pageIndex, channels);
+    } catch {
+      entry.resolve(false);
+      return;
+    }
+    entry.resolve(true);
+  };
+  worker.addEventListener("message", onMessage);
+  const supplyPage = (pageIndex) => {
+    if (closed) {
+      return Promise.reject(new Error("OpfsClipPageProvider is closed"));
+    }
+    const requestId = allocateOpfsWorkerRequestId();
+    const promise = new Promise((resolve, reject) => {
+      pending.set(requestId, { resolve, reject });
+    });
+    readQueue = readQueue.catch(() => void 0).then(() => {
+      if (closed) {
+        const entry = pending.get(requestId);
+        pending.delete(requestId);
+        entry?.reject(new Error("OpfsClipPageProvider is closed"));
+        return;
+      }
+      worker.postMessage({
+        type: "sonare:read-clip-page",
+        requestId,
+        path: options.path,
+        pageIndex,
+        numChannels: options.numChannels,
+        numSamples: options.numSamples,
+        pageFrames: options.pageFrames,
+        dataOffsetBytes: options.dataOffsetBytes ?? 0
+      });
+      return promise.then(
+        () => void 0,
+        () => void 0
+      );
+    });
+    readQueue.catch(() => {
+    });
+    return promise;
+  };
+  return {
+    provider,
+    supplyPage,
+    supplyRequest(request) {
+      return supplyPage(Math.floor(request.sample / options.pageFrames));
+    },
+    clearPage(pageIndex) {
+      if (closed) {
+        return;
+      }
+      provider.clear(pageIndex);
+      options.onPageCleared?.(pageIndex);
+    },
+    close() {
+      if (closed) {
+        return;
+      }
+      closed = true;
+      const held = (heldOpfsClipPaths.get(heldKey) ?? 1) - 1;
+      if (held > 0) {
+        heldOpfsClipPaths.set(heldKey, held);
+      } else {
+        heldOpfsClipPaths.delete(heldKey);
+      }
+      worker.removeEventListener("message", onMessage);
+      for (const entry of pending.values()) {
+        entry.reject(new Error("OpfsClipPageProvider is closed"));
+      }
+      pending.clear();
+      provider.destroy();
+      options.onClose?.();
+      if (ownsWorker) {
+        worker.terminate();
+      }
+    }
+  };
+}
+var OPFS_WRITE_CHUNK_BYTES = 4 * 1024 * 1024;
+
+// src/owner_epoch.ts
+init_errors();
+var OwnerEpoch = class {
+  /** @param ownerName Names the owner in the errors a stale token raises. */
+  constructor(ownerName) {
+    this.ownerName = ownerName;
+    this.generation = 0;
+    this.ended = false;
+    this.cleanups = /* @__PURE__ */ new Set();
+  }
+  /** True once {@link close} has run. */
+  get closed() {
+    return this.ended;
+  }
+  /** Token of the current owner generation. */
+  current() {
+    return this.generation;
+  }
+  /** Starts a new generation, so every earlier token becomes stale. */
+  advance() {
+    this.generation += 1;
+    return this.generation;
+  }
+  isCurrent(token) {
+    return !this.ended && token === this.generation;
+  }
+  /** Throws `InvalidState` unless `token` still names the live owner. */
+  assertCurrent(token) {
+    if (this.ended) {
+      throw new SonareError(7 /* InvalidState */, "InvalidState", `${this.ownerName} is closed.`);
+    }
+    if (token !== this.generation) {
+      throw new SonareError(
+        7 /* InvalidState */,
+        "InvalidState",
+        `${this.ownerName} was replaced while an operation was pending.`
+      );
+    }
+  }
+  /**
+   * Registers `cleanup` to run when the epoch closes; runs it at once when the
+   * epoch is already closed. Returns a function that unregisters it.
+   */
+  onClose(cleanup) {
+    if (this.ended) {
+      cleanup();
+      return () => void 0;
+    }
+    this.cleanups.add(cleanup);
+    return () => {
+      this.cleanups.delete(cleanup);
+    };
+  }
+  /** Ends the epoch and runs every registered cleanup once. Idempotent. */
+  close() {
+    if (this.ended) {
+      return;
+    }
+    this.ended = true;
+    this.generation += 1;
+    const cleanups = Array.from(this.cleanups);
+    this.cleanups.clear();
+    let failure;
+    for (const cleanup of cleanups) {
+      try {
+        cleanup();
+      } catch (error) {
+        failure ?? (failure = error);
+      }
+    }
+    if (failure !== void 0) {
+      throw failure;
+    }
+  }
+};
+
+// src/clip_page_streamer.ts
+var streamerEpochs = /* @__PURE__ */ new WeakMap();
+var ClipPageStreamer = class {
+  constructor(engine, options = {}) {
+    this.sources = /* @__PURE__ */ new Map();
+    this.epoch = new OwnerEpoch("ClipPageStreamer");
+    this.nextFetchToken = 1;
+    this.engine = engine;
+    streamerEpochs.set(this, this.epoch);
+    this.readAheadPages = Math.max(0, Math.floor(options.readAheadPages ?? 2));
+    this.retainBehindPages = Math.max(0, Math.floor(options.retainBehindPages ?? 1));
+    this.maxRequestsPerPump = Math.max(1, Math.floor(options.maxRequestsPerPump ?? 256));
+  }
+  /**
+   * Register a paged clip. Pages already supplied to the provider before
+   * registration (for example a primed first page) should be passed in
+   * `initialResidentPages` so they participate in eviction. Throws
+   * `InvalidState` once the streamer is closed.
+   */
+  addSource(source, initialResidentPages = []) {
+    if (this.epoch.closed) {
+      throw new SonareError(7 /* InvalidState */, "InvalidState", "ClipPageStreamer is closed.");
+    }
+    if (source.pageFrames <= 0 || source.numSamples <= 0) {
+      throw new Error("pageFrames and numSamples must be positive");
+    }
+    const lastPage = Math.ceil(source.numSamples / source.pageFrames) - 1;
+    const previous = this.sources.get(source.clipId);
+    if (previous) {
+      this.resetState(previous);
+    }
+    this.sources.set(source.clipId, {
+      source,
+      lastPage,
+      lastFrontier: null,
+      resident: new Map(Array.from(initialResidentPages, (page) => [page, this.nextFetchToken++]))
+    });
+  }
+  /** Stop tracking a clip. Does not close its binding (the caller owns that). */
+  removeSource(clipId) {
+    const state = this.sources.get(clipId);
+    if (state) {
+      this.resetState(state);
+    }
+    this.sources.delete(clipId);
+  }
+  /**
+   * Explicitly start a new playback generation after a host seek/loop. Resident
+   * pages are evicted and any older in-flight fetch is cleared when it settles.
+   * The next miss establishes the new bounded window.
+   */
+  resetSource(clipId) {
+    const state = this.sources.get(clipId);
+    if (state) {
+      this.resetState(state);
+    }
+  }
+  /**
+   * Drain pending page-miss requests, fetch the missing pages plus their
+   * read-ahead window, and evict out-of-window pages. Resolves once this round's
+   * fetches settle. Concurrent fetches are serialized inside each binding.
+   */
+  async pump() {
+    if (this.epoch.closed) {
+      return;
+    }
+    const frontiers = /* @__PURE__ */ new Map();
+    for (let drained = 0; drained < this.maxRequestsPerPump; ++drained) {
+      const request = this.engine.popClipPageRequest();
+      if (!request) {
+        break;
+      }
+      const state = this.sources.get(request.clipId);
+      if (!state) {
+        continue;
+      }
+      const page = request.pageIndex !== void 0 ? request.pageIndex : Math.floor((request.sample ?? Number.NaN) / state.source.pageFrames);
+      if (!Number.isInteger(page) || page < 0 || page > state.lastPage) {
+        continue;
+      }
+      frontiers.set(request.clipId, page);
+    }
+    const fetches = [];
+    for (const [clipId, frontier] of frontiers) {
+      const state = this.sources.get(clipId);
+      if (!state) {
+        continue;
+      }
+      fetches.push(...this.serviceFrontier(state, frontier));
+    }
+    await Promise.all(fetches);
+  }
+  /** Close every registered clip's binding and stop tracking. */
+  close() {
+    if (this.epoch.closed) {
+      return;
+    }
+    const states = Array.from(this.sources.values());
+    this.sources.clear();
+    for (const state of states) {
+      this.resetState(state);
+      state.source.binding.close();
+    }
+    this.epoch.close();
+  }
+  /** Alias for {@link close}, provided for cross-binding compatibility. */
+  delete() {
+    this.close();
+  }
+  /** Alias for {@link close}, provided for cross-binding compatibility. */
+  destroy() {
+    this.close();
+  }
+  /** Releases the streamer through {@link close}, so the instance works with `using`. */
+  [Symbol.dispose]() {
+    this.close();
+  }
+  serviceFrontier(state, frontier) {
+    if (state.lastFrontier !== null && frontier < state.lastFrontier) {
+      this.resetState(state);
+    }
+    state.lastFrontier = frontier;
+    const low = Math.max(0, frontier - this.retainBehindPages);
+    const high = Math.min(state.lastPage, frontier + this.readAheadPages);
+    for (const page of state.resident.keys()) {
+      if (page < low || page > high) {
+        this.clearPage(state, page);
+        state.resident.delete(page);
+      }
+    }
+    const fetches = [];
+    for (let page = low; page <= high; ++page) {
+      if (state.resident.has(page)) {
+        continue;
+      }
+      const token = this.nextFetchToken++;
+      state.resident.set(page, token);
+      const pageIndex = page;
+      fetches.push(
+        state.source.binding.supplyPage(pageIndex).then(
+          (ok) => {
+            if (state.resident.get(pageIndex) === token) {
+              if (!ok) {
+                state.resident.delete(pageIndex);
+                this.clearPage(state, pageIndex);
+              }
+            } else if (ok && !state.resident.has(pageIndex)) {
+              this.clearPage(state, pageIndex);
+            }
+            return ok;
+          },
+          (error) => {
+            if (state.resident.get(pageIndex) === token) {
+              state.resident.delete(pageIndex);
+            }
+            throw error;
+          }
+        )
+      );
+    }
+    return fetches;
+  }
+  resetState(state) {
+    state.lastFrontier = null;
+    for (const page of state.resident.keys()) {
+      this.clearPage(state, page);
+    }
+    state.resident.clear();
+  }
+  clearPage(state, pageIndex) {
+    if (state.source.binding.clearPage) {
+      state.source.binding.clearPage(pageIndex);
+    } else {
+      state.source.binding.provider.clear(pageIndex);
+    }
+  }
+};
+async function attachOpfsClipStream(streamerOrEngine, engineOrOptions, maybeOptions) {
+  if (!(streamerOrEngine instanceof ClipPageStreamer)) {
+    return streamerOrEngine.attachOpfsClipStream(engineOrOptions);
+  }
+  const streamer = streamerOrEngine;
+  const engine = engineOrOptions;
+  const options = maybeOptions;
+  if (!options) {
+    throw new Error("attachOpfsClipStream requires options.");
+  }
+  const { clipId, primePages = 1, ...providerOptions } = options;
+  const epoch = streamerEpochs.get(streamer);
+  if (!epoch || epoch.closed) {
+    throw new SonareError(7 /* InvalidState */, "InvalidState", "ClipPageStreamer is closed.");
+  }
+  const token = epoch.current();
+  const binding = createOpfsClipPageProvider(engine, providerOptions);
+  const releaseOnClose = epoch.onClose(() => binding.close());
+  try {
+    const lastPage = Math.ceil(providerOptions.numSamples / providerOptions.pageFrames) - 1;
+    const primed = [];
+    for (let page = 0; page < primePages && page <= lastPage; ++page) {
+      const ok = await binding.supplyPage(page);
+      epoch.assertCurrent(token);
+      if (ok) {
+        primed.push(page);
+      }
+    }
+    streamer.addSource(
+      {
+        clipId,
+        binding,
+        pageFrames: providerOptions.pageFrames,
+        numSamples: providerOptions.numSamples
+      },
+      primed
+    );
+  } catch (error) {
+    binding.close();
+    throw error;
+  } finally {
+    releaseOnClose();
+  }
+  return { binding, provider: binding.provider };
+}
+
+// src/index.ts
+init_module_state();
+
+// src/project_internal.ts
+init_errors();
+init_module_state();
 
 // src/sample_bank.ts
 var SampleBank = class {
@@ -717,6 +1106,10 @@ var SampleBank = class {
   destroy() {
     this.delete();
   }
+  /** Releases the handle through {@link delete}, so the instance works with `using`. */
+  [Symbol.dispose]() {
+    this.delete();
+  }
 };
 
 // src/project_internal.ts
@@ -739,7 +1132,7 @@ function normalizeSynthInstrument(patch) {
     throw new TypeError("sampleBank must be a SampleBank instance");
   }
   if (sampleBank.released) {
-    throw new TypeError("sampleBank is destroyed");
+    throw new SonareError(7 /* InvalidState */, "InvalidState", "sampleBank is destroyed");
   }
   return { ...rest, sampleBankId: sampleBank.nativeId };
 }
@@ -751,40 +1144,61 @@ function partRigInsertsJson(inserts) {
     throw new TypeError("inserts must be an array");
   }
   return JSON.stringify(
-    inserts.map((insert) => {
-      const { processor, params } = insert;
-      return params === void 0 ? { processor } : { processor, params: typeof params === "string" ? params : JSON.stringify(params) };
+    inserts.map((insert, index) => {
+      if (typeof insert !== "object" || insert === null) {
+        throw new TypeError(`inserts[${index}] must be an object`);
+      }
+      if (typeof insert.processor !== "string") {
+        throw new TypeError(`inserts[${index}].processor must be a string`);
+      }
+      const { params } = insert;
+      if (params === void 0) {
+        return { processor: insert.processor, params: "{}" };
+      }
+      if (typeof params === "string") {
+        return { processor: insert.processor, params };
+      }
+      if (typeof params !== "object" || params === null || Array.isArray(params)) {
+        throw new TypeError(`inserts[${index}].params must be an object or a JSON string`);
+      }
+      return { processor: insert.processor, params: JSON.stringify(params) };
     })
   );
+}
+function normalizePartRig(method, requestOrDestinationId, part, mode, inserts) {
+  if (typeof requestOrDestinationId === "object" && requestOrDestinationId !== null) {
+    if (part !== void 0 || mode !== void 0 || inserts !== void 0) {
+      throw new TypeError(`${method}: a request object takes no further arguments`);
+    }
+    const request = requestOrDestinationId;
+    return {
+      destinationId: request.destinationId,
+      part: request.part,
+      mode: request.mode,
+      insertsJson: partRigInsertsJson(request.inserts)
+    };
+  }
+  return {
+    destinationId: requestOrDestinationId,
+    part,
+    mode,
+    insertsJson: partRigInsertsJson(inserts)
+  };
 }
 function projectModule() {
   const candidate = getSonareModule();
   if (typeof candidate.projectAbiVersion !== "function" || candidate.Project === void 0) {
-    throw new Error("libsonare was built without arrangement (headless DAW) support");
+    throw new SonareError(
+      6 /* NotSupported */,
+      "NotSupported",
+      "libsonare was built without arrangement (headless DAW) support"
+    );
   }
   return candidate;
 }
 
-// src/_chain_config.ts
-function flattenChainConfig(config) {
-  const out = {};
-  const walk = (node, prefix) => {
-    for (const [key, value] of Object.entries(node)) {
-      const path = prefix ? `${prefix}.${key}` : key;
-      if (typeof value === "number" || typeof value === "boolean") {
-        out[path] = value;
-      } else if (value !== null && typeof value === "object") {
-        walk(value, path);
-      } else if (value !== void 0) {
-        throw new TypeError(`Mastering override '${path}' must be a number or boolean.`);
-      }
-    }
-  };
-  walk(config, "");
-  return out;
-}
-
 // src/playback_renderer.ts
+init_module_state();
 function configJsonText(config) {
   return typeof config === "string" ? config : JSON.stringify(config);
 }
@@ -816,6 +1230,10 @@ var HrtfSet = class _HrtfSet {
   }
   /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
   destroy() {
+    this.delete();
+  }
+  /** Releases the handle through {@link delete}, so the instance works with `using`. */
+  [Symbol.dispose]() {
     this.delete();
   }
 };
@@ -912,9 +1330,17 @@ var PlaybackRenderer = class {
   destroy() {
     this.delete();
   }
+  /** Releases the handle through {@link delete}, so the instance works with `using`. */
+  [Symbol.dispose]() {
+    this.delete();
+  }
 };
 
 // src/realtime_engine.ts
+init_codes();
+init_errors();
+init_module_state();
+init_validation();
 var EXPECTED_ENGINE_ABI_VERSION = 3;
 var UMP_WORD_MIN = -2147483648;
 var UMP_WORD_MAX = 4294967295;
@@ -956,16 +1382,25 @@ function engineCapabilities() {
     mode: sharedArrayBuffer && atomics ? "sab" : "postMessage"
   };
 }
+function nativeClip(clip) {
+  return {
+    ...clip,
+    pageProvider: typeof clip.pageProvider === "object" && clip.pageProvider !== null ? clip.pageProvider.id : clip.pageProvider
+  };
+}
 var RealtimeEngine = class _RealtimeEngine {
   constructor(sampleRate = 48e3, maxBlockSize = 128, commandCapacity = 1024, telemetryCapacity = 1024, maxChannels = 64) {
     this.released = false;
     const module2 = getSonareModule();
     const capabilities = engineCapabilities();
     if (!capabilities.abiCompatible) {
-      throw new Error(
+      throw new SonareError(
+        10 /* AbiMismatch */,
+        "AbiMismatch",
         `Engine ABI mismatch: wasm=${capabilities.engineAbiVersion}, expected=${capabilities.expectedEngineAbiVersion}`
       );
     }
+    this.sampleRate = sampleRate;
     this.native = new module2.RealtimeEngine(
       sampleRate,
       maxBlockSize,
@@ -991,29 +1426,41 @@ var RealtimeEngine = class _RealtimeEngine {
       telemetryCapacity,
       maxChannels
     );
+    this.sampleRate = sampleRate;
   }
   /** Queue a sample-accurate parameter change (engine kSetParam). */
-  setParameter(paramId, value, renderFrame = -1) {
-    this.native.setParameter(paramId, value, renderFrame);
+  setParameter(paramId, value, renderFrame) {
+    this.native.setParameter(paramId, value, resolveRenderFrame("setParameter", renderFrame));
   }
   /** Queue a smoothed parameter change (engine kSetParamSmoothed). */
-  setParameterSmoothed(paramId, value, renderFrame = -1) {
-    this.native.setParameterSmoothed(paramId, value, renderFrame);
+  setParameterSmoothed(paramId, value, renderFrame) {
+    this.native.setParameterSmoothed(
+      paramId,
+      value,
+      resolveRenderFrame("setParameterSmoothed", renderFrame)
+    );
   }
   /**
-   * Set the default ramp time (ms) for engine-level smoothed parameters —
-   * fader/pan glides, insert-parameter automation, and MIDI-CC mappings. The
-   * default is 20 ms; pass `0` for instant (un-ramped) changes.
+   * Set the ramp time (ms) of the engine-level smoother. It governs only
+   * `setParameterSmoothed` on parameters bound through the automation engine.
+   * Reserved engine targets — track and bus faders, pan and width, and insert and
+   * instrument parameters — keep their own fixed smoothing whatever this is set
+   * to, and MIDI-CC mappings apply their values directly. The default is 20 ms;
+   * `0` makes the governed changes instant.
    */
   setParamSmoothingMs(smoothingMs) {
     this.native.setParamSmoothingMs(smoothingMs);
   }
-  setSoloMute(laneIndex, solo, mute, renderFrame = -1) {
-    this.native.setSoloMute(laneIndex, solo, mute, renderFrame);
+  setSoloMute(laneIndex, solo, mute, renderFrame) {
+    this.native.setSoloMute(laneIndex, solo, mute, resolveRenderFrame("setSoloMute", renderFrame));
   }
   /** Queue a per-track PFL/AFL monitor tap mode change. */
-  setTrackMonitorMode(laneIndex, mode, renderFrame = -1) {
-    this.native.setTrackMonitorMode(laneIndex, trackMonitorModeCode(mode), renderFrame);
+  setTrackMonitorMode(laneIndex, mode, renderFrame) {
+    this.native.setTrackMonitorMode(
+      laneIndex,
+      trackMonitorModeCode(mode),
+      resolveRenderFrame("setTrackMonitorMode", renderFrame)
+    );
   }
   setMidiClips(clips) {
     this.native.setMidiClips(clips);
@@ -1170,16 +1617,9 @@ var RealtimeEngine = class _RealtimeEngine {
   setArticulation(destinationId, channel, articulation) {
     this.native.setArticulation(destinationId, channel, articulation);
   }
-  /**
-   * Set the rig of one part (0-15), or of the destination's default when `part`
-   * is `PART_RIG_ALL_PARTS`, on the instrument bound to `destinationId`. A
-   * direct call, not a stored edit: a destination with no instrument is an
-   * invalid parameter, and an instrument without part rigs (a builtin, a
-   * host-callback instrument) is refused as not implemented rather than
-   * succeeding quietly. `'chain'` takes 1-8 `inserts`; no other mode does.
-   */
-  setPartRig(destinationId, part, mode, inserts) {
-    this.native.setPartRig(destinationId, part, mode, partRigInsertsJson(inserts));
+  setPartRig(requestOrDestinationId, part, mode, inserts) {
+    const rig = normalizePartRig("setPartRig", requestOrDestinationId, part, mode, inserts);
+    this.native.setPartRig(rig.destinationId, rig.part, rig.mode, rig.insertsJson);
   }
   /**
    * Read back {@link setArticulation} as the canonical name. An ordinal this
@@ -1258,8 +1698,7 @@ var RealtimeEngine = class _RealtimeEngine {
    * One queued record lowers to at most 4 MIDI 1.0 messages (a MIDI 2.0
    * registered or assignable controller becomes CC 101/100 or 99/98 plus Data
    * Entry 6/38), so a positive `maxRecords` below 4 could never consume a record
-   * and is rejected with an `InvalidParameter` `SonareError` instead of
-   * returning nothing forever.
+   * and is rejected with a `RangeError` instead of returning nothing forever.
    */
   drainExternalMidi(maxRecords = 1024) {
     return this.native.drainExternalMidi(maxRecords);
@@ -1317,46 +1756,86 @@ var RealtimeEngine = class _RealtimeEngine {
   pushMidiInputPolyPressure(group, channel, note, pressure, portTimeSamples = 0) {
     this.native.pushMidiInputPolyPressure(group, channel, note, pressure, portTimeSamples);
   }
-  pushMidiNoteOn(destinationId, group, channel, note, velocity, renderFrame = -1) {
-    this.native.pushMidiNoteOn(destinationId, group, channel, note, velocity, renderFrame);
+  pushMidiNoteOn(destinationId, group, channel, note, velocity, renderFrame) {
+    this.native.pushMidiNoteOn(
+      destinationId,
+      group,
+      channel,
+      note,
+      velocity,
+      resolveRenderFrame("pushMidiNoteOn", renderFrame)
+    );
   }
-  pushMidiNoteOff(destinationId, group, channel, note, velocity = 0, renderFrame = -1) {
-    this.native.pushMidiNoteOff(destinationId, group, channel, note, velocity, renderFrame);
+  pushMidiNoteOff(destinationId, group, channel, note, velocity = 0, renderFrame) {
+    this.native.pushMidiNoteOff(
+      destinationId,
+      group,
+      channel,
+      note,
+      velocity,
+      resolveRenderFrame("pushMidiNoteOff", renderFrame)
+    );
   }
   /**
    * Queue an immediate (live) MIDI control change to a MIDI destination
    * (engine kMidiCcImmediate). `group`/`channel` are 0..15; `controller`/`value`
-   * are 7-bit (0..127). `renderFrame` is the frame to fire at, or -1 for
-   * immediate. Mirrors the Node/Python/C-ABI `pushMidiCc`.
+   * are 7-bit (0..127). `renderFrame` is the frame to fire at (omit for
+   * immediate). Mirrors the Node/Python/C-ABI `pushMidiCc`.
    */
-  pushMidiCc(destinationId, group, channel, controller, value, renderFrame = -1) {
-    this.native.pushMidiCc(destinationId, group, channel, controller, value, renderFrame);
+  pushMidiCc(destinationId, group, channel, controller, value, renderFrame) {
+    this.native.pushMidiCc(
+      destinationId,
+      group,
+      channel,
+      controller,
+      value,
+      resolveRenderFrame("pushMidiCc", renderFrame)
+    );
   }
   /**
    * Queue an immediate (live) MIDI pitch bend to a MIDI destination. `bend14`
    * is unsigned 14-bit with centre 8192 (0..16383); `renderFrame` is the frame
-   * to fire at, or -1 for immediate. Mirrors the Node/Python/C-ABI
+   * to fire at (omit for immediate). Mirrors the Node/Python/C-ABI
    * `pushMidiPitchBend`.
    */
-  pushMidiPitchBend(destinationId, group, channel, bend14, renderFrame = -1) {
-    this.native.pushMidiPitchBend(destinationId, group, channel, bend14, renderFrame);
+  pushMidiPitchBend(destinationId, group, channel, bend14, renderFrame) {
+    this.native.pushMidiPitchBend(
+      destinationId,
+      group,
+      channel,
+      bend14,
+      resolveRenderFrame("pushMidiPitchBend", renderFrame)
+    );
   }
   /**
    * Queue an immediate (live) MIDI channel pressure to a MIDI destination.
-   * `pressure` is 7-bit (0..127); `renderFrame` is the frame to fire at, or -1
-   * for immediate. Mirrors the Node/Python/C-ABI `pushMidiChannelPressure`.
+   * `pressure` is 7-bit (0..127); `renderFrame` is the frame to fire at (omit
+   * for immediate). Mirrors the Node/Python/C-ABI `pushMidiChannelPressure`.
    */
-  pushMidiChannelPressure(destinationId, group, channel, pressure, renderFrame = -1) {
-    this.native.pushMidiChannelPressure(destinationId, group, channel, pressure, renderFrame);
+  pushMidiChannelPressure(destinationId, group, channel, pressure, renderFrame) {
+    this.native.pushMidiChannelPressure(
+      destinationId,
+      group,
+      channel,
+      pressure,
+      resolveRenderFrame("pushMidiChannelPressure", renderFrame)
+    );
   }
   /**
    * Queue an immediate (live) MIDI polyphonic key pressure to a MIDI
    * destination. `note` and `pressure` are 7-bit (0..127); `renderFrame` is the
-   * frame to fire at, or -1 for immediate. Mirrors the Node/Python/C-ABI
+   * frame to fire at (omit for immediate). Mirrors the Node/Python/C-ABI
    * `pushMidiPolyPressure`.
    */
-  pushMidiPolyPressure(destinationId, group, channel, note, pressure, renderFrame = -1) {
-    this.native.pushMidiPolyPressure(destinationId, group, channel, note, pressure, renderFrame);
+  pushMidiPolyPressure(destinationId, group, channel, note, pressure, renderFrame) {
+    this.native.pushMidiPolyPressure(
+      destinationId,
+      group,
+      channel,
+      note,
+      pressure,
+      resolveRenderFrame("pushMidiPolyPressure", renderFrame)
+    );
   }
   /**
    * Queue an immediate (live) raw UMP message to a MIDI destination. `words` is
@@ -1365,12 +1844,16 @@ var RealtimeEngine = class _RealtimeEngine {
    * width; SysEx7 / data messages (MT 0x3 / 0x5) are refused, use
    * {@link pushMidiSysex}. Throws when the slot ring or command queue is full
    * (retry after a process block). `renderFrame` is the render-frame time to
-   * apply, or -1 for immediate. A bare number is accepted as a one-word
+   * apply (omit for immediate). A bare number is accepted as a one-word
    * message.
    */
-  pushMidiUmp(destinationId, words, renderFrame = -1) {
+  pushMidiUmp(destinationId, words, renderFrame) {
     const list = typeof words === "number" ? [words] : words;
-    this.native.pushMidiUmp(destinationId, assertUmpWords("pushMidiUmp", list), renderFrame);
+    this.native.pushMidiUmp(
+      destinationId,
+      assertUmpWords("pushMidiUmp", list),
+      resolveRenderFrame("pushMidiUmp", renderFrame)
+    );
   }
   /**
    * Push one raw UMP message (1 to 4 words) to the engine-owned MIDI input
@@ -1383,25 +1866,30 @@ var RealtimeEngine = class _RealtimeEngine {
   /**
    * Queue an immediate (live) MIDI SysEx frame to a MIDI destination. `data` is
    * the full message including the leading 0xF0 and trailing 0xF7 (1..512
-   * bytes). `renderFrame` is the frame to fire at, or -1 for immediate. Throws
+   * bytes). `renderFrame` is the frame to fire at (omit for immediate). Throws
    * `InvalidParameter` when the destination instrument cannot prepare
    * the SysEx (retrying cannot help), and `OutOfMemory` when the payload
    * slots or the command queue are full (retry after a processed block).
    * Mirrors the Node/Python/C-ABI `pushMidiSysex`.
    */
-  pushMidiSysex(destinationId, data, renderFrame = -1) {
-    this.native.pushMidiSysex(destinationId, data, renderFrame);
+  pushMidiSysex(destinationId, data, renderFrame) {
+    this.native.pushMidiSysex(
+      destinationId,
+      data,
+      resolveRenderFrame("pushMidiSysex", renderFrame)
+    );
   }
   /**
    * Queue a MIDI panic (all-notes-off) releasing every sounding note at
-   * `renderFrame` (-1 = immediate). Mirrors the C-ABI `pushMidiPanic`.
+   * `renderFrame` (omitted = immediate). Mirrors the C-ABI `pushMidiPanic`.
    */
-  pushMidiPanic(renderFrame = -1) {
-    this.native.pushMidiPanic(renderFrame);
+  pushMidiPanic(renderFrame) {
+    this.native.pushMidiPanic(resolveRenderFrame("pushMidiPanic", renderFrame));
   }
   /**
-   * Remove all registered parameters (and their automation lanes). Control-thread
-   * only; not realtime-safe. Mirrors the C-ABI `clearParameters`.
+   * Remove all registered parameters. Automation lanes stay in place, as they do
+   * on {@link addParameter}. Control-thread only; not realtime-safe. Mirrors the
+   * C-ABI `clearParameters`.
    */
   clearParameters() {
     this.native.clearParameters();
@@ -1411,40 +1899,92 @@ var RealtimeEngine = class _RealtimeEngine {
     return this.native.getTransportState();
   }
   /** Queues an integrated-loudness reset; short-term and momentary windows are retained. */
-  resetMasterLoudnessMeter(renderFrame = -1) {
-    this.native.resetMasterLoudnessMeter(renderFrame);
+  resetMasterLoudnessMeter(renderFrame) {
+    this.native.resetMasterLoudnessMeter(
+      resolveRenderFrame("resetMasterLoudnessMeter", renderFrame)
+    );
   }
   /** Reads the immutable factory value for a resolved insert parameter id. */
   insertParameterConstructedValue(paramId) {
     return this.native.insertParameterConstructedValue(paramId);
   }
-  play(renderFrame = -1) {
-    this.native.play(renderFrame);
+  play(renderFrame) {
+    this.native.play(resolveRenderFrame("play", renderFrame));
   }
   /**
    * A loop wrap, seek or stop sends note-offs plus CC64=0, CC121, CC123 and a
    * centred pitch bend on every channel played since the last reset, so
    * controller values set before a loop region are not restored at the wrap.
    */
-  stop(renderFrame = -1) {
-    this.native.stop(renderFrame);
+  stop(renderFrame) {
+    this.native.stop(resolveRenderFrame("stop", renderFrame));
   }
   /**
    * A loop wrap, seek or stop sends note-offs plus CC64=0, CC121, CC123 and a
    * centred pitch bend on every channel played since the last reset, so
    * controller values set before a loop region are not restored at the wrap.
    */
-  seekSample(timelineSample, renderFrame = -1) {
-    this.native.seekSample(timelineSample, renderFrame);
+  seekSample(timelineSample, renderFrame) {
+    this.native.seekSample(timelineSample, resolveRenderFrame("seekSample", renderFrame));
   }
   /**
    * Snaps every in-flight parameter ramp (engine-level smoothed params, mixer
-   * lane fader/pan/gate, bus gains) to its target value. Offline renders call
-   * this after a priming process() block so the first audible block renders at
-   * settled values instead of ramping in from defaults.
+   * lane fader/pan/gate, bus gains) to its target value. It is one step of
+   * {@link primeOfflineParameters}; called alone it only snaps the smoothers
+   * and does not touch automation or processing state. Control-thread only:
+   * must not be called concurrently with {@link process}.
    */
   settleParameters() {
     this.native.settleParameters();
+  }
+  /**
+   * Runs the offline pre-roll that bounce and freeze run before rendering,
+   * without rendering anything: applies every queued command, resets the mixer
+   * and effect processors to their prepared state, adopts the published
+   * snapshots, resolves automation and lane gates at the transport position
+   * and snaps every smoother. A host that drives the engine block by block
+   * calls it once before the first chunk so a repeat render starts from the
+   * same state. Instruments are not reset. Control-thread only: must not be
+   * called concurrently with {@link process}.
+   *
+   * @param numChannels - Channel count of the blocks that will be rendered
+   * @param blockSize - Frames per block that will be rendered (clamped to the prepared block size)
+   * @throws If a count is not positive, `numChannels` exceeds the prepared
+   *   channel count, or the engine was never prepared
+   */
+  primeOfflineParameters(numChannels, blockSize) {
+    this.native.primeOfflineParameters(numChannels, blockSize);
+  }
+  /**
+   * Queues a reset of every mixer and effect processor to its prepared state.
+   * At `renderFrame` (omitted: the next block head) the lane, bus, master,
+   * monitor and graph processors drop their tails, delay lines and envelopes,
+   * automation is applied at the transport position and every smoother is
+   * snapped to its target, so playback queued after it starts from the state an
+   * offline bounce starts from. Strips the host bound to the engine, including
+   * host-owned ones, are reset too. Instruments are not reset. Called during
+   * playback it cuts running insert tails and delay lines mid-sound, like a
+   * seek.
+   *
+   * @param renderFrame - Block-relative frame to apply at; omit for the next block head (negative is refused)
+   * @throws If the command queue is full
+   */
+  resetProcessorState(renderFrame) {
+    this.native.resetProcessorState(resolveRenderFrame("resetProcessorState", renderFrame));
+  }
+  /**
+   * Longest audible tail after the last input, in samples: an upper bound made
+   * of the longest instrument tail plus the longest route through lane strips
+   * (channel delay included), buses, sends, the graph and the master strip.
+   * `2147483647` means the tail is unbounded. Control-thread only: must not be
+   * called concurrently with {@link process}.
+   */
+  tailSamples() {
+    return this.native.tailSamples();
+  }
+  /** Processing latency of the engine in 1/256 samples, as telemetry reports it. */
+  graphLatencySamplesQ8() {
+    return this.native.graphLatencySamplesQ8();
   }
   /** Snap only insert automation slots after structural replay. */
   settleInsertParameters() {
@@ -1463,8 +2003,8 @@ var RealtimeEngine = class _RealtimeEngine {
    * centred pitch bend on every channel played since the last reset, so
    * controller values set before a loop region are not restored at the wrap.
    */
-  seekPpq(ppq, renderFrame = -1) {
-    this.native.seekPpq(ppq, renderFrame);
+  seekPpq(ppq, renderFrame) {
+    this.native.seekPpq(ppq, resolveRenderFrame("seekPpq", renderFrame));
   }
   /** Set a finite tempo in the range (0, 100000] BPM. */
   setTempo(bpm) {
@@ -1520,8 +2060,8 @@ var RealtimeEngine = class _RealtimeEngine {
   marker(id) {
     return this.native.marker(id);
   }
-  seekMarker(markerId, renderFrame = -1) {
-    this.native.seekMarker(markerId, renderFrame);
+  seekMarker(markerId, renderFrame) {
+    this.native.seekMarker(markerId, resolveRenderFrame("seekMarker", renderFrame));
   }
   setLoopFromMarkers(startMarkerId, endMarkerId) {
     this.native.setLoopFromMarkers(startMarkerId, endMarkerId);
@@ -1546,16 +2086,29 @@ var RealtimeEngine = class _RealtimeEngine {
     return this.native.graphConnectionCount();
   }
   setClips(clips) {
-    this.native.setClips(
-      clips.map((clip) => ({
-        ...clip,
-        pageProvider: typeof clip.pageProvider === "object" && clip.pageProvider !== null ? clip.pageProvider.id : clip.pageProvider
-      }))
-    );
+    this.native.setClips(clips.map(nativeClip));
   }
   /**
-   * Returns the PCM generated for a tempo-sync clip by the control-thread
-   * setter, or `null` when the clip did not require a tempo-sync bake.
+   * Replaces every published clip carrying `clip.id` with `clip`, or adds it
+   * when none does. Every other clip stays as published, so its audio is not
+   * copied again. Validated as {@link setClips} validates each entry; a refused
+   * clip leaves the published set unchanged.
+   */
+  upsertClip(clip) {
+    this.native.upsertClip(nativeClip(clip));
+  }
+  /**
+   * Removes the clip carrying `clipId`.
+   *
+   * @throws SonareError `InvalidParameter` when no clip has that id.
+   */
+  removeClip(clipId) {
+    this.native.removeClip(clipId);
+  }
+  /**
+   * Returns the engine-owned PCM behind a clip: the audio generated for a
+   * tempo-sync clip by the control-thread setter, or the audio a
+   * {@link freezeOffline} produced. `null` for any other clip.
    */
   prebakedClipChannels(clipId) {
     return this.native.prebakedClipChannels(clipId);
@@ -1646,6 +2199,33 @@ var RealtimeEngine = class _RealtimeEngine {
    */
   setMasterSidechain(insertIndex, sourceKind, sourceId) {
     this.native.setMasterSidechain(insertIndex, sidechainSourceKindCode(sourceKind), sourceId);
+  }
+  /**
+   * Reports whether {@link setLaneSidechain} would accept the binding, without
+   * changing anything. `reason` names the first check the setter would fail.
+   * Control-thread only: must not be called concurrently with {@link process}.
+   */
+  canSetLaneSidechain(trackId, insertIndex, sourceTrackId) {
+    return sidechainCheckFromCode(
+      this.native.canSetLaneSidechain(trackId, insertIndex, sourceTrackId)
+    );
+  }
+  /** Reports whether {@link setBusSidechain} would accept the binding, without changing anything. */
+  canSetBusSidechain(busId, insertIndex, sourceKind, sourceId) {
+    return sidechainCheckFromCode(
+      this.native.canSetBusSidechain(
+        busId,
+        insertIndex,
+        sidechainSourceKindCode(sourceKind),
+        sourceId
+      )
+    );
+  }
+  /** Reports whether {@link setMasterSidechain} would accept the binding, without changing anything. */
+  canSetMasterSidechain(insertIndex, sourceKind, sourceId) {
+    return sidechainCheckFromCode(
+      this.native.canSetMasterSidechain(insertIndex, sidechainSourceKindCode(sourceKind), sourceId)
+    );
   }
   setBusStripJson(busId, sceneJson) {
     try {
@@ -1785,15 +2365,14 @@ var RealtimeEngine = class _RealtimeEngine {
    * match stages) have no insert form and no automation id: they buffer the
    * entire signal by construction and do not run on the realtime path.
    *
-   * The returned id uses the track's current positional lane selector. When
-   * `setTrackLanes` successfully changes lane order or membership, the engine
-   * remaps already queued and published track automation by track id, but it
-   * cannot update a numeric id retained by the caller. Re-resolve every track
-   * insert id after such a topology change before passing it to
-   * `setAutomationLane`, `setParameter`, or `setParameterSmoothed`. Use
-   * `setTrackStripInsertParamByName` when the operation needs a stable track
-   * identity. Master and bus insert ids are separate and are not invalidated by
-   * track-lane changes.
+   * Track, bus and master insert ids share one lifetime rule: an id names its
+   * strip by identity and the kind of processor in its slot (for
+   * `effects.gsEfx`, its EFX type too), so it survives lane and bus reorders
+   * and the removal of other strips, and stays valid until its track or bus is
+   * removed or its slot comes to hold another kind of processor. After that it
+   * applies nothing, its queued edits are dropped, and it is never reissued;
+   * resolve again for the new processor. A change that would take the engine
+   * past its 8192 insert-id entries is refused.
    */
   resolveTrackInsertAutomationId(trackId, insertIndex, paramName) {
     return this.native.resolveTrackInsertAutomationId(trackId, insertIndex, paramName);
@@ -1803,6 +2382,28 @@ var RealtimeEngine = class _RealtimeEngine {
   }
   resolveBusInsertAutomationId(busId, insertIndex, paramName) {
     return this.native.resolveBusInsertAutomationId(busId, insertIndex, paramName);
+  }
+  /**
+   * Resolve a track lane's fader (`'faderDb'`) or pan (`'pan'`) to its reserved
+   * automation id. Same lifetime rule as {@link resolveTrackInsertAutomationId}:
+   * the id names the track, not its lane position, so it keeps driving that
+   * track across {@link setTrackLanes} reorders and applies nothing once the
+   * track is removed. Returns `-1` when the track has no lane or the name is
+   * neither.
+   */
+  resolveTrackLaneAutomationId(trackId, paramName) {
+    return this.native.resolveTrackLaneAutomationId(trackId, paramName);
+  }
+  /**
+   * Resolve a bus's fader (`'faderDb'`) to its reserved automation id. Same
+   * lifetime rule as {@link resolveTrackInsertAutomationId}: the id names the
+   * bus, not its position in the bus list, so it keeps driving that bus across
+   * {@link setTrackBuses} reorders and the removal of other buses, and applies
+   * nothing once the bus is removed. Returns `-1` when the bus is not
+   * configured or the name is not `'faderDb'`.
+   */
+  resolveBusAutomationId(busId, paramName) {
+    return this.native.resolveBusAutomationId(busId, paramName);
   }
   /**
    * Resolves a hosted instrument's continuous parameter (by its JSON-key name)
@@ -1974,8 +2575,30 @@ var RealtimeEngine = class _RealtimeEngine {
   armCapture(armed = true) {
     this.native.armCapture(armed);
   }
-  setCapturePunch(startSample, endSample, enabled = true) {
-    this.native.setCapturePunch(startSample, endSample, enabled);
+  setCapturePunch(first, endSample, enabled = true) {
+    const request = typeof first === "object" && first !== null ? first : { startSample: first, endSample, enabled };
+    const start = resolveSampleBound(
+      "setCapturePunch",
+      request.startSample,
+      request.startSec,
+      this.sampleRate,
+      "startSample",
+      "startSec"
+    );
+    const end = resolveSampleBound(
+      "setCapturePunch",
+      request.endSample,
+      request.endSec,
+      this.sampleRate,
+      "endSample",
+      "endSec"
+    );
+    if (start === void 0 || end === void 0) {
+      throw new RangeError(
+        "setCapturePunch: both bounds are required (startSample or startSec, endSample or endSec)"
+      );
+    }
+    this.native.setCapturePunch(start, end, request.enabled ?? true);
   }
   setCaptureSource(source) {
     this.native.setCaptureSource(source);
@@ -2080,14 +2703,20 @@ var RealtimeEngine = class _RealtimeEngine {
   }
   /**
    * Bounce the timeline to an interleaved buffer. `numChannels` above the
-   * prepared channel count throws an `InvalidParameter` `SonareError`.
+   * prepared channel count throws a `RangeError`.
    */
   bounceOffline(options) {
     return this.native.bounceOffline(options);
   }
   /**
-   * Freeze the current graph to audio. `numChannels` above the prepared channel
-   * count throws an `InvalidParameter` `SonareError`.
+   * Render the source layer over the span and install it as the only clip.
+   * Bakes every audio clip and hosted MIDI instrument through the lane strips,
+   * lane inserts and group buses; the master strip, monitor bus, engine graph,
+   * capture and metronome stay live and process the frozen clip once on
+   * playback. The frozen clip replaces the whole clip set and every MIDI clip is
+   * withdrawn in the same call, so nothing plays twice; live MIDI input still
+   * reaches the instruments. `numChannels` above the prepared channel count
+   * throws a `RangeError`.
    */
   freezeOffline(options) {
     return this.native.freezeOffline(options);
@@ -2141,13 +2770,13 @@ var RealtimeEngine = class _RealtimeEngine {
     return this.native.drainMeterTelemetry(maxRecords);
   }
   /**
-   * Drains pending meter telemetry as per-plane (wide) records for a surround
-   * target. Use this for a surround mix target; {@link drainMeterTelemetry}
-   * stays the stereo fast path. The two share one queue and each consumes every
-   * target's records, so an engine uses only one of them. The live AudioWorklet
-   * path owns the queue via the stereo drain, so this wide drain is for an
-   * offline (non-worklet) engine instance; per-plane
-   * surround meters are not delivered over the live worklet meter ring.
+   * Drains pending meter telemetry as per-plane (wide) records. This is the one
+   * meter drain: a stereo target's left and right are planes 0 and 1, and a
+   * surround target carries every plane. Use it alone; {@link drainMeterTelemetry}
+   * consumes the same queue (every target's records) and stays for
+   * compatibility. The live AudioWorklet engine drains through this one, so a
+   * worklet-driven engine delivers per-plane meters on both the postMessage and
+   * the SharedArrayBuffer meter paths.
    */
   drainMeterTelemetryWide(maxRecords = 1024) {
     return this.native.drainMeterTelemetryWide(maxRecords);
@@ -2210,6 +2839,10 @@ var RealtimeEngine = class _RealtimeEngine {
   delete() {
     this.destroy();
   }
+  /** Releases the handle through {@link destroy}, so the instance works with `using`. */
+  [Symbol.dispose]() {
+    this.destroy();
+  }
 };
 var ClipPageProvider = class {
   constructor(engine, id) {
@@ -2219,7 +2852,11 @@ var ClipPageProvider = class {
   }
   supply(pageIndex, channels) {
     if (this.disposed) {
-      throw new Error("ClipPageProvider is destroyed");
+      throw new SonareError(
+        7 /* InvalidState */,
+        "InvalidState",
+        "ClipPageProvider is destroyed"
+      );
     }
     this.engine.supplyClipPage(this.id, pageIndex, channels);
   }
@@ -2236,9 +2873,293 @@ var ClipPageProvider = class {
     this.disposed = true;
     this.engine.destroyClipPageProvider(this.id);
   }
+  /** Alias for {@link destroy}, provided for cross-binding compatibility. */
+  delete() {
+    this.destroy();
+  }
+  /** Releases the provider through {@link destroy}, so the instance works with `using`. */
+  [Symbol.dispose]() {
+    this.destroy();
+  }
+};
+
+// src/stream_analyzer.ts
+init_codes();
+init_module_state();
+function streamAnalyzerConfigDefaults() {
+  return getSonareModule().streamAnalyzerConfigDefault();
+}
+var StreamAnalyzer = class {
+  /**
+   * Create a new StreamAnalyzer.
+   *
+   * @param config - Configuration options
+   */
+  constructor(config = {}) {
+    this.released = false;
+    if (config.computeMagnitude) {
+      throw new Error(
+        "computeMagnitude is not supported because magnitude frames are not exposed by StreamAnalyzer read paths."
+      );
+    }
+    if (config.outputFormat !== void 0 && (typeof config.outputFormat !== "number" || !Number.isFinite(config.outputFormat) || !Number.isInteger(config.outputFormat) || config.outputFormat !== 0)) {
+      throw new TypeError("outputFormat must be the integer 0 (Float32)");
+    }
+    const window = config.window === void 0 ? void 0 : resolveOrdinalInRange(config.window, 0, 3, "stream analyzer window");
+    const module2 = getSonareModule();
+    const defaults = streamAnalyzerConfigDefaults();
+    this.analyzer = new module2.StreamAnalyzer(
+      config.sampleRate ?? defaults.sampleRate,
+      config.nFft ?? defaults.nFft,
+      config.hopLength ?? defaults.hopLength,
+      config.nMels ?? defaults.nMels,
+      config.fmin ?? defaults.fmin,
+      config.fmax ?? defaults.fmax,
+      config.tuningRefHz ?? defaults.tuningRefHz,
+      config.computeMagnitude ?? defaults.computeMagnitude,
+      config.computeMel ?? defaults.computeMel,
+      config.computeChroma ?? defaults.computeChroma,
+      config.computeOnset ?? defaults.computeOnset,
+      config.computeSpectral ?? defaults.computeSpectral,
+      config.emitEveryNFrames ?? defaults.emitEveryNFrames,
+      config.magnitudeDownsample ?? defaults.magnitudeDownsample,
+      config.maxPendingFrames ?? defaults.maxPendingFrames,
+      config.maxProgressionEntries ?? defaults.maxProgressionEntries,
+      config.keyUpdateIntervalSec ?? defaults.keyUpdateIntervalSec,
+      config.bpmUpdateIntervalSec ?? defaults.bpmUpdateIntervalSec,
+      window ?? defaults.window,
+      config.outputFormat ?? defaults.outputFormat
+    );
+  }
+  /**
+   * Process audio samples.
+   *
+   * Feeding a finalized analyzer is an invalid-state error; call `reset()`
+   * first to start a new stream.
+   *
+   * @param samples - Audio samples (mono, float32)
+   */
+  process(samples) {
+    this.analyzer.process(samples);
+  }
+  /**
+   * Process audio samples with a contiguous explicit sample offset. A gap,
+   * seek, or switch from `process()` requires `reset()` first, as does feeding
+   * a finalized analyzer.
+   *
+   * @param samples - Audio samples (mono, float32)
+   * @param sampleOffset - Cumulative sample count at start of this chunk
+   */
+  processWithOffset(samples, sampleOffset) {
+    this.analyzer.processWithOffset(samples, sampleOffset);
+  }
+  /**
+   * Drain any high-rate resampler tail, then zero-pad the final partial frame.
+   *
+   * Repeating a successful call is a no-op, and a call that fails leaves the
+   * stream un-finalized so a retry resumes from the same point. Call `reset()`
+   * before reusing the analyzer for another stream: more audio fed to a
+   * finalized analyzer is rejected rather than silently analyzed without the
+   * overlap context the finalized tail consumed.
+   */
+  finalize() {
+    this.analyzer.finalize();
+  }
+  /**
+   * Get the number of frames available to read.
+   */
+  availableFrames() {
+    return this.analyzer.availableFrames();
+  }
+  /**
+   * Read processed frames as Structure of Arrays.
+   *
+   * @param maxFrames - Maximum number of frames to read
+   * @returns Frame buffer with analysis results
+   */
+  readFrames(maxFrames) {
+    return this.analyzer.readFramesSoa(maxFrames);
+  }
+  /**
+   * Read frames as uint8-quantized arrays.
+   *
+   * @param maxFrames - Maximum number of frames to read
+   * @param quantizeConfig - Optional quantization ranges; widen these for a
+   *   stream louder or quieter than the defaults (omitted keeps the defaults)
+   */
+  readFramesU8(maxFrames, quantizeConfig) {
+    return this.analyzer.readFramesU8(maxFrames, quantizeConfig);
+  }
+  /**
+   * Read frames as int16-quantized arrays.
+   *
+   * @param maxFrames - Maximum number of frames to read
+   * @param quantizeConfig - Optional quantization ranges; widen these for a
+   *   stream louder or quieter than the defaults (omitted keeps the defaults)
+   */
+  readFramesI16(maxFrames, quantizeConfig) {
+    return this.analyzer.readFramesI16(maxFrames, quantizeConfig);
+  }
+  /**
+   * Reset the analyzer state.
+   *
+   * @param baseSampleOffset - Starting sample offset (default 0)
+   */
+  reset(baseSampleOffset = 0) {
+    this.analyzer.reset(baseSampleOffset);
+  }
+  /**
+   * Get current statistics and progressive estimates.
+   *
+   * @returns Analyzer statistics including BPM, key, and chord progression
+   */
+  stats() {
+    const s = this.analyzer.stats();
+    return {
+      totalFrames: s.totalFrames,
+      totalSamples: s.totalSamples,
+      durationSeconds: s.durationSeconds,
+      pendingFrames: s.pendingFrames,
+      droppedOutputFrames: s.droppedOutputFrames,
+      droppedChordProgressionEntries: s.droppedChordProgressionEntries,
+      droppedBarProgressionEntries: s.droppedBarProgressionEntries,
+      nonFiniteDiscardBlocks: s.nonFiniteDiscardBlocks,
+      estimate: {
+        bpm: s.estimate.bpm,
+        bpmConfidence: s.estimate.bpmConfidence,
+        bpmCandidateCount: s.estimate.bpmCandidateCount,
+        key: s.estimate.key,
+        keyMinor: s.estimate.keyMinor,
+        keyConfidence: s.estimate.keyConfidence,
+        keyName: s.estimate.keyName,
+        keyShortName: s.estimate.keyShortName,
+        chordRoot: s.estimate.chordRoot,
+        chordQuality: s.estimate.chordQuality,
+        chordName: s.estimate.chordName,
+        chordConfidence: s.estimate.chordConfidence,
+        chordStartTime: s.estimate.chordStartTime,
+        chordProgression: s.estimate.chordProgression.map((c) => ({
+          root: c.root,
+          quality: c.quality,
+          name: c.name,
+          startTime: c.startTime,
+          confidence: c.confidence
+        })),
+        barChordProgression: s.estimate.barChordProgression.map((c) => ({
+          barIndex: c.barIndex,
+          root: c.root,
+          quality: c.quality,
+          name: c.name,
+          startTime: c.startTime,
+          confidence: c.confidence
+        })),
+        currentBar: s.estimate.currentBar,
+        barDuration: s.estimate.barDuration,
+        votedPattern: (s.estimate.votedPattern || []).map((c) => ({
+          barIndex: c.barIndex,
+          root: c.root,
+          quality: c.quality,
+          name: c.name,
+          startTime: c.startTime,
+          confidence: c.confidence
+        })),
+        patternLength: s.estimate.patternLength,
+        detectedPatternName: s.estimate.detectedPatternName || "",
+        detectedPatternScore: s.estimate.detectedPatternScore || 0,
+        allPatternScores: (s.estimate.allPatternScores || []).map((p) => ({
+          name: p.name,
+          score: p.score
+        })),
+        accumulatedSeconds: s.estimate.accumulatedSeconds,
+        usedFrames: s.estimate.usedFrames,
+        updated: s.estimate.updated
+      }
+    };
+  }
+  /**
+   * Get total frames processed.
+   */
+  frameCount() {
+    return this.analyzer.frameCount();
+  }
+  /**
+   * Get current time position in seconds.
+   */
+  currentTime() {
+    return this.analyzer.currentTime();
+  }
+  /**
+   * Get the sample rate.
+   */
+  sampleRate() {
+    return this.analyzer.sampleRate();
+  }
+  /**
+   * Set the expected total duration for pattern lock timing.
+   *
+   * @param durationSeconds - Total duration in seconds
+   */
+  setExpectedDuration(durationSeconds) {
+    this.analyzer.setExpectedDuration(durationSeconds);
+  }
+  /**
+   * Set normalization gain for loud/compressed audio.
+   *
+   * Throws for a value outside 0.01..100 rather than clamping into it. The
+   * usual recipe (`gain = targetLevel / measuredLevel`) can land outside that
+   * range for a buffer that is not in the conventional ±1 float domain — an
+   * integer-scaled one asks for about 3e-4 — and no getter exposes the
+   * effective gain, so a clamped request would leave the analysis far off
+   * target undetectably. Convert such a buffer before feeding it instead.
+   *
+   * @param gain - Gain factor to apply (e.g., 0.5 for -6dB reduction, range
+   *   0.01..100)
+   */
+  setNormalizationGain(gain) {
+    this.analyzer.setNormalizationGain(gain);
+  }
+  /**
+   * Set tuning reference frequency for non-standard tuning.
+   *
+   * Throws for a value outside 220..880 Hz rather than clamping into it, so
+   * this and `tuningRefHz` at create time accept exactly the same range.
+   *
+   * @param refHz - Reference frequency for A4 (default 440 Hz, range 220..880)
+   * @example
+   * // If audio is 1 semitone sharp (A4 = 466.16 Hz)
+   * analyzer.setTuningRefHz(466.16);
+   * // If audio is 1 semitone flat (A4 = 415.30 Hz)
+   * analyzer.setTuningRefHz(415.30);
+   */
+  setTuningRefHz(refHz) {
+    this.analyzer.setTuningRefHz(refHz);
+  }
+  /** Release the underlying WASM object. Idempotent, as the Node facade is. */
+  delete() {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
+    this.analyzer.delete();
+  }
+  /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
+  destroy() {
+    this.delete();
+  }
+  /** Alias for {@link delete}, kept for backward compatibility (historical name). */
+  dispose() {
+    this.delete();
+  }
+  /** Releases the handle through {@link delete}, so the instance works with `using`. */
+  [Symbol.dispose]() {
+    this.delete();
+  }
 };
 
 // src/mixer.ts
+init_codes();
+init_module_state();
+init_validation();
 var Mixer = class _Mixer {
   constructor(mixer, blockSize) {
     this.released = false;
@@ -2256,10 +3177,11 @@ var Mixer = class _Mixer {
    * whose snapshots are never read.
    *
    * @param json - Scene JSON (strips, buses, sends, connections, inserts)
-   * @param sampleRate - Sample rate in Hz (default: 48000)
+   * @param sampleRate - Sample rate in Hz, `[8000, 384000]` (default: 48000)
    * @param blockSize - Maximum block size per {@link processStereo} call (default: 512)
    */
   static fromSceneJson(json, sampleRate = 48e3, blockSize = 512) {
+    assertSampleRate("Mixer.fromSceneJson", sampleRate);
     const module2 = getSonareModule();
     return new _Mixer(module2.createMixerFromSceneJson(json, sampleRate, blockSize), blockSize);
   }
@@ -2289,7 +3211,7 @@ var Mixer = class _Mixer {
    */
   processStereo(leftChannels, rightChannels) {
     if (leftChannels.length !== rightChannels.length) {
-      throw new Error("leftChannels and rightChannels must have the same length.");
+      throw new RangeError("leftChannels and rightChannels must have the same length.");
     }
     return this.mixer.processStereo(leftChannels, rightChannels);
   }
@@ -2302,10 +3224,10 @@ var Mixer = class _Mixer {
    */
   processStereoInto(leftChannels, rightChannels, outLeft, outRight) {
     if (leftChannels.length !== rightChannels.length) {
-      throw new Error("leftChannels and rightChannels must have the same length.");
+      throw new RangeError("leftChannels and rightChannels must have the same length.");
     }
     if (outLeft.length !== outRight.length) {
-      throw new Error("outLeft and outRight must have the same length.");
+      throw new RangeError("outLeft and outRight must have the same length.");
     }
     this.mixer.processStereoInto(leftChannels, rightChannels, outLeft, outRight);
   }
@@ -2594,7 +3516,7 @@ var Mixer = class _Mixer {
   setChannelDelaySamples(stripIndex, delaySamples) {
     this.mixer.setChannelDelaySamples(stripIndex, delaySamples);
   }
-  /** Set the strip's live VCA gain offset in dB (not persisted to the scene). */
+  /** Set the strip's direct VCA trim in dB (persisted as the scene's `vcaOffsetDb`). */
   setVcaOffsetDb(stripIndex, offsetDb) {
     this.mixer.setVcaOffsetDb(stripIndex, offsetDb);
   }
@@ -2781,8 +3703,8 @@ var Mixer = class _Mixer {
    * Read up to `maxPoints` of a strip's most recent goniometer samples
    * (oldest to newest).
    *
-   * `maxPoints` must be a finite non-negative integer; anything else throws an
-   * `InvalidParameter` error. It is a request rather than an allocation size —
+   * `maxPoints` must be a finite non-negative integer; anything else throws a
+   * `RangeError`. It is a request rather than an allocation size —
    * a value beyond the strip's goniometer ring simply returns every point the
    * ring holds.
    */
@@ -2820,6 +3742,16 @@ var Mixer = class _Mixer {
     }
     return this.mixer.drainTailStereo(numSamples);
   }
+  /**
+   * Marks the end of the signal for every strip and bus meter. The true-peak
+   * reading runs one reconstruction-filter group delay behind the block; this
+   * reads that pending stretch against silence and folds it into the
+   * snapshots, so `truePeakDb` covers the whole signal. Call it after the last
+   * block of an offline render; a later process call starts a new signal.
+   */
+  flushMeters() {
+    this.mixer.flushMeters();
+  }
   /** Release the underlying WASM object. Idempotent, as the Node facade is. */
   delete() {
     if (this.released) {
@@ -2832,9 +3764,14 @@ var Mixer = class _Mixer {
   destroy() {
     this.delete();
   }
+  /** Releases the handle through {@link delete}, so the instance works with `using`. */
+  [Symbol.dispose]() {
+    this.delete();
+  }
 };
 
 // src/realtime_voice_changer.ts
+init_module_state();
 var RealtimeVoiceChanger = class {
   /**
    * Creates a voice changer. Supplying `sampleRate` prepares it immediately,
@@ -3087,9 +4024,15 @@ var RealtimeVoiceChanger = class {
   destroy() {
     this.delete();
   }
+  /** Releases the handle through {@link delete}, so the instance works with `using`. */
+  [Symbol.dispose]() {
+    this.delete();
+  }
 };
 
 // src/streaming_processors.ts
+init_chain_config();
+init_module_state();
 var StreamingMasteringChain = class {
   constructor(config) {
     this.released = false;
@@ -3122,7 +4065,7 @@ var StreamingMasteringChain = class {
    */
   processStereo(left, right) {
     if (left.length !== right.length) {
-      throw new Error("Stereo channel lengths must match.");
+      throw new RangeError("Stereo channel lengths must match.");
     }
     return this.chain.processStereo(left, right);
   }
@@ -3227,25 +4170,36 @@ var StreamingMasteringChain = class {
   destroy() {
     this.delete();
   }
+  /** Releases the handle through {@link delete}, so the instance works with `using`. */
+  [Symbol.dispose]() {
+    this.delete();
+  }
 };
 
 // src/index.ts
 var module = null;
 var initPromise = null;
+var firstInitOptions;
 async function init(options) {
   if (module) {
+    assertSameInitOptions(firstInitOptions, options);
     return;
   }
   if (initPromise) {
+    assertSameInitOptions(firstInitOptions, options);
     return initPromise;
   }
+  firstInitOptions = options && { ...options };
   initPromise = (async () => {
     try {
       const createModule = options?.moduleFactory ?? (await import("./sonare.js")).default;
-      module = await createModule(options);
+      const created = await createModule(options);
+      assertAbiCompatible(created);
+      module = created;
       setSonareModule(module);
     } catch (error) {
       initPromise = null;
+      firstInitOptions = void 0;
       throw error;
     }
   })();
@@ -3253,6 +4207,32 @@ async function init(options) {
 }
 function isInitialized() {
   return module !== null;
+}
+
+// src/worklet/engine.ts
+init_errors();
+init_validation();
+
+// src/worklet/engine-commit.ts
+function commitCommand(ctx, command, applyOffline, commitCache) {
+  if (!ctx.hasCommandRoom()) {
+    return false;
+  }
+  applyOffline(ctx.offlineEngine);
+  commitCache?.();
+  return ctx.sendCommand(command);
+}
+function commitSync(ctx, applyOffline, publish) {
+  applyOffline(ctx.offlineEngine);
+  publish?.();
+}
+function commitStore(ctx, store, staged, applyOffline, publish) {
+  applyOffline(ctx.offlineEngine);
+  store.clear();
+  for (const [key, value] of staged) {
+    store.set(key, value);
+  }
+  publish();
 }
 
 // src/worklet/engine-sync.ts
@@ -3305,42 +4285,47 @@ function curveCode(curve) {
 // src/worklet/engine-automation.ts
 function scheduleParam(ctx, nodeId, param, ppq, value, curve = "linear") {
   const paramId = ctx.resolveParamId(nodeId, param);
-  const lane = ctx.automationLanes.get(paramId) ?? [];
+  const lane = [...ctx.automationLanes.get(paramId) ?? []];
   lane.push({ ppq, value, curveToNext: curveCode(curve) });
   lane.sort((a, b) => a.ppq - b.ppq);
-  ctx.automationLanes.set(paramId, lane);
-  ctx.offlineEngine.setAutomationLane(paramId, lane);
-  ctx.postSync({ type: "syncAutomation", paramId, points: lane });
+  commitLane(ctx, paramId, lane);
 }
 function addAutomationPoint(ctx, laneId, ppq, value, curve = "linear") {
   scheduleParam(ctx, "", laneId, ppq, value, curve);
 }
 function setAutomationLane(ctx, paramId, points) {
   const sorted = points.map((point) => ({ ...point })).sort((a, b) => a.ppq - b.ppq);
-  if (sorted.length === 0) {
-    ctx.automationLanes.delete(paramId);
+  commitLane(ctx, paramId, sorted);
+}
+function commitLane(ctx, paramId, lane) {
+  const staged = new Map(ctx.automationLanes);
+  if (lane.length === 0) {
+    staged.delete(paramId);
   } else {
-    ctx.automationLanes.set(paramId, sorted);
+    staged.set(paramId, lane);
   }
-  ctx.offlineEngine.setAutomationLane(paramId, sorted);
-  ctx.postSync({ type: "syncAutomation", paramId, points: sorted });
+  commitStore(
+    ctx,
+    ctx.automationLanes,
+    staged,
+    (offline) => offline.setAutomationLane(paramId, lane),
+    () => ctx.postSync({ type: "syncAutomation", paramId, points: lane })
+  );
 }
 
 // src/worklet/protocol.ts
 var ENGINE_MIXER_TARGET_BASE = 1297612800;
 var ENGINE_MIXER_PARAM_FADER_DB = 1;
 var ENGINE_MIXER_PARAM_PAN = 2;
-function engineMixerLaneTarget(laneIndex, paramKind) {
-  return ENGINE_MIXER_TARGET_BASE | (laneIndex & 255) << 8 | paramKind & 255;
-}
-function engineMixerBusTarget(busIndex, paramKind) {
-  return ENGINE_MIXER_TARGET_BASE | (254 - busIndex & 255) << 8 | paramKind & 255;
-}
 function engineMixerMasterTarget(paramKind) {
   return ENGINE_MIXER_TARGET_BASE | 255 << 8 | paramKind & 255;
 }
 var SONARE_METER_RING_HEADER_INTS = 4;
-var SONARE_METER_RING_RECORD_FLOATS = 16;
+var SONARE_METER_RING_PROTOCOL_VERSION = 2;
+var SONARE_METER_RING_MAX_CHANNELS = 8;
+var SONARE_METER_RING_CHANNEL_COUNT_OFFSET = 16;
+var SONARE_METER_RING_PLANES_OFFSET = 17;
+var SONARE_METER_RING_RECORD_FLOATS = SONARE_METER_RING_PLANES_OFFSET + 4 * SONARE_METER_RING_MAX_CHANNELS;
 var SONARE_SPECTRUM_RING_HEADER_INTS = 5;
 var SONARE_SCOPE_RING_HEADER_INTS = 6;
 var SONARE_SCOPE_RING_RECORD_PREFIX_FLOATS = 5;
@@ -3364,7 +4349,7 @@ var SONARE_ENGINE_TELEMETRY_RECORD_BYTES = 48;
 var SONARE_CLIP_PAGE_REQUEST_RING_HEADER_INTS = 5;
 var SONARE_CLIP_PAGE_REQUEST_RING_RECORD_UINT32S = 2;
 var SONARE_EXTERNAL_MIDI_RING_HEADER_INTS = 5;
-var SONARE_EXTERNAL_MIDI_RING_RECORD_UINT32S = 4;
+var SONARE_EXTERNAL_MIDI_RING_RECORD_UINT32S = 5;
 var SonareEngineCommandType = /* @__PURE__ */ ((SonareEngineCommandType2) => {
   SonareEngineCommandType2[SonareEngineCommandType2["SetParam"] = 0] = "SetParam";
   SonareEngineCommandType2[SonareEngineCommandType2["SetParamSmoothed"] = 1] = "SetParamSmoothed";
@@ -3386,6 +4371,7 @@ var SonareEngineCommandType = /* @__PURE__ */ ((SonareEngineCommandType2) => {
   SonareEngineCommandType2[SonareEngineCommandType2["SeekMarker"] = 17] = "SeekMarker";
   SonareEngineCommandType2[SonareEngineCommandType2["SetTrackMonitorMode"] = 26] = "SetTrackMonitorMode";
   SonareEngineCommandType2[SonareEngineCommandType2["ResetMasterLoudnessMeter"] = 28] = "ResetMasterLoudnessMeter";
+  SonareEngineCommandType2[SonareEngineCommandType2["ResetProcessorState"] = 29] = "ResetProcessorState";
   return SonareEngineCommandType2;
 })(SonareEngineCommandType || {});
 var SonareEngineTelemetryType = /* @__PURE__ */ ((SonareEngineTelemetryType2) => {
@@ -3419,6 +4405,27 @@ var SonareEngineTelemetryError = /* @__PURE__ */ ((SonareEngineTelemetryError2) 
   return SonareEngineTelemetryError2;
 })(SonareEngineTelemetryError || {});
 var SONARE_FLOOR_DB = -120;
+var RING_CURSOR_RANGE = 4294967296;
+function ringCursorSpan(capacity) {
+  return capacity * Math.floor(RING_CURSOR_RANGE / capacity);
+}
+function loadSonareRingCursor(header, slot, capacity) {
+  return (Atomics.load(header, slot) >>> 0) % ringCursorSpan(capacity);
+}
+function storeSonareRingCursor(header, slot, cursor, capacity, count = 1) {
+  Atomics.store(header, slot, (cursor + count) % ringCursorSpan(capacity) | 0);
+}
+function sonareRingCursorDistance(from, to, capacity) {
+  const span = ringCursorSpan(capacity);
+  return ((to - from) % span + span) % span;
+}
+function sonareRingCursorSlot(cursor, capacity) {
+  return cursor % capacity;
+}
+function overwriteRingFirstReadable(readIndex, writeIndex, capacity) {
+  const lag = sonareRingCursorDistance(readIndex, writeIndex, capacity);
+  return lag <= capacity ? readIndex : (writeIndex - capacity + ringCursorSpan(capacity)) % ringCursorSpan(capacity);
+}
 function isRecord(value) {
   return typeof value === "object" && value !== null;
 }
@@ -3433,18 +4440,20 @@ function createSonareMeterRingBuffer(capacity = 128) {
   Atomics.store(ring.header, 0, 0);
   Atomics.store(ring.header, 1, clampedCapacity);
   Atomics.store(ring.header, 2, SONARE_METER_RING_RECORD_FLOATS);
-  Atomics.store(ring.header, 3, 0);
+  Atomics.store(ring.header, 3, SONARE_METER_RING_PROTOCOL_VERSION);
   return { sharedBuffer, header: ring.header, records: ring.records, capacity: ring.capacity };
 }
 function readSonareMeterRingBuffer(ring, readIndex = 0) {
-  const writeIndex = Atomics.load(ring.header, 0);
+  const writeIndex = loadSonareRingCursor(ring.header, 0, ring.capacity);
   const recordFloats = Atomics.load(ring.header, 2) || SONARE_METER_RING_RECORD_FLOATS;
-  const nextReadIndex = Math.max(0, Math.min(readIndex, writeIndex));
-  const firstReadable = Math.max(nextReadIndex, writeIndex - ring.capacity);
+  const hasPlanes = Atomics.load(ring.header, 3) >= SONARE_METER_RING_PROTOCOL_VERSION && recordFloats >= SONARE_METER_RING_RECORD_FLOATS;
+  const firstReadable = overwriteRingFirstReadable(readIndex, writeIndex, ring.capacity);
+  const count = sonareRingCursorDistance(firstReadable, writeIndex, ring.capacity);
   const meters = [];
-  for (let index = firstReadable; index < writeIndex; index++) {
-    const offset = index % ring.capacity * recordFloats;
-    meters.push({
+  for (let i = 0; i < count; i++) {
+    const cursor = (firstReadable + i) % ringCursorSpan(ring.capacity);
+    const offset = sonareRingCursorSlot(cursor, ring.capacity) * recordFloats;
+    const meter = {
       type: "meter",
       frame: decodeFrame(ring.records[offset], ring.records[offset + 1]),
       targetId: ring.records[offset + 2],
@@ -3461,7 +4470,25 @@ function readSonareMeterRingBuffer(ring, readIndex = 0) {
       gainReductionDb: ring.records[offset + 13],
       inputPeakDbL: ring.records[offset + 14],
       inputPeakDbR: ring.records[offset + 15]
-    });
+    };
+    if (hasPlanes) {
+      const channelCount = ring.records[offset + SONARE_METER_RING_CHANNEL_COUNT_OFFSET];
+      if (channelCount > 2) {
+        const planes = Math.min(channelCount, SONARE_METER_RING_MAX_CHANNELS);
+        const plane = (kind) => Array.from(
+          ring.records.subarray(
+            offset + SONARE_METER_RING_PLANES_OFFSET + kind * SONARE_METER_RING_MAX_CHANNELS,
+            offset + SONARE_METER_RING_PLANES_OFFSET + kind * SONARE_METER_RING_MAX_CHANNELS + planes
+          )
+        );
+        meter.channelCount = planes;
+        meter.peakDb = plane(0);
+        meter.rmsDb = plane(1);
+        meter.truePeakDb = plane(2);
+        meter.inputPeakDb = plane(3);
+      }
+    }
+    meters.push(meter);
   }
   return { nextReadIndex: writeIndex, meters };
 }
@@ -3491,14 +4518,15 @@ function createSonareSpectrumRingBuffer(capacity = 128, bands = 16) {
   };
 }
 function readSonareSpectrumRingBuffer(ring, readIndex = 0) {
-  const writeIndex = Atomics.load(ring.header, 0);
+  const writeIndex = loadSonareRingCursor(ring.header, 0, ring.capacity);
   const recordFloats = Atomics.load(ring.header, 2) || 3 + ring.bands;
   const bands = Atomics.load(ring.header, 3) || ring.bands;
-  const nextReadIndex = Math.max(0, Math.min(readIndex, writeIndex));
-  const firstReadable = Math.max(nextReadIndex, writeIndex - ring.capacity);
+  const firstReadable = overwriteRingFirstReadable(readIndex, writeIndex, ring.capacity);
+  const count = sonareRingCursorDistance(firstReadable, writeIndex, ring.capacity);
   const spectra = [];
-  for (let index = firstReadable; index < writeIndex; index++) {
-    const offset = index % ring.capacity * recordFloats;
+  for (let i = 0; i < count; i++) {
+    const cursor = (firstReadable + i) % ringCursorSpan(ring.capacity);
+    const offset = sonareRingCursorSlot(cursor, ring.capacity) * recordFloats;
     const values = new Float32Array(bands);
     values.set(ring.records.subarray(offset + 3, offset + 3 + bands));
     spectra.push({
@@ -3547,15 +4575,16 @@ function createSonareScopeRingBuffer(capacity = 64, bands = SONARE_SCOPE_DEFAULT
   };
 }
 function readSonareScopeRingBuffer(ring, readIndex = 0) {
-  const writeIndex = Atomics.load(ring.header, 0);
+  const writeIndex = loadSonareRingCursor(ring.header, 0, ring.capacity);
   const bands = Atomics.load(ring.header, 3) || ring.bands;
   const maxPoints = Atomics.load(ring.header, 4);
   const recordFloats = Atomics.load(ring.header, 2) || sonareScopeRingRecordFloats(bands, maxPoints);
-  const nextReadIndex = Math.max(0, Math.min(readIndex, writeIndex));
-  const firstReadable = Math.max(nextReadIndex, writeIndex - ring.capacity);
+  const firstReadable = overwriteRingFirstReadable(readIndex, writeIndex, ring.capacity);
+  const count = sonareRingCursorDistance(firstReadable, writeIndex, ring.capacity);
   const scopes = [];
-  for (let index = firstReadable; index < writeIndex; index++) {
-    const offset = index % ring.capacity * recordFloats;
+  for (let i = 0; i < count; i++) {
+    const cursor = (firstReadable + i) % ringCursorSpan(ring.capacity);
+    const offset = sonareRingCursorSlot(cursor, ring.capacity) * recordFloats;
     const bandCount = Math.min(bands, Math.max(0, ring.records[offset + 3]));
     const pointCount = Math.min(maxPoints, Math.max(0, ring.records[offset + 4]));
     const bandsView = new Float32Array(bandCount);
@@ -3658,6 +4687,13 @@ function createSonareExternalMidiRingBuffer(capacity = 256) {
   Atomics.store(ring.header, 4, 0);
   return { sharedBuffer, header: ring.header, records: ring.records, capacity: ring.capacity };
 }
+function sonareExternalMidiRingHasRoom(ring) {
+  return sonareRingCursorDistance(
+    loadSonareRingCursor(ring.header, 1, ring.capacity),
+    loadSonareRingCursor(ring.header, 0, ring.capacity),
+    ring.capacity
+  ) < ring.capacity;
+}
 function pushSonareExternalMidiRingBuffer(ring, destinationId, renderFrame, byteWord, byteCount) {
   const destination = Number(destinationId);
   const frame = Number(renderFrame);
@@ -3667,34 +4703,40 @@ function pushSonareExternalMidiRingBuffer(ring, destinationId, renderFrame, byte
     Atomics.add(ring.header, 4, 1);
     return false;
   }
-  const writeIndex = Atomics.load(ring.header, 0);
-  const readIndex = Atomics.load(ring.header, 1);
-  if (writeIndex - readIndex >= ring.capacity) {
+  const writeIndex = loadSonareRingCursor(ring.header, 0, ring.capacity);
+  const readIndex = loadSonareRingCursor(ring.header, 1, ring.capacity);
+  if (sonareRingCursorDistance(readIndex, writeIndex, ring.capacity) >= ring.capacity) {
     Atomics.add(ring.header, 4, 1);
     return false;
   }
-  const offset = writeIndex % ring.capacity * SONARE_EXTERNAL_MIDI_RING_RECORD_UINT32S;
+  const offset = sonareRingCursorSlot(writeIndex, ring.capacity) * SONARE_EXTERNAL_MIDI_RING_RECORD_UINT32S;
   Atomics.store(ring.records, offset, destination);
-  Atomics.store(ring.records, offset + 1, frame);
+  Atomics.store(ring.records, offset + 1, frame >>> 0);
   Atomics.store(ring.records, offset + 2, packedBytes);
   Atomics.store(ring.records, offset + 3, count);
-  Atomics.store(ring.header, 0, writeIndex + 1);
+  Atomics.store(ring.records, offset + 4, Math.floor(frame / RING_CURSOR_RANGE));
+  storeSonareRingCursor(ring.header, 0, writeIndex, ring.capacity);
   return true;
 }
 function readSonareExternalMidiRingBuffer(ring) {
-  const readIndex = Atomics.load(ring.header, 1);
-  const writeIndex = Atomics.load(ring.header, 0);
+  const readIndex = loadSonareRingCursor(ring.header, 1, ring.capacity);
+  const writeIndex = loadSonareRingCursor(ring.header, 0, ring.capacity);
+  const pending = Math.min(
+    ring.capacity,
+    sonareRingCursorDistance(readIndex, writeIndex, ring.capacity)
+  );
   const events = [];
-  for (let index = readIndex; index < writeIndex; index++) {
-    const offset = index % ring.capacity * SONARE_EXTERNAL_MIDI_RING_RECORD_UINT32S;
+  for (let i = 0; i < pending; i++) {
+    const cursor = (readIndex + i) % ringCursorSpan(ring.capacity);
+    const offset = sonareRingCursorSlot(cursor, ring.capacity) * SONARE_EXTERNAL_MIDI_RING_RECORD_UINT32S;
     events.push({
       destinationId: Atomics.load(ring.records, offset) >>> 0,
-      renderFrame: Atomics.load(ring.records, offset + 1) >>> 0,
+      renderFrame: (Atomics.load(ring.records, offset + 4) >>> 0) * RING_CURSOR_RANGE + (Atomics.load(ring.records, offset + 1) >>> 0),
       byteWord: Atomics.load(ring.records, offset + 2) >>> 0,
       byteCount: Atomics.load(ring.records, offset + 3) >>> 0
     });
   }
-  Atomics.store(ring.header, 1, writeIndex);
+  storeSonareRingCursor(ring.header, 1, readIndex, ring.capacity, pending);
   return { events, dropped: Atomics.load(ring.header, 4) >>> 0 };
 }
 function createSonareClipPageRequestRingBuffer(capacity = 128) {
@@ -3715,30 +4757,35 @@ function pushSonareClipPageRequestRingBuffer(ring, clipId, pageIndex) {
     Atomics.add(ring.header, 4, 1);
     return false;
   }
-  const writeIndex = Atomics.load(ring.header, 0);
-  const readIndex = Atomics.load(ring.header, 1);
-  if (writeIndex - readIndex >= ring.capacity) {
+  const writeIndex = loadSonareRingCursor(ring.header, 0, ring.capacity);
+  const readIndex = loadSonareRingCursor(ring.header, 1, ring.capacity);
+  if (sonareRingCursorDistance(readIndex, writeIndex, ring.capacity) >= ring.capacity) {
     Atomics.add(ring.header, 4, 1);
     return false;
   }
-  const offset = writeIndex % ring.capacity * SONARE_CLIP_PAGE_REQUEST_RING_RECORD_UINT32S;
+  const offset = sonareRingCursorSlot(writeIndex, ring.capacity) * SONARE_CLIP_PAGE_REQUEST_RING_RECORD_UINT32S;
   Atomics.store(ring.records, offset, clipId);
   Atomics.store(ring.records, offset + 1, pageIndex);
-  Atomics.store(ring.header, 0, writeIndex + 1);
+  storeSonareRingCursor(ring.header, 0, writeIndex, ring.capacity);
   return true;
 }
 function readSonareClipPageRequestRingBuffer(ring) {
-  const readIndex = Atomics.load(ring.header, 1);
-  const writeIndex = Atomics.load(ring.header, 0);
+  const readIndex = loadSonareRingCursor(ring.header, 1, ring.capacity);
+  const writeIndex = loadSonareRingCursor(ring.header, 0, ring.capacity);
+  const pending = Math.min(
+    ring.capacity,
+    sonareRingCursorDistance(readIndex, writeIndex, ring.capacity)
+  );
   const requests = [];
-  for (let index = readIndex; index < writeIndex; index++) {
-    const offset = index % ring.capacity * SONARE_CLIP_PAGE_REQUEST_RING_RECORD_UINT32S;
+  for (let i = 0; i < pending; i++) {
+    const cursor = (readIndex + i) % ringCursorSpan(ring.capacity);
+    const offset = sonareRingCursorSlot(cursor, ring.capacity) * SONARE_CLIP_PAGE_REQUEST_RING_RECORD_UINT32S;
     requests.push({
-      clipId: Atomics.load(ring.records, offset),
-      pageIndex: Atomics.load(ring.records, offset + 1)
+      clipId: Atomics.load(ring.records, offset) >>> 0,
+      pageIndex: Atomics.load(ring.records, offset + 1) >>> 0
     });
   }
-  Atomics.store(ring.header, 1, writeIndex);
+  storeSonareRingCursor(ring.header, 1, readIndex, ring.capacity, pending);
   return { requests, dropped: Atomics.load(ring.header, 4) >>> 0 };
 }
 function createSonareEngineCommandRingBuffer(capacity = 128) {
@@ -3766,9 +4813,9 @@ function createSonareEngineTelemetryRingBuffer(capacity = 128) {
   return { sharedBuffer, header: ring.header, view: ring.view, capacity: ring.capacity };
 }
 function pushSonareEngineCommandRingBuffer(ring, command) {
-  const writeIndex = Atomics.load(ring.header, 0);
-  const readIndex = Atomics.load(ring.header, 1);
-  if (writeIndex - readIndex >= ring.capacity) {
+  const writeIndex = loadSonareRingCursor(ring.header, 0, ring.capacity);
+  const readIndex = loadSonareRingCursor(ring.header, 1, ring.capacity);
+  if (sonareRingCursorDistance(readIndex, writeIndex, ring.capacity) >= ring.capacity) {
     Atomics.add(ring.header, 4, 1);
     return false;
   }
@@ -3777,44 +4824,61 @@ function pushSonareEngineCommandRingBuffer(ring, command) {
     recordOffset(writeIndex, ring.capacity, SONARE_ENGINE_COMMAND_RECORD_BYTES),
     command
   );
-  Atomics.store(ring.header, 0, writeIndex + 1);
+  storeSonareRingCursor(ring.header, 0, writeIndex, ring.capacity);
   return true;
 }
 function popSonareEngineCommandRingBuffer(ring) {
-  const readIndex = Atomics.load(ring.header, 1);
-  const writeIndex = Atomics.load(ring.header, 0);
-  if (readIndex >= writeIndex) {
+  const readIndex = loadSonareRingCursor(ring.header, 1, ring.capacity);
+  const writeIndex = loadSonareRingCursor(ring.header, 0, ring.capacity);
+  if (readIndex === writeIndex) {
     return null;
   }
   const command = readEngineCommandRecord(
     ring.view,
     recordOffset(readIndex, ring.capacity, SONARE_ENGINE_COMMAND_RECORD_BYTES)
   );
-  Atomics.store(ring.header, 1, readIndex + 1);
+  storeSonareRingCursor(ring.header, 1, readIndex, ring.capacity);
   return command;
 }
+function sonareEngineCommandRingHasRoom(ring) {
+  return pendingSonareEngineCommandCount(ring) < ring.capacity;
+}
+function pendingSonareEngineCommandCount(ring) {
+  return Math.min(
+    ring.capacity,
+    sonareRingCursorDistance(
+      loadSonareRingCursor(ring.header, 1, ring.capacity),
+      loadSonareRingCursor(ring.header, 0, ring.capacity),
+      ring.capacity
+    )
+  );
+}
 function writeSonareEngineTelemetryRingBuffer(ring, telemetry) {
-  const writeIndex = Atomics.load(ring.header, 0);
+  const writeIndex = loadSonareRingCursor(ring.header, 0, ring.capacity);
   writeEngineTelemetryRecord(
     ring.view,
     recordOffset(writeIndex, ring.capacity, SONARE_ENGINE_TELEMETRY_RECORD_BYTES),
     telemetry
   );
-  Atomics.store(ring.header, 0, writeIndex + 1);
-  if (writeIndex + 1 > ring.capacity) {
-    Atomics.store(ring.header, 4, writeIndex + 1 - ring.capacity);
+  commitSonareEngineTelemetryRingWrite(ring, writeIndex);
+}
+function commitSonareEngineTelemetryRingWrite(ring, writeIndex) {
+  storeSonareRingCursor(ring.header, 0, writeIndex, ring.capacity);
+  if (Atomics.load(ring.header, 4) !== 0 || writeIndex >= ring.capacity) {
+    Atomics.add(ring.header, 4, 1);
   }
 }
 function readSonareEngineTelemetryRingBuffer(ring, readIndex = 0) {
-  const writeIndex = Atomics.load(ring.header, 0);
-  const nextReadIndex = Math.max(0, Math.min(readIndex, writeIndex));
-  const firstReadable = Math.max(nextReadIndex, writeIndex - ring.capacity);
+  const writeIndex = loadSonareRingCursor(ring.header, 0, ring.capacity);
+  const firstReadable = overwriteRingFirstReadable(readIndex, writeIndex, ring.capacity);
+  const count = sonareRingCursorDistance(firstReadable, writeIndex, ring.capacity);
   const telemetry = [];
-  for (let index = firstReadable; index < writeIndex; index++) {
+  for (let i = 0; i < count; i++) {
+    const cursor = (firstReadable + i) % ringCursorSpan(ring.capacity);
     telemetry.push(
       readEngineTelemetryRecord(
         ring.view,
-        recordOffset(index, ring.capacity, SONARE_ENGINE_TELEMETRY_RECORD_BYTES)
+        recordOffset(cursor, ring.capacity, SONARE_ENGINE_TELEMETRY_RECORD_BYTES)
       )
     );
   }
@@ -3831,6 +4895,7 @@ function meterRingFromSharedBuffer(sharedBuffer, fallbackCapacity) {
   }
   Atomics.store(header, 1, capacity);
   Atomics.store(header, 2, SONARE_METER_RING_RECORD_FLOATS);
+  Atomics.store(header, 3, SONARE_METER_RING_PROTOCOL_VERSION);
   return {
     header,
     records: new Float32Array(
@@ -3902,8 +4967,8 @@ function clipPageRequestRingFromSharedBuffer(sharedBuffer, fallbackCapacity) {
     capacity
   };
 }
-function recordOffset(index, capacity, recordBytes) {
-  return index % capacity * recordBytes;
+function recordOffset(cursor, capacity, recordBytes) {
+  return sonareRingCursorSlot(cursor, capacity) * recordBytes;
 }
 function isUint32Slot(value) {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= 4294967295;
@@ -3983,24 +5048,32 @@ function telemetryFromEngine(telemetry) {
   };
 }
 function meterFromEngine(meter) {
-  return {
+  const snapshot = {
     type: "meter",
     targetId: meter.targetId,
     frame: meter.renderFrame,
-    peakDbL: meter.peakDbL,
-    peakDbR: meter.peakDbR,
-    rmsDbL: meter.rmsDbL,
-    rmsDbR: meter.rmsDbR,
+    peakDbL: meter.peakDb[0] ?? SONARE_FLOOR_DB,
+    peakDbR: meter.peakDb[1] ?? SONARE_FLOOR_DB,
+    rmsDbL: meter.rmsDb[0] ?? SONARE_FLOOR_DB,
+    rmsDbR: meter.rmsDb[1] ?? SONARE_FLOOR_DB,
     correlation: meter.correlation,
-    truePeakDbL: meter.truePeakDbL,
-    truePeakDbR: meter.truePeakDbR,
+    truePeakDbL: meter.truePeakDb[0] ?? SONARE_FLOOR_DB,
+    truePeakDbR: meter.truePeakDb[1] ?? SONARE_FLOOR_DB,
     momentaryLufs: meter.momentaryLufs,
     shortTermLufs: meter.shortTermLufs,
     integratedLufs: meter.integratedLufs,
     gainReductionDb: meter.gainReductionDb,
-    inputPeakDbL: meter.inputPeakDbL,
-    inputPeakDbR: meter.inputPeakDbR
+    inputPeakDbL: meter.inputPeakDb[0] ?? SONARE_FLOOR_DB,
+    inputPeakDbR: meter.inputPeakDb[1] ?? SONARE_FLOOR_DB
   };
+  if (meter.channelCount > 2) {
+    snapshot.channelCount = meter.channelCount;
+    snapshot.peakDb = meter.peakDb;
+    snapshot.rmsDb = meter.rmsDb;
+    snapshot.truePeakDb = meter.truePeakDb;
+    snapshot.inputPeakDb = meter.inputPeakDb;
+  }
+  return snapshot;
 }
 function magnitudeToDb(value) {
   return value > 1e-12 ? 20 * Math.log10(value) : -120;
@@ -4162,6 +5235,15 @@ function isRealtimeVoiceChangerMessage(value) {
   }
   return value.type === "setConfig" || value.type === "reset" || value.type === "destroy";
 }
+function isStreamAnalyzerMessage(value) {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return value.type === "destroy" || value.type === "recycle" && value.samples instanceof Float32Array;
+}
+function isStreamAnalyzerChunkMessage(value) {
+  return isRecord(value) && value.type === "chunk" && value.samples instanceof Float32Array && typeof value.startSample === "number" && typeof value.discontinuity === "boolean";
+}
 var isOptionalNumber = (value) => value === void 0 || typeof value === "number";
 function isPlaybackMessage(value) {
   if (!isRecord(value) || typeof value.type !== "string") {
@@ -4192,7 +5274,7 @@ function isClipPageRequestMessage(value) {
   );
 }
 function isMeterSnapshot(value) {
-  return isRecord(value) && value.type === "meter" && typeof value.frame === "number" && typeof value.peakDbL === "number" && typeof value.peakDbR === "number" && typeof value.rmsDbL === "number" && typeof value.rmsDbR === "number" && typeof value.correlation === "number" && Number.isFinite(value.inputPeakDbL) && Number.isFinite(value.inputPeakDbR) && (typeof value.targetId === "number" || value.targetId === void 0);
+  return isRecord(value) && value.type === "meter" && typeof value.frame === "number" && typeof value.peakDbL === "number" && typeof value.peakDbR === "number" && typeof value.rmsDbL === "number" && typeof value.rmsDbR === "number" && typeof value.correlation === "number" && Number.isFinite(value.inputPeakDbL) && Number.isFinite(value.inputPeakDbR) && (value.channelCount === void 0 || typeof value.channelCount === "number" && Array.isArray(value.peakDb) && Array.isArray(value.rmsDb) && Array.isArray(value.truePeakDb) && Array.isArray(value.inputPeakDb)) && (typeof value.targetId === "number" || value.targetId === void 0);
 }
 var SONARE_SCOPE_MAX_BANDS = 64;
 var SONARE_SCOPE_MAX_POINTS = 32;
@@ -4209,6 +5291,14 @@ function isPlainFloat32Array(value, maxLength, evenLength = false) {
 }
 function isScopeSnapshot(value) {
   return isRecord(value) && value.type === "scope" && typeof value.targetId === "number" && Number.isSafeInteger(value.targetId) && value.targetId >= 0 && value.targetId <= 4294967295 && typeof value.frame === "number" && Number.isSafeInteger(value.frame) && value.frame >= 0 && isPlainFloat32Array(value.bands, SONARE_SCOPE_MAX_BANDS) && value.bands.length > 0 && isPlainFloat32Array(value.points, SONARE_SCOPE_MAX_POINTS * 2, true);
+}
+function resolveContextSampleRate(requested, context, what) {
+  if (requested !== void 0 && requested !== context.sampleRate) {
+    throw new RangeError(
+      `${what}: sampleRate ${String(requested)} differs from the AudioContext rate ${context.sampleRate}`
+    );
+  }
+  return context.sampleRate;
 }
 function requireIntegerOption(value, fallback, name, minimum) {
   const resolved = value ?? fallback;
@@ -4232,29 +5322,39 @@ function requireChannelCount(channelCount, fallback) {
 }
 
 // src/worklet/engine-offline.ts
+var FLOAT32_MAX = 34028234663852886e22;
 function buildCaptureConfig(options, defaultChannels) {
+  const rawSource = options.source ?? "output";
+  const source = rawSource === 0 ? "output" : rawSource === 1 ? "input" : rawSource;
+  if (source !== "output" && source !== "input") {
+    throw new RangeError("capture source must be 'output' or 'input' (or ordinal 0 or 1)");
+  }
+  const gain = options.inputMonitor?.gain ?? 1;
+  if (typeof gain !== "number" || !Number.isFinite(gain) || Math.abs(gain) > FLOAT32_MAX) {
+    throw new RangeError("inputMonitor.gain must be a finite number within the 32-bit float range");
+  }
   return {
     // bufferFrames has no default; NaN makes the guard refuse an absent value.
     bufferFrames: requireIntegerOption(options.bufferFrames, Number.NaN, "bufferFrames", 1),
     channels: requireChannelCount(options.channels, defaultChannels),
-    source: options.source ?? "output",
+    source,
     recordOffsetSamples: requireInteger(options.recordOffsetSamples, 0, "recordOffsetSamples"),
     inputMonitor: {
       enabled: Boolean(options.inputMonitor?.enabled),
-      gain: options.inputMonitor?.gain ?? 1
+      gain
     }
   };
 }
 function buildTransportFacade(ctx) {
   return {
-    play: (sampleTime = -1) => {
+    play: (sampleTime) => {
       const ok = ctx.realtimeNode.play(sampleTime);
       if (ok) {
         ctx.setTransportPlaying(true);
       }
       return ok;
     },
-    stop: (sampleTime = -1) => {
+    stop: (sampleTime) => {
       const ok = ctx.realtimeNode.stop(sampleTime);
       if (ok) {
         ctx.setTransportPlaying(false);
@@ -4262,18 +5362,26 @@ function buildTransportFacade(ctx) {
       }
       return ok;
     },
-    seekPpq: (ppq, sampleTime = -1) => {
-      ctx.offlineEngine.seekPpq(ppq, sampleTime);
-      const ok = ctx.realtimeNode.seekPpq(ppq, sampleTime);
-      ctx.flushOfflineMirror();
-      return ok;
-    },
-    seekSeconds: (seconds, sampleTime = -1) => {
+    seekPpq: (ppq, sampleTime) => commitCommand(
+      ctx,
+      {
+        type: 5 /* TransportSeekPpq */,
+        sampleTime: sampleTime ?? -1,
+        argFloat: ppq
+      },
+      (offline) => offline.seekPpq(ppq, sampleTime)
+    ),
+    seekSeconds: (seconds, sampleTime) => {
       const timelineSample = Math.max(0, Math.round(seconds * ctx.sampleRate));
-      ctx.offlineEngine.seekSample(timelineSample, sampleTime);
-      const ok = ctx.realtimeNode.seekSample(timelineSample, sampleTime);
-      ctx.flushOfflineMirror();
-      return ok;
+      return commitCommand(
+        ctx,
+        {
+          type: 4 /* TransportSeekSample */,
+          sampleTime: sampleTime ?? -1,
+          argInt: timelineSample
+        },
+        (offline) => offline.seekSample(timelineSample, sampleTime)
+      );
     },
     setTempo: (bpm) => ctx.setTempo(bpm),
     setTempoSegments: (segments) => ctx.setTempoSegments(segments),
@@ -4330,12 +5438,19 @@ function resolveMarkerSet(markers, nextMarkerId) {
 // src/worklet/engine-capture-facade.ts
 function configureCapture(ctx, options) {
   const config = buildCaptureConfig(options, ctx.offlineChannelCount);
-  ctx.offlineEngine.setCaptureBuffer(config.channels, config.bufferFrames);
-  ctx.offlineEngine.setCaptureSource(config.source);
-  ctx.offlineEngine.setRecordOffsetSamples(config.recordOffsetSamples);
-  ctx.offlineEngine.setInputMonitor(config.inputMonitor.enabled, config.inputMonitor.gain);
-  ctx.setCaptureConfig(config);
-  ctx.postSync({ type: "syncCapture", ...config });
+  commitSync(
+    ctx,
+    (offline) => {
+      offline.setCaptureBuffer(config.channels, config.bufferFrames);
+      offline.setCaptureSource(config.source);
+      offline.setRecordOffsetSamples(config.recordOffsetSamples);
+      offline.setInputMonitor(config.inputMonitor.enabled, config.inputMonitor.gain);
+    },
+    () => {
+      ctx.setCaptureConfig(config);
+      ctx.postSync({ type: "syncCapture", ...config });
+    }
+  );
 }
 function armRecord(ctx, trackId, enabled) {
   if (trackId !== 0) {
@@ -4344,24 +5459,25 @@ function armRecord(ctx, trackId, enabled) {
   if (enabled && !ctx.getCaptureConfig()) {
     throw new Error("Capture buffer is not configured");
   }
-  ctx.offlineEngine.armCapture(enabled);
-  return ctx.sendCommand({
-    type: 13 /* ArmRecord */,
-    targetId: 0,
-    sampleTime: -1,
-    argInt: enabled ? 1 : 0
-  });
+  return commitCommand(
+    ctx,
+    {
+      type: 13 /* ArmRecord */,
+      targetId: 0,
+      sampleTime: -1,
+      argInt: enabled ? 1 : 0
+    },
+    (offline) => offline.armCapture(enabled)
+  );
 }
 function punch(ctx, inPpq, outPpq) {
   const inSample = ctx.offlineEngine.sampleAtPpq(inPpq);
   const outSample = ctx.offlineEngine.sampleAtPpq(outPpq);
-  ctx.offlineEngine.setCapturePunch(inSample, outSample, true);
-  return ctx.sendCommand({
-    type: 14 /* Punch */,
-    sampleTime: -1,
-    argInt: inSample,
-    argFloat: outSample
-  });
+  return commitCommand(
+    ctx,
+    { type: 14 /* Punch */, sampleTime: -1, argInt: inSample, argFloat: outSample },
+    (offline) => offline.setCapturePunch(inSample, outSample, true)
+  );
 }
 function captureStatus(ctx) {
   return ctx.realtimeNode.requestCaptureStatus();
@@ -4377,6 +5493,9 @@ async function resetCapture(ctx) {
 // src/worklet/engine-clips.ts
 var PREBAKED_CLIP_PAGE_THRESHOLD = 16384;
 var PREBAKED_CLIP_PAGE_FRAMES = 4096;
+function isWarpOff(mode) {
+  return mode === void 0 || mode === "off" || mode === 0;
+}
 function addClip(ctx, trackId, buffer, startPpq, opts = {}) {
   const id = opts.id ?? ctx.allocateClipId();
   const clip = {
@@ -4387,27 +5506,60 @@ function addClip(ctx, trackId, buffer, startPpq, opts = {}) {
     trackId: ctx.resolveTargetId(trackId)
   };
   ctx.ensureTrackLane(trackId);
-  ctx.clips.set(id, clip);
-  syncClipsDelta(ctx, [clip], []);
+  const staged = new Map(ctx.clips);
+  staged.set(id, clip);
+  commitClips(ctx, staged, [clip], [], (offline) => offline.upsertClip(clip));
   return id;
 }
 function removeClip(ctx, clipId) {
-  ctx.clips.delete(clipId);
-  syncClipsDelta(ctx, [], [clipId]);
+  const staged = new Map(ctx.clips);
+  staged.delete(clipId);
+  commitClips(ctx, staged, [], [clipId], (offline) => {
+    if (ctx.clips.has(clipId)) {
+      offline.removeClip(clipId);
+    }
+  });
+}
+function replaceClips(ctx, clip, previousClipIds) {
+  const staged = /* @__PURE__ */ new Map();
+  if (clip.id !== void 0) {
+    staged.set(clip.id, clip);
+  }
+  const clips = Array.from(staged.values());
+  commitClips(
+    ctx,
+    staged,
+    [clip],
+    previousClipIds.filter((id) => id !== clip.id),
+    (offline) => offline.setClips(clips)
+  );
 }
 function setMidiClips(ctx, clips) {
-  ctx.midiClips.clear();
+  const staged = /* @__PURE__ */ new Map();
   for (const clip of clips) {
     const id = clip.id ?? ctx.allocateClipId();
-    ctx.midiClips.set(id, { ...clip, id, events: clip.events.map((event) => ({ ...event })) });
+    staged.set(id, { ...clip, id, events: clip.events.map((event) => ({ ...event })) });
   }
-  syncMidiClips(ctx);
+  const scheduled = Array.from(staged.values());
+  commitStore(
+    ctx,
+    ctx.midiClips,
+    staged,
+    (offline) => offline.setMidiClips(scheduled),
+    () => ctx.postSync({ type: "syncMidiClips", clips: scheduled })
+  );
 }
-function syncClipsDelta(ctx, upserts, removeIds) {
-  const clips = Array.from(ctx.clips.values());
-  ctx.offlineEngine.setClips(clips);
+function commitClips(ctx, staged, upserts, removeIds, applyOffline) {
+  for (const clip of upserts) {
+    if (!clip.channels && clip.pageProvider !== void 0 && !ctx.workletClipStream(clip)) {
+      throw new Error("A pageProvider on SonareEngine must be created by attachOpfsClipStream().");
+    }
+  }
+  commitStore(ctx, ctx.clips, staged, applyOffline, () => postClipsDelta(ctx, upserts, removeIds));
+}
+function postClipsDelta(ctx, upserts, removeIds) {
   const preparedById = /* @__PURE__ */ new Map();
-  for (const clip of clips) {
+  for (const clip of upserts) {
     if (clip.id === void 0) {
       continue;
     }
@@ -4429,13 +5581,18 @@ function syncClipsDelta(ctx, upserts, removeIds) {
   for (const clip of upserts) {
     const prepared = clip.id === void 0 ? clip : preparedById.get(clip.id) ?? clip;
     const channels = prepared.channels;
-    if (!channels && prepared.pageProvider !== void 0) {
-      if (ctx.commitWorkletClipPageProvider(prepared)) {
-        continue;
-      }
-      throw new Error("A pageProvider on SonareEngine must be created by attachOpfsClipStream().");
+    const stream = !channels && prepared.pageProvider !== void 0 ? ctx.workletClipStream(prepared) : void 0;
+    if (stream) {
+      ctx.postSync({
+        type: "syncClipPageCommit",
+        clipId: stream.clipId,
+        streamKey: stream.streamKey,
+        clip: { ...prepared, channels: void 0, pageProvider: void 0 }
+      });
+      continue;
     }
-    if (prepared.id === void 0 || prepared.warpMode !== "off" || !channels || channels.length === 0 || channels[0].length <= PREBAKED_CLIP_PAGE_THRESHOLD) {
+    if (prepared.id === void 0 || // The worklet holds one provider per clip id; a stream's is not displaced.
+    ctx.hasClipStream(prepared.id) || !isWarpOff(prepared.warpMode) || !channels || channels.length === 0 || channels[0].length <= PREBAKED_CLIP_PAGE_THRESHOLD) {
       inlineUpserts.push(prepared);
       continue;
     }
@@ -4465,28 +5622,189 @@ function syncClipsDelta(ctx, upserts, removeIds) {
     removeIds
   });
 }
-function syncMidiClips(ctx) {
-  const clips = Array.from(ctx.midiClips.values());
-  ctx.offlineEngine.setMidiClips(clips);
-  ctx.postSync({ type: "syncMidiClips", clips });
+
+// src/worklet/engine-export.ts
+function mirrorPosition(ctx) {
+  ctx.flushOfflineMirror();
+  return ctx.offlineEngine.getTransportState().samplePosition;
+}
+function restorePosition(ctx, position) {
+  commitSync(
+    ctx,
+    (offline) => offline.seekSample(position),
+    () => ctx.flushOfflineMirror()
+  );
+}
+function resolveBlockSize(ctx, blockSize) {
+  const resolved = requireIntegerOption(blockSize, ctx.offlineBlockSize, "blockSize", 1);
+  if (resolved > ctx.offlineBlockSize) {
+    throw new RangeError(
+      `blockSize must not exceed the offline block size (${ctx.offlineBlockSize})`
+    );
+  }
+  return resolved;
+}
+function sourcePageRange(ctx, clip, source, spanStart, spanEnd) {
+  const lastPage = Math.ceil(source.numSamples / source.pageFrames) - 1;
+  const clipStart = ctx.offlineEngine.sampleAtPpq(clip.startPpq);
+  if (clipStart >= spanEnd) {
+    return null;
+  }
+  if (clip.loop || clip.warpMode !== void 0 && clip.warpMode !== "off" && clip.warpMode !== 0) {
+    return [0, lastPage];
+  }
+  const offset = clip.clipOffsetSamples ?? 0;
+  const length = clip.lengthSamples ? clip.lengthSamples : source.numSamples - offset;
+  if (clipStart + length <= spanStart) {
+    return null;
+  }
+  const first = offset + Math.max(0, spanStart - clipStart);
+  const last = offset + Math.min(length, spanEnd - clipStart) - 1;
+  return [
+    Math.min(lastPage, Math.floor(first / source.pageFrames)),
+    Math.min(lastPage, Math.floor(last / source.pageFrames))
+  ];
+}
+async function prefetchOpfsSpan(ctx, startSample, frames) {
+  const supplied = [];
+  const release = () => {
+    for (const { source, page } of supplied) {
+      source.binding.clearPage?.(page);
+    }
+    supplied.length = 0;
+  };
+  if (ctx.opfsSources.size === 0 || frames <= 0) {
+    return release;
+  }
+  const token = ctx.epoch.current();
+  try {
+    for (const clip of ctx.clips.values()) {
+      const providerId = typeof clip.pageProvider === "object" ? clip.pageProvider?.id : clip.pageProvider;
+      const source = providerId === void 0 ? void 0 : ctx.opfsSources.get(providerId);
+      if (!source) {
+        continue;
+      }
+      const range = sourcePageRange(ctx, clip, source, startSample, startSample + frames);
+      if (!range) {
+        continue;
+      }
+      for (let page = range[0]; page <= range[1]; page++) {
+        if (source.residentPages.has(page)) {
+          continue;
+        }
+        const ok = await source.binding.supplyPage(page);
+        ctx.epoch.assertCurrent(token);
+        if (!ok) {
+          throw new Error(
+            `Failed to page in OPFS clip ${clip.id ?? "?"} page ${page} for offline render.`
+          );
+        }
+        supplied.push({ source, page });
+      }
+    }
+  } catch (error) {
+    release();
+    throw error;
+  }
+  return release;
+}
+function endTimeline(ctx, origin) {
+  restorePosition(ctx, origin);
+  ctx.session.chunkOrigin = void 0;
+}
+async function renderOffline(ctx, request) {
+  const numeric = typeof request === "number";
+  const frames = numeric ? Math.max(0, Math.floor(request)) : requireIntegerOption(request.totalFrames, Number.NaN, "totalFrames", 0);
+  const blockSize = resolveBlockSize(ctx, numeric ? void 0 : request.blockSize);
+  const finalize = numeric ? true : request.finalize ?? true;
+  const continuing = ctx.session.chunkOrigin !== void 0;
+  const origin = ctx.session.chunkOrigin ?? mirrorPosition(ctx);
+  const release = await prefetchOpfsSpan(ctx, mirrorPosition(ctx), frames);
+  try {
+    const channels = [];
+    for (let ch = 0; ch < ctx.offlineChannelCount; ch++) {
+      channels.push(new Float32Array(frames));
+    }
+    if (!continuing) {
+      ctx.offlineEngine.primeOfflineParameters(ctx.offlineChannelCount, blockSize);
+    }
+    const planes = ctx.offlineEngine.renderOffline({ channels, blockSize, finalize });
+    if (finalize) {
+      endTimeline(ctx, origin);
+    } else {
+      ctx.session.chunkOrigin = origin;
+    }
+    return planes;
+  } catch (error) {
+    endTimeline(ctx, origin);
+    throw error;
+  } finally {
+    release();
+  }
+}
+function finishOfflineRender(ctx) {
+  ctx.offlineEngine.finishOfflineRender();
+  if (ctx.session.chunkOrigin !== void 0) {
+    endTimeline(ctx, ctx.session.chunkOrigin);
+  }
+}
+function spanFrames(totalFrames) {
+  return Number.isFinite(totalFrames) ? Math.max(0, Math.floor(totalFrames)) : 0;
+}
+async function bounceOffline(ctx, options) {
+  const blockSize = resolveBlockSize(ctx, options.blockSize);
+  const origin = ctx.session.chunkOrigin ?? mirrorPosition(ctx);
+  const release = await prefetchOpfsSpan(ctx, mirrorPosition(ctx), spanFrames(options.totalFrames));
+  try {
+    return ctx.offlineEngine.bounceOffline({ ...options, blockSize });
+  } finally {
+    release();
+    endTimeline(ctx, origin);
+  }
+}
+async function freezeOffline(ctx, options) {
+  const blockSize = resolveBlockSize(ctx, options.blockSize);
+  const origin = ctx.session.chunkOrigin ?? mirrorPosition(ctx);
+  const release = await prefetchOpfsSpan(ctx, mirrorPosition(ctx), spanFrames(options.totalFrames));
+  try {
+    const previousClipIds = Array.from(ctx.clips.keys());
+    const result = ctx.offlineEngine.freezeOffline({ ...options, blockSize });
+    const channels = ctx.offlineEngine.prebakedClipChannels(result.clipId);
+    if (channels === null) {
+      throw new Error("The frozen clip audio is unavailable.");
+    }
+    ctx.commitFrozenClip(
+      {
+        id: result.clipId,
+        channels,
+        startPpq: options.startPpq ?? 0,
+        gain: options.gain ?? 1,
+        clipOffsetSamples: 0,
+        lengthSamples: result.frames,
+        loop: false
+      },
+      previousClipIds
+    );
+    return result;
+  } finally {
+    release();
+    endTimeline(ctx, origin);
+  }
 }
 
 // src/worklet/engine-markers.ts
 function addMarker(ctx, ppq, name = "") {
   const id = ctx.getNextMarkerId();
+  const staged = new Map(ctx.markers);
+  staged.set(id, { id, ppq, name });
+  commitMarkers(ctx, staged);
   ctx.setNextMarkerId(id + 1);
-  ctx.markers.set(id, { id, ppq, name });
-  syncMarkers(ctx);
   return id;
 }
 function setMarkers(ctx, markers) {
   const { resolved, nextMarkerId } = resolveMarkerSet(markers, ctx.getNextMarkerId());
+  commitMarkers(ctx, new Map(resolved.map((marker2) => [marker2.id, marker2])));
   ctx.setNextMarkerId(nextMarkerId);
-  ctx.markers.clear();
-  for (const marker2 of resolved) {
-    ctx.markers.set(marker2.id, marker2);
-  }
-  syncMarkers(ctx);
   return resolved.map((marker2) => ({ ...marker2 }));
 }
 function markerCount(ctx) {
@@ -4499,26 +5817,30 @@ function marker(ctx, markerId) {
   return ctx.offlineEngine.marker(markerId);
 }
 function seekMarker(ctx, markerId) {
-  ctx.offlineEngine.seekMarker(markerId);
-  return ctx.sendCommand({
-    type: 17 /* SeekMarker */,
-    targetId: markerId,
-    sampleTime: -1
-  });
+  return commitCommand(
+    ctx,
+    { type: 17 /* SeekMarker */, targetId: markerId, sampleTime: -1 },
+    (offline) => offline.seekMarker(markerId)
+  );
 }
 function setLoopFromMarkers(ctx, startMarkerId, endMarkerId) {
-  ctx.offlineEngine.setLoopFromMarkers(startMarkerId, endMarkerId);
   const start = ctx.offlineEngine.marker(startMarkerId);
   const end = ctx.offlineEngine.marker(endMarkerId);
   return ctx.setLoop(start.ppq, end.ppq, true);
 }
-function syncMarkers(ctx) {
-  const markers = Array.from(ctx.markers.values()).sort((a, b) => a.ppq - b.ppq);
-  ctx.offlineEngine.setMarkers(markers);
-  ctx.postSync({ type: "syncMarkers", markers });
+function commitMarkers(ctx, staged) {
+  const markers = Array.from(staged.values()).sort((a, b) => a.ppq - b.ppq);
+  commitStore(
+    ctx,
+    ctx.markers,
+    staged,
+    (offline) => offline.setMarkers(markers),
+    () => ctx.postSync({ type: "syncMarkers", markers })
+  );
 }
 
 // src/worklet/engine-mixer-facade.ts
+init_codes();
 function isSceneObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -4851,12 +6173,14 @@ function buildDraftMixerLanes(draft) {
 function applyMixerRouting(ctx, draft, busesAlreadyApplied) {
   const lanes = buildDraftMixerLanes(draft);
   const buses = ctx.buses.map((bus) => ({ ...bus }));
-  if (!busesAlreadyApplied) {
-    ctx.offlineEngine.setTrackBuses(buses);
-  }
-  if (lanes.length > 0) {
-    ctx.offlineEngine.setTrackLanes(lanes);
-  }
+  commitSync(ctx, (offline) => {
+    if (!busesAlreadyApplied) {
+      offline.setTrackBuses(buses);
+    }
+    if (lanes.length > 0) {
+      offline.setTrackLanes(lanes);
+    }
+  });
   return { lanes, buses };
 }
 function postMixerSync(ctx, lanes, buses, insertBaseResets, oneShotInsertParamOverrides) {
@@ -4938,6 +6262,13 @@ function replayInsertParamOverrides(ctx, lanes = mixerLanes(ctx), buses = ctx.bu
   }
 }
 function setTrackLanes(ctx, lanes) {
+  for (const lane of lanes) {
+    if (typeof lane === "object" && lane.sourceChannelLayout !== void 0 && lane.sourceChannelLayout !== 1) {
+      throw new RangeError(
+        "track lane sourceChannelLayout must be stereo; multichannel lanes are not implemented"
+      );
+    }
+  }
   const draft = cloneMixerRouting(ctx);
   const { entries, ids } = normalizeTrackLanes(draft.trackLaneIds, lanes);
   for (const entry of entries) {
@@ -5001,52 +6332,67 @@ function setLaneSidechain(ctx, target, insertIndex, sourceTarget) {
     const sourceIndex = ctx.ensureTrackLane(sourceTarget);
     sourceTrackId = ctx.trackLaneIds[sourceIndex];
   }
-  ctx.offlineEngine.setLaneSidechain(trackId, insertIndex, sourceTrackId);
-  if (sourceTrackId === 0) {
-    ctx.laneSidechains.delete(key);
-  } else {
-    ctx.laneSidechains.set(key, { trackId, insertIndex, sourceTrackId });
-  }
-  ctx.postSync({
-    type: "syncMixer",
-    sidechainDelta: true,
-    lanes: ctx.mixerLanes(),
-    laneSidechains: [{ trackId, insertIndex, sourceTrackId }]
-  });
+  commitSync(
+    ctx,
+    (offline) => offline.setLaneSidechain(trackId, insertIndex, sourceTrackId),
+    () => {
+      if (sourceTrackId === 0) {
+        ctx.laneSidechains.delete(key);
+      } else {
+        ctx.laneSidechains.set(key, { trackId, insertIndex, sourceTrackId });
+      }
+      ctx.postSync({
+        type: "syncMixer",
+        sidechainDelta: true,
+        lanes: ctx.mixerLanes(),
+        laneSidechains: [{ trackId, insertIndex, sourceTrackId }]
+      });
+    }
+  );
 }
 function setBusSidechain(ctx, busId, insertIndex, kind, sourceId) {
   const sourceKind = sidechainSourceKindCode(kind);
   ctx.ensureBus(busId);
   ensureSidechainSource(ctx, sourceKind, sourceId);
-  ctx.offlineEngine.setBusSidechain(busId, insertIndex, sourceKind, sourceId);
-  const key = `${busId}:${insertIndex}`;
-  if (sourceId === 0) {
-    ctx.busSidechains.delete(key);
-  } else {
-    ctx.busSidechains.set(key, { busId, insertIndex, sourceKind, sourceId });
-  }
-  ctx.postSync({
-    type: "syncMixer",
-    sidechainDelta: true,
-    lanes: ctx.mixerLanes(),
-    busSidechains: [{ busId, insertIndex, sourceKind, sourceId }]
-  });
+  commitSync(
+    ctx,
+    (offline) => offline.setBusSidechain(busId, insertIndex, sourceKind, sourceId),
+    () => {
+      const key = `${busId}:${insertIndex}`;
+      if (sourceId === 0) {
+        ctx.busSidechains.delete(key);
+      } else {
+        ctx.busSidechains.set(key, { busId, insertIndex, sourceKind, sourceId });
+      }
+      ctx.postSync({
+        type: "syncMixer",
+        sidechainDelta: true,
+        lanes: ctx.mixerLanes(),
+        busSidechains: [{ busId, insertIndex, sourceKind, sourceId }]
+      });
+    }
+  );
 }
 function setMasterSidechain(ctx, insertIndex, kind, sourceId) {
   const sourceKind = sidechainSourceKindCode(kind);
   ensureSidechainSource(ctx, sourceKind, sourceId);
-  ctx.offlineEngine.setMasterSidechain(insertIndex, sourceKind, sourceId);
-  if (sourceId === 0) {
-    ctx.masterSidechains.delete(insertIndex);
-  } else {
-    ctx.masterSidechains.set(insertIndex, { insertIndex, sourceKind, sourceId });
-  }
-  ctx.postSync({
-    type: "syncMixer",
-    sidechainDelta: true,
-    lanes: ctx.mixerLanes(),
-    masterSidechains: [{ insertIndex, sourceKind, sourceId }]
-  });
+  commitSync(
+    ctx,
+    (offline) => offline.setMasterSidechain(insertIndex, sourceKind, sourceId),
+    () => {
+      if (sourceId === 0) {
+        ctx.masterSidechains.delete(insertIndex);
+      } else {
+        ctx.masterSidechains.set(insertIndex, { insertIndex, sourceKind, sourceId });
+      }
+      ctx.postSync({
+        type: "syncMixer",
+        sidechainDelta: true,
+        lanes: ctx.mixerLanes(),
+        masterSidechains: [{ insertIndex, sourceKind, sourceId }]
+      });
+    }
+  );
 }
 function ensureSidechainSource(ctx, sourceKind, sourceId) {
   if (sourceId === 0) {
@@ -5069,36 +6415,41 @@ function setSends(ctx, target, sends) {
   syncMixerDraft(ctx, draft, true);
 }
 function setTrackBuses(ctx, buses) {
-  ctx.offlineEngine.setTrackBuses(buses);
-  const retainedBusIds = new Set(buses.map((bus) => bus.busId));
-  for (const bus of ctx.buses) {
-    if (!retainedBusIds.has(bus.busId)) {
-      ctx.clearInsertAutomationLanes({ kind: "bus", busId: bus.busId }, true);
+  commitSync(
+    ctx,
+    (offline) => offline.setTrackBuses(buses),
+    () => {
+      const retainedBusIds = new Set(buses.map((bus) => bus.busId));
+      for (const bus of ctx.buses) {
+        if (!retainedBusIds.has(bus.busId)) {
+          ctx.clearInsertAutomationLanes({ kind: "bus", busId: bus.busId }, true);
+        }
+      }
+      ctx.buses.splice(0, ctx.buses.length, ...buses.map((bus) => ({ ...bus })));
+      const activeBusIds = new Set(ctx.buses.map((bus) => bus.busId));
+      for (const busId of ctx.busStripJson.keys()) {
+        if (!activeBusIds.has(busId)) {
+          ctx.busStripJson.delete(busId);
+        }
+      }
+      for (const [key, binding] of ctx.busSidechains) {
+        if (!activeBusIds.has(binding.busId) || binding.sourceKind === 1 && !activeBusIds.has(binding.sourceId)) {
+          ctx.busSidechains.delete(key);
+        }
+      }
+      for (const [key, binding] of ctx.masterSidechains) {
+        if (binding.sourceKind === 1 && !activeBusIds.has(binding.sourceId)) {
+          ctx.masterSidechains.delete(key);
+        }
+      }
+      syncMixer(ctx, true);
     }
-  }
-  ctx.buses.splice(0, ctx.buses.length, ...buses.map((bus) => ({ ...bus })));
-  const activeBusIds = new Set(ctx.buses.map((bus) => bus.busId));
-  for (const busId of ctx.busStripJson.keys()) {
-    if (!activeBusIds.has(busId)) {
-      ctx.busStripJson.delete(busId);
-    }
-  }
-  for (const [key, binding] of ctx.busSidechains) {
-    if (!activeBusIds.has(binding.busId) || binding.sourceKind === 1 && !activeBusIds.has(binding.sourceId)) {
-      ctx.busSidechains.delete(key);
-    }
-  }
-  for (const [key, binding] of ctx.masterSidechains) {
-    if (binding.sourceKind === 1 && !activeBusIds.has(binding.sourceId)) {
-      ctx.masterSidechains.delete(key);
-    }
-  }
-  syncMixer(ctx, true);
+  );
 }
 function setBusGain(ctx, busId, db) {
   const busIndex = ctx.ensureBus(busId);
   ctx.buses[busIndex] = { ...ctx.buses[busIndex], busId, gainDb: db };
-  return ctx.sendSmoothedParam(engineMixerBusTarget(busIndex, ENGINE_MIXER_PARAM_FADER_DB), db);
+  return ctx.sendSmoothedParam(ctx.offlineEngine.resolveBusAutomationId(busId, "faderDb"), db);
 }
 function replaceStripScene(ctx, target, previousJson, sceneJson) {
   const chainChanged = previousJson !== void 0 && decodedInsertSignature(previousJson, target) !== decodedInsertSignature(sceneJson, target);
@@ -5142,6 +6493,8 @@ function setMasterStripJson(ctx, sceneJson) {
 }
 
 // src/worklet/engine-node.ts
+init_errors();
+init_validation();
 function isFiniteInteger(value) {
   if (value === void 0) {
     return true;
@@ -5157,7 +6510,7 @@ function isTrackMonitorMode(value) {
 }
 function isValidCommandRecord(command) {
   const type = Number(command.type);
-  if (!Number.isSafeInteger(type) || type < 0 /* SetParam */ || type > 17 /* SeekMarker */ && type !== 26 /* SetTrackMonitorMode */ && type !== 28 /* ResetMasterLoudnessMeter */) {
+  if (!Number.isSafeInteger(type) || type < 0 /* SetParam */ || type > 17 /* SeekMarker */ && type !== 26 /* SetTrackMonitorMode */ && type !== 28 /* ResetMasterLoudnessMeter */ && type !== 29 /* ResetProcessorState */) {
     return false;
   }
   return (
@@ -5195,7 +6548,7 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
     this.transportRequests = /* @__PURE__ */ new Map();
     this.insertGainReductionRequestId = 1;
     this.insertGainReductionRequests = /* @__PURE__ */ new Map();
-    this.destroyed = false;
+    this.epoch = new OwnerEpoch("Realtime engine node");
     this.node = node;
     this.capabilities = capabilities;
     this.commandRing = commandRing;
@@ -5211,8 +6564,18 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
     if (!capabilities.readyMessage) {
       this.resolveReady();
     }
+    this.ready.catch(() => void 0);
+    this.epoch.onClose(
+      () => this.rejectReady(
+        new SonareError(
+          7 /* InvalidState */,
+          "InvalidState",
+          "Realtime engine node was destroyed before it became ready."
+        )
+      )
+    );
     this.node.port.onmessage = (event) => {
-      if (this.destroyed) {
+      if (this.epoch.closed) {
         return;
       }
       const captureRequestId = engineCaptureResponseRequestId(event.data);
@@ -5283,6 +6646,11 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
   }
   static async create(context, options = {}) {
     const blockSize = workletBlockSize(options.blockSize);
+    const sampleRate = resolveContextSampleRate(
+      options.sampleRate,
+      context,
+      "SonareRealtimeEngineNode.create"
+    );
     const processorName = options.processorName ?? "sonare-realtime-engine-processor";
     const moduleUrl = options.moduleUrl;
     if (moduleUrl && context.audioWorklet?.addModule) {
@@ -5294,7 +6662,9 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
       abiCompatible: options.engineAbiVersion === (options.expectedEngineAbiVersion ?? options.engineAbiVersion)
     } : engineCapabilities();
     if (options.requireAbiCompatible !== false && detectedCapabilities?.abiCompatible === false) {
-      throw new Error(
+      throw new SonareError(
+        10 /* AbiMismatch */,
+        "AbiMismatch",
         `Engine ABI mismatch: wasm=${detectedCapabilities.engineAbiVersion}, expected=${detectedCapabilities.expectedEngineAbiVersion}`
       );
     }
@@ -5369,7 +6739,7 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
     const channelCount = requireChannelCount(options.channelCount, 2);
     const cueOutput = options.cueOutput === true;
     const processorOptions = {
-      sampleRate: options.sampleRate ?? context.sampleRate,
+      sampleRate,
       blockSize,
       channelCount,
       meterIntervalFrames,
@@ -5429,35 +6799,56 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
       externalMidiRing
     );
   }
-  play(sampleTime = -1) {
-    return this.sendCommand({ type: 2 /* TransportPlay */, sampleTime });
+  play(sampleTime) {
+    return this.sendCommand({
+      type: 2 /* TransportPlay */,
+      sampleTime: resolveRenderFrame("play", sampleTime)
+    });
   }
   /** Queues a reset of the master's integrated-loudness accumulator. */
-  resetMasterLoudnessMeter(sampleTime = -1) {
-    return this.sendCommand({ type: 28 /* ResetMasterLoudnessMeter */, sampleTime });
+  resetMasterLoudnessMeter(sampleTime) {
+    return this.sendCommand({
+      type: 28 /* ResetMasterLoudnessMeter */,
+      sampleTime: resolveRenderFrame("resetMasterLoudnessMeter", sampleTime)
+    });
   }
-  stop(sampleTime = -1) {
-    return this.sendCommand({ type: 3 /* TransportStop */, sampleTime });
+  /** Queues a reset of every mixer and effect processor to its prepared state. */
+  resetProcessorState(sampleTime) {
+    return this.sendCommand({
+      type: 29 /* ResetProcessorState */,
+      sampleTime: resolveRenderFrame("resetProcessorState", sampleTime)
+    });
   }
-  seekSample(timelineSample, sampleTime = -1) {
+  stop(sampleTime) {
+    return this.sendCommand({
+      type: 3 /* TransportStop */,
+      sampleTime: resolveRenderFrame("stop", sampleTime)
+    });
+  }
+  seekSample(timelineSample, sampleTime) {
     return this.sendCommand({
       type: 4 /* TransportSeekSample */,
-      sampleTime,
+      sampleTime: resolveRenderFrame("seekSample", sampleTime),
       argInt: timelineSample
     });
   }
-  seekPpq(ppq, sampleTime = -1) {
-    if (!Number.isFinite(ppq) || !Number.isSafeInteger(sampleTime)) {
+  seekPpq(ppq, sampleTime) {
+    const frame = resolveRenderFrame("seekPpq", sampleTime);
+    if (!Number.isFinite(ppq) || !Number.isSafeInteger(frame)) {
       return false;
     }
     return this.sendCommand({
       type: 5 /* TransportSeekPpq */,
-      sampleTime,
+      sampleTime: frame,
       argFloat: ppq
     });
   }
+  /** Whether the node could queue one more well-formed command now; queues nothing. */
+  hasCommandRoom() {
+    return !this.epoch.closed && (!this.commandRing || sonareEngineCommandRingHasRoom(this.commandRing));
+  }
   sendCommand(command) {
-    if (this.destroyed || !isValidCommandRecord(command)) {
+    if (this.epoch.closed || !isValidCommandRecord(command)) {
       return false;
     }
     if (this.commandRing) {
@@ -5602,9 +6993,14 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
     };
   }
   /**
-   * Subscribe to external-MIDI batches drained from the engine (one call per
-   * render block that produced events), already lowered to MIDI 1.0 bytes for a
-   * Web MIDI output port. Returns an unsubscribe function.
+   * Subscribe to batches of external-MIDI events drained from the engine,
+   * already lowered to MIDI 1.0 bytes for a Web MIDI output port. Each event
+   * carries its absolute `renderFrame`; a batch is not a render block. With
+   * postMessage transport a batch holds one block's events; with the SAB ring
+   * it holds whatever accumulated since the previous poll (every 16 ms), which
+   * may span many blocks. While subscribed, the poll consumes the ring, so a
+   * manual {@link pollMidiOut} sees only what arrived since. Returns an
+   * unsubscribe function.
    */
   onMidiOut(callback) {
     this.midiOutListeners.add(callback);
@@ -5625,10 +7021,10 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
     };
   }
   destroy() {
-    if (this.destroyed) {
+    if (this.epoch.closed) {
       return;
     }
-    this.destroyed = true;
+    this.epoch.close();
     if (this.ringPollTimer !== void 0) {
       clearInterval(this.ringPollTimer);
       this.ringPollTimer = void 0;
@@ -5665,11 +7061,13 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
       return;
     }
     const poll = () => {
-      if (!this.destroyed) {
+      if (!this.epoch.closed) {
         this.pollTelemetry();
         this.pollMeters();
         this.pollScope();
-        this.pollMidiOut();
+        if (this.midiOutListeners.size > 0) {
+          this.pollMidiOut();
+        }
       }
     };
     poll();
@@ -5702,7 +7100,7 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
    * target is invalid or mixing is not compiled in.
    */
   pollInsertGainReduction(targetId) {
-    if (this.destroyed) {
+    if (this.epoch.closed) {
       return Promise.reject(new Error("Realtime engine node is destroyed."));
     }
     const requestId = this.insertGainReductionRequestId++;
@@ -5725,7 +7123,7 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
     }
   }
   sendCaptureRequest(op) {
-    if (this.destroyed) {
+    if (this.epoch.closed) {
       return Promise.reject(new Error("Realtime engine node is destroyed."));
     }
     const requestId = this.captureRequestId++;
@@ -5743,7 +7141,7 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
     return promise;
   }
   sendTransportRequest() {
-    if (this.destroyed) {
+    if (this.epoch.closed) {
       return Promise.reject(new Error("Realtime engine node is destroyed."));
     }
     const requestId = this.transportRequestId++;
@@ -5756,50 +7154,55 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
 };
 
 // src/worklet/engine-parameter-facade.ts
+init_codes();
+init_validation();
 function setParam(ctx, nodeId, param, value) {
   const paramId = ctx.resolveParamId(nodeId, param);
-  ctx.offlineEngine.setParameter(paramId, value);
-  return ctx.sendCommand({
-    type: 0 /* SetParam */,
-    targetId: paramId,
-    sampleTime: -1,
-    argFloat: value
-  });
+  return commitCommand(
+    ctx,
+    { type: 0 /* SetParam */, targetId: paramId, sampleTime: -1, argFloat: value },
+    (offline) => offline.setParameter(paramId, value)
+  );
 }
 function setSoloMute(ctx, target, solo, mute) {
   const laneIndex = ctx.ensureTrackLane(target);
-  ctx.offlineEngine.setSoloMute(laneIndex, solo, mute);
-  return ctx.sendCommand({
-    type: 10 /* SetSoloMute */,
-    targetId: laneIndex,
-    sampleTime: -1,
-    argInt: (mute ? 1 : 0) | (solo ? 2 : 0)
-  });
+  return commitCommand(
+    ctx,
+    {
+      type: 10 /* SetSoloMute */,
+      targetId: laneIndex,
+      sampleTime: -1,
+      argInt: (mute ? 1 : 0) | (solo ? 2 : 0)
+    },
+    (offline) => offline.setSoloMute(laneIndex, solo, mute)
+  );
 }
-function setTrackMonitorMode(ctx, target, mode, renderFrame = -1) {
+function setTrackMonitorMode(ctx, target, mode, renderFrame) {
   const modeOrdinal = trackMonitorModeCode(mode);
   const laneIndex = ctx.ensureTrackLane(target);
-  ctx.offlineEngine.setTrackMonitorMode(
-    laneIndex,
-    modeOrdinal,
-    renderFrame
+  return commitCommand(
+    ctx,
+    {
+      type: 26 /* SetTrackMonitorMode */,
+      targetId: laneIndex,
+      sampleTime: resolveRenderFrame("setTrackMonitorMode", renderFrame),
+      argInt: modeOrdinal
+    },
+    (offline) => offline.setTrackMonitorMode(laneIndex, modeOrdinal, renderFrame)
   );
-  return ctx.sendCommand({
-    type: 26 /* SetTrackMonitorMode */,
-    targetId: laneIndex,
-    sampleTime: renderFrame,
-    argInt: modeOrdinal
-  });
 }
 function automationParamId(ctx, target, kind) {
-  const paramKind = kind === "pan" ? ENGINE_MIXER_PARAM_PAN : ENGINE_MIXER_PARAM_FADER_DB;
   if (target === "master") {
-    return engineMixerMasterTarget(paramKind);
+    return engineMixerMasterTarget(
+      kind === "pan" ? ENGINE_MIXER_PARAM_PAN : ENGINE_MIXER_PARAM_FADER_DB
+    );
   }
-  return engineMixerLaneTarget(ctx.ensureTrackLane(target), paramKind);
+  const laneIndex = ctx.ensureTrackLane(target);
+  return ctx.offlineEngine.resolveTrackLaneAutomationId(ctx.trackLaneIds[laneIndex], kind);
 }
 function busAutomationParamId(ctx, busId) {
-  return engineMixerBusTarget(ctx.ensureBus(busId), ENGINE_MIXER_PARAM_FADER_DB);
+  ctx.ensureBus(busId);
+  return ctx.offlineEngine.resolveBusAutomationId(busId, "faderDb");
 }
 function resolveTrackInsertAutomationId(ctx, target, insertIndex, paramName) {
   const laneIndex = ctx.ensureTrackLane(target);
@@ -5830,16 +7233,24 @@ function listParameters(ctx) {
   return parameters;
 }
 function addParameter(ctx, info) {
-  ctx.offlineEngine.addParameter(info);
-  ctx.postSync({ type: "syncParameters", parameters: listParameters(ctx) });
+  commitSync(
+    ctx,
+    (offline) => offline.addParameter(info),
+    () => ctx.postSync({ type: "syncParameters", parameters: listParameters(ctx) })
+  );
 }
 function clearParameters(ctx) {
-  ctx.offlineEngine.clearParameters();
-  ctx.automationLanes.clear();
-  ctx.postSync({ type: "syncParameters", parameters: [] });
+  commitSync(
+    ctx,
+    (offline) => offline.clearParameters(),
+    () => ctx.postSync({ type: "syncParameters", parameters: [] })
+  );
 }
 
 // src/worklet/engine-strips.ts
+init_codes();
+init_errors();
+init_validation();
 function trackIdFor(ctx, target) {
   return ctx.trackLaneIds[ctx.ensureTrackLane(target)];
 }
@@ -5874,20 +7285,30 @@ function setTrackStripJson(ctx, trackId, sceneJson, trackStripJson) {
 function setTrackStripEqBand(ctx, target, bandIndex, band) {
   const trackId = trackIdFor(ctx, target);
   const bandJson = typeof band === "string" ? band : JSON.stringify(band);
-  ctx.offlineEngine.setTrackStripEqBandJson(trackId, bandIndex, bandJson);
-  mergeEqBand(ctx, { kind: "track", trackId }, bandIndex, bandJson);
-  ctx.postSync({ type: "syncTrackStripEqBand", trackId, bandIndex, bandJson });
+  commitSync(
+    ctx,
+    (offline) => offline.setTrackStripEqBandJson(trackId, bandIndex, bandJson),
+    () => {
+      mergeEqBand(ctx, { kind: "track", trackId }, bandIndex, bandJson);
+      ctx.postSync({ type: "syncTrackStripEqBand", trackId, bandIndex, bandJson });
+    }
+  );
 }
 function setTrackStripInsertBypassed(ctx, target, insertIndex, bypassed, resetOnBypass) {
   const trackId = trackIdFor(ctx, target);
-  ctx.offlineEngine.setTrackStripInsertBypassed(trackId, insertIndex, bypassed, resetOnBypass);
-  ctx.postSync({
-    type: "syncTrackStripInsertBypassed",
-    trackId,
-    insertIndex,
-    bypassed,
-    resetOnBypass
-  });
+  commitSync(
+    ctx,
+    (offline) => offline.setTrackStripInsertBypassed(trackId, insertIndex, bypassed, resetOnBypass),
+    () => {
+      ctx.postSync({
+        type: "syncTrackStripInsertBypassed",
+        trackId,
+        insertIndex,
+        bypassed,
+        resetOnBypass
+      });
+    }
+  );
 }
 function setTrackStripInsertParamByName(ctx, target, insertIndex, paramName, value) {
   const trackId = trackIdFor(ctx, target);
@@ -5903,61 +7324,91 @@ function setTrackStripInsertParamByName(ctx, target, insertIndex, paramName, val
 }
 function setTrackStripPan(ctx, target, pan) {
   const trackId = trackIdFor(ctx, target);
-  ctx.offlineEngine.setTrackStripPan(trackId, pan);
-  mergeStripJson(ctx, { kind: "track", trackId }, (entry) => {
-    entry.pan = pan;
-  });
-  ctx.postSync({ type: "syncTrackStripPan", trackId, pan });
+  commitSync(
+    ctx,
+    (offline) => offline.setTrackStripPan(trackId, pan),
+    () => {
+      mergeStripJson(ctx, { kind: "track", trackId }, (entry) => {
+        entry.pan = pan;
+      });
+      ctx.postSync({ type: "syncTrackStripPan", trackId, pan });
+    }
+  );
 }
 function setTrackStripPanLaw(ctx, target, panLaw) {
   const trackId = trackIdFor(ctx, target);
   const code = panLawCode(panLaw);
-  ctx.offlineEngine.setTrackStripPanLaw(trackId, code);
-  mergeStripJson(ctx, { kind: "track", trackId }, (entry) => {
-    entry.panLaw = code;
-  });
-  ctx.postSync({ type: "syncTrackStripPanLaw", trackId, panLaw: code });
+  commitSync(
+    ctx,
+    (offline) => offline.setTrackStripPanLaw(trackId, code),
+    () => {
+      mergeStripJson(ctx, { kind: "track", trackId }, (entry) => {
+        entry.panLaw = code;
+      });
+      ctx.postSync({ type: "syncTrackStripPanLaw", trackId, panLaw: code });
+    }
+  );
 }
 function setTrackStripPanMode(ctx, target, panMode) {
   const trackId = trackIdFor(ctx, target);
   const code = panModeCode(panMode);
-  ctx.offlineEngine.setTrackStripPanMode(trackId, code);
-  mergeStripJson(ctx, { kind: "track", trackId }, (entry) => {
-    entry.panMode = code;
-  });
-  ctx.postSync({ type: "syncTrackStripPanMode", trackId, panMode: code });
+  commitSync(
+    ctx,
+    (offline) => offline.setTrackStripPanMode(trackId, code),
+    () => {
+      mergeStripJson(ctx, { kind: "track", trackId }, (entry) => {
+        entry.panMode = code;
+      });
+      ctx.postSync({ type: "syncTrackStripPanMode", trackId, panMode: code });
+    }
+  );
 }
 function setTrackStripDualPan(ctx, target, leftPan, rightPan) {
   const trackId = trackIdFor(ctx, target);
-  ctx.offlineEngine.setTrackStripDualPan(trackId, leftPan, rightPan);
-  mergeStripJson(ctx, { kind: "track", trackId }, (entry) => {
-    entry.dualPanLeft = leftPan;
-    entry.dualPanRight = rightPan;
-  });
-  ctx.postSync({ type: "syncTrackStripDualPan", trackId, leftPan, rightPan });
+  commitSync(
+    ctx,
+    (offline) => offline.setTrackStripDualPan(trackId, leftPan, rightPan),
+    () => {
+      mergeStripJson(ctx, { kind: "track", trackId }, (entry) => {
+        entry.dualPanLeft = leftPan;
+        entry.dualPanRight = rightPan;
+      });
+      ctx.postSync({ type: "syncTrackStripDualPan", trackId, leftPan, rightPan });
+    }
+  );
 }
 function setTrackStripSurroundPan(ctx, target, pan) {
   const trackId = trackIdFor(ctx, target);
-  ctx.offlineEngine.setTrackStripSurroundPan(trackId, pan);
-  const resolved = {
-    azimuth: pan.azimuth ?? 0,
-    elevation: pan.elevation ?? 0,
-    divergence: pan.divergence ?? 0,
-    lfe: pan.lfe ?? 0,
-    distance: pan.distance === void 0 || pan.distance <= 0 ? 1 : pan.distance
-  };
-  mergeStripJson(ctx, { kind: "track", trackId }, (entry) => {
-    entry.surroundPan = resolved;
-  });
-  ctx.postSync({ type: "syncTrackStripSurroundPan", trackId, pan: resolved });
+  commitSync(
+    ctx,
+    (offline) => offline.setTrackStripSurroundPan(trackId, pan),
+    () => {
+      const resolved = {
+        azimuth: pan.azimuth ?? 0,
+        elevation: pan.elevation ?? 0,
+        divergence: pan.divergence ?? 0,
+        lfe: pan.lfe ?? 0,
+        distance: pan.distance === void 0 || pan.distance <= 0 ? 1 : pan.distance
+      };
+      mergeStripJson(ctx, { kind: "track", trackId }, (entry) => {
+        entry.surroundPan = resolved;
+      });
+      ctx.postSync({ type: "syncTrackStripSurroundPan", trackId, pan: resolved });
+    }
+  );
 }
 function setTrackStripChannelDelaySamples(ctx, target, delaySamples) {
   const trackId = trackIdFor(ctx, target);
-  ctx.offlineEngine.setTrackStripChannelDelaySamples(trackId, delaySamples);
-  mergeStripJson(ctx, { kind: "track", trackId }, (entry) => {
-    entry.channelDelaySamples = delaySamples;
-  });
-  ctx.postSync({ type: "syncTrackStripChannelDelaySamples", trackId, delaySamples });
+  commitSync(
+    ctx,
+    (offline) => offline.setTrackStripChannelDelaySamples(trackId, delaySamples),
+    () => {
+      mergeStripJson(ctx, { kind: "track", trackId }, (entry) => {
+        entry.channelDelaySamples = delaySamples;
+      });
+      ctx.postSync({ type: "syncTrackStripChannelDelaySamples", trackId, delaySamples });
+    }
+  );
 }
 function cacheMasterStripScalar(ctx, field, value) {
   mergeStripJson(ctx, { kind: "master" }, (entry) => {
@@ -5966,13 +7417,23 @@ function cacheMasterStripScalar(ctx, field, value) {
 }
 function setMasterStripEqBand(ctx, bandIndex, band) {
   const bandJson = typeof band === "string" ? band : JSON.stringify(band);
-  ctx.offlineEngine.setMasterStripEqBandJson(bandIndex, bandJson);
-  mergeEqBand(ctx, { kind: "master" }, bandIndex, bandJson);
-  ctx.postSync({ type: "syncMasterStripEqBand", bandIndex, bandJson });
+  commitSync(
+    ctx,
+    (offline) => offline.setMasterStripEqBandJson(bandIndex, bandJson),
+    () => {
+      mergeEqBand(ctx, { kind: "master" }, bandIndex, bandJson);
+      ctx.postSync({ type: "syncMasterStripEqBand", bandIndex, bandJson });
+    }
+  );
 }
 function setMasterStripInsertBypassed(ctx, insertIndex, bypassed, resetOnBypass) {
-  ctx.offlineEngine.setMasterStripInsertBypassed(insertIndex, bypassed, resetOnBypass);
-  ctx.postSync({ type: "syncMasterStripInsertBypassed", insertIndex, bypassed, resetOnBypass });
+  commitSync(
+    ctx,
+    (offline) => offline.setMasterStripInsertBypassed(insertIndex, bypassed, resetOnBypass),
+    () => {
+      ctx.postSync({ type: "syncMasterStripInsertBypassed", insertIndex, bypassed, resetOnBypass });
+    }
+  );
 }
 function setMasterStripInsertParamByName(ctx, insertIndex, paramName, value) {
   setInsertParamByName(
@@ -5997,45 +7458,81 @@ function setBusStripInsertParamByName(ctx, busId, insertIndex, paramName, value)
   );
 }
 function setBusStripInsertBypassed(ctx, busId, insertIndex, bypassed, resetOnBypass) {
-  ctx.offlineEngine.setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass);
-  ctx.postSync({ type: "syncBusStripInsertBypassed", busId, insertIndex, bypassed, resetOnBypass });
+  commitSync(
+    ctx,
+    (offline) => offline.setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass),
+    () => {
+      ctx.postSync({
+        type: "syncBusStripInsertBypassed",
+        busId,
+        insertIndex,
+        bypassed,
+        resetOnBypass
+      });
+    }
+  );
 }
 function setBusStripEqBand(ctx, busId, bandIndex, band) {
   const bandJson = typeof band === "string" ? band : JSON.stringify(band);
-  ctx.offlineEngine.setBusStripEqBandJson(busId, bandIndex, bandJson);
-  mergeEqBand(ctx, { kind: "bus", busId }, bandIndex, bandJson);
-  ctx.postSync({ type: "syncBusStripEqBand", busId, bandIndex, bandJson });
+  commitSync(
+    ctx,
+    (offline) => offline.setBusStripEqBandJson(busId, bandIndex, bandJson),
+    () => {
+      mergeEqBand(ctx, { kind: "bus", busId }, bandIndex, bandJson);
+      ctx.postSync({ type: "syncBusStripEqBand", busId, bandIndex, bandJson });
+    }
+  );
 }
 function setBusStripPan(ctx, busId, pan) {
-  ctx.offlineEngine.setBusStripPan(busId, pan);
-  mergeStripJson(ctx, { kind: "bus", busId }, (entry) => {
-    entry.pan = pan;
-  });
-  ctx.postSync({ type: "syncBusStripPan", busId, pan });
+  commitSync(
+    ctx,
+    (offline) => offline.setBusStripPan(busId, pan),
+    () => {
+      mergeStripJson(ctx, { kind: "bus", busId }, (entry) => {
+        entry.pan = pan;
+      });
+      ctx.postSync({ type: "syncBusStripPan", busId, pan });
+    }
+  );
 }
 function setBusStripPanLaw(ctx, busId, panLaw) {
   const code = panLawCode(panLaw);
-  ctx.offlineEngine.setBusStripPanLaw(busId, code);
-  mergeStripJson(ctx, { kind: "bus", busId }, (entry) => {
-    entry.panLaw = code;
-  });
-  ctx.postSync({ type: "syncBusStripPanLaw", busId, panLaw: code });
+  commitSync(
+    ctx,
+    (offline) => offline.setBusStripPanLaw(busId, code),
+    () => {
+      mergeStripJson(ctx, { kind: "bus", busId }, (entry) => {
+        entry.panLaw = code;
+      });
+      ctx.postSync({ type: "syncBusStripPanLaw", busId, panLaw: code });
+    }
+  );
 }
 function setBusStripPanMode(ctx, busId, panMode) {
   const code = panModeCode(panMode);
-  ctx.offlineEngine.setBusStripPanMode(busId, code);
-  mergeStripJson(ctx, { kind: "bus", busId }, (entry) => {
-    entry.panMode = code;
-  });
-  ctx.postSync({ type: "syncBusStripPanMode", busId, panMode: code });
+  commitSync(
+    ctx,
+    (offline) => offline.setBusStripPanMode(busId, code),
+    () => {
+      mergeStripJson(ctx, { kind: "bus", busId }, (entry) => {
+        entry.panMode = code;
+      });
+      ctx.postSync({ type: "syncBusStripPanMode", busId, panMode: code });
+    }
+  );
 }
 function setBusStripDualPan(ctx, busId, leftPan, rightPan) {
-  ctx.offlineEngine.setBusStripDualPan(busId, leftPan, rightPan);
-  mergeStripJson(ctx, { kind: "bus", busId }, (entry) => {
-    entry.dualPanLeft = leftPan;
-    entry.dualPanRight = rightPan;
-  });
-  ctx.postSync({ type: "syncBusStripDualPan", busId, leftPan, rightPan });
+  commitSync(
+    ctx,
+    (offline) => offline.setBusStripDualPan(busId, leftPan, rightPan),
+    () => {
+      mergeStripJson(ctx, { kind: "bus", busId }, (entry) => {
+        entry.dualPanLeft = leftPan;
+        entry.dualPanRight = rightPan;
+      });
+      ctx.postSync({ type: "syncBusStripDualPan", busId, leftPan, rightPan });
+    }
+  );
 }
 function pushMidiNoteOn(ctx, trackId, group, channel, note, velocity, renderFrame) {
   const destinationId = ctx.resolveTargetId(trackId);
@@ -6047,7 +7544,7 @@ function pushMidiNoteOn(ctx, trackId, group, channel, note, velocity, renderFram
     channel,
     note,
     velocity,
-    renderFrame
+    renderFrame: resolveRenderFrame("pushMidiNoteOn", renderFrame)
   });
 }
 function pushMidiNoteOff(ctx, trackId, group, channel, note, velocity, renderFrame) {
@@ -6060,7 +7557,7 @@ function pushMidiNoteOff(ctx, trackId, group, channel, note, velocity, renderFra
     channel,
     note,
     velocity,
-    renderFrame
+    renderFrame: resolveRenderFrame("pushMidiNoteOff", renderFrame)
   });
 }
 function pushMidiCc(ctx, trackId, group, channel, controller, value, renderFrame) {
@@ -6073,7 +7570,7 @@ function pushMidiCc(ctx, trackId, group, channel, controller, value, renderFrame
     channel,
     controller,
     value,
-    renderFrame
+    renderFrame: resolveRenderFrame("pushMidiCc", renderFrame)
   });
 }
 function pushMidiPitchBend(ctx, trackId, group, channel, bend14, renderFrame) {
@@ -6086,7 +7583,7 @@ function pushMidiPitchBend(ctx, trackId, group, channel, bend14, renderFrame) {
     channel,
     data0: bend14,
     data1: 0,
-    renderFrame
+    renderFrame: resolveRenderFrame("pushMidiPitchBend", renderFrame)
   });
 }
 function pushMidiChannelPressure(ctx, trackId, group, channel, pressure, renderFrame) {
@@ -6099,7 +7596,7 @@ function pushMidiChannelPressure(ctx, trackId, group, channel, pressure, renderF
     channel,
     data0: pressure,
     data1: 0,
-    renderFrame
+    renderFrame: resolveRenderFrame("pushMidiChannelPressure", renderFrame)
   });
 }
 function pushMidiPolyPressure(ctx, trackId, group, channel, note, pressure, renderFrame) {
@@ -6119,29 +7616,56 @@ function pushMidiPolyPressure(ctx, trackId, group, channel, note, pressure, rend
     channel,
     data0: note,
     data1: pressure,
-    renderFrame
+    renderFrame: resolveRenderFrame("pushMidiPolyPressure", renderFrame)
   });
 }
 function pushMidiUmp(ctx, trackId, word0, renderFrame) {
   const destinationId = ctx.resolveTargetId(trackId);
   if (typeof word0 === "number") {
     ctx.offlineEngine.pushMidiUmp(destinationId, word0, renderFrame);
-    ctx.postSync({ type: "syncMidiUmp", destinationId, word0, renderFrame });
+    ctx.postSync({
+      type: "syncMidiUmp",
+      destinationId,
+      word0,
+      renderFrame: resolveRenderFrame("pushMidiUmp", renderFrame)
+    });
     return;
   }
   const words = word0 instanceof Uint32Array ? new Uint32Array(word0) : word0.slice();
   ctx.offlineEngine.pushMidiUmp(destinationId, words, renderFrame);
-  ctx.postSync({ type: "syncMidiUmp", destinationId, words, renderFrame });
+  ctx.postSync({
+    type: "syncMidiUmp",
+    destinationId,
+    words,
+    renderFrame: resolveRenderFrame("pushMidiUmp", renderFrame)
+  });
 }
 function setBuiltinInstrument(ctx, trackId, config) {
   const destinationId = ctx.resolveTargetId(trackId);
-  ctx.offlineEngine.setBuiltinInstrument(config, destinationId);
-  ctx.postInstrumentSync({ type: "syncBuiltinInstrument", destinationId, config });
+  commitSync(
+    ctx,
+    (offline) => offline.setBuiltinInstrument(config, destinationId),
+    () => {
+      ctx.postInstrumentSync({ type: "syncBuiltinInstrument", destinationId, config });
+    }
+  );
 }
 function setSynthInstrument(ctx, trackId, patch) {
   const destinationId = ctx.resolveTargetId(trackId);
-  ctx.offlineEngine.setSynthInstrument(patch, destinationId);
-  ctx.postInstrumentSync({ type: "syncSynthInstrument", destinationId, patch });
+  if (typeof patch === "object" && patch !== null && patch.sampleBank != null) {
+    throw new SonareError(
+      6 /* NotSupported */,
+      "NotSupported",
+      "setSynthInstrument: a patch with sampleBank cannot be delivered to the AudioWorklet engine"
+    );
+  }
+  commitSync(
+    ctx,
+    (offline) => offline.setSynthInstrument(patch, destinationId),
+    () => {
+      ctx.postInstrumentSync({ type: "syncSynthInstrument", destinationId, patch });
+    }
+  );
 }
 function loadSoundFont(ctx, data) {
   ctx.offlineEngine.loadSoundFont(data);
@@ -6149,32 +7673,62 @@ function loadSoundFont(ctx, data) {
 }
 function setSf2Instrument(ctx, trackId, config) {
   const destinationId = ctx.resolveTargetId(trackId);
-  ctx.offlineEngine.setSf2Instrument(config, destinationId);
-  ctx.postInstrumentSync({ type: "syncSf2Instrument", destinationId, config });
+  commitSync(
+    ctx,
+    (offline) => offline.setSf2Instrument(config, destinationId),
+    () => {
+      ctx.postInstrumentSync({ type: "syncSf2Instrument", destinationId, config });
+    }
+  );
 }
 function setMidiDestinationExternal(ctx, trackId, external) {
   const destinationId = ctx.resolveTargetId(trackId);
-  ctx.offlineEngine.setMidiDestinationExternal(destinationId, external);
-  ctx.postSync({ type: "syncMidiDestinationExternal", destinationId, external });
+  commitSync(
+    ctx,
+    (offline) => offline.setMidiDestinationExternal(destinationId, external),
+    () => {
+      ctx.postSync({ type: "syncMidiDestinationExternal", destinationId, external });
+    }
+  );
 }
 function setExternalMidiClockEnabled(ctx, enabled) {
-  ctx.offlineEngine.setExternalMidiClockEnabled(enabled);
-  ctx.postSync({ type: "syncExternalMidiClock", enabled });
+  commitSync(
+    ctx,
+    (offline) => offline.setExternalMidiClockEnabled(enabled),
+    () => {
+      ctx.postSync({ type: "syncExternalMidiClock", enabled });
+    }
+  );
 }
 function setMidiFx(ctx, trackId, configJson) {
   const destinationId = ctx.resolveTargetId(trackId);
-  ctx.offlineEngine.setMidiFx(destinationId, configJson);
-  ctx.postInstrumentSync({ type: "syncMidiFx", destinationId, configJson });
+  commitSync(
+    ctx,
+    (offline) => offline.setMidiFx(destinationId, configJson),
+    () => {
+      ctx.postInstrumentSync({ type: "syncMidiFx", destinationId, configJson });
+    }
+  );
 }
 function clearMidiFx(ctx, trackId) {
   const destinationId = ctx.resolveTargetId(trackId);
-  ctx.offlineEngine.clearMidiFx(destinationId);
-  ctx.postInstrumentSync({ type: "syncClearMidiFx", destinationId });
+  commitSync(
+    ctx,
+    (offline) => offline.clearMidiFx(destinationId),
+    () => {
+      ctx.postInstrumentSync({ type: "syncClearMidiFx", destinationId });
+    }
+  );
 }
 function pushMidiSysex(ctx, trackId, data, renderFrame) {
   const destinationId = ctx.resolveTargetId(trackId);
   ctx.offlineEngine.pushMidiSysex(destinationId, data, renderFrame);
-  ctx.postSync({ type: "syncMidiSysex", destinationId, data, renderFrame });
+  ctx.postSync({
+    type: "syncMidiSysex",
+    destinationId,
+    data,
+    renderFrame: resolveRenderFrame("pushMidiSysex", renderFrame)
+  });
 }
 
 // src/worklet/engine-tempo-facade.ts
@@ -6189,43 +7743,66 @@ function postTempoSync(ctx) {
   );
 }
 function setTempo(ctx, bpm) {
-  ctx.setTempoBpm(bpm);
-  ctx.setTempoSegments([{ startPpq: 0, bpm }]);
-  ctx.offlineEngine.setTempo(bpm);
-  postTempoSync(ctx);
+  commitSync(
+    ctx,
+    (offline) => offline.setTempo(bpm),
+    () => {
+      ctx.setTempoBpm(bpm);
+      ctx.setTempoSegments([{ startPpq: 0, bpm }]);
+      postTempoSync(ctx);
+    }
+  );
 }
 function setTempoSegments(ctx, segments) {
   const copied = segments.map((segment) => ({ ...segment }));
-  ctx.setTempoSegments(copied);
-  ctx.setTempoBpm(copied[0]?.bpm ?? ctx.getTempoBpm());
-  ctx.offlineEngine.setTempoSegments(copied);
-  postTempoSync(ctx);
+  commitSync(
+    ctx,
+    (offline) => offline.setTempoSegments(copied),
+    () => {
+      ctx.setTempoSegments(copied);
+      ctx.setTempoBpm(copied[0]?.bpm ?? ctx.getTempoBpm());
+      postTempoSync(ctx);
+    }
+  );
 }
 function setTimeSignature(ctx, numerator, denominator) {
-  ctx.setTimeSignature({ numerator, denominator });
-  ctx.setTimeSignatureSegments([{ startPpq: 0, numerator, denominator }]);
-  ctx.offlineEngine.setTimeSignature(numerator, denominator);
-  postTempoSync(ctx);
+  commitSync(
+    ctx,
+    (offline) => offline.setTimeSignature(numerator, denominator),
+    () => {
+      ctx.setTimeSignature({ numerator, denominator });
+      ctx.setTimeSignatureSegments([{ startPpq: 0, numerator, denominator }]);
+      postTempoSync(ctx);
+    }
+  );
 }
 function setTimeSignatureSegments(ctx, segments) {
   const copied = segments.map((segment) => ({ ...segment }));
-  ctx.setTimeSignatureSegments(copied);
-  const first = copied[0];
-  if (first) {
-    ctx.setTimeSignature({ numerator: first.numerator, denominator: first.denominator });
-  }
-  ctx.offlineEngine.setTimeSignatureSegments(copied);
-  postTempoSync(ctx);
+  commitSync(
+    ctx,
+    (offline) => offline.setTimeSignatureSegments(copied),
+    () => {
+      ctx.setTimeSignatureSegments(copied);
+      const first = copied[0];
+      if (first) {
+        ctx.setTimeSignature({ numerator: first.numerator, denominator: first.denominator });
+      }
+      postTempoSync(ctx);
+    }
+  );
 }
 function setLoop(ctx, startPpq, endPpq, enabled = true) {
-  ctx.offlineEngine.setLoop(startPpq, endPpq, enabled);
-  return ctx.sendCommand({
-    type: 7 /* SetLoop */,
-    targetId: enabled ? 1 : 0,
-    sampleTime: -1,
-    argFloat: startPpq,
-    argInt: Math.round(endPpq * 1e6)
-  });
+  return commitCommand(
+    ctx,
+    {
+      type: 7 /* SetLoop */,
+      targetId: enabled ? 1 : 0,
+      sampleTime: -1,
+      argFloat: startPpq,
+      argInt: Math.round(endPpq * 1e6)
+    },
+    (offline) => offline.setLoop(startPpq, endPpq, enabled)
+  );
 }
 function countInEndSample(ctx, startSample, bars) {
   return ctx.offlineEngine.countInEndSample(startSample, bars);
@@ -6286,7 +7863,10 @@ var SonareEngine = class _SonareEngine {
     // places a hard cap on work queued while OPFS I/O is stalled.
     this.workletClipPageRequests = /* @__PURE__ */ new Map();
     this.workletPageProviderClipIds = /* @__PURE__ */ new Map();
-    this.destroyed = false;
+    this.nextClipStreamKey = 1;
+    this.opfsExportSources = /* @__PURE__ */ new Map();
+    this.exportSession = { chunkOrigin: void 0 };
+    this.epoch = new OwnerEpoch("SonareEngine");
     this.context = context;
     this.realtimeNode = realtimeNode;
     this.offlineEngine = offlineEngine;
@@ -6305,7 +7885,8 @@ var SonareEngine = class _SonareEngine {
       sampleRate: this.sampleRate,
       realtimeNode: this.realtimeNode,
       offlineEngine: this.offlineEngine,
-      flushOfflineMirror: () => this.flushOfflineMirror(),
+      hasCommandRoom: () => this.realtimeNode.hasCommandRoom(),
+      sendCommand: (command) => this.sendMirroredCommand(command),
       setTransportPlaying: (playing) => {
         this.transportPlaying = playing;
       },
@@ -6316,7 +7897,7 @@ var SonareEngine = class _SonareEngine {
     });
   }
   static async create(context, options = {}) {
-    const sampleRate = options.sampleRate ?? context.sampleRate;
+    const sampleRate = resolveContextSampleRate(options.sampleRate, context, "SonareEngine.create");
     const blockSize = options.offlineBlockSize ?? options.blockSize ?? 128;
     const channelCount = Math.max(
       1,
@@ -6342,13 +7923,13 @@ var SonareEngine = class _SonareEngine {
     return engine;
   }
   async suspend() {
-    if (this.destroyed) {
+    if (this.epoch.closed) {
       return;
     }
     await this.context.suspend?.();
   }
   async resume() {
-    if (this.destroyed) {
+    if (this.epoch.closed) {
       return;
     }
     await this.context.resume?.();
@@ -6414,7 +7995,9 @@ var SonareEngine = class _SonareEngine {
     return automationParamId(this.parameterContext, target, kind);
   }
   /**
-   * Returns the automation target id for a bus fader.
+   * Returns the automation target id for a bus fader. The id names the bus, so
+   * it keeps driving that bus across bus reorders and the removal of other
+   * buses, and applies nothing once the bus is removed.
    *
    * @param busId Bus id (declares the mixer bus on first use).
    * @returns Reserved engine parameter id for the bus fader gain (dB).
@@ -6425,17 +8008,19 @@ var SonareEngine = class _SonareEngine {
   /**
    * Resolves a track-lane insert parameter (JSON-key name) to the reserved
    * insert-automation id fed straight to setAutomationLane. Declares the track's
-   * mixer lane first (like automationParamId) so the offline engine resolves the
-   * same strip selector the realtime engine uses.
+   * mixer lane first (like automationParamId). The offline engine and the
+   * worklet's engine receive the same mixer configuration in the same order, so
+   * they number insert ids identically and an id resolved here drives the
+   * worklet.
    *
-   * The returned id uses the track's current positional lane selector. When
-   * setTrackLanes successfully changes lane order or membership, the engine
-   * remaps already queued and published track automation by track id, but it
-   * cannot update a numeric id retained by the caller. Re-resolve every track
-   * insert id after such a topology change before passing it to
-   * setAutomationLane. Use setTrackStripInsertParamByName when the operation
-   * needs a stable track identity. Master and bus insert ids are separate and
-   * are not invalidated by track-lane changes.
+   * Track, bus and master insert ids share one lifetime rule: an id names its
+   * strip by identity and the kind of processor in its slot (for
+   * `effects.gsEfx`, its EFX type too), so it survives lane and bus reorders
+   * and the removal of other strips, and stays valid until its track or bus is
+   * removed or its slot comes to hold another kind of processor. After that it
+   * applies nothing, its queued edits are dropped, and it is never reissued;
+   * resolve again for the new processor. A change that would take the engine
+   * past its 8192 insert-id entries is refused.
    *
    * @param target Track id (declares a mixer lane on first use).
    * @param insertIndex Index into the strip's combined insert sequence.
@@ -6525,7 +8110,7 @@ var SonareEngine = class _SonareEngine {
   addParameter(info) {
     addParameter(this.parameterContext, info);
   }
-  /** Clears custom parameters and their automation lanes on both engines. */
+  /** Clears custom parameters on both engines; automation lanes stay in place. */
   clearParameters() {
     clearParameters(this.parameterContext);
   }
@@ -6533,38 +8118,57 @@ var SonareEngine = class _SonareEngine {
     return setSoloMute(this.parameterContext, target, solo, mute);
   }
   /** Queues a per-track PFL/AFL monitor tap mode change. */
-  setTrackMonitorMode(target, mode, renderFrame = -1) {
+  setTrackMonitorMode(target, mode, renderFrame) {
     return setTrackMonitorMode(this.parameterContext, target, mode, renderFrame);
   }
   setStripGain(target, db) {
-    const sent = this.sendSmoothedParam(this.stripParamId(target, ENGINE_MIXER_PARAM_FADER_DB), db);
+    const sent = this.sendSmoothedParam(this.automationParamId(target, "faderDb"), db);
     if (sent && target === "master") {
       cacheMasterStripScalar(this.stripContext, "faderDb", db);
     }
     return sent;
   }
   setStripPan(target, pan) {
-    const sent = this.sendSmoothedParam(this.stripParamId(target, ENGINE_MIXER_PARAM_PAN), pan);
+    const sent = this.sendSmoothedParam(this.automationParamId(target, "pan"), pan);
     if (sent && target === "master") {
       cacheMasterStripScalar(this.stripContext, "pan", pan);
     }
     return sent;
   }
   /** Resets the master's integrated loudness accumulator in both engine mirrors. */
-  resetMasterLoudnessMeter(renderFrame = -1) {
-    this.offlineEngine.resetMasterLoudnessMeter(renderFrame);
-    return this.sendMirroredCommand({
-      type: 28 /* ResetMasterLoudnessMeter */,
-      sampleTime: renderFrame
-    });
+  resetMasterLoudnessMeter(renderFrame) {
+    const frame = resolveRenderFrame("resetMasterLoudnessMeter", renderFrame);
+    return commitCommand(
+      this.commitContext,
+      { type: 28 /* ResetMasterLoudnessMeter */, sampleTime: frame },
+      (offline) => offline.resetMasterLoudnessMeter(renderFrame)
+    );
+  }
+  /**
+   * Queues a reset of every mixer and effect processor to its prepared state,
+   * applied to the offline mirror immediately and to the live engine at
+   * `renderFrame` (omitted: the next block head). The same command that
+   * follows it on the queue, such as `play()`, starts from the state an offline
+   * render starts from. Instruments are not reset. During playback it cuts
+   * running insert tails and delay lines mid-sound, like a seek.
+   *
+   * @returns Whether the live command was queued
+   */
+  resetProcessorState(renderFrame) {
+    const frame = resolveRenderFrame("resetProcessorState", renderFrame);
+    return commitCommand(
+      this.commitContext,
+      { type: 29 /* ResetProcessorState */, sampleTime: frame },
+      (offline) => offline.resetProcessorState(renderFrame)
+    );
   }
   /**
    * Declares the mixer track lanes in an explicit order.
    *
    * A successful call may reorder existing track ids, remove track ids, or add
    * new ones. Existing queued and published track automation follows the track
-   * id, while numeric track-insert automation ids retained by the caller do
-   * not; re-resolve those ids after every topology change. Entries carrying
+   * id, and so do track insert automation ids (see
+   * resolveTrackInsertAutomationId). Entries carrying
    * `sends` replace that track's send list; entries without `sends` leave
    * existing sends untouched.
    *
@@ -6609,6 +8213,37 @@ var SonareEngine = class _SonareEngine {
    */
   setMasterSidechain(insertIndex, sourceKind, sourceId) {
     setMasterSidechain(this.mixerContext, insertIndex, sourceKind, sourceId);
+  }
+  /**
+   * Reports whether {@link setBusSidechain} would accept the binding, without
+   * changing anything. Answers from the offline mirror, which holds the same
+   * configuration as the live engine, and never declares a missing lane or bus.
+   */
+  canSetBusSidechain(busId, insertIndex, sourceKind, sourceId) {
+    return this.offlineEngine.canSetBusSidechain(busId, insertIndex, sourceKind, sourceId);
+  }
+  /** Reports whether {@link setMasterSidechain} would accept the binding, without changing anything. */
+  canSetMasterSidechain(insertIndex, sourceKind, sourceId) {
+    return this.offlineEngine.canSetMasterSidechain(insertIndex, sourceKind, sourceId);
+  }
+  /**
+   * Reports whether {@link setLaneSidechain} would accept the binding, without
+   * changing anything. Takes numeric track ids and, unlike the setter, never
+   * declares a missing lane or bus; `sourceTrackId` 0 asks about an unbind.
+   */
+  canSetLaneSidechain(trackId, insertIndex, sourceTrackId) {
+    return this.offlineEngine.canSetLaneSidechain(trackId, insertIndex, sourceTrackId);
+  }
+  /**
+   * Longest audible tail in samples (an upper bound; `2147483647` is
+   * unbounded), answered from the offline mirror.
+   */
+  tailSamples() {
+    return this.offlineEngine.tailSamples();
+  }
+  /** Processing latency in 1/256 samples, answered from the offline mirror. */
+  graphLatencySamplesQ8() {
+    return this.offlineEngine.graphLatencySamplesQ8();
   }
   setBusGain(busId, db) {
     return setBusGain(this.mixerContext, busId, db);
@@ -6763,16 +8398,11 @@ var SonareEngine = class _SonareEngine {
    * supplied back to the worklet through its bounded pull protocol.
    */
   async attachOpfsClipStream(options) {
-    if (this.destroyed) {
-      throw new Error("SonareEngine is destroyed.");
-    }
-    if (!this.capabilities.clipPageRequestsRealtimeSafe) {
-      throw new Error(
-        "OPFS clip streaming requires SharedArrayBuffer clip-page requests; the postMessage fallback is not realtime-safe."
-      );
+    if (this.epoch.closed) {
+      throw new SonareError(7 /* InvalidState */, "InvalidState", "SonareEngine is destroyed.");
     }
     const { clipId, primePages = 1, ...providerOptions } = options;
-    if ([...this.workletPageProviderClipIds.values()].includes(clipId)) {
+    if ([...this.workletPageProviderClipIds.values()].some((entry) => entry.clipId === clipId)) {
       throw new Error(`An OPFS stream is already attached for clip ${clipId}.`);
     }
     const streamer = this.ensureWorkletClipStreamer();
@@ -6783,29 +8413,51 @@ var SonareEngine = class _SonareEngine {
       numSamples: providerOptions.numSamples,
       pageFrames: providerOptions.pageFrames
     });
+    const token = this.epoch.current();
+    const streamKey = this.nextClipStreamKey++;
+    this.postSync({
+      type: "syncClipPageProvider",
+      clipId,
+      streamKey,
+      numChannels: providerOptions.numChannels,
+      numSamples: providerOptions.numSamples,
+      pageFrames: providerOptions.pageFrames
+    });
     let binding;
     binding = createOpfsClipPageProvider(this.offlineEngine, {
       ...providerOptions,
       onPageSupplied: (pageIndex, channels) => {
+        this.opfsExportSources.get(binding.provider.id)?.residentPages.add(pageIndex);
         this.postSync(
-          { type: "syncClipPage", clipId, pageIndex, channels },
+          { type: "syncClipPage", clipId, streamKey, pageIndex, channels },
           transferableAudioBuffers(channels)
         );
       },
       onPageCleared: (pageIndex) => {
-        this.postSync({ type: "syncClipPageClear", clipId, pageIndex });
+        this.opfsExportSources.get(binding.provider.id)?.residentPages.delete(pageIndex);
+        this.postSync({ type: "syncClipPageClear", clipId, streamKey, pageIndex });
       },
       onClose: () => {
         this.workletPageProviderClipIds.delete(binding.provider.id);
-        this.postSync({ type: "syncClipPageDestroy", clipId });
+        this.opfsExportSources.delete(binding.provider.id);
+        this.postSync({ type: "syncClipPageDestroy", clipId, streamKey });
       }
     });
-    this.workletPageProviderClipIds.set(binding.provider.id, clipId);
+    const releaseOnDestroy = this.epoch.onClose(() => binding.close());
+    this.workletPageProviderClipIds.set(binding.provider.id, { clipId, streamKey });
+    this.opfsExportSources.set(binding.provider.id, {
+      binding,
+      pageFrames: providerOptions.pageFrames,
+      numSamples: providerOptions.numSamples,
+      residentPages: /* @__PURE__ */ new Set()
+    });
     const lastPage = Math.ceil(providerOptions.numSamples / providerOptions.pageFrames) - 1;
     const primed = [];
     try {
       for (let page = 0; page < primePages && page <= lastPage; ++page) {
-        if (await binding.supplyPage(page)) {
+        const ok = await binding.supplyPage(page);
+        this.epoch.assertCurrent(token);
+        if (ok) {
           primed.push(page);
         }
       }
@@ -6822,6 +8474,8 @@ var SonareEngine = class _SonareEngine {
     } catch (error) {
       binding.close();
       throw error;
+    } finally {
+      releaseOnDestroy();
     }
     return { binding, provider: binding.provider };
   }
@@ -6839,14 +8493,17 @@ var SonareEngine = class _SonareEngine {
    * Safe to call during playback.
    */
   setClipPagePrefetchFrames(frames) {
-    if (this.destroyed) {
-      throw new Error("SonareEngine is destroyed.");
+    if (this.epoch.closed) {
+      throw new SonareError(7 /* InvalidState */, "InvalidState", "SonareEngine is destroyed.");
     }
     if (!Number.isFinite(frames) || frames < 0) {
       throw new Error("clip page prefetch frames must be a finite value >= 0.");
     }
-    this.offlineEngine.setClipPagePrefetchFrames(frames);
-    this.postSync({ type: "syncClipPagePrefetchFrames", frames });
+    commitSync(
+      this.commitContext,
+      (offline) => offline.setClipPagePrefetchFrames(frames),
+      () => this.postSync({ type: "syncClipPagePrefetchFrames", frames })
+    );
   }
   /**
    * Sets the number of concurrent time-stretch voices on both this thread's
@@ -6858,11 +8515,14 @@ var SonareEngine = class _SonareEngine {
    * stretching through a voice at that moment.
    */
   setWarpVoiceCapacity(voices) {
-    if (this.destroyed) {
-      throw new Error("SonareEngine is destroyed.");
+    if (this.epoch.closed) {
+      throw new SonareError(7 /* InvalidState */, "InvalidState", "SonareEngine is destroyed.");
     }
-    this.offlineEngine.setWarpVoiceCapacity(voices);
-    this.postSync({ type: "syncWarpVoiceCapacity", voices });
+    commitSync(
+      this.commitContext,
+      (offline) => offline.setWarpVoiceCapacity(voices),
+      () => this.postSync({ type: "syncWarpVoiceCapacity", voices })
+    );
   }
   /** Reads the current time-stretch voice capacity (default 8). */
   warpVoiceCapacity() {
@@ -6923,19 +8583,19 @@ var SonareEngine = class _SonareEngine {
   clearMidiFx(trackId) {
     clearMidiFx(this.stripContext, trackId);
   }
-  pushMidiNoteOn(trackId, group, channel, note, velocity, renderFrame = -1) {
+  pushMidiNoteOn(trackId, group, channel, note, velocity, renderFrame) {
     pushMidiNoteOn(this.stripContext, trackId, group, channel, note, velocity, renderFrame);
   }
-  pushMidiNoteOff(trackId, group, channel, note, velocity = 0, renderFrame = -1) {
+  pushMidiNoteOff(trackId, group, channel, note, velocity = 0, renderFrame) {
     pushMidiNoteOff(this.stripContext, trackId, group, channel, note, velocity, renderFrame);
   }
-  pushMidiCc(trackId, group, channel, controller, value, renderFrame = -1) {
+  pushMidiCc(trackId, group, channel, controller, value, renderFrame) {
     pushMidiCc(this.stripContext, trackId, group, channel, controller, value, renderFrame);
   }
-  pushMidiPitchBend(trackId, group, channel, bend14, renderFrame = -1) {
+  pushMidiPitchBend(trackId, group, channel, bend14, renderFrame) {
     pushMidiPitchBend(this.stripContext, trackId, group, channel, bend14, renderFrame);
   }
-  pushMidiChannelPressure(trackId, group, channel, pressure, renderFrame = -1) {
+  pushMidiChannelPressure(trackId, group, channel, pressure, renderFrame) {
     pushMidiChannelPressure(
       this.stripContext,
       trackId,
@@ -6945,7 +8605,7 @@ var SonareEngine = class _SonareEngine {
       renderFrame
     );
   }
-  pushMidiPolyPressure(trackId, group, channel, note, pressure, renderFrame = -1) {
+  pushMidiPolyPressure(trackId, group, channel, note, pressure, renderFrame) {
     pushMidiPolyPressure(
       this.stripContext,
       trackId,
@@ -6956,10 +8616,10 @@ var SonareEngine = class _SonareEngine {
       renderFrame
     );
   }
-  pushMidiUmp(trackId, words, renderFrame = -1) {
+  pushMidiUmp(trackId, words, renderFrame) {
     pushMidiUmp(this.stripContext, trackId, words, renderFrame);
   }
-  pushMidiSysex(trackId, data, renderFrame = -1) {
+  pushMidiSysex(trackId, data, renderFrame) {
     pushMidiSysex(this.stripContext, trackId, data, renderFrame);
   }
   bindMidiCc(channel, controller, paramId, options = {}) {
@@ -6969,12 +8629,18 @@ var SonareEngine = class _SonareEngine {
     this.postSync({ type: "syncMidiCcBinding", channel, controller, paramId, minValue, maxValue });
   }
   setMidiInputSource(destinationId = 0) {
-    this.offlineEngine.setMidiInputSource(destinationId);
-    this.postSync({ type: "syncMidiInputSource", destinationId });
+    commitSync(
+      this.commitContext,
+      (offline) => offline.setMidiInputSource(destinationId),
+      () => this.postSync({ type: "syncMidiInputSource", destinationId })
+    );
   }
   clearMidiInputSource() {
-    this.offlineEngine.clearMidiInputSource();
-    this.postSync({ type: "syncClearMidiInputSource" });
+    commitSync(
+      this.commitContext,
+      (offline) => offline.clearMidiInputSource(),
+      () => this.postSync({ type: "syncClearMidiInputSource" })
+    );
   }
   pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples = 0) {
     this.offlineEngine.pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples);
@@ -7047,9 +8713,10 @@ var SonareEngine = class _SonareEngine {
     this.offlineEngine.pushMidiInputUmp(copiedWords, portTimeSamples);
     this.postSync({ type: "syncMidiInputUmp", words: copiedWords, portTimeSamples });
   }
-  pushMidiPanic(renderFrame = -1) {
+  pushMidiPanic(renderFrame) {
+    const frame = resolveRenderFrame("pushMidiPanic", renderFrame);
     this.offlineEngine.pushMidiPanic(renderFrame);
-    this.postSync({ type: "syncMidiPanic", renderFrame });
+    this.postSync({ type: "syncMidiPanic", renderFrame: frame });
   }
   configureCapture(options) {
     configureCapture(this.captureContext, options);
@@ -7073,14 +8740,18 @@ var SonareEngine = class _SonareEngine {
   async resetCapture() {
     return resetCapture(this.captureContext);
   }
+  /**
+   * Configures the metronome on both engines.
+   *
+   * @returns Whether the live command was queued; on false neither engine changed.
+   */
   setMetronome(opts) {
-    this.offlineEngine.setMetronome(opts);
-    this.postSync({ type: "syncMetronome", config: opts });
-    this.sendMirroredCommand({
-      type: 15 /* SetMetronome */,
-      sampleTime: -1,
-      argInt: opts.enabled ? 1 : 0
-    });
+    return commitCommand(
+      this.commitContext,
+      { type: 15 /* SetMetronome */, sampleTime: -1, argInt: opts.enabled ? 1 : 0 },
+      (offline) => offline.setMetronome(opts),
+      () => this.postSync({ type: "syncMetronome", config: opts })
+    );
   }
   addMarker(ppq, name = "") {
     return addMarker(this.markerContext, ppq, name);
@@ -7108,18 +8779,58 @@ var SonareEngine = class _SonareEngine {
   setLoopFromMarkers(startMarkerId, endMarkerId) {
     return setLoopFromMarkers(this.markerContext, startMarkerId, endMarkerId);
   }
-  async renderOffline(totalFrames) {
-    const frames = Math.max(0, Math.floor(totalFrames));
-    const inputs = [];
-    for (let ch = 0; ch < this.offlineChannelCount; ch++) {
-      inputs.push(new Float32Array(frames));
-    }
-    return this.offlineEngine.renderOffline(inputs, this.offlineBlockSize);
+  /**
+   * Renders the timeline offline through this thread's mirror engine, from the
+   * current transport position, and returns one planar buffer per offline
+   * channel. Primes the mirror first, so the result equals a bounce of the same
+   * span. Runs synchronously on the calling thread: the thread is blocked for
+   * the whole render.
+   *
+   * The request form takes `blockSize` (default and ceiling: the offline block
+   * size; a larger value throws `RangeError`) and `finalize`. With
+   * `finalize: false` a chunk leaves held notes and delay tails running into
+   * the next call, which does not prime again; end the series with
+   * {@link finishOfflineRender}. The mirror's transport position is restored
+   * when the timeline ends.
+   */
+  async renderOffline(request) {
+    return renderOffline(this.exportContext, request);
   }
   /**
-   * Subscribe to external-MIDI batches (already lowered to MIDI 1.0 bytes) for
-   * delivery to Web MIDI output ports. Fires once per render block that
-   * produced events. Returns an unsubscribe function.
+   * Ends a chunked {@link renderOffline} series: releases every held note,
+   * flushes the delay lines and restores the mirror's transport position.
+   */
+  finishOfflineRender() {
+    finishOfflineRender(this.exportContext);
+  }
+  /**
+   * Bounces the timeline to an interleaved buffer with the options, defaults
+   * and result of {@link RealtimeEngine.bounceOffline}; `blockSize` defaults to
+   * the offline block size and must not exceed it (`RangeError`). Runs
+   * synchronously on the calling thread. The mirror's transport position is
+   * restored afterwards. OPFS-streamed clips are paged in for the span first.
+   */
+  async bounceOffline(options) {
+    return bounceOffline(this.exportContext, options);
+  }
+  /**
+   * Freezes the source layer with the options, defaults and result of
+   * {@link RealtimeEngine.freezeOffline}: master, monitor, graph, capture and
+   * metronome stay live. As there, the frozen clip replaces the clip set and the
+   * MIDI clips are withdrawn: the facade, the mirror and the worklet all end up
+   * holding only that clip. `blockSize` defaults to the offline block size and must not
+   * exceed it (`RangeError`). Runs synchronously on the calling thread.
+   */
+  async freezeOffline(options) {
+    return freezeOffline(this.exportContext, options);
+  }
+  /**
+   * Subscribe to batches of external-MIDI events (already lowered to MIDI 1.0
+   * bytes) for delivery to Web MIDI output ports. Each event carries its
+   * absolute `renderFrame`; a batch is not a render block. With postMessage
+   * transport a batch holds one block's events; with the SAB ring it holds what
+   * accumulated since the previous poll, which may span many blocks. Returns an
+   * unsubscribe function.
    */
   onMidiOut(callback) {
     return this.realtimeNode.onMidiOut(callback);
@@ -7147,7 +8858,7 @@ var SonareEngine = class _SonareEngine {
     return this.realtimeNode.pollInsertGainReduction(targetId);
   }
   destroy() {
-    if (this.destroyed) {
+    if (this.epoch.closed) {
       return;
     }
     this.unsubscribeWorkletClipRequests?.();
@@ -7159,7 +8870,7 @@ var SonareEngine = class _SonareEngine {
       this.workletClipPagePollTimer = void 0;
     }
     this.workletClipPageRequests.clear();
-    this.destroyed = true;
+    this.epoch.close();
     this.transport.stop();
     this.realtimeNode.pollTelemetry();
     this.realtimeNode.destroy();
@@ -7183,7 +8894,7 @@ var SonareEngine = class _SonareEngine {
       return;
     }
     const poll = () => {
-      if (!this.destroyed) {
+      if (!this.epoch.closed) {
         this.realtimeNode.pollClipPageRequests();
       }
     };
@@ -7226,24 +8937,22 @@ var SonareEngine = class _SonareEngine {
     this.workletClipPageRequests.delete(clipId);
     return request;
   }
-  commitWorkletClipPageProvider(clip) {
+  /**
+   * The attached OPFS stream `clip` schedules, or undefined when its page
+   * provider is not one; throws when the clip id differs from the stream's.
+   */
+  workletClipStream(clip) {
     const providerId = typeof clip.pageProvider === "object" && clip.pageProvider !== null ? clip.pageProvider.id : clip.pageProvider;
     if (providerId === void 0) {
-      return false;
+      return void 0;
     }
-    const clipId = this.workletPageProviderClipIds.get(providerId);
-    if (clipId === void 0) {
-      return false;
+    const stream = this.workletPageProviderClipIds.get(providerId);
+    if (stream !== void 0 && clip.id !== stream.clipId) {
+      throw new Error(
+        `OPFS stream clipId ${stream.clipId} must match addClip(..., { id: ${stream.clipId} }).`
+      );
     }
-    if (clip.id !== clipId) {
-      throw new Error(`OPFS stream clipId ${clipId} must match addClip(..., { id: ${clipId} }).`);
-    }
-    this.postSync({
-      type: "syncClipPageCommit",
-      clipId,
-      clip: { ...clip, channels: void 0, pageProvider: void 0 }
-    });
-    return true;
+    return stream;
   }
   mixerLanes() {
     return mixerLanes(this.mixerContext);
@@ -7276,17 +8985,17 @@ var SonareEngine = class _SonareEngine {
     }
   }
   postInstrumentSync(message) {
-    if (this.destroyed) {
+    if (this.epoch.closed) {
       return;
     }
     if (this.transportPlaying) {
-      this.pendingInstrumentSync.push(message);
+      this.pendingInstrumentSync.push(structuredClone(message));
       return;
     }
     this.postSync(message);
   }
   flushPendingInstrumentSync() {
-    if (this.destroyed || this.pendingInstrumentSync.length === 0) {
+    if (this.epoch.closed || this.pendingInstrumentSync.length === 0) {
       return;
     }
     const pending = this.pendingInstrumentSync.splice(0);
@@ -7298,7 +9007,7 @@ var SonareEngine = class _SonareEngine {
   // Sync messages use a string `type` so the worklet's message handler routes
   // them to receiveSync() (numeric `type` is reserved for SonareEngineCommandRecord).
   postSync(message, transfer) {
-    if (this.destroyed) {
+    if (this.epoch.closed) {
       return;
     }
     if (transfer && transfer.length > 0) {
@@ -7385,6 +9094,7 @@ var SonareEngine = class _SonareEngine {
       offlineEngine: this.offlineEngine,
       realtimeNode: this.realtimeNode,
       sendCommand: (command) => this.sendMirroredCommand(command),
+      hasCommandRoom: () => this.realtimeNode.hasCommandRoom(),
       offlineChannelCount: this.offlineChannelCount,
       postSync: (message) => this.postSync(message),
       getCaptureConfig: () => this.captureConfig,
@@ -7401,6 +9111,7 @@ var SonareEngine = class _SonareEngine {
     return {
       offlineEngine: this.offlineEngine,
       sendCommand: (command) => this.sendMirroredCommand(command),
+      hasCommandRoom: () => this.realtimeNode.hasCommandRoom(),
       postSync: (message) => this.postSync(message),
       automationLanes: this.automationLanes,
       trackLaneIds: this.trackLaneIds,
@@ -7417,6 +9128,7 @@ var SonareEngine = class _SonareEngine {
       offlineEngine: this.offlineEngine,
       realtimeNode: this.realtimeNode,
       sendCommand: (command) => this.sendMirroredCommand(command),
+      hasCommandRoom: () => this.realtimeNode.hasCommandRoom(),
       postSync: (message) => this.postSync(message),
       getTempoBpm: () => this.tempoBpm,
       setTempoBpm: (bpm) => {
@@ -7440,6 +9152,23 @@ var SonareEngine = class _SonareEngine {
       getLatestTransportState: () => this.latestTransportState
     };
   }
+  get exportContext() {
+    return {
+      offlineEngine: this.offlineEngine,
+      offlineBlockSize: this.offlineBlockSize,
+      offlineChannelCount: this.offlineChannelCount,
+      clips: this.clips,
+      opfsSources: this.opfsExportSources,
+      session: this.exportSession,
+      epoch: this.epoch,
+      flushOfflineMirror: () => this.flushOfflineMirror(),
+      // The frozen clip stands for the MIDI it baked, so the MIDI clips leave with the old set.
+      commitFrozenClip: (clip, previousClipIds) => {
+        replaceClips(this.clipContext, clip, previousClipIds);
+        setMidiClips(this.clipContext, []);
+      }
+    };
+  }
   // Collaborator surface handed to the audio/MIDI clip scheduling free
   // functions so they can mutate the clip stores, mirror into the offline
   // engine, and post clip-sync messages without holding a back-reference.
@@ -7452,7 +9181,8 @@ var SonareEngine = class _SonareEngine {
       postSync: (message, transfer) => this.postSync(message, transfer),
       ensureTrackLane: (target) => this.ensureTrackLane(target),
       resolveTargetId: (target) => this.resolveTargetId(target),
-      commitWorkletClipPageProvider: (clip) => this.commitWorkletClipPageProvider(clip)
+      workletClipStream: (clip) => this.workletClipStream(clip),
+      hasClipStream: (clipId) => [...this.workletPageProviderClipIds.values()].some((entry) => entry.clipId === clipId)
     };
   }
   // Collaborator surface handed to the marker free functions so they can mutate
@@ -7468,27 +9198,31 @@ var SonareEngine = class _SonareEngine {
       },
       postSync: (message) => this.postSync(message),
       sendCommand: (command) => this.sendMirroredCommand(command),
+      hasCommandRoom: () => this.realtimeNode.hasCommandRoom(),
       setLoop: (startPpq, endPpq, enabled) => this.setLoop(startPpq, endPpq, enabled)
     };
-  }
-  // Resolves the reserved mixer parameter id for a fader/pan target, declaring a
-  // track lane on first use; 'master' addresses the master strip namespace.
-  stripParamId(target, paramKind) {
-    if (target === "master") {
-      return engineMixerMasterTarget(paramKind);
-    }
-    return engineMixerLaneTarget(this.ensureTrackLane(target), paramKind);
   }
   // Mirrors a smoothed parameter into the offline engine and pushes a
   // sample-accurate smoothed-param command to the realtime runtime.
   sendSmoothedParam(paramId, value) {
-    this.offlineEngine.setParameter(paramId, value);
-    return this.sendMirroredCommand({
-      type: 1 /* SetParamSmoothed */,
-      targetId: paramId,
-      sampleTime: -1,
-      argFloat: value
-    });
+    return commitCommand(
+      this.commitContext,
+      {
+        type: 1 /* SetParamSmoothed */,
+        targetId: paramId,
+        sampleTime: -1,
+        argFloat: value
+      },
+      (offline) => offline.setParameter(paramId, value)
+    );
+  }
+  // The transaction every control edit commits through (see engine-commit.ts).
+  get commitContext() {
+    return {
+      offlineEngine: this.offlineEngine,
+      hasCommandRoom: () => this.realtimeNode.hasCommandRoom(),
+      sendCommand: (command) => this.sendMirroredCommand(command)
+    };
   }
   resolveParamId(nodeId, param) {
     return resolveParamId(this.listParameters(), nodeId, param);
@@ -7572,10 +9306,21 @@ function captureTransferList(channels) {
   }
   return transfers;
 }
+var CLIP_PAGE_REPOST_SECONDS = 0.25;
+var METER_TARGET_SLOTS = 42;
+var METER_SCRATCH_CHANNEL_COUNT = 11;
+var METER_SCRATCH_PLANES = 12;
+function wireRenderFrame(frame) {
+  const value = Number(frame ?? -1);
+  return value < 0 ? void 0 : value;
+}
 var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletProcessor {
   constructor(options = {}, transport) {
     this.closed = false;
-    this.lastMeterFrame = Number.NEGATIVE_INFINITY;
+    // Last delivered meter frame per target slot: master, 32 lanes, 8 buses, then every other id.
+    this.lastMeterFrameBySlot = new Float64Array(METER_TARGET_SLOTS).fill(
+      Number.NEGATIVE_INFINITY
+    );
     // Latest metronome gains/click length pushed via 'syncMetronome'. The
     // SetMetronome command only toggles enabled state; the config arrives here.
     this.metronomeConfig = { ...DEFAULT_METRONOME_CONFIG };
@@ -7584,6 +9329,8 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     // historical behaviour where process() folds the cue into the program mix.
     this.monitorBuffers = [];
     this.liveClips = /* @__PURE__ */ new Map();
+    // clipId -> native provider; `streamKey` marks a provider an OPFS stream owns,
+    // which outlives its clip's schedule until that stream closes.
     this.pagedClipProviders = /* @__PURE__ */ new Map();
     this.pagedClipPageFrames = /* @__PURE__ */ new Map();
     this.pendingPagedClips = /* @__PURE__ */ new Map();
@@ -7594,7 +9341,31 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     this.clipPageRequestClipIds = new Float64Array(64);
     this.clipPageRequestPageIndices = new Float64Array(64);
     this.clipPageRequestOverflowReported = 0;
+    this.postedClipPageRequestClipIds = new Float64Array(64);
+    this.postedClipPageRequestPageIndices = new Float64Array(64);
+    this.postedClipPageRequestCount = 0;
+    this.clipPageRequestFrameClock = 0;
+    this.lastClipPageRequestPostFrame = 0;
+    this.clipPageRequestPayloadEntries = Array.from({ length: 64 }, () => ({
+      clipId: 0,
+      pageIndex: 0
+    }));
+    // One preallocated request array per batch size, so a post builds no objects.
+    this.clipPageRequestPayloadArrays = Array.from(
+      { length: 65 },
+      (_, n) => this.clipPageRequestPayloadEntries.slice(0, n)
+    );
+    this.clipPageRequestMessage = {
+      type: "clipPageRequest",
+      requests: []
+    };
+    this.clipPageRequestMessageWithDropped = {
+      type: "clipPageRequest",
+      requests: [],
+      dropped: 0
+    };
     this.sampleRate = options.sampleRate ?? 48e3;
+    this.clipPageRepostFrames = Math.max(1, Math.round(this.sampleRate * CLIP_PAGE_REPOST_SECONDS));
     this.blockSize = options.blockSize ?? 128;
     this.channelCount = requireChannelCount(options.channelCount, 2);
     this.transport = transport;
@@ -7717,7 +9488,7 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
         copyPlanesToOutput(cue, this.monitorBuffers, usableFrames);
       }
     }
-    this.publishClipPageRequests();
+    this.publishClipPageRequests(usableFrames);
     this.publishTelemetry();
     this.publishMeters();
     this.publishScope();
@@ -7783,9 +9554,11 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
             nextClips.set(clip.id, clip);
           }
         }
-        this.engine.setClips(Array.from(nextClips.values()));
+        this.applyClipDelta(message.upserts, message.removeIds);
         for (const clipId of message.removeIds) {
-          this.removePagedClipProvider(clipId);
+          if (this.pagedClipProviders.get(clipId)?.streamKey === void 0) {
+            this.removePagedClipProvider(clipId);
+          }
         }
         this.liveClips.clear();
         for (const [clipId, clip] of nextClips) {
@@ -7800,7 +9573,10 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           message.pageFrames
         );
         this.removePagedClipProvider(message.clipId);
-        this.pagedClipProviders.set(message.clipId, provider.id);
+        this.pagedClipProviders.set(message.clipId, {
+          providerId: provider.id,
+          streamKey: message.streamKey
+        });
         this.pagedClipPageFrames.set(message.clipId, message.pageFrames);
         if (message.clip) {
           this.pendingPagedClips.set(message.clipId, message.clip);
@@ -7808,14 +9584,14 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
         break;
       }
       case "syncClipPage": {
-        const providerId = this.pagedClipProviders.get(message.clipId);
+        const providerId = this.ownedPagedClipProvider(message.clipId, message.streamKey);
         if (providerId !== void 0) {
           this.engine.supplyClipPage(providerId, message.pageIndex, message.channels);
         }
         break;
       }
       case "syncClipPageClear": {
-        const providerId = this.pagedClipProviders.get(message.clipId);
+        const providerId = this.ownedPagedClipProvider(message.clipId, message.streamKey);
         if (providerId !== void 0) {
           this.engine.clearClipPage(providerId, message.pageIndex);
         }
@@ -7830,23 +9606,25 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
         break;
       }
       case "syncClipPageCommit": {
-        const providerId = this.pagedClipProviders.get(message.clipId);
+        const providerId = this.ownedPagedClipProvider(message.clipId, message.streamKey);
         const clip = message.clip ?? this.pendingPagedClips.get(message.clipId);
         if (providerId !== void 0 && clip) {
           const nextClip = { ...clip, pageProvider: providerId };
-          const nextClips = new Map(this.liveClips);
-          nextClips.set(message.clipId, nextClip);
-          this.engine.setClips(Array.from(nextClips.values()));
+          this.engine.upsertClip(nextClip);
           this.liveClips.set(message.clipId, nextClip);
           this.pendingPagedClips.delete(message.clipId);
         }
         break;
       }
       case "syncClipPageDestroy": {
-        const nextClips = new Map(this.liveClips);
-        nextClips.delete(message.clipId);
-        this.engine.setClips(Array.from(nextClips.values()));
-        this.liveClips.delete(message.clipId);
+        const providerId = this.ownedPagedClipProvider(message.clipId, message.streamKey);
+        if (providerId === void 0) {
+          break;
+        }
+        if (this.liveClips.get(message.clipId)?.pageProvider === providerId) {
+          this.engine.removeClip(message.clipId);
+          this.liveClips.delete(message.clipId);
+        }
         this.removePagedClipProvider(message.clipId);
         break;
       }
@@ -7866,12 +9644,22 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
       case "syncAutomation":
         this.engine.setAutomationLane(message.paramId, message.points);
         break;
-      case "syncParameters":
-        this.engine.clearParameters();
+      case "syncParameters": {
+        if (message.parameters.length === 0) {
+          this.engine.clearParameters();
+          break;
+        }
+        const registered = /* @__PURE__ */ new Set();
+        for (let index = 0; index < this.engine.parameterCount(); index++) {
+          registered.add(this.engine.parameterInfoByIndex(index).id);
+        }
         for (const info of message.parameters) {
-          this.engine.addParameter(info);
+          if (!registered.has(info.id)) {
+            this.engine.addParameter(info);
+          }
         }
         break;
+      }
       case "syncTempo":
         if (message.tempoSegments) {
           this.engine.setTempoSegments(message.tempoSegments);
@@ -7914,9 +9702,7 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           break;
         }
         if (this.commandRing) {
-          const write = Atomics.load(this.commandRing.header, 0);
-          const read = Atomics.load(this.commandRing.header, 1);
-          this.drainCommands(Math.min(this.commandRing.capacity, Math.max(0, write - read)));
+          this.drainCommands(pendingSonareEngineCommandCount(this.commandRing));
         }
         this.engine.applyCommandsDueNowPreservingFuture();
         if (message.buses) {
@@ -7988,12 +9774,14 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
         }
         break;
       }
-      case "syncCapture":
-        this.engine.setCaptureBuffer(message.channels, message.bufferFrames);
-        this.engine.setCaptureSource(message.source);
-        this.engine.setRecordOffsetSamples(message.recordOffsetSamples);
-        this.engine.setInputMonitor(message.inputMonitor.enabled, message.inputMonitor.gain);
+      case "syncCapture": {
+        const config = buildCaptureConfig(message, message.channels);
+        this.engine.setCaptureBuffer(config.channels, config.bufferFrames);
+        this.engine.setCaptureSource(config.source);
+        this.engine.setRecordOffsetSamples(config.recordOffsetSamples);
+        this.engine.setInputMonitor(config.inputMonitor.enabled, config.inputMonitor.gain);
         break;
+      }
       case "syncTrackStripEqBand":
         this.engine.setTrackStripEqBandJson(message.trackId, message.bandIndex, message.bandJson);
         break;
@@ -8127,7 +9915,7 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           message.channel,
           message.note,
           message.velocity,
-          message.renderFrame
+          wireRenderFrame(message.renderFrame)
         );
         break;
       case "syncMidiNoteOff":
@@ -8137,7 +9925,7 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           message.channel,
           message.note,
           message.velocity,
-          message.renderFrame
+          wireRenderFrame(message.renderFrame)
         );
         break;
       case "syncMidiCc":
@@ -8147,7 +9935,7 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           message.channel,
           message.controller,
           message.value,
-          message.renderFrame
+          wireRenderFrame(message.renderFrame)
         );
         break;
       case "syncMidiPitchBend":
@@ -8156,7 +9944,7 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           message.group,
           message.channel,
           message.data0,
-          message.renderFrame
+          wireRenderFrame(message.renderFrame)
         );
         break;
       case "syncMidiChannelPressure":
@@ -8165,7 +9953,7 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           message.group,
           message.channel,
           message.data0,
-          message.renderFrame
+          wireRenderFrame(message.renderFrame)
         );
         break;
       case "syncMidiPolyPressure":
@@ -8175,21 +9963,25 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           message.channel,
           message.data0,
           message.data1,
-          message.renderFrame
+          wireRenderFrame(message.renderFrame)
         );
         break;
       case "syncMidiUmp":
         this.engine.pushMidiUmp(
           message.destinationId,
           message.words ?? [message.word0],
-          message.renderFrame
+          wireRenderFrame(message.renderFrame)
         );
         break;
       case "syncMidiSysex":
-        this.engine.pushMidiSysex(message.destinationId, message.data, message.renderFrame);
+        this.engine.pushMidiSysex(
+          message.destinationId,
+          message.data,
+          wireRenderFrame(message.renderFrame)
+        );
         break;
       case "syncMidiPanic":
-        this.engine.pushMidiPanic(message.renderFrame);
+        this.engine.pushMidiPanic(wireRenderFrame(message.renderFrame));
         break;
       case "syncMidiDestinationExternal":
         this.engine.setMidiDestinationExternal(message.destinationId, message.external);
@@ -8392,7 +10184,7 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     }
   }
   applyCommand(command) {
-    const sampleTime = Number(command.sampleTime ?? -1);
+    const sampleTime = wireRenderFrame(command.sampleTime);
     switch (command.type) {
       case 0 /* SetParam */:
         this.engine.setParameter(
@@ -8473,6 +10265,9 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
       case 28 /* ResetMasterLoudnessMeter */:
         this.engine.resetMasterLoudnessMeter(sampleTime);
         break;
+      case 29 /* ResetProcessorState */:
+        this.engine.resetProcessorState(sampleTime);
+        break;
       default:
         this.publishTelemetryRecord({
           type: 1 /* Error */,
@@ -8499,8 +10294,8 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     }
   }
   writeTelemetryScratch(ring) {
-    const writeIndex = Atomics.load(ring.header, 0);
-    const offset = writeIndex % ring.capacity * SONARE_ENGINE_TELEMETRY_RECORD_BYTES;
+    const writeIndex = loadSonareRingCursor(ring.header, 0, ring.capacity);
+    const offset = sonareRingCursorSlot(writeIndex, ring.capacity) * SONARE_ENGINE_TELEMETRY_RECORD_BYTES;
     ring.view.setUint32(offset, this.engine.telemetryScratchType(), true);
     ring.view.setUint32(offset + 4, this.engine.telemetryScratchError(), true);
     writeInt64Words(ring.view, offset + 8, this.engine.telemetryScratchRenderFrame());
@@ -8510,10 +10305,7 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     ring.view.setUint32(offset + 36, this.engine.telemetryScratchValue(), true);
     ring.view.setUint32(offset + 40, 0, true);
     ring.view.setUint32(offset + 44, 0, true);
-    Atomics.store(ring.header, 0, writeIndex + 1);
-    if (writeIndex + 1 > ring.capacity) {
-      Atomics.store(ring.header, 4, writeIndex + 1 - ring.capacity);
-    }
+    commitSonareEngineTelemetryRingWrite(ring, writeIndex);
   }
   publishTelemetryRecord(record) {
     if (this.telemetryRing) {
@@ -8522,29 +10314,19 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     }
     this.transport?.postMessage?.(record);
   }
-  // Drains the engine meter telemetry queue into the stereo meter ring / transport.
+  // Drains the engine meter telemetry queue into the meter ring / transport.
   //
-  // Shared-queue contract: `drainMeterTelemetry` and `drainMeterTelemetryWide`
-  // pop the SAME single-consumer telemetry queue, so exactly ONE of them may run
-  // per engine. The live worklet path owns the queue via the stereo drain below;
-  // the worklet meter ring (SONARE_METER_RING_RECORD_FLOATS) is a fixed stereo
-  // layout carrying planes 0/1 plus the correlation/LUFS summary. Per-plane
-  // surround meters are NOT delivered over the live worklet ring — a host that
-  // needs them must use the offline `drainMeterTelemetryWide()` API on a
-  // non-worklet engine instance (do not also call it on a worklet-driven engine,
-  // or the two drains will starve each other).
+  // The wide drain is the one meter drain: it carries every plane of every
+  // target (stereo is planes 0/1), so both transports deliver surround meters
+  // and nothing else may pop this queue on a worklet-driven engine.
   publishMeters() {
     if (this.meterIntervalFrames <= 0 || !this.transport && !this.meterRing) {
       return;
     }
     if (this.meterRing) {
       for (let count = 0; count < 64 && this.engine.popMeterTelemetryToScratch(); count++) {
-        const frame = this.engine.meterScratchRenderFrame();
-        if (frame !== this.lastMeterFrame && frame - this.lastMeterFrame < this.meterIntervalFrames) {
+        if (!this.meterDue(this.engine.meterScratchTargetId(), this.engine.meterScratchRenderFrame())) {
           continue;
-        }
-        if (frame !== this.lastMeterFrame) {
-          this.lastMeterFrame = frame;
         }
         this.writeMeterScratch(this.meterRing);
       }
@@ -8552,13 +10334,10 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     }
     const delivered = [];
     const newestByTarget = /* @__PURE__ */ new Map();
-    for (const item of this.engine.drainMeterTelemetry(64)) {
+    for (const item of this.engine.drainMeterTelemetryWide(64)) {
       const meter = meterFromEngine(item);
-      if (meter.frame !== this.lastMeterFrame && meter.frame - this.lastMeterFrame < this.meterIntervalFrames) {
+      if (!this.meterDue(meter.targetId, meter.frame)) {
         continue;
-      }
-      if (meter.frame !== this.lastMeterFrame) {
-        this.lastMeterFrame = meter.frame;
       }
       delivered.push(meter);
       newestByTarget.set(meter.targetId, meter);
@@ -8574,9 +10353,19 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
       }
     }
   }
+  // Interval gate per target, so one busy target cannot hold back another's cadence.
+  meterDue(targetId, frame) {
+    const slot = targetId < METER_TARGET_SLOTS - 1 ? targetId : METER_TARGET_SLOTS - 1;
+    const last = this.lastMeterFrameBySlot[slot];
+    if (frame !== last && frame - last < this.meterIntervalFrames) {
+      return false;
+    }
+    this.lastMeterFrameBySlot[slot] = frame;
+    return true;
+  }
   writeMeterScratch(ring) {
-    const writeIndex = Atomics.load(ring.header, 0);
-    const offset = writeIndex % ring.capacity * SONARE_METER_RING_RECORD_FLOATS;
+    const writeIndex = loadSonareRingCursor(ring.header, 0, ring.capacity);
+    const offset = sonareRingCursorSlot(writeIndex, ring.capacity) * SONARE_METER_RING_RECORD_FLOATS;
     const frame = Number(this.engine.meterScratchRenderFrame());
     ring.records[offset] = encodeFrameLo(frame);
     ring.records[offset + 1] = encodeFrameHi(frame);
@@ -8586,7 +10375,19 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     }
     ring.records[offset + 14] = this.engine.meterScratchInputPeakDbL();
     ring.records[offset + 15] = this.engine.meterScratchInputPeakDbR();
-    Atomics.store(ring.header, 0, writeIndex + 1);
+    const channelCount = this.engine.meterScratchValue(METER_SCRATCH_CHANNEL_COUNT);
+    ring.records[offset + SONARE_METER_RING_CHANNEL_COUNT_OFFSET] = channelCount;
+    if (channelCount > 2) {
+      const planes = Math.min(channelCount, SONARE_METER_RING_MAX_CHANNELS);
+      for (let kind = 0; kind < 4; kind++) {
+        const out = offset + SONARE_METER_RING_PLANES_OFFSET + kind * SONARE_METER_RING_MAX_CHANNELS;
+        const field = METER_SCRATCH_PLANES + kind * SONARE_METER_RING_MAX_CHANNELS;
+        for (let ch = 0; ch < planes; ch++) {
+          ring.records[out + ch] = this.engine.meterScratchValue(field + ch);
+        }
+      }
+    }
+    storeSonareRingCursor(ring.header, 0, writeIndex, ring.capacity);
   }
   // A snapshot-object ring writer used to live here as well. It was
   // unreachable: publishMeters returns after the writeMeterScratch loop
@@ -8595,11 +10396,8 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
   // render callback allocation-free by reading the engine's scratch registers
   // directly.
   //
-  // writeIndex is a free-running monotonic counter, so an overflow guard would
-  // fire on essentially every write past the first `capacity` records and store
-  // an ever-growing value, not a dropped-record count. Readers already detect
-  // silent overrun via firstReadable = max(readIndex, writeIndex - capacity),
-  // so header slot 3 is left at its initial 0.
+  // An overwrite ring keeps no drop count: readers detect overrun from the
+  // cursor distance, so header slot 3 is left at its initial 0.
   // Drains the engine's scope producer (FFT spectrum + goniometer points) into
   // the lock-free SAB scope ring or the bounded postMessage fallback. The SAB
   // path remains allocation-free; postMessage materialises only records that
@@ -8649,8 +10447,8 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     transport.postMessage(scope, [bands.buffer, points.buffer]);
   }
   writeScopeScratch(ring) {
-    const writeIndex = Atomics.load(ring.header, 0);
-    const base = writeIndex % ring.capacity * ring.recordFloats;
+    const writeIndex = loadSonareRingCursor(ring.header, 0, ring.capacity);
+    const base = sonareRingCursorSlot(writeIndex, ring.capacity) * ring.recordFloats;
     const frame = Number(this.engine.scopeScratchRenderFrame());
     ring.records[base] = encodeFrameLo(frame);
     ring.records[base + 1] = encodeFrameHi(frame);
@@ -8668,7 +10466,7 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
       ring.records[pointsBase + 2 * i] = this.engine.scopeScratchPointLeft(i);
       ring.records[pointsBase + 2 * i + 1] = this.engine.scopeScratchPointRight(i);
     }
-    Atomics.store(ring.header, 0, writeIndex + 1);
+    storeSonareRingCursor(ring.header, 0, writeIndex, ring.capacity);
   }
   // Drains queued external-MIDI events (already lowered to MIDI 1.0 bytes) and
   // forwards them to the main thread for delivery to Web MIDI output ports.
@@ -8678,6 +10476,9 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     const ring = this.externalMidiRing;
     if (ring) {
       for (let count = 0; count < 256 && this.engine.popExternalMidiToScratch(); count++) {
+        if (!sonareExternalMidiRingHasRoom(ring)) {
+          break;
+        }
         pushSonareExternalMidiRingBuffer(
           ring,
           this.engine.externalMidiScratchDestinationId(),
@@ -8706,7 +10507,7 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
    * deliberately runs after audio rendering: a cache miss is silence for this
    * block, and OPFS I/O must never delay `process()`.
    */
-  publishClipPageRequests() {
+  publishClipPageRequests(frames) {
     const ring = this.clipPageRequestRing;
     const transport = this.transport;
     if (!ring && !transport?.postMessage) {
@@ -8716,22 +10517,11 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     let drained = 0;
     while (drained < this.clipPageRequestClipIds.length) {
       drained += 1;
-      let clipId;
-      let sample;
-      if (ring) {
-        if (!this.engine.popClipPageRequestToScratch()) {
-          break;
-        }
-        clipId = this.engine.clipPageRequestScratchClipId();
-        sample = this.engine.clipPageRequestScratchSample();
-      } else {
-        const request = this.engine.popClipPageRequest();
-        if (!request) {
-          break;
-        }
-        clipId = request.clipId;
-        sample = request.sample;
+      if (!this.engine.popClipPageRequestToScratch()) {
+        break;
       }
+      const clipId = this.engine.clipPageRequestScratchClipId();
+      const sample = this.engine.clipPageRequestScratchSample();
       const pageFrames = this.pagedClipPageFrames.get(clipId);
       if (!pageFrames) {
         continue;
@@ -8766,29 +10556,78 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
       }
       return;
     }
-    if (count === 0 && dropped === 0) {
-      return;
-    }
     if (!transport?.postMessage) {
       return;
     }
-    const requests = new Array(count);
-    for (let i = 0; i < count; ++i) {
-      requests[i] = {
-        clipId: this.clipPageRequestClipIds[i],
-        pageIndex: this.clipPageRequestPageIndices[i]
-      };
+    this.clipPageRequestFrameClock += frames;
+    let changed = count !== this.postedClipPageRequestCount;
+    for (let i = 0; i < count && !changed; ++i) {
+      let found = false;
+      for (let j = 0; j < count; ++j) {
+        if (this.postedClipPageRequestClipIds[j] === this.clipPageRequestClipIds[i] && this.postedClipPageRequestPageIndices[j] === this.clipPageRequestPageIndices[i]) {
+          found = true;
+          break;
+        }
+      }
+      changed = !found;
     }
-    transport.postMessage({
-      type: "clipPageRequest",
-      requests,
-      ...dropped > 0 ? { dropped } : {}
-    });
+    const due = count > 0 && this.clipPageRequestFrameClock - this.lastClipPageRequestPostFrame >= this.clipPageRepostFrames;
+    if (!changed && !due && dropped === 0) {
+      return;
+    }
+    this.lastClipPageRequestPostFrame = this.clipPageRequestFrameClock;
+    for (let i = 0; i < count; ++i) {
+      this.postedClipPageRequestClipIds[i] = this.clipPageRequestClipIds[i];
+      this.postedClipPageRequestPageIndices[i] = this.clipPageRequestPageIndices[i];
+      const entry = this.clipPageRequestPayloadEntries[i];
+      entry.clipId = this.clipPageRequestClipIds[i];
+      entry.pageIndex = this.clipPageRequestPageIndices[i];
+    }
+    this.postedClipPageRequestCount = count;
+    if (count === 0 && dropped === 0) {
+      return;
+    }
+    const requests = this.clipPageRequestPayloadArrays[count];
+    if (dropped > 0) {
+      this.clipPageRequestMessageWithDropped.requests = requests;
+      this.clipPageRequestMessageWithDropped.dropped = dropped;
+      transport.postMessage(this.clipPageRequestMessageWithDropped);
+    } else {
+      this.clipPageRequestMessage.requests = requests;
+      transport.postMessage(this.clipPageRequestMessage);
+    }
+  }
+  /**
+   * Applies a clip delta one clip at a time, so clips it does not name keep
+   * their storage instead of being copied again. A refusal part-way restores
+   * the published set from the live mirror and rethrows.
+   */
+  applyClipDelta(upserts, removeIds) {
+    try {
+      for (const clipId of removeIds) {
+        if (this.liveClips.has(clipId)) {
+          this.engine.removeClip(clipId);
+        }
+      }
+      for (const clip of upserts) {
+        if (clip.id !== void 0) {
+          this.engine.upsertClip(clip);
+        }
+      }
+    } catch (error) {
+      this.engine.setClips(Array.from(this.liveClips.values()));
+      throw error;
+    }
+  }
+  /** The provider of `clipId` when `streamKey` names its owner, else undefined. */
+  ownedPagedClipProvider(clipId, streamKey) {
+    const entry = this.pagedClipProviders.get(clipId);
+    return entry !== void 0 && entry.streamKey === streamKey ? entry.providerId : void 0;
   }
   removePagedClipProvider(clipId) {
-    const providerId = this.pagedClipProviders.get(clipId);
-    if (providerId !== void 0) {
-      this.engine.destroyClipPageProvider(providerId);
+    const entry = this.pagedClipProviders.get(clipId);
+    if (entry !== void 0) {
+      this.engine.destroyClipPageProvider(entry.providerId);
     }
     this.pagedClipProviders.delete(clipId);
     this.pagedClipPageFrames.delete(clipId);
@@ -9147,8 +10986,8 @@ var SonareWorkletProcessor = class {
     if (!ring) {
       return;
     }
-    const writeIndex = Atomics.load(ring.header, 0);
-    const offset = writeIndex % ring.capacity * SONARE_METER_RING_RECORD_FLOATS;
+    const writeIndex = loadSonareRingCursor(ring.header, 0, ring.capacity);
+    const offset = sonareRingCursorSlot(writeIndex, ring.capacity) * SONARE_METER_RING_RECORD_FLOATS;
     ring.records[offset] = encodeFrameLo(meter.frame);
     ring.records[offset + 1] = encodeFrameHi(meter.frame);
     ring.records[offset + 2] = meter.targetId;
@@ -9165,7 +11004,8 @@ var SonareWorkletProcessor = class {
     ring.records[offset + 13] = meter.gainReductionDb;
     ring.records[offset + 14] = meter.inputPeakDbL;
     ring.records[offset + 15] = meter.inputPeakDbR;
-    Atomics.store(ring.header, 0, writeIndex + 1);
+    ring.records[offset + SONARE_METER_RING_CHANNEL_COUNT_OFFSET] = 2;
+    storeSonareRingCursor(ring.header, 0, writeIndex, ring.capacity);
   }
   publishSpectrum(left, right) {
     if (this.spectrumIntervalFrames <= 0) {
@@ -9216,13 +11056,13 @@ var SonareWorkletProcessor = class {
     if (!ring) {
       return;
     }
-    const writeIndex = Atomics.load(ring.header, 0);
-    const offset = writeIndex % ring.capacity * SONARE_METER_RING_RECORD_FLOATS;
+    const writeIndex = loadSonareRingCursor(ring.header, 0, ring.capacity);
+    const offset = sonareRingCursorSlot(writeIndex, ring.capacity) * ring.recordFloats;
     ring.records[offset] = encodeFrameLo(frame);
     ring.records[offset + 1] = encodeFrameHi(frame);
     ring.records[offset + 2] = bands.length;
     ring.records.set(bands.subarray(0, ring.bands), offset + 3);
-    Atomics.store(ring.header, 0, writeIndex + 1);
+    storeSonareRingCursor(ring.header, 0, writeIndex, ring.capacity);
   }
 };
 function registerSonareWorkletProcessor(name = "sonare-worklet-processor") {
@@ -9462,7 +11302,7 @@ function createSonarePlaybackNode(context, options = {}) {
     config: JSON.stringify(config),
     hrtf: options.hrtf,
     maxBlockSize: options.maxBlockSize,
-    sampleRate: options.sampleRate ?? context.sampleRate
+    sampleRate: resolveContextSampleRate(options.sampleRate, context, "createSonarePlaybackNode")
   };
   return factory(context, options.processorName ?? "sonare-playback-processor", {
     numberOfInputs: 1,
@@ -9473,6 +11313,281 @@ function createSonarePlaybackNode(context, options = {}) {
     processorOptions
   });
 }
+
+// src/worklet/stream-analyzer-processor.ts
+var STREAM_ANALYZER_DEFAULT_CHUNK_FRAMES = 4096;
+var STREAM_ANALYZER_MIN_CHUNK_FRAMES = 128;
+var POOL_BUFFERS = 4;
+var EMPTY = new Float32Array(0);
+function resolveStreamAnalyzerChunkFrames(chunkFrames) {
+  return requireIntegerOption(
+    chunkFrames,
+    STREAM_ANALYZER_DEFAULT_CHUNK_FRAMES,
+    "chunkFrames",
+    STREAM_ANALYZER_MIN_CHUNK_FRAMES
+  );
+}
+var SonareStreamAnalyzerWorkletProcessor = class {
+  constructor(options = {}, port) {
+    this.port = port;
+    this.pool = new Array(POOL_BUFFERS);
+    this.poolCount = 0;
+    this.fill = 0;
+    this.chunkStart = 0;
+    this.discontinuity = false;
+    this.destroyed = false;
+    this.transferList = [];
+    this.chunkFrames = resolveStreamAnalyzerChunkFrames(options.chunkFrames);
+    for (let i = 0; i < POOL_BUFFERS; i++) {
+      this.recycle(new Float32Array(this.chunkFrames));
+    }
+    this.current = this.takeBuffer();
+    this.chunkMessage = {
+      type: "chunk",
+      samples: EMPTY,
+      startSample: 0,
+      discontinuity: false
+    };
+    this.port?.postMessage?.({ type: "ready" });
+  }
+  /** Handles a control message; runs between render quanta. */
+  receiveMessage(message) {
+    if (this.destroyed) {
+      return;
+    }
+    if (message.type === "recycle") {
+      this.recycle(message.samples);
+    } else if (message.type === "destroy") {
+      this.destroyed = true;
+      this.current = void 0;
+      this.poolCount = 0;
+    }
+  }
+  process(inputs, _outputs) {
+    if (this.destroyed) {
+      return false;
+    }
+    const input = inputs[0];
+    if (!input || input.length === 0) {
+      return true;
+    }
+    const channels = input.length;
+    const frames = input[0].length;
+    const scale = 1 / channels;
+    let done = 0;
+    while (done < frames) {
+      const take = Math.min(frames - done, this.chunkFrames - this.fill);
+      const target = this.current;
+      if (target) {
+        const base = this.fill;
+        const first = input[0];
+        for (let i = 0; i < take; i++) {
+          target[base + i] = first[done + i];
+        }
+        for (let ch = 1; ch < channels; ch++) {
+          const plane = input[ch];
+          for (let i = 0; i < take; i++) {
+            target[base + i] += plane[done + i];
+          }
+        }
+        if (channels > 1) {
+          for (let i = 0; i < take; i++) {
+            target[base + i] *= scale;
+          }
+        }
+      }
+      this.fill += take;
+      done += take;
+      if (this.fill === this.chunkFrames) {
+        this.completeChunk();
+      }
+    }
+    return true;
+  }
+  completeChunk() {
+    const full = this.current;
+    if (full) {
+      const message = this.chunkMessage;
+      message.samples = full;
+      message.startSample = this.chunkStart;
+      message.discontinuity = this.discontinuity;
+      this.transferList[0] = full.buffer;
+      this.port?.postMessage?.(message, this.transferList);
+      message.samples = EMPTY;
+      this.discontinuity = false;
+    } else {
+      this.discontinuity = true;
+    }
+    this.chunkStart += this.chunkFrames;
+    this.fill = 0;
+    this.current = this.takeBuffer();
+  }
+  takeBuffer() {
+    if (this.poolCount === 0) {
+      return void 0;
+    }
+    this.poolCount--;
+    const buffer = this.pool[this.poolCount];
+    this.pool[this.poolCount] = void 0;
+    return buffer;
+  }
+  recycle(samples) {
+    if (samples.length !== this.chunkFrames || this.poolCount >= POOL_BUFFERS) {
+      return;
+    }
+    this.pool[this.poolCount++] = samples;
+  }
+};
+function registerSonareStreamAnalyzerWorkletProcessor(name = "sonare-stream-analyzer-processor") {
+  const scope = globalThis;
+  if (!scope.AudioWorkletProcessor || !scope.registerProcessor) {
+    throw new Error("AudioWorkletProcessor is not available in this context.");
+  }
+  const Base = scope.AudioWorkletProcessor;
+  class RegisteredSonareStreamAnalyzerWorkletProcessor extends Base {
+    constructor(options) {
+      super();
+      const port = this.port;
+      this.bridge = new SonareStreamAnalyzerWorkletProcessor(options?.processorOptions ?? {}, port);
+      const onMessage = (event) => {
+        if (isStreamAnalyzerMessage(event.data)) {
+          this.bridge.receiveMessage(event.data);
+        }
+      };
+      if (port?.addEventListener) {
+        port.addEventListener("message", onMessage);
+        port.start?.();
+      } else if (port) {
+        port.onmessage = onMessage;
+      }
+    }
+    process(inputs, outputs) {
+      return this.bridge.process(inputs, outputs);
+    }
+  }
+  scope.registerProcessor(name, RegisteredSonareStreamAnalyzerWorkletProcessor);
+}
+
+// src/worklet/stream-analyzer-node.ts
+var SonareStreamAnalyzerNode = class _SonareStreamAnalyzerNode {
+  constructor(node, analyzer) {
+    this.frameListeners = /* @__PURE__ */ new Set();
+    this.statsListeners = /* @__PURE__ */ new Set();
+    this.expectedSample = 0;
+    this.lastFrameCount = 0;
+    this.destroyed = false;
+    this.node = node;
+    this.analyzer = analyzer;
+    this.ready = new Promise((resolve, reject) => {
+      this.resolveReady = resolve;
+      this.rejectReady = reject;
+    });
+    this.node.port.onmessage = (event) => {
+      if (this.destroyed) {
+        return;
+      }
+      if (isStreamAnalyzerChunkMessage(event.data)) {
+        this.consume(event.data);
+      } else if (isRecord(event.data) && event.data.type === "ready") {
+        this.resolveReady();
+      } else if (isRecord(event.data) && event.data.type === "error") {
+        this.rejectReady(new Error(String(event.data.message ?? "AudioWorklet error")));
+      }
+    };
+  }
+  static async create(context, options = {}) {
+    const chunkFrames = resolveStreamAnalyzerChunkFrames(options.chunkFrames);
+    const processorName = options.processorName ?? "sonare-stream-analyzer-processor";
+    if (options.moduleUrl && context.audioWorklet?.addModule) {
+      await context.audioWorklet.addModule(options.moduleUrl);
+    }
+    const analyzer = new StreamAnalyzer({
+      ...options.config,
+      sampleRate: resolveContextSampleRate(
+        options.config?.sampleRate,
+        context,
+        "SonareStreamAnalyzerNode.create"
+      )
+    });
+    const processorOptions = { chunkFrames };
+    const factory = options.nodeFactory ?? ((ctx, name, nodeOptions) => new AudioWorkletNode(ctx, name, nodeOptions));
+    let node;
+    try {
+      node = factory(context, processorName, {
+        numberOfInputs: 1,
+        numberOfOutputs: 0,
+        // The processor averages the channels itself, so the browser must not remix first.
+        channelCountMode: "max",
+        channelInterpretation: "discrete",
+        processorOptions
+      });
+    } catch (error) {
+      analyzer.destroy();
+      throw error;
+    }
+    return new _SonareStreamAnalyzerNode(node, analyzer);
+  }
+  /** Subscribes to analysis frames, delivered in the analyzer's `readFrames` format. */
+  onFrames(callback) {
+    this.frameListeners.add(callback);
+    return () => {
+      this.frameListeners.delete(callback);
+    };
+  }
+  /**
+   * Subscribes to analyzer statistics, delivered when the key or tempo estimate
+   * was re-estimated (`estimate.updated`).
+   */
+  onStats(callback) {
+    this.statsListeners.add(callback);
+    return () => {
+      this.statsListeners.delete(callback);
+    };
+  }
+  destroy() {
+    if (this.destroyed) {
+      return;
+    }
+    this.destroyed = true;
+    this.node.port.postMessage({ type: "destroy" });
+    this.node.disconnect();
+    this.frameListeners.clear();
+    this.statsListeners.clear();
+    this.node.port.onmessage = null;
+    this.analyzer.destroy();
+  }
+  consume(chunk) {
+    const { samples, startSample } = chunk;
+    if (chunk.discontinuity || startSample !== this.expectedSample) {
+      this.analyzer.reset(startSample);
+      this.lastFrameCount = 0;
+    }
+    this.expectedSample = startSample + samples.length;
+    this.analyzer.processWithOffset(samples, startSample);
+    this.node.port.postMessage({ type: "recycle", samples }, [samples.buffer]);
+    if (this.frameListeners.size > 0) {
+      const available = this.analyzer.availableFrames();
+      if (available > 0) {
+        const frames = this.analyzer.readFrames(available);
+        for (const listener of this.frameListeners) {
+          listener(frames);
+        }
+      }
+    }
+    if (this.statsListeners.size > 0) {
+      const frameCount = this.analyzer.frameCount();
+      if (frameCount !== this.lastFrameCount) {
+        this.lastFrameCount = frameCount;
+        const stats = this.analyzer.stats();
+        if (stats.estimate.updated) {
+          for (const listener of this.statsListeners) {
+            listener(stats);
+          }
+        }
+      }
+    }
+  }
+};
 
 // src/worklet/voice-changer-processor.ts
 var _SonareRealtimeVoiceChangerWorkletProcessor = class _SonareRealtimeVoiceChangerWorkletProcessor {
@@ -9668,6 +11783,8 @@ export {
   SonareRealtimeEngineNode,
   SonareRealtimeEngineWorkletProcessor,
   SonareRealtimeVoiceChangerWorkletProcessor,
+  SonareStreamAnalyzerNode,
+  SonareStreamAnalyzerWorkletProcessor,
   SonareWorkletProcessor,
   StreamingMasteringChain,
   attachOpfsClipStream,
@@ -9697,6 +11814,7 @@ export {
   registerSonarePlaybackWorkletProcessor,
   registerSonareRealtimeEngineWorkletProcessor,
   registerSonareRealtimeVoiceChangerWorkletProcessor,
+  registerSonareStreamAnalyzerWorkletProcessor,
   registerSonareWorkletProcessor,
   sonareClipPageRequestRingBufferByteLength,
   sonareEngineCommandRingBufferByteLength,

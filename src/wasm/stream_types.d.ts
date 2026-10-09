@@ -1,10 +1,12 @@
-import type { ChordQuality, PitchClass } from './public_types';
+import type { ChordQuality, PitchClass } from './public_types.js';
 /**
  * A detected chord change in the progression
  */
 export interface ChordChange {
     root: PitchClass;
     quality: ChordQuality;
+    /** Chord symbol (e.g. `C`, `C#m`, `N.C.`), spelled as the batch analysis spells it. */
+    name: string;
     startTime: number;
     confidence: number;
 }
@@ -21,6 +23,8 @@ export interface BarChord {
     barIndex: number;
     root: PitchClass;
     quality: ChordQuality;
+    /** Chord symbol, spelled as the batch analysis spells it. */
+    name: string;
     /**
      * Start of the bar, on the same timeline as `StreamFrame.timestamp`
      * (including a `sampleOffset` anchor). Consecutive bars are `barDuration`
@@ -52,8 +56,14 @@ export interface ProgressiveEstimate {
     key: PitchClass;
     keyMinor: boolean;
     keyConfidence: number;
+    /** Key name (e.g. `A minor`); `null` while no key is estimated. */
+    keyName: string | null;
+    /** Short key name (e.g. `Am`); `null` while no key is estimated. */
+    keyShortName: string | null;
     chordRoot: PitchClass;
     chordQuality: ChordQuality;
+    /** Current chord symbol; `N.C.` while no chord is detected. */
+    chordName: string;
     chordConfidence: number;
     chordStartTime: number;
     chordProgression: ChordChange[];
@@ -184,6 +194,12 @@ export interface StreamFramesI16 {
 export interface StreamConfig {
     /** Sample rate in Hz. Optional for parity with the Node/Python bindings. */
     sampleRate?: number;
+    /**
+     * Analysis window as a duration, in samples at 44100 Hz. Below that rate the
+     * window is rescaled to the analysis rate, never shorter than `hopLength`. The
+     * emitted bin count follows the FFT length the window is zero-padded to, not
+     * `nFft / 2 + 1`.
+     */
     nFft?: number;
     hopLength?: number;
     nMels?: number;

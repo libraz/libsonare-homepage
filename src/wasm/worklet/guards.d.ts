@@ -1,5 +1,5 @@
-import type { SonareEngineCaptureRequestMessage, SonareEngineCaptureResponseMessageInternal, SonareEngineClipPageRequestMessage, SonareEngineInsertGainReductionRequestMessage, SonareEngineInsertGainReductionResponseMessage, SonareEngineSyncMessage, SonareEngineTransportRequestMessage, SonareEngineTransportResponseMessage, SonarePlaybackMessage, SonareRealtimeVoiceChangerMessage, SonareWorkletExternalMidiMessage, SonareWorkletMessage } from './messages';
-import { type SonareEngineCommandRecord, type SonareEngineTelemetryRecord, type SonareWorkletMeterSnapshot, type SonareWorkletScopeSnapshot } from './protocol';
+import type { SonareEngineCaptureRequestMessage, SonareEngineCaptureResponseMessageInternal, SonareEngineClipPageRequestMessage, SonareEngineInsertGainReductionRequestMessage, SonareEngineInsertGainReductionResponseMessage, SonareEngineSyncMessage, SonareEngineTransportRequestMessage, SonareEngineTransportResponseMessage, SonarePlaybackMessage, SonareRealtimeVoiceChangerMessage, SonareStreamAnalyzerChunkMessage, SonareStreamAnalyzerMessage, SonareWorkletExternalMidiMessage, SonareWorkletMessage } from './messages.js';
+import { type SonareEngineCommandRecord, type SonareEngineTelemetryRecord, type SonareWorkletMeterSnapshot, type SonareWorkletScopeSnapshot } from './protocol.js';
 export declare function isWorkletMessage(value: unknown): value is SonareWorkletMessage;
 export declare function isEngineCommandRecord(value: unknown): value is SonareEngineCommandRecord;
 /**
@@ -28,6 +28,8 @@ export declare function isEngineTransportResponseMessage(value: unknown): value 
 export declare function isEngineInsertGainReductionRequestMessage(value: unknown): value is SonareEngineInsertGainReductionRequestMessage;
 export declare function isEngineInsertGainReductionResponseMessage(value: unknown): value is SonareEngineInsertGainReductionResponseMessage;
 export declare function isRealtimeVoiceChangerMessage(value: unknown): value is SonareRealtimeVoiceChangerMessage;
+export declare function isStreamAnalyzerMessage(value: unknown): value is SonareStreamAnalyzerMessage;
+export declare function isStreamAnalyzerChunkMessage(value: unknown): value is SonareStreamAnalyzerChunkMessage;
 export declare function isPlaybackMessage(value: unknown): value is SonarePlaybackMessage;
 export declare function isEngineTelemetryRecord(value: unknown): value is SonareEngineTelemetryRecord;
 export declare function isExternalMidiBatchMessage(value: unknown): value is SonareWorkletExternalMidiMessage;
@@ -37,6 +39,14 @@ export declare const SONARE_SCOPE_MAX_BANDS = 64;
 export declare const SONARE_SCOPE_MAX_POINTS = 32;
 /** Validates the bounded postMessage representation of a scope snapshot. */
 export declare function isScopeSnapshot(value: unknown): value is SonareWorkletScopeSnapshot;
+/**
+ * The rate a worklet renderer runs at: always the AudioContext's, since the
+ * context drives it with its own quanta and nothing resamples between them. An
+ * explicit `requested` rate that differs is refused before any node exists.
+ *
+ * @throws RangeError when `requested` is given and differs from `context.sampleRate`.
+ */
+export declare function resolveContextSampleRate(requested: number | undefined, context: BaseAudioContext, what: string): number;
 /**
  * Resolves an integer option, refusing anything the field's own domain cannot
  * hold instead of rounding it into range.

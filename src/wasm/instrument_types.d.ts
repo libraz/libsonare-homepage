@@ -2,7 +2,7 @@
  * Instrument definitions a project source plays through: the built-in synth
  * patch, the SoundFont player, and the sample bank's descriptors.
  */
-import type { SampleBank } from './sample_bank';
+import type { SampleBank } from './sample_bank.js';
 /** Names accepted by the minimal built-in oscillator synth. */
 export declare const BUILTIN_SYNTH_WAVEFORMS: readonly ["sine", "saw", "sawtooth", "square", "triangle"];
 /** Oscillator waveform for the built-in synth. */
@@ -42,6 +42,47 @@ export interface BuiltinSynthBinding {
  * lets portable code use that shared name on the WASM surface too.
  */
 export type BuiltinSynthConfig = BuiltinSynthBinding;
+/** One dispatched MIDI event delivered to {@link ExternalInstrument.onEvent}. */
+export interface ExternalInstrumentEvent {
+    /** MIDI destination id the event is routed to. */
+    destinationId: number;
+    /** The event's 32-bit UMP words (one or two), as unsigned integers. */
+    words: number[];
+    /**
+     * Sample-accurate position in frames this instrument has been asked to
+     * render so far; the events that close the bounce sit one past the last frame.
+     */
+    renderFrame: number;
+}
+/**
+ * A JavaScript instrument driven during {@link Project.bounceWithInstruments}.
+ * Only `render` is required. Every callback runs synchronously while the
+ * bounce is blocked and must not return a Promise.
+ */
+export interface ExternalInstrument {
+    /** MIDI destination id this instrument renders. Defaults to `0`. */
+    destinationId?: number;
+    /**
+     * Called once per render pass, before the first block, with the sample rate,
+     * the largest block `render` will receive, and the number of arrays `render`
+     * gets (always 2: the engine hosts an instrument as a stereo source whatever
+     * the bounce's `numChannels`).
+     */
+    prepare?(sampleRate: number, maxBlockFrames: number, channels: number): void;
+    /** Called for each dispatched MIDI event, just before the block it falls in is rendered. */
+    onEvent?(event: ExternalInstrumentEvent): void;
+    /**
+     * Write `frames` of audio into `outputs`, one `Float32Array` per channel. The
+     * arrays are scratch space that arrive zero-filled; whatever they hold when
+     * `render` returns normally is added into the engine's buffers (nothing is
+     * added if it throws). They are reused for the next block, so do not keep them.
+     */
+    render(outputs: Float32Array[], frames: number): void;
+    /** Reported instrument latency in samples (plugin delay compensation); defaults to 0. */
+    latencySamples?: number;
+    /** Release / effect tail in samples, used to extend an auto-length bounce; defaults to 0. */
+    tailSamples?: number;
+}
 /**
  * SoundFont (SF2) player patch + MIDI routing for
  * {@link Project.bounceWithSf2Instrument}. Every field is optional; a
@@ -272,8 +313,19 @@ export interface PartRigInsert {
     /** Processor parameters, as an object or an already-serialized JSON object string. */
     params?: Record<string, unknown> | string;
 }
+/** Selects one part rig entry of a destination; `part` is 0-15 or `PART_RIG_ALL_PARTS`. */
+export interface PartRigKey {
+    destinationId: number;
+    part: number;
+}
+/** Request for {@link Project.setPartRig} and {@link RealtimeEngine.setPartRig}. */
+export interface PartRigRequest extends PartRigKey {
+    mode: PartRigMode | number;
+    /** 1-8 inserts; required for `'chain'` and refused for the other modes. */
+    inserts?: PartRigInsert[];
+}
 /** A part rig as stored on a project ({@link Project.getPartRig}). */
-export interface PartRig {
+export interface PartRigEntry {
     mode: PartRigMode;
     /** Present for `'chain'` only; `params` is the parsed parameter object. */
     inserts?: {
@@ -281,6 +333,8 @@ export interface PartRig {
         params: Record<string, unknown>;
     }[];
 }
+/** @deprecated Use {@link PartRigEntry}, the name the Node binding shares. */
+export type PartRig = PartRigEntry;
 /** One per-note MPE dimension ({@link MPE_DIMENSIONS}). */
 export type MpeDimension = (typeof MPE_DIMENSIONS)[number];
 /** One note-attribution rule ({@link NOTE_TRACKINGS}). */

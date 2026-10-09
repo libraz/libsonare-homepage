@@ -6,8 +6,9 @@
  * bound to one JavaScript realm, so moving them across a Worker boundary would
  * make ownership and `delete()` semantics unsound.
  */
-import type { OfflineWorkerRequestMessage, OfflineWorkerResponseMessage } from './worker_protocol';
-export type { OfflineWorkerOperation } from './worker_protocol';
+import './lifetime.js';
+import type { OfflineWorkerRequestMessage, OfflineWorkerResponseMessage } from './worker_protocol.js';
+export type { OfflineWorkerOperation } from './worker_protocol.js';
 /** Minimal endpoint shared by browser Workers and the Node worker-thread test bridge. */
 export interface OfflineWorkerEndpoint {
     postMessage(message: OfflineWorkerResponseMessage, transfer?: Transferable[]): void;

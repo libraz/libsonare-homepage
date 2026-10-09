@@ -3,7 +3,7 @@
  * it.
  */
 import type { WasmLufsResult, WasmLufsSeriesResult } from './sonare.js';
-import type { ValidateOptions } from './validation';
+import type { ValidateOptions } from './validation.js';
 export interface LufsInterleavedRequest extends ValidateOptions {
     samples: Float32Array;
     channels: number;

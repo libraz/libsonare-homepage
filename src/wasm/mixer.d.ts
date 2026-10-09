@@ -1,13 +1,12 @@
-import type { AutomationCurve, GoniometerPoint, MeterTap, MixerProcessResult, MixMeterSnapshot, PanLawInput, PanMode, SendTiming, SurroundPan } from './public_types';
+import type { AutomationCurve, GoniometerPoint, MeterTap, MixerProcessResult, MixMeterSnapshot, PanLawInput, PanMode, SendTiming, SurroundPan } from './public_types.js';
 /**
  * One master-output meter reading. All dB fields are finite and floored at
  * -120; `truePeakDb*` is an inter-sample peak from the ITU-R BS.1770-4
  * polyphase reconstruction at 4x, not a sample peak. That reconstruction is a
- * streaming measurement: its centered stencil needs a few future samples a
- * realtime path does not have, so each block's last samples read marginally low
- * (about 0.1 dB across 64..8192-sample blocks on a near-Nyquist tone, always
- * under-reading). Use `meteringTruePeakDb` over the whole signal for an exact
- * dBTP number.
+ * streaming measurement that runs one reconstruction-filter group delay (a few
+ * samples) behind the block, so every value has its whole stencil and the
+ * reading does not depend on the block size. Use `meteringTruePeakDb` over the
+ * whole signal for an exact dBTP number.
  */
 export interface MixerMeterSnapshot {
     peakDbL: number;
@@ -35,8 +34,8 @@ export interface StripMeteringOptions {
     /** Inter-sample (true) peak measurement. Default `true`. */
     truePeak?: boolean;
     /**
-     * Requested true-peak oversampling factor in `[0, 16]`; the meter resolves it
-     * to the nearest of 2x / 4x / 8x. `0` selects the library default (4x).
+     * Requested true-peak oversampling factor in `[0, 16]`; the meter resolves 2
+     * to 2x, 8..16 to 8x, and any other value to 4x. `0` selects the library default (4x).
      */
     truePeakOversample?: number;
 }
@@ -86,7 +85,7 @@ export declare class Mixer {
      * whose snapshots are never read.
      *
      * @param json - Scene JSON (strips, buses, sends, connections, inserts)
-     * @param sampleRate - Sample rate in Hz (default: 48000)
+     * @param sampleRate - Sample rate in Hz, `[8000, 384000]` (default: 48000)
      * @param blockSize - Maximum block size per {@link processStereo} call (default: 512)
      */
     static fromSceneJson(json: string, sampleRate?: number, blockSize?: number): Mixer;
@@ -284,7 +283,7 @@ export declare class Mixer {
      * the others. It is not latency: latency compensation does not undo it.
      */
     setChannelDelaySamples(stripIndex: number, delaySamples: number): void;
-    /** Set the strip's live VCA gain offset in dB (not persisted to the scene). */
+    /** Set the strip's direct VCA trim in dB (persisted as the scene's `vcaOffsetDb`). */
     setVcaOffsetDb(stripIndex: number, offsetDb: number): void;
     /** Set independent left/right pan positions (dual-pan mode). */
     setDualPan(stripIndex: number, leftPan: number, rightPan: number): void;
@@ -432,8 +431,8 @@ export declare class Mixer {
      * Read up to `maxPoints` of a strip's most recent goniometer samples
      * (oldest to newest).
      *
-     * `maxPoints` must be a finite non-negative integer; anything else throws an
-     * `InvalidParameter` error. It is a request rather than an allocation size —
+     * `maxPoints` must be a finite non-negative integer; anything else throws a
+     * `RangeError`. It is a request rather than an allocation size —
      * a value beyond the strip's goniometer ring simply returns every point the
      * ring holds.
      */
@@ -456,8 +455,18 @@ export declare class Mixer {
      * master (`left`, `right`, `sampleRate`).
      */
     drainTailStereo(numSamples: number): MixerProcessResult;
+    /**
+     * Marks the end of the signal for every strip and bus meter. The true-peak
+     * reading runs one reconstruction-filter group delay behind the block; this
+     * reads that pending stretch against silence and folds it into the
+     * snapshots, so `truePeakDb` covers the whole signal. Call it after the last
+     * block of an offline render; a later process call starts a new signal.
+     */
+    flushMeters(): void;
     /** Release the underlying WASM object. Idempotent, as the Node facade is. */
     delete(): void;
     /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
     destroy(): void;
+    /** Releases the handle through {@link delete}, so the instance works with `using`. */
+    [Symbol.dispose](): void;
 }

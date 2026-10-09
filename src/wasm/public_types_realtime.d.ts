@@ -137,10 +137,20 @@ export interface RealtimeVoiceChangerPodConfig {
     retuneMix: number;
     retuneGrainSize: number;
     formantFactor: number;
+    /** Strength of the formant displacement in [0, 1]. Ignored when `formantMode` is `'absolute'`. */
     formantAmount: number;
     formantBody: number;
     formantBrightness: number;
     formantNasal: number;
+    /**
+     * How `formantFactor` acts. `'relative'` leaves it to the colour stage
+     * after the retune. `'absolute'` warps the formants to `formantFactor` times the input's ahead
+     * of the retune, adds one analysis frame of latency and ignores `formantAmount`; it needs
+     * `formantFactor / 2^(retuneSemitones / 12)` within [0.55, 1.65], else the call is refused
+     * with an error naming the reachable `formantFactor` range. Fixed when the changer is prepared:
+     * a config carrying a different mode is refused. Required, like every POD field.
+     */
+    formantMode: 'relative' | 'absolute';
     eqHighpassHz: number;
     eqBodyDb: number;
     eqPresenceDb: number;
@@ -171,3 +181,14 @@ export interface RealtimeVoiceChangerPodConfig {
 }
 /** One raw UMP message: 1 to 4 words, most significant word first. */
 export type UmpWords = Uint32Array | readonly number[];
+/**
+ * Why a sidechain binding would be refused; the camelCase form of the C ABI
+ * `SonareSidechainRefusal`. When several reasons hold, the first check the
+ * matching setter runs is reported.
+ */
+export type SidechainRefusal = 'invalidTarget' | 'insertOutOfRange' | 'undeclaredSource' | 'invalidSourceKind' | 'selfKey' | 'cycle' | 'tableFull' | 'planRefused';
+/** Result of a `canSet*Sidechain` query; `reason` is `null` exactly when `ok`. */
+export interface SidechainCheck {
+    ok: boolean;
+    reason: SidechainRefusal | null;
+}

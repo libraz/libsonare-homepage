@@ -5,27 +5,28 @@
  * and other native-handle APIs. Import the package root when those surfaces are
  * required.
  */
-import type { SonareCapabilities } from './public_types';
+import './lifetime.js';
+import type { SonareCapabilities } from './public_types.js';
 import type { SonareModule } from './sonare.js';
-export { ErrorCode, isSonareError, SonareError } from './errors';
-export * from './feature_core';
-export type * from './feature_decompose';
-export { segmentAgglomerative, segmentCrossSimilarity, segmentLagToRecurrence, segmentPathEnhance, segmentRecurrenceMatrix, segmentRecurrenceToLag, segmentSubsegment, } from './feature_decompose';
-export type * from './feature_inverse';
-export { griffinLim, melToAudio, melToStft, mfccToAudio, mfccToMel } from './feature_inverse';
-export type * from './feature_loudness';
-export { ebur128LoudnessRange, lufsInterleaved, lufsSeriesInterleaved } from './feature_loudness';
-export * from './feature_music';
-export * from './feature_pitch';
-export type * from './feature_resample';
-export type * from './feature_spectral';
-export { polyFeatures, rmsEnergy, spectralBandwidth, spectralCentroid, spectralContrast, spectralFlatness, spectralFlux, spectralRolloff, zeroCrossingRate, zeroCrossings, } from './feature_spectral';
-export type * from './feature_spectrogram';
-export { bassChroma, chroma, chromaCens, chromaCqt, melDelta, melSpectrogram, mfcc, reassignedSpectrogram, stft, stftDb, } from './feature_spectrogram';
-export * from './metering';
-export * from './public_types';
-export type { AnalyzeBpmRequest, AnalyzeDynamicsRequest, AnalyzeImpulseResponseRequest, AnalyzeRhythmRequest, AnalyzeTimbreRequest, AnalyzeWithProgressRequest, BpmAnalysisResult, BpmCandidate, ChordFunctionalAnalysisRequest, DetectAcousticRequest, DetectChordsRequest, DetectKeyRequest, DynamicsAnalysisResult, DynamicsResult, EstimateMeterRequest, MusicAnalyzeOptions, MusicAnalyzeRequest, RhythmAnalysisResult, SamplesRequest, TimbreAnalysisResult, TimbreFrame, } from './quick_analysis';
-export { analyze, analyzeBpm, analyzeDynamics, analyzeImpulseResponse, analyzeRhythm, analyzeTimbre, analyzeWithProgress, chordFunctionalAnalysis, detectAcoustic, detectBeats, detectBpm, detectChords, detectDownbeats, detectKey, detectKeyCandidates, detectOnsets, estimateMeter, hasFfmpegSupport, } from './quick_analysis';
+export { ErrorCode, isSonareError, SonareError } from './errors.js';
+export * from './feature_core.js';
+export type * from './feature_decompose.js';
+export { segmentAgglomerative, segmentCrossSimilarity, segmentLagToRecurrence, segmentPathEnhance, segmentRecurrenceMatrix, segmentRecurrenceToLag, segmentSubsegment, } from './feature_decompose.js';
+export type * from './feature_inverse.js';
+export { griffinLim, melToAudio, melToStft, mfccToAudio, mfccToMel } from './feature_inverse.js';
+export type * from './feature_loudness.js';
+export { ebur128LoudnessRange, lufsInterleaved, lufsSeriesInterleaved, } from './feature_loudness.js';
+export * from './feature_music.js';
+export * from './feature_pitch.js';
+export type * from './feature_resample.js';
+export type * from './feature_spectral.js';
+export { polyFeatures, rmsEnergy, spectralBandwidth, spectralCentroid, spectralContrast, spectralFlatness, spectralFlux, spectralRolloff, zeroCrossingRate, zeroCrossings, } from './feature_spectral.js';
+export type * from './feature_spectrogram.js';
+export { bassChroma, chroma, chromaCens, chromaCqt, melDelta, melSpectrogram, mfcc, reassignedSpectrogram, stft, stftDb, } from './feature_spectrogram.js';
+export * from './metering.js';
+export * from './public_types.js';
+export type { AnalyzeBpmRequest, AnalyzeDynamicsRequest, AnalyzeImpulseResponseRequest, AnalyzeRhythmRequest, AnalyzeTimbreRequest, AnalyzeWithProgressRequest, BpmAnalysisResult, BpmCandidate, ChordFunctionalAnalysisRequest, DetectAcousticRequest, DetectChordsRequest, DetectKeyCandidatesRequest, DetectKeyRequest, DynamicsAnalysisResult, DynamicsResult, EstimateMeterRequest, MusicAnalyzeOptions, MusicAnalyzeRequest, RhythmAnalysisResult, SamplesRequest, TimbreAnalysisResult, TimbreFrame, } from './quick_analysis.js';
+export { analyze, analyzeBpm, analyzeDynamics, analyzeImpulseResponse, analyzeRhythm, analyzeTimbre, analyzeWithProgress, chordFunctionalAnalysis, detectAcoustic, detectBeats, detectBpm, detectChords, detectDownbeats, detectKey, detectKeyCandidates, detectOnsets, estimateMeter, hasFfmpegSupport, } from './quick_analysis.js';
 /** Initialize the analysis-only WASM module. */
 export declare function init(options?: {
     locateFile?: (path: string, prefix: string) => string;

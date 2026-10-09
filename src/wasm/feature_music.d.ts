@@ -1,6 +1,6 @@
-import type { AnalyzeSectionsOptions, BoundaryOptions, BoundaryResult, CqtResult, LufsResult, MelodyResult, OnsetStrengthMultiResult, Section } from './public_types';
+import type { AnalyzeSectionsOptions, BoundaryOptions, BoundaryResult, CqtResult, LufsResult, MelodyResult, OnsetStrengthMultiResult, Section } from './public_types.js';
 import type { WasmFourierTempogramResult, WasmNnlsChromaResult } from './sonare.js';
-import type { ValidateOptions } from './validation';
+import type { ValidateOptions } from './validation.js';
 type GuardedOptions = ValidateOptions;
 type AnalyzeSectionsGuardedOptions = AnalyzeSectionsOptions & ValidateOptions;
 type BoundaryGuardedOptions = BoundaryOptions & ValidateOptions;
@@ -138,8 +138,8 @@ export declare function hybridCqt(samples: Float32Array, sampleRate?: number, ho
  * @param fmin - Minimum frequency in Hz (default: 32.70319566257483, C1)
  * @param nBins - Number of frequency bins (default: 84)
  * @param binsPerOctave - Bins per octave (default: 12)
- * @param gamma - Bandwidth offset; a negative value or NaN selects the automatic
- *   ERB-derived value, while 0 is equivalent to CQT (default: -1)
+ * @param gamma - Bandwidth offset; omit it for the automatic ERB-derived value,
+ *   while 0 is equivalent to CQT. A negative or non-finite value is refused
  * @returns VQT magnitude result (same shape as CQT)
  */
 export declare function vqt(request: VqtRequest): CqtResult;
@@ -195,9 +195,9 @@ export interface MelodyOptions {
     fmin?: number;
     /** Highest f0 (Hz) the tracker will consider. Default 2093 (≈ C7). */
     fmax?: number;
-    /** Analysis frame length in samples. Default 2048. */
+    /** Analysis frame length in samples at 22050 Hz, rescaled to the input rate. Default 2048. */
     frameLength?: number;
-    /** Hop length between frames in samples. Default 256. */
+    /** Hop length between frames in samples of the input buffer. Default 256. */
     hopLength?: number;
     /** Voicing confidence threshold in [0,1]; frames below are unvoiced. Default 0.1. */
     threshold?: number;

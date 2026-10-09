@@ -1,4 +1,4 @@
-import type { EqBand } from './public_types_realtime';
+import type { EqBand } from './public_types_realtime.js';
 export type PanMode = 'balance' | 'pan' | 'stereoPan' | 'stereo-pan' | 'dualPan' | 'dual-pan' | number;
 /**
  * Surround pan position for a strip feeding a >2-channel bus. Phase 1 honors
@@ -41,11 +41,10 @@ export interface MixMeterSnapshot {
     gainReductionDb: number;
     /**
      * Left-channel inter-sample (true) peak in dB, from the ITU-R BS.1770-4
-     * polyphase reconstruction at 4x. A streaming measurement: the centered
-     * reconstruction stencil needs a few future samples a realtime path does not
-     * have, so each block's last samples read marginally low (about 0.1 dB across
-     * 64..8192-sample blocks on a near-Nyquist tone, always under-reading). Use
-     * `meteringTruePeakDb` over the whole signal for an exact dBTP number.
+     * polyphase reconstruction at 4x. A streaming measurement that runs one
+     * reconstruction-filter group delay (a few samples) behind the block, so every
+     * value has its whole stencil and the reading does not depend on the block
+     * size. Use `meteringTruePeakDb` over the whole signal for an exact dBTP number.
      */
     truePeakDbL: number;
     /** Right-channel inter-sample (true) peak in dB. See {@link truePeakDbL}. */
@@ -276,7 +275,7 @@ export interface MixSceneStrip {
         enabled: boolean;
         lufs: boolean;
         truePeak: boolean;
-        /** Requested factor; the meter resolves it to the nearest of 2x / 4x / 8x. */
+        /** Requested factor; the meter resolves 2 to 2x, 8..16 to 8x, and any other value (0, 1, 3..7) to 4x. */
         truePeakOversample: number;
     };
     inserts: MixSceneInsert[];

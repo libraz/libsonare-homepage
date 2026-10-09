@@ -1,18 +1,17 @@
-import type { EngineMarker, RealtimeEngine } from '../index';
-import type { SonareEngineSyncMessage } from './messages';
-import { type SonareEngineCommandRecord } from './protocol';
+import type { EngineMarker, RealtimeEngine } from '../index.js';
+import { type EngineCommitContext } from './engine-commit.js';
+import type { SonareEngineSyncMessage } from './messages.js';
 /**
  * Collaborator surface the marker helpers need from the owning
  * {@link SonareEngine}: the marker store and id counter, the offline engine they
  * mirror into, the sync poster, the realtime command sender, and the loop setter.
  */
-export interface EngineMarkerContext {
+export interface EngineMarkerContext extends EngineCommitContext {
     readonly offlineEngine: RealtimeEngine;
     readonly markers: Map<number, EngineMarker>;
     getNextMarkerId(): number;
     setNextMarkerId(value: number): void;
     postSync(message: SonareEngineSyncMessage): void;
-    sendCommand(command: SonareEngineCommandRecord): boolean;
     setLoop(startPpq: number, endPpq: number, enabled: boolean): boolean;
 }
 export declare function addMarker(ctx: EngineMarkerContext, ppq: number, name?: string): number;

@@ -1,4 +1,4 @@
-import type { ValidateOptions } from './validation';
+import type { ValidateOptions } from './validation.js';
 /**
  * Pitch class enum (C=0, C#=1, ..., B=11)
  */
@@ -30,6 +30,10 @@ export declare const Mode: {
     readonly Locrian: 6;
 };
 export type Mode = (typeof Mode)[keyof typeof Mode];
+/** A key mode by name (`Mode` in lowercase): what {@link Key.mode} reports. */
+export type KeyMode = 'major' | 'minor' | 'dorian' | 'phrygian' | 'lydian' | 'mixolydian' | 'locrian';
+/** A scale named by the mode names `detectKey` reports, as `scaleMaskForMode` takes it. */
+export type ScaleName = KeyMode;
 export type TempogramMode = 'autocorrelation' | 'auto' | 'ac' | 'cosine' | 0 | 1;
 export declare const KeyProfile: {
     readonly KrumhanslSchmuckler: 0;
@@ -100,7 +104,8 @@ export type SectionType = (typeof SectionType)[keyof typeof SectionType];
  */
 export interface Key {
     root: PitchClass;
-    mode: Mode;
+    /** Mode name (`'major'`, `'minor'`, `'dorian'`, ...), the form `scaleMaskForMode` and `chordFunctions` take. */
+    mode: KeyMode;
     /**
      * Share of the model's belief that this key is the answer, in `[0, 1)`.
      *
@@ -119,15 +124,30 @@ export interface Key {
     name: string;
     shortName: string;
 }
+/** A detected key together with the tuning its chroma was built with. */
+export interface KeyDetection extends Key {
+    /** Tuning used, in fractions of a semitone: the given value, or the measured one under `'auto'`. */
+    tuning: number;
+}
 export interface KeyDetectionOptions extends ValidateOptions {
     nFft?: number;
     hopLength?: number;
     useHpss?: boolean;
     loudnessWeighted?: boolean;
     highPassHz?: number;
-    modes?: Mode[] | ('major' | 'minor' | 'dorian' | 'phrygian' | 'lydian' | 'mixolydian' | 'locrian')[] | 'major-minor' | 'all' | 'modal';
+    modes?: Mode[] | KeyMode[] | 'major-minor' | 'all' | 'modal';
     profile?: KeyProfile | KeyProfileName;
     genreHint?: 'auto' | 'edm' | 'electronic' | 'dance' | 'pop' | 'classical' | 'jazz' | string;
+}
+/** Options of `detectKey`: {@link KeyDetectionOptions} plus the recording's tuning. */
+export interface DetectKeyOptions extends KeyDetectionOptions {
+    /**
+     * Tuning offset of the recording in fractions of a semitone, in `[-0.5, 0.5)`;
+     * 0 is concert A440. `'auto'` measures it from the audio. The value used is
+     * reported as {@link KeyDetection.tuning}; {@link referenceHzToTuning} converts
+     * a reference pitch to this unit. Default 0.
+     */
+    tuning?: number | 'auto';
 }
 export interface KeyCandidate {
     key: Key;
@@ -151,10 +171,12 @@ export interface ChordDetectionOptions extends ValidateOptions {
     detectInversions?: boolean;
     chromaMethod?: 'stft' | 'nnls';
     /**
-     * Tuning offset of the recording in fractions of a semitone, the unit
-     * `estimateTuning` returns; must be in `[-0.5, 0.5)`. Default 0 (concert A440).
+     * Tuning offset of the recording in fractions of a semitone; must be in
+     * `[-0.5, 0.5)`. `'auto'` measures it from the audio; the value used is
+     * reported as {@link ChordAnalysisResult.tuning}. {@link referenceHzToTuning}
+     * converts a reference pitch to this unit. Default 0 (concert A440).
      */
-    tuning?: number;
+    tuning?: number | 'auto';
 }
 /** Options for `analyzeBpm`. All fields are optional. */
 export interface AnalyzeBpmOptions extends ValidateOptions {
@@ -164,9 +186,9 @@ export interface AnalyzeBpmOptions extends ValidateOptions {
     bpmMax?: number;
     /** Tempo prior the tracker is biased toward. Default 120. */
     startBpm?: number;
-    /** FFT size for the onset envelope. Default 2048. */
+    /** Analysis window length in samples at 22050 Hz, rescaled to the input sample rate. Default 2048. */
     nFft?: number;
-    /** Hop length for the onset envelope. Default 512. */
+    /** Hop length in samples of the input buffer. Default 512. */
     hopLength?: number;
     /** Number of tempo candidates to return. Default 5. */
     maxCandidates?: number;
@@ -179,9 +201,9 @@ export interface AnalyzeRhythmOptions extends ValidateOptions {
     bpmMax?: number;
     /** Tempo prior the tracker is biased toward. Default 120. */
     startBpm?: number;
-    /** FFT size for the onset envelope. Default 2048. */
+    /** Analysis window length in samples at 22050 Hz, rescaled to the input sample rate. Default 2048. */
     nFft?: number;
-    /** Hop length for the onset envelope. Default 512. */
+    /** Hop length in samples of the input buffer. Default 512. */
     hopLength?: number;
 }
 /** Options for `analyzeDynamics`. All fields are optional. */
@@ -195,9 +217,9 @@ export interface AnalyzeDynamicsOptions extends ValidateOptions {
 }
 /** Options for `analyzeTimbre`. All fields are optional. */
 export interface AnalyzeTimbreOptions extends ValidateOptions {
-    /** FFT size. Default 2048. */
+    /** Analysis window length in samples at 22050 Hz, rescaled to the input sample rate. Default 2048. */
     nFft?: number;
-    /** Hop length. Default 512. */
+    /** Hop length in samples of the input buffer. Default 512. */
     hopLength?: number;
     /** Number of Mel bands. Default 128. */
     nMels?: number;
@@ -290,8 +312,32 @@ export interface AnalysisChord extends Chord {
      */
     romanNumeral: string;
 }
+/**
+ * Harmonic function of a chord in a key: `'chromatic'` for a root outside the
+ * key's scale and `'none'` for an unknown chord (`'N.C.'`).
+ */
+export type ChordFunction = 'tonic' | 'subdominant' | 'dominant' | 'chromatic' | 'none';
+/** The fields `chordFunctions` reads from a chord; everything else is carried through. */
+export interface ChordFunctionsInput {
+    root: PitchClass;
+    quality: ChordQuality;
+}
+/** A key given as `detectKey` reports it. */
+export interface ChordFunctionsKey {
+    root: PitchClass;
+    /** Mode name as `detectKey` reports it, or its `Mode` ordinal. */
+    mode: KeyMode | Mode;
+}
+/** A timed chord with its Roman numeral and harmonic function in a key. */
+export type FunctionalChord<T extends ChordFunctionsInput = Chord> = T & {
+    /** Roman numeral relative to the key (`'I'`, `'V7'`, `'vi'`; `'N.C.'` for an unknown chord). */
+    roman: string;
+    function: ChordFunction;
+};
 export interface ChordAnalysisResult {
     chords: Chord[];
+    /** Tuning the chroma was built with, in fractions of a semitone: the given value, or the measured one under `tuning: 'auto'`. */
+    tuning: number;
 }
 /**
  * Detected section
@@ -300,6 +346,7 @@ export interface Section {
     type: SectionType;
     start: number;
     end: number;
+    /** Median frame RMS in the section over the loudest section's, in `[0, 1]`. */
     energyLevel: number;
     confidence: number;
     name: string;
@@ -313,9 +360,11 @@ export interface BoundaryOptions {
     /** Checkerboard kernel size in frames. Default 64. */
     kernelSize?: number;
     /**
-     * Relative novelty threshold, applied to the curve after it has been scaled by
-     * its own maximum. Selects how prominent a peak must be *within this track*; it
-     * says nothing about how much the features actually changed. Default 0.3.
+     * Relative novelty threshold: a peak must reach this fraction of the largest raw
+     * novelty event within {@link referenceWindow} of it, a lone dominant event (one
+     * no other event in the window comes within `threshold` of) set aside. Selects
+     * how prominent a peak is *among its neighbours*; it says nothing about how much
+     * the features actually changed. Default 0.3.
      */
     threshold?: number;
     /**
@@ -334,6 +383,14 @@ export interface BoundaryOptions {
     nChroma?: number;
     /** Minimum spacing between peaks, in seconds. Default 2. */
     peakDistance?: number;
+    /**
+     * One-sided span in seconds over which the local novelty maximum that
+     * `threshold` is measured against is taken. Must be finite and non-negative;
+     * 0 makes each frame its own reference, which disables the relative threshold.
+     * A value at least the track length makes the reference whole-track, still with
+     * a lone dominant event set aside. Default 60.
+     */
+    referenceWindow?: number;
     /** Use MFCC features. Default `true`. */
     useMfcc?: boolean;
     /** Use chroma features. Default `true`. */
@@ -615,4 +672,6 @@ export interface AnalysisResult {
     rhythm: RhythmFeatures;
     melody: MelodyContour;
     form: string;
+    /** Tuning the chromagrams were built with, in fractions of a semitone: the given value, or the measured one under `tuning: 'auto'`. */
+    tuning: number;
 }

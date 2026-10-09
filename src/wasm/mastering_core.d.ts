@@ -1,4 +1,4 @@
-import type { LoudnessMatchResult, LoudnessMatchStereoResult, MasteringAssistantParams, MasteringInsertParamChoice, MasteringInsertSlot, MasteringOptions, MasteringProcessorParams, MasteringResult, MasteringStereoResult, PairAnalysis, PairProcessor, SoloProcessor, StereoAnalysis, StereoPairProcessor, StreamingPlatform } from './public_types';
+import type { LoudnessMatchResult, LoudnessMatchStereoResult, MasteringAssistantParams, MasteringAssistantResult, MasteringInsertParamChoice, MasteringInsertParamDependency, MasteringInsertParamScale, MasteringInsertParamUnit, MasteringInsertSlot, MasteringOptions, MasteringProcessorParams, MasteringResult, MasteringStereoResult, MasteringStreamingPreviewResult, MatchEqCurveResult, MatchEstimateReferenceDelaySamplesResult, MatchReferenceLoudnessResult, MatchTonalBalanceLogBandsResult, MatchTonalBalanceResult, PairAnalysis, PairAnalysisResultMap, PairProcessor, SoloProcessor, StereoAnalysis, StereoAnalysisResultMap, StereoMonoCompatCheckLogBandsResult, StereoMonoCompatCheckResult, StereoPairProcessor, StreamingPlatform, TypedJson } from './public_types.js';
 export type { MasteringInsertParamChoice, MasteringInsertSlot };
 /** Canonical request form for loudness/true-peak mastering. */
 export interface MasteringRequest extends MasteringOptions {
@@ -53,16 +53,16 @@ export interface MasteringAbMatchLoudnessStereoRequest {
     sampleRate?: number;
 }
 /** Canonical request form for a two-input match analysis. */
-export interface MasteringPairAnalyzeRequest {
-    analysisName: PairAnalysis;
+export interface MasteringPairAnalyzeRequest<N extends PairAnalysis = PairAnalysis> {
+    analysisName: N;
     source: Float32Array;
     reference: Float32Array;
     sampleRate?: number;
     params?: MasteringProcessorParams;
 }
 /** Canonical request form for a stereo analysis. */
-export interface MasteringStereoAnalyzeRequest {
-    analysisName: StereoAnalysis;
+export interface MasteringStereoAnalyzeRequest<N extends StereoAnalysis = StereoAnalysis> {
+    analysisName: N;
     left: Float32Array;
     right: Float32Array;
     sampleRate?: number;
@@ -165,6 +165,16 @@ export interface MasteringInsertParamInfo {
     min: number | null;
     /** Largest value construction accepts, or null when the catalog states no limit or `choices` is non-null. */
     max: number | null;
+    /** Whether {@link min} itself is rejected (a `> min` constraint); false when `min` is null. */
+    minExclusive: boolean;
+    /** Whether {@link max} itself is rejected (a `< max` constraint); false when `max` is null. */
+    maxExclusive: boolean;
+    /**
+     * `"nyquist"` when the ceiling follows the processing rate: the effective
+     * ceiling is then the lower of `max` (measured at the catalog's probe rate)
+     * and the host's Nyquist frequency, both exclusive. Null otherwise.
+     */
+    maxRelativeTo: 'nyquist' | null;
     /**
      * Value the processor uses when the key is absent — the config struct's own
      * field initializer, an enum as its number. Null for a param id with no
@@ -172,8 +182,14 @@ export interface MasteringInsertParamInfo {
      * no fallback.
      */
     default: boolean | number | null;
-    /** Physical unit, or null when the parameter is unitless. */
-    unit: string | null;
+    /** Declared unit of a number; null for any other type. */
+    unit: MasteringInsertParamUnit | null;
+    /** Lowest value a control should draw, inside `min` / `max`; null when the accepted range is also the display range. */
+    uiMin: number | null;
+    /** Highest value a control should draw, inside `min` / `max`; null when the accepted range is also the display range. */
+    uiMax: number | null;
+    /** Axis a control draws the value on. */
+    scale: MasteringInsertParamScale;
     /**
      * The closed set of values construction accepts, in value order, or null
      * when the accepted values are not a closed set. Non-null only for `"enum"`
@@ -186,6 +202,11 @@ export interface MasteringInsertParamInfo {
      * always exists.
      */
     slot: string | null;
+    /**
+     * Siblings whose live value bounds this key, each read as `this <relation> sibling`;
+     * empty for an independent key. `min` and `max` are measured with every sibling at its default.
+     */
+    dependsOn: MasteringInsertParamDependency[];
 }
 /**
  * Returns every parameter an insert / FX processor's construction reads,
@@ -199,8 +220,14 @@ export interface MasteringInsertParamInfo {
  * unknown name.
  *
  * @param name - Insert processor name (see {@link masteringInsertNames}).
+ * @param sampleRate - Optional host rate in Hz. A key whose `maxRelativeTo` is
+ *   `"nyquist"` then reports, as `max` and `maxExclusive`, the bound accepted
+ *   when the insert is built and prepared at that rate, which includes any cap
+ *   fixed at build time (an EQ band frequency stays at 24000 for a 96000 Hz
+ *   host). Omitted, the rate-less answer is returned. Throws for a rate outside
+ *   the supported range.
  */
-export declare function masteringInsertParamInfo(name: string): MasteringInsertParamInfo[];
+export declare function masteringInsertParamInfo(name: string, sampleRate?: number): MasteringInsertParamInfo[];
 /** Latency and tail of one insert instance, in samples. */
 export interface MasteringInsertTiming {
     /** Latency in samples at the queried sample rate. */
@@ -260,7 +287,7 @@ export type MasteringRealtimeCost = 'low' | 'moderate' | 'high';
  * Catalog grouping for a processor picker, derived from the id's prefix
  * ("eq.*" -> "eq", "match.*" -> "reference"); anything unprefixed is "other".
  */
-export type MasteringProcessorCategory = 'dynamics' | 'effects' | 'eq' | 'final' | 'maximizer' | 'multiband' | 'other' | 'reference' | 'repair' | 'saturation' | 'spectral' | 'stereo' | 'utility';
+export type MasteringProcessorCategory = 'dynamics' | 'effects' | 'eq' | 'final' | 'maximizer' | 'multiband' | 'other' | 'reference' | 'repair' | 'saturation' | 'spectral' | 'stereo' | 'utility' | 'voice';
 /** One processor's realtime/offline/pair classification in the catalog. */
 export interface MasteringProcessorCatalogEntry {
     /** Processor id (the name used for scene inserts / named processors). */
@@ -296,9 +323,15 @@ export interface MasteringProcessorCatalogEntry {
     /** Grouping for a processor picker; see {@link MasteringProcessorCategory}. */
     category: MasteringProcessorCategory;
     /**
-     * The processor's construction parameters, the same list
-     * {@link masteringInsertParamInfo} returns. Empty for entries that are not
-     * realtime-insertable.
+     * Whether the processor has a configuration whose output at a sample depends only on the
+     * input up to it, plus its reported latency. False for `repair.declick`, `repair.declip` and
+     * `repair.trimSilence`; true for the other repair stages and every insert.
+     */
+    causal: boolean;
+    /**
+     * The processor's construction parameters: for an insert the list
+     * {@link masteringInsertParamInfo} returns, for a `repair.*` stage the bounds its own
+     * configuration validation enforces (no `id`, never `rtSafe`). Empty for any other offline entry.
      */
     params: MasteringInsertParamInfo[];
     /**
@@ -337,9 +370,23 @@ export declare function masteringPairProcessStereo(processorName: StereoPairProc
 /**
  * Analyze a `source` against a `reference` with a two-input analysis. The two
  * buffers may have independent lengths.
+ *
+ * Returns JSON whose shape depends on the analysis name; the overload for
+ * each analysis name carries its entry of {@link PairAnalysisResultMap}, which
+ * `JSON.parse(json) as JsonResult<typeof json>` reads back.
  */
-export declare function masteringPairAnalyze(request: MasteringPairAnalyzeRequest): string;
-export declare function masteringPairAnalyze(analysisName: PairAnalysis, source: Float32Array, reference: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): string;
+export declare function masteringPairAnalyze(request: MasteringPairAnalyzeRequest<'match.referenceLoudness'>): TypedJson<MatchReferenceLoudnessResult>;
+export declare function masteringPairAnalyze(request: MasteringPairAnalyzeRequest<'match.tonalBalance'>): TypedJson<MatchTonalBalanceResult>;
+export declare function masteringPairAnalyze(request: MasteringPairAnalyzeRequest<'match.tonalBalanceLogBands'>): TypedJson<MatchTonalBalanceLogBandsResult>;
+export declare function masteringPairAnalyze(request: MasteringPairAnalyzeRequest<'match.matchEqCurve'>): TypedJson<MatchEqCurveResult>;
+export declare function masteringPairAnalyze(request: MasteringPairAnalyzeRequest<'match.estimateReferenceDelaySamples'>): TypedJson<MatchEstimateReferenceDelaySamplesResult>;
+export declare function masteringPairAnalyze(request: MasteringPairAnalyzeRequest): TypedJson<PairAnalysisResultMap[PairAnalysis]>;
+export declare function masteringPairAnalyze(analysisName: 'match.referenceLoudness', source: Float32Array, reference: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): TypedJson<MatchReferenceLoudnessResult>;
+export declare function masteringPairAnalyze(analysisName: 'match.tonalBalance', source: Float32Array, reference: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): TypedJson<MatchTonalBalanceResult>;
+export declare function masteringPairAnalyze(analysisName: 'match.tonalBalanceLogBands', source: Float32Array, reference: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): TypedJson<MatchTonalBalanceLogBandsResult>;
+export declare function masteringPairAnalyze(analysisName: 'match.matchEqCurve', source: Float32Array, reference: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): TypedJson<MatchEqCurveResult>;
+export declare function masteringPairAnalyze(analysisName: 'match.estimateReferenceDelaySamples', source: Float32Array, reference: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): TypedJson<MatchEstimateReferenceDelaySamplesResult>;
+export declare function masteringPairAnalyze(analysisName: PairAnalysis, source: Float32Array, reference: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): TypedJson<PairAnalysisResultMap[PairAnalysis]>;
 /**
  * Gain-match `source` to `reference`'s integrated loudness, so an A/B between
  * the two is not decided by level. `source` and `reference` may have
@@ -363,10 +410,19 @@ export declare function masteringPairAnalyze(analysisName: PairAnalysis, source:
 export declare function masteringAbMatchLoudness(request: MasteringAbMatchLoudnessRequest): LoudnessMatchResult;
 /** Gain-match a stereo source to a stereo reference with one shared gain. */
 export declare function masteringAbMatchLoudnessStereo(request: MasteringAbMatchLoudnessStereoRequest): LoudnessMatchStereoResult;
-export declare function masteringStereoAnalyze(request: MasteringStereoAnalyzeRequest): string;
-export declare function masteringStereoAnalyze(analysisName: StereoAnalysis, left: Float32Array, right: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): string;
-export declare function masteringAssistantSuggest(request: MasteringAssistantParamsRequest): string;
-export declare function masteringAssistantSuggest(samples: Float32Array, sampleRate?: number, params?: MasteringAssistantParams): string;
+/**
+ * Analyze a stereo pair. Returns JSON whose shape depends on the analysis name;
+ * the overload for
+ * each analysis name carries its entry of {@link StereoAnalysisResultMap}.
+ */
+export declare function masteringStereoAnalyze(request: MasteringStereoAnalyzeRequest<'stereo.monoCompatCheck'>): TypedJson<StereoMonoCompatCheckResult>;
+export declare function masteringStereoAnalyze(request: MasteringStereoAnalyzeRequest<'stereo.monoCompatCheckLogBands'>): TypedJson<StereoMonoCompatCheckLogBandsResult>;
+export declare function masteringStereoAnalyze(request: MasteringStereoAnalyzeRequest): TypedJson<StereoAnalysisResultMap[StereoAnalysis]>;
+export declare function masteringStereoAnalyze(analysisName: 'stereo.monoCompatCheck', left: Float32Array, right: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): TypedJson<StereoMonoCompatCheckResult>;
+export declare function masteringStereoAnalyze(analysisName: 'stereo.monoCompatCheckLogBands', left: Float32Array, right: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): TypedJson<StereoMonoCompatCheckLogBandsResult>;
+export declare function masteringStereoAnalyze(analysisName: StereoAnalysis, left: Float32Array, right: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): TypedJson<StereoAnalysisResultMap[StereoAnalysis]>;
+export declare function masteringAssistantSuggest(request: MasteringAssistantParamsRequest): TypedJson<MasteringAssistantResult>;
+export declare function masteringAssistantSuggest(samples: Float32Array, sampleRate?: number, params?: MasteringAssistantParams): TypedJson<MasteringAssistantResult>;
 /**
  * Suggest a mastering chain, as the flat `{key: number|boolean}` params map
  * {@link masteringAssistantSuggest}'s `chainConfig` carries, without needing to
@@ -374,6 +430,34 @@ export declare function masteringAssistantSuggest(samples: Float32Array, sampleR
  * straight through as `overrides` to {@link mastering} / {@link masterAudio}.
  */
 export declare function masteringAssistantSuggestChain(request: MasteringAssistantParamsRequest): Record<string, number | boolean>;
+/** The repair-defect block of {@link MasteringAudioProfile}, and of each channel of a repair analysis. */
+export interface MasteringAudioProfileDefects {
+    measured: boolean;
+    clickCount: number;
+    clickRejected: number;
+    clickLongestRunSamples: number;
+    clickPerSecond: number;
+    crackleSampleCount: number;
+    crackleSampleFraction: number;
+    cracklePerSecond: number;
+    clipSampleCount: number;
+    clipRunCount: number;
+    clipLongestRunSamples: number;
+    clipSampleFraction: number;
+    clipFlatRunCount: number;
+    clipFlatSampleCount: number;
+    clipLongestFlatRunSamples: number;
+    clipFlatLevel: number;
+    noiseFloorDbfs: number;
+    noiseBandPeakDbfs: number;
+    noiseBandPeakIndex: number;
+    humFundamentalHz: number;
+    humFundamentalProminence: number;
+    humHarmonics: number;
+    humFundamentalDbfs: number;
+    humPeakHarmonicDbfs: number;
+    lateDecayRatioDb: number;
+}
 /**
  * The shape {@link masteringAudioProfile}'s JSON parses to.
  *
@@ -392,6 +476,7 @@ export interface MasteringAudioProfile {
         truePeakDb: number;
         crestFactorDb: number;
     };
+    /** Band levels (`*RmsDb`) are dBFS, mean square: a full-scale sine reads -3.01 dBFS in its band. */
     spectral: {
         subRmsDb: number;
         lowRmsDb: number;
@@ -414,38 +499,12 @@ export interface MasteringAudioProfile {
      * either `detectDefects` was not asked for or the input was too short — and
      * every other field is then at its default rather than a reading.
      */
-    defects: {
-        measured: boolean;
-        clickCount: number;
-        clickRejected: number;
-        clickLongestRunSamples: number;
-        clickPerSecond: number;
-        crackleSampleCount: number;
-        crackleSampleFraction: number;
-        cracklePerSecond: number;
-        clipSampleCount: number;
-        clipRunCount: number;
-        clipLongestRunSamples: number;
-        clipSampleFraction: number;
-        clipFlatRunCount: number;
-        clipFlatSampleCount: number;
-        clipLongestFlatRunSamples: number;
-        clipFlatLevel: number;
-        noiseFloorDbfs: number;
-        noiseBandPeakDbfs: number;
-        noiseBandPeakIndex: number;
-        humFundamentalHz: number;
-        humFundamentalProminence: number;
-        humHarmonics: number;
-        humFundamentalDbfs: number;
-        humPeakHarmonicDbfs: number;
-        lateDecayRatioDb: number;
-    };
+    defects: MasteringAudioProfileDefects;
 }
-export declare function masteringAudioProfile(request: MasteringSamplesParamsRequest): string;
-export declare function masteringAudioProfile(samples: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): string;
-export declare function masteringStreamingPreview(request: MasteringStreamingPreviewRequest): string;
-export declare function masteringStreamingPreview(samples: Float32Array, sampleRate?: number, platforms?: StreamingPlatform[]): string;
+export declare function masteringAudioProfile(request: MasteringSamplesParamsRequest): TypedJson<MasteringAudioProfile>;
+export declare function masteringAudioProfile(samples: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): TypedJson<MasteringAudioProfile>;
+export declare function masteringStreamingPreview(request: MasteringStreamingPreviewRequest): TypedJson<MasteringStreamingPreviewResult>;
+export declare function masteringStreamingPreview(samples: Float32Array, sampleRate?: number, platforms?: StreamingPlatform[]): TypedJson<MasteringStreamingPreviewResult>;
 /**
  * Suggest a mastering chain for a stereo pair, as shared JSON.
  *
@@ -453,7 +512,7 @@ export declare function masteringStreamingPreview(samples: Float32Array, sampleR
  * of the suggestion is built on the channel-summed program rather than a
  * downmix that reads roughly 6 dB low.
  */
-export declare function masteringAssistantSuggestStereo(request: MasteringAssistantStereoParamsRequest): string;
+export declare function masteringAssistantSuggestStereo(request: MasteringAssistantStereoParamsRequest): TypedJson<MasteringAssistantResult>;
 /**
  * Stereo counterpart of {@link masteringAssistantSuggestChain}: the flat
  * `{key: number|boolean}` params map without the surrounding assistant
@@ -470,7 +529,7 @@ export declare function masteringAssistantSuggestChainStereo(request: MasteringA
  * comparable with {@link masteringAudioProfile}. Defect detectors run on each
  * channel and their results are aggregated.
  */
-export declare function masteringAudioProfileStereo(request: MasteringStereoParamsRequest): string;
+export declare function masteringAudioProfileStereo(request: MasteringStereoParamsRequest): TypedJson<MasteringAudioProfile>;
 /**
  * Preview streaming-platform normalization for a stereo pair, as shared JSON.
  *
@@ -480,4 +539,4 @@ export declare function masteringAudioProfileStereo(request: MasteringStereoPara
  * decorrelated material, and both the normalization gain and the ceiling-risk
  * flag follow from that measurement.
  */
-export declare function masteringStreamingPreviewStereo(request: MasteringStreamingPreviewStereoRequest): string;
+export declare function masteringStreamingPreviewStereo(request: MasteringStreamingPreviewStereoRequest): TypedJson<MasteringStreamingPreviewResult>;

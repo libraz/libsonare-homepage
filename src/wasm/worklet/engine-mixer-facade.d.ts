@@ -1,5 +1,5 @@
-import type { EngineBus, EngineTrackLane, EngineTrackSend, RealtimeEngine, SidechainSourceKind } from '../index';
-import type { SonareEngineSyncMessage } from './messages';
+import type { EngineBus, EngineTrackLane, EngineTrackSend, RealtimeEngine, SidechainSourceKind } from '../index.js';
+import type { SonareEngineSyncMessage } from './messages.js';
 /** A latest by-name insert value retained across a later topology replay. */
 export interface InsertParamOverride {
     target: StripJsonTarget;
@@ -110,6 +110,7 @@ export declare function replayInsertParamOverrides(ctx: EngineMixerContext, lane
  * append new track ids after them. Entries carrying `sends` replace that
  * track's send list; entries without `sends` leave existing sends untouched.
  * The same omission rule preserves an existing source channel layout.
+ * A `sourceChannelLayout` other than stereo (1) throws a `RangeError`.
  *
  * @param lanes Track ids or lane descriptors in the desired lane order.
  */

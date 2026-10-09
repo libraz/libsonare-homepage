@@ -1,4 +1,4 @@
-import type { ValidateOptions } from './validation';
+import type { ValidateOptions } from './validation.js';
 /** Options for `detectAcoustic`. All fields are optional. */
 export interface AcousticOptions extends ValidateOptions {
     /** Number of octave bands. Default 6. */
@@ -39,6 +39,10 @@ export interface AcousticResult {
     confidence: number;
     isBlind: boolean;
 }
+/** Names accepted for `materialPreset`. */
+export type MaterialPresetName = 'none' | 'concrete' | 'wood' | 'curtain' | 'carpet' | 'glass';
+/** Names accepted for the room-estimate `mode`. */
+export type AcousticModeName = 'auto' | 'blind' | 'impulse_response';
 /** Shoebox geometry + placement shared by RIR synthesis and the room morph. */
 export interface RoomGeometryOptions {
     lengthM?: number;
@@ -69,10 +73,12 @@ export interface RoomGeometryOptions {
      */
     bandScattering?: Float32Array | number[];
     /**
-     * Named wall-material preset (0 none; 1 concrete, 2 wood, 3 curtain,
-     * 4 carpet, 5 glass). A non-zero preset wins over `bandAbsorption`/`absorption`.
+     * Wall-material preset, by name (`'none'`, `'concrete'`, `'wood'`,
+     * `'curtain'`, `'carpet'`, `'glass'`). Any preset but `'none'` wins over
+     * `bandAbsorption`/`absorption`. An unknown name throws a `RangeError` and a
+     * number a `TypeError`, both listing the valid names.
      */
-    materialPreset?: number;
+    materialPreset?: MaterialPresetName;
     sourceX?: number;
     sourceY?: number;
     sourceZ?: number;
@@ -121,16 +127,11 @@ export interface RirDiagnostic {
 export interface RirResult {
     rir: Float32Array;
     sampleRate: number;
-    hasError: boolean;
     /**
-     * First error diagnostic as `code: message`, empty when `hasError` is false.
-     * Matches the string the C ABI leaves in `sonare_last_error_message()`.
-     */
-    errorMessage: string;
-    /**
-     * Every diagnostic the synthesizer reported, in order. Warnings appear here on
-     * successful calls too — a `maxSeconds` clamp that cut the tail is a warning,
-     * not an error, and is otherwise indistinguishable from an untruncated RIR.
+     * Every diagnostic the synthesizer reported, in order. A refused synthesis
+     * throws a coded `SonareError` instead, so every entry is a warning — a
+     * `maxSeconds` clamp that cut the tail is one, and is otherwise
+     * indistinguishable from an untruncated RIR.
      */
     diagnostics: RirDiagnostic[];
 }
@@ -147,8 +148,12 @@ export interface RoomEstimateOptions {
     referenceAbsorption?: number;
     preferEyring?: boolean;
     nOctaveBands?: number;
-    /** Analyzer routing: 0 = auto, 1 = blind, 2 = impulse-response. */
-    mode?: number;
+    /**
+     * Analyzer routing, by name: `'auto'`, `'blind'`, `'impulse_response'`. An
+     * unknown name throws a `RangeError` and a number a `TypeError`, both listing
+     * the valid names.
+     */
+    mode?: AcousticModeName;
     /** Analyzer decay-fit span in dB (0 = library default). */
     minDecayDb?: number;
     /** Analyzer noise-floor margin in dB (0 = library default). */
@@ -156,19 +161,31 @@ export interface RoomEstimateOptions {
 }
 export interface RoomEstimateResult {
     /**
-     * Equivalent volume (m^3) and representative dimensions (m). NaN, with
-     * `confidence` 0, when the recording has no measurable broadband decay
-     * (silence, or an RT60 the analyzer could not fit) — the acoustic family's
-     * "not measurable", as in `rt60Bands`.
+     * Equivalent volume (m^3) and representative dimensions (m), under the names
+     * {@link RoomGeometryOptions} takes. NaN, with `confidence` 0, when the
+     * recording has no measurable broadband decay (silence, or an RT60 the
+     * analyzer could not fit) — the acoustic family's "not measurable", as in
+     * `rt60Bands`.
      */
     volume: number;
-    length: number;
-    width: number;
-    height: number;
+    lengthM: number;
+    widthM: number;
+    heightM: number;
     drrDb: number;
     confidence: number;
-    absorptionBands: Float32Array;
+    bandAbsorption: Float32Array;
     rt60Bands: Float32Array;
+}
+/** A position inside a room, in metres. */
+export interface RoomPlacement {
+    x: number;
+    y: number;
+    z: number;
+}
+/** Positions for `roomGeometryFromEstimate`; an omitted one is left to `synthesizeRir`'s default. */
+export interface RoomGeometryFromEstimateOptions {
+    source?: RoomPlacement;
+    listener?: RoomPlacement;
 }
 export interface RoomMorphOptions extends RoomGeometryOptions {
     wet?: number;
@@ -187,8 +204,8 @@ export interface RoomMorphOptions extends RoomGeometryOptions {
  * Morphed audio and what the target-room synthesis had to change to make it.
  *
  * Shaped like {@link RirResult} because the same synthesis runs underneath.
- * There is no `hasError` / `errorMessage` counterpart: an unusable morph throws,
- * so every entry in {@link RoomMorphResult.diagnostics} is a warning.
+ * An unusable morph throws, so every entry in {@link RoomMorphResult.diagnostics}
+ * is a warning.
  */
 export interface RoomMorphResult {
     /** Morphed samples: input length plus the target room's reverb tail. */

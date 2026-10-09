@@ -1,4 +1,4 @@
-import type { SonareRealtimeEngineNode } from './worklet';
+import type { SonareRealtimeEngineNode } from './worklet.js';
 export interface BindMicrophoneInputOptions extends MediaStreamConstraints {
     /**
      * Stream to bind instead of requesting one. Supplying it also transfers

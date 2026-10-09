@@ -1,4 +1,5 @@
-import type { ValidateOptions } from './validation';
+import type { Key, Mode, PitchClass, ScaleName } from './public_types_music.js';
+import type { ValidateOptions } from './validation.js';
 /**
  * Per-frame voicing decision, one entry per `f0Hz` frame. A truthy or non-zero
  * entry marks the frame voiced. The union covers what the analysis side hands
@@ -15,8 +16,11 @@ export interface PitchCorrectOptions extends ValidateOptions {
     targetMidi?: number;
     /** Scale root pitch class (0=C .. 11=B) when `mode` is `'scale'`. Default 0. */
     scaleRoot?: number;
-    /** 12-bit degree mask, bit `i` = semitone `i` above the root enabled. Default C major. */
-    scaleModeMask?: number;
+    /**
+     * Scale degrees enabled: a 12-bit mask (bit `i` = semitone `i` above the root)
+     * or a mode name, as `scaleMaskForMode` resolves it. Default C major.
+     */
+    scaleModeMask?: number | ScaleName;
     /** Reference MIDI anchoring the scale grid. Default 69 (A4). */
     referenceMidi?: number;
     /** Correction strength in `[0, 1]`; 1 = full snap, 0 = bypass. Default 1. */
@@ -32,21 +36,66 @@ export interface PitchCorrectOptions extends ValidateOptions {
     /** Per-frame voicing probability in `[0, 1]`; used only when `voiced` is omitted or `null`, and ignored when flags are supplied. */
     voicedProb?: Float32Array | null;
 }
+/** A key as `detectKey` reports it, which is what `autoTune` takes to name one. */
+export interface AutoTuneKey {
+    root: PitchClass;
+    /** A `Mode` ordinal or its name (a `ScaleName`). */
+    mode: Mode | ScaleName;
+}
+/** Tuning knobs of `autoTune`. All fields are optional. */
+export interface AutoTuneOptions extends ValidateOptions {
+    /** Correction strength in `[0, 1]`; 1 = full snap to the scale, 0 = bypass. Default 1. */
+    strength?: number;
+    /** Retune IIR time constant (ms); larger = slower glide. Default 50. */
+    retuneSpeedMs?: number;
+    /** Corrections below this are bypassed to preserve vibrato (cents). Default 20. */
+    vibratoThresholdCents?: number;
+    /** Hard clamp on per-frame correction magnitude (semitones). Default 12. */
+    maxCorrectionSemitones?: number;
+    /** Reference MIDI anchoring the scale grid. Default 69 (A4). */
+    referenceMidi?: number;
+}
+/** Result of `autoTune`. */
+export interface AutoTuneResult {
+    /** The corrected audio, the length of the input. */
+    samples: Float32Array;
+    /**
+     * The key the audio was tuned to: the detected one (with the model's own
+     * `confidence`, see `Key`) or the one the request named (`confidence` 1).
+     */
+    key: Key;
+}
 /** Options for `noteStretch`. All fields are optional. */
 export interface NoteStretchOptions {
-    /** Note onset position in samples (selects the region). Default 0. */
+    /** Note onset position in samples (selects the region). Default 0. Not with `onsetSec`. */
     onsetSample?: number;
-    /** Note offset position in samples (selects the region). Defaults to the input length. */
+    /** Note onset in seconds, rounded to the nearest sample. Not with `onsetSample`. */
+    onsetSec?: number;
+    /** Note offset position in samples (selects the region). Defaults to the input length. Not with `offsetSec`. */
     offsetSample?: number;
-    /** Stretch ratio (0.5 = half duration, 2.0 = double duration). Default 1. */
+    /** Note offset in seconds, rounded to the nearest sample. Not with `offsetSample`. */
+    offsetSec?: number;
+    /**
+     * Duration ratio of the note (0.5 = half duration, 2.0 = double duration);
+     * default 1. This is the opposite sense of `timeStretch`'s `rate`, a speed
+     * (`> 1` shortens).
+     */
     stretchRatio?: number;
 }
 /** Options for `noteMove`. */
 export interface NoteMoveOptions {
+    /** First sample of the note to move. Default 0. Not with `onsetSec`. */
     onsetSample?: number;
-    /** Defaults to the input length. */
+    /** First second of the note to move, rounded to the nearest sample. Not with `onsetSample`. */
+    onsetSec?: number;
+    /** Defaults to the input length. Not with `offsetSec`. */
     offsetSample?: number;
+    /** Last second of the note to move, rounded to the nearest sample. Not with `offsetSample`. */
+    offsetSec?: number;
+    /** Sample the note's onset moves to. Default 0. Not with `targetOnsetSec`. */
     targetOnsetSample?: number;
+    /** Second the note's onset moves to, rounded to the nearest sample. Not with `targetOnsetSample`. */
+    targetOnsetSec?: number;
 }
 /** Segmentation tuning for `extractNotes`. All fields are optional; 0 or absent takes the default. */
 export interface NoteExtractorOptions {
@@ -81,7 +130,10 @@ export interface NoteEdit {
     pitchShiftSemitones: number;
     /** Level change applied to the note's span. */
     gainDb: number;
-    /** `>1` lengthens the note, `<1` shortens it; pitch is preserved. 0 reads as 1. */
+    /**
+     * Duration ratio: `>1` lengthens the note, `<1` shortens it; pitch is
+     * preserved. 0 reads as 1. The opposite sense of `timeStretch`'s `rate`, a speed.
+     */
     timeStretchRatio: number;
     /**
      * Moves the spectral envelope, in semitones, on top of whatever the pitch
@@ -130,6 +182,12 @@ export interface NoteEdit {
  */
 export type NoteEditInput = Omit<Partial<NoteEdit>, 'amplitudeEnvelope'> & {
     amplitudeEnvelope?: Float32Array | readonly number[];
+    /**
+     * `NoteEdit.timeOffsetSamples` in seconds, rounded to the nearest sample at the
+     * call's sample rate; negative moves the note earlier. Not with
+     * `timeOffsetSamples`.
+     */
+    timeOffsetSec?: number;
 };
 /**
  * One editable note, returned by `extractNotes` and by
@@ -175,10 +233,14 @@ export interface NoteObject {
  * back with its `edit` changed and nothing else.
  */
 export interface NoteObjectInput {
-    /** First sample of the note's span. */
-    onsetSample: number;
-    /** One past the last sample of the span. */
-    offsetSample: number;
+    /** First sample of the note's span. Give this or `onsetSec`. */
+    onsetSample?: number;
+    /** First second of the span, rounded to the nearest sample. Not with `onsetSample`. */
+    onsetSec?: number;
+    /** One past the last sample of the span. Give this or `offsetSec`. */
+    offsetSample?: number;
+    /** End of the span in seconds, rounded to the nearest sample. Not with `offsetSample`. */
+    offsetSec?: number;
     /**
      * First frame of the span in the request's `f0Hz` track. Read only when a
      * track is given; a curve edit acts on `f0Hz.subarray(frameStart, frameEnd)`.
@@ -282,11 +344,15 @@ export interface PitchDecompositionResult {
  * state it would be a second thing to keep in agreement.
  */
 export interface PolyphonicAnalysisOptions {
-    /** STFT size the whole chain runs in. Default 4096, the size it is tuned at. */
+    /**
+     * STFT size the whole chain runs in. Default 4096, the size it is tuned at.
+     * `nFft`, `hopLength` and `winLength` are samples at 44100 Hz, converted to the
+     * input's sample rate; explicit values are converted too.
+     */
     nFft?: number;
-    /** STFT hop in samples. Default 512. */
+    /** STFT hop in samples at 44100 Hz. Default 512. */
     hopLength?: number;
-    /** Window length in samples. Defaults to `nFft`. */
+    /** Window length in samples at 44100 Hz. Defaults to `nFft`. */
     winLength?: number;
     /** Bottom of the cent axis the salience is folded onto, in Hz. Default 55. */
     centRefHz?: number;
@@ -435,7 +501,14 @@ export interface PercussiveEventEdit {
  * field is optional and an omitted one is the identity, so `{}` leaves the event
  * untouched.
  */
-export type PercussiveEventEditInput = Partial<PercussiveEventEdit>;
+export type PercussiveEventEditInput = Partial<PercussiveEventEdit> & {
+    /**
+     * `PercussiveEventEdit.timeOffsetSamples` in seconds, rounded to the nearest
+     * sample at the call's sample rate; negative moves the hit earlier. Not with
+     * `timeOffsetSamples`.
+     */
+    timeOffsetSec?: number;
+};
 /**
  * One editable percussive event returned by `extractPercussiveEvents`.
  *
@@ -483,10 +556,14 @@ export interface PercussiveEvent {
  * changed and nothing else.
  */
 export interface PercussiveEventInput {
-    /** First sample of the span. */
-    onsetSample: number;
-    /** One past the last sample of the span. */
-    offsetSample: number;
+    /** First sample of the span. Give this or `onsetSec`. */
+    onsetSample?: number;
+    /** First second of the span, rounded to the nearest sample. Not with `onsetSample`. */
+    onsetSec?: number;
+    /** One past the last sample of the span. Give this or `offsetSec`. */
+    offsetSample?: number;
+    /** End of the span in seconds, rounded to the nearest sample. Not with `offsetSample`. */
+    offsetSec?: number;
     /** Omit for the identity edit. */
     edit?: PercussiveEventEditInput;
 }
@@ -496,10 +573,17 @@ export type SpectralEditMode = 'gain' | 'attenuate' | 'mute' | 'heal';
 export type SpectralEditWindow = 'hann' | 'hamming' | 'blackman' | 'rectangular' | 'rect';
 /** One time x frequency rectangle edit op for `spectralEdit`. */
 export interface SpectralRegionOp {
-    /** Region time start (input samples); clamped to [0, length]. Default 0. */
+    /** Region time start in input samples (clamped to `[0, length]`). Default 0. Not with `startSec`. */
     startSample?: number;
-    /** Region time end, exclusive (input samples); clamped to [0, length]. Default = signal length. */
+    /** Region time start in seconds, rounded to the nearest sample. Not with `startSample`. */
+    startSec?: number;
+    /**
+     * Region time end (exclusive) in input samples. Omit for the end of the signal;
+     * a negative value is refused. Not with `endSec`.
+     */
     endSample?: number;
+    /** Region time end in seconds, rounded to the nearest sample. Not with `endSample`. */
+    endSec?: number;
     /** Region frequency low edge in Hz; clamped to [0, nyquist]. Default 0. */
     lowHz?: number;
     /** Region frequency high edge in Hz; <=0 or >= nyquist means nyquist. Default 0. */
@@ -511,7 +595,7 @@ export interface SpectralRegionOp {
 }
 /** STFT + heal parameters for `spectralEdit`. All fields are optional. */
 export interface SpectralEditOptions {
-    /** FFT size; a power of two in `[2, 262144]`. Default 2048. */
+    /** FFT size; a power of two in `[4, 262144]`. Default 2048. */
     nFft?: number;
     /** Hop length; must satisfy 0 < hop <= nFft/2. Default 512. */
     hopLength?: number;
@@ -559,22 +643,49 @@ export interface StftResult {
     power: Float32Array;
 }
 /**
- * Mel spectrogram result
+ * Mel spectrogram result, with the parameters of the forward transform, so the
+ * result alone is enough to invert it: `melToStft` and `melToAudio` take it as
+ * `{ result }`.
  */
 export interface MelSpectrogramResult {
     nMels: number;
     nFrames: number;
     sampleRate: number;
     hopLength: number;
+    /** FFT size of the source STFT. */
+    nFft: number;
+    /** Lower Mel band edge in Hz as applied. */
+    fmin: number;
+    /** Upper Mel band edge in Hz as applied: the Nyquist when the request left it at 0. */
+    fmax: number;
+    /** `true` for the HTK Mel formula, `false` for Slaney. */
+    htk: boolean;
+    /** `true` when `power` holds dB values. A forward transform always reports `false`: `power` is linear power and `db` is its dB form. */
+    isDb: boolean;
     power: Float32Array;
     db: Float32Array;
 }
 /**
- * MFCC result
+ * MFCC result, with the Mel parameters the coefficients were derived with and
+ * the lifter, so the result alone is enough to invert it: `mfccToMel` and
+ * `mfccToAudio` take it as `{ result }`.
  */
 export interface MfccResult {
     nMfcc: number;
     nFrames: number;
+    sampleRate: number;
+    hopLength: number;
+    nFft: number;
+    /** Mel bands the coefficients were taken from. */
+    nMels: number;
+    fmin: number;
+    /** Upper Mel band edge in Hz as applied: the Nyquist when the request left it at 0. */
+    fmax: number;
+    htk: boolean;
+    /** Always `false`: the coefficients are a cepstrum, not a dB spectrogram. */
+    isDb: boolean;
+    /** Cepstral lifter applied to the coefficients; 0 means none. */
+    lifter: number;
     coefficients: Float32Array;
 }
 /**

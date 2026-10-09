@@ -1,7 +1,9 @@
-import type { BuiltinSynthBinding, PartRig, PartRigInsert, PartRigMode, Sf2InstrumentConfig, Sf2ProgramStatus, SynthPatch } from './instrument_types';
-import { type WasmProjectTimeline } from './project_internal';
-import type { ExternalSeparatedStemImportRequest, ExternalSeparatedStemImportResult, MidiCcLearnOptions, ProjectAssistSidecar, ProjectAssistSidecarInput, ProjectAutomationLaneDesc, ProjectAutomationPoint, ProjectBounceOptions, ProjectChordSymbol, ProjectClip, ProjectClipCompSegment, ProjectClipDesc, ProjectClipFade, ProjectClipTake, ProjectCompileResult, ProjectCompileTimelineResult, ProjectDeserializeResult, ProjectKeySegment, ProjectLoopMode, ProjectLoopRecordingDesc, ProjectLoopRecordingResult, ProjectMarker, ProjectMidiCcBinding, ProjectMidiClipResult, ProjectMidiEvent, ProjectMidiFxBakeRequest, ProjectMidiFxBakeResult, ProjectMidiFxPreviewRequest, ProjectMidiRouteConfig, ProjectMidiRouteResult, ProjectNotePairValidation, ProjectSource, ProjectTempoCandidate, ProjectTempoOptions, ProjectTempoSegment, ProjectTimeSignatureSegment, ProjectTrack, ProjectTrackDesc, ProjectTrackKind, ProjectTranscribeRequest, ProjectWarpMapDesc, ProjectWarpMode } from './project_types';
-import type { ProjectVocalEditApplyRequest, ProjectVocalEditApplyResult, ProjectVocalEditDependency, ProjectVocalOriginalSource, ProjectVocalRehydrateItem } from './public_types_vocal_project';
+import type { BuiltinSynthBinding, BuiltinSynthWaveform, ExternalInstrument, PartRigEntry, PartRigInsert, PartRigKey, PartRigMode, PartRigRequest, Sf2InstrumentConfig, Sf2ProgramStatus, SynthPatch } from './instrument_types.js';
+import { type WasmProjectTimeline } from './project_internal.js';
+import type { ExternalSeparatedStemImportRequest, ExternalSeparatedStemImportResult, MidiCcLearnOptions, ProjectAssistSidecar, ProjectAssistSidecarInput, ProjectAutomationLaneDesc, ProjectAutomationPoint, ProjectBounceOptions, ProjectChordSymbol, ProjectClip, ProjectClipCompSegment, ProjectClipDesc, ProjectClipFade, ProjectClipTake, ProjectCompileResult, ProjectCompileTimelineResult, ProjectDeserializeResult, ProjectKeySegment, ProjectLoopMode, ProjectLoopRecordingDesc, ProjectLoopRecordingResult, ProjectMarker, ProjectMidiCcBinding, ProjectMidiClipResult, ProjectMidiEvent, ProjectMidiFxBakeRequest, ProjectMidiFxBakeResult, ProjectMidiFxPreviewRequest, ProjectMidiRouteConfig, ProjectMidiRouteResult, ProjectNotePairValidation, ProjectSource, ProjectTempoCandidate, ProjectTempoOptions, ProjectTempoSegment, ProjectTimeSignatureSegment, ProjectTrack, ProjectTrackDesc, ProjectTrackKind, ProjectTranscribeRequest, ProjectWarpMapDesc, ProjectWarpMode } from './project_types.js';
+import type { ProjectVocalEditApplyRequest, ProjectVocalEditApplyResult, ProjectVocalEditDependency, ProjectVocalOriginalSource, ProjectVocalRehydrateItem } from './public_types_vocal_project.js';
+/** A built-in synth binding, or a bare waveform name standing for `{ waveform }`. */
+type BuiltinSynthBindingInput = BuiltinSynthBinding | Extract<BuiltinSynthWaveform, string>;
 /**
  * An immutable compiled snapshot of a {@link Project}, produced by
  * {@link Project.compileTimeline} and installed into a stopped realtime engine
@@ -23,6 +25,12 @@ export declare class ProjectTimeline {
     get nativeId(): number;
     /** Release the underlying WASM object. Idempotent. */
     dispose(): void;
+    /** Alias for {@link dispose}, provided for cross-binding compatibility. */
+    delete(): void;
+    /** Alias for {@link dispose}, provided for cross-binding compatibility. */
+    destroy(): void;
+    /** Releases the timeline through {@link dispose}, so the instance works with `using`. */
+    [Symbol.dispose](): void;
 }
 /**
  * Headless DAW project (control-thread-only arrangement model).
@@ -51,7 +59,11 @@ export declare class ProjectTimeline {
  * ```
  */
 export declare class Project {
-    private native;
+    private nativeHandle;
+    /** The native project; refused while an instrument bounce is calling back into JavaScript. */
+    private get native();
+    private set native(value);
+    private instrumentBounceActive;
     applyVocalEdit(request: ProjectVocalEditApplyRequest): ProjectVocalEditApplyResult;
     getVocalEditDependencies(): ProjectVocalEditDependency[];
     rehydrateVocalEdits(originals: readonly ProjectVocalOriginalSource[], cancel?: () => boolean): ProjectVocalRehydrateItem[];
@@ -163,9 +175,9 @@ export declare class Project {
     /** Serialize the project (+ MIDI content) to deterministic JSON. */
     toJson(): string;
     /**
-     * Set the project sample rate in Hz. Must be in `[8000, 384000]`; anything
-     * outside that range throws. Applied through the edit history, so it is
-     * undoable.
+     * Set the project sample rate in Hz. Must be a whole number of hertz within
+     * `[8000, 384000]`; anything else throws. Applied through the edit history, so
+     * it is undoable.
      */
     setSampleRate(sampleRate: number): void;
     /** Add a track and return its allocated stable id. */
@@ -174,7 +186,13 @@ export declare class Project {
     addClip(desc: ProjectClipDesc): number;
     /** Import host-separated PCM through the normal audio-track/clip path. */
     importExternalStems(request: ExternalSeparatedStemImportRequest): ExternalSeparatedStemImportResult;
-    /** Split captured loop-recording audio into takes and add one clip. */
+    /**
+     * Split captured loop-recording audio into takes and add one clip. `audio` may
+     * be interleaved or planar (`Float32Array[]`). The last take is made active
+     * unless it is partial and an earlier complete take exists; `partialTail:
+     * 'drop'` does not create the partial take. A partial take is marked
+     * `"partial": true` in its `takes[]` entry of `toJson()`.
+     */
     addLoopRecordingTakes(desc: ProjectLoopRecordingDesc): ProjectLoopRecordingResult;
     /** Create a MIDI track + clip; returns `{ trackId, clipId }`. */
     addMidiClip(startPpq: number, lengthPpq: number): ProjectMidiClipResult;
@@ -232,11 +250,17 @@ export declare class Project {
      * Refused: a malformed insert document (invalid format), an out-of-range part,
      * an unknown mode or processor, or inserts on a non-chain mode (invalid
      * parameter), and an insert chain in a build without mastering.
+     *
+     * The {@link PartRigRequest} object is the canonical form; the positional
+     * form is the same call.
      */
+    setPartRig(request: PartRigRequest): void;
     setPartRig(destinationId: number, part: number, mode: PartRigMode | number, inserts?: PartRigInsert[]): void;
     /** The stored rig for `(destinationId, part)`, or null when none is stored. */
-    getPartRig(destinationId: number, part: number): PartRig | null;
+    getPartRig(key: PartRigKey): PartRigEntry | null;
+    getPartRig(destinationId: number, part: number): PartRigEntry | null;
     /** Remove the stored rig for `(destinationId, part)` via an undoable edit (no-op when absent). */
+    clearPartRig(key: PartRigKey): void;
     clearPartRig(destinationId: number, part: number): void;
     /** Set a track's mute flag via an undoable edit (a muted track is silent). */
     setTrackMute(trackId: number, mute: boolean): void;
@@ -310,9 +334,9 @@ export declare class Project {
      */
     exportClipFile(): Uint8Array<ArrayBuffer>;
     /**
-     * Set a MIDI clip's channel-0 program / bank at source PPQ 0. `bank` defaults
-     * to `-1` (no Bank Select emitted), matching `setProgramOnChannel` and the
-     * Node/Python surfaces; pass `>= 0` to emit a Bank Select.
+     * Set a MIDI clip's channel-0 program / bank at source PPQ 0. Omit `bank` for
+     * no Bank Select, matching `setProgramOnChannel` and the Node/Python surfaces;
+     * pass `>= 0` to emit a Bank Select. A negative `bank` is refused.
      */
     setProgram(clipId: number, program: number, bank?: number): void;
     /** Set a MIDI clip's program / bank for one UMP group and channel. */
@@ -358,9 +382,10 @@ export declare class Project {
      * @returns the number of notes written (half the events)
      * @throws {RangeError} on empty `samples`, a non-finite sample, or a
      *   `sampleRate` outside `[8000, 384000]`
+     * @throws {RangeError} on an option outside its domain
      * @throws {SonareError} `InvalidParameter` when `clipId` is unknown or not a
-     *   MIDI clip, or on an option outside its domain; `NotSupported` when the
-     *   library was built without the pitch editor
+     *   MIDI clip; `NotSupported` when the library was built without the pitch
+     *   editor
      */
     transcribeToClip(request: ProjectTranscribeRequest): number;
     /** Return ranked tempo-octave and detected-meter candidates without editing. */
@@ -403,8 +428,9 @@ export declare class Project {
     /**
      * Compile + render the project offline, routing MIDI tracks through the
      * built-in oscillator synth so a MIDI-only arrangement bounces to audible
-     * audio. Pass a {@link BuiltinSynthBinding} (or an array of them) to choose
-     * the patch and MIDI destination; omit it (or pass `{}`) for one
+     * audio. Pass a {@link BuiltinSynthBinding} or a bare waveform name (or an
+     * array of either; {@link bounceWithBuiltinInstruments} is the list form) to
+     * choose the patch and MIDI destination; omit it (or pass `{}`) for one
      * default-destination sine patch. Because the parameter defaults to `{}`,
      * omission and explicit `undefined` both create that one default binding.
      * Use an explicitly empty array `[]` (or runtime `null`) for zero bindings,
@@ -422,7 +448,39 @@ export declare class Project {
      * );
      * ```
      */
-    bounceWithBuiltinInstrument(instrument?: BuiltinSynthBinding | ReadonlyArray<BuiltinSynthBinding>, options?: ProjectBounceOptions): Float32Array;
+    bounceWithBuiltinInstrument(instrument?: BuiltinSynthBindingInput | ReadonlyArray<BuiltinSynthBindingInput>, options?: ProjectBounceOptions): Float32Array;
+    /**
+     * List form of {@link bounceWithBuiltinInstrument}: one binding per entry,
+     * and an empty array renders silence, identical to {@link bounce}.
+     */
+    bounceWithBuiltinInstruments(instruments?: ReadonlyArray<BuiltinSynthBindingInput>, options?: ProjectBounceOptions): Float32Array;
+    /**
+     * Like {@link bounce}, but drives MIDI tracks routed to a destination through
+     * instruments you implement in JavaScript. Each entry of `instruments` binds
+     * an {@link ExternalInstrument} to its `destinationId` (default `0`).
+     *
+     * Every callback runs synchronously while this method is blocked, so there is
+     * no async instrument: a callback that returns a Promise is refused with a
+     * `TypeError`. A callback that throws stops all further callbacks, and the
+     * bounce rethrows that first error once it returns (a native failure is
+     * reported ahead of it). The `outputs` passed to `render` are zero-filled
+     * scratch arrays, added into the engine's buffers when `render` returns
+     * normally.
+     *
+     * While the bounce runs, using this project from inside a callback (a
+     * mutation, a nested bounce, or `delete`) throws `InvalidState`.
+     *
+     * One instrument shared by tracks that feed different channel strips throws
+     * a `SonareError` with `NOT_SUPPORTED`, because callback audio carries no
+     * source-track attribution; bind one destination per strip instead.
+     */
+    bounceWithInstruments(instruments?: ReadonlyArray<ExternalInstrument>, options?: ProjectBounceOptions): Float32Array;
+    /**
+     * Single-instrument form of {@link bounceWithInstruments}; an array is the
+     * list form.
+     */
+    bounceWithInstrument(instrument: ExternalInstrument | ReadonlyArray<ExternalInstrument>, options?: ProjectBounceOptions): Float32Array;
+    private bounceWithExternalInstruments;
     /**
      * Compile + render the project offline, routing MIDI tracks through the
      * patch-driven NativeSynth — the full synthesizer (every
@@ -444,6 +502,11 @@ export declare class Project {
      * and one bound without a bank renders silence.
      */
     bounceWithSynthInstrument(instrument?: SynthPatch | string | ReadonlyArray<SynthPatch | string>, options?: ProjectBounceOptions): Float32Array;
+    /**
+     * List form of {@link bounceWithSynthInstrument}: one binding per entry,
+     * and an empty array renders silence, identical to {@link bounce}.
+     */
+    bounceWithSynthInstruments(instruments?: ReadonlyArray<SynthPatch | string>, options?: ProjectBounceOptions): Float32Array;
     /**
      * Load (parse) SoundFont 2 bytes into the project: presets / instruments /
      * sample headers plus the sample PCM decoded to a float pool. The host
@@ -479,6 +542,11 @@ export declare class Project {
      * render silently.
      */
     bounceWithSf2Instrument(instrument?: Sf2InstrumentConfig | ReadonlyArray<Sf2InstrumentConfig>, options?: ProjectBounceOptions): Float32Array;
+    /**
+     * List form of {@link bounceWithSf2Instrument}: one binding per entry, and
+     * an empty array renders silence, identical to {@link bounce}.
+     */
+    bounceWithSf2Instruments(instruments?: ReadonlyArray<Sf2InstrumentConfig>, options?: ProjectBounceOptions): Float32Array;
     /** Remove a clip (undoable). */
     removeClip(clipId: number): void;
     /** Set a clip's linear playback gain (>= 0; undoable). */
@@ -487,6 +555,8 @@ export declare class Project {
     setClipFade(clipId: number, fadeIn?: ProjectClipFade, fadeOut?: ProjectClipFade): void;
     /** Audio source ids that need decoded PCM after deserialization. */
     unresolvedAudioSourceIds(): number[];
+    /** Unresolved audio source descriptors, in the order of {@link unresolvedAudioSourceIds}; `nameOrUri` is the full URI. */
+    unresolvedAudioSources(): ProjectSource[];
     /** Register decoded interleaved PCM for an existing audio source (undoable). */
     setSourceAudio(sourceId: number, audio: Float32Array, channels: number, sampleRate: number): void;
     /** Replace an audio source's metadata strings as one undoable edit. */
@@ -542,8 +612,14 @@ export declare class Project {
     getOverlapPolicy(): number;
     /** Read the project sample rate in Hz. */
     getSampleRate(): number;
-    /** Replace the project's mixer scene from a scene JSON string. */
-    setMixerSceneJson(sceneJson: string): void;
+    /**
+     * Replace the project's mixer scene from a scene JSON string.
+     *
+     * @returns One warning per key the scene reader does not recognise (e.g.
+     *   `unknown scene key 'strips[2].faderDB'`; `$`- and `x-`-prefixed keys are exempt).
+     *   The scene is still applied; empty when every key was consumed.
+     */
+    setMixerSceneJson(sceneJson: string): string[];
     /**
      * Add or replace a marker. Pass `markerId` 0 to allocate a new id; returns the
      * stable marker id (the allocated id when 0 was passed).
@@ -612,4 +688,7 @@ export declare class Project {
     delete(): void;
     /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
     destroy(): void;
+    /** Releases the handle through {@link delete}, so the instance works with `using`. */
+    [Symbol.dispose](): void;
 }
+export {};

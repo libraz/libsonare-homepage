@@ -1,7 +1,7 @@
 /**
  * Broadband and tonal noise repair: denoise and dehum, with their detectors.
  */
-import type { HumDetection, MasteringRepairDehumStereoResult, MasteringRepairDenoiseClassicalLinkedResult, MasteringRepairDenoiseClassicalStereoResult, NoiseDetection } from './public_types_repair';
+import type { HumDetection, MasteringRepairDehumStereoResult, MasteringRepairDenoiseClassicalLinkedResult, MasteringRepairDenoiseClassicalStereoResult, NoiseDetection } from './public_types_repair.js';
 /** Algorithms accepted by `masteringRepairDenoiseClassical`. */
 export type DenoiseClassicalMode = 'logMmse' | 'mmseStsa' | 'spectralSubtraction';
 /** Noise PSD estimators accepted by `masteringRepairDenoiseClassical`. */
@@ -23,7 +23,7 @@ export interface DenoiseClassicalOptions {
 }
 export interface MasteringRepairDenoiseClassicalRequest extends DenoiseClassicalOptions {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
 }
 /** Request form of `masteringRepairDenoiseClassicalStereo`. */
 export interface MasteringRepairDenoiseClassicalStereoRequest extends DenoiseClassicalOptions {
@@ -39,7 +39,7 @@ export interface MasteringRepairDenoiseClassicalLinkedRequest extends DenoiseCla
 }
 /** Offline STFT-domain classical denoiser (LogMMSE / MMSE-STSA / SpectralSubtraction). */
 export declare function masteringRepairDenoiseClassical(request: MasteringRepairDenoiseClassicalRequest): Float32Array;
-export declare function masteringRepairDenoiseClassical(samples: Float32Array, sampleRate: number, options?: DenoiseClassicalOptions): Float32Array;
+export declare function masteringRepairDenoiseClassical(samples: Float32Array, sampleRate?: number, options?: DenoiseClassicalOptions): Float32Array;
 /**
  * Offline STFT-domain classical denoiser for a stereo pair, driven by one channel-linked
  * gain mask.
@@ -55,8 +55,8 @@ export declare function masteringRepairDenoiseClassical(samples: Float32Array, s
  * {@link masteringRepairDenoiseClassical}. A stereo floor is comparable only against another
  * stereo floor, never against a mono one.
  *
- * Needs at least `nFft` samples and REJECTS a shorter input, which is the opposite of
- * {@link masteringRepairDereverbClassicalStereo} — that one pads.
+ * An input shorter than `nFft` is padded for analysis and the output trimmed back to the input
+ * length, as {@link masteringRepairDereverbClassicalStereo} does.
  *
  * Which options are live depends on `mode`: `overSubtraction` and `spectralFloor` are read
  * only by `spectralSubtraction`, and `speechPresenceGain` and `gainSmoothing` only by the
@@ -74,7 +74,7 @@ export declare function masteringRepairDenoiseClassical(samples: Float32Array, s
  * ```
  */
 export declare function masteringRepairDenoiseClassicalStereo(request: MasteringRepairDenoiseClassicalStereoRequest): MasteringRepairDenoiseClassicalStereoResult;
-export declare function masteringRepairDenoiseClassicalStereo(left: Float32Array, right: Float32Array, sampleRate: number, config?: DenoiseClassicalOptions): MasteringRepairDenoiseClassicalStereoResult;
+export declare function masteringRepairDenoiseClassicalStereo(left: Float32Array, right: Float32Array, sampleRate?: number, config?: DenoiseClassicalOptions): MasteringRepairDenoiseClassicalStereoResult;
 /**
  * Offline STFT-domain classical denoiser for any number of channels, driven by one
  * channel-linked gain mask.
@@ -94,8 +94,8 @@ export declare function masteringRepairDenoiseClassicalStereo(left: Float32Array
  * one measured over the same number of channels. Every other field of the report is a fraction
  * and does not move with the channel count.
  *
- * Needs at least `nFft` samples and REJECTS a shorter input, which is the opposite of
- * {@link masteringRepairDereverbClassicalLinked} — that one pads.
+ * An input shorter than `nFft` is padded for analysis and the output trimmed back to the input
+ * length, as {@link masteringRepairDereverbClassicalLinked} does.
  *
  * @example
  * ```ts
@@ -108,7 +108,7 @@ export declare function masteringRepairDenoiseClassicalStereo(left: Float32Array
  * ```
  */
 export declare function masteringRepairDenoiseClassicalLinked(request: MasteringRepairDenoiseClassicalLinkedRequest): MasteringRepairDenoiseClassicalLinkedResult;
-export declare function masteringRepairDenoiseClassicalLinked(channels: Float32Array[], sampleRate: number, config?: DenoiseClassicalOptions): MasteringRepairDenoiseClassicalLinkedResult;
+export declare function masteringRepairDenoiseClassicalLinked(channels: Float32Array[], sampleRate?: number, config?: DenoiseClassicalOptions): MasteringRepairDenoiseClassicalLinkedResult;
 /**
  * How `masteringRepairDehum` removes the harmonic series.
  *
@@ -133,7 +133,7 @@ export interface DehumOptions {
 }
 export interface MasteringRepairDehumRequest extends DehumOptions {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
 }
 /** Request form of `masteringRepairDehumStereo`. */
 export interface MasteringRepairDehumStereoRequest extends DehumOptions {
@@ -143,7 +143,7 @@ export interface MasteringRepairDehumStereoRequest extends DehumOptions {
 }
 /** Offline mains-hum remover. */
 export declare function masteringRepairDehum(request: MasteringRepairDehumRequest): Float32Array;
-export declare function masteringRepairDehum(samples: Float32Array, sampleRate: number, options?: DehumOptions): Float32Array;
+export declare function masteringRepairDehum(samples: Float32Array, sampleRate?: number, options?: DehumOptions): Float32Array;
 /**
  * Offline mains-hum remover for a stereo pair.
  *
@@ -156,11 +156,11 @@ export declare function masteringRepairDehum(samples: Float32Array, sampleRate: 
  * independently at the configured frequency.
  */
 export declare function masteringRepairDehumStereo(request: MasteringRepairDehumStereoRequest): MasteringRepairDehumStereoResult;
-export declare function masteringRepairDehumStereo(left: Float32Array, right: Float32Array, sampleRate: number, config?: DehumOptions): MasteringRepairDehumStereoResult;
+export declare function masteringRepairDehumStereo(left: Float32Array, right: Float32Array, sampleRate?: number, config?: DehumOptions): MasteringRepairDehumStereoResult;
 /** Request form of `masteringRepairDetectNoiseFloor`. */
 export interface MasteringRepairDetectNoiseFloorRequest extends DenoiseClassicalOptions {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
 }
 /** Request form of `masteringRepairNoiseBandBins`. */
 export interface MasteringRepairNoiseBandBinsRequest {
@@ -170,7 +170,7 @@ export interface MasteringRepairNoiseBandBinsRequest {
 /** Request form of `masteringRepairDetectHum`. */
 export interface MasteringRepairDetectHumRequest extends DehumOptions {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
 }
 /**
  * Measures the noise floor without denoising.
@@ -179,14 +179,14 @@ export interface MasteringRepairDetectHumRequest extends DehumOptions {
  * {@link masteringRepairDenoiseClassical} runs — and stops before the gain mask, which is why
  * no attenuation figure appears here.
  *
- * Needs at least `nFft` samples and THROWS for a shorter buffer, the opposite of
- * {@link masteringRepairDetectReverb}, which pads one.
+ * A buffer shorter than `nFft` is padded for analysis, as {@link masteringRepairDetectReverb}
+ * pads one.
  *
  * `floorDbfs` is an absolute level, so it is comparable only against another figure measured
  * over the same channel count.
  */
 export declare function masteringRepairDetectNoiseFloor(request: MasteringRepairDetectNoiseFloorRequest): NoiseDetection;
-export declare function masteringRepairDetectNoiseFloor(samples: Float32Array, sampleRate: number, options?: DenoiseClassicalOptions): NoiseDetection;
+export declare function masteringRepairDetectNoiseFloor(samples: Float32Array, sampleRate?: number, options?: DenoiseClassicalOptions): NoiseDetection;
 /**
  * Bin boundaries of the grid {@link masteringRepairDetectNoiseFloor} reports `bandFloorDbfs` on.
  *
@@ -236,4 +236,4 @@ export declare function masteringRepairNoiseBandBins(nFft?: number, sampleRate?:
  * to measure.
  */
 export declare function masteringRepairDetectHum(request: MasteringRepairDetectHumRequest): HumDetection;
-export declare function masteringRepairDetectHum(samples: Float32Array, sampleRate: number, options?: DehumOptions): HumDetection;
+export declare function masteringRepairDetectHum(samples: Float32Array, sampleRate?: number, options?: DehumOptions): HumDetection;

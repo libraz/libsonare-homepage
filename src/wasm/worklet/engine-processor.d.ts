@@ -1,6 +1,6 @@
-import { type WorkletInput, type WorkletOutput } from './audio_types';
-import { type SonareEngineCaptureRequestMessage, type SonareEngineInsertGainReductionRequestMessage, type SonareEngineSyncMessage, type SonareEngineTransportRequestMessage, type SonareRealtimeEngineWorkletProcessorOptions, type WorkletTransport } from './messages';
-import { type SonareEngineCommandRecord } from './protocol';
+import { type WorkletInput, type WorkletOutput } from './audio_types.js';
+import { type SonareEngineCaptureRequestMessage, type SonareEngineInsertGainReductionRequestMessage, type SonareEngineSyncMessage, type SonareEngineTransportRequestMessage, type SonareRealtimeEngineWorkletProcessorOptions, type WorkletTransport } from './messages.js';
+import { type SonareEngineCommandRecord } from './protocol.js';
 /**
  * AudioWorklet-style bridge for the DAW realtime engine facade.
  *
@@ -21,7 +21,7 @@ export declare class SonareRealtimeEngineWorkletProcessor {
     private externalMidiRing?;
     private transport?;
     private meterIntervalFrames;
-    private lastMeterFrame;
+    private readonly lastMeterFrameBySlot;
     private scopeIntervalFrames;
     private scopeEnabled;
     private scopeBands;
@@ -36,6 +36,16 @@ export declare class SonareRealtimeEngineWorkletProcessor {
     private readonly clipPageRequestClipIds;
     private readonly clipPageRequestPageIndices;
     private clipPageRequestOverflowReported;
+    private readonly postedClipPageRequestClipIds;
+    private readonly postedClipPageRequestPageIndices;
+    private postedClipPageRequestCount;
+    private clipPageRequestFrameClock;
+    private lastClipPageRequestPostFrame;
+    private readonly clipPageRepostFrames;
+    private readonly clipPageRequestPayloadEntries;
+    private readonly clipPageRequestPayloadArrays;
+    private readonly clipPageRequestMessage;
+    private readonly clipPageRequestMessageWithDropped;
     constructor(options?: SonareRealtimeEngineWorkletProcessorOptions, transport?: WorkletTransport);
     process(inputs: WorkletInput, outputs: WorkletOutput): boolean;
     private reacquireChannelBuffers;
@@ -54,6 +64,7 @@ export declare class SonareRealtimeEngineWorkletProcessor {
     private writeTelemetryScratch;
     private publishTelemetryRecord;
     private publishMeters;
+    private meterDue;
     private writeMeterScratch;
     private publishScope;
     private postScopeScratch;
@@ -65,6 +76,14 @@ export declare class SonareRealtimeEngineWorkletProcessor {
      * block, and OPFS I/O must never delay `process()`.
      */
     private publishClipPageRequests;
+    /**
+     * Applies a clip delta one clip at a time, so clips it does not name keep
+     * their storage instead of being copied again. A refusal part-way restores
+     * the published set from the live mirror and rethrows.
+     */
+    private applyClipDelta;
+    /** The provider of `clipId` when `streamKey` names its owner, else undefined. */
+    private ownedPagedClipProvider;
     private removePagedClipProvider;
     private clearPagedClipProviders;
     private commandRingFromSharedBuffer;

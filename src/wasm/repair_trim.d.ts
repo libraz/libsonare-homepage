@@ -1,20 +1,23 @@
 /**
  * Silence trimming, with the range detector it shares its geometry with.
  */
-import type { MasteringRepairTrimSilenceStereoResult, TrimRange } from './public_types_repair';
+import type { MasteringRepairTrimSilenceStereoResult, TrimRange } from './public_types_repair.js';
 /** Trimming modes accepted by `masteringRepairTrimSilence`. */
 export type TrimSilenceMode = 'peak' | 'lufsGated';
 /** Options for `masteringRepairTrimSilence`. */
 export interface TrimSilenceOptions {
     threshold?: number;
+    /** Kept margin around the signal, in samples. Not with `paddingSec`. */
     paddingSamples?: number;
+    /** Kept margin in seconds, rounded to the nearest sample. Not with `paddingSamples`. */
+    paddingSec?: number;
     mode?: TrimSilenceMode;
     gateLufs?: number;
     windowMs?: number;
 }
 export interface MasteringRepairTrimSilenceRequest extends TrimSilenceOptions {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
 }
 /** Request form of `masteringRepairTrimSilenceStereo`. */
 export interface MasteringRepairTrimSilenceStereoRequest extends TrimSilenceOptions {
@@ -24,7 +27,7 @@ export interface MasteringRepairTrimSilenceStereoRequest extends TrimSilenceOpti
 }
 /** Offline silence trimmer (peak threshold or LUFS-gated). */
 export declare function masteringRepairTrimSilence(request: MasteringRepairTrimSilenceRequest): Float32Array;
-export declare function masteringRepairTrimSilence(samples: Float32Array, sampleRate: number, options?: TrimSilenceOptions): Float32Array;
+export declare function masteringRepairTrimSilence(samples: Float32Array, sampleRate?: number, options?: TrimSilenceOptions): Float32Array;
 /**
  * Offline silence trimmer for a stereo pair, cutting both channels to one shared range.
  *
@@ -59,6 +62,8 @@ export declare function masteringRepairTrimSilence(samples: Float32Array, sample
  * can never reach past either end; a pass that kept nothing is not padded. A NEGATIVE count is
  * refused by name rather than absorbed into 0 or into the default — the underlying field is
  * unsigned, and a negative one would arrive as an enormous count instead.
+ * `paddingSec` spells the same margin in seconds, rounded to the nearest sample; give
+ * `paddingSamples` or `paddingSec`, not both.
  *
  * @example
  * ```ts
@@ -73,11 +78,11 @@ export declare function masteringRepairTrimSilence(samples: Float32Array, sample
  * ```
  */
 export declare function masteringRepairTrimSilenceStereo(request: MasteringRepairTrimSilenceStereoRequest): MasteringRepairTrimSilenceStereoResult;
-export declare function masteringRepairTrimSilenceStereo(left: Float32Array, right: Float32Array, sampleRate: number, config?: TrimSilenceOptions): MasteringRepairTrimSilenceStereoResult;
+export declare function masteringRepairTrimSilenceStereo(left: Float32Array, right: Float32Array, sampleRate?: number, config?: TrimSilenceOptions): MasteringRepairTrimSilenceStereoResult;
 /** Request form of `masteringRepairDetectTrimRange`. */
 export interface MasteringRepairDetectTrimRangeRequest extends TrimSilenceOptions {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
 }
 /** Request form of `masteringRepairDetectTrimRangeStereo`. */
 export interface MasteringRepairDetectTrimRangeStereoRequest extends TrimSilenceOptions {
@@ -99,7 +104,7 @@ export interface MasteringRepairDetectTrimRangeStereoRequest extends TrimSilence
  * ```
  */
 export declare function masteringRepairDetectTrimRange(request: MasteringRepairDetectTrimRangeRequest): TrimRange;
-export declare function masteringRepairDetectTrimRange(samples: Float32Array, sampleRate: number, options?: TrimSilenceOptions): TrimRange;
+export declare function masteringRepairDetectTrimRange(samples: Float32Array, sampleRate?: number, options?: TrimSilenceOptions): TrimRange;
 /**
  * Measures the one range a stereo trim pass would cut both channels to.
  *
@@ -119,4 +124,4 @@ export declare function masteringRepairDetectTrimRange(samples: Float32Array, sa
  * ```
  */
 export declare function masteringRepairDetectTrimRangeStereo(request: MasteringRepairDetectTrimRangeStereoRequest): TrimRange;
-export declare function masteringRepairDetectTrimRangeStereo(left: Float32Array, right: Float32Array, sampleRate: number, config?: TrimSilenceOptions): TrimRange;
+export declare function masteringRepairDetectTrimRangeStereo(left: Float32Array, right: Float32Array, sampleRate?: number, config?: TrimSilenceOptions): TrimRange;

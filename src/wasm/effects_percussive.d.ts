@@ -2,8 +2,8 @@
  * Percussive event editing: locating struck sounds in audio and rendering an
  * edited set of them back.
  */
-import type { PercussiveEvent, PercussiveEventInput } from './public_types';
-import type { ValidateOptions } from './validation';
+import type { PercussiveEvent, PercussiveEventInput } from './public_types.js';
+import type { ValidateOptions } from './validation.js';
 /**
  * The separation a percussive event's signal is lifted out with. Extraction
  * measures events against it and rendering has to repeat it, so both calls take
@@ -118,12 +118,13 @@ export interface RenderPercussiveEventsRequest extends PercussiveSeparationOptio
  *   span options
  * @returns One {@link PercussiveEvent} per detected hit, in time order; an empty
  *   array when nothing was detected
- * @throws RangeError when the samples or sample rate fail the shared input checks
- * @throws SonareError (`InvalidParameter`) on a kernel size that is not an
- *   integer within the 32-bit range, a framing size that is negative or outside
- *   that range, a framing that breaks constant overlap-add, an `onsetWait` that
- *   is fractional, negative or non-finite, a negative or non-finite `onsetDelta`
- *   / `maxEventMs`, or a `minPercussiveRatio` outside `[0, 1]`
+ * @throws RangeError when the samples or sample rate fail the shared input checks,
+ *   or on a kernel size that is not an integer within the 32-bit range, a framing
+ *   size that is negative or outside that range, an `onsetWait` that is
+ *   fractional, negative or non-finite, a negative or non-finite `onsetDelta` /
+ *   `maxEventMs`, or a `minPercussiveRatio` outside `[0, 1]`
+ * @throws SonareError (`InvalidParameter`) on an even or non-positive kernel, or
+ *   a framing that breaks constant overlap-add
  *
  * @example
  * ```ts
@@ -162,12 +163,12 @@ export declare function extractPercussiveEvents(request: ExtractPercussiveEvents
  * @param request - Source audio, the events to render, the separation and the
  *   tail fade
  * @returns The rendered audio, the same length and sample rate as the input
- * @throws RangeError when the samples or sample rate fail the shared input checks
+ * @throws RangeError when the samples or sample rate fail the shared input checks,
+ *   or on a non-finite `gainDb`, a kernel size that is not an integer within the
+ *   32-bit range, a negative framing size, or a negative or non-finite `fadeMs`
  * @throws SonareError (`InvalidParameter`) on an event whose span is empty,
- *   reversed or outside the audio, overlapping source spans, a non-finite
- *   `gainDb`, a kernel size that is not an integer within the 32-bit range, a
- *   framing that breaks constant overlap-add, or a negative or non-finite
- *   `fadeMs`
+ *   reversed or outside the audio, overlapping source spans, an even or
+ *   non-positive kernel, or a framing that breaks constant overlap-add
  *
  * @example
  * ```ts

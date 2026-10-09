@@ -1,9 +1,9 @@
-import type { VoiceChangeOptions } from './effects_mastering';
-import type { ClippingReport, DynamicRangeReport, MeteringDetectClippingOptions, MeteringDynamicRangeOptions, SpectrumOptions, SpectrumReport } from './metering';
-import type { AnalysisResult, ChordAnalysisResult, ChordDetectionOptions, ChromaResult, HpssResult, Key, KeyCandidate, KeyDetectionOptions, LufsResult, MasteringChainConfig, MasteringChainResult, MasteringOptions, MasteringPreset, MasteringProcessorParams, MasteringResult, MelSpectrogramResult, MfccResult, Mode, NoteStretchOptions, PitchClass, PitchResult, SoloProcessor, StftResult } from './public_types';
-import type { MusicAnalyzeOptions } from './quick_analysis';
+import type { VoiceChangeOptions } from './effects_mastering.js';
+import type { ClippingReport, DynamicRangeReport, MeteringDetectClippingOptions, MeteringDynamicRangeOptions, SpectrumOptions, SpectrumReport } from './metering.js';
+import type { AnalysisResult, ChordAnalysisResult, ChordDetectionOptions, ChromaResult, DetectKeyOptions, FunctionalChord, HpssResult, KeyCandidate, KeyDetection, KeyDetectionOptions, LufsResult, MasteringChainConfig, MasteringChainResult, MasteringOptions, MasteringPreset, MasteringProcessorParams, MasteringResult, MelSpectrogramResult, MfccResult, Mode, NoteStretchOptions, PitchClass, PitchResult, SoloProcessor, StftResult } from './public_types.js';
+import type { MusicAnalyzeOptions } from './quick_analysis.js';
 import type { ProgressCallback, WasmNnlsChromaResult } from './sonare.js';
-import type { ValidateOptions } from './validation';
+import type { ValidateOptions } from './validation.js';
 type BrowserDecodeContext = Pick<BaseAudioContext, 'decodeAudioData' | 'sampleRate'>;
 export interface BrowserAudioDecodeOptions {
     /**
@@ -23,6 +23,64 @@ export interface BrowserAudioDecodeOptions {
      */
     targetSampleRate?: number;
 }
+/** Result of {@link decodeChannels}. */
+export interface DecodedChannels {
+    /** Sample rate of the decoded audio, in Hz. */
+    sampleRate: number;
+    /** One plane per source channel, in the source's own channel order. All the same length. */
+    channels: Float32Array[];
+}
+/**
+ * Speaker bed layout, mirroring the C enum `SonareChannelLayout`: `0` = mono,
+ * `1` = stereo, `2` = 5.1 (L R C LFE Ls Rs), `3` = 7.1 (L R C LFE Ls Rs Lss Rss).
+ */
+export type ChannelLayout = 0 | 1 | 2 | 3;
+/**
+ * Decode audio bytes once and keep every source channel.
+ *
+ * {@link Audio.fromMemory} folds a multi-channel source to mono as it decodes;
+ * this returns the planes instead. Same format set, size ceiling and
+ * decoded-buffer contract as `Audio.fromMemory`. A 5.1 source arrives as
+ * `L R C LFE Ls Rs`.
+ *
+ * @param bytes - Encoded audio bytes such as WAV or MP3.
+ * @throws SonareError with `codeName: 'DecodeFailed'` for an empty decode or a
+ *   non-finite sample, `'InvalidFormat'` for a declared rate outside the
+ *   supported range, and `'InvalidParameter'` for empty input.
+ *
+ * @example
+ * ```typescript
+ * const { sampleRate, channels } = decodeChannels(bytes);
+ * const stereo = channels.length > 2 ? downmix(channels, 1) : channels;
+ * ```
+ */
+export declare function decodeChannels(bytes: Uint8Array): DecodedChannels;
+/**
+ * Downmix channels to a narrower layout with the ITU-R BS.775 rule.
+ *
+ * Center and surround enter the front pair at -3 dB and the LFE plane is
+ * dropped; a stereo, 5.1 or 7.1 source folds to mono through the same matrix
+ * the decoders use. The source layout is the one the channel count names
+ * (1, 2, 6 or 8). Supported targets narrow the bed (7.1 to 5.1, 5.1 or 7.1 to
+ * stereo, anything modelled to mono) or copy it. A channel count outside
+ * 1/2/6/8 folds to mono (`0`) as the unweighted mean of its planes, as the
+ * decoders do, and has no other target.
+ *
+ * @param channels - One `Float32Array` per channel, all of the same length.
+ * @param targetLayout - `0` mono, `1` stereo, `2` 5.1, `3` 7.1.
+ * @throws SonareError with `codeName: 'InvalidParameter'` for an upmix or an
+ *   unknown layout.
+ * @throws RangeError for no channels, or channels of differing length.
+ * @returns One `Float32Array` per channel of the target layout.
+ */
+export declare function downmix(channels: Float32Array[], targetLayout: ChannelLayout): Float32Array[];
+/**
+ * {@link decodeChannels} with the same browser codec fallback as
+ * {@link Audio.fromMemoryWithBrowserFallback}: formats the native decoder does
+ * not carry (AAC, OGG, FLAC) go through `decodeAudioData`, and every channel the
+ * browser returns is kept.
+ */
+export declare function decodeChannelsWithBrowserFallback(bytes: Uint8Array, options?: BrowserAudioDecodeOptions): Promise<DecodedChannels>;
 /**
  * Wrapper around audio data that exposes analysis and feature functions as
  * instance methods.
@@ -68,7 +126,8 @@ export declare class Audio {
      * Decode audio bytes with the native WASM decoder first, then fall back to the
      * browser codec stack (`AudioContext.decodeAudioData`) for formats such as
      * AAC, OGG, and FLAC when available. Browser-decoded multi-channel audio is
-     * mixed down to mono to match the `Audio` wrapper contract.
+     * folded to mono with {@link downmix}, the rule the native decoder applies, so
+     * a file folds to the same samples whichever decoder ran.
      */
     static fromMemoryWithBrowserFallback(bytes: Uint8Array, options?: BrowserAudioDecodeOptions): Promise<Audio>;
     /**
@@ -85,13 +144,13 @@ export declare class Audio {
     /** Duration in seconds. */
     get duration(): number;
     detectBpm(): number;
-    detectKey(options?: KeyDetectionOptions): Key;
+    detectKey(options?: DetectKeyOptions): KeyDetection;
     detectKeyCandidates(options?: KeyDetectionOptions): KeyCandidate[];
     detectOnsets(): Float32Array;
     detectBeats(): Float32Array;
     detectDownbeats(): Float32Array;
     detectChords(options?: ChordDetectionOptions): ChordAnalysisResult;
-    chordFunctionalAnalysis(keyRoot: PitchClass, keyMode: Mode, options?: ChordDetectionOptions): string[];
+    chordFunctionalAnalysis(keyRoot: PitchClass, keyMode: Mode, options?: ChordDetectionOptions): FunctionalChord[];
     /**
      * Full music analysis of the held buffer.
      *
@@ -158,5 +217,7 @@ export declare class Audio {
      */
     spectrumFrame(frameOffset?: number, options?: SpectrumOptions & ValidateOptions): SpectrumReport;
     ebur128LoudnessRange(): number;
+    /** No-op: Audio holds no native handle, so `using` works the same as on the other surfaces. */
+    [Symbol.dispose](): void;
 }
 export {};

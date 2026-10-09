@@ -1,5 +1,5 @@
-import type { BuiltinSynthBinding, PartRig, PartRigInsert, PartRigMode, SampleDesc, SampleZoneDesc, Sf2InstrumentConfig, Sf2ProgramStatus, SynthEnumTables, SynthPatch } from './instrument_types';
-import type { AlignTakeToReferenceRequest, AlignTakeToReferenceResult, ProjectAssistSidecar, ProjectAutomationLaneDesc, ProjectAutomationPoint, ProjectAutomationTargetKind, ProjectBounceOptions, ProjectChordSymbol, ProjectClip, ProjectClipCompSegment, ProjectClipDesc, ProjectClipFade, ProjectClipTake, ProjectCompileResult, ProjectKeySegment, ProjectLoopMode, ProjectLoopRecordingDesc, ProjectLoopRecordingResult, ProjectMarker, ProjectMidiCcBinding, ProjectMidiClipResult, ProjectMidiEvent, ProjectMidiRouteConfig, ProjectMidiRouteResult, ProjectNotePairValidation, ProjectSource, ProjectTempoCandidate, ProjectTempoOptions, ProjectTempoSegment, ProjectTimeSignatureSegment, ProjectTrack, ProjectTrackKind, ProjectWarpMapDesc, ProjectWarpMode, TranscribeOptions, TranscribeResult } from './project_types';
+import type { BuiltinSynthBinding, ExternalInstrument, PartRigEntry, PartRigInsert, PartRigKey, PartRigMode, PartRigRequest, SampleDesc, SampleZoneDesc, Sf2InstrumentConfig, Sf2ProgramStatus, SynthEnumTables, SynthPatch } from './instrument_types.js';
+import type { AlignTakeToReferenceRequest, AlignTakeToReferenceResult, ProjectAssistSidecar, ProjectAutomationLaneDesc, ProjectAutomationPoint, ProjectAutomationTargetKind, ProjectBounceOptions, ProjectChordSymbol, ProjectClip, ProjectClipCompSegment, ProjectClipDesc, ProjectClipFade, ProjectClipTake, ProjectCompileResult, ProjectKeySegment, ProjectLoopMode, ProjectLoopRecordingDesc, ProjectLoopRecordingResult, ProjectMarker, ProjectMidiCcBinding, ProjectMidiClipResult, ProjectMidiEvent, ProjectMidiRouteConfig, ProjectMidiRouteResult, ProjectNotePairValidation, ProjectSource, ProjectTempoCandidate, ProjectTempoOptions, ProjectTempoSegment, ProjectTimeSignatureSegment, ProjectTrack, ProjectTrackKind, ProjectWarpMapDesc, ProjectWarpMode, TranscribeOptions, TranscribeResult } from './project_types.js';
 /**
  * A synth binding as the embind layer takes it: the public `sampleBank` handle
  * has already been resolved to the id the native registry looks the bank up by,
@@ -47,15 +47,33 @@ export type NativeProjectCompileTimelineResult = ProjectCompileResult & {
  */
 export declare function normalizeSynthInstrument(patch: unknown): NativeSynthBinding | string;
 /**
- * Serializes a part rig's inserts into the JSON array the native layer reads
- * (`params` always a JSON object string), or undefined when none were given.
+ * Resolve a `bounceWith*Instrument(s)` binding argument to the list the native
+ * layer reads, so the singular and plural forms share one shape check. `null`
+ * means no bindings; the singular form also takes one binding on its own. Each
+ * element must be a plain object, or a name where the family has a string
+ * shorthand (`allowName`); anything else — an array included — is refused by
+ * name before any render starts.
  */
-export declare function partRigInsertsJson(inserts: PartRigInsert[] | undefined): string | undefined;
+export declare function normalizeInstrumentBindings<E, R>(method: string, plural: boolean, value: E | ReadonlyArray<E> | null, allowName: boolean, entry: (binding: E) => R): R[];
+/** A part-rig call resolved to the native argument list; `mode` is unset for a key. */
+export interface NormalizedPartRig {
+    destinationId: number;
+    part: number;
+    mode: PartRigMode | number | undefined;
+    insertsJson: string | undefined;
+}
+/**
+ * Resolve either part-rig call form — a {@link PartRigRequest} / {@link PartRigKey}
+ * object, or positional `(destinationId, part, mode?, inserts?)` — to the native
+ * arguments, so both forms share one validation path. A request object takes no
+ * further arguments.
+ */
+export declare function normalizePartRig(method: string, requestOrDestinationId: PartRigRequest | PartRigKey | number, part?: number, mode?: PartRigMode | number, inserts?: PartRigInsert[]): NormalizedPartRig;
 /** Reads a native `{ mode, insertsJson }` part rig back into the public shape. */
 export declare function partRigFromNative(native: {
-    mode: PartRig['mode'];
+    mode: PartRigEntry['mode'];
     insertsJson: string | null;
-} | null): PartRig | null;
+} | null): PartRigEntry | null;
 export interface WasmProject {
     applyVocalEdit: (request: unknown) => unknown;
     getVocalEditDependencies: () => unknown;
@@ -117,6 +135,9 @@ export interface WasmProject {
     compileTimeline: () => NativeProjectCompileTimelineResult;
     bounce: (options: ProjectBounceOptions) => Float32Array;
     bounceWithBuiltinInstrument: (bindings: BuiltinSynthBinding | ReadonlyArray<BuiltinSynthBinding> | undefined, options: ProjectBounceOptions) => Float32Array;
+    bounceWithInstruments: (bindings: ExternalInstrument | ReadonlyArray<ExternalInstrument> | undefined, options: ProjectBounceOptions) => Float32Array | {
+        instrumentFailure: unknown;
+    };
     bounceWithSynthInstrument: (bindings: NativeSynthBinding | string | ReadonlyArray<NativeSynthBinding | string> | undefined, options: ProjectBounceOptions) => Float32Array;
     loadSoundFont: (data: Uint8Array) => void;
     clearSoundFont: () => void;
@@ -127,6 +148,7 @@ export interface WasmProject {
     setClipGain: (clipId: number, gain: number) => void;
     setClipFade: (clipId: number, fadeIn: ProjectClipFade, fadeOut: ProjectClipFade) => void;
     unresolvedAudioSourceIds: () => number[];
+    unresolvedAudioSources: () => ProjectSource[];
     setSourceAudio: (sourceId: number, audio: Float32Array, channels: number, sampleRate: number) => void;
     setAudioSourceMetadata: (sourceId: number, contentHash: string, externalStemRole: string) => void;
     setClipTakes: (clipId: number, takes: ReadonlyArray<ProjectClipTake>, activeTakeId: number) => void;
@@ -148,7 +170,7 @@ export interface WasmProject {
     setOverlapPolicy: (policy: number) => void;
     getOverlapPolicy: () => number;
     getSampleRate: () => number;
-    setMixerSceneJson: (sceneJson: string) => void;
+    setMixerSceneJson: (sceneJson: string) => string[];
     setMarker: (markerId: number, ppq: number, name: string) => number;
     setMarkerEx: (marker: ProjectMarker) => number;
     markerByIndex: (index: number) => ProjectMarker;

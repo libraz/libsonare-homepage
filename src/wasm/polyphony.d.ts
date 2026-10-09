@@ -1,5 +1,5 @@
-import type { NoteEditInput, NoteObject, PolyphonicAnalysisOptions, PolyphonicRenderOptions } from './public_types';
-import type { ValidateOptions } from './validation';
+import type { NoteEditInput, NoteObject, PolyphonicAnalysisOptions, PolyphonicRenderOptions } from './public_types.js';
+import type { ValidateOptions } from './validation.js';
 /** Canonical request form for {@link analyzePolyphonic}. */
 export interface AnalyzePolyphonicRequest extends PolyphonicAnalysisOptions, ValidateOptions {
     samples: Float32Array;
@@ -31,6 +31,7 @@ export interface AnalyzePolyphonicRequest extends PolyphonicAnalysisOptions, Val
  */
 export declare class PolyphonicAnalysis {
     private native;
+    private readonly sampleRate;
     /** Analyses the request's audio. {@link analyzePolyphonic} is the same call. */
     constructor(request: AnalyzePolyphonicRequest);
     private handle;
@@ -66,7 +67,7 @@ export declare class PolyphonicAnalysis {
      * names one place.
      *
      * @param note - Index below {@link noteCount}
-     * @throws {SonareError} `InvalidParameter` when `note` is out of range
+     * @throws {RangeError} when `note` is out of range
      */
     setNoteEdit(note: number, edit: NoteEditInput): void;
     /**
@@ -86,7 +87,7 @@ export declare class PolyphonicAnalysis {
      * back in; here the handle already holds it, so a curve edit needs nothing from
      * the caller.
      *
-     * @throws {SonareError} `InvalidParameter` when `note` is out of range
+     * @throws {RangeError} when `note` is out of range
      */
     noteF0(note: number): Float32Array;
     /** One note's linear RMS, per frame over its own span. Indexed as {@link noteF0}. */
@@ -146,10 +147,10 @@ export declare class PolyphonicAnalysis {
      * contribution is identical between two renders. That is also the limit: a host
      * cannot tell from two renders whether a claim set divided the energy correctly.
      *
-     * @throws {SonareError} `InvalidParameter` on an option or an edit field the
-     *   renderer rejects — a non-positive stretch ratio, a negative or non-finite
-     *   envelope point, or a vibrato or drift edit on a note carrying no usable
-     *   pitch curve
+     * @throws {RangeError} on a negative or non-finite `fadeMs` or `vibratoCutoffHz`
+     * @throws {SonareError} `InvalidParameter` on an edit field the renderer
+     *   rejects — a non-positive stretch ratio, a negative or non-finite envelope
+     *   point, or a vibrato or drift edit on a note carrying no usable pitch curve
      */
     render(options?: PolyphonicRenderOptions): Float32Array;
     /**
@@ -160,6 +161,8 @@ export declare class PolyphonicAnalysis {
     delete(): void;
     /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
     destroy(): void;
+    /** Releases the handle through {@link delete}, so the instance works with `using`. */
+    [Symbol.dispose](): void;
 }
 /**
  * Analyses audio into editable notes and returns a handle to the analysis.
@@ -182,7 +185,7 @@ export declare class PolyphonicAnalysis {
  *   outside `[8000, 384000]`
  * @throws {SonareError} `InvalidParameter` on a config value the chain rejects,
  *   or on audio too short for two STFT frames at the configured `nFft`/`hopLength`
- *   (roughly one `hopLength`, ~512 samples at the default)
+ *   (roughly one `hopLength`, 512 samples at 44100 Hz by default, converted to the input rate)
  *
  * @example
  * ```typescript

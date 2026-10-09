@@ -1,7 +1,7 @@
 /**
  * Impulsive-defect repair: declick, declip and decrackle, with their detectors.
  */
-import type { ClickDetection, ClipDetection, CrackleDetection, MasteringRepairDeclickStereoResult, MasteringRepairDeclipStereoResult, MasteringRepairDecrackleStereoResult } from './public_types_repair';
+import type { ClickDetection, ClipDetection, CrackleDetection, MasteringRepairDeclickStereoResult, MasteringRepairDeclipStereoResult, MasteringRepairDecrackleStereoResult } from './public_types_repair.js';
 /** Options for `masteringRepairDeclick`. */
 export interface DeclickOptions {
     threshold?: number;
@@ -12,7 +12,7 @@ export interface DeclickOptions {
 }
 export interface MasteringRepairDeclickRequest extends DeclickOptions {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
 }
 /** Request form of `masteringRepairDeclickStereo`. */
 export interface MasteringRepairDeclickStereoRequest extends DeclickOptions {
@@ -32,10 +32,10 @@ export interface MasteringRepairDeclickStereoRequest extends DeclickOptions {
  * per-channel pass never repairs the other side's image-shifting click.
  */
 export declare function masteringRepairDeclickStereo(request: MasteringRepairDeclickStereoRequest): MasteringRepairDeclickStereoResult;
-export declare function masteringRepairDeclickStereo(left: Float32Array, right: Float32Array, sampleRate: number, config?: DeclickOptions): MasteringRepairDeclickStereoResult;
+export declare function masteringRepairDeclickStereo(left: Float32Array, right: Float32Array, sampleRate?: number, config?: DeclickOptions): MasteringRepairDeclickStereoResult;
 /** Offline LPC-based declicker. */
 export declare function masteringRepairDeclick(request: MasteringRepairDeclickRequest): Float32Array;
-export declare function masteringRepairDeclick(samples: Float32Array, sampleRate: number, options?: DeclickOptions): Float32Array;
+export declare function masteringRepairDeclick(samples: Float32Array, sampleRate?: number, options?: DeclickOptions): Float32Array;
 /** Options for `masteringRepairDeclip`. */
 export interface DeclipOptions {
     clipThreshold?: number;
@@ -45,7 +45,7 @@ export interface DeclipOptions {
 }
 export interface MasteringRepairDeclipRequest extends DeclipOptions {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
 }
 /** Request form of `masteringRepairDeclipStereo`. */
 export interface MasteringRepairDeclipStereoRequest extends DeclipOptions {
@@ -63,7 +63,7 @@ export interface DecrackleOptions {
 }
 export interface MasteringRepairDecrackleRequest extends DecrackleOptions {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
 }
 /** Request form of `masteringRepairDecrackleStereo`. */
 export interface MasteringRepairDecrackleStereoRequest extends DecrackleOptions {
@@ -83,7 +83,7 @@ export interface MasteringRepairDecrackleStereoRequest extends DecrackleOptions 
  * effect on the interpolated run.
  */
 export declare function masteringRepairDeclip(request: MasteringRepairDeclipRequest): Float32Array;
-export declare function masteringRepairDeclip(samples: Float32Array, sampleRate: number, options?: DeclipOptions): Float32Array;
+export declare function masteringRepairDeclip(samples: Float32Array, sampleRate?: number, options?: DeclipOptions): Float32Array;
 /**
  * Offline LPC-based declipper for a stereo pair.
  *
@@ -96,10 +96,10 @@ export declare function masteringRepairDeclip(samples: Float32Array, sampleRate:
  * region with different extents.
  */
 export declare function masteringRepairDeclipStereo(request: MasteringRepairDeclipStereoRequest): MasteringRepairDeclipStereoResult;
-export declare function masteringRepairDeclipStereo(left: Float32Array, right: Float32Array, sampleRate: number, config?: DeclipOptions): MasteringRepairDeclipStereoResult;
+export declare function masteringRepairDeclipStereo(left: Float32Array, right: Float32Array, sampleRate?: number, config?: DeclipOptions): MasteringRepairDeclipStereoResult;
 /** Offline crackle suppressor (median or wavelet-shrinkage). */
 export declare function masteringRepairDecrackle(request: MasteringRepairDecrackleRequest): Float32Array;
-export declare function masteringRepairDecrackle(samples: Float32Array, sampleRate: number, options?: DecrackleOptions): Float32Array;
+export declare function masteringRepairDecrackle(samples: Float32Array, sampleRate?: number, options?: DecrackleOptions): Float32Array;
 /**
  * Offline crackle suppressor (median or wavelet-shrinkage) for a stereo pair.
  *
@@ -110,21 +110,21 @@ export declare function masteringRepairDecrackle(samples: Float32Array, sampleRa
  * the channel-length contract in one place.
  */
 export declare function masteringRepairDecrackleStereo(request: MasteringRepairDecrackleStereoRequest): MasteringRepairDecrackleStereoResult;
-export declare function masteringRepairDecrackleStereo(left: Float32Array, right: Float32Array, sampleRate: number, config?: DecrackleOptions): MasteringRepairDecrackleStereoResult;
+export declare function masteringRepairDecrackleStereo(left: Float32Array, right: Float32Array, sampleRate?: number, config?: DecrackleOptions): MasteringRepairDecrackleStereoResult;
 /** Request form of `masteringRepairDetectClicks`. */
 export interface MasteringRepairDetectClicksRequest extends DeclickOptions {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
 }
 /** Request form of `masteringRepairDetectClipping`. */
 export interface MasteringRepairDetectClippingRequest extends DeclipOptions {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
 }
 /** Request form of `masteringRepairDetectCrackle`. */
 export interface MasteringRepairDetectCrackleRequest extends DecrackleOptions {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
 }
 /**
  * Measures clicks without repairing.
@@ -142,7 +142,7 @@ export interface MasteringRepairDetectCrackleRequest extends DecrackleOptions {
  * ```
  */
 export declare function masteringRepairDetectClicks(request: MasteringRepairDetectClicksRequest): ClickDetection;
-export declare function masteringRepairDetectClicks(samples: Float32Array, sampleRate: number, options?: DeclickOptions): ClickDetection;
+export declare function masteringRepairDetectClicks(samples: Float32Array, sampleRate?: number, options?: DeclickOptions): ClickDetection;
 /**
  * Measures clipping without repairing.
  *
@@ -159,8 +159,10 @@ export declare function masteringRepairDetectClicks(samples: Float32Array, sampl
  * apex of any waveform that reaches it — a full-scale sine reports thousands of "clipped" samples
  * having never been clipped — and they miss material clipped in one tool and attenuated in the
  * next, which leaves nothing at the threshold. The flat-top fields instead count runs of at least
- * 3 consecutive bit-identical samples whose level sits within 1 dB of the signal's peak, so they
- * catch a clipped-then-attenuated waveform that `sampleCount` reports as clean.
+ * 3 consecutive bit-identical samples (at or above -40 dBFS) whose level sits within 1 dB of the
+ * flat level — the largest run level once the two highest runs are set aside, so louder unclipped
+ * audio cannot move it — so they catch a clipped-then-attenuated waveform that `sampleCount`
+ * reports as clean.
  *
  * Two opposite errors follow from what a flat top actually is. A genuinely flat-topped waveform —
  * a square or pulse train, a fully limited master — counts as clipped here too and cannot be told
@@ -172,7 +174,7 @@ export declare function masteringRepairDetectClicks(samples: Float32Array, sampl
  * never on the mixed-down result.**
  */
 export declare function masteringRepairDetectClipping(request: MasteringRepairDetectClippingRequest): ClipDetection;
-export declare function masteringRepairDetectClipping(samples: Float32Array, sampleRate: number, options?: DeclipOptions): ClipDetection;
+export declare function masteringRepairDetectClipping(samples: Float32Array, sampleRate?: number, options?: DeclipOptions): ClipDetection;
 /**
  * Measures crackle without repairing.
  *
@@ -182,4 +184,4 @@ export declare function masteringRepairDetectClipping(samples: Float32Array, sam
  * mode.
  */
 export declare function masteringRepairDetectCrackle(request: MasteringRepairDetectCrackleRequest): CrackleDetection;
-export declare function masteringRepairDetectCrackle(samples: Float32Array, sampleRate: number, options?: DecrackleOptions): CrackleDetection;
+export declare function masteringRepairDetectCrackle(samples: Float32Array, sampleRate?: number, options?: DecrackleOptions): CrackleDetection;

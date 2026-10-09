@@ -1,4 +1,4 @@
-import type { RealtimeVoiceChangerConfigInput, RealtimeVoiceChangerPodConfig, VoicePresetId } from './public_types';
+import type { RealtimeVoiceChangerConfigInput, RealtimeVoiceChangerPodConfig, VoicePresetId } from './public_types.js';
 /**
  * Zero-copy realtime buffer pair for {@link RealtimeVoiceChanger} mono
  * processing. The `input` / `output` `Float32Array`s are typed-memory views
@@ -147,6 +147,8 @@ export declare class RealtimeVoiceChanger {
     delete(): void;
     /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
     destroy(): void;
+    /** Releases the handle through {@link delete}, so the instance works with `using`. */
+    [Symbol.dispose](): void;
 }
 export declare function realtimeVoiceChangerPresetNames(): VoicePresetId[];
 export declare function realtimeVoiceChangerPresetJson(name: VoicePresetId): string;

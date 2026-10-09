@@ -1,6 +1,7 @@
-import type { VocalAnalysis, VocalCapabilities, VocalCreateRequest, VocalEditOperation, VocalEditResult, VocalHistoryState, VocalNotesResult, VocalPitchEvaluation, VocalRestoreRequest, VocalStateBytes, VocalStateToken } from './public_types_vocal_edit';
-import { type VocalRenderSnapshot } from './vocal_edit';
-import { type VocalWorkerRequestMessage, type VocalWorkerResponseMessage } from './vocal_edit_worker_protocol';
+import './lifetime.js';
+import type { VocalAnalysis, VocalCapabilities, VocalCreateRequest, VocalEditOperation, VocalEditResult, VocalHistoryState, VocalNotesResult, VocalPitchEvaluation, VocalRestoreRequest, VocalStateBytes, VocalStateToken } from './public_types_vocal_edit.js';
+import { type VocalRenderSnapshot } from './vocal_edit.js';
+import { type VocalWorkerRequestMessage, type VocalWorkerResponseMessage } from './vocal_edit_worker_protocol.js';
 export interface VocalEditWorkerEndpoint {
     postMessage(message: VocalWorkerResponseMessage, transfer?: Transferable[]): void;
     addEventListener(type: 'message', listener: (event: MessageEvent<VocalWorkerRequestMessage>) => void): void;

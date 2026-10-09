@@ -1,4 +1,4 @@
-import type { VocalAnalysis, VocalApplyRequest, VocalCapabilities, VocalCreateRequest, VocalEditOperation, VocalEditResult, VocalErrorShape, VocalHistoryState, VocalJobProgress, VocalNotesResult, VocalPitchEvaluation, VocalRenderRequest, VocalRenderResult, VocalRestoreRequest, VocalStateToken, VocalUint64 } from './public_types_vocal_edit';
+import type { VocalAnalysis, VocalApplyRequest, VocalCapabilities, VocalCreateRequest, VocalEditOperation, VocalEditResult, VocalErrorShape, VocalHistoryState, VocalJobProgress, VocalNotesResult, VocalPitchEvaluation, VocalRenderRequest, VocalRenderResult, VocalRestoreRequest, VocalStateToken, VocalUint64 } from './public_types_vocal_edit.js';
 /** Native symbols registered by the full vocal-edit WASM binding. */
 export interface VocalWasmExports {
     vocalEditApiVersion: () => number;
@@ -52,11 +52,14 @@ export declare class VocalEditSession {
     private handle;
     private readonly drafts;
     private disposed;
+    private readonly sampleRate;
     /** @internal Instances are created by {@link createVocalEditSession} and {@link restoreVocalEditSession}. */
-    constructor(handle: number);
+    constructor(handle: number, sampleRate: number);
     dispose(): void;
     delete(): void;
     destroy(): void;
+    /** Releases the handle through {@link dispose}, so the instance works with `using`. */
+    [Symbol.dispose](): void;
     private native;
     token(): VocalStateToken;
     revision(): VocalUint64;
@@ -80,8 +83,9 @@ export declare class VocalEditDraft {
     private handle;
     private disposed;
     private readonly owner;
+    private readonly sampleRate;
     /** @internal Instances are created by {@link VocalEditSession.beginEdit}. */
-    constructor(handle: number, owner: VocalEditSession);
+    constructor(handle: number, owner: VocalEditSession, sampleRate: number);
     private native;
     token(): VocalStateToken;
     notes(): VocalNotesResult;
@@ -95,12 +99,15 @@ export declare class VocalEditDraft {
     dispose(): void;
     delete(): void;
     destroy(): void;
+    /** Releases the handle through {@link dispose}, so the instance works with `using`. */
+    [Symbol.dispose](): void;
 }
 export declare class VocalRenderSnapshot {
     private handle;
     private disposed;
+    private readonly sampleRate;
     /** @internal Instances are created by a session or draft. */
-    constructor(handle: number);
+    constructor(handle: number, sampleRate: number);
     private native;
     outputLengthSamples(): number;
     render(request: VocalRenderRequest): VocalRenderResult;
@@ -113,6 +120,8 @@ export declare class VocalRenderSnapshot {
     dispose(): void;
     delete(): void;
     destroy(): void;
+    /** Releases the handle through {@link dispose}, so the instance works with `using`. */
+    [Symbol.dispose](): void;
 }
 export declare class VocalRenderJob {
     private handle;
@@ -126,5 +135,7 @@ export declare class VocalRenderJob {
     dispose(): void;
     delete(): void;
     destroy(): void;
+    /** Releases the handle through {@link dispose}, so the instance works with `using`. */
+    [Symbol.dispose](): void;
 }
-export type { VocalAnalysis, VocalCapabilities, VocalCreateRequest, VocalEditResult, VocalHistory, } from './public_types_vocal_edit';
+export type { VocalAnalysis, VocalCapabilities, VocalCreateRequest, VocalEditResult, VocalHistory, } from './public_types_vocal_edit.js';

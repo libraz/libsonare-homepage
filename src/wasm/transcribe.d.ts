@@ -1,4 +1,4 @@
-import type { TranscribeOptions, TranscribeResult } from './project_types';
+import type { TranscribeOptions, TranscribeResult } from './project_types.js';
 /**
  * Canonical request form for {@link transcribe}.
  *
@@ -42,7 +42,7 @@ export interface TranscribeRequest extends TranscribeOptions {
  * resolve, come back with an empty `events` array and `noteCount` 0, and
  * `tempoBpm` still reports the tempo that was used or detected.
  *
- * Three things are deliberately **not** done here, because the library already
+ * Two things are deliberately **not** done here, because the library already
  * does each of them somewhere else and a second implementation would drift:
  *
  * - **Quantizing to a grid** — {@link Project.bakeMidiFx}'s `quantizePpq` /
@@ -54,16 +54,18 @@ export interface TranscribeRequest extends TranscribeOptions {
  * - **Annotating key and chords** — {@link Project.annotateKeys} /
  *   {@link Project.annotateChords}.
  *
- * The tuning reference is likewise not measured — see
+ * The tuning reference is `referenceHz`, or measured from the audio with
+ * `referenceHz: 'auto'`; the result reports it as `tuning` — see
  * {@link TranscribeOptions.referenceHz}.
  *
  * @throws {RangeError} on empty `samples`, a non-finite sample, or a
  *   `sampleRate` outside `[8000, 384000]`
- * @throws {SonareError} `InvalidParameter` on an option outside its domain —
- *   a non-negative `velocityFloorDb`, a `fixedVelocity` outside `[1, 127]`, a
- *   `group` or `channel` outside `[0, 15]`, an `fmax` at or below `fmin`, or a
- *   written `0` on any field but `group` and `channel` — or `NotSupported`
- *   when the library was built without the pitch editor
+ * @throws {RangeError} also on an option outside its domain that the reader
+ *   refuses — a non-negative `velocityFloorDb`, a `fixedVelocity` outside
+ *   `[1, 127]`, or a written `0` on any field but `group` and `channel`
+ * @throws {SonareError} `InvalidParameter` on a `group` or `channel` outside
+ *   `[0, 15]` or an `fmax` at or below `fmin`, which the C ABI refuses, or
+ *   `NotSupported` when the library was built without the pitch editor
  *
  * @example
  * ```typescript

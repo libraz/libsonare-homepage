@@ -1,5 +1,5 @@
-import type { VocalAnalysis, VocalApplyRequest, VocalCapabilities, VocalCreateRequest, VocalEditResult, VocalHistoryState, VocalNotesResult, VocalPitchEvaluation, VocalRenderRequest, VocalRenderResult, VocalRestoreRequest, VocalStateBytes, VocalStateToken, VocalUint64 } from './public_types_vocal_edit';
-import { type VocalWorkerCreateResult, type VocalWorkerMutation } from './vocal_edit_worker_protocol';
+import type { VocalAnalysis, VocalApplyRequest, VocalCapabilities, VocalCreateRequest, VocalEditResult, VocalHistoryState, VocalNotesResult, VocalPitchEvaluation, VocalRenderRequest, VocalRenderResult, VocalRestoreRequest, VocalStateBytes, VocalStateToken, VocalUint64 } from './public_types_vocal_edit.js';
+import { type VocalWorkerCreateResult, type VocalWorkerMutation } from './vocal_edit_worker_protocol.js';
 export interface VocalEditWorker {
     postMessage(message: unknown, transfer?: Transferable[]): void;
     terminate(): unknown;

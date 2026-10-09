@@ -21,3 +21,11 @@ export declare function resolveFftOptions(fnName: string, nFft: unknown, hopLeng
     nFft: number;
     hopLength: number;
 };
+/**
+ * The same pair for an effect that resynthesizes audio: the symmetric Hann
+ * synthesis window is all zeros at two points, so the smallest size is 4.
+ */
+export declare function resolveEffectFftOptions(fnName: string, nFft: unknown, hopLength: unknown): {
+    nFft: number;
+    hopLength: number;
+};

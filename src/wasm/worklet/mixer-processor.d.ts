@@ -1,5 +1,5 @@
-import type { WorkletInput, WorkletOutput } from './audio_types';
-import type { SonareWorkletMessage, SonareWorkletProcessorOptions, WorkletTransport } from './messages';
+import type { WorkletInput, WorkletOutput } from './audio_types.js';
+import type { SonareWorkletMessage, SonareWorkletProcessorOptions, WorkletTransport } from './messages.js';
 /**
  * AudioWorklet-style mixer bridge backed by the package's single `sonare.wasm`.
  *

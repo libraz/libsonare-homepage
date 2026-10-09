@@ -1,5 +1,5 @@
-import type { SpectralFrameRequest } from './feature_spectral';
-import type { NoteSegment, PiptrackResult, PitchResult } from './public_types';
+import type { SpectralFrameRequest } from './feature_spectral.js';
+import type { NoteSegment, PiptrackResult, PitchResult } from './public_types.js';
 /**
  * Detect pitch using YIN algorithm.
  *
@@ -101,7 +101,32 @@ export interface EstimateTuningRequest extends SpectralFrameRequest {
 export declare function pitchTuning(request: PitchTuningRequest): number;
 export declare function pitchTuning(frequencies: Float32Array, resolution?: number, binsPerOctave?: number): number;
 /**
+ * Reference frequency of an A4 raised by `tuning` fractions of a semitone:
+ * `a4 * 2 ** (tuning / 12)`. The converter from the analysis unit (`tuning`, in
+ * `[-0.5, 0.5)` for the analysis options) to the Hz a pitch reference is stated
+ * in, such as `referenceHz` and the streaming `tuningRefHz`.
+ *
+ * @param tuning - Finite fraction of a semitone.
+ * @param a4 - Finite positive concert pitch the tuning is measured from. Default 440.
+ * @throws `RangeError` for a non-finite `tuning`, `SonareError` for a non-positive `a4`.
+ */
+export declare function tuningToReferenceHz(tuning: number, a4?: number): number;
+/**
+ * Tuning, in fractions of a semitone, of a recording whose A4 sits at `hz`:
+ * `12 * log2(hz / a4)`. Inverse of {@link tuningToReferenceHz}.
+ *
+ * @param hz - Finite positive reference frequency.
+ * @param a4 - Finite positive concert pitch. Default 440.
+ * @throws `RangeError` for a non-finite `hz` or `a4`, `SonareError` for a non-positive one.
+ */
+export declare function referenceHzToTuning(hz: number, a4?: number): number;
+/**
  * Estimate the tuning offset of an audio signal (librosa.estimate_tuning).
+ *
+ * A librosa mirror: the offset is a fraction of a bin of `binsPerOctave`, which
+ * is the semitone fraction the analysis options take only at 12 (otherwise
+ * multiply by `12 / binsPerOctave`). Analysis measures the semitone fraction
+ * itself with `tuning: 'auto'`; {@link tuningToReferenceHz} converts it to Hz.
  */
 export declare function estimateTuning(request: EstimateTuningRequest): number;
 export declare function estimateTuning(samples: Float32Array, sampleRate?: number, nFft?: number, hopLength?: number, resolution?: number, binsPerOctave?: number): number;

@@ -1,4 +1,4 @@
-import type { ValidateOptions } from './validation';
+import type { ValidateOptions } from './validation.js';
 /** Compressor sidechain detector mode. */
 export type CompressorDetector = 'peak' | 'rms' | 'log_rms';
 /** Options for `masteringDynamicsCompressor`. */
@@ -19,7 +19,7 @@ export interface CompressorOptions extends ValidateOptions {
 /** Canonical request form for the offline compressor. */
 export interface MasteringDynamicsCompressorRequest extends CompressorOptions {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
 }
 /** Options for `masteringDynamicsGate`. */
 export interface GateOptions extends ValidateOptions {
@@ -34,7 +34,7 @@ export interface GateOptions extends ValidateOptions {
 /** Canonical request form for the offline gate. */
 export interface MasteringDynamicsGateRequest extends GateOptions {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
 }
 /** Options for `masteringDynamicsTransientShaper`. */
 export interface TransientShaperOptions extends ValidateOptions {
@@ -52,7 +52,7 @@ export interface TransientShaperOptions extends ValidateOptions {
 /** Canonical request form for the offline transient shaper. */
 export interface MasteringDynamicsTransientShaperRequest extends TransientShaperOptions {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
 }
 /**
  * Result envelope returned by offline mastering dynamics processors.
@@ -66,14 +66,18 @@ export interface MasteringDynamicsTransientShaperRequest extends TransientShaper
  */
 export interface DynamicsProcessorResult {
     samples: Float32Array;
+    /**
+     * The processor's own latency, already compensated in the returned audio;
+     * do not trim the returned audio by it.
+     */
     latencySamples: number;
 }
 /** Offline feed-forward compressor (soft knee, optional auto-makeup / sidechain HPF). */
 export declare function masteringDynamicsCompressor(request: MasteringDynamicsCompressorRequest): DynamicsProcessorResult;
-export declare function masteringDynamicsCompressor(samples: Float32Array, sampleRate: number, options?: CompressorOptions): DynamicsProcessorResult;
+export declare function masteringDynamicsCompressor(samples: Float32Array, sampleRate?: number, options?: CompressorOptions): DynamicsProcessorResult;
 /** Offline noise gate (hysteresis, hold, optional key HPF). */
 export declare function masteringDynamicsGate(request: MasteringDynamicsGateRequest): DynamicsProcessorResult;
-export declare function masteringDynamicsGate(samples: Float32Array, sampleRate: number, options?: GateOptions): DynamicsProcessorResult;
+export declare function masteringDynamicsGate(samples: Float32Array, sampleRate?: number, options?: GateOptions): DynamicsProcessorResult;
 /** Offline transient shaper (envelope-difference attack/sustain control). */
 export declare function masteringDynamicsTransientShaper(request: MasteringDynamicsTransientShaperRequest): DynamicsProcessorResult;
-export declare function masteringDynamicsTransientShaper(samples: Float32Array, sampleRate: number, options?: TransientShaperOptions): DynamicsProcessorResult;
+export declare function masteringDynamicsTransientShaper(samples: Float32Array, sampleRate?: number, options?: TransientShaperOptions): DynamicsProcessorResult;

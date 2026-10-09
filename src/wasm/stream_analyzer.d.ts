@@ -1,4 +1,4 @@
-import type { AnalyzerStats, FrameBuffer, StreamConfig, StreamConfigDefaults, StreamFramesI16, StreamFramesU8, StreamQuantizeConfig } from './stream_types';
+import type { AnalyzerStats, FrameBuffer, StreamConfig, StreamConfigDefaults, StreamFramesI16, StreamFramesU8, StreamQuantizeConfig } from './stream_types.js';
 export declare function streamAnalyzerConfigDefaults(): StreamConfigDefaults;
 /**
  * Real-time streaming audio analyzer.
@@ -159,4 +159,6 @@ export declare class StreamAnalyzer {
     destroy(): void;
     /** Alias for {@link delete}, kept for backward compatibility (historical name). */
     dispose(): void;
+    /** Releases the handle through {@link delete}, so the instance works with `using`. */
+    [Symbol.dispose](): void;
 }

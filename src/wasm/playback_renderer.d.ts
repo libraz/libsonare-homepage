@@ -1,4 +1,4 @@
-import type { PlaybackDiagnostics, PlaybackRendererConfig, PlaybackRendererOptions, RenderPlaybackRequest, RenderPlaybackResult } from './public_types_playback';
+import type { PlaybackDiagnostics, PlaybackRendererConfig, PlaybackRendererOptions, RenderPlaybackRequest, RenderPlaybackResult } from './public_types_playback.js';
 /**
  * An HRTF set (SHRF v1): the direct-sound impulse responses and inter-aural
  * time delays a headphones-target {@link PlaybackRenderer} convolves each
@@ -27,6 +27,8 @@ export declare class HrtfSet {
     delete(): void;
     /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
     destroy(): void;
+    /** Releases the handle through {@link delete}, so the instance works with `using`. */
+    [Symbol.dispose](): void;
 }
 /**
  * Renders decoded movie audio (mono / stereo / 5.1 / 7.1 PCM) to headphones
@@ -99,6 +101,8 @@ export declare class PlaybackRenderer {
     delete(): void;
     /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
     destroy(): void;
+    /** Releases the handle through {@link delete}, so the instance works with `using`. */
+    [Symbol.dispose](): void;
 }
 /**
  * Integrated-loudness meter for multichannel program material (BS.1770
@@ -117,6 +121,8 @@ export declare class PlaybackLoudnessMeter {
     delete(): void;
     /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
     destroy(): void;
+    /** Releases the handle through {@link delete}, so the instance works with `using`. */
+    [Symbol.dispose](): void;
 }
 /**
  * Offline one-shot playback render: builds a renderer internally, feeds the

@@ -2,11 +2,16 @@
  * Time and pitch transforms over a whole buffer: stretching, shifting, and
  * correction onto a target pitch.
  */
-import type { PitchCorrectOptions, VoicedFlags } from './public_types';
-import type { ValidateOptions } from './validation';
+import type { AutoTuneKey, AutoTuneOptions, AutoTuneResult, PitchCorrectOptions, VoicedFlags } from './public_types.js';
+import type { ValidateOptions } from './validation.js';
 export interface TimeStretchRequest extends ValidateOptions {
     samples: Float32Array;
     sampleRate?: number;
+    /**
+     * Playback speed: `> 1` is faster and shorter (2 halves the duration), `< 1` is
+     * slower and longer (0.5 doubles it). The opposite sense of a note's
+     * `stretchRatio`, which is a duration ratio.
+     */
     rate: number;
     nFft?: number;
     hopLength?: number;
@@ -39,13 +44,23 @@ export interface PitchCorrectTimevaryingRequest extends PitchCorrectOptions {
     sampleRate?: number;
     hopLength?: number;
 }
+export interface AutoTuneRequest extends AutoTuneOptions {
+    samples: Float32Array;
+    sampleRate?: number;
+    /**
+     * `'detect'` (default) finds the key with `detectKey`'s defaults; a
+     * `{ root, mode }` names it, as `detectKey`'s result does.
+     */
+    key?: 'detect' | AutoTuneKey;
+}
 /**
  * Time-stretch audio without changing pitch.
  *
  * @param samples - Audio samples (mono, float32)
  * @param sampleRate - Sample rate in Hz (default: 22050)
- * @param rate - Time stretch rate (0.5 = double duration, 2.0 = half duration)
- * @param nFft - FFT size: an even integer >= 2 (default 2048)
+ * @param rate - Playback speed (0.5 = double duration, 2.0 = half duration); the
+ *   opposite sense of a note's `stretchRatio`, a duration ratio
+ * @param nFft - FFT size: an even integer >= 4 (default 2048)
  * @param hopLength - Hop in samples, in `(0, nFft / 2]` (default 512), so
  *   frames overlap by at least half a window
  * @returns Time-stretched audio
@@ -59,7 +74,7 @@ export declare function timeStretch(samples: Float32Array, sampleRate: number, r
  * @param samples - Audio samples (mono, float32)
  * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param semitones - Pitch shift in semitones (+12 = one octave up, -12 = one octave down)
- * @param nFft - FFT size: an even integer >= 2 (default 2048)
+ * @param nFft - FFT size: an even integer >= 4 (default 2048)
  * @param hopLength - Hop in samples, in `(0, nFft / 2]` (default 512), so
  *   frames overlap by at least half a window
  * @returns Pitch-shifted audio
@@ -131,3 +146,19 @@ export declare function pitchCorrectToMidiTimevarying(samples: Float32Array, f0H
  */
 export declare function pitchCorrectTimevarying(request: PitchCorrectTimevaryingRequest): Float32Array;
 export declare function pitchCorrectTimevarying(samples: Float32Array, f0Hz: Float32Array, sampleRate?: number, hopLength?: number, options?: PitchCorrectOptions): Float32Array;
+/**
+ * Snaps the voiced pitch of a monophonic recording to a scale, offline.
+ *
+ * Chains key detection (when `key` is `'detect'`), `scaleMaskForMode`, pYIN
+ * pitch tracking (2048-sample frames, 512-sample hop) and the time-varying scale
+ * corrector, so the options are `pitchCorrectTimevarying`'s with `strength` as
+ * `retuneAmount`. The output has the input's length. Unvoiced stretches and
+ * notes the corrector cannot repitch pass through unchanged.
+ *
+ * @example
+ * const { samples: tuned, key } = autoTune({ samples, sampleRate: 44100, strength: 0.8 });
+ *
+ * @param request - Audio, the key (`'detect'` or `{ root, mode }`) and the tuning knobs
+ * @returns The corrected audio and the key it was tuned to
+ */
+export declare function autoTune(request: AutoTuneRequest): AutoTuneResult;

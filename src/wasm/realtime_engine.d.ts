@@ -1,6 +1,6 @@
-import type { Articulation, ControllerBinding, MpeDimension, NoteTracking, PartRigInsert, PartRigMode, ProjectMidiCcBinding, SynthPatch } from './project';
-import type { ProjectTimeline } from './project_class';
-import type { EqBand, PanLawInput, PanMode, SendTiming, SidechainSourceKind, SurroundPan, UmpWords } from './public_types';
+import type { Articulation, ControllerBinding, MpeDimension, NoteTracking, PartRigInsert, PartRigMode, PartRigRequest, ProjectMidiCcBinding, SynthPatch } from './project.js';
+import type { ProjectTimeline } from './project_class.js';
+import type { EqBand, PanLawInput, PanMode, SendTiming, SidechainCheck, SidechainSourceKind, SurroundPan, UmpWords } from './public_types.js';
 import type { WasmClipPageRequest, WasmEngineAutomationPoint, WasmEngineBounceOptions, WasmEngineBounceResult, WasmEngineCaptureStatus, WasmEngineClip, WasmEngineFreezeOptions, WasmEngineFreezeResult, WasmEngineGraphSpec, WasmEngineMarker, WasmEngineMeterTelemetry, WasmEngineMeterTelemetryWide, WasmEngineMetronomeConfig, WasmEngineParameterInfo, WasmEngineProcessWithMonitorResult, WasmEngineScopeTelemetry, WasmEngineTelemetry, WasmEngineTempoSegment, WasmEngineTimeSignatureSegment, WasmEngineTransportState, WasmExternalMidiEvent } from './sonare.js';
 export type ExternalMidiEvent = WasmExternalMidiEvent;
 export type EngineClip = WasmEngineClip;
@@ -11,6 +11,19 @@ export type EngineMarker = WasmEngineMarker;
 export type EngineMetronomeConfig = WasmEngineMetronomeConfig;
 export type EngineGraphSpec = WasmEngineGraphSpec;
 export type EngineCaptureStatus = WasmEngineCaptureStatus;
+/** Punch-in window for {@link RealtimeEngine.setCapturePunch}; each bound is samples or seconds, not both. */
+export interface EngineCapturePunchRequest {
+    /** First timeline sample captured. Not with `startSec`. */
+    startSample?: number;
+    /** First timeline second captured, rounded to the nearest sample. Not with `startSample`. */
+    startSec?: number;
+    /** One past the last timeline sample captured. Not with `endSec`. */
+    endSample?: number;
+    /** End of the window in timeline seconds, rounded to the nearest sample. Not with `endSample`. */
+    endSec?: number;
+    /** Whether the punch window is active. Default `true`. */
+    enabled?: boolean;
+}
 export type EngineCaptureSource = EngineCaptureStatus['source'] | number;
 export type EngineBounceOptions = WasmEngineBounceOptions;
 export type EngineBounceResult = WasmEngineBounceResult;
@@ -43,8 +56,8 @@ export interface EngineTrackLane {
     outputBusId?: number;
     /**
      * Input channel layout of the source feeding this lane (`SonareChannelLayout`:
-     * 0 mono, 1 stereo, 2 5.1, 3 7.1). Absent defaults to stereo. Stored but inert
-     * until the surround DSP path lands.
+     * 0 mono, 1 stereo, 2 5.1, 3 7.1). Absent defaults to stereo. Only stereo is
+     * accepted; any other layout throws until multichannel lanes are implemented.
      */
     sourceChannelLayout?: number;
 }
@@ -168,6 +181,7 @@ export declare function engineCapabilities(): EngineCapabilities;
 export declare class RealtimeEngine {
     private native;
     private released;
+    private sampleRate;
     constructor(sampleRate?: number, maxBlockSize?: number, commandCapacity?: number, telemetryCapacity?: number, maxChannels?: number);
     /**
      * Size the engine's queues and scratch for a sample rate and block size.
@@ -184,9 +198,12 @@ export declare class RealtimeEngine {
     /** Queue a smoothed parameter change (engine kSetParamSmoothed). */
     setParameterSmoothed(paramId: number, value: number, renderFrame?: number): void;
     /**
-     * Set the default ramp time (ms) for engine-level smoothed parameters —
-     * fader/pan glides, insert-parameter automation, and MIDI-CC mappings. The
-     * default is 20 ms; pass `0` for instant (un-ramped) changes.
+     * Set the ramp time (ms) of the engine-level smoother. It governs only
+     * `setParameterSmoothed` on parameters bound through the automation engine.
+     * Reserved engine targets — track and bus faders, pan and width, and insert and
+     * instrument parameters — keep their own fixed smoothing whatever this is set
+     * to, and MIDI-CC mappings apply their values directly. The default is 20 ms;
+     * `0` makes the governed changes instant.
      */
     setParamSmoothingMs(smoothingMs: number): void;
     setSoloMute(laneIndex: number, solo: boolean, mute: boolean, renderFrame?: number): void;
@@ -318,6 +335,7 @@ export declare class RealtimeEngine {
      * host-callback instrument) is refused as not implemented rather than
      * succeeding quietly. `'chain'` takes 1-8 `inserts`; no other mode does.
      */
+    setPartRig(request: PartRigRequest): void;
     setPartRig(destinationId: number, part: number, mode: PartRigMode | number, inserts?: PartRigInsert[]): void;
     /**
      * Read back {@link setArticulation} as the canonical name. An ordinal this
@@ -374,8 +392,7 @@ export declare class RealtimeEngine {
      * One queued record lowers to at most 4 MIDI 1.0 messages (a MIDI 2.0
      * registered or assignable controller becomes CC 101/100 or 99/98 plus Data
      * Entry 6/38), so a positive `maxRecords` below 4 could never consume a record
-     * and is rejected with an `InvalidParameter` `SonareError` instead of
-     * returning nothing forever.
+     * and is rejected with a `RangeError` instead of returning nothing forever.
      */
     drainExternalMidi(maxRecords?: number): WasmExternalMidiEvent[];
     /** Scalar, allocation-free external-MIDI drain for AudioWorklet SAB output. */
@@ -412,27 +429,27 @@ export declare class RealtimeEngine {
     /**
      * Queue an immediate (live) MIDI control change to a MIDI destination
      * (engine kMidiCcImmediate). `group`/`channel` are 0..15; `controller`/`value`
-     * are 7-bit (0..127). `renderFrame` is the frame to fire at, or -1 for
-     * immediate. Mirrors the Node/Python/C-ABI `pushMidiCc`.
+     * are 7-bit (0..127). `renderFrame` is the frame to fire at (omit for
+     * immediate). Mirrors the Node/Python/C-ABI `pushMidiCc`.
      */
     pushMidiCc(destinationId: number, group: number, channel: number, controller: number, value: number, renderFrame?: number): void;
     /**
      * Queue an immediate (live) MIDI pitch bend to a MIDI destination. `bend14`
      * is unsigned 14-bit with centre 8192 (0..16383); `renderFrame` is the frame
-     * to fire at, or -1 for immediate. Mirrors the Node/Python/C-ABI
+     * to fire at (omit for immediate). Mirrors the Node/Python/C-ABI
      * `pushMidiPitchBend`.
      */
     pushMidiPitchBend(destinationId: number, group: number, channel: number, bend14: number, renderFrame?: number): void;
     /**
      * Queue an immediate (live) MIDI channel pressure to a MIDI destination.
-     * `pressure` is 7-bit (0..127); `renderFrame` is the frame to fire at, or -1
-     * for immediate. Mirrors the Node/Python/C-ABI `pushMidiChannelPressure`.
+     * `pressure` is 7-bit (0..127); `renderFrame` is the frame to fire at (omit
+     * for immediate). Mirrors the Node/Python/C-ABI `pushMidiChannelPressure`.
      */
     pushMidiChannelPressure(destinationId: number, group: number, channel: number, pressure: number, renderFrame?: number): void;
     /**
      * Queue an immediate (live) MIDI polyphonic key pressure to a MIDI
      * destination. `note` and `pressure` are 7-bit (0..127); `renderFrame` is the
-     * frame to fire at, or -1 for immediate. Mirrors the Node/Python/C-ABI
+     * frame to fire at (omit for immediate). Mirrors the Node/Python/C-ABI
      * `pushMidiPolyPressure`.
      */
     pushMidiPolyPressure(destinationId: number, group: number, channel: number, note: number, pressure: number, renderFrame?: number): void;
@@ -443,7 +460,7 @@ export declare class RealtimeEngine {
      * width; SysEx7 / data messages (MT 0x3 / 0x5) are refused, use
      * {@link pushMidiSysex}. Throws when the slot ring or command queue is full
      * (retry after a process block). `renderFrame` is the render-frame time to
-     * apply, or -1 for immediate. A bare number is accepted as a one-word
+     * apply (omit for immediate). A bare number is accepted as a one-word
      * message.
      */
     pushMidiUmp(destinationId: number, words: UmpWords | number, renderFrame?: number): void;
@@ -456,7 +473,7 @@ export declare class RealtimeEngine {
     /**
      * Queue an immediate (live) MIDI SysEx frame to a MIDI destination. `data` is
      * the full message including the leading 0xF0 and trailing 0xF7 (1..512
-     * bytes). `renderFrame` is the frame to fire at, or -1 for immediate. Throws
+     * bytes). `renderFrame` is the frame to fire at (omit for immediate). Throws
      * `InvalidParameter` when the destination instrument cannot prepare
      * the SysEx (retrying cannot help), and `OutOfMemory` when the payload
      * slots or the command queue are full (retry after a processed block).
@@ -465,12 +482,13 @@ export declare class RealtimeEngine {
     pushMidiSysex(destinationId: number, data: Uint8Array, renderFrame?: number): void;
     /**
      * Queue a MIDI panic (all-notes-off) releasing every sounding note at
-     * `renderFrame` (-1 = immediate). Mirrors the C-ABI `pushMidiPanic`.
+     * `renderFrame` (omitted = immediate). Mirrors the C-ABI `pushMidiPanic`.
      */
     pushMidiPanic(renderFrame?: number): void;
     /**
-     * Remove all registered parameters (and their automation lanes). Control-thread
-     * only; not realtime-safe. Mirrors the C-ABI `clearParameters`.
+     * Remove all registered parameters. Automation lanes stay in place, as they do
+     * on {@link addParameter}. Control-thread only; not realtime-safe. Mirrors the
+     * C-ABI `clearParameters`.
      */
     clearParameters(): void;
     /** Read back the current transport state snapshot. */
@@ -494,11 +512,53 @@ export declare class RealtimeEngine {
     seekSample(timelineSample: number, renderFrame?: number): void;
     /**
      * Snaps every in-flight parameter ramp (engine-level smoothed params, mixer
-     * lane fader/pan/gate, bus gains) to its target value. Offline renders call
-     * this after a priming process() block so the first audible block renders at
-     * settled values instead of ramping in from defaults.
+     * lane fader/pan/gate, bus gains) to its target value. It is one step of
+     * {@link primeOfflineParameters}; called alone it only snaps the smoothers
+     * and does not touch automation or processing state. Control-thread only:
+     * must not be called concurrently with {@link process}.
      */
     settleParameters(): void;
+    /**
+     * Runs the offline pre-roll that bounce and freeze run before rendering,
+     * without rendering anything: applies every queued command, resets the mixer
+     * and effect processors to their prepared state, adopts the published
+     * snapshots, resolves automation and lane gates at the transport position
+     * and snaps every smoother. A host that drives the engine block by block
+     * calls it once before the first chunk so a repeat render starts from the
+     * same state. Instruments are not reset. Control-thread only: must not be
+     * called concurrently with {@link process}.
+     *
+     * @param numChannels - Channel count of the blocks that will be rendered
+     * @param blockSize - Frames per block that will be rendered (clamped to the prepared block size)
+     * @throws If a count is not positive, `numChannels` exceeds the prepared
+     *   channel count, or the engine was never prepared
+     */
+    primeOfflineParameters(numChannels: number, blockSize: number): void;
+    /**
+     * Queues a reset of every mixer and effect processor to its prepared state.
+     * At `renderFrame` (omitted: the next block head) the lane, bus, master,
+     * monitor and graph processors drop their tails, delay lines and envelopes,
+     * automation is applied at the transport position and every smoother is
+     * snapped to its target, so playback queued after it starts from the state an
+     * offline bounce starts from. Strips the host bound to the engine, including
+     * host-owned ones, are reset too. Instruments are not reset. Called during
+     * playback it cuts running insert tails and delay lines mid-sound, like a
+     * seek.
+     *
+     * @param renderFrame - Block-relative frame to apply at; omit for the next block head (negative is refused)
+     * @throws If the command queue is full
+     */
+    resetProcessorState(renderFrame?: number): void;
+    /**
+     * Longest audible tail after the last input, in samples: an upper bound made
+     * of the longest instrument tail plus the longest route through lane strips
+     * (channel delay included), buses, sends, the graph and the master strip.
+     * `2147483647` means the tail is unbounded. Control-thread only: must not be
+     * called concurrently with {@link process}.
+     */
+    tailSamples(): number;
+    /** Processing latency of the engine in 1/256 samples, as telemetry reports it. */
+    graphLatencySamplesQ8(): number;
     /** Snap only insert automation slots after structural replay. */
     settleInsertParameters(): void;
     /** Drains queued commands on an offline/control-only engine immediately. */
@@ -544,8 +604,22 @@ export declare class RealtimeEngine {
     graphConnectionCount(): number;
     setClips(clips: EngineClip[]): void;
     /**
-     * Returns the PCM generated for a tempo-sync clip by the control-thread
-     * setter, or `null` when the clip did not require a tempo-sync bake.
+     * Replaces every published clip carrying `clip.id` with `clip`, or adds it
+     * when none does. Every other clip stays as published, so its audio is not
+     * copied again. Validated as {@link setClips} validates each entry; a refused
+     * clip leaves the published set unchanged.
+     */
+    upsertClip(clip: EngineClip): void;
+    /**
+     * Removes the clip carrying `clipId`.
+     *
+     * @throws SonareError `InvalidParameter` when no clip has that id.
+     */
+    removeClip(clipId: number): void;
+    /**
+     * Returns the engine-owned PCM behind a clip: the audio generated for a
+     * tempo-sync clip by the control-thread setter, or the audio a
+     * {@link freezeOffline} produced. `null` for any other clip.
      */
     prebakedClipChannels(clipId: number): Float32Array[] | null;
     clipCount(): number;
@@ -596,6 +670,16 @@ export declare class RealtimeEngine {
      * source rules as {@link setBusSidechain}.
      */
     setMasterSidechain(insertIndex: number, sourceKind: SidechainSourceKind | number, sourceId: number): void;
+    /**
+     * Reports whether {@link setLaneSidechain} would accept the binding, without
+     * changing anything. `reason` names the first check the setter would fail.
+     * Control-thread only: must not be called concurrently with {@link process}.
+     */
+    canSetLaneSidechain(trackId: number, insertIndex: number, sourceTrackId: number): SidechainCheck;
+    /** Reports whether {@link setBusSidechain} would accept the binding, without changing anything. */
+    canSetBusSidechain(busId: number, insertIndex: number, sourceKind: SidechainSourceKind | number, sourceId: number): SidechainCheck;
+    /** Reports whether {@link setMasterSidechain} would accept the binding, without changing anything. */
+    canSetMasterSidechain(insertIndex: number, sourceKind: SidechainSourceKind | number, sourceId: number): SidechainCheck;
     setBusStripJson(busId: number, sceneJson: string): void;
     setTrackStripJson(trackId: number, sceneJson: string): void;
     setTrackStripEqBand(trackId: number, bandIndex: number, band: EqBand | string): void;
@@ -657,19 +741,36 @@ export declare class RealtimeEngine {
      * match stages) have no insert form and no automation id: they buffer the
      * entire signal by construction and do not run on the realtime path.
      *
-     * The returned id uses the track's current positional lane selector. When
-     * `setTrackLanes` successfully changes lane order or membership, the engine
-     * remaps already queued and published track automation by track id, but it
-     * cannot update a numeric id retained by the caller. Re-resolve every track
-     * insert id after such a topology change before passing it to
-     * `setAutomationLane`, `setParameter`, or `setParameterSmoothed`. Use
-     * `setTrackStripInsertParamByName` when the operation needs a stable track
-     * identity. Master and bus insert ids are separate and are not invalidated by
-     * track-lane changes.
+     * Track, bus and master insert ids share one lifetime rule: an id names its
+     * strip by identity and the kind of processor in its slot (for
+     * `effects.gsEfx`, its EFX type too), so it survives lane and bus reorders
+     * and the removal of other strips, and stays valid until its track or bus is
+     * removed or its slot comes to hold another kind of processor. After that it
+     * applies nothing, its queued edits are dropped, and it is never reissued;
+     * resolve again for the new processor. A change that would take the engine
+     * past its 8192 insert-id entries is refused.
      */
     resolveTrackInsertAutomationId(trackId: number, insertIndex: number, paramName: string): number;
     resolveMasterInsertAutomationId(insertIndex: number, paramName: string): number;
     resolveBusInsertAutomationId(busId: number, insertIndex: number, paramName: string): number;
+    /**
+     * Resolve a track lane's fader (`'faderDb'`) or pan (`'pan'`) to its reserved
+     * automation id. Same lifetime rule as {@link resolveTrackInsertAutomationId}:
+     * the id names the track, not its lane position, so it keeps driving that
+     * track across {@link setTrackLanes} reorders and applies nothing once the
+     * track is removed. Returns `-1` when the track has no lane or the name is
+     * neither.
+     */
+    resolveTrackLaneAutomationId(trackId: number, paramName: 'faderDb' | 'pan'): number;
+    /**
+     * Resolve a bus's fader (`'faderDb'`) to its reserved automation id. Same
+     * lifetime rule as {@link resolveTrackInsertAutomationId}: the id names the
+     * bus, not its position in the bus list, so it keeps driving that bus across
+     * {@link setTrackBuses} reorders and the removal of other buses, and applies
+     * nothing once the bus is removed. Returns `-1` when the bus is not
+     * configured or the name is not `'faderDb'`.
+     */
+    resolveBusAutomationId(busId: number, paramName: 'faderDb'): number;
     /**
      * Resolves a hosted instrument's continuous parameter (by its JSON-key name)
      * to the reserved automation id usable with `setAutomationLane` /
@@ -785,6 +886,14 @@ export declare class RealtimeEngine {
     clipPagePrefetchFrames(): number;
     setCaptureBuffer(numChannels: number, capacityFrames: number): void;
     armCapture(armed?: boolean): void;
+    /**
+     * Set the punch-in window, half-open `[start, end)` in timeline samples.
+     *
+     * Each bound is samples or seconds (rounded to the nearest sample at the
+     * engine's sample rate), one spelling each; both bounds are required and a
+     * negative one is refused.
+     */
+    setCapturePunch(request: EngineCapturePunchRequest): void;
     setCapturePunch(startSample: number, endSample: number, enabled?: boolean): void;
     setCaptureSource(source: EngineCaptureSource): void;
     /** Positive values delay capture relative to the punch window. */
@@ -842,8 +951,8 @@ export declare class RealtimeEngine {
     processWithMonitor(channels: Float32Array[]): WasmEngineProcessWithMonitorResult;
     /**
      * Render `channels` offline from the current transport position. Requesting
-     * more planes than `prepare` reserved throws an `InvalidParameter`
-     * `SonareError` rather than returning silence that reads as a finished render.
+     * more planes than `prepare` reserved throws a `RangeError` rather than
+     * returning silence that reads as a finished render.
      *
      * Set `finalize: false` to render one chunk of a longer timeline; see
      * {@link RenderOfflineRequest.finalize} and {@link finishOfflineRender}.
@@ -865,12 +974,18 @@ export declare class RealtimeEngine {
     finishOfflineRender(): void;
     /**
      * Bounce the timeline to an interleaved buffer. `numChannels` above the
-     * prepared channel count throws an `InvalidParameter` `SonareError`.
+     * prepared channel count throws a `RangeError`.
      */
     bounceOffline(options: EngineBounceOptions): EngineBounceResult;
     /**
-     * Freeze the current graph to audio. `numChannels` above the prepared channel
-     * count throws an `InvalidParameter` `SonareError`.
+     * Render the source layer over the span and install it as the only clip.
+     * Bakes every audio clip and hosted MIDI instrument through the lane strips,
+     * lane inserts and group buses; the master strip, monitor bus, engine graph,
+     * capture and metronome stay live and process the frozen clip once on
+     * playback. The frozen clip replaces the whole clip set and every MIDI clip is
+     * withdrawn in the same call, so nothing plays twice; live MIDI input still
+     * reaches the instruments. `numChannels` above the prepared channel count
+     * throws a `RangeError`.
      */
     freezeOffline(options: EngineFreezeOptions): EngineFreezeResult;
     drainTelemetry(maxRecords?: number): EngineTelemetry[];
@@ -890,13 +1005,13 @@ export declare class RealtimeEngine {
     meterScratchValue(field: number): number;
     drainMeterTelemetry(maxRecords?: number): EngineMeterTelemetry[];
     /**
-     * Drains pending meter telemetry as per-plane (wide) records for a surround
-     * target. Use this for a surround mix target; {@link drainMeterTelemetry}
-     * stays the stereo fast path. The two share one queue and each consumes every
-     * target's records, so an engine uses only one of them. The live AudioWorklet
-     * path owns the queue via the stereo drain, so this wide drain is for an
-     * offline (non-worklet) engine instance; per-plane
-     * surround meters are not delivered over the live worklet meter ring.
+     * Drains pending meter telemetry as per-plane (wide) records. This is the one
+     * meter drain: a stereo target's left and right are planes 0 and 1, and a
+     * surround target carries every plane. Use it alone; {@link drainMeterTelemetry}
+     * consumes the same queue (every target's records) and stays for
+     * compatibility. The live AudioWorklet engine drains through this one, so a
+     * worklet-driven engine delivers per-plane meters on both the postMessage and
+     * the SharedArrayBuffer meter paths.
      */
     drainMeterTelemetryWide(maxRecords?: number): EngineMeterTelemetryWide[];
     /**
@@ -927,6 +1042,8 @@ export declare class RealtimeEngine {
     destroy(): void;
     /** Alias for {@link destroy}, matching embind's own release method name. */
     delete(): void;
+    /** Releases the handle through {@link destroy}, so the instance works with `using`. */
+    [Symbol.dispose](): void;
 }
 export declare class ClipPageProvider {
     private readonly engine;
@@ -936,4 +1053,8 @@ export declare class ClipPageProvider {
     supply(pageIndex: number, channels: Float32Array[]): void;
     clear(pageIndex: number): void;
     destroy(): void;
+    /** Alias for {@link destroy}, provided for cross-binding compatibility. */
+    delete(): void;
+    /** Releases the provider through {@link destroy}, so the instance works with `using`. */
+    [Symbol.dispose](): void;
 }

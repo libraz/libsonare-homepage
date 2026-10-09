@@ -1,5 +1,5 @@
-import { type WorkletInput, type WorkletOutput } from './audio_types';
-import type { SonareRealtimeVoiceChangerMessage, SonareRealtimeVoiceChangerWorkletProcessorOptions } from './messages';
+import { type WorkletInput, type WorkletOutput } from './audio_types.js';
+import type { SonareRealtimeVoiceChangerMessage, SonareRealtimeVoiceChangerWorkletProcessorOptions } from './messages.js';
 export declare class SonareRealtimeVoiceChangerWorkletProcessor {
     private static warnedMonoOverflow;
     private static warnedInterleavedOverflow;

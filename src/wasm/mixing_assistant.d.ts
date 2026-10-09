@@ -1,4 +1,4 @@
-import type { MixAssistantOptions, MixAssistantResult, MixAssistantTrack } from './public_types';
+import type { MixAssistantOptions, MixAssistantResult, MixAssistantTrack } from './public_types.js';
 /** Inputs for the {@link suggestMixScene} / {@link suggestMixSceneJson} facades. */
 export interface SuggestMixSceneRequest {
     /** Tracks to mix, in the order their profiles are reported. */

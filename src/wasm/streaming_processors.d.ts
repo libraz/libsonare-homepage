@@ -1,4 +1,4 @@
-import type { EqBand, EqMatchOptions, EqSpectrumSnapshot, EqStereoPlacement, StreamingEqualizerConfig, StreamingMasteringChainConfig, StreamingRetuneConfig } from './public_types';
+import type { EqBand, EqMatchOptions, EqSpectrumSnapshot, EqStereoPlacement, StreamingEqualizerConfig, StreamingMasteringChainConfig, StreamingRetuneConfig } from './public_types.js';
 type EqPhaseMode = 'zero' | 'zero-latency' | 'zero_latency' | 'natural' | 'natural-phase' | 'natural_phase' | 'linear' | 'linear-phase' | 'linear_phase' | number;
 /**
  * Block-by-block streaming variant of {@link masteringChain}.
@@ -38,10 +38,11 @@ type EqPhaseMode = 'zero' | 'zero-latency' | 'zero_latency' | 'natural' | 'natur
  *   message handler, never from `AudioWorkletProcessor.process()`.
  * - {@link processMono}/{@link processStereo} return fresh arrays. On the render
  *   thread, reuse the returned reference for the block rather than retaining it.
- * - An enabled `loudness` stage needs `loudnessStaticGainDb` measured offline,
- *   because whole-signal integrated LUFS cannot be measured block by block. Pass
- *   `loudnessStaticGainPeakDb` too and the static gain is clamped exactly as the
- *   offline chain clamps it, so the live preview matches the render.
+ * - An enabled `loudness` stage needs `loudnessStaticGainDb` measured offline
+ *   ({@link streamingLoudnessGain} returns it), because whole-signal integrated
+ *   LUFS cannot be measured block by block. Pass `loudnessStaticGainPeakDb` too
+ *   and the static gain is clamped exactly as the offline chain clamps it, so
+ *   the live preview matches the render.
  * - {@link flush} output starts {@link latencySamples} samples early; discard
  *   that many leading samples when time alignment matters.
  *
@@ -163,6 +164,8 @@ export declare class StreamingMasteringChain {
     delete(): void;
     /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
     destroy(): void;
+    /** Releases the handle through {@link delete}, so the instance works with `using`. */
+    [Symbol.dispose](): void;
 }
 /**
  * Block-by-block streaming equalizer wrapping the unified C++
@@ -297,6 +300,8 @@ export declare class StreamingEqualizer {
     delete(): void;
     /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
     destroy(): void;
+    /** Releases the handle through {@link delete}, so the instance works with `using`. */
+    [Symbol.dispose](): void;
 }
 /**
  * Block-by-block mono voice retune / pitch shifter.
@@ -335,5 +340,7 @@ export declare class StreamingRetune {
     delete(): void;
     /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
     destroy(): void;
+    /** Releases the handle through {@link delete}, so the instance works with `using`. */
+    [Symbol.dispose](): void;
 }
 export {};

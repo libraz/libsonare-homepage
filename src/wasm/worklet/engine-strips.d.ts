@@ -1,8 +1,8 @@
-import type { EqBand, PanLawInput, PanMode, RealtimeEngine, UmpWords } from '../index';
-import type { SurroundPan } from '../public_types';
-import type { InsertParamOverrideMap } from './engine-mixer-facade';
-import { type InsertParamOverride, type StripJsonTarget } from './engine-mixer-facade';
-import type { SonareEngineInstrumentSyncMessage, SonareEngineSyncMessage } from './messages';
+import type { EqBand, PanLawInput, PanMode, RealtimeEngine, UmpWords } from '../index.js';
+import type { SurroundPan } from '../public_types.js';
+import type { InsertParamOverrideMap } from './engine-mixer-facade.js';
+import { type InsertParamOverride, type StripJsonTarget } from './engine-mixer-facade.js';
+import type { SonareEngineInstrumentSyncMessage, SonareEngineSyncMessage } from './messages.js';
 /**
  * Collaborator surface the strip/pan/EQ/insert/instrument/MIDI setters need from
  * the owning {@link SonareEngine}: the offline engine they mirror writes into,
@@ -48,13 +48,13 @@ export declare function setBusStripPan(ctx: EngineStripContext, busId: number, p
 export declare function setBusStripPanLaw(ctx: EngineStripContext, busId: number, panLaw: PanLawInput): void;
 export declare function setBusStripPanMode(ctx: EngineStripContext, busId: number, panMode: PanMode | number): void;
 export declare function setBusStripDualPan(ctx: EngineStripContext, busId: number, leftPan: number, rightPan: number): void;
-export declare function pushMidiNoteOn(ctx: EngineStripContext, trackId: string | number, group: number, channel: number, note: number, velocity: number, renderFrame: number): void;
-export declare function pushMidiNoteOff(ctx: EngineStripContext, trackId: string | number, group: number, channel: number, note: number, velocity: number, renderFrame: number): void;
-export declare function pushMidiCc(ctx: EngineStripContext, trackId: string | number, group: number, channel: number, controller: number, value: number, renderFrame: number): void;
-export declare function pushMidiPitchBend(ctx: EngineStripContext, trackId: string | number, group: number, channel: number, bend14: number, renderFrame: number): void;
-export declare function pushMidiChannelPressure(ctx: EngineStripContext, trackId: string | number, group: number, channel: number, pressure: number, renderFrame: number): void;
-export declare function pushMidiPolyPressure(ctx: EngineStripContext, trackId: string | number, group: number, channel: number, note: number, pressure: number, renderFrame: number): void;
-export declare function pushMidiUmp(ctx: EngineStripContext, trackId: string | number, word0: number | UmpWords, renderFrame: number): void;
+export declare function pushMidiNoteOn(ctx: EngineStripContext, trackId: string | number, group: number, channel: number, note: number, velocity: number, renderFrame: number | undefined): void;
+export declare function pushMidiNoteOff(ctx: EngineStripContext, trackId: string | number, group: number, channel: number, note: number, velocity: number, renderFrame: number | undefined): void;
+export declare function pushMidiCc(ctx: EngineStripContext, trackId: string | number, group: number, channel: number, controller: number, value: number, renderFrame: number | undefined): void;
+export declare function pushMidiPitchBend(ctx: EngineStripContext, trackId: string | number, group: number, channel: number, bend14: number, renderFrame: number | undefined): void;
+export declare function pushMidiChannelPressure(ctx: EngineStripContext, trackId: string | number, group: number, channel: number, pressure: number, renderFrame: number | undefined): void;
+export declare function pushMidiPolyPressure(ctx: EngineStripContext, trackId: string | number, group: number, channel: number, note: number, pressure: number, renderFrame: number | undefined): void;
+export declare function pushMidiUmp(ctx: EngineStripContext, trackId: string | number, word0: number | UmpWords, renderFrame: number | undefined): void;
 export declare function setBuiltinInstrument(ctx: EngineStripContext, trackId: string | number, config: {
     destinationId?: number;
 } & Record<string, unknown>): void;
@@ -72,5 +72,5 @@ export declare function setMidiDestinationExternal(ctx: EngineStripContext, trac
 export declare function setExternalMidiClockEnabled(ctx: EngineStripContext, enabled: boolean): void;
 export declare function setMidiFx(ctx: EngineStripContext, trackId: string | number, configJson: string): void;
 export declare function clearMidiFx(ctx: EngineStripContext, trackId: string | number): void;
-export declare function pushMidiSysex(ctx: EngineStripContext, trackId: string | number, data: Uint8Array, renderFrame: number): void;
-export declare function pushMidiPanic(ctx: EngineStripContext, renderFrame: number): void;
+export declare function pushMidiSysex(ctx: EngineStripContext, trackId: string | number, data: Uint8Array, renderFrame: number | undefined): void;
+export declare function pushMidiPanic(ctx: EngineStripContext, renderFrame: number | undefined): void;

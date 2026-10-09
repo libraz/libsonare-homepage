@@ -1,5 +1,5 @@
-import type { EngineParameterInfo, EngineTempoSegment, EngineTimeSignatureSegment, EngineTrackLane, EngineTrackSend } from '../index';
-import type { SonareEngineSyncTempoMessage } from './messages';
+import type { EngineParameterInfo, EngineTempoSegment, EngineTimeSignatureSegment, EngineTrackLane, EngineTrackSend } from '../index.js';
+import type { SonareEngineSyncTempoMessage } from './messages.js';
 /**
  * Builds the ordered mixer-lane descriptors for a sync message.
  *

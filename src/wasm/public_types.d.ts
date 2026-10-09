@@ -1,11 +1,11 @@
-export * from './public_types_acoustic';
-export * from './public_types_mastering';
-export * from './public_types_mixing';
-export * from './public_types_music';
-export * from './public_types_playback';
-export * from './public_types_realtime';
-export * from './public_types_repair';
-export * from './public_types_spectral';
+export * from './public_types_acoustic.js';
+export * from './public_types_mastering.js';
+export * from './public_types_mixing.js';
+export * from './public_types_music.js';
+export * from './public_types_playback.js';
+export * from './public_types_realtime.js';
+export * from './public_types_repair.js';
+export * from './public_types_spectral.js';
 /** Runtime capabilities reported by the loaded libsonare build. */
 export interface SonareCapabilities {
     version: string;
@@ -51,6 +51,17 @@ export interface SonareCapabilities {
     };
     simd: string;
     hardwareConcurrency: number;
+}
+/** Closed vocabulary of units a numeric insert parameter declares; `none` is a declaration (a fraction, a selector index, a seed). */
+export type MasteringInsertParamUnit = 'dB' | 'dBFS' | 'LUFS' | 'Hz' | 'ms' | 's' | 'samples' | 'm' | 'cm' | 'deg' | 'percent' | 'degC' | 'V' | 'inPerSec' | 'dBPerOct' | 'semitones' | 'cents' | 'ratio' | 'bits' | 'count' | 'none';
+/** Axis a control draws an insert parameter on. */
+export type MasteringInsertParamScale = 'linear' | 'log';
+/** How a parameter's value is ordered against a sibling's, read as `this <relation> sibling`. */
+export type MasteringInsertParamRelation = 'lt' | 'le' | 'gt' | 'ge';
+/** A sibling whose live value bounds an insert parameter. */
+export interface MasteringInsertParamDependency {
+    key: string;
+    relation: MasteringInsertParamRelation;
 }
 /** One named value an enum- or closed-integer-typed insert param accepts. */
 export interface MasteringInsertParamChoice {
@@ -115,8 +126,10 @@ export interface MasteringInsertSlot {
  * parameters that constrain each other each report the other's default; a
  * sample-rate-derived bound reflects the un-prepared processor and rises once
  * the insert is prepared at a higher rate; and an exclusive bound is reported
- * as its limit value, so a control requiring `> 0` reports `min` 0 and still
- * rejects 0.
+ * as its limit value and flagged by `minExclusive` / `maxExclusive`, so a
+ * control requiring `> 0` reports `min` 0 with `minExclusive` true. A ceiling
+ * that follows the processing rate carries `maxRelativeTo: "nyquist"`: its
+ * effective ceiling is the lower of `max` and the host's Nyquist.
  */
 export interface CapabilityCatalogParameter {
     name: string;
@@ -125,14 +138,31 @@ export interface CapabilityCatalogParameter {
     type: 'boolean' | 'number' | 'enum' | 'string' | 'array';
     min: number | null;
     max: number | null;
+    /** Whether `min` itself is rejected; false when `min` is null. */
+    minExclusive: boolean;
+    /** Whether `max` itself is rejected; false when `max` is null. */
+    maxExclusive: boolean;
+    /** `"nyquist"` when the effective ceiling is the lower of `max` and the host's Nyquist (both exclusive); null otherwise. */
+    maxRelativeTo: 'nyquist' | null;
     default: boolean | number | null;
-    unit: string | null;
+    unit: MasteringInsertParamUnit | null;
+    /** Lowest value a control should draw, inside `min` / `max`; null when the accepted range is also the display range. */
+    uiMin: number | null;
+    /** Highest value a control should draw, inside `min` / `max`; null when the accepted range is also the display range. */
+    uiMax: number | null;
+    /** Axis a control draws the value on. */
+    scale: MasteringInsertParamScale;
     choices: MasteringInsertParamChoice[] | null;
     /**
      * The {@link MasteringInsertSlot} this key belongs to, or null for a key that
      * always exists.
      */
     slot: string | null;
+    /**
+     * Siblings whose live value bounds this key, each read as `this <relation> sibling`;
+     * empty for an independent key. `min` and `max` are measured with every sibling at its default.
+     */
+    dependsOn: MasteringInsertParamDependency[];
 }
 /** One named mastering processor and its host-facing capabilities. */
 export interface CapabilityCatalogProcessor {
@@ -146,6 +176,8 @@ export interface CapabilityCatalogProcessor {
     realtimeCost: 'low' | 'moderate' | 'high' | null;
     channelPolicy: 'multichannel' | 'stereoPairOnly' | 'perChannel' | 'passthrough';
     category: string;
+    /** Whether the processor has a causal configuration; false for declick, declip and trimSilence. */
+    causal: boolean;
     params: CapabilityCatalogParameter[];
     /**
      * The insert's conditional key groups in declaration order, named by each

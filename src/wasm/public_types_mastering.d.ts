@@ -30,13 +30,139 @@ export interface StreamingPlatform {
  * Every processor name `masteringProcessorNames()` can return, and therefore
  * every name `masteringProcess` / `masteringProcessStereo` accept.
  */
-export declare const SOLO_PROCESSORS: readonly ["dynamics.brickwallLimiter", "dynamics.compressor", "dynamics.deesser", "dynamics.duckingProcessor", "dynamics.expander", "dynamics.gate", "dynamics.limiter", "dynamics.parallelComp", "dynamics.sidechainRouter", "dynamics.transientShaper", "dynamics.upwardCompressor", "dynamics.upwardExpander", "dynamics.vocalRider", "effects.acoustic.roomMorph", "effects.delay.stereo", "effects.filter.vowel", "effects.gsEfx", "effects.modulation.autoWah", "effects.modulation.chorus", "effects.modulation.ensemble", "effects.modulation.flanger", "effects.modulation.phaser", "effects.modulation.pitchShifter", "effects.modulation.ringModulator", "effects.modulation.rotary", "effects.modulation.wah", "effects.reverb.convolution", "effects.reverb.dattorro", "effects.reverb.fdn", "effects.reverb.plate", "effects.reverb.room", "effects.reverb.velvet", "eq.apiStyle", "eq.bandPass", "eq.cutFilter", "eq.dynamic", "eq.equalizer", "eq.graphic", "eq.linearPhase", "eq.midSide", "eq.minimumPhase", "eq.parametric", "eq.pultec", "eq.shelving", "eq.tilt", "final.bitDepth", "final.dither", "final.outputChain", "maximizer.adaptiveRelease", "maximizer.loudnessOptimize", "maximizer.maximizer", "maximizer.softKneeMax", "maximizer.truePeakLimiter", "multiband.compressor", "multiband.dynamicEq", "multiband.expander", "multiband.imager", "multiband.limiter", "multiband.saturation", "repair.declick", "repair.declip", "repair.decrackle", "repair.dehum", "repair.denoiseClassical", "repair.dereverbClassical", "repair.trimSilence", "saturation.ampSim", "saturation.bitcrusher", "saturation.distortion", "saturation.exciter", "saturation.hardClipper", "saturation.multibandExciter", "saturation.overdrive", "saturation.softClipper", "saturation.tape", "saturation.transformer", "saturation.tube", "saturation.waveshaper", "spectral.airBand", "spectral.lowEndFocus", "spectral.presenceEnhancer", "spectral.spectralShaper", "stereo.autoPan", "stereo.binaural", "stereo.haasEnhancer", "stereo.imager", "stereo.monoMaker", "stereo.phaseAlign", "stereo.stereoBalance", "utility.gain"];
+export declare const SOLO_PROCESSORS: readonly ["dynamics.brickwallLimiter", "dynamics.compressor", "dynamics.deesser", "dynamics.duckingProcessor", "dynamics.expander", "dynamics.gate", "dynamics.limiter", "dynamics.parallelComp", "dynamics.sidechainRouter", "dynamics.transientShaper", "dynamics.upwardCompressor", "dynamics.upwardExpander", "dynamics.vocalRider", "effects.acoustic.roomMorph", "effects.delay.stereo", "effects.filter.vowel", "effects.gsEfx", "effects.modulation.autoWah", "effects.modulation.chorus", "effects.modulation.ensemble", "effects.modulation.flanger", "effects.modulation.phaser", "effects.modulation.pitchShifter", "effects.modulation.ringModulator", "effects.modulation.rotary", "effects.modulation.wah", "effects.reverb.convolution", "effects.reverb.dattorro", "effects.reverb.fdn", "effects.reverb.plate", "effects.reverb.room", "effects.reverb.velvet", "eq.apiStyle", "eq.bandPass", "eq.cutFilter", "eq.dynamic", "eq.equalizer", "eq.graphic", "eq.linearPhase", "eq.midSide", "eq.minimumPhase", "eq.parametric", "eq.pultec", "eq.shelving", "eq.tilt", "final.bitDepth", "final.dither", "final.outputChain", "maximizer.adaptiveRelease", "maximizer.loudnessOptimize", "maximizer.maximizer", "maximizer.softKneeMax", "maximizer.truePeakLimiter", "multiband.compressor", "multiband.dynamicEq", "multiband.expander", "multiband.imager", "multiband.limiter", "multiband.saturation", "repair.declick", "repair.declip", "repair.decrackle", "repair.dehum", "repair.denoiseClassical", "repair.dereverbClassical", "repair.trimSilence", "saturation.ampSim", "saturation.bitcrusher", "saturation.distortion", "saturation.exciter", "saturation.hardClipper", "saturation.multibandExciter", "saturation.overdrive", "saturation.softClipper", "saturation.tape", "saturation.transformer", "saturation.tube", "saturation.waveshaper", "spectral.airBand", "spectral.lowEndFocus", "spectral.presenceEnhancer", "spectral.spectralShaper", "stereo.autoPan", "stereo.binaural", "stereo.haasEnhancer", "stereo.imager", "stereo.monoMaker", "stereo.phaseAlign", "stereo.stereoBalance", "utility.gain", "voice.changer"];
 export type SoloProcessor = (typeof SOLO_PROCESSORS)[number];
 export type PairProcessor = 'match.applyMatchEq' | 'match.alignReferenceToSource' | 'match.abSwitch' | 'match.abCrossfade';
 /** Pair processors with a stereo entry point. */
 export type StereoPairProcessor = 'match.abCrossfade';
 export type PairAnalysis = 'match.referenceLoudness' | 'match.tonalBalance' | 'match.tonalBalanceLogBands' | 'match.matchEqCurve' | 'match.estimateReferenceDelaySamples';
 export type StereoAnalysis = 'stereo.monoCompatCheck' | 'stereo.monoCompatCheckLogBands';
+/**
+ * A JSON string known to parse to a `R`.
+ *
+ * The helpers that return one cross as a string each facade parses, so nothing
+ * type-checks the parse; this carries the result type at compile time only and
+ * is a plain `string` at run time. Read it back with {@link JsonResult}.
+ */
+export type TypedJson<R> = string & {
+    readonly __jsonResult?: R;
+};
+/** The result type a {@link TypedJson} string parses to. */
+export type JsonResult<J> = J extends {
+    readonly __jsonResult?: infer R;
+} ? NonNullable<R> : never;
+/**
+ * The chain document {@link masteringAssistantSuggest} suggests: a version and
+ * the flat `{ "module.param": value }` params. `params` keys depend on the
+ * suggested stages, so they are not enumerated; a version 2 document carries the
+ * multiband stage as a structured object under `dynamics.multibandComp`.
+ */
+export interface MasteringChainConfigDocument {
+    version: 1 | 2;
+    params: Record<string, number | boolean | Record<string, unknown>>;
+}
+/**
+ * The measurements the assistant summarises its suggestion from. Flat, unlike
+ * `MasteringAudioProfile`'s nested groups. A non-finite loudness is `null`.
+ */
+export interface MasteringAssistantProfile {
+    durationSec: number;
+    bpm: number;
+    bpmConfidence: number;
+    integratedLufs: number | null;
+    lraLu: number;
+    truePeakDb: number;
+    crestFactorDb: number;
+    spectralCentroidHz: number;
+    spectralFlatness: number;
+    attackDensity: number;
+    sustainRatio: number;
+}
+/** The shape {@link masteringAssistantSuggest}'s and its stereo form's JSON parses to. */
+export interface MasteringAssistantResult {
+    chainConfig: MasteringChainConfigDocument;
+    /** One line per decision the assistant made, in the order it made them. */
+    explanation: string[];
+    profile: MasteringAssistantProfile;
+}
+/** One delivery target in a {@link MasteringStreamingPreviewResult}. */
+export interface MasteringStreamingPreviewPlatform {
+    name: string;
+    /** `null` for a silent or below-gate take. */
+    integratedLufs: number | null;
+    truePeakDb: number;
+    /** Gain that lands the take on the platform's target; 0 when the loudness is `null`. */
+    normalizationGainDb: number;
+    /** True when that gain would push the true peak above the platform's ceiling. */
+    ceilingRisk: boolean;
+}
+/** The shape {@link masteringStreamingPreview}'s and its stereo form's JSON parses to. */
+export interface MasteringStreamingPreviewResult {
+    platforms: MasteringStreamingPreviewPlatform[];
+}
+/** Result of the `match.referenceLoudness` pair analysis. A silent take reads `null`. */
+export interface MatchReferenceLoudnessResult {
+    sourceLufs: number | null;
+    referenceLufs: number | null;
+    gainToMatchDb: number | null;
+}
+/** One band of the `match.tonalBalance` and `match.tonalBalanceLogBands` analyses. */
+export interface MatchTonalBalanceBand {
+    lowHz: number;
+    highHz: number;
+    sourceDb: number;
+    referenceDb: number;
+    deviationDb: number;
+}
+/** Result of the `match.tonalBalance` pair analysis. */
+export interface MatchTonalBalanceResult {
+    bands: MatchTonalBalanceBand[];
+}
+/** Result of the `match.tonalBalanceLogBands` pair analysis. */
+export interface MatchTonalBalanceLogBandsResult {
+    bands: MatchTonalBalanceBand[];
+}
+/** Result of the `match.matchEqCurve` pair analysis: `gainDb[i]` is the gain at `frequencies[i]`. */
+export interface MatchEqCurveResult {
+    frequencies: number[];
+    gainDb: number[];
+}
+/** Result of the `match.estimateReferenceDelaySamples` pair analysis. */
+export interface MatchEstimateReferenceDelaySamplesResult {
+    delaySamples: number;
+}
+/** What each {@link PairAnalysis} name's JSON parses to. */
+export interface PairAnalysisResultMap {
+    'match.referenceLoudness': MatchReferenceLoudnessResult;
+    'match.tonalBalance': MatchTonalBalanceResult;
+    'match.tonalBalanceLogBands': MatchTonalBalanceLogBandsResult;
+    'match.matchEqCurve': MatchEqCurveResult;
+    'match.estimateReferenceDelaySamples': MatchEstimateReferenceDelaySamplesResult;
+}
+/** Result of the `stereo.monoCompatCheck` analysis. `width` is `null` for a fully out-of-phase pair. */
+export interface StereoMonoCompatCheckResult {
+    correlation: number;
+    width: number | null;
+    monoPeak: number;
+    sideRms: number;
+    likelyMonoCompatible: boolean;
+}
+/** One band of the `stereo.monoCompatCheckLogBands` analysis. */
+export interface StereoMonoCompatBand {
+    lowHz: number;
+    highHz: number;
+    correlation: number;
+    sideRms: number;
+}
+/** Result of the `stereo.monoCompatCheckLogBands` analysis. */
+export interface StereoMonoCompatCheckLogBandsResult {
+    bands: StereoMonoCompatBand[];
+}
+/** What each {@link StereoAnalysis} name's JSON parses to. */
+export interface StereoAnalysisResultMap {
+    'stereo.monoCompatCheck': StereoMonoCompatCheckResult;
+    'stereo.monoCompatCheckLogBands': StereoMonoCompatCheckLogBandsResult;
+}
 /** Options for `mastering`. All fields are optional. */
 export interface MasteringOptions {
     /** Target integrated LUFS. Default -14. */
@@ -49,6 +175,24 @@ export interface MasteringOptions {
     releaseMs?: number;
     /** Apply the static loudness gain at the input (pre-oversample) rate. Default false. */
     applyGainAtInputRate?: boolean;
+}
+/**
+ * The loudness numbers a {@link StreamingMasteringChain} is constructed with,
+ * measured at the loudness stage's input (after every earlier enabled stage),
+ * which is where the offline chain measures.
+ *
+ * `loudnessStaticGainDb` equals the gain {@link masteringChain} applies, ceiling
+ * clamp included, and 0 for a silent or below-gate stage input. Pass it and
+ * `truePeakDb` as the chain config's `loudnessStaticGainDb` and
+ * `loudnessStaticGainPeakDb`.
+ */
+export interface StreamingLoudnessGainResult {
+    /** Static gain in dB the offline loudness stage applies. */
+    loudnessStaticGainDb: number;
+    /** True peak in dBTP of the loudness stage's input; -120 for digital silence. */
+    truePeakDb: number;
+    /** Integrated loudness in LUFS of the loudness stage's input; `-Infinity` below the absolute gate. */
+    integratedLufs: number;
 }
 /** What gain-matching one take to another's loudness took, and produced. */
 export interface LoudnessMatchResult {
@@ -63,8 +207,10 @@ export interface LoudnessMatchResult {
     /** The matched take's, before the gain. Non-finite in the same case. */
     sourceLufs: number;
     /**
-     * `referenceLufs - sourceLufs`. Applied with no upper bound, and 0 whenever
-     * either loudness is non-finite.
+     * The gain that lands the remeasured source on `referenceLufs`; equals
+     * `referenceLufs - sourceLufs` unless the gain moves blocks across the
+     * absolute gate. Applied with no upper bound, and 0 whenever either loudness
+     * is non-finite.
      */
     appliedGainDb: number;
     /**
@@ -104,6 +250,10 @@ export interface MasteringResult {
     appliedGainDb: number;
     /** True when peak headroom prevented the requested LUFS target. */
     loudnessTargetLimited?: boolean;
+    /**
+     * The processor's own latency, already compensated in the returned audio;
+     * do not trim the returned audio by it.
+     */
     latencySamples?: number;
     /**
      * Samples the named processor replaced with a finite in-domain one,
@@ -391,9 +541,10 @@ export interface MasteringChainConfig {
  * Extends {@link MasteringChainConfig} with optional precomputed loudness
  * parameters. The streaming chain cannot measure whole-signal integrated LUFS,
  * so an enabled `loudness` stage normally throws at construction. To let a
- * preset's streaming preview match its offline render, the caller may
- * precompute the loudness normalization gain offline (e.g.
- * `targetLufs - measuredIntegratedLufs`) and supply it here.
+ * preset's streaming preview match its offline render, the caller precomputes
+ * the loudness normalization gain offline with {@link streamingLoudnessGain},
+ * which measures at the loudness stage's input like the offline chain, and
+ * supplies it here.
  */
 export interface StreamingMasteringChainConfig extends MasteringChainConfig {
     /**
@@ -404,8 +555,8 @@ export interface StreamingMasteringChainConfig extends MasteringChainConfig {
      */
     loudnessStaticGainDb?: number;
     /**
-     * Offline-measured true-peak (dBFS) of the source the static gain was
-     * computed for. When provided, the static gain is clamped to
+     * True peak (dBFS) of the loudness stage's input the static gain was
+     * computed for (`truePeakDb` of {@link streamingLoudnessGain}). When provided, the static gain is clamped to
      * `(loudness.ceilingDb - loudnessStaticGainPeakDb) +
      * max(loudness.maxLimiterGainReductionDb, 0)` so the streaming preview
      * does not drive the loudness limiter harder than the offline chain. When
@@ -516,6 +667,10 @@ export interface MasteringStereoResult {
     inputLufs: number;
     outputLufs: number;
     appliedGainDb: number;
+    /**
+     * The processor's own latency, already compensated in the returned audio;
+     * do not trim the returned audio by it.
+     */
     latencySamples: number;
     /** True when peak headroom prevented the requested LUFS target. */
     loudnessTargetLimited: boolean;
