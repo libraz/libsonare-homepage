@@ -106,7 +106,7 @@ class LibsonareSynthProcessor extends AudioWorkletProcessor {
     } else if (msg.type === 'midi') {
       if (this.engine && MIDI_PUSH.includes(msg.method)) this.engine[msg.method](...msg.args);
     } else if (msg.type === 'panic') {
-      if (this.engine) this.engine.pushMidiPanic(-1);
+      if (this.engine) this.engine.pushMidiPanic();
     } else if (msg.type === 'patch') {
       this.pendingPatch = msg.patch;
       if (this.engine) {

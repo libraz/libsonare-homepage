@@ -152,12 +152,8 @@ export interface StepBassEngine {
   resolveInstrumentAutomationId(destinationId: number, paramName: string): number;
   setAutomationLane(paramId: number, points: CompiledLanePoint[]): void;
   setLoop(startPpq: number, endPpq: number, enabled?: boolean): void;
-  /**
-   * `renderFrame` is required here even though the JS facade defaults it: the
-   * native embind object has no default and throws on a zero-argument call, so
-   * the shared type is the thing that keeps one out of the worklet.
-   */
-  play(renderFrame: number): void;
+  /** Starts the transport at the next block; both surfaces read an omitted frame as "now". */
+  play(): void;
 }
 
 /** Automation ids the apply sequence resolved, keyed by parameter name. */

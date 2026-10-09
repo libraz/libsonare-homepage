@@ -53,7 +53,7 @@ describe('buildSynthProcessorSource', () => {
     expect(source).toContain(
       'this.engine.pushMidiInputCc(GROUP, CHANNEL, msg.controller, msg.value, 0)',
     );
-    expect(source).toContain('this.engine.pushMidiPanic(-1)');
+    expect(source).toContain('this.engine.pushMidiPanic()');
   });
 
   it('renders via processPrepared and re-acquires heap views after memory growth', () => {

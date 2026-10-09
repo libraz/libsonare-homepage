@@ -18,7 +18,6 @@ import { LOOP_PPQ, STEP_PPQ } from '@/demos/step-bass/stepBassCompile';
 import {
   ACCENT_MEMORY_CAP,
   accentVelocity,
-  RENDER_NOW,
   STEP_BASS_CHANNEL,
   STEP_COUNT,
   STEP_VELOCITY,
@@ -54,7 +53,7 @@ export function renderStepBassChannels(
   const engine = new mod.RealtimeEngine(compiled.sampleRate, BLOCK, 1024, 1024);
   try {
     applyCompiled(engine as unknown as StepBassEngine, compiled, 'facade');
-    engine.play(RENDER_NOW);
+    engine.play();
 
     const totalFrames = compiled.clip.lengthSamples * loops;
     const left = new Float32Array(totalFrames);

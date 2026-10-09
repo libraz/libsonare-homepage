@@ -34,7 +34,7 @@ export interface LaneMixerEngine {
   setMasterStripJson(sceneJson: string): void;
   setMidiClips(clips: Array<Record<string, unknown>>): void;
   setTrackStripJson(trackId: number, sceneJson: string): void;
-  setSoloMute(laneIndex: number, solo: boolean, mute: boolean, renderFrame: number): void;
+  setSoloMute(laneIndex: number, solo: boolean, mute: boolean, renderFrame?: number): void;
   renderOffline(channels: Float32Array[], blockSize?: number): Float32Array[];
   destroy(): void;
 }
@@ -125,7 +125,7 @@ export function applyLaneMixerControls(
       t + 1,
       JSON.stringify({ strips: [{ id: LANE_MIXER_STRIP_IDS[t], faderDb: faderDb[t] }] }),
     );
-    e.setSoloMute(t, false, muted[t], -1);
+    e.setSoloMute(t, false, muted[t]);
   }
 }
 

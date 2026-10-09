@@ -218,10 +218,7 @@ describe('criterion 7(c): the worklet and export apply-and-render procedures agr
     let nativeOut: [Float32Array, Float32Array];
     try {
       applyCompiled(nativeEngine as unknown as StepBassEngine, compiled, 'native');
-      // The raw embind object has no JS-side default for this argument — only
-      // the facade wrapper supplies one (`play(renderFrame = -1)`); -1 mirrors
-      // it exactly so both sides start the transport the same way.
-      nativeEngine.play(-1);
+      nativeEngine.play();
       nativeOut = pumpStereo(nativeEngine, compiled.clip.lengthSamples);
     } finally {
       releaseEngine(nativeEngine);

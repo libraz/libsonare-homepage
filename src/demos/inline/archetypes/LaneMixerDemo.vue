@@ -120,10 +120,10 @@ async function compute(): Promise<void> {
     // reader muted stays muted, so its band goes flat — exactly what it plays.
     const lanePcm: Float32Array[] = [];
     for (let t = 0; t < 3; t++) {
-      for (let o = 0; o < 3; o++) e.setSoloMute(o, false, o !== t || muted.value[o], -1);
+      for (let o = 0; o < 3; o++) e.setSoloMute(o, false, o !== t || muted.value[o]);
       lanePcm.push(renderLaneMixerLoop(e));
     }
-    for (let o = 0; o < 3; o++) e.setSoloMute(o, false, muted.value[o], -1);
+    for (let o = 0; o < 3; o++) e.setSoloMute(o, false, muted.value[o]);
 
     // One shared scale so the lane bands stay comparable to the master band.
     let peak = 1e-4;

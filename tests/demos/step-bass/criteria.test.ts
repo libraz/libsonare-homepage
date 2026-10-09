@@ -19,7 +19,6 @@ import {
   DEFAULT_BPM,
   KNOB_RANGES,
   MASTER_FADER_PARAM_ID,
-  RENDER_NOW,
   STEP_BASS_DEFAULT_KNOBS,
   STEP_BASS_TRACK_ID,
   STEP_COUNT,
@@ -80,7 +79,7 @@ function renderCompiled(
   const engine = new wasm.RealtimeEngine(compiled.sampleRate, BLOCK, 1024, 1024);
   try {
     const ids = applyCompiled(engine, compiled, 'facade');
-    engine.play(RENDER_NOW);
+    engine.play();
     const total = compiled.clip.lengthSamples * loops;
     const left = new Float32Array(total);
     const right = new Float32Array(total);
