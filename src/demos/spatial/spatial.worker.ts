@@ -213,9 +213,6 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         maxSeconds,
         sampleRate,
       });
-      if (rir.hasError || rir.rir.length === 0) {
-        throw new Error('Invalid room geometry for synthesis');
-      }
       self.postMessage({ type: 'progress', id, stage: 'estimate', value: 0.7 });
       const result = analyse(rir.rir, rir.sampleRate, true, geometry, (v) =>
         self.postMessage({ type: 'progress', id, stage: 'estimate', value: 0.7 + v * 0.3 }),
@@ -295,24 +292,24 @@ function analyse(
   // zero/NaN dimensions and zero confidence. Flag it so the UI shows guidance
   // instead of rendering a broken (NaN-geometry) scene.
   const valid =
-    Number.isFinite(estimate.length) &&
-    estimate.length > 0.1 &&
-    Number.isFinite(estimate.width) &&
-    estimate.width > 0.1 &&
-    Number.isFinite(estimate.height) &&
-    estimate.height > 0.1 &&
+    Number.isFinite(estimate.lengthM) &&
+    estimate.lengthM > 0.1 &&
+    Number.isFinite(estimate.widthM) &&
+    estimate.widthM > 0.1 &&
+    Number.isFinite(estimate.heightM) &&
+    estimate.heightM > 0.1 &&
     Number.isFinite(estimate.volume) &&
     estimate.volume > 0.5;
 
   const volume =
-    estimate.volume > 0 ? estimate.volume : estimate.length * estimate.width * estimate.height;
+    estimate.volume > 0 ? estimate.volume : estimate.lengthM * estimate.widthM * estimate.heightM;
   const rt60 = acoustic.rt60 > 0 ? acoustic.rt60 : meanPositive(estimate.rt60Bands) || 0.4;
 
   // Critical distance r_c = 0.057 * sqrt(V / RT60) (omnidirectional source, Q = 1).
   const criticalDistance = 0.057 * Math.sqrt(Math.max(volume, 0.5) / Math.max(rt60, 0.05));
 
   // DRR (dB, power) maps to distance: DRR = (r_c / r)^2 → r = r_c * 10^(-DRR/20).
-  const diagonal = Math.hypot(estimate.length, estimate.width, estimate.height);
+  const diagonal = Math.hypot(estimate.lengthM, estimate.widthM, estimate.heightM);
   const drrDb = Number.isFinite(estimate.drrDb) ? estimate.drrDb : 0;
   const rawDistance = criticalDistance * 10 ** (-drrDb / 20);
   const sourceDistance = clamp(
@@ -324,7 +321,7 @@ function analyse(
   // Listener: a sensible interior measurement point. Use truth listener for presets.
   const listener = truthGeometry
     ? { x: truthGeometry.listenerX, y: truthGeometry.listenerY, z: truthGeometry.listenerZ }
-    : { x: estimate.length * 0.62, y: estimate.width * 0.5, z: 1.5 };
+    : { x: estimate.lengthM * 0.62, y: estimate.widthM * 0.5, z: 1.5 };
 
   // Representative source point: a fixed bearing at exactly sourceDistance from the
   // listener, so the marker always sits on the drawn distance shell. (A single channel
@@ -339,9 +336,9 @@ function analyse(
     z: listener.z + sourceDistance * Math.sin(elevation),
   };
   const dspSource = {
-    x: clamp(source.x, 0.05, Math.max(0.05, estimate.length - 0.05)),
-    y: clamp(source.y, 0.05, Math.max(0.05, estimate.width - 0.05)),
-    z: clamp(source.z, 0.05, Math.max(0.05, estimate.height - 0.05)),
+    x: clamp(source.x, 0.05, Math.max(0.05, estimate.lengthM - 0.05)),
+    y: clamp(source.y, 0.05, Math.max(0.05, estimate.widthM - 0.05)),
+    z: clamp(source.z, 0.05, Math.max(0.05, estimate.heightM - 0.05)),
   };
 
   const estimateConfidence = clamp(estimate.confidence, 0, 1);
@@ -350,9 +347,9 @@ function analyse(
 
   return {
     room: {
-      length: estimate.length,
-      width: estimate.width,
-      height: estimate.height,
+      length: estimate.lengthM,
+      width: estimate.widthM,
+      height: estimate.heightM,
       volume,
     },
     drrDb,
@@ -367,7 +364,7 @@ function analyse(
       c80: finiteOrNull(acoustic.c80),
       d50: finiteOrNull(acoustic.d50),
     },
-    bands: buildBands(estimate.rt60Bands, estimate.absorptionBands),
+    bands: buildBands(estimate.rt60Bands, estimate.bandAbsorption),
     criticalDistance,
     sourceDistance,
     listener,

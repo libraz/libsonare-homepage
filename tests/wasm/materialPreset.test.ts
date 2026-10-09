@@ -27,7 +27,7 @@ const studio = {
   sampleRate: SAMPLE_RATE,
 };
 
-function lowBandRt60(materialPreset: number): number {
+function lowBandRt60(materialPreset: 'none' | 'carpet'): number {
   const { rir } = wasm.synthesizeRir({ ...studio, materialPreset });
   return wasm.analyzeImpulseResponse(rir, SAMPLE_RATE, 6).rt60Bands[0];
 }
@@ -36,7 +36,7 @@ describe('material presets', () => {
   it('leaves an all-carpet room ringing for seconds at 125 Hz', async () => {
     await wasm.init();
     // The scalar absorption the preset replaces decays in well under a second.
-    expect(lowBandRt60(0)).toBeLessThan(1);
-    expect(lowBandRt60(4)).toBeGreaterThan(4);
+    expect(lowBandRt60('none')).toBeLessThan(1);
+    expect(lowBandRt60('carpet')).toBeGreaterThan(4);
   }, 60_000);
 });

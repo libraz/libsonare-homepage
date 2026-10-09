@@ -18,34 +18,34 @@ const wasmMock = vi.hoisted(() => {
     degenerate
       ? {
           volume: 0,
-          length: 0,
-          width: 0,
-          height: 0,
+          lengthM: 0,
+          widthM: 0,
+          heightM: 0,
           drrDb: 0,
           confidence: 0,
-          absorptionBands: new Float32Array(6),
+          bandAbsorption: new Float32Array(6),
           rt60Bands: new Float32Array(6),
         }
       : {
           volume: 60,
-          length: 5,
-          width: 4,
-          height: 3,
+          lengthM: 5,
+          widthM: 4,
+          heightM: 3,
           drrDb: 6,
           confidence: 0.7,
-          absorptionBands: new Float32Array([0.1, 0.12, 0.15, 0.18, 0.2, 0.22]),
+          bandAbsorption: new Float32Array([0.1, 0.12, 0.15, 0.18, 0.2, 0.22]),
           rt60Bands: new Float32Array([0.5, 0.55, 0.6, 0.62, 0.58, 0.5]),
         };
   // A wide room with a very negative DRR so the estimated source lands far from the
   // listener — far enough that the raw shell point falls outside the room walls.
   const farRoom = () => ({
     volume: 300,
-    length: 6,
-    width: 4,
-    height: 3,
+    lengthM: 6,
+    widthM: 4,
+    heightM: 3,
     drrDb: -30,
     confidence: 0.7,
-    absorptionBands: new Float32Array([0.1, 0.12, 0.15, 0.18, 0.2, 0.22]),
+    bandAbsorption: new Float32Array([0.1, 0.12, 0.15, 0.18, 0.2, 0.22]),
     rt60Bands: new Float32Array([0.5, 0.55, 0.6, 0.62, 0.58, 0.5]),
   });
   return {
@@ -60,12 +60,16 @@ const wasmMock = vi.hoisted(() => {
     ),
     analyzeImpulseResponse: vi.fn(() => acoustic(false)),
     detectAcoustic: vi.fn(() => acoustic(true)),
-    synthesizeRir: vi.fn(() => ({
-      rir: wasmMock.rirError.value ? new Float32Array(0) : new Float32Array([1, 0.5, 0.25, 0.1]),
-      sampleRate: 48000,
-      hasError: wasmMock.rirError.value,
-      diagnostics: wasmMock.rirDiagnostics.value,
-    })),
+    synthesizeRir: vi.fn(() => {
+      if (wasmMock.rirError.value) {
+        throw new Error('acoustic.source_outside_room: source position lies outside the room');
+      }
+      return {
+        rir: new Float32Array([1, 0.5, 0.25, 0.1]),
+        sampleRate: 48000,
+        diagnostics: wasmMock.rirDiagnostics.value,
+      };
+    }),
     roomMorph: vi.fn(
       (samples: Float32Array, sampleRate: number, _options?: Record<string, number>) => ({
         audio: new Float32Array(samples),
@@ -233,7 +237,10 @@ describe('spatial worker protocol', () => {
 
     expect(done()).toBeUndefined();
     const err = posted.find((p) => p.message?.type === 'error')!;
-    expect(err.message).toMatchObject({ id: 5, error: 'Invalid room geometry for synthesis' });
+    expect(err.message).toMatchObject({
+      id: 5,
+      error: 'acoustic.source_outside_room: source position lies outside the room',
+    });
   });
 
   it('morphs both channels and transfers the rendered buffers', async () => {

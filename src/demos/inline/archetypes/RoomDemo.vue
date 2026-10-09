@@ -86,9 +86,6 @@ function renderRir(wasm: WasmModule): { rir: Float32Array; sampleRate: number } 
     sampleRate: 48000,
     maxSeconds: displaySec.value + 0.25,
   });
-  if (r.hasError || !r.rir.length) {
-    throw new Error('source/listener fell outside the room');
-  }
   return { rir: r.rir, sampleRate: r.sampleRate };
 }
 
