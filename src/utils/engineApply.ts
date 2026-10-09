@@ -370,23 +370,17 @@ export function createFacadeTarget(engine: SonareEngine): EngineTarget {
   return target;
 }
 
-// Reserved mixer parameter ids, the formula the facade's automationParamId
-// uses; the raw engine has no resolver for them.
-const MIXER_PARAM_BASE = 0x4d580000;
-const MIXER_PARAM_FADER_DB = 1;
-const MIXER_PARAM_PAN = 2;
-const MIXER_MASTER_SELECTOR = 0xff;
-
-function mixerParamId(selector: number, kind: number): number {
-  return MIXER_PARAM_BASE | ((selector & 0xff) << 8) | (kind & 0xff);
-}
+// The master strip's reserved mixer parameter ids; tracks and buses resolve
+// theirs through the engine, since those ids name the strip.
+const MASTER_FADER_ID = 0x4d58ff01;
+const MASTER_PAN_ID = 0x4d58ff02;
 
 /**
  * Adapter over a plain `RealtimeEngine` (the export Worker's). It keeps the
- * topology so it can address lanes and buses by declaration index the way the
- * facade does: fader, pan and bus gain are smoothed sets of the reserved mixer
- * ids, solo/mute takes the lane index, sends re-declare the lanes, and clips
- * are replaced with one `setClips` of every track's clips.
+ * topology so solo/mute can take the lane index and sends can re-declare the
+ * lanes; fader, pan and bus gain are smoothed sets of the reserved mixer ids
+ * the engine resolves, and clips are replaced with one `setClips` of every
+ * track's clips.
  */
 export function createRawTarget(engine: RealtimeEngine): EngineTarget {
   let buses: EngineBus[] = [];
@@ -403,10 +397,17 @@ export function createRawTarget(engine: RealtimeEngine): EngineTarget {
     if (index < 0) throw new RangeError(`bus ${busId} is not in the topology`);
     return index;
   };
-  const stripParamId = (t: FaderTarget, kind: number): number =>
-    mixerParamId(t === 'master' ? MIXER_MASTER_SELECTOR : laneIndex(t), kind);
-  const busGainId = (busId: number): number =>
-    mixerParamId(0xfe - busIndex(busId), MIXER_PARAM_FADER_DB);
+  const stripParamId = (t: FaderTarget, kind: 'faderDb' | 'pan'): number => {
+    if (t === 'master') return kind === 'faderDb' ? MASTER_FADER_ID : MASTER_PAN_ID;
+    const id = engine.resolveTrackLaneAutomationId(t, kind);
+    if (id < 0) throw new RangeError(`track ${t} is not in the topology`);
+    return id;
+  };
+  const busGainId = (busId: number): number => {
+    const id = engine.resolveBusAutomationId(busId, 'faderDb');
+    if (id < 0) throw new RangeError(`bus ${busId} is not in the topology`);
+    return id;
+  };
   const declareLanes = () =>
     engine.setTrackLanes(
       lanes.map((lane) => ({
@@ -433,8 +434,8 @@ export function createRawTarget(engine: RealtimeEngine): EngineTarget {
     },
     setMidiClips: (midiClips) => engine.setMidiClips(midiClips),
     setSynthInstrument: (destinationId, preset) => engine.setSynthInstrument(preset, destinationId),
-    setFader: (t, db) => engine.setParameterSmoothed(stripParamId(t, MIXER_PARAM_FADER_DB), db),
-    setPan: (t, pan) => engine.setParameterSmoothed(stripParamId(t, MIXER_PARAM_PAN), pan),
+    setFader: (t, db) => engine.setParameterSmoothed(stripParamId(t, 'faderDb'), db),
+    setPan: (t, pan) => engine.setParameterSmoothed(stripParamId(t, 'pan'), pan),
     setTrackStripScalars: (trackId, scalars) => applyScalars(engine, trackId, scalars),
     setSoloMute: (trackId, solo, mute) => engine.setSoloMute(laneIndex(trackId), solo, mute),
     setSends(trackId, sends) {
@@ -466,9 +467,9 @@ export function createRawTarget(engine: RealtimeEngine): EngineTarget {
     resolveAutomationId(param) {
       switch (param.kind) {
         case 'fader':
-          return stripParamId(param.target, MIXER_PARAM_FADER_DB);
+          return stripParamId(param.target, 'faderDb');
         case 'pan':
-          return stripParamId(param.target, MIXER_PARAM_PAN);
+          return stripParamId(param.target, 'pan');
         case 'busGain':
           return busGainId(param.busId);
         case 'insert':

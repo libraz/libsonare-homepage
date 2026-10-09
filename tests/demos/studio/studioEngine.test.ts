@@ -48,6 +48,11 @@ const wasmMock = vi.hoisted(() => {
     setMasterStripJson = vi.fn();
     setMidiClips = vi.fn();
     setParameterSmoothed = vi.fn();
+    // Track and bus automation ids name the strip; one distinct id per id.
+    resolveTrackLaneAutomationId = vi.fn((trackId: number, param: string) =>
+      param === 'pan' ? 0xe0000002 + trackId * 0x100 : 0xe0000001 + trackId * 0x100,
+    );
+    resolveBusAutomationId = vi.fn((busId: number) => 0xe1000001 + busId * 0x100);
     play = vi.fn();
     // A constant non-zero render makes the WAV encoding observable.
     bounceOffline = vi.fn((options: { totalFrames: number; numChannels: number }) => ({
