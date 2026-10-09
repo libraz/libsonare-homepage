@@ -219,15 +219,9 @@ describe('mix assistant proposal on a real analysis', () => {
     const switched = await render(state, proposal);
     const built = await render(proposal);
     expect(maxAbsDiff(mine, switched)).toBeGreaterThan(1e-3);
-    // Switching by setters lands where building the proposal from scratch does.
-    expect(maxAbsDiff(switched, built)).toBeGreaterThan(0);
-    // A delay time set live glides to its target, so only the proposal without the delay bus
-    // lands exactly where building it from scratch does.
-    const { delay: _glides, ...buses } = suggested.suggestion.patch.buses ?? {};
-    const noDelay = applyMixPatch(state, { ...suggested.suggestion.patch, buses });
-    expect(maxAbsDiff(await render(state, noDelay), await render(noDelay))).toBeLessThanOrEqual(
-      1e-7,
-    );
+    // Switching by setters lands exactly where building the proposal from scratch does:
+    // the bounce's prime settles every glide, the delay time's included.
+    expect(maxAbsDiff(switched, built)).toBeLessThanOrEqual(1e-7);
   });
 });
 

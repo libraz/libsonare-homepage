@@ -91,16 +91,23 @@ describe('export length', () => {
     const audio = new Map([
       [1, { channels: stereo(noise(SOURCE_SEC, 1, SR, 0.4)), sampleRate: SR }],
     ]);
-    let state = setSend(addTrack(createMixingState(), 'a', SOURCE_SEC), 1, 'reverb', {
+    const plainState = setSend(addTrack(createMixingState(), 'a', SOURCE_SEC), 1, 'reverb', {
       levelDb: 0,
     });
-    const without = exportFrames(state, SR, timing);
-    state = setChannelDelay(state, 1, 50);
+    const without = exportFrames(plainState, SR, timing);
+    const state = setChannelDelay(plainState, 1, 50);
     const withDelay = exportFrames(state, SR, timing);
-    expect(withDelay - without).toBe(Math.round(0.05 * SR));
-    // The tail the delay pushes past the undelayed length is still audible.
+    const delay = Math.round(0.05 * SR);
+    expect(withDelay - without).toBe(delay);
+    // The delay pushes the whole tail one delay later, and the export length follows it:
+    // the delayed export ends on as much tail as the undelayed one does.
+    const plain = await bounce(plainState, audio, without);
     const out = await bounce(state, audio, withDelay);
-    expect(rms(out, without, withDelay)).toBeGreaterThan(1e-5);
+    const plainEnd = rms(plain, without - delay, without);
+    const delayedEnd = rms(out, withDelay - delay, withDelay);
+    expect(plainEnd).toBeGreaterThan(0);
+    expect(delayedEnd / plainEnd).toBeGreaterThan(0.9);
+    expect(delayedEnd / plainEnd).toBeLessThan(1.1);
   });
 
   it('adds no latency for a keyed duck: reported graph latency stays zero', async () => {

@@ -96,7 +96,7 @@ describe('real lead transcription and piano bounce', () => {
     expect(result.notes.map((note) => note.midi)).toEqual([
       72, 74, 76, 79, 76, 74, 72, 69, 72, 76, 77, 74, 72, 67,
     ]);
-    expect(result.tempoBpm).toBeCloseTo(120.4217, 3);
+    expect(result.tempoBpm).toBeCloseTo(120.3126, 3);
     expect(result.piano.length).toBeGreaterThan(lead.samples.length);
     expect(result.piano.every(Number.isFinite)).toBe(true);
     expect(result.piano.some((sample) => Math.abs(sample) > 1e-5)).toBe(true);

@@ -6,7 +6,7 @@
  * `RealtimeEngine.setMasterStripJson` (or the worklet facade's).
  */
 
-/** Master-strip insert processor; realtime-insertable, 60 samples of latency. */
+/** Master-strip insert processor; realtime-insertable, 129 samples of latency at 48 kHz. */
 export const MASTER_LIMITER_PROCESSOR = 'maximizer.truePeakLimiter';
 /** Output ceiling in dBTP. */
 export const MASTER_LIMITER_CEILING_DB = -1;
