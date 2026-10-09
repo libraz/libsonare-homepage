@@ -174,7 +174,7 @@ console.log(`Blind RT60: ${blind.rt60.toFixed(2)} s`);
 console.log(`Confidence: ${(blind.confidence * 100).toFixed(0)}%`);
 
 const estimate = estimateRoom(samples, sampleRate);
-console.log(`Estimated room: ${estimate.length.toFixed(1)} x ${estimate.width.toFixed(1)} x ${estimate.height.toFixed(1)} m`);
+console.log(`Estimated room: ${estimate.lengthM.toFixed(1)} x ${estimate.widthM.toFixed(1)} x ${estimate.heightM.toFixed(1)} m`);
 
 const rir = synthesizeRir({ lengthM: 7, widthM: 5, heightM: 3, absorption: 0.2 });
 const morphed = roomMorph(samples, sampleRate, { lengthM: 12, widthM: 9, heightM: 4, wet: 0.6 });
@@ -197,7 +197,7 @@ with Audio.from_file("recording.wav") as audio:
 
 print(f"Blind RT60: {blind.rt60:.2f} s")
 print(f"Confidence: {blind.confidence * 100:.0f}%")
-print(f"Estimated room: {estimate.length:.1f} x {estimate.width:.1f} x {estimate.height:.1f} m")
+print(f"Estimated room: {estimate.length_m:.1f} x {estimate.width_m:.1f} x {estimate.height_m:.1f} m")
 ```
 
 ```bash [CLI]
@@ -442,9 +442,7 @@ function checkEstimates() {
   }
 
   if (stats.estimate.key >= 0) {
-    const keys = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    const mode = stats.estimate.keyMinor ? 'minor' : 'major';
-    console.log(`Key: ${keys[stats.estimate.key]} ${mode}`);
+    console.log(`Key: ${stats.estimate.keyName}`); // e.g. "E minor"; keyShortName is "Em"
   }
 }
 ```

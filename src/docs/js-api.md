@@ -102,11 +102,27 @@ same predicate as `cancel=`.
 
 Node and WASM reject values instead of quietly reshaping them: wrong-typed repair and
 dynamics options, an unknown track kind, capture source, or pitch-correction
-mode, a negative spectrum setting, enum spellings and ordinals that are not
-declared, and mastering override values that are neither number nor boolean.
-Instance methods also throw after `destroy()` instead of touching a freed
-handle. A bad value surfaces as a `SonareError` at the call site rather than as
-a surprising default.
+mode, a negative spectrum setting, a fractional number where an integer is read,
+enum spellings and ordinals that are not declared, and mastering override values
+that are neither number nor boolean. Instance methods also throw after
+`destroy()` instead of touching a freed handle. A bad value surfaces as an error
+at the call site rather than as a surprising default.
+
+Which error class you get depends on who refused the value:
+
+| Refused by | Class | Examples |
+|------------|-------|----------|
+| The JavaScript binding, wrong type or missing | `TypeError` | a string where samples are expected, a missing required field |
+| The JavaScript binding, outside the domain | `RangeError` | an unknown name, a fractional integer, two buffers whose lengths must match, a string carrying an embedded NUL, a `sampleRate` outside the supported range |
+| The library or an object's state | `SonareError` with a code | non-finite audio in a mastering call, a rejected stream configuration, a malformed project or scene document (`InvalidFormat`), an unknown insert in a scene (`InvalidParameter`) |
+| A released, destroyed, or uninitialised handle | `SonareError` with `InvalidState` | calling an analysis function before `init()`, any method after `destroy()` |
+
+`isSonareError` matches only the third and fourth rows, so validate user input
+with a catch that handles all three classes. The split between binding checks and
+library checks can differ per function: `detectBpm` refuses empty samples in
+JavaScript with a `RangeError`, while `masterAudio` hands them to the library and
+throws `InvalidParameter`. See [Error Handling](./js-api.md#error-handling)
+for the code table.
 
 ## Pick The Smallest API That Solves The Job
 
@@ -165,6 +181,11 @@ Initialize the WASM module. Must be called before any analysis functions.
 ```typescript
 async function init(options?: {
   locateFile?: (path: string, prefix: string) => string;
+  wasmBinary?: ArrayBuffer | Uint8Array;
+  moduleFactory?: (options?: {
+    locateFile?: (path: string, prefix: string) => string;
+    wasmBinary?: ArrayBuffer | Uint8Array;
+  }) => Promise<SonareModule>;
 }): Promise<void>
 ```
 
@@ -181,6 +202,15 @@ await init({
   locateFile: (path, prefix) => `/custom/wasm/path/${path}`
 });
 ```
+
+Options apply on the first call only. Calling `init()` again with no options, or
+with the same options (functions compared by reference), resolves immediately; a
+second call whose options differ throws `SonareError` with `InvalidState` naming
+the option. `init()` also compares the loaded module's ABI version with the one
+the package was built against and throws `AbiMismatch` (code 10) when the `.wasm`
+and the JavaScript come from different builds, which a stale cache or a custom
+`wasmBinary` / `locateFile` can produce. Every function called before `init()`
+resolves and needs the module throws `InvalidState`.
 
 ### `isInitialized()`
 
@@ -243,8 +273,8 @@ and the built-in preset lists. It is the same canonical JSON the C ABI publishes
 and Python exposes as `capability_catalog`, validated against
 `schemas/capability-catalog.schema.json`.
 
-The catalog carries real values: the current build publishes 94 processors and
-5,484 parameter descriptors. Defaults can be `null` when a construction key has
+The catalog carries real values: the current build publishes 95 processors (84
+of them realtime-insertable) and 5,577 parameter descriptors. Defaults can be `null` when a construction key has
 no fallback. Bounds are measured with the processor's other parameters at their
 defaults; a `null` bound means the catalog knows of no limit on that side, not
 that bounds are unavailable in general.
@@ -281,6 +311,8 @@ function capabilityCatalog(): {
     realtimeCost: 'low' | 'moderate' | 'high' | null;
     channelPolicy: 'multichannel' | 'stereoPairOnly' | 'perChannel' | 'passthrough';
     category: string;
+    /** False for repair.declick, repair.declip and repair.trimSilence. */
+    causal: boolean;
     params: Array<{
       name: string;
       id: number | null;
@@ -288,10 +320,20 @@ function capabilityCatalog(): {
       type: 'boolean' | 'number' | 'enum' | 'string' | 'array';
       min: number | null;
       max: number | null;
+      minExclusive: boolean;
+      maxExclusive: boolean;
+      maxRelativeTo: 'nyquist' | null;
       default: boolean | number | null;
-      unit: string | null;
+      /** One of a closed set ('dB', 'Hz', 'ms', 's', 'samples', ...); null for non-numeric keys. */
+      unit: MasteringInsertParamUnit | null;
+      /** Display range a control should draw, inside [min, max]; null when it equals the accepted range. */
+      uiMin: number | null;
+      uiMax: number | null;
+      scale: 'linear' | 'log';
       choices: Array<{ name: string; value: number }> | null;
       slot: string | null;
+      /** Siblings whose live value bounds this key, read as `this <relation> sibling`. */
+      dependsOn: Array<{ key: string; relation: 'lt' | 'le' | 'gt' | 'ge' }>;
     }>;
     slots: Array<{
       name: string;
@@ -316,8 +358,10 @@ function capabilityCatalog(): {
 }
 ```
 
-This is what you build a generic parameter UI from: every slider's range and
-default comes from the catalog rather than from a table you maintain by hand. A
+This is what you build a generic parameter UI from: every slider's range, default,
+unit, and axis (`uiMin` / `uiMax`, `scale`) comes from the catalog rather than from
+a table you maintain by hand. [Insert Effects](./effects-inserts.md#the-parameter-descriptor)
+documents each descriptor field. A
 bound the core does not know is reported as an explicit `null` — treat that as
 "unbounded/unknown", not as zero.
 
@@ -366,7 +410,7 @@ function realtimeVoiceChangerPresetConfig(preset: VoicePresetId | number): Realt
 Unknown string IDs throw. `realtimeVoiceChangerPresetConfig(...)` throws for
 an invalid ordinal or unknown ID because it must return a resolved POD config.
 
-The resolved `RealtimeVoiceChangerPodConfig` uses camelCase keys on both JavaScript surfaces (`inputGainDb`, `wetMix`, `formantFactor`, `limiterIspCeilingDbtp`, and so on). The equivalent C and Python POD fields remain snake_case.
+The resolved `RealtimeVoiceChangerPodConfig` uses camelCase keys on both JavaScript surfaces (`inputGainDb`, `wetMix`, `formantFactor`, `formantMode`, `limiterIspCeilingDbtp`, and so on). The equivalent C and Python POD fields remain snake_case. A POD config handed back to the engine must carry every field, `formantMode` (`'relative'` or `'absolute'`) included.
 
 ### Realtime environment helpers
 
@@ -388,15 +432,33 @@ function hasFfmpegSupport(): boolean
 
 `hasFfmpegSupport()` reports whether the loaded build can decode through FFmpeg. The browser/WASM npm package works on decoded PCM and normally returns `false`; Python/native builds are the intended place to decode files directly.
 
+## Releasing Native Handles
+
+Every class that owns a native handle (`Mixer`, `StreamAnalyzer`, `Project`, `ProjectTimeline`, `RealtimeEngine`, `ClipPageProvider`, `ClipPageStreamer`, `StreamingEqualizer`, `StreamingMasteringChain`, `StreamingRetune`, `RealtimeVoiceChanger`, `PlaybackRenderer`, and the others) has an idempotent `destroy()` (with `delete()` as an alias) and implements `[Symbol.dispose]()`, so the `using` declaration releases it when the scope ends, even on an exception. `Audio` holds no native handle, so its `[Symbol.dispose]()` does nothing and `using` still works on it.
+
+```typescript
+import { init, Mixer, mixingScenePresetJson } from '@libraz/libsonare';
+
+await init();
+{
+  using mixer = Mixer.fromSceneJson(mixingScenePresetJson('vocalReverbSend'), 48000, 512);
+  // ... process blocks; the mixer is released at the closing brace.
+}
+```
+
+The package installs `Symbol.dispose` when the host lacks it, so the methods exist everywhere. The `using` syntax itself needs TypeScript 5.2 or later (with `esnext.disposable` in `lib`), a bundler that lowers it, or a runtime with native support; otherwise call `destroy()` in a `finally` block. A method called on a released handle throws `SonareError` with `InvalidState`.
+
 ## Reference Pages
 
 The reference is split by subject. Every page below assumes the installation, import, and initialization steps above.
 
-- [Analysis](./js-api-analysis.md) — song-level analysis, feature extraction, scale quantization, unit conversion, librosa-compatible helpers, and resampling.
+- [Analysis](./js-api-analysis.md) — song-level analysis, feature extraction, and Roman-numeral chord analysis.
+- [Helpers and Conversions](./js-api-helpers.md) — librosa-compatible helpers, scale quantization, unit conversion, resampling, and chord functions.
 - [Effects](./js-api-effects.md) — audio effects, editing DSP, and room-acoustics measurement.
-- [Mastering](./js-api-mastering.md) — the mastering chain, named processors, presets, streaming mastering, and the mixing API.
-- [Audio and Streaming](./js-api-audio.md) — the `Audio` class, metering, and the incremental streaming API.
-- [Types and Errors](./js-api-types.md) — type definitions, enumerations, error handling, and the type export index.
+- [Mastering](./js-api-mastering.md) — the mastering chain, named processors, presets, and the one-shot dynamics and repair processors.
+- [Streaming and Realtime](./js-api-streaming.md) — block-by-block processors, the streaming mastering chain, and the incremental `StreamAnalyzer`.
+- [Audio, Metering and Mixing](./js-api-audio.md) — the `Audio` class, metering, take alignment, mixer strips, and the mixing API.
+- [Types and Enumerations](./js-api-types.md) — type definitions, enumerations, and the type export index. Error handling is [on this page](#error-handling).
 
 ## Projects, instruments & live MIDI
 
@@ -416,7 +478,7 @@ a dedicated guide.
 | Schedule MIDI clips into the live engine, sample-accurately | `engine.setMidiClips(...)`, `engine.sampleAtPpq(ppq)` | [Realtime Engine](./realtime-engine.md#midi-clip-scheduling-and-sampleatppq) |
 | Set per-track cue monitoring | `engine.setTrackMonitorMode(laneIndex, 'off' | 'pfl' | 'afl')` | [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
 | Mix the engine's tracks live with lanes, buses, sends, and strips | `engine.setTrackLanes(...)`, `engine.setTrackBuses(...)`, strip JSON setters | [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
-| Send a track to external MIDI hardware and optionally forward clock/transport | `engine.setMidiDestinationExternal(...)`, `engine.setExternalMidiClockEnabled(...)`, `engine.drainExternalMidi(...)`; Worklet facade: `onMidiOut(...)` | [Realtime Engine](./realtime-engine.md#sending-a-track-to-external-midi-gear) |
+| Send a track to external MIDI hardware and optionally forward clock/transport | `engine.setMidiDestinationExternal(...)`, `engine.setExternalMidiClockEnabled(...)`, `engine.drainExternalMidi(...)`; Worklet facade: `onMidiOut(...)` | [Realtime Engine](./project-editing-midi.md#sending-a-track-to-external-midi-gear) |
 | Drive the engine from a hardware/Web MIDI device | `bindWebMidi(engine, ...)` <Badge type="info" text="Browser only" /> | [MIDI Input](./midi-input.md) |
 | Feed a live microphone into the engine | `bindMicrophoneInput(context, engine, ...)` <Badge type="info" text="Browser only" /> | [Recording and Takes](./recording-and-takes.md) |
 
@@ -475,3 +537,51 @@ wire Web MIDI / a `MediaStream` into a live `RealtimeEngine`. See
 | Edge | 16+ |
 
 Requirements: WebAssembly, ES2017+ (async/await), Web Audio API
+
+## Error Handling
+
+A function called before the module is initialized throws a `SonareError` with code `InvalidState` — call `await init()` first. A second `init()` with different options also throws `InvalidState`, naming the option; repeating the same options is fine.
+
+Native (C++) failures throw a structured **`SonareError`**: an `Error` subclass carrying a numeric `code` and its canonical `codeName`, mirroring the C ABI error enum. The same failure reports the same numeric code on every binding (WASM, Node native, Python, C ABI), so you can branch on the cause instead of matching message text. The package exports the `ErrorCode` enum, the `SonareError` class, and an `isSonareError(value)` type guard.
+
+The facades consistently reject non-finite numbers, invalid enum/index values, and oversized resources before they reach DSP or serialization. Treat these failures as invalid input; do not rely on a binding silently clamping or accepting malformed values.
+
+An argument the binding refuses itself is a plain `TypeError` (wrong type or missing) or `RangeError` (out of domain, unknown name, empty or non-finite samples), which `isSonareError` does not match. Failures made by the engine carry a code, such as `InvalidParameter` from `synthesizeRir(...)` for a source outside the room. Released or destroyed handles throw `SonareError` `InvalidState`.
+
+```typescript
+import { ErrorCode, isSonareError, Mixer } from '@libraz/libsonare';
+
+try {
+  const mixer = Mixer.fromSceneJson(sceneJson, 48000, 512);
+} catch (error) {
+  if (isSonareError(error) && error.code === ErrorCode.InvalidState) {
+    // 'failed to build mixer from scene JSON: send timing must be a string ("pre" or "post")'
+    console.error(`scene rejected: ${error.codeName}: ${error.message}`);
+  } else {
+    throw error;
+  }
+}
+```
+
+`Mixer.fromSceneJson` reports **`InvalidState`**, not `InvalidParameter`, for
+every way a scene can fail to build — a rejected field value and malformed JSON
+alike. The construction is wrapped, so the underlying complaint arrives as the
+tail of a `failed to build mixer from scene JSON: <inner>` message rather than as
+its own code; branch on `InvalidState` and show the message to locate the field.
+
+| `ErrorCode` | Value |
+|-------------|-------|
+| `Ok` | `0` |
+| `FileNotFound` | `1` |
+| `InvalidFormat` | `2` |
+| `DecodeFailed` | `3` |
+| `InvalidParameter` | `4` |
+| `OutOfMemory` | `5` |
+| `NotSupported` | `6` |
+| `InvalidState` | `7` |
+| `Cancelled` | `8` |
+| `EncodeFailed` | `9` |
+| `Unknown` | `99` |
+
+The codes match Python's `SonareError.code` and the C ABI `SonareError` enum, and the Python CLI maps them onto its [exit codes](./cli.md#exit-codes).
+

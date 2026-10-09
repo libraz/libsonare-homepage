@@ -133,7 +133,7 @@ A live monitoring chain has latency: by the time a player hears the click and pl
 
 ### Punch in/out
 
-Punch recording arms capture only inside a chosen timeline region, so a fixed take is left untouched outside it. `setCapturePunch(startSample, endSample, enabled?)` sets the in/out points in timeline samples; while `punchEnabled` is true the engine appends only when the transport (the moving play position) is inside `[startSample, endSample)`. Pass `enabled: false` (or `resetCapture()`) to clear the region and return to free recording.
+Punch recording arms capture only inside a chosen timeline region, so a fixed take is left untouched outside it. `setCapturePunch({ startSample, endSample, enabled? })` sets the in/out points in timeline samples, or `setCapturePunch({ startSec, endSec })` in seconds (rounded to the nearest sample at the engine's sample rate). Give one spelling per bound and both bounds; a negative bound, both spellings of one bound, or a missing bound throws a `RangeError`. The positional form `setCapturePunch(startSample, endSample, enabled?)` still works, and Python takes `start_sample` / `end_sample` or the keyword-only `start_sec` / `end_sec`. while `punchEnabled` is true the engine appends only when the transport (the moving play position) is inside `[startSample, endSample)`. Pass `enabled: false` (or `resetCapture()`) to clear the region and return to free recording.
 
 :::: details Track a part, then read it back
 ```typescript
@@ -207,7 +207,7 @@ try {
   const loopLengthQuarters = 4;
   const passes = 3;
   const passSamples = Math.round((loopLengthQuarters * 60 / 120) * sampleRate); // 96000
-  const recorded = new Float32Array(passes * passSamples);                       // your concatenated passes (interleaved if audioChannels > 1)
+  const recorded = new Float32Array(passes * passSamples);                       // your concatenated passes (interleaved if audioChannels > 1, or one array per channel)
 
   const result = project.addLoopRecordingTakes({
     trackId,
@@ -227,11 +227,13 @@ try {
 `loopLengthPpq` is measured in quarter notes, so its duration depends on tempo: a 4-quarter-note loop is 2 s at 120 BPM but 4 s at 60 BPM. Set the project tempo first, work out the per-pass sample count from it, and supply `passes * passSamples` frames. Hand in less and you simply get fewer takes than you expected.
 :::
 
-::: warning Interleave the audio for multi-channel takes
-The `audio` Float32Array is read as **interleaved** when `audioChannels > 1` (L, R, L, R, …). `engine.capturedAudio()` returns **planar** channels (one `Float32Array` per channel), so for a stereo loop you must interleave those channels before passing them to `addLoopRecordingTakes` — or record the loop with `audioChannels: 1` (mono) and pass the single channel straight through.
+::: tip Interleaved or planar audio
+`audio` takes either shape. A single `Float32Array` is read as **interleaved** when `audioChannels > 1` (L, R, L, R, …). An array of `Float32Array`s — one per channel, all the same length, the shape `engine.capturedAudio()` returns — is read as **planar**: its length is the channel count and `audioChannels` is ignored. Python takes a channels-first 2-D array or a sequence of equal-length per-channel sequences the same way.
 :::
 
-The call adds one clip whose alternate takes are the loop passes, and sets the **active take** to the newest (last) pass. Note that if your captured audio did not end exactly on a loop boundary, that last pass is a short, partial take — so by default the clip plays the truncated take until you pick another take or build a comp. From here you comp across those takes.
+The call adds one clip whose alternate takes are the loop passes, and sets the **active take** to the newest (last) pass. If your captured audio did not end exactly on a loop boundary, the last pass is a short, partial take. It is kept, but it is not activated: the previous complete take stays active, and the partial take carries `"partial": true` in its entry of the project JSON `takes`, which round-trips. A capture shorter than one loop has only the partial take, and that take stays active. A remainder of one frame or less creates no take.
+
+Pass `partialTail: 'drop'` (Python `partial_tail="drop"`) to leave the partial take out altogether; the default is `'keep'`. In the example above, 2 full passes plus 30000 frames give `takeCount: 3` with take 2 active and take 3 marked partial, and `'drop'` gives `takeCount: 2`. From here you comp across those takes.
 
 ## Takes and comp segments
 
@@ -470,7 +472,8 @@ Re-record only one phrase without touching the rest.
 ```typescript
 const inSample = Math.round(2.0 * 48000);    // punch in at 2 s
 const outSample = Math.round(4.0 * 48000);   // punch out at 4 s
-engine.setCapturePunch(inSample, outSample, true);
+engine.setCapturePunch({ startSample: inSample, endSample: outSample });
+// or in seconds: engine.setCapturePunch({ startSec: 2, endSec: 4 });
 engine.setCaptureSource('input');
 engine.armCapture();
 engine.play();

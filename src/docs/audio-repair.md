@@ -1,6 +1,6 @@
 ---
 title: Audio Repair Workflow
-description: Choose, measure, and apply libsonare's offline repair stages for noise, hum, transient damage, and diffuse reverb.
+description: Choose, measure, and apply libsonare's repair stages for noise, hum, transient damage, and diffuse reverb.
 ---
 
 # Audio Repair Workflow
@@ -52,7 +52,7 @@ const reports = {
 console.log(reports);
 ```
 
-The denoise detector needs at least `nFft` samples and rejects a shorter buffer. The dereverb detector pads a shorter buffer for analysis. Keep those different contracts in mind when you process short clips.
+The denoise and dereverb detectors pad a buffer shorter than `nFft` for analysis, so a short clip is measured rather than refused. A 512-sample input to `masteringRepairDenoiseClassical` returns a 512-sample result.
 
 ## Fixed stage order
 
@@ -83,11 +83,51 @@ The restoration presets are named chain configurations, not new algorithms. They
 
 Read the exact preset parameters in [Mastering Processors](./mastering-processors.md#restoration-presets). A preset is a starting point: inspect the source and the report before keeping its output.
 
+## Measure and repair in one call
+
+`masteringRepairAnalyze` runs all six detectors on every channel and returns the defects per channel, the aggregate, whether a declip at the measured flat level leaves louder audio alone (`declipThresholdSafe`), and the stages the evidence supports in `recommended`, each with its settings. It never recommends dereverb, because the late-decay statistic cannot tell a sustaining dry source from a reverberant one. `masteringRepairApply` takes those stages, or your own, and runs them over a channel set of any size.
+
+```ts
+import { init, masteringRepairAnalyze, masteringRepairApply } from '@libraz/libsonare';
+
+await init();
+
+const analysis = masteringRepairAnalyze({ channels: [left, right], sampleRate });
+console.log(analysis.recommended.map((s) => s.stage), analysis.explanation);
+
+const { channels, reports } = masteringRepairApply({
+  channels: [left, right],
+  sampleRate,
+  stages: analysis.recommended,
+  onProgress: (fraction, stage) => console.log(stage, fraction), // "repair.declick", 0.5
+  cancel: () => userPressedStop,
+});
+```
+
+- `stages` is `[{ stage, ...settings }]`. The settings are the stage's catalog parameters (`repair.declick`, `repair.dehum`, `repair.denoiseClassical`, ...); a setting left out takes the default, and an unknown setting, a repeated stage, or an out-of-range value is refused with `InvalidParameter`.
+- The stages run in the fixed order above whatever order the array gives.
+- Declip, declick, and dehum decide over the whole channel set: a defect found in one channel is repaired in all of them, and dehum tracks one fundamental. Decrackle runs each channel alone. Denoise and dereverb apply one linked mask. The first three groups report once per channel (`scope: 'channel'`); the linked stages report once for the set (`scope: 'linked'`).
+- `onProgress` is called after each stage with the fraction done and `repair.<stage>`. When `cancel` returns true after a report, the call throws a `SonareError` with code `Cancelled`.
+
+The same pair exists on Node under the same names and in Python as `mastering_repair_analyze(channels, sample_rate)` and `mastering_repair_apply(channels, sample_rate, stages=[...], on_progress=..., cancel=...)`, which also accept a 2-D `(channels, frames)` array. The Python result exposes `.channels` and `.reports`. The individual detectors and stages follow the same `mastering_repair_` prefix in Python (`mastering_repair_detect_hum`, `mastering_repair_declick_stereo`, `mastering_repair_denoise_classical_linked`, `mastering_repair_dereverb_config_for_room`, `mastering_repair_noise_band_bins`).
+
+## Realtime inserts
+
+Four of the stages are causal and run as realtime mixer inserts under their catalog ids: `repair.decrackle` (median mode), `repair.dehum`, `repair.denoiseClassical`, and `repair.dereverbClassical` (subtraction mask). Each reproduces its offline function for the same settings, delayed by the latency the instance reports. A setting that needs the whole signal (wavelet decrackle, WPE, the quantile noise estimator) is refused by name, and the insert's denoise estimator defaults to `spp`. Denoise and dereverb link their masks across the insert's channels.
+
+`repair.declick`, `repair.declip`, and `repair.trimSilence` are offline only; the capability catalog marks them `causal: false`. See [Effects Inserts](./effects-inserts.md) for how a host reads the catalog.
+
+## Trimming silence
+
+`masteringRepairTrimSilence` keeps a margin around the signal: `paddingSamples`, or `paddingSec` for the same margin in seconds rounded to the nearest sample. Give one or the other. At 22.05 kHz, `paddingSec: 0.1` on a 1 s tone with 1 s of silence on each side returns 26460 samples (1.2 s); the same input without padding returns 22050. A negative padding throws `RangeError`.
+
+Accepted ranges: `threshold` in `[0, 1]`, `paddingSamples` up to `960000`, `windowMs` in `(0, 10000]`, and `gateLufs` in `[-144, 0]` for `lufsGated` mode. A value outside them throws `InvalidParameter`.
+
 ## Offline contract
 
-- The `masteringRepair*` functions consume a complete buffer and return a new buffer or a result containing new channel buffers. They are offline operations, not streaming or AudioWorklet stages.
+- The `masteringRepair*` functions consume a complete buffer and return a new buffer or a result containing new channel buffers. Apart from the four realtime inserts above, they are offline operations.
 - All six repair stages preserve input length in their mono and stereo forms. Denoise and dereverb also provide linked forms for more than two channels. The separate `masteringRepairTrimSilence` utility is the boundary operation that can shorten a buffer.
-- Denoise analysis rejects an input shorter than `nFft`; dereverb pads a short input for analysis and repair. Other validation rules are in the [JavaScript mastering API](./js-api-mastering.md).
+- Denoise and dereverb pad an input shorter than `nFft` for analysis and return it at its own length. Every stage refuses a setting above its upper bound; the bounds are listed on the stage pages. Other validation rules are in the [JavaScript mastering API](./js-api-mastering.md).
 - Repair does not match LUFS or add gain to make the result appear equally loud. Measure loudness separately and compare at a controlled playback gain.
 
 The [DSP implementation notes](./dsp-implementation.md#repair) explain the classical algorithms and their real-time boundary. For the exact overloads and report fields, use the [JavaScript mastering API](./js-api-mastering.md).

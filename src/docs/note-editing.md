@@ -87,6 +87,36 @@ An identity edit passes its source span through. Before rendering, all edited so
 
 The `NoteEdit` fields cover sample movement, semitone shift, gain in dB, time stretch, formant shift, mute, an amplitude envelope, and drift/vibrato changes. Ordinary edits do not need pitch metadata. Curve edits (`vibratoDepthChange` and `driftChange`) need the original `f0Hz` track and `frameRate` in the render request; in JS/WASM, `f0Hz` must be a `Float32Array`. An optional `voiced` flag array must have the same length as `f0Hz`: `false` suppresses a positive F0, while `true` cannot make a non-positive, non-finite, or otherwise unusable F0 valid. `decomposeNotePitch` accepts the same optional flags. `extractNotes` accepts either voiced flags or voiced probabilities; a non-positive or non-finite F0 frame contributes no pitch measurement.
 
+### Seconds beside samples
+
+A note or percussive event handed to `renderNotes` or `renderPercussiveEvents` gives each span bound as samples (`onsetSample`, `offsetSample`) or seconds (`onsetSec`, `offsetSec`), and an edit's move as `timeOffsetSamples` or `timeOffsetSec` (negative moves earlier). Seconds are rounded to the nearest sample at the call's sample rate. Give one spelling of each; both together is refused. Python spells these `onset_sec`, `offset_sec` and `time_offset_sec`.
+
+```typescript
+const edited = renderNotes({
+  samples,
+  sampleRate,
+  notes: [{ onsetSec: 0.25, offsetSec: 0.75, edit: { timeOffsetSec: 0.1 } }],
+});
+```
+
+A negative `onsetSample` or `offsetSample` is refused (`RangeError` on WASM and Node, `SonareValueError` in Python). `-1` is not a "to the end" sentinel; omit a bound to take the input's edge.
+
+### Split and merge notes
+
+`splitNote` cuts one note at a track frame and `mergeNotes` joins a run of notes. Both take the same source as `extractNotes` (`samples`, `sampleRate`, `f0Hz`, `voiced`, `frameRate`) plus the current `notes`, and return the whole new note set, because every note is re-derived from the audio and the track. Notes are therefore identified by their `frameStart` / `frameEnd`, not by object identity.
+
+```typescript
+import { mergeNotes, splitNote } from '@libraz/libsonare';
+
+const source = { samples, sampleRate, f0Hz: pitch.f0, voiced: pitch.voicedFlag, frameRate: sampleRate / 512 };
+const middle = Math.floor((notes[0].frameStart + notes[0].frameEnd) / 2);
+
+const halves = splitNote({ ...source, notes, index: 0, frame: middle }); // one note longer
+const rejoined = mergeNotes({ ...source, notes: halves, first: 0, last: 1 }); // back to the original count
+```
+
+`frame` must lie strictly inside the note's span and `first < last < notes.length`; otherwise the call throws a `SonareError` (`InvalidParameter`). A merged note spans from the first note's onset to the last note's offset, gap included, and takes the first note's edit; set the edit afterwards if the notes carried different ones. Python: `split_note(samples, sample_rate, f0_hz, frame_rate, notes, index, frame, voiced=...)` and `merge_notes(..., notes, first, last, voiced=...)`.
+
 ## Edit overlapping voices with a held analysis
 
 `analyzePolyphonic` keeps the spectrogram and per-note claim sets in a native handle. The returned notes have the same `NoteObject` shape, while `setNoteEdit(index, edit)` changes only the pending edit. `render()` produces audio at the source length. The handle owns substantial memory, so analyze the passage being edited and release it with `destroy()` / `delete()`; Python supports `with PolyphonicAnalysis.analyze(...)` or `close()`.

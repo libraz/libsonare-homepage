@@ -76,6 +76,8 @@ Gate on level first: check RMS or peak for the frame and ignore the flatness rea
 | Scalar descriptors | Spectral centroid and flatness are computed directly from the per-frame magnitude spectrum |
 
 These follow librosa conventions closely enough for reference comparison. The spectral descriptors are reused by higher-level descriptors such as `TimbreAnalyzer`; mel and MFCC can also be inverted to approximate audio for previews (see Inverse Features).
+
+A mel or MFCC result carries the parameters of its forward transform (`nFft`, `fmin`, `fmax` as applied, `htk`, `isDb`; MFCC also `sampleRate`, `hopLength`, `nMels`, `lifter`), so the result alone is enough to invert it: `melToAudio({ result })` and `mfccToAudio({ result })` on Node and WASM, `mel_result_to_audio` and `mfcc_result_to_audio` in Python.
 :::
 
 Related: [MIR Overview](../concepts/mir-overview.md), [Spectrogram and STFT](./spectrogram-stft.md), [Section and Structure](./section-structure.md), [Chroma Features](./chroma-features.md)

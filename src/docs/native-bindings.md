@@ -84,9 +84,9 @@ A binding and the shared library it loads must come from the same tree. The C AB
 
 | ABI | Current | Covers |
 |-----|---------|--------|
-| Feature | 6 | the flat analysis and feature-result structs plus the shipped general C function contracts — `SonareKey`, `SonareAnalysisResult`, `SonareChordDetectionOptions`, and their neighbours |
+| Feature | 7 | the flat analysis and feature-result structs plus the shipped general C function contracts — `SonareKey`, `SonareAnalysisResult`, `SonareChordDetectionOptions`, and their neighbours |
 | Project | 2 | the headless-DAW project and arrangement structs. Reports `0` in a build without arrangement support |
-| Voice changer | 2 | the realtime voice-changer configuration struct |
+| Voice changer | 3 | the realtime voice-changer configuration struct |
 | Acoustic | 4 | the room-acoustics structs |
 | Engine | 3 | the realtime command queue |
 
@@ -94,8 +94,8 @@ A binding and the shared library it loads must come from the same tree. The C AB
 
 What each binding does with the number differs, and it decides where a stale library shows up:
 
-- **Python** compares the packed value against the one it was built for at import, before configuring a single symbol, and raises `RuntimeError` with a message beginning `libsonare ABI mismatch` — a shared library from another checkout fails at `import libsonare`, never at the first call.
-- **Node native and WASM** export `EXPECTED_PROJECT_ABI_VERSION` and `EXPECTED_ENGINE_ABI_VERSION` and the query functions `abiVersion()`, `projectAbiVersion()`, `engineAbiVersion()`, `voiceChangerAbiVersion()`. `projectAbiVersion()` equals the expected constant when arrangement support is compiled in and `0` when it is not, and WASM's `engineCapabilities()` reports `engineAbiVersion`, `expectedEngineAbiVersion` and `abiCompatible`. These are queries rather than guards, so the comparison is yours to make before constructing a `Project` or a `RealtimeEngine`.
+- **Python** compares the packed value against the one it was built for when the library first loads, before configuring a single symbol, and raises a `SonareError` with `ErrorCode.ABI_MISMATCH` (10) and a message beginning `libsonare ABI mismatch` — a shared library from another checkout fails on first library use, never partway through a call. The Python CLI exits with 13.
+- **Node native and WASM** make the same comparison themselves and throw a `SonareError` with `ErrorCode.AbiMismatch` (10): Node when the addon is required, WASM in `init()`. They also export `EXPECTED_PROJECT_ABI_VERSION` and `EXPECTED_ENGINE_ABI_VERSION` and the query functions `abiVersion()`, `projectAbiVersion()`, `engineAbiVersion()`, `voiceChangerAbiVersion()`. `projectAbiVersion()` equals the expected constant when arrangement support is compiled in and `0` when it is not, and WASM's `engineCapabilities()` reports `engineAbiVersion`, `expectedEngineAbiVersion` and `abiCompatible`. The engine ABI is outside the packed value, so that comparison is yours to make before constructing a `RealtimeEngine`.
 - **A C caller** compares `sonare_abi_version()` with its compile-time `SONARE_ABI_VERSION` once; the JSON entry points (the voice changer's JSON configuration, the capability catalog) tolerate layout drift and need no gate. See [C ABI versions](./cpp-api.md#c-abi-versions).
 
 Additive struct changes are gated on a per-struct `struct_version` so existing C callers keep their behaviour at both source and call level. `SonareNoteSegmenterConfig` is the case to know: it carries a trailing `voiced_threshold` read only when `struct_version` is `2`, so a config filled the way it always was is unaffected, and a zero-initialized one keeps the 0.5 default. What does change is the version the library reports — which is why the library has to be rebuilt alongside the binding even when your own code is untouched.
@@ -219,6 +219,7 @@ The WASM package exposes the same camelCase mastering API names as the browser d
 | Presets and quick entry points | `mastering()`, `masteringPresetNames()`, `masteringPresetParams()`, `masteringPlatformNames()`, `masterAudio()`, `masterAudioStereo()`, `masterAudioWithProgress()`, `masterAudioStereoWithProgress()` |
 | Full chains | `masteringChain()`, `masteringChainStereo()`, `masteringChainWithProgress()`, `masteringChainStereoWithProgress()` |
 | Offline dynamics (one-shot) | `masteringDynamicsCompressor()`, `masteringDynamicsGate()`, `masteringDynamicsTransientShaper()` |
+| Repair in one call (any channel count) | `masteringRepairAnalyze()`, `masteringRepairApply()` — see [Measure and repair in one call](./audio-repair.md#measure-and-repair-in-one-call) |
 | Offline repair — mono | `masteringRepairDeclick()`, `masteringRepairDeclip()`, `masteringRepairDecrackle()`, `masteringRepairDehum()`, `masteringRepairDenoiseClassical()`, `masteringRepairDereverbClassical()`, `masteringRepairTrimSilence()` |
 | Offline repair — stereo pair | `masteringRepairDeclickStereo()`, `masteringRepairDeclipStereo()`, `masteringRepairDecrackleStereo()`, `masteringRepairDehumStereo()`, `masteringRepairDenoiseClassicalStereo()`, `masteringRepairDereverbClassicalStereo()`, `masteringRepairTrimSilenceStereo()` |
 | Offline repair — channel-linked (any channel count) | `masteringRepairDenoiseClassicalLinked()`, `masteringRepairDereverbClassicalLinked()` |
@@ -268,19 +269,19 @@ Use it for channel-strip processing, scene presets, sends, buses, automation, me
 
 For persistent mixers, Node native accepts a `StripRef` (`number | string`) for most strip control methods; WASM methods use numeric strip indexes and expose `stripById(id)` for lookup.
 
-Node `stripMeter(strip)` reads the post-fader meter; use `meterTap(strip, 'preFader' | 'postFader')` when you need an explicit tap. After loading scene JSON, `mixer.sceneWarnings()` lists insert params no processor consumed (typically typos) as non-fatal warnings.
+Node `stripMeter(strip)` reads the post-fader meter; use `meterTap(strip, 'preFader' | 'postFader')` when you need an explicit tap. After loading scene JSON, `mixer.sceneWarnings()` lists every key the scene reader did not consume (typically typos) as non-fatal warnings, with its path.
 
 ## Projects, Instruments & Live MIDI
 
 The Node native addon exposes the same headless-DAW API as WASM and Python: the `Project` class (tracks, clips, tempo, undo/redo, SMF/MIDI 2.0 interchange), instrument-bound bounces (`bounceWithSynthInstrument(s)`, SoundFont loading), the NativeSynth preset catalog (`synthPresetNames()` / `synthPresetPatch()` / `SynthPatch`), `chordFunctionalAnalysis(...)`, and the `RealtimeEngine` with live MIDI input.
 
-The engine carries the same lane mixer and MIDI clip schedule as the other bindings — `setTrackLanes` / `setTrackBuses`, strip JSON and insert controls for tracks, the master, and buses, insert automation-id resolvers, `setParamSmoothingMs`, wide/scope telemetry, `setMidiClips`, and `sampleAtPpq` — with the same camelCase names as WASM. It also exposes external-device routing through `setMidiDestinationExternal`, `setExternalMidiClockEnabled`, `drainExternalMidi`, and `externalMidiDroppedCount` (see [Realtime Engine](./realtime-engine.md#sending-a-track-to-external-midi-gear)). The browser-only helpers (`bindWebMidi`, `bindMicrophoneInput`) are WASM-specific and not part of the native addon.
+The engine carries the same lane mixer and MIDI clip schedule as the other bindings — `setTrackLanes` / `setTrackBuses`, strip JSON and insert controls for tracks, the master, and buses, insert automation-id resolvers, `setParamSmoothingMs`, wide/scope telemetry, `setMidiClips`, and `sampleAtPpq` — with the same camelCase names as WASM. It also exposes external-device routing through `setMidiDestinationExternal`, `setExternalMidiClockEnabled`, `drainExternalMidi`, and `externalMidiDroppedCount` (see [Realtime Engine](./project-editing-midi.md#sending-a-track-to-external-midi-gear)). The browser-only helpers (`bindWebMidi`, `bindMicrophoneInput`) are WASM-specific and not part of the native addon.
 
 The guides carry the depth: [Project Editing](./project-editing.md), [Bouncing Projects](./project-bounce.md), [Built-in Synthesizer](./native-synth.md), [SoundFont Player](./soundfont-player.md), and [MIDI Input](./midi-input.md).
 
 ## Error Handling
 
-Like the WASM package, the native addon throws a structured `SonareError` on every native failure: an `Error` subclass with a numeric `code` and its canonical `codeName`, mirroring the C ABI error enum. Both packages export `ErrorCode`, `SonareError`, and the `isSonareError(value)` type guard, and the same failure reports the same numeric code on every binding. See [Error Handling](./js-api-types.md#error-handling) for the code table and a usage example.
+Like the WASM package, the native addon throws a structured `SonareError` on every failure the library or an object's state reports: an `Error` subclass with a numeric `code` and its canonical `codeName`, mirroring the C ABI error enum. Both packages export `ErrorCode`, `SonareError`, and the `isSonareError(value)` type guard, and the same failure reports the same numeric code on every binding. An argument the binding refuses before the call reaches the library is a native `TypeError` (wrong type or missing) or `RangeError` (out of domain, including a string with an embedded NUL) on both packages, and `isSonareError` does not match it. A released or destroyed handle throws `InvalidState`. See [Error Handling](./js-api.md#error-handling) for the code table and a usage example.
 
 `SonareError` is a runtime class on both packages, so importing the name by value gets you a constructor rather than `undefined`, and a shared TypeScript module can import it from either package and find the same *kind* of thing. Its `instanceof` is brand-based rather than prototype-based — it narrows any `Error` named `SonareError` that carries a numeric `code`:
 
@@ -316,7 +317,7 @@ Node native's `Audio` object has more methods because it can call into the nativ
 |------------|-------------|------|
 | Extra `Audio` methods | More focused analysis and room-acoustic methods are available as instance methods | Use standalone focused helpers where available |
 | File construction | `Audio.fromFile(...)`, `Audio.fromMemory(...)` | `Audio.fromBuffer(...)`, `Audio.fromMemory(...)`, `Audio.fromMemoryWithBrowserFallback(...)` |
-| Sample access | `audio.getData()` returns a copy | `audio.data` returns the instance's mutable `Float32Array` |
+| Sample access | `audio.getData()` returns a copy | `audio.data` returns a copy |
 
 Node native adds `analyzeBpm(...)`, `analyzeImpulseResponse(...)`, `detectAcoustic(...)`, `analyzeRhythm(...)`, `analyzeDynamics(...)`, and `analyzeTimbre(...)` to `Audio`. The room helpers `estimateRoom(...)`, `synthesizeRir(...)`, and `roomMorph(...)` remain standalone functions. The full method and function reference is on the [Node.js Native API](./node-api.md) page.
 

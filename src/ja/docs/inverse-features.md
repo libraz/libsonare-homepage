@@ -20,7 +20,7 @@ libsonare の大半は、音声を特徴量へ変換します。たとえばメ�
 このページを読むと、次のことを判断・実装できるようになります。
 
 - メル／MFCC の逆変換が近似であり、特徴量だけから位相を復元できない理由を説明できる。
-- 正しく往復確認するために必要な `sampleRate`、`nFft`、`hopLength`、`nMels`、`nMfcc`、`fmin`、`fmax`、`htk`、MFCC の `lifter` を保持できる。
+- 正しく往復確認するために必要な `sampleRate`、`nFft`、`hopLength`、`nMels`、`nMfcc`、`fmin`、`fmax`、`htk`、MFCC の `lifter` を保持するか、順変換の結果を渡してこれらを引き継がせることができる。
 - 特徴量行列と、行列／プレビュー音声のどちらが必要かに応じて、`melToStft`、`melToAudio`、`mfccToMel`、`mfccToAudio`、`cqtToAudio`、`vqtToAudio` を選べる。
 - JavaScript と Python の戻り値の形を、行数・フレーム数・フラット配列を混同せずに比較できる。
 
@@ -75,6 +75,7 @@ MFCC はさらにもう 1 段の損失を加えます — 先頭 `nMfcc` 個（�
 | メルパワー → 音声 | `melToAudio(...)` は `Float32Array` を返す | `mel_to_audio(...)` は `list[float]` を返す |
 | MFCC → メルパワー | `mfccToMel(...)` は `{ nMels, nFrames, power }` を返す | `mfcc_to_mel(...)` は `InverseResult(rows, n_frames, data)` を返す |
 | MFCC → 音声 | `mfccToAudio(...)` は `Float32Array` を返す | `mfcc_to_audio(...)` は `list[float]` を返す |
+| 順変換の結果 → 上記のいずれか | `melToStft({ result })`、`melToAudio({ result })`、`mfccToMel({ result })`、`mfccToAudio({ result })` | `mel_result_to_stft`、`mel_result_to_audio`、`mfcc_result_to_mel`、`mfcc_result_to_audio` |
 | CQT 振幅 → 音声 | `cqtToAudio(...)` は `Float32Array` を返す | `cqt_to_audio(...)` は `list[float]` を返す |
 | VQT 振幅 → 音声 | `vqtToAudio(...)` は `Float32Array` を返す | `vqt_to_audio(...)` は `list[float]` を返す |
 
@@ -89,6 +90,24 @@ MFCC はさらにもう 1 段の損失を加えます — 先頭 `nMfcc` 個（�
 :::
 
 順変換で 0 以外の `lifter` を使った場合は、`mfccToMel` または `mfccToAudio` に同じ値を渡してください。逆変換で取り除かれます。
+
+## 結果をそのまま逆変換する
+
+メルまたは MFCC の結果は、それを作った変換のパラメータを持っています。`nFft`、`hopLength`、`sampleRate`、適用された `fmin` と `fmax`、`htk`、MFCC ではさらに `nMels` と `lifter` です。JavaScript では逆変換が結果そのものをリクエストとして受け取るので、値を繰り返す必要も、ずれる余地もありません。
+
+```typescript
+const mel = melSpectrogram(samples, sampleRate, 2048, 512, 128);
+const spectrum = melToStft({ result: mel });
+const preview = melToAudio({ result: mel, nIter: 32 });
+
+const coeffs = mfcc(samples, sampleRate, 2048, 512, 128, 20, 0, 0, false, 22);
+const reMel = mfccToMel({ result: coeffs });
+const fromMfcc = mfccToAudio({ result: coeffs, nIter: 32 });
+```
+
+`result` と並べて指定したフィールドは結果の値と一致していなければならず、食い違うと両方の値を示す `RangeError` を投げます。つまり上書きできるのは順変換で使った値の再確認だけです（`nIter` は自由）。dB の状態のメル結果（`isDb`）は、`dbToPower` を案内するメッセージで拒否されるので、先に変換してください。行列で渡すリクエスト形式では、行列のフィールド名はメルが `power`、MFCC が `coefficients` です（`melToStft({ power, nMels, nFrames, ... })`、`mfccToMel({ coefficients, nMfcc, nFrames, ... })`）。それ以外のフィールド名では例外になります。
+
+Python では `mel_result_to_stft(mel)`、`mel_result_to_audio(mel, n_iter=32)`、`mfcc_result_to_mel(coeffs)`、`mfcc_result_to_audio(coeffs, n_iter=32)` が同じ役割を担います。以降の位置引数形式の librosa 風関数は変わりません。
 
 ここではまだ音声波形には戻りません。結果は「周波数ごとのエネルギー表」です。機械学習モデルや可視化の途中結果を確認したい場合は、音声化するよりこの段階で見る方が原因を追いやすいことがあります。
 
@@ -131,13 +150,13 @@ sonare mel-to-audio song.wav --n-fft 2048 --hop-length 512 --n-mels 128 -o mel-p
 
 :::
 
-入力はいずれも**行優先**の行列です — `melPower` は `[nMels x nFrames]`、MFCC 係数は `[nMfcc x nFrames]`。`nMels`／`nMfcc`／`nFrames` の引数は、その平坦配列の読み方をヘルパーに伝えるので、渡す行列と一致させてください。
+入力はいずれも**行優先**の行列です — メルの `power` は `[nMels x nFrames]`、MFCC 係数は `[nMfcc x nFrames]`。`nMels`／`nMfcc`／`nFrames` の引数は、その平坦配列の読み方をヘルパーに伝えるので、渡す行列と一致させてください。
 
 ## 音声を再構成する
 
 `melToAudio` と `mfccToAudio` は、再生やファイル書き出しができるモノラルの `Float32Array` を返します。特徴量に位相がないため、どちらも **Griffin-Lim** を実行します — 振幅にランダム（またはゼロ）位相を与えて開始し、STFT → 新しい位相を保持 → 既知の振幅を課す → 逆 STFT を繰り返し、位相が自己整合するまで反復します。
 
-`cqtToAudio` と `vqtToAudio` も、`cqt(...)`／`vqt(...)`（定 Q 変換と可変 Q 変換。周波数ビンを線形ではなく対数間隔で並べる変換です）が返す row-major の振幅行列に同じ反復手法を使います。順変換時の `sampleRate`、`hopLength`、`fmin`、`binsPerOctave`（VQT は `gamma` も）を変えずに渡してください。メル／MFCC の復元と同じく、これは近似的なモノラルプレビューであり、原音の復元ではありません。
+`cqtToAudio` と `vqtToAudio` も、`cqt(...)`／`vqt(...)`（定 Q 変換と可変 Q 変換。周波数ビンを線形ではなく対数間隔で並べる変換です）が返す row-major の振幅行列に同じ反復手法を使います。順変換時の `sampleRate`、`hopLength`、`fmin`、`binsPerOctave`（VQT は `gamma` も。順変換で省略したなら省略）を変えずに渡してください。メル／MFCC の復元と同じく、これは近似的なモノラルプレビューであり、原音の復元ではありません。
 
 聴いたときに、元の曲の輪郭やリズムは分かるが、にじみ・金属的な質感・ざらつきが出ることがあります。これは多くの場合、実装の失敗ではなく、捨てた位相を推定しているために起きる自然な限界です。
 
@@ -294,7 +313,7 @@ sonare mel-to-audio song.wav -o mel-preview.wav
 :::
 
 ::: warning 両側で同じパラメータを使う
-逆変換ヘルパーは、順変換で使ったのと**同じ** `sampleRate`、`nFft`、`hopLength`、`nMels`、`fmin`、`fmax`、`htk` のときだけ意味を持ちます。不一致があると、エラーにならないまま「誤っているがもっともらしい」スペクトルが生まれ、最も気づきにくいバグになります。特に、順変換で `htk: true` やカスタムの `fmin`／`fmax` を使った場合は、逆変換にも**必ず**同じ `htk`／`fmin`／`fmax` を渡してください。さもないとメルフィルタバンクが別物として構築され、再構成は気づかないうちに誤った結果になります。これらの値を特徴量と一緒に保存し、逆変換呼び出しがずれないようにしてください。`mel_to_stft(...)` は周波数領域にとどまるため `hop_length` は不要ですが、音声を生成するヘルパーでは必要です。
+逆変換ヘルパーは、順変換で使ったのと**同じ** `sampleRate`、`nFft`、`hopLength`、`nMels`、`fmin`、`fmax`、`htk` のときだけ意味を持ちます。不一致があると、エラーにならないまま「誤っているがもっともらしい」スペクトルが生まれ、最も気づきにくいバグになります。特に、順変換で `htk: true` やカスタムの `fmin`／`fmax` を使った場合は、逆変換にも**必ず**同じ `htk`／`fmin`／`fmax` を渡してください。さもないとメルフィルタバンクが別物として構築され、再構成は気づかないうちに誤った結果になります。これらの値を特徴量と一緒に保存し、逆変換呼び出しがずれないようにしてください。あるいは、これらの値を持っている順変換の結果そのものを逆変換してください。`mel_to_stft(...)` は周波数領域にとどまるため `hop_length` は不要ですが、音声を生成するヘルパーでは必要です。
 :::
 
 ## 関連

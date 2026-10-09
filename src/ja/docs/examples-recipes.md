@@ -168,7 +168,7 @@ console.log(`ブラインド RT60: ${blind.rt60.toFixed(2)} 秒`);
 console.log(`信頼度: ${(blind.confidence * 100).toFixed(0)}%`);
 
 const estimate = estimateRoom(samples, sampleRate);
-console.log(`推定ルーム: ${estimate.length.toFixed(1)} x ${estimate.width.toFixed(1)} x ${estimate.height.toFixed(1)} m`);
+console.log(`推定ルーム: ${estimate.lengthM.toFixed(1)} x ${estimate.widthM.toFixed(1)} x ${estimate.heightM.toFixed(1)} m`);
 
 const rir = synthesizeRir({ lengthM: 7, widthM: 5, heightM: 3, absorption: 0.2 });
 const morphed = roomMorph(samples, sampleRate, { lengthM: 12, widthM: 9, heightM: 4, wet: 0.6 });
@@ -191,7 +191,7 @@ with Audio.from_file("recording.wav") as audio:
 
 print(f"ブラインド RT60: {blind.rt60:.2f} 秒")
 print(f"信頼度: {blind.confidence * 100:.0f}%")
-print(f"推定ルーム: {estimate.length:.1f} x {estimate.width:.1f} x {estimate.height:.1f} m")
+print(f"推定ルーム: {estimate.length_m:.1f} x {estimate.width_m:.1f} x {estimate.height_m:.1f} m")
 ```
 
 ```bash [CLI]
@@ -440,9 +440,7 @@ function checkEstimates() {
   }
 
   if (stats.estimate.key >= 0) {
-    const keys = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    const mode = stats.estimate.keyMinor ? 'マイナー' : 'メジャー';
-    console.log(`キー: ${keys[stats.estimate.key]} ${mode}`);
+    console.log(`キー: ${stats.estimate.keyName}`); // 例: "E minor"。keyShortName は "Em"
   }
 }
 ```

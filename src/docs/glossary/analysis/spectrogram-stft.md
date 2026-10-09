@@ -60,6 +60,8 @@ That means an even-Hz grid can waste resolution high up and lack resolution down
 
 ::: details How libsonare computes the STFT
 libsonare's STFT and framing utilities apply a window (Hann by default), advance by `hopLength`, and run a real FFT per frame, producing the magnitude/power spectra that mel, chroma, onset, and tempogram stages reuse. That reuse is scoped: inside `analyze()` (`MusicAnalyzer`) the spectrogram is computed once and shared by the chroma and mel stages, while the standalone per-feature helpers — `chroma()`, `melSpectrogram()`, and the individual key/chord/section analyzers — each run their own STFT. Ask for several features through `analyze()` if you want the FFT paid for once. The `nFft`/`hopLength` defaults (`2048`/`512`) mirror common librosa usage so reference tests can compare outputs. CQT/VQT use log-frequency bins layered on top of the same framing conventions.
+
+A window length in samples means a different duration at each sample rate, so the analyzers that take audio at its own rate (beats, tempo, onsets, key, rhythm, the chord beat grid, timbre) read `nFft` as samples at 22050 Hz and rescale it to the input rate; the hop stays in input samples. The same material therefore gets the same window duration at 22050, 44100 or 48000 Hz. The streaming analyzer reads `nFft` as samples at 44100 Hz instead (rescaled below that rate, never shorter than the hop), and polyphony reads `nFft`, `winLength` and `hopLength` at 44100 Hz.
 :::
 
 Related: [MIR Overview](../concepts/mir-overview.md), [Chroma Features](./chroma-features.md), [Mel, MFCC, and Timbre](./mel-mfcc-timbre.md), [Audio Basics](../concepts/audio-basics.md)

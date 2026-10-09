@@ -108,7 +108,7 @@ MIDI 1.0 の対象には、MIDI 1.0 パッカーも使えます。`midiNoteOn`�
 
 ## リアルタイムで生 UMP をキューへ入れる
 
-`RealtimeEngine.pushMidiUmp(destinationId, words, renderFrame = -1)` は、最上位ワードから並べた 1～4 個の 32 ビットワードを受け取ります。配列の長さは先頭ワードのメッセージタイプと一致する必要があります。MT `0x4` の MIDI 2.0 チャンネルボイスはフル解像度で渡されます。`setMidiInputSource(...)` の後で使う `pushMidiInputUmp(words, portTimeSamples = 0)` も同じ規則でエンジン所有の入力ソースへ入れます。
+`RealtimeEngine.pushMidiUmp(destinationId, words, renderFrame?)` は、最上位ワードから並べた 1～4 個の 32 ビットワードを受け取ります。配列の長さは先頭ワードのメッセージタイプと一致する必要があります。MT `0x4` の MIDI 2.0 チャンネルボイスはフル解像度で渡されます。`setMidiInputSource(...)` の後で使う `pushMidiInputUmp(words, portTimeSamples = 0)` も同じ規則でエンジン所有の入力ソースへ入れます。
 
 ::: code-group
 
@@ -121,7 +121,7 @@ engine.setBuiltinInstrument({}, 0);
 engine.setMidiInputSource(0);
 const note = Project.midi2NoteOn(0, 0, 0, 60, 0xc000);
 try {
-  engine.pushMidiUmp(0, [note.data0, note.data1 ?? 0], -1);
+  engine.pushMidiUmp(0, [note.data0, note.data1 ?? 0]);
   engine.pushMidiInputUmp([note.data0, note.data1 ?? 0], 0);
 } finally {
   engine.destroy();
@@ -136,14 +136,14 @@ engine.set_builtin_instrument()
 engine.set_midi_input_source(0)
 try:
     note = sonare.Project.midi2_note_on(0.0, 0, 0, 60, 0xC000)
-    engine.push_midi_ump(0, [note[1], note[2]], render_frame=-1)
+    engine.push_midi_ump(0, [note[1], note[2]])
 finally:
     engine.close()
 ```
 
 :::
 
-AudioWorklet の `SonareEngine` ファサードは `pushMidiUmp(trackId, words, renderFrame = -1)` で完全なパケットを受け取ります。`words` は従来の 1 ワードの数値、または 1～4 ワードの配列／`Uint32Array` にできます。エンジン所有の入力ソースに入れる `pushMidiInputUmp(words, portTimeSamples = 0)` も同じ完全なパケットを受け取ります。生の MT `0x3`／`0x5` データメッセージはどちらの生 UMP 呼び出しでも拒否されるため、完全な SysEx フレームを `pushMidiSysex` で送ります。キュー満杯や不正なワードはバインディングからエラーとして返ります。
+AudioWorklet の `SonareEngine` ファサードは `pushMidiUmp(trackId, words, renderFrame?)` で完全なパケットを受け取ります。`words` は従来の 1 ワードの数値、または 1～4 ワードの配列／`Uint32Array` にできます。エンジン所有の入力ソースに入れる `pushMidiInputUmp(words, portTimeSamples = 0)` も同じ完全なパケットを受け取ります。生の MT `0x3`／`0x5` データメッセージはどちらの生 UMP 呼び出しでも拒否されるため、完全な SysEx フレームを `pushMidiSysex` で送ります。キュー満杯や不正なワードはバインディングからエラーとして返ります。
 
 ## 組み込み受信側が適用するもの
 
@@ -161,7 +161,7 @@ AudioWorklet の `SonareEngine` ファサードは `pushMidiUmp(trackId, words, 
 
 MIDI 2.0 クリップファイルは、`SMF2CLIP` ヘッダを持つメモリ上の UMP コンテナです。`Project.exportClipFile()` はプロジェクトのテンポマップと MIDI クリップを 1 つのクリップコンテナへ書き出し、`importClipFile(...)` はインポートしたクリップを追加します。この形式は MIDI 2.0 のチャンネルボイスメッセージを値変換なしで保持します。
 
-16 ビットベロシティ、32 ビット CC、パーノート／レジスタードコントローラ、バンク有効な Program Change を保持します。これらの値が重要な交換ではこの経路を使います。クリップファイルは SysEx7/8 データも運びます。書き出し時はプロジェクトの別ストアにある SysEx をファイルへ直列化し、読み込み時にそのストアへ戻します。
+16 ビットベロシティ、32 ビット CC、パーノート／レジスタードコントローラ、バンク有効な Program Change を保持します。これらの値が重要な交換ではこの経路を使います。クリップファイルは SysEx7/8 データも運びます。書き出し時はプロジェクトの別ストアにある SysEx をファイルへ直列化し、読み込み時にそのストアへ戻します。SysEx8 ペイロードの先頭 `F0` や末尾 `F7` のデータバイトは、SMF とクリップファイルのどちらの書き出しでも保たれ、SMF の読み込みではメタイベントをまたいで分割された SysEx メッセージが 1 つに結合されます。
 
 拍子の Flex Data は分母を 2 の指数 `e` として格納し、`2^e` にデコードします。クリップファイルでは `e = 0` を非標準分母用に予約するため、表現できる指数は `1..7`（分母 2..128）です。2 のべき乗でない分母を書き出すと、128 を上限として次に表現できるべき乗へ切り上げ、スキップイベント数を増やします。読み込んだ指数が `1..7` の範囲外ならスキップし、有効な拍子が PPQ 0 から始まらない場合は PPQ 0 に 4/4 を補います。`SMF2CLIP` ヘッダにはプロジェクト履歴やスキーマバージョンのフィールドがないため、現在のクリップファイル形式の交換データだけを保持し、プロジェクト履歴やバージョン交渉は保持しません。
 

@@ -64,6 +64,8 @@ libsonare はフレーム単位、またはビート同期したクロマ要約�
 
 ::: details libsonare がどう計算するか
 `ChordAnalyzer` は STFT または NNLS クロマを作り、`use_triads_only` に応じて `generate_triad_templates()` か `generate_all_chord_templates()` を取り、テンプレート相関に低域ルートの項（`bass_root_weight`。C++ のみで、0 で無効）を加えて候補を採点します。三和音以外のテンプレートはそれぞれの余裕（既定は `kTetradThreshold` の 0.05、`mM7`・`11`・`13`・`7b9`・`7#9` は `kExtendedQualityThreshold` の 0.09）を超えた場合だけ三和音より優先され、`minDuration` 未満の短い区間はマージされます。既定値は `minDuration = 0.3`、`smoothingWindow = 2.0`、`threshold = 0.5`、`nFft = 2048`、`hopLength = 512`、`useBeatSync = true` です。単体検出は有効時にビートを推定し、曲全体の解析は共有するビートグリッドを再利用します。ビートグリッドがない場合はフレーム単位のクロマへフォールバックします。公開バインディングでは、コードのルート、クオリティ、時刻、信頼度に加え、バインディングに応じて inversion、key、HMM オプションを扱えます。
+
+進行を名前の並びではなくハーモニーとして読むには、各コードをキーに対する**ローマ数字**（`I`、`IV`、`V7`、`vi`）と機能（`tonic`、`subdominant`、`dominant`、`chromatic`）でラベル付けします。`chordFunctions({ chords, key })` は、すでに手元にあるコードに再検出なしで `roman` と `function` を付け足します。`chordFunctionalAnalysis` は検出とラベル付けを一度に行い、数値の文字列だけのリストではなく、同じ時刻付きエントリ（`start`、`end`、`name`、`roman`、`function` など）を返します。WASM バインディングでは `detectKey` が `mode` を名前（`'major'`、`'minor'`、`'dorian'` など）で返し、これが `chordFunctions` の受け取る形です。
 :::
 
 関連: [クロマ特徴量](./chroma-features.md)、[キー検出](./key-detection.md)、[ビートとダウンビート](./beats-downbeats.md)

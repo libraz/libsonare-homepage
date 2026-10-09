@@ -33,12 +33,18 @@ The order is fixed because every stage's detector assumes the damage the earlier
 
 There is no reordering option because there is no order in which a later stage would see cleaner input.
 
+## Analyze, then Apply
+
+`masteringRepairAnalyze({ channels, sampleRate })` runs the six detectors on every channel of any channel count and returns each channel's defects, whether a declip at the measured flat level is safe, and the stages the assistant would pick, each with its settings. Dereverb is never recommended. `masteringRepairApply({ channels, sampleRate, stages })` takes that list as it stands (or a list you edit) and runs the stages in the fixed order above whatever order the array has; a stage named twice or a setting it does not know is refused. Declip, declick and dehum decide over the whole channel set and report per channel, denoise and dereverb apply one linked mask and report once, and `onProgress` reports after each stage while `cancel` aborts between stages. Python has `mastering_repair_analyze` / `mastering_repair_apply`.
+
+`repair.decrackle`, `repair.dehum`, `repair.denoiseClassical` and `repair.dereverbClassical` are also available as realtime inserts that equal their offline function for the same settings, delayed by the latency the insert reports; declick and declip stay offline-only.
+
 ## Denoise Depth: `repair.denoise.reductionDb`
 
 The denoise stage has one main strength control, `repair.denoise.reductionDb`: the deepest attenuation the gain mask may apply to any frequency bin, in dB.
 
 - **Sign:** non-negative; larger values permit deeper attenuation. At 26 the mask can attenuate a bin by at most 26 dB; 0 prevents mask attenuation.
-- **Range:** any finite value of 0 or more. There is no upper bound; a negative or non-finite value is rejected with `denoise reduction_db must be finite and non-negative`.
+- **Range:** 0 to 120. A negative, non-finite or larger value is refused (`denoise reduction_db must be finite and in [0, 120]`).
 - **Default:** 26 dB. Among the built-in presets only `shellac78` changes it, to 32 dB.
 
 The value sets a lower bound on mask gain, not a guaranteed reduction of the noise itself. At 26 dB that bound is about 0.0501. Signal and noise estimates determine each bin’s actual gain, and audible artifacts remain possible. The demo's Denoise Amount slider is scaled onto this depth.

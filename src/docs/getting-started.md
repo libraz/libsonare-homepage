@@ -163,17 +163,17 @@ Next: read [Node.js / Native Bindings](/docs/native-bindings).
 :::
 
 - **BPM Detection** - Tempo estimation using tempogram and autocorrelation
-- **Key Detection** - Musical key detection using Krumhansl-Schmuckler profiles
+- **Key Detection** - Musical key detection using Krumhansl-Schmuckler profiles, with optional measured tuning (`tuning: 'auto'`) for recordings that are not at A440
 - **Beat Tracking** - Dynamic programming-based beat extraction, with downbeats and a scored time-signature estimate
-- **Chord Recognition** - Template matching against per-root chord templates: 4 triad qualities by default, 24 qualities across 12 roots once the full template set is enabled
+- **Chord Recognition** - Template matching against per-root chord templates: 4 triad qualities by default, 24 qualities across 12 roots once the full template set is enabled, plus Roman-numeral chord functions
 - **Section Detection** - Structural segmentation such as intro, verse, and chorus
 - **Melody / Pitch Tracking** - YIN and pYIN algorithms for F0 detection
 - **Audio Characteristics** - Timbre, dynamics, and rhythm analysis
 - **Room Acoustics** - RT60 / EDT, clarity, definition, octave-band decay, blind and equivalent-room estimates, RIR synthesis, and room morphing
 - **Spectral Features** - Mel spectrogram, MFCC, chroma, CQT/VQT, spectral centroid, and flatness
-- **Audio Effects** - HPSS, time stretch, pitch shift, normalize, and trim
+- **Audio Effects** - HPSS, time stretch, pitch shift, auto-tune to a key, normalize, and trim
 - **Streaming Analysis** - Chunk-by-chunk processing with BPM/key/chord estimates that update as audio arrives
-- **Mastering** - Preset and configurable mastering chains with LUFS targets, true-peak limiting, EQ, dynamics, repair, stereo tools, and reference matching
+- **Mastering** - Preset and configurable mastering chains with LUFS targets, true-peak limiting, EQ, dynamics, repair (analysis and fixed-order repair stages in one call), stereo tools, and reference matching
 - **Mixing** - Channel strips, sends, buses, automation, scene presets, goniometer/true-peak metering, and offline stereo rendering
 - **Editing DSP and inserts** - Direct pitch correction, note-region stretch, and voice-change pitch/formant controls; reverb and ducking are available through named processor or mixer insert paths where enabled
 - **Inverse Feature Helpers** - Approximate STFT/audio reconstruction from mel spectrograms and MFCCs

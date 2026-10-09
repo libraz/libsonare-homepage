@@ -40,7 +40,7 @@ const cleaned = masteringRepairDereverbClassical({
 });
 ```
 
-The `configForRoom` call reads the room estimate and returns a complete dereverb configuration. A real workflow still needs an audition: a low-confidence room estimate or a tail that is actually musical may not justify the pass.
+The `configForRoom` call reads the room estimate and returns a complete dereverb configuration. Python spells it `mastering_repair_dereverb_config_for_room`. A real workflow still needs an audition: a low-confidence room estimate or a tail that is actually musical may not justify the pass.
 
 ## What the room config changes
 
@@ -48,11 +48,11 @@ The `configForRoom` call reads the room estimate and returns a complete dereverb
 
 | Option | How to use it |
 |---|---|
-| `t60Sec` | Derived from the mid-band RT60 estimate. If the relevant bands did not converge, the helper uses the documented fallback from the available bands. |
-| `lateDelayMs` | Derived from the estimated volume as a mixing-time delay, which marks the late diffuse region. |
-| `attenuation`, `threshold`, `overSubtraction`, `spectralFloor` | Keep or override these amount and gate controls; they are not replaced by room geometry. `threshold` and `attenuation` are validated in the `[0, 1]` range. |
+| `t60Sec` | Derived from the mid-band RT60 estimate. If the relevant bands did not converge, the helper uses the documented fallback from the available bands. Accepted range `(0, 10]` seconds (default `0.4`). |
+| `lateDelayMs` | Derived from the estimated volume as a mixing-time delay, which marks the late diffuse region. Accepted range `[0, 500]` ms (default `50`). |
+| `attenuation`, `threshold`, `overSubtraction`, `spectralFloor` | Keep or override these amount and gate controls; they are not replaced by room geometry. `threshold`, `attenuation`, and `spectralFloor` are validated in the `[0, 1]` range, `overSubtraction` in `[0, 16]`. |
 | `nFft`, `hopLength` | Set the STFT geometry. `nFft` must be a power of two from `4` through `524288`; `hopLength` must be positive, no greater than `nFft / 2`, and reconstructible with the Hann overlap. |
-| `wpeEnabled`, `wpeIterations`, `wpeTaps`, `wpeStrength` | Enable and shape the optional WPE pre-stage. WPE analysis is otherwise off by default. |
+| `wpeEnabled`, `wpeIterations`, `wpeTaps`, `wpeStrength` | Enable and shape the optional WPE pre-stage. WPE analysis is otherwise off by default. `wpeIterations` is in `[1, 16]`, `wpeTaps` in `[1, 32]`, and `wpeStrength` in `[0, 1]`. |
 
 The [Room Acoustics](./acoustic-analysis.md) page explains equivalent-room estimates, RT60 bands, and confidence. Its `roomMorph` effect adds a target-room character; it is a different operation from dereverberation.
 

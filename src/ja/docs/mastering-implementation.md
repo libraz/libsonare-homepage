@@ -51,7 +51,7 @@ description: ブラウザ内マスタリングデモが UI の判断を libsonar
   caption="リペアはオフラインで一度だけ走ります。試聴と書き出しは同じエンジン操作を使うので、ファイルにはレーンで鳴っていた音がそのまま入ります。"
 />
 
-デコードはブラウザ API で行います。リペアの各ステージ（declip、declick、decrackle、dehum、denoise、dereverb）はオフライン専用なので、最初にワーカーで実行してエンジンが再生するプログラムのクリップを作ります。再実行されるのはリペア設定を変えたときだけです。それ以降はリアルタイムエンジンの仕事で、ページは AudioWorklet 上の `SonareEngine` ファサードを postMessage モードで再生します。このため、サイトは SharedArrayBuffer を使わずに済んでいます。
+デコードはブラウザ API で行います。リペアの各ステージ（declip、declick、decrackle、dehum、denoise、dereverb）は最初にワーカーでオフライン実行して、エンジンが再生するプログラムのクリップを作ります。再実行されるのはリペア設定を変えたときだけです。デモは 6 段すべてをこの方法で実行してエンジンには載せませんが、decrackle、dehum、denoise、dereverb はリアルタイムインサートとしても使えます。それ以降はリアルタイムエンジンの仕事で、ページは AudioWorklet 上の `SonareEngine` ファサードを postMessage モードで再生します。このため、サイトは SharedArrayBuffer を使わずに済んでいます。
 
 エンジンには 3 つのレーンがあります。**After** はプログラムをインサート列と 8 バンドのストリップ EQ に通したもの、**Before** は同じプログラムを無加工で流したもの、**Reference** は任意のリファレンスファイルです。A/B/R の切り替えはレーンのフェーダーを動かすだけなので、3 レーンは常に動き続け、切り替えにギャップは生じません。各レーンは出力側でラウドネスが揃えられます。大きいレーンは最も静かなレーンに合わせて下げられ、上げられるレーンはありません。ラウドネス合わせをオフにすると、どのレーンも 0 dB のままです。
 
@@ -75,7 +75,7 @@ lane 1 には 13 スロットのインサートが固定の並びで入ってい
 | Stereo | `stereo.imager` |
 | Mono bass | `stereo.monoMaker` |
 | Drive | `utility.gain`（リミッターの直前） |
-| Limiter | `maximizer.truePeakLimiter` |
+| Limiter | `maximizer.truePeakLimiter`（既定で 129 サンプルのレイテンシを報告） |
 
 連続値のコントロールはパラメータのセッターでエンジンに渡すので、つまみを回してもプロセッサの内部状態は保たれます。マルチバンドのニーやリミッターのルックアヘッドなど、構築時にしか決められない一部のパラメータは、そのストリップのインサートを作り直します。UI はそれらをコントロールを離したときに適用します。
 
@@ -135,11 +135,11 @@ lane 1 には 13 スロットのインサートが固定の並びで入ってい
 | プリセットを使う | `masterAudio()`、`masterAudioStereo()`、`masteringPresetNames()` |
 | フルチェーンを実行する | `masteringChain()`、`masteringChainStereo()` |
 | 進捗を表示する | `masteringChainWithProgress()`、`masteringChainStereoWithProgress()` |
-| ブロック単位でレンダリングする | `StreamingMasteringChain`（`prepare` / `processMono` / `processStereo` / `flushMono` / `flushStereo` / `setParameter` / `reset` / `latencySamples` / `stageNames`） |
+| ブロック単位でレンダリングする | `StreamingMasteringChain`（`prepare` / `processMono` / `processStereo` / `flushMono` / `flushStereo` / `setParameter` / `reset` / `latencySamples` / `stageNames`）。静的なラウドネスゲインは `streamingLoudnessGain()` / `streamingLoudnessGainStereo()` が求める |
 | 名前付きプロセッサを単体で実行する | `masteringProcessorNames()`、`masteringProcess()`、`masteringProcessStereo()` |
 | ソースとリファレンスを比較する | `masteringPairProcessorNames()`、`masteringPairProcess()`、`masteringPairAnalysisNames()`、`masteringPairAnalyze()` |
 | ステレオ出力を解析する | `masteringStereoAnalysisNames()`、`masteringStereoAnalyze()` |
-| プロファイル・提案・プレビュー | `masteringAudioProfile()`、`masteringAssistantSuggest()`、`masteringStreamingPreview()` |
+| プロファイル・提案・プレビュー | `masteringAudioProfile()`、`masteringAssistantSuggest()`、`masteringStreamingPreview()`（結果は型付き。ステレオ版は `Stereo` 接尾辞） |
 
 最後の入力ブロックを処理した後は、空のバッファが返るまで `flushMono()` または `flushStereo()` を呼びます。フラッシュしないと、チェーンの遅延分と有限長のプロセッサテールが出力から欠落します。
 

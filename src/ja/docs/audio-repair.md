@@ -1,6 +1,6 @@
 ---
 title: オーディオリペアの流れ
-description: libsonare のオフラインリペア段で、ノイズ、ハム、過渡的な損傷、拡散残響を選別・測定・処理する方法です。
+description: libsonare のリペア段で、ノイズ、ハム、過渡的な損傷、拡散残響を選別・測定・処理する方法です。
 ---
 
 # オーディオリペアの流れ
@@ -52,7 +52,7 @@ const reports = {
 console.log(reports);
 ```
 
-デノイズ検出器は `nFft` サンプル以上を必要とし、短いバッファを拒否します。デリバーブ検出器は解析のために短いバッファをパディングします。短い素材を処理するときは、この違いを覚えておいてください。
+デノイズ検出器とデリバーブ検出器は、`nFft` より短いバッファを解析のためにパディングします。短い素材も拒否されずに測定できます。512 サンプルの入力を `masteringRepairDenoiseClassical` に渡すと、512 サンプルの結果が返ります。
 
 ## 固定された段の順序
 
@@ -83,11 +83,51 @@ console.log(reports);
 
 正確なプリセットパラメータは [マスタリングプロセッサ](./mastering-processors.md) にあります。プリセットは出発点なので、素材とレポートを確認してから出力を採用してください。
 
+## 測定と修復を 1 回の呼び出しで行う
+
+`masteringRepairAnalyze` は 6 つの検出器をすべてのチャンネルで実行し、チャンネルごとの欠陥、全体の集計、測定したフラットレベルでの declip がそれより大きい音に手を触れないかどうか (`declipThresholdSafe`)、根拠のある段とその設定を `recommended` として返します。デリバーブは推奨しません。後期減衰の統計量では、持続する直接音と残響を区別できないためです。`masteringRepairApply` は推奨された段、または自分で選んだ段を、任意のチャンネル数に対して実行します。
+
+```ts
+import { init, masteringRepairAnalyze, masteringRepairApply } from '@libraz/libsonare';
+
+await init();
+
+const analysis = masteringRepairAnalyze({ channels: [left, right], sampleRate });
+console.log(analysis.recommended.map((s) => s.stage), analysis.explanation);
+
+const { channels, reports } = masteringRepairApply({
+  channels: [left, right],
+  sampleRate,
+  stages: analysis.recommended,
+  onProgress: (fraction, stage) => console.log(stage, fraction), // "repair.declick", 0.5
+  cancel: () => userPressedStop,
+});
+```
+
+- `stages` は `[{ stage, ...settings }]` の配列です。設定はその段のカタログパラメータ (`repair.declick`、`repair.dehum`、`repair.denoiseClassical` など) で、省略すると既定値になります。未知の設定、同じ段の重複、範囲外の値は `InvalidParameter` で拒否されます。
+- 段は、配列の順序にかかわらず上記の固定順序で実行されます。
+- declip、declick、dehum はチャンネル全体で判断します。1 つのチャンネルで見つかった欠陥はすべてのチャンネルで修復され、dehum は基本周波数を 1 つだけ追跡します。decrackle は各チャンネルを単独で処理します。denoise と dereverb は 1 つのリンクしたマスクを適用します。前者の 3 つはチャンネルごとにレポートし (`scope: 'channel'`)、リンクした段は全体で 1 つだけレポートします (`scope: 'linked'`)。
+- `onProgress` は各段の後に、完了した割合と `repair.<stage>` で呼ばれます。レポートの後に `cancel` が true を返すと、`SonareError` (コード `Cancelled`) を投げて中断します。
+
+Node でも同じ名前で使えます。Python では `mastering_repair_analyze(channels, sample_rate)` と `mastering_repair_apply(channels, sample_rate, stages=[...], on_progress=..., cancel=...)` で、2 次元の `(channels, frames)` 配列も受け取ります。結果は `.channels` と `.reports` を持ちます。個々の検出器と段も Python では `mastering_repair_` 接頭辞に揃っています (`mastering_repair_detect_hum`、`mastering_repair_declick_stereo`、`mastering_repair_denoise_classical_linked`、`mastering_repair_dereverb_config_for_room`、`mastering_repair_noise_band_bins`)。
+
+## リアルタイムインサート
+
+4 つの段は因果的で、カタログ ID のリアルタイムミキサーインサートとして動作します。`repair.decrackle` (メディアンモード)、`repair.dehum`、`repair.denoiseClassical`、`repair.dereverbClassical` (減算マスク) です。同じ設定ならオフライン関数と同じ結果を、インスタンスが報告するレイテンシー分だけ遅らせて出力します。信号全体を必要とする設定 (ウェーブレット decrackle、WPE、quantile ノイズ推定器) は名前を挙げて拒否され、インサートのデノイズ推定器は既定値で `spp` です。デノイズとデリバーブは、インサートのチャンネル間でマスクをリンクします。
+
+`repair.declick`、`repair.declip`、`repair.trimSilence` はオフライン専用で、機能カタログでは `causal: false` になっています。ホストがカタログを読む方法は [エフェクトインサート](./effects-inserts.md) を参照してください。
+
+## 無音のトリミング
+
+`masteringRepairTrimSilence` は信号の周囲に余白を残します。サンプル数なら `paddingSamples`、同じ余白を秒で指定するなら `paddingSec` (最も近いサンプルに丸められます) です。どちらか一方だけを指定してください。22.05 kHz で、前後に 1 秒ずつ無音を付けた 1 秒のトーンに `paddingSec: 0.1` を指定すると 26460 サンプル (1.2 秒) が返り、余白なしなら 22050 サンプルです。負の余白は `RangeError` になります。
+
+受け付ける範囲は、`threshold` が `[0, 1]`、`paddingSamples` が `960000` まで、`windowMs` が `(0, 10000]`、`lufsGated` モードの `gateLufs` が `[-144, 0]` です。範囲外の値は `InvalidParameter` を投げます。
+
 ## オフライン処理の条件
 
-- `masteringRepair*` 関数は完全なバッファを受け取り、新しいバッファ、または新しいチャンネルバッファを含む結果を返します。ストリーミングや AudioWorklet の段ではありません。
+- `masteringRepair*` 関数は完全なバッファを受け取り、新しいバッファ、または新しいチャンネルバッファを含む結果を返します。上記の 4 つのリアルタイムインサートを除き、オフライン処理です。
 - 6 つのリペア段はモノラル・ステレオ形式で入力長を保ちます。デノイズとデリバーブには、3 チャンネル以上を扱うリンク形式もあります。別の `masteringRepairTrimSilence` ユーティリティだけは、バッファを短くする境界処理です。
-- デノイズ解析は `nFft` 未満の入力を拒否し、デリバーブは解析と修復のために短い入力をパディングします。その他の検証規則は [JavaScript マスタリング API](./js-api-mastering.md) にあります。
+- デノイズとデリバーブは `nFft` 未満の入力を解析のためにパディングし、入力と同じ長さで返します。どの段も上限を超える設定を拒否します。上限は各段のページに一覧があります。その他の検証規則は [JavaScript マスタリング API](./js-api-mastering.md) にあります。
 - リペアは LUFS を整合させたり、結果を同じ音量に見せるゲインを加えたりしません。ラウドネスは別に測定し、一定の再生ゲインで比較してください。
 
 [DSP 実装解説](./dsp-implementation.md) に古典的アルゴリズムとリアルタイム処理との境界をまとめています。正確なオーバーロードとレポートのフィールドは [JavaScript マスタリング API](./js-api-mastering.md) を参照してください。

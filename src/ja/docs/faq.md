@@ -48,6 +48,17 @@ librosa と一致するとは、2 つのライブラリが同じ計算をして�
 
 後段のアルゴリズムには、ラベルより生の信号を渡すほうが向いています。`boundaryTimes` とクロマのコサイン自己類似度行列は、呼び出し側が自分のしきい値を当てられるように公開してあります。
 
+## 録音が A = 440 Hz にチューニングされていないときは？
+
+`analyze`、`detectChords`、`detectKey` に `tuning: 'auto'`（Python は `tuning="auto"`）を渡すと、ピッチクラスを読む前に音声からチューニングを測定します。`tuning` は半音の端数で `[-0.5, 0.5)` の範囲、0 が A440 で、どの結果も、指定した値でも測定した値でも、実際に使った値を報告します（`KeyDetection.tuning`、`AnalysisResult.tuning`、`ChordAnalysisResult.tuning`）。
+
+```typescript
+const key = detectKey({ samples, sampleRate, tuning: 'auto' });
+console.log(key.name, key.tuning, tuningToReferenceHz(key.tuning));
+```
+
+40 セント高く生成したテストコードは、C メジャーとして読まれ、測定された `tuning` は 0.42 でした。`tuningToReferenceHz` で 450.8 Hz になります。オプションなしでもキーは C メジャーのままで、`tuning` は 0 のままでした。基準ピッチが分かっているときは、`referenceHzToTuning(hz)` で逆向きに変換できます。
+
 ## モーダルのキーはメジャー／マイナーと同じくらい信頼できますか？
 
 いいえ。違いはプロファイルの出どころにあります。

@@ -51,7 +51,7 @@ By the end of this page you should be able to:
   caption="Repair runs once offline. Listening and export use the same engine operations, so the file contains what the lane played."
 />
 
-Decoding uses browser APIs. The repair stages (declip, declick, decrackle, dehum, denoise, dereverb) are offline-only, so they run first in a worker and produce the program clip the engine plays; they rerun only when a repair setting changes. Everything after that is the realtime engine: the page plays it through the `SonareEngine` AudioWorklet facade in postMessage mode, which keeps the site free of SharedArrayBuffer.
+Decoding uses browser APIs. The repair stages (declip, declick, decrackle, dehum, denoise, dereverb) run first, offline, in a worker and produce the program clip the engine plays; they rerun only when a repair setting changes. The demo runs all six this way and keeps them off the engine, although decrackle, dehum, denoise, and dereverb are also available as realtime inserts. Everything after that is the realtime engine: the page plays it through the `SonareEngine` AudioWorklet facade in postMessage mode, which keeps the site free of SharedArrayBuffer.
 
 The engine holds three lanes. **After** carries the program through the insert chain and an 8-band strip EQ. **Before** is the same program with no processing, and **Reference** is the optional reference file. The A/B/R switch moves lane faders, so all three lanes keep running and the switch has no gap. Each lane is loudness-matched on the way out: the louder lanes are turned down to the quietest one, and nothing is turned up. Turning matching off leaves every lane at unity.
 
@@ -75,7 +75,7 @@ Lane 1 has a fixed column of 13 insert slots. Turning a module on or off is a by
 | Stereo | `stereo.imager` |
 | Mono bass | `stereo.monoMaker` |
 | Drive | `utility.gain`, just before the limiter |
-| Limiter | `maximizer.truePeakLimiter` |
+| Limiter | `maximizer.truePeakLimiter` (reports 129 samples of latency at its defaults) |
 
 Continuous controls go to the engine as parameter setters, so a knob keeps the processor's state. A few construction-only parameters, such as a multiband knee or the limiter's lookahead, rebuild the strip's inserts; the UI applies those when the control is released.
 
@@ -135,11 +135,11 @@ Use these entry points by intent:
 | Use a preset | `masterAudio()`, `masterAudioStereo()`, `masteringPresetNames()` |
 | Run a full chain | `masteringChain()`, `masteringChainStereo()` |
 | Show progress | `masteringChainWithProgress()`, `masteringChainStereoWithProgress()` |
-| Render block-by-block | `StreamingMasteringChain` (`prepare` / `processMono` / `processStereo` / `flushMono` / `flushStereo` / `setParameter` / `reset` / `latencySamples` / `stageNames`) |
+| Render block-by-block | `StreamingMasteringChain` (`prepare` / `processMono` / `processStereo` / `flushMono` / `flushStereo` / `setParameter` / `reset` / `latencySamples` / `stageNames`), with `streamingLoudnessGain()` / `streamingLoudnessGainStereo()` supplying the static loudness gain |
 | Run one named processor | `masteringProcessorNames()`, `masteringProcess()`, `masteringProcessStereo()` |
 | Compare source and reference | `masteringPairProcessorNames()`, `masteringPairProcess()`, `masteringPairAnalysisNames()`, `masteringPairAnalyze()` |
 | Analyze stereo output | `masteringStereoAnalysisNames()`, `masteringStereoAnalyze()` |
-| Profile, suggest, and preview | `masteringAudioProfile()`, `masteringAssistantSuggest()`, `masteringStreamingPreview()` |
+| Profile, suggest, and preview | `masteringAudioProfile()`, `masteringAssistantSuggest()`, `masteringStreamingPreview()` (typed results; stereo forms have a `Stereo` suffix) |
 
 After the last input block, call `flushMono()` or `flushStereo()` until it returns an empty buffer. Skipping the flush drops the chain's delayed samples and finite processor tails from the rendered output.
 

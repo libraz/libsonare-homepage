@@ -133,7 +133,7 @@ try {
 
 ### パンチイン／アウト
 
-パンチ録音は、選んだタイムライン範囲の内側だけでキャプチャをアームし、その外側にある確定テイクには手を触れません。`setCapturePunch(startSample, endSample, enabled?)` は入／出ポイントをタイムラインサンプルで設定し、`punchEnabled` が true の間は、トランスポート（動いている再生位置）が `[startSample, endSample)` の内側にあるときだけ追記します。`enabled: false`（または `resetCapture()`）で範囲を解除し、自由録音へ戻ります。
+パンチ録音は、選んだタイムライン範囲の内側だけでキャプチャをアームし、その外側にある確定テイクには手を触れません。`setCapturePunch({ startSample, endSample, enabled? })` は入／出ポイントをタイムラインサンプルで設定します。秒で指定する `setCapturePunch({ startSec, endSec })` もあり、エンジンのサンプルレートで最も近いサンプルに丸められます。境界ごとにどちらか一方の表記を使い、両方の境界を指定してください。負の境界、片方の境界への両表記の併用、境界の欠落は `RangeError` になります。位置引数形式の `setCapturePunch(startSample, endSample, enabled?)` も使え、Python は `start_sample` / `end_sample`、またはキーワード専用の `start_sec` / `end_sec` を受け取ります。`punchEnabled` が true の間は、トランスポート（動いている再生位置）が `[startSample, endSample)` の内側にあるときだけ追記します。`enabled: false`（または `resetCapture()`）で範囲を解除し、自由録音へ戻ります。
 
 :::: details パートを録ってから読み戻す
 ```typescript
@@ -207,7 +207,7 @@ try {
   const loopLengthQuarters = 4;
   const passes = 3;
   const passSamples = Math.round((loopLengthQuarters * 60 / 120) * sampleRate); // 96000
-  const recorded = new Float32Array(passes * passSamples);                       // 連結した周回（audioChannels が 2 以上ならインターリーブ）
+  const recorded = new Float32Array(passes * passSamples);                       // 連結した周回（audioChannels が 2 以上ならインターリーブ、またはチャンネルごとに 1 本の配列）
 
   const result = project.addLoopRecordingTakes({
     trackId,
@@ -227,11 +227,13 @@ try {
 `loopLengthPpq` は 4 分音符単位なので、その長さはテンポに依存します。4 分音符 4 つ分のループは 120 BPM で 2 秒、60 BPM では 4 秒です。先にプロジェクトのテンポを設定し、そこから周回ごとのサンプル数を求め、`passes * passSamples` フレームを渡してください。これより少ないと、期待より少ないテイクしか得られません。
 :::
 
-::: warning マルチチャンネルのテイクはインターリーブして渡す
-`audioChannels` が 2 以上のとき、`audio` の Float32Array は L, R, L, R, … と並ぶ**インターリーブ形式**として読まれます。`engine.capturedAudio()` はチャンネルごとに 1 本の Float32Array を返す**プレーナー形式**なので、ステレオのループでは渡す前にチャンネルをインターリーブするか、`audioChannels: 1`（モノラル）で録音して 1 チャンネルをそのまま渡してください。
+::: tip インターリーブでもプレーナーでも渡せる
+`audio` はどちらの形も受け付けます。単一の `Float32Array` は、`audioChannels` が 2 以上のとき L, R, L, R, … と並ぶ**インターリーブ形式**として読まれます。`Float32Array` の配列（チャンネルごとに 1 本で、長さはすべて同じ。`engine.capturedAudio()` が返す形）は**プレーナー形式**として読まれ、配列の長さがチャンネル数になって `audioChannels` は無視されます。Python も、チャンネルが先頭軸の 2 次元配列や、同じ長さのチャンネルごとのシーケンスを同様に受け付けます。
 :::
 
-この呼び出しは、ループの各周回を別テイクとして持つクリップを 1 本追加し、**アクティブテイク**を最新（最後）の周回に設定します。ここで注意したいのは、キャプチャした音声がループ境界ちょうどで終わっていない場合、この最後の周回は短い部分的なテイクになる点です。そのため、別のテイクを選ぶかコンプを組み立てるまで、クリップは既定でこの切れたテイクを再生します。ここからテイクをまたいでコンピングします。
+この呼び出しは、ループの各周回を別テイクとして持つクリップを 1 本追加し、**アクティブテイク**を最新（最後）の周回に設定します。ここで注意したいのは、キャプチャした音声がループ境界ちょうどで終わっていない場合、この最後の周回は短い部分的なテイクになる点です。ただしこの部分テイクは残るものの、アクティブにはなりません。直前の完全なテイクがアクティブのままで、部分テイクはプロジェクト JSON の `takes` のエントリに `"partial": true` を持ち、これは往復保存されます。1 ループに満たないキャプチャは部分テイクだけになり、そのテイクがアクティブのままです。残りが 1 フレーム以下なら、テイクは作られません。
+
+`partialTail: 'drop'`（Python は `partial_tail="drop"`）を渡すと、部分テイクを作りません。既定は `'keep'` です。上の例で、完全な 2 周回に 30000 フレームを足すと `takeCount: 3` で、テイク 2 がアクティブ、テイク 3 が partial になります。`'drop'` なら `takeCount: 2` です。ここからテイクをまたいでコンピングします。
 
 ## テイクとコンプセグメント
 
@@ -470,7 +472,8 @@ try {
 ```typescript
 const inSample = Math.round(2.0 * 48000);    // 2 秒でパンチイン
 const outSample = Math.round(4.0 * 48000);   // 4 秒でパンチアウト
-engine.setCapturePunch(inSample, outSample, true);
+engine.setCapturePunch({ startSample: inSample, endSample: outSample });
+// 秒で指定する場合: engine.setCapturePunch({ startSec: 2, endSec: 4 });
 engine.setCaptureSource('input');
 engine.armCapture();
 engine.play();

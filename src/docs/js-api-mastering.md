@@ -1,11 +1,11 @@
 ---
 title: JavaScript/TypeScript Mastering API
-description: The mastering chain, named processors, presets, one-shot dynamics and repair processors, and the mixing API of the libsonare JavaScript/TypeScript package. Streaming processors and the chain config schema live on their own pages.
+description: The mastering chain, named processors, presets, one-shot dynamics and repair processors, of the libsonare JavaScript/TypeScript package; the mixing API is on the audio page. Streaming processors and the chain config schema live on their own pages.
 ---
 
 # JavaScript/TypeScript Mastering API
 
-This page covers the offline mastering entry points of the libsonare JavaScript/TypeScript package: the chain and preset calls, the explainable-mastering helpers, the one-shot dynamics and repair processors, and the mixing API. Two related references live alongside it: [Streaming and Realtime API](./js-api-streaming.md) covers `StreamingEqualizer`, `StreamingRetune`, `RealtimeVoiceChanger`, `voiceChangeRealtime(...)`, and `StreamingMasteringChain`, and the `MasteringChainConfig` schema with its result types is on [Types and Errors](./js-api-types.md#masteringchainconfig).
+This page covers the offline mastering entry points of the libsonare JavaScript/TypeScript package: the chain and preset calls, the explainable-mastering helpers, the one-shot dynamics and repair processors. Two related references live alongside it: [Streaming and Realtime API](./js-api-streaming.md) covers `StreamingEqualizer`, `StreamingRetune`, `RealtimeVoiceChanger`, `voiceChangeRealtime(...)`, and `StreamingMasteringChain`, and the `MasteringChainConfig` schema with its result types is on [Types and Enumerations](./js-api-types.md#masteringchainconfig).
 
 ## Where the sections went
 
@@ -16,7 +16,8 @@ This page covers the offline mastering entry points of the libsonare JavaScript/
 | RealtimeVoiceChanger | [Streaming and Realtime API](./js-api-streaming.md) |
 | `voiceChangeRealtime(samples, sampleRate?, preset?, options?)` | [Streaming and Realtime API](./js-api-streaming.md) |
 | StreamingMasteringChain | [Streaming and Realtime API](./js-api-streaming.md) |
-| MasteringChainConfig | [Types and Errors](./js-api-types.md) |
+| MasteringChainConfig | [Types and Enumerations](./js-api-types.md) |
+| Mixing API | [Audio, Metering and Mixing API](./js-api-audio.md#mixing-api) |
 
 ## Mastering API
 
@@ -91,16 +92,16 @@ The same object is mirrored on the C ABI, ctypes, Node, Python, and both CLI
 report files, so a report exported from the CLI and one read in the browser have
 the same shape.
 
-The explainable-mastering helpers — `masteringAudioProfile(...)`, `masteringAssistantSuggest(...)`, and `masteringStreamingPreview(...)` — return JSON strings; see [Mastering Assistant](./mastering-assistant.md) for their exact shapes, accepted options, and how to turn a suggestion into a rendered master. Reference-track workflows use `masteringPairProcessorNames()` and `masteringPairAnalyze()` (matched sample rate and comparable duration). `masteringPairProcess()` runs a mono two-input `match.*` processor; its stereo counterpart `masteringPairProcessStereo()` is described below.
+The explainable-mastering helpers — `masteringAudioProfile(...)`, `masteringAssistantSuggest(...)`, and `masteringStreamingPreview(...)` — return JSON strings typed as `TypedJson<MasteringAudioProfile>`, `TypedJson<MasteringAssistantResult>`, and `TypedJson<MasteringStreamingPreviewResult>` (`JsonResult<J>` reads the parsed type back); see [Mastering Assistant](./mastering-assistant.md) for their exact shapes, accepted options, and how to turn a suggestion into a rendered master. Reference-track workflows use `masteringPairProcessorNames()` and `masteringPairAnalyze()` (matched sample rate and comparable duration). `masteringPairProcess()` runs a mono two-input `match.*` processor; its stereo counterpart `masteringPairProcessStereo()` is described below.
 
 #### Stereo entry points for the explainable helpers
 
-Each of the three has a stereo counterpart that measures the channel pair directly. They are **request-object only** — there is no positional overload, and a positional call throws.
+Each of the three has a stereo counterpart that measures the channel pair directly. They are **request-object only** — there is no positional overload, and a positional call throws a `TypeError`.
 
 ```typescript
-function masteringAudioProfileStereo(request: MasteringStereoParamsRequest): string
-function masteringAssistantSuggestStereo(request: MasteringAssistantStereoParamsRequest): string
-function masteringStreamingPreviewStereo(request: MasteringStreamingPreviewStereoRequest): string
+function masteringAudioProfileStereo(request: MasteringStereoParamsRequest): TypedJson<MasteringAudioProfile>
+function masteringAssistantSuggestStereo(request: MasteringAssistantStereoParamsRequest): TypedJson<MasteringAssistantResult>
+function masteringStreamingPreviewStereo(request: MasteringStreamingPreviewStereoRequest): TypedJson<MasteringStreamingPreviewResult>
 
 interface MasteringStereoParamsRequest {
   left: Float32Array;
@@ -141,7 +142,7 @@ const preview = JSON.parse(
 );
 ```
 
-Use them for anything stereo. The mono helpers measure a `0.5 * (left + right)` downmix, and on decorrelated material that downmix reads about 6 dB low — so the integrated loudness, the normalization gain derived from it, and the ceiling-risk judgement are all under-reported by the same amount. Measured on a decorrelated pink-noise pair (48 kHz, 4 s), the downmix path reported **-22.55 LUFS** against the stereo path's **-16.44 LUFS**, a **6.11 dB** gap, and Spotify `normalizationGainDb` came out at **+8.55** through the downmix versus **+2.44** through the stereo path. On a correlated pair the gap shrinks to 3.01 dB, which is just the halving; the remaining ~3 dB is the decorrelation.
+Use them for anything stereo. The mono helpers measure a `0.5 * (left + right)` downmix, and on decorrelated material that downmix reads about 6 dB low — so the integrated loudness, the normalization gain derived from it, and the ceiling-risk judgement are all under-reported by the same amount. Measured on a decorrelated pink-noise pair (48 kHz, 4 s), the downmix path reported **-18.45 LUFS** against the stereo path's **-12.43 LUFS**, a **6.03 dB** gap, and a -14 LUFS target's `normalizationGainDb` came out at **+4.45** through the downmix versus **-1.57** through the stereo path. On a correlated pair the gap shrinks to 3.01 dB, which is just the halving; the remaining ~3 dB is the decorrelation.
 
 Only the `loudness` block of the stereo profile is measured from both channels: integrated LUFS and LRA come from the channel-summed program, and the true peak is the larger of the two. The spectral, dynamics, and tempo fields describe shape and timing rather than absolute level, so they stay measured on the downmix and remain directly comparable with `masteringAudioProfile`.
 
@@ -176,6 +177,34 @@ the same reason the other stereo entry points do. Python spells them
 `mastering_assistant_suggest_chain` and
 `mastering_assistant_suggest_chain_stereo`.
 
+#### `streamingLoudnessGain(request)`
+
+A `StreamingMasteringChain` cannot measure whole-signal loudness, so its loudness stage needs a precomputed static gain. `streamingLoudnessGain` runs the offline chain described by `config` up to the loudness stage and measures there, so the gain it returns is the one `masteringChain` applies, ceiling clamp included.
+
+```typescript
+function streamingLoudnessGain(request: StreamingLoudnessGainRequest): StreamingLoudnessGainResult
+function streamingLoudnessGainStereo(request: StreamingLoudnessGainStereoRequest): StreamingLoudnessGainResult
+// request: { samples | left + right: Float32Array; sampleRate?: number; config?: MasteringChainConfig }
+
+interface StreamingLoudnessGainResult {
+  loudnessStaticGainDb: number;  // the gain the offline loudness stage applies
+  truePeakDb: number;            // dBTP of the loudness stage's input; -120 for digital silence
+  integratedLufs: number;        // LUFS of that input; -Infinity below the absolute gate
+}
+```
+
+```typescript
+const config = { loudness: { enabled: true, targetLufs: -14, ceilingDb: -1 } };
+const { loudnessStaticGainDb, truePeakDb } = streamingLoudnessGain({ samples, sampleRate, config });
+const chain = new StreamingMasteringChain({
+  ...config,
+  loudnessStaticGainDb,
+  loudnessStaticGainPeakDb: truePeakDb,
+});
+```
+
+The measurement is taken at the loudness stage's input, where the offline chain measures it, not on the source. The gain is computed from `config.loudness` whether or not the stage is enabled, and a silent or below-gate input yields 0 dB. On a soft-clipped synthetic loop at -9.47 LUFS with a -14 LUFS target and -1 dBTP ceiling the gain was -4.53 dB, equal to the chain's `report.appliedGainDb`. The stereo form sums the two channels with BS.1770 weights. Python spells them `streaming_loudness_gain` and `streaming_loudness_gain_stereo` and returns a `StreamingLoudnessGain` with `loudness_static_gain_db`, `true_peak_db`, and `integrated_lufs`.
+
 #### `masteringPlatformNames()`
 
 ```typescript
@@ -202,7 +231,7 @@ interface LoudnessMatchResult {
   sampleRate: number;
   referenceLufs: number;        // BS.1770 integrated
   sourceLufs: number;           // before the gain
-  appliedGainDb: number;        // referenceLufs - sourceLufs
+  appliedGainDb: number;        // the gain that lands the remeasured source on referenceLufs
   matchedTruePeakDbtp: number;  // true peak after the gain
 }
 ```
@@ -210,7 +239,7 @@ interface LoudnessMatchResult {
 Request-object only. The two buffers may differ in length — each is measured on its own program.
 
 ::: warning The gain is uncapped, and the result can exceed 0 dBTP
-`appliedGainDb` has no upper bound and no headroom clamp is applied, so `matchedTruePeakDbtp` can come back **above `0`**. That is deliberate: clamping for headroom would silently no-op the match for any source already near full scale, which is exactly the case an A/B is most often set up to examine. Check `matchedTruePeakDbtp` yourself and attenuate the pair together if you are about to render rather than audition.
+`appliedGainDb` is the gain that lands the *remeasured* source on `referenceLufs`: it equals `referenceLufs - sourceLufs` unless the gain moves blocks across the absolute gate, in which case it is solved for the target. It has no upper bound and no headroom clamp is applied, so `matchedTruePeakDbtp` can come back **above `0`**. That is deliberate: clamping for headroom would silently no-op the match for any source already near full scale, which is exactly the case an A/B is most often set up to examine. Check `matchedTruePeakDbtp` yourself and attenuate the pair together if you are about to render rather than audition.
 
 When either take is silent or sits below the measurement gate, its LUFS field is **non-finite** and `appliedGainDb` is `0` — the source comes back unchanged. Test `Number.isFinite(result.sourceLufs)` before presenting a figure.
 :::
@@ -224,7 +253,7 @@ function masteringAbMatchLoudnessStereo(request: MasteringAbMatchLoudnessStereoR
 // request: { sourceLeft, sourceRight, referenceLeft, referenceRight: Float32Array; sampleRate?: number } -> { left, right, sampleRate, referenceLufs, sourceLufs, appliedGainDb, matchedTruePeakDbtp }
 ```
 
-The stereo form of `masteringAbMatchLoudness`: one gain, measured on the stereo program, goes to both source channels, so the left/right balance is unchanged. Request-object only; each pair's two channels must be equal in length or the call throws, and the source and reference pairs may differ. Measured: -22.64 LUFS matched to -10.60 LUFS applied 12.04 dB, and both channels came back at exactly 4.0000 times their input RMS. `matchedTruePeakDbtp` is the maximum over both channels. The uncapped gain and the non-finite LUFS of a silent take behave as in the mono call: a silent source gave `sourceLufs` of `-Infinity`, `appliedGainDb` of `0`, and unchanged samples.
+The stereo form of `masteringAbMatchLoudness`: one gain, measured on the stereo program, goes to both source channels, so the left/right balance is unchanged. Request-object only; each pair's two channels must be equal in length or the call throws a `RangeError`, and the source and reference pairs may differ. Measured on decorrelated pink noise: -12.43 LUFS matched to -1.99 LUFS applied 10.44 dB, and both channels came back at 3.3256 times their input RMS. `matchedTruePeakDbtp` is the maximum over both channels. The uncapped gain and the non-finite LUFS of a silent take behave as in the mono call: a silent source gave `sourceLufs` of `-Infinity`, `appliedGainDb` of `0`, and unchanged samples.
 
 #### `masteringPairProcessStereo(request)`
 
@@ -233,7 +262,7 @@ function masteringPairProcessStereo(request: MasteringPairProcessStereoRequest):
 // request: { processorName: 'match.abCrossfade', sourceLeft, sourceRight, referenceLeft, referenceRight, sampleRate?, params? }; also positional in that order
 ```
 
-`match.abCrossfade` is the only `StereoPairProcessor`; any other name throws `unsupported stereo pair processor`. The result is a static linear blend, `(1 - mix) * source + mix * reference`, as long as the shorter pair. `mix` defaults to `0.5` and must lie in `[0, 1]` (outside it the call throws); `0` returns the source and `1` the reference. Measured on in-phase tones (source RMS 0.0707, reference RMS 0.2828): the default gave 0.1768, `mix: 0.25` gave 0.1237, a 4 s source against a 2 s reference returned 2 s, and `latencySamples` was 0.
+`match.abCrossfade` is the only `StereoPairProcessor`; any other name throws a `SonareError` (`unsupported stereo pair processor`). The result is a static linear blend, `(1 - mix) * source + mix * reference`, as long as the shorter pair. `mix` defaults to `0.5` and must lie in `[0, 1]` (outside it the call throws a `SonareError`); `0` returns the source and `1` the reference. Measured on in-phase tones (source RMS 0.0707, reference RMS 0.2828): the default gave 0.1768, `mix: 0.25` gave 0.1237, a 4 s source against a 2 s reference returned 2 s, and `latencySamples` was 0.
 
 #### `lufsSeriesInterleaved(...)`
 
@@ -279,6 +308,7 @@ The named mastering API families are:
 | Run a full stereo chain with progress | `masteringChainStereoWithProgress()` |
 | Run block-by-block EQ | `StreamingEqualizer` |
 | Run a streaming chain (block-by-block) | `StreamingMasteringChain` |
+| Measure the loudness numbers a streaming chain is built with | `streamingLoudnessGain()` / `streamingLoudnessGainStereo()` |
 | Summarize source audio for mastering decisions | `masteringAudioProfile()` |
 | Summarize a stereo pair for mastering decisions | `masteringAudioProfileStereo()` |
 | Suggest mastering moves from source analysis | `masteringAssistantSuggest()` |
@@ -290,7 +320,7 @@ The named mastering API families are:
 | Get machine-readable processor classifications | `masteringProcessorCatalog()` |
 | List chain insert processors | `masteringInsertNames()` |
 | List the parameter keys an insert accepts | `masteringInsertParamNames(name)` |
-| Describe construction keys and realtime insert parameters | `masteringInsertParamInfo(name)` |
+| Describe construction keys and realtime insert parameters | `masteringInsertParamInfo(name, sampleRate?)` |
 | Measure configured insert latency and tail | `masteringInsertTiming(name, params, sampleRate)` |
 | Process mono audio | `masteringProcess()` |
 | Process stereo audio | `masteringProcessStereo()` |
@@ -300,6 +330,7 @@ The named mastering API families are:
 | Analyze source/reference pair | `masteringPairAnalyze()` |
 | List stereo analyses | `masteringStereoAnalysisNames()` |
 | Analyze stereo channels | `masteringStereoAnalyze()` |
+| Analyze and repair any channel count in one call | `masteringRepairAnalyze()` / `masteringRepairApply()` — see [Audio Repair Workflow](./audio-repair.md#measure-and-repair-in-one-call) |
 
 ### Amp preset catalog
 
@@ -325,7 +356,7 @@ function masteringInsertTiming(
 ): { latencySamples: number; tailSamples: number }
 ```
 
-`masteringInsertTiming` applies the supplied construction parameters and returns the exact latency and tail for that sample rate. The wrapper accepts finite numbers and booleans only, so catalog keys typed `string` or `array` cannot be supplied through this query. It rejects unknown keys and invalid sample rates, and throws when the processor cannot be prepared. Passing `{}` at 48 kHz gives the default configuration represented by the processor catalog; use the actual insert parameters when a topology or slot changes the timing.
+`masteringInsertTiming` applies the supplied construction parameters and returns the exact latency and tail for that sample rate. The wrapper accepts finite numbers and booleans only, so catalog keys typed `string` or `array` cannot be supplied through this query. It rejects unknown keys, non-finite or non-boolean values, and invalid sample rates with a `SonareError`, and throws when the processor cannot be prepared. Passing `{}` at 48 kHz gives the default configuration represented by the processor catalog; use the actual insert parameters when a topology or slot changes the timing.
 
 Related mastering guides: [Processing chain](./glossary/mastering.md), [Tone and air](./glossary/mastering/tone-air.md), [Dynamics](./glossary/mastering/dynamics.md), [Stereo, limiter, and loudness](./glossary/mastering/stereo-limiter-loudness.md), [Reference match](./glossary/mastering/reference-match.md).
 
@@ -349,7 +380,7 @@ function masteringRepairDereverbClassical(samples: Float32Array, sampleRate: num
 function masteringRepairTrimSilence(samples: Float32Array, sampleRate: number, options?: TrimSilenceOptions): Float32Array
 ```
 
-The repair stages are offline-only and are rejected by `StreamingMasteringChain` — run them with these one-shot helpers or inside `masteringChain*`/`masterAudio*`. See [Dynamics](./glossary/mastering/dynamics.md) and [Repair](./glossary/mastering/repair.md).
+The one-shot repair helpers and the chain-config repair stages are offline. `StreamingMasteringChain` rejects `repair.declick`, `repair.declip`, `repair.decrackle`, `repair.dehum`, and `repair.dereverb`, and accepts `repair.denoise` only with a streaming noise estimator (`mcra`, `imcra`, or `spp`, not the default quantile estimator). Four of the repair processors — `repair.decrackle`, `repair.dehum`, `repair.denoiseClassical`, and `repair.dereverbClassical` — are also causal realtime inserts under those ids; see [Audio Repair Workflow](./audio-repair.md#realtime-inserts). See [Dynamics](./glossary/mastering/dynamics.md) and [Repair](./glossary/mastering/repair.md).
 
 #### Stereo and linked repair
 
@@ -559,42 +590,3 @@ because no bin landed in it — not because that region was quiet. Nothing in th
 band array distinguishes the two, and the band count alone cannot recover it;
 this grid can. Label an empty band as "not measured" rather than plotting a
 floor-level bar.
-
-## Mixing API
-
-The WASM package exposes the libsonare mixing engine. `mixStereo(...)` is a compact one-shot renderer for stem arrays. `Mixer` is a persistent scene-based mixer with channel strips, buses, sends, VCA groups, automation, strip meters, and goniometer buffers.
-
-```typescript
-import {
-  Mixer,
-  mixStereo,
-  mixingScenePresetJson,
-  mixingScenePresetNames,
-} from '@libraz/libsonare';
-
-mixingScenePresetNames(); // ['vocalReverbSend', ...]
-
-const offline = mixStereo([vocalL, musicL], [vocalR, musicR], sampleRate, {
-  inputTrimDb: [3, 0],
-  faderDb: [-3, -12],
-  pan: [0, -0.2],
-  width: [1, 0.9],
-  muted: [false, false],
-});
-
-const mixer = Mixer.fromSceneJson(mixingScenePresetJson('vocalReverbSend'), sampleRate, 512);
-mixer.sceneWarnings(); // non-fatal scene-load warnings: insert params no processor reads (typos)
-const latency = mixer.latencySamples(); // compiled graph latency for dry/wet alignment
-const block = mixer.processStereo([vocalBlockL, musicBlockL], [vocalBlockR, musicBlockR]);
-const meter = mixer.stripMeter(0, 'postFader');
-
-mixer.scheduleFaderAutomation(0, sampleRate * 8, -6, 's-curve');
-mixer.schedulePanAutomation(0, sampleRate * 8, -0.25, 'linear');
-mixer.scheduleSendAutomation(0, 0, sampleRate * 12, -12, 'hold');
-
-const goniometer = mixer.readGoniometerLatest(0, 256);
-const sceneJson = mixer.toSceneJson();
-mixer.delete();
-```
-
-`Mixer.createRealtimeBuffer()` and `processStereoInto(...)` are intended for AudioWorklet-style render loops where avoiding per-block allocation matters. See [Mixing Engine](./mixing.md) for scene and routing details.

@@ -281,6 +281,8 @@ camelCase の JSON 文字列を返し、`sonare_free_string` で解放します�
 `sonare_trim_ex` は `frame_length` と `hop_length`、`sonare_analyze_impulse_response_ex` は
 `min_decay_db`、`sonare_nnls_chroma_ex2` は NNLS オプションの CQT `hop_length` を追加します。
 
+プロジェクトまたはエンジンのサンプルレートは、サポート範囲内の整数ヘルツでなければなりません（`sonare_project_set_sample_rate` は `[8000, 384000]`）。小数のレートは `SONARE_ERROR_INVALID_PARAMETER` を返し、`sample_rate` が小数のプロジェクト JSON は `SONARE_ERROR_INVALID_FORMAT` と診断 `invalid_sample_rate` で読み込みに失敗します。
+
 プロジェクト編集は `sonare_c_project.h` にあります。`sonare_project_set_clip_loop(project, clip_id, loop_mode, loop_length_ppq, loop_crossfade_ppq)` の最後の引数が任意の equal-power 継ぎ目クロスフェードです。有限で 0 以上である必要があり、`0` ならハードループのままです。エンジンは使用可能なプリロールとループ長の半分を上限にクランプし、ワープ時は無視します。
 
 `sonare_project_bounce_with_synth_instruments` と `sonare_engine_set_synth_instrument` が受け取る NativeSynth のパッチ `SonareSynthPatch` は、現在 `SONARE_SYNTH_PATCH_STRUCT_VERSION` 7 です。`struct_version` が 0 または 1 なら元のレイアウト、2 なら末尾の `present_fields` ビットマスク、3〜6 ならサンプルエンジン、高域通過、コンバーター、ピッチオフセットの各フィールドが追加され、7 なら末尾の `retrigger` フィールドまで読み取ります。`retrigger` は `SONARE_SYNTH_RETRIGGER_BASE`（0）、`SONARE_SYNTH_RETRIGGER_FREE`（1）、`SONARE_SYNTH_RETRIGGER_NOTE`（2）のいずれかです。`FREE` はノートごとにオシレーターの位相、ユニゾンの揺らぎ、ドリフト、エンジンのノイズストリームを変え、`NOTE` はノート番号からそれらを決めるため、テール後に同じノートを鳴らすと同じサンプル列になります。どちらもボイス外の状態（コントローラー、共有楽器の共鳴、エフェクトのテールなど）はリセットしません。`present_fields` は 31 ビットを使用しており、さらに拡張する場合はワードを広げず、新しい `struct_version` で 2 ワード目を追加します。enum フィールドに存在ビットがないのは、ゼロがベースを保つ値で、実際の enum 値はすべて非ゼロだからです。`SONARE_SYNTH_FIELD_MOD_ROUTINGS` を立てて `num_mod_routings == 0` にするとベースのモッドマトリクスを消去し、要素のあるテーブルは置き換えます。
@@ -335,7 +337,7 @@ C ABI のルーム音響では、次の設定を公開します。
 C ABI でのサラウンド／マルチチャンネルのエンジンバスでは、次を扱えます。
 
 - `SonareChannelLayout` はスピーカーベッドを列挙します。`SONARE_CHANNEL_LAYOUT_MONO`（0）、`SONARE_CHANNEL_LAYOUT_STEREO`（1）、`SONARE_CHANNEL_LAYOUT_5_1`（2）、`SONARE_CHANNEL_LAYOUT_7_1`（3）。値は `sonare::ChannelLayout` と一致し、ABI／JSON のワイヤフォーマットの一部です。
-- `SonareEngineBus.channel_layout` はバスのスピーカーベッドを設定します（マスターバスはプロジェクト出力レイアウトを担い、既定はステレオ）。`SonareEngineTrackLane.source_channel_layout` はソースのメタデータとしてシリアライズされますが、マルチチャンネルのレーン入力をディスクリートのまま扱う指定にはまだなりません。
+- `SonareEngineBus.channel_layout` はバスのスピーカーベッドを設定します（マスターバスはプロジェクト出力レイアウトを担い、既定はステレオ）。`SonareEngineTrackLane.source_channel_layout` は `SONARE_CHANNEL_LAYOUT_STEREO` でなければなりません。マルチチャンネルのレーン入力は未実装のため、`sonare_engine_set_track_lanes` はモノラル、5.1、7.1 のレーンに `SONARE_ERROR_INVALID_PARAMETER` を返します。ゼロ初期化したレーンはモノラル（`SONARE_CHANNEL_LAYOUT_MONO` は 0）として読まれるので、すべてのレーンに `STEREO` を明示してください。
 - リアルタイムのレーンミキサーは、ストリップの `surroundPan` 位置から各モノラル／ステレオレーンを 5.1/7.1 の宛先へパンし、バスをプレーンごとに合算してプレーン別（ワイド）メーターを公開します。`azimuth`、`divergence`、`lfe` は配置に反映され、`elevation` と `distance` は予約です。[リアルタイムエンジンのサラウンドグループバス](./realtime-engine.md#サラウンドグループバスとワイドメーター)を参照してください。
 
 C ABI のリアルタイム・インサートオートメーションと外部 MIDI では、次を扱えます。
@@ -401,9 +403,45 @@ SonareError sonare_mastering_insert_timing(const char* name, const char* params,
 SonareError sonare_mastering_preset_params_json(const char* preset, char** json_out);
 ```
 
-`sonare_mastering_insert_param_info` はスレッドローカルな JSON 記述子配列を返すため、解放しないでください。`sonare_mastering_insert_timing` は未知のキーを拒否し、指定した構成のレイテンシとテールを返します。`sonare_mastering_preset_params_json` は `{"version":1,"params":{...}}` を返し、ヒープで確保された文字列を `sonare_free_string` で解放します。`sonare_capability_catalog_json()` はプロセッサカタログ、組み込みのマスタリング、シンセ、ミキシングシーン、ボイスチェンジャーのプリセット名一覧、詳細な `masteringPresets` 項目をまとめて返します。
+`sonare_mastering_insert_param_info` はスレッドローカルな JSON 記述子配列を返すため、解放しないでください。記述子は、`name`、`id`、`rtSafe`、`type`、`min`、`max`、`default`、`choices`、`slot` に加えて、受け入れ範囲の外でコントロールが必要とする情報を宣言します。`unit` は、そのキーを消費するプロセッサから読まれ、閉じた集合（`dB`、`dBFS`、`LUFS`、`Hz`、`ms`、`s`、`samples`、`m`、`cm`、`deg`、`percent`、`degC`、`V`、`inPerSec`、`dBPerOct`、`semitones`、`cents`、`ratio`、`bits`、`count`、`none`）の値です。`scale` は `linear` または `log`、`uiMin` / `uiMax` は `[min, max]` の内側に置く任意の表示範囲、`dependsOn` は現在値がこのキーの範囲を左右する兄弟キーです。`sonare_mastering_insert_param_info_at_rate(name, sample_rate)` は同じ配列を返しますが、`maxRelativeTo` が `"nyquist"` のキーを、そのホストレートで受け入れられる上限（ホストのナイキストと、インサート構築時に固定された上限のうち低い方）に解決します。レートが範囲外なら `SONARE_ERROR_INVALID_PARAMETER` とともに `NULL` を返し、レートなしの問い合わせは変わりません。`sonare_mastering_insert_timing` は未知のキーを拒否し、指定した構成のレイテンシとテールを返します。`sonare_mastering_preset_params_json` は `{"version":1,"params":{...}}` を返し、ヒープで確保された文字列を `sonare_free_string` で解放します。カタログの `repair.*` 項目は、同じ記述子でパラメータを公開し、自動化 `id` を持たず、`rtSafe` にもなりません。すべての項目は `causal` も持ちます（`repair.declick`、`repair.declip`、`repair.trimSilence` は false、他のリペアステージとすべてのインサートは true）。`repair.decrackle`、`repair.dehum`、`repair.denoiseClassical`、`repair.dereverbClassical` はそれぞれの ID でリアルタイムインサートになり、declick と declip はオフラインのままです。`sonare_capability_catalog_json()` はプロセッサカタログ、組み込みのマスタリング、シンセ、ミキシングシーン、ボイスチェンジャーのプリセット名一覧、詳細な `masteringPresets` 項目をまとめて返します。
 
 リアルタイムボイスプリセットは C では `sonare_realtime_voice_changer_preset_names()`、`sonare_realtime_voice_changer_preset_json()`、`sonare_realtime_voice_changer_validate_preset_json()` から扱えます。型付きのプリセット選択子は `SonareVoiceCharacterPreset` 列挙です（`SONARE_VC_PRESET_NEUTRAL_MONITOR` = 0 から `SONARE_VC_PRESET_DARK_VILLAIN` = 5）。`sonare_voice_character_preset_id(preset)` は正規の id 文字列を返し（不明値には NULL）、`SONARE_REALTIME_VOICE_CHANGER_PRESET_IDS` マクロはコンパイル時のバインディング生成向けに改行区切りの id 一覧を提供します。ネイティブ POD 設定の ABI は `SONARE_VOICE_CHANGER_ABI_VERSION` で、プリセット JSON の `schemaVersion` とは別です。
+
+### C ABI のエントリポイントの追加分
+
+ピッチ、ボイス、リペア（`sonare_c_effects.h`、`sonare_c_mastering.h`）:
+
+| 関数 | 用途 |
+|------|------|
+| `sonare_auto_tune(samples, length, sample_rate, key, config, &out, &out_length, &out_key)` | モノフォニックな録音を、キーのスケールに合わせるオフラインのオートチューン。`key` は `SonareKey`、または検出させるなら `NULL`（指定したキーは確定として扱われ、`out_key` の信頼度は 1）。`config` は `NULL` でもよく、読まれるのは `scale_reference_midi`、`retune_amount`、`max_correction_semitones`、`retune_speed_ms`、`vibrato_threshold_cents` だけです。出力は入力と同じ長さで、`sonare_free_floats` で解放します |
+| `sonare_voice_change_ex(samples, length, sample_rate, &config, &out, &out_length)` | `SonareVoiceChangeConfig`（`struct_version` は 0 または 1、`pitch_semitones`、`formant_factor`、`formant_mode`）を取る `sonare_voice_change`。`SONARE_FORMANT_MODE_RELATIVE`（0）はピッチシフトの後に掛かるワープで、フォルマントはピッチに追従します。`SONARE_FORMANT_MODE_ABSOLUTE`（1）は入力に対するフォルマントシフトで、`1` ならフォルマントは元の位置に留まります。絶対モードで `formant_factor / 2^(semitones / 12)` が [0.55, 1.65] を外れる指定は `SONARE_ERROR_INVALID_PARAMETER` で拒否され、最後のエラーメッセージが届く係数の範囲を示します |
+| `sonare_mastering_repair_analyze(channels, channel_count, length, sample_rate, request_json, &json)` | チャンネルごとのリペア欠陥と、アシスタントが推奨するステージを JSON で返します（`defects`、`channels`、`declipThresholdSafe`、`integratedLufs`、`recommended`、`explanation`）。`request_json` は `NULL` または `{"preferStreamingSafe": true}`。デリバーブは推奨されません。文字列は `sonare_free_string` で解放します |
+| `sonare_mastering_repair_apply(channels, channel_count, length, sample_rate, stages_json, progress, user_data, out_channels, &reports_json, cancel, cancel_user_data)` | `[{"stage": ..., ...settings}]` を全チャンネルに適用します。配列の順序に関わらず、declip、declick、decrackle、dehum、denoise、dereverb の固定順で実行され、重複したステージ、未知のステージ、未知の設定は `SONARE_ERROR_INVALID_PARAMETER` です。`out_channels` は呼び出し側が所有するプレーンで（入力と同じメモリでもかまいません）、成功時にのみ書き込まれます。レポートは `[{stage, scope, reports}]` で、`scope` は `"channel"`（チャンネルごとに 1 件）または `"linked"`（全体で 1 件）です。コールバックはどちらも `NULL` にでき、`cancel` が 0 以外を返すと `SONARE_ERROR_CANCELLED` になります |
+| `sonare_streaming_loudness_gain(samples, length, sample_rate, params, param_count, &out)` と `_stereo(left, right, ...)` | `sonare_streaming_mastering_chain_create_ex` に渡す `SonareStreamingLoudnessGain`（`loudness_static_gain_db`、`true_peak_db`、`integrated_lufs`）を、ラウドネスステージの入力で測定します。ゲインはオフラインチェーンが適用するものと等しく（シーリングのクランプを含む）、`params` は `sonare_mastering_chain` と同じキーを取ります |
+
+リアルタイムエンジン（`sonare_c_engine.h`。ここでの `render_frame` は `int64_t` のままで、負の値は「次のブロック先頭」を意味します）:
+
+| 関数 | 用途 |
+|------|------|
+| `sonare_engine_upsert_clip(engine, &clip)`, `sonare_engine_remove_clip(engine, clip_id)` | 公開済みのクリップ集合の他の部分はそのままに、クリップを 1 つ置換・追加、または削除します。拒否されたクリップは集合を変えません。未知の ID の削除は `SONARE_ERROR_INVALID_PARAMETER` です。コントロールスレッド専用 |
+| `sonare_engine_reset_processor_state(engine, render_frame)` | すべてのミキサーとエフェクトのプロセッサを準備直後の状態へ戻す処理をキューに積み、その後に再生を始めると、オフラインバウンスが始まるのと同じ状態から鳴ります。インストゥルメントは状態を保ち、再生中に呼ぶとシークと同様に進行中のテールを切ります |
+| `sonare_engine_prime_offline_parameters(engine, num_channels, block_size)` | バウンスとフリーズが実行するオフラインのプリロールを、レンダリングせずに行います。`sonare_engine_render_offline` を自分で駆動するホストは、最初のチャンクの前に 1 回呼びます。準備済みの最大値を超えるチャンネル数やブロックサイズは `SONARE_ERROR_INVALID_PARAMETER`、準備前のエンジンは `SONARE_ERROR_INVALID_STATE` です |
+| `sonare_engine_tail_samples(engine, &samples)` | 最後の入力の後に聞こえる最長のテールの上限（サンプル数。`2147483647` は無制限） |
+| `sonare_engine_graph_latency_samples_q8(engine, &latency_q8)` | 処理レイテンシ（1/256 サンプル単位）。テレメトリレコードが持つ値と同じです |
+| `sonare_engine_can_set_lane_sidechain`, `sonare_engine_can_set_bus_sidechain`, `sonare_engine_can_set_master_sidechain` | 対応する `set_*_sidechain` が接続を受理するかを、何も変更せずに報告します。`out_refusal` に `SonareSidechainRefusal` が入ります。`NONE`（0）、`INVALID_TARGET`、`INSERT_OUT_OF_RANGE`、`UNDECLARED_SOURCE`、`INVALID_SOURCE_KIND`、`SELF_KEY`、`CYCLE`、`TABLE_FULL`、`PLAN_REFUSED`（1〜8）です |
+| `sonare_engine_resolve_track_lane_automation_id(engine, track_id, "faderDb" または "pan", &id)`, `sonare_engine_resolve_bus_automation_id(engine, bus_id, "faderDb", &id)` | 位置ではなくトラックまたはバスを指す、予約済みのオートメーション ID。`sonare_engine_set_track_lanes` や `sonare_engine_set_track_buses` で並べ替えても対象を追い続け、対象が削除されると未知のターゲットとして失敗します |
+
+準備時より大きなブロックサイズでのオフラインレンダリング、バウンス、フリーズ、プリロールは `SONARE_ERROR_INVALID_PARAMETER` で拒否されます。`sonare_engine_set_track_strip_json`、`sonare_engine_set_bus_strip_json`、`sonare_engine_set_master_strip_json` は、シーンリーダーが読まないキーを名指しして拒否します（`unknown strip key 'strips[0].faderDB'`）。`$` または `x-` で始まるキーと snake_case の別名は、引き続き受け付けられます。
+
+ミキサーとプロジェクト（`sonare_c_mixing.h`、`sonare_c_project_core.h`、`sonare_c_project_edit.h`）:
+
+| 関数 | 用途 |
+|------|------|
+| `sonare_mixer_flush_meters(mixer)` | すべてのストリップとバスのメーターに信号の終わりを知らせ、True Peakの読みに残っている群遅延分を、公開済みスナップショットに反映します。オフラインまたは単発の処理では最後のブロックの後に呼びます。その後の process 呼び出しは新しい信号として始まります |
+| `sonare_project_unresolved_audio_source_by_index(project, index, &source)` | 解決できていないオーディオソースの記述子を、0 始まりのインデックスで読みます。順序は `sonare_project_unresolved_audio_source_id_by_index` と同じで、`name_or_uri` は 127 バイトで切り詰められます |
+| `sonare_project_get_audio_source_uri(project, source_id, &uri)` | オーディオソース ID の、切り詰められていない完全な URI。ヒープのコピーで、`sonare_free_string` で解放します |
+
+`sonare_project_add_loop_recording_takes` が取る `SonareProjectLoopRecordingDesc` の `flags` ワードは、`0`（部分的な最後のテイクを残す）または `SONARE_PROJECT_LOOP_RECORDING_DROP_PARTIAL_TAIL`（作らない）で、他のビットは `SONARE_ERROR_INVALID_PARAMETER` です。部分的な最後のテイクは残されますが、それ以前に完全なテイクがあればアクティブにはならず、プロジェクト JSON で `"partial": true` と記されます。残りが 1 フレーム以下ならテイクは作られません。
 
 ## ミキシングエンジン
 
@@ -429,3 +467,104 @@ strip.prepare(48000.0, 512);
 ```
 
 ランタイム横断の例とシーン単位の説明は [ミキシングエンジン](./mixing.md) を参照してください。
+
+## 幾何ベースのルーム音響
+
+これらの API は、部屋モデルを推定・合成・適用するためのものです。専用モジュールヘッダーにあり、`BUILD_ACOUSTIC_SIM=ON` ビルドで使えます（ソースビルドの既定値です）。
+
+::: info このセクションの用語
+- **等価ルーム** は、音声から推定した実用上の部屋モデルです。実際の部屋の正確な形状ではありません。
+- **RIR** は room impulse response（ルームインパルス応答）の略で、部屋が短い音にどう反応するかを表すサンプル列です。
+- **RT60** は残響時間です。残響が 60 dB 減衰するまでの長さを指します。
+- **DRR (direct-to-reverberant ratio)** は直接音と残響の音量比を dB で表します。値が大きいほど、乾いた近い音になります。
+- **ルームモーフィング** は、部屋の響きを足す音作り効果です。残響除去ではありません。
+:::
+
+```cpp
+#include <acoustic/rir_synthesizer.h>
+#include <analysis/room_estimator.h>
+#include <effects/acoustic/room_morph.h>
+
+using namespace sonare;
+
+acoustic::ShoeboxRoom room = acoustic::uniform_shoebox({7.0f, 5.0f, 3.0f}, 0.2f);
+acoustic::SourceListener placement{{1.0f, 1.0f, 1.2f}, {5.0f, 4.0f, 1.7f}};
+auto rir = acoustic::synthesize_rir(room, placement, 48000);
+if (!rir.rir.empty()) {
+  RoomEstimate estimate = estimate_room(rir.rir);
+}
+
+effects::acoustic::RoomMorphConfig morph_config;
+morph_config.target = room;
+morph_config.placement = placement;
+morph_config.wet = 0.6f;
+effects::acoustic::RoomMorphResult morphed = effects::acoustic::room_morph(recording, morph_config);
+// morphed.audio がレンダー結果、morphed.diagnostics は目標 RIR 合成でクランプされた項目の一覧。
+```
+
+3 つの呼び出しは、ワークフローの別々の部分を担当します。
+
+- `estimate_room(...)` は、体積、代表寸法、吸音率バンド、RT60 バンド、DRR、信頼度を返します。
+- `synthesize_rir(...)` は、形状問題を診断情報で報告します。音源／聴取位置が不正な場合は空の RIR を返します。
+- `room_morph(...)` は、入力音声に目標ルームの響きを付けてレンダーし、`RoomMorphResult` を返します。音声に加えて、`synthesize_rir(...)` と同じ診断情報を持ちます。目標 RIR を同じコードで合成しているためです。使えない設定はエラー項目として報告されるのではなく、`ErrorCode::InvalidParameter` をスローします。
+
+::: details 設定項目の詳細
+`acoustic::RirSynthConfig` では、RIR 生成の設定を指定できます。
+
+- 鏡像音源法の反射次数
+- Sabine/Eyring の後期テールモデル
+- 決定的なシード
+- RIR の最大長
+- 初期反射と後期テールの混合時刻
+- クロスフェード幅
+
+`RoomEstimateConfig` は、`AcousticConfig` 経由で解析設定を渡します。主な項目は、解析モード、オクターブバンド数、最小減衰幅、ノイズフロア余裕です。
+
+アスペクトヒントと `reference_absorption` は、等価ルームの事前条件を決めます。
+:::
+
+### C ABI の名前取得と推定からジオメトリへの変換
+
+`sonare_material_preset_name(preset)` と `sonare_acoustic_mode_name(mode)` は、`SONARE_MATERIAL_PRESET_*` または `SONARE_ACOUSTIC_MODE_*` の値の名前を返し（`"none"`、`"concrete"`、`"wood"`、`"curtain"`、`"carpet"`、`"glass"`、および `"auto"`、`"blind"`、`"impulse_response"`）、最後の値を過ぎると `NULL` を返します。値は 0 から連続しているので、`NULL` になるまで数え上げれば有効な名前を列挙できます。返される文字列は静的領域のもので、解放しないでください。
+
+`sonare_room_geometry_from_estimate(&estimate, &config)` は、`sonare_estimate_room` の結果を `SonareRirSynthConfig` のジオメトリに変換します。3 つの寸法を設定し、バンドごとの吸音率は推定結果から借用するので、推定結果は config より長く生きている必要があります。推定結果には配置の情報がないため、音源とリスナーは 0 のままです。`sonare_synthesize_rir` を呼ぶ前に両方を設定してください。有限でない吸音バンドは未設定のままになり、測定可能な減衰がない推定結果（寸法が有限でない）は `SONARE_ERROR_INVALID_PARAMETER` で拒否されます。
+
+### C ABI からのルームモーフ
+
+`sonare_c_acoustic.h` の `sonare_room_morph` は、入力サンプル、そのサンプルレート、`SonareRoomMorphConfig` を受け取り、モーフ後のモノラル信号を出力ポインタの組で返します。目標ルームの合成が出した診断情報は戻り値には含まれず、スレッドローカルの構造化チャンネルに置かれるので、呼び出しが返ってから読み出します。所有権と寿命は以下のとおりです。
+
+```c
+float* out = NULL;
+size_t out_length = 0;
+SonareError err = sonare_room_morph(samples, length, sample_rate, &config, &out, &out_length);
+if (err != SONARE_OK) return err;  // 何も確保されていない。詳細は sonare_last_error_message() にある
+for (size_t i = 0; i < sonare_last_diagnostic_count(); ++i) {
+  const char* code = sonare_last_diagnostic_code(i);  // 例: "acoustic.rir_length_clamped"
+  // sonare_last_diagnostic_message(i) と sonare_last_diagnostic_severity(i) が同じ添字で並ぶ
+}
+sonare_free_floats(out);
+```
+
+- `*out` はライブラリが確保し、`sonare_free_floats` で解放します。長さは入力の `length` サンプルに目標ルームのテールを足したもので、サンプルレートは入力と同じです。空の入力では `NULL` ／ `0` が返り、そのまま解放しても安全です。戻り値が `SONARE_OK` 以外なら何も確保されていません。
+- 診断情報の文字列はライブラリが所有し、`NULL` になることはなく、同じスレッドで診断情報を記録またはクリアする次の C ABI 呼び出しまで有効です。`sonare_room_morph` と `sonare_synthesize_rir` はどちらも入口でこのチャンネルをクリアし、それ以外の呼び出しの後は件数が `0` になります。読み出しても項目は消費されず、解放するものもありません。保持したい文字列はコピーしてください。
+- 件数以上の添字を渡すと `""` と `SONARE_DIAGNOSTIC_INFO` が返るので、ループは重要度ではなく件数で区切ります。モーフが出す項目はすべて回復可能なクランプで、重要度は `SONARE_DIAGNOSTIC_WARNING` です。使えない設定は項目ではなくエラー戻り値になります。
+- `sonare_last_warning_message()` には同じ項目が `code: message; code: message` の 1 本の文字列に畳まれて入ります。これは従来この形式を読んでいた呼び出し側のために残されているもので、分岐には構造化アクセサを使ってください。区切り文字を含むメッセージは元に戻せず、重要度も文字列には含まれないためです。
+
+### 大空間での空気吸収
+
+大きなホールでは、長い伝搬経路での空気損失を考慮しない幾何学のみの RT60 推定は、高域の残響を長く見積もりすぎることがあります。C++ の音響コアでは、Sabine/Eyring 計算に ISO 9613-1 の大気吸収項を加えられます。これはオプトインです。最後の引数を省略すれば、従来の幾何学のみの結果がそのまま得られます。
+
+```cpp
+#include <acoustic/late_reverb.h>
+
+acoustic::AirAbsorption air;
+air.temperature_c = 20.0f;
+air.humidity_percent = 50.0f;
+
+const auto rt60 = acoustic::shoebox_reverb_time(
+    room, acoustic::ReverbModel::Eyring, &air);
+// rt60.rt60_bands: 空気損失により、とくに高域が短くなる。
+```
+
+`AirAbsorption` の既定値は 20 ℃・相対湿度 50% です。この低レベル C++ 計算は C ABI、Node、Python、WASM のシューボックスヘルパーには含まれません。これらの公開ヘルパーは引き続き幾何学のみのモデルを使います。
+

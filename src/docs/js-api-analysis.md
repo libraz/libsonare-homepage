@@ -5,14 +5,15 @@ description: Analysis functions, scale quantization, unit conversion, and resamp
 
 # JavaScript/TypeScript Analysis API
 
-This page covers the core analysis functions for the libsonare JavaScript/TypeScript package: BPM/key/beat/onset detection, the all-in-one `analyze()` call and its focused helpers, structural boundary and meter estimation, plus scale quantization, unit conversion, and resampling. Two related references live alongside it: [Feature Extraction](./js-api-features.md) covers STFT, mel/MFCC, chroma, spectral features, pitch detection, and the CQT/VQT/decomposition family, and [librosa-Compatible Helpers](./js-api-helpers.md) covers the argument-for-argument librosa ports for pre-emphasis, test-signal generation, spectral reconstruction, structure, segmentation, and tempograms.
+This page covers the core analysis functions for the libsonare JavaScript/TypeScript package: BPM/key/beat/onset detection, the all-in-one `analyze()` call and its focused helpers, structural boundary and meter estimation, and Roman-numeral chord analysis. Two related references live alongside it: [Feature Extraction](./js-api-features.md) covers STFT, mel/MFCC, chroma, spectral features, pitch detection, and the CQT/VQT/decomposition family, and [Helpers and Conversions](./js-api-helpers.md) covers the argument-for-argument librosa ports for pre-emphasis, test-signal generation, spectral reconstruction, structure, segmentation, and tempograms, along with scale quantization, unit conversion, resampling, and `chordFunctions`.
 
 ## Where the sections went
 
 | Section | Page |
 |---|---|
 | Feature Extraction | [Feature Extraction](./js-api-features.md) |
-| librosa-Compatible Helpers | [librosa-Compatible Helpers](./js-api-helpers.md) |
+| librosa-Compatible Helpers | [Helpers and Conversions](./js-api-helpers.md) |
+| Scale Quantization, Unit Conversion, Resampling, `chordFunctions` | [Helpers and Conversions](./js-api-helpers.md#scale-quantization) |
 
 ## Analysis Functions
 
@@ -49,7 +50,7 @@ console.log(`BPM: ${bpm}`);  // "BPM: 120"
 
 ### `detectKey(samples, sampleRate)`
 
-Detect musical key from audio samples. Returns the root note (C, D, E...) and mode (major/minor).
+Detect musical key from audio samples. Returns the root note (C, D, E...), the mode (major, minor, or a church mode), and the tuning the chroma was built with.
 
 ::: info Use Cases
 - **Harmonic Mixing**: DJs match keys for smooth transitions (Camelot wheel)
@@ -59,18 +60,29 @@ Detect musical key from audio samples. Returns the root note (C, D, E...) and mo
 :::
 
 ```typescript
-function detectKey(samples: Float32Array, sampleRate?: number): Key  // sampleRate default: 22050
+function detectKey(request: DetectKeyRequest): KeyDetection
+function detectKey(
+  samples: Float32Array,
+  sampleRate?: number,             // default: 22050
+  options?: DetectKeyOptions,
+): KeyDetection
 ```
 
-**Returns:** `Key` object
+**Returns:** `KeyDetection` object
 
 ```typescript
+type KeyMode = 'major' | 'minor' | 'dorian' | 'phrygian' | 'lydian' | 'mixolydian' | 'locrian';
+
 interface Key {
   root: PitchClass;      // 0-11 (C=0, B=11)
-  mode: Mode;            // Major, Minor, or modal value; see Mode enum
+  mode: KeyMode;         // a name, not a Mode ordinal
   confidence: number;    // posterior share in [0, 1); see below
   name: string;          // "C major", "A minor"
   shortName: string;     // "C", "Am"
+}
+
+interface KeyDetection extends Key {
+  tuning: number;        // semitone fraction the chroma was built with
 }
 
 const KeyProfile = {
@@ -88,6 +100,15 @@ const KeyProfile = {
 const key = detectKey(samples, sampleRate);
 console.log(`Key: ${key.name}`);        // "C major"
 console.log(`Confidence: ${(key.confidence * 100).toFixed(1)}%`);
+console.log(key.mode);                  // 'major'
+```
+
+`detectKey`, `detectKeyCandidates` and `analyze` report `mode` as a name, as the Node package does. The `Mode` enum (`Mode.Major` is `0`) is what the chord functions' `keyMode` option takes; `modes` accepts either spelling, and `chordFunctions` and `scaleMaskForMode` accept a name or an ordinal.
+
+The chroma is read at concert A440 unless `tuning` says otherwise. `tuning` is a semitone fraction in `[-0.5, 0.5)`, and `'auto'` measures it from the audio. The value used, given or measured, comes back as `KeyDetection.tuning`; `analyze()` and `detectChords()` report theirs the same way (`AnalysisResult.tuning`, `ChordAnalysisResult.tuning`). To work in Hz instead, see [`tuningToReferenceHz` and `referenceHzToTuning`](./js-api-helpers.md#unit-conversion).
+
+```typescript
+const { name, tuning } = detectKey(samples, sampleRate, { tuning: 'auto' });
 ```
 
 ::: warning What `confidence` measures
@@ -173,8 +194,8 @@ function analyze(
 
 interface MusicAnalyzeOptions {
   // Framing
-  nFft?: number;                   // default 2048
-  hopLength?: number;              // default 512
+  nFft?: number;                   // default 2048; samples at 22050 Hz, see below
+  hopLength?: number;              // default 512; samples of the input
 
   // Tempo and beats
   bpmMin?: number;                 // default 60
@@ -198,8 +219,13 @@ interface MusicAnalyzeOptions {
   useChordKeyContext?: boolean;    // default false
   chordHmmBeamWidth?: number;      // default 24
   detectChordInversions?: boolean; // default false
+
+  // Tuning
+  tuning?: number | 'auto';        // default 0 (A440); semitone fraction in [-0.5, 0.5)
 }
 ```
+
+`nFft` is a window length in samples **at 22050 Hz** and is rescaled to the input rate, so the window covers the same duration at 44100 Hz or 48000 Hz; `hopLength` stays in samples of the input. The same holds for the tempo, beat, onset, key, rhythm, chord and timbre helpers, so results at different rates agree and 22050 Hz input is read as written. `tuning` shifts every chroma the analysis builds (key, chords, sections), and `'auto'` measures it; the value used is `result.tuning`.
 
 **Returns:** Complete `AnalysisResult`. A single `analyze()` call returns the
 full result — chords, sections, timbre, dynamics, rhythm, melody, form, and
@@ -283,6 +309,7 @@ interface TranscribeRequest {
   sampleRate: number;
   tempoBpm?: number;  // omit to detect
   polyphonic?: boolean;
+  referenceHz?: number | 'auto';  // tuning reference in Hz; default 440, 'auto' measures it
   // Other TranscribeOptions detector settings are optional.
 }
 
@@ -290,6 +317,7 @@ interface TranscribeResult {
   events: ProjectMidiEvent[];
   noteCount: number;
   tempoBpm: number;
+  tuning: number;     // semitone fraction the note numbers were measured against
 }
 
 function transcribe(request: TranscribeRequest): TranscribeResult
@@ -324,23 +352,27 @@ Use the focused helpers when the default `analyze(...)` result is either too bro
 | Rhythm character | `analyzeRhythm(samples, sampleRate, ...)` | Reports groove, syncopation, and regularity style features. |
 | Dynamics | `analyzeDynamics(samples, sampleRate, ...)` | Dynamic range, loudness range, crest factor, and compression flag. |
 | Timbre | `analyzeTimbre(samples, sampleRate, ...)` | Brightness, warmth, density, roughness, and complexity. |
-| Chords | `detectChords(samples, sampleRate, options?)` | Returns `{ chords }` of chord segments; options include HMM smoothing, key context, inversions, and `chromaMethod: 'stft' \| 'nnls'`. |
+| Chords | `detectChords(samples, sampleRate, options?)` | Returns `{ chords, tuning }`: the chord segments and the tuning used. Options include HMM smoothing, key context, inversions, `chromaMethod: 'stft' \| 'nnls'`, and `tuning`. |
+| Chord functions | `chordFunctions({ chords, key })` | Adds a Roman numeral and a harmonic function to chords you already have, without re-detecting. |
 | Sections | `analyzeSections(samples, sampleRate, ...)` | Song-structure sections such as intro, verse, chorus, bridge, and outro. Long inputs keep accurate `start` / `end` times even when the internal boundary grid is pooled. |
 | Structural boundaries | `detectBoundaries(request)` | The transitions alone, plus the novelty curve they were picked from. Use it when you want to apply your own threshold. |
 | Melody | `analyzeMelody(samples, sampleRate, ...)` | Monophonic melody contour based on pitch tracking. |
 
 ```typescript
 const keys = detectKeyCandidates(samples, sampleRate, {
-  modes: [Mode.Major, Mode.Minor],
+  modes: ['major', 'minor'],
   profile: 'krumhansl',
   genreHint: 'pop',
 });
+
+// keyMode is a Mode ordinal; the candidate's mode is a name.
+const modeOrdinal = (name: KeyMode) => Mode[(name[0].toUpperCase() + name.slice(1)) as keyof typeof Mode];
 
 const { chords } = detectChords(samples, sampleRate, {
   useHmm: true,
   useKeyContext: true,
   keyRoot: keys[0].key.root,
-  keyMode: keys[0].key.mode,
+  keyMode: modeOrdinal(keys[0].key.mode),
   chromaMethod: 'nnls',
 });
 
@@ -369,19 +401,23 @@ for (const { time, strength } of boundaries) {
 | `nFft` | 2048 | FFT size for the structural features |
 | `hopLength` | 512 | Hop length in samples |
 | `kernelSize` | 64 | Checkerboard kernel size, in frames |
-| `threshold` | 0.3 | Relative novelty threshold, applied *after* the curve is scaled by its own maximum |
+| `threshold` | 0.3 | Relative novelty threshold: the fraction of the largest novelty event within `referenceWindow` of a peak that the peak must reach |
 | `absoluteThreshold` | 0.005 | Novelty floor applied to the raw response *before* that scaling |
 | `nMfcc` | 13 | Number of MFCC coefficients |
 | `nChroma` | 12 | Number of chroma bins |
 | `peakDistance` | 2.0 | Minimum spacing between peaks, in seconds |
+| `referenceWindow` | 60 | One-sided span in seconds the relative threshold is measured over. `0` disables the relative threshold; a value at least the track length makes the reference whole-track |
 | `useMfcc` | `true` | Use MFCC features |
 | `useChroma` | `true` | Use chroma features |
 
 ::: tip The two thresholds do different jobs
-`threshold` asks how prominent a peak is *within this track*; because the curve
-is scaled by its own maximum first, it says nothing about how much the features
-actually changed. `absoluteThreshold` is the floor that asks whether anything
-changed at all. Setting it to `0` does not make the detector more sensitive in a
+`threshold` asks how prominent a peak is *among its neighbours*: each peak is
+gated against the largest novelty within `referenceWindow` seconds on either
+side, not against the whole track's maximum, so a dominant change does not hide
+weaker section changes far from it. A lone dominant event, one that no other
+event in the window comes within `threshold` of, is set aside from that
+reference. It says nothing about how much the features actually changed.
+`absoluteThreshold` is the floor that asks whether anything changed at all. Setting it to `0` does not make the detector more sensitive in a
 useful way — self-scaling turns residual fluctuation into peaks of 1.0, so a
 stationary input then segments anyway.
 
@@ -399,7 +435,8 @@ uninterpretable without the returned `sampleRate`, `hopLength`, `nFrames`, and
 
 Passing `useMfcc: false` together with `useChroma: false` throws
 `SonareError` with `InvalidParameter`: the two feature streams are combined
-frame for frame, so with neither enabled there is nothing to combine.
+frame for frame, so with neither enabled there is nothing to combine. A negative
+or non-finite `referenceWindow` throws `RangeError`.
 
 ### `estimateMeter(request)`
 
@@ -495,99 +532,39 @@ within one result, never across two.
 ### `chordFunctionalAnalysis(samples, keyRoot, keyMode, sampleRate?, options?)`
 
 Functional (Roman-numeral) harmonic analysis of the detected chord progression,
-relative to the given key. It runs chord detection internally and labels each
-detected chord, so pass the same `keyRoot`/`keyMode` you get from `detectKey(...)`
-and the same `options` you would give `detectChords(...)`.
+relative to the given key. It runs chord detection internally, then labels each
+detected chord, so give it the same `options` you would give `detectChords(...)`.
 
-The labels carry no times; they pair with `detectChords(...)` one for one only
-when both calls get the same options, and different options can give a list of a
-different length. `analyze(...)` performs a separate chord detection with its
-own settings, so its chord list does not pair with these labels. Each chord in
-the `analyze(...)` result carries its own `romanNumeral`, relative to
-`result.key`; it is an empty string for `N.C.`.
+It returns the timed chord entries themselves: every `Chord` field (`root`, `bass`,
+`quality`, `start`, `end`, `duration`, `confidence`, `name`) plus `roman` and
+`function`. There is no pairing to keep in step with a separate `detectChords(...)`
+call. `analyze(...)` performs its own chord detection with its own settings, and
+each chord in its result carries `romanNumeral` relative to `result.key`
+(an empty string for `N.C.`).
 
 ```typescript
 function chordFunctionalAnalysis(
   samples: Float32Array,
   keyRoot: PitchClass,
-  keyMode?: Mode,
+  keyMode?: Mode,                  // a Mode ordinal, default Mode.Major
   sampleRate?: number,
   options?: ChordDetectionOptions,
-): string[]   // one Roman-numeral label per detected chord, e.g. ["I", "IV", "V", "vi"]
+): FunctionalChord[]
+
+type ChordFunction = 'tonic' | 'subdominant' | 'dominant' | 'chromatic' | 'none';
+
+type FunctionalChord = Chord & {
+  roman: string;                   // 'I', 'V7', 'vi'; 'N.C.' for an unknown chord
+  function: ChordFunction;         // 'chromatic' for a root outside the key's scale
+};
 ```
 
 ```typescript
 const key = detectKey(samples, sampleRate);
-const roman = chordFunctionalAnalysis(samples, key.root, key.mode, sampleRate);
-console.log(roman);  // e.g. ["I", "IV", "V", "vi"]
-```
+const modeOrdinal = key.mode === 'minor' ? Mode.Minor : Mode.Major;
+const functional = chordFunctionalAnalysis(samples, key.root, modeOrdinal, sampleRate);
 
-`detectKey(...)` and `detectKeyCandidates(...)` accept the same
-`KeyDetectionOptions` includes:
-
-| Option group | Values |
-|--------------|--------|
-| Controls | `modes`, `profile`, `genreHint`, `useHpss`, `loudnessWeighted`, `highPassHz` |
-| Profile names | `ks`, `krumhansl`, `temperley`, `shaath`, `keyfinder`, `faraldo-edmt` / `edmt`, `faraldo-edma` / `edma`, `faraldo-edmm` / `edmm`, `bellman-budge` / `bellman` |
-| Genre hints | `auto`, `edm`, `electronic`, `dance`, `pop`, `classical`, `jazz` |
-
-## Scale Quantization
-
-12-TET (twelve-tone equal temperament) scale helpers for building pitch-correction targets. `modeMask` is a 12-bit mask where bit *i* enables the *i*-th pitch class relative to `root` (a `PitchClass`, C = 0); natural major is `0b101010110101`. `referenceMidi` is the tuning anchor (pass `0` for A4 = 69).
-
-```typescript
-// Snap a (possibly fractional) MIDI number to the nearest enabled pitch class
-function scaleQuantizeMidi(root: number, modeMask: number, midi: number, referenceMidi?: number): number
-// Correction (quantized − input), in semitones
-function scaleCorrectionSemitones(root: number, modeMask: number, midi: number, referenceMidi?: number): number
-// Is pitchClass (0..11) enabled by modeMask relative to root?
-function scalePitchClassEnabled(root: number, modeMask: number, pitchClass: number): boolean
-```
-
-Pair `scaleQuantizeMidi(...)` with `pitchCorrectToMidi(...)` to retune a detected note to the nearest scale degree.
-
-## Unit Conversion
-
-These functions are lightweight and fast.
-
-```typescript
-// Hz <-> Mel (Slaney formula)
-function hzToMel(hz: number): number
-function melToHz(mel: number): number
-
-// Hz <-> MIDI note number (A4 = 440 Hz = 69)
-function hzToMidi(hz: number): number
-function midiToHz(midi: number): number
-
-// Hz <-> Note name
-function hzToNote(hz: number): string      // "A4", "C#5"
-function noteToHz(note: string): number
-
-// Time <-> Frames
-function framesToTime(frames: number, sr: number, hopLength: number): number
-function timeToFrames(time: number, sr: number, hopLength: number): number
-
-// Frames <-> Samples (librosa.frames_to_samples / samples_to_frames)
-function framesToSamples(frames: number, hopLength?: number, nFft?: number): number
-function samplesToFrames(samples: number, hopLength?: number, nFft?: number): number
-
-// dB conversions (vectorised)
-function powerToDb(values: Float32Array, ref?: number, amin?: number, topDb?: number): Float32Array
-function amplitudeToDb(values: Float32Array, ref?: number, amin?: number, topDb?: number): Float32Array
-function dbToPower(values: Float32Array, ref?: number): Float32Array
-function dbToAmplitude(values: Float32Array, ref?: number): Float32Array
-```
-
-## Resampling
-
-### `resample(samples, srcSr, targetSr)` <Badge type="info" text="Medium" />
-
-High-quality resampling using r8brain algorithm.
-
-```typescript
-function resample(
-  samples: Float32Array,
-  srcSr: number,
-  targetSr: number
-): Float32Array
+for (const { start, name, roman, function: role } of functional) {
+  console.log(`${start.toFixed(1)}s  ${name}  ${roman}  ${role}`);  // e.g. "0.0s  C  I  tonic"
+}
 ```

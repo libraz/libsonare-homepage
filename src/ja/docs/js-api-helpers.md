@@ -1,11 +1,11 @@
 ---
-title: JavaScript/TypeScript librosa 互換ヘルパー
-description: libsonare JavaScript/TypeScript パッケージのプリエンファシス、テスト信号生成、スペクトル再構成、構造解析、セグメンテーション、テンポグラムなど librosa の引数対応ポートのリファレンスです。
+title: JavaScript/TypeScript ヘルパーと変換
+description: libsonare JavaScript/TypeScript パッケージのプリエンファシス、テスト信号生成、スペクトル再構成、構造解析、セグメンテーション、テンポグラムなど librosa の引数対応ポートと、スケール量子化、単位変換、リサンプリング、コード機能のリファレンスです。
 ---
 
-# JavaScript/TypeScript librosa 互換ヘルパー
+# JavaScript/TypeScript ヘルパーと変換
 
-libsonare JavaScript/TypeScript パッケージの librosa 互換ヘルパー関数です。BPM・キー・ビート検出、総合解析の `analyze()`、単位変換については [解析 API](./js-api-analysis.md) を参照してください。
+libsonare JavaScript/TypeScript パッケージの librosa 互換ヘルパー関数と、それに続くスケール量子化、単位変換、リサンプリング、コード列からの和声機能です。BPM・キー・ビート検出と総合解析の `analyze()` については [解析 API](./js-api-analysis.md) を参照してください。
 
 ## librosa 互換ヘルパー
 
@@ -99,6 +99,8 @@ function noteSegments(request: NoteSegmentsRequest): Array<{
 
 `f0Hz` と `voicedProb` は長さが等しく、0 でない必要があります。0 Hz のフレームと、
 `voicedThreshold`（既定 `0.5`）を下回る値は無声として扱われ、そこでノートが切れます。
+
+`referenceHz` の単位は Hz です。解析の `tuning`（半音の端数）から始める場合は `tuningToReferenceHz(tuning, a4 = 440)` で変換します。逆変換は `referenceHzToTuning(hz, a4 = 440)` です（`tuningToReferenceHz(0.25)` は約 446.4 Hz）。
 
 ::: danger ここに `pitchPyin` の `voicedProb` を渡してはいけない
 フィールド名に反して、ここは pYIN の `voicedProb` を渡す場所では**ありません**。あの値は
@@ -270,4 +272,122 @@ function plp(
 ```
 
 `tempogram` では、`mode: 'cosine'` で窓内コサイン類似度の変種になります（`'auto'`、`'ac'`、`0`、`1` の alias も受け付けます）。各ヘルパーが対応する librosa の特徴量は [librosa 互換性](/ja/docs/librosa-compatibility)、使い分けは [リアルタイムとストリーミング](./realtime-streaming.md#オンセット包絡からテンポグラムへ) を参照してください。
+
+## スケール量子化
+
+ピッチ補正のターゲットを構築するための 12-TET（12 平均律）スケールヘルパーです。
+
+`modeMask` は 12 ビットのマスクで、ビット *i* が `root`（`PitchClass`、C = 0）を基準とした *i* 番目のピッチクラスを有効化します。自然な長調は `0b101010110101` です。
+
+`referenceMidi` はチューニングの基準音です。A4 = 69 にするには `0` を渡します。
+
+```typescript
+// (小数を含む)MIDI 番号を最も近い有効なピッチクラスにスナップ
+function scaleQuantizeMidi(root: number, modeMask: number, midi: number, referenceMidi?: number): number
+// 補正量(量子化後 − 入力)をセミトーンで返す
+function scaleCorrectionSemitones(root: number, modeMask: number, midi: number, referenceMidi?: number): number
+// pitchClass(0..11)が root を基準に modeMask で有効か
+function scalePitchClassEnabled(root: number, modeMask: number, pitchClass: number): boolean
+// モードのマスクをこのレイアウトで返す。mode は教会旋法名または Mode の序数
+function scaleMaskForMode(root: number, mode: KeyMode | Mode): number
+```
+
+```typescript
+scaleMaskForMode(0, 'major');   // 0b101010110101
+scaleMaskForMode(2, 'dorian');  // 0b11010101101。どのルートでも同じマスク
+```
+
+`scaleMaskForMode` は `detectKey` が返すモード名を受け取るので、検出したキーを手書きの対応表なしで補正ターゲットにできます。マイナーは自然短音階で、未知の名前は `RangeError` を投げます。`scaleQuantizeMidi(...)` を `pitchCorrectToMidi(...)` と組み合わせると、検出した音を最も近いスケール構成音へリチューンできます。録音全体を検出したキーや指定したキーに合わせるには、[ボーカル編集](./vocal-editing.md) の `autoTune` を参照してください。
+
+## 単位変換
+
+これらの関数は軽量で高速です。
+
+```typescript
+// Hz <-> Mel (Slaney 式)
+function hzToMel(hz: number): number
+function melToHz(mel: number): number
+
+// Hz <-> MIDI ノート番号 (A4 = 440 Hz = 69)
+function hzToMidi(hz: number): number
+function midiToHz(midi: number): number
+
+// Hz <-> ノート名
+function hzToNote(hz: number): string      // "A4", "C#5"
+function noteToHz(note: string): number
+
+// チューニング（解析オプションが受け取るセミトーン端数）<-> Hz 単位の基準ピッチ
+function tuningToReferenceHz(tuning: number, a4?: number): number   // a4 既定 440
+function referenceHzToTuning(hz: number, a4?: number): number
+
+// 時間 <-> フレーム
+function framesToTime(frames: number, sr: number, hopLength: number): number
+function timeToFrames(time: number, sr: number, hopLength: number): number
+
+// フレーム <-> サンプル (librosa.frames_to_samples / samples_to_frames 相当)
+function framesToSamples(frames: number, hopLength?: number, nFft?: number): number
+function samplesToFrames(samples: number, hopLength?: number, nFft?: number): number
+
+// dB 変換（ベクトル）
+function powerToDb(values: Float32Array, ref?: number, amin?: number, topDb?: number): Float32Array
+function amplitudeToDb(values: Float32Array, ref?: number, amin?: number, topDb?: number): Float32Array
+function dbToPower(values: Float32Array, ref?: number): Float32Array
+function dbToAmplitude(values: Float32Array, ref?: number): Float32Array
+```
+
+`noteToHz` は解釈できない名前に、`hzToNote` は有限でも正でもない周波数に対して、`0` や `"?"` を返す代わりに `SonareError` を投げます。
+
+解析オプションはチューニングをセミトーンの端数で表しますが、文字起こしの `referenceHz` やストリーム解析器の `tuningRefHz` は Hz です。`tuningToReferenceHz(tuning)` は `440 * 2 ** (tuning / 12)`、`referenceHzToTuning(hz)` はその逆で、440 以外のコンサートピッチを使うときは `a4` を渡します。
+
+```typescript
+referenceHzToTuning(442);      // 0.0785 セミトーン
+tuningToReferenceHz(0.25);     // 446.4 Hz
+```
+
+## リサンプリング
+
+### `resample(samples, srcSr, targetSr)` <Badge type="info" text="中負荷" />
+
+r8brain アルゴリズムを使用した高品質リサンプリング。
+
+```typescript
+function resample(
+  samples: Float32Array,
+  srcSr: number,
+  targetSr: number
+): Float32Array
+```
+
+## `chordFunctions({ chords, key })`
+
+すでに手元にあるコードに、キーの中でのローマ数字と和声機能を付けます。再検出は行わないため、コードを得た検出処理に比べてコストはほぼかかりません。`chords` は `detectChords(...)` の結果かその `chords` 配列、または手で組み立てたエントリです（読まれるのは `root` と `quality` だけ）。`key` は `{ root, mode }` なので、`detectKey(...)` の結果をそのまま渡せます。`mode` は名前でも `Mode` の序数でも構いません。マイナー以外のモードはすべて長音階として読みます。
+
+```typescript
+function chordFunctions<T extends ChordFunctionsInput>(request: {
+  chords: readonly T[] | { chords: readonly T[] };
+  key: { root: PitchClass; mode: KeyMode | Mode };
+}): FunctionalChord<T>[]
+```
+
+```typescript
+const key = detectKey(samples, sampleRate);
+const detected = detectChords(samples, sampleRate);
+const labelled = chordFunctions({ chords: detected, key });
+console.log(labelled.map((c) => c.roman));  // 例: ["I", "IV", "V", "I"]
+```
+
+認識できないモード名は `RangeError` を投げます。
+
+`detectKey(...)` と `detectKeyCandidates(...)` は同じ `KeyDetectionOptions` を受け取り、`detectKey(...)` にはさらに `tuning`（`number | 'auto'`）があります。オプションは次のとおりです。
+
+| グループ | 値 |
+|----------|----|
+| 制御項目 | `modes`, `profile`, `genreHint`, `useHpss`, `loudnessWeighted`, `highPassHz`, `nFft`, `hopLength` |
+| モード集合 | `'major-minor'`, `'modal'`, `'all'`、または名前のリスト（`['major', 'minor']`）か `Mode` の序数のリスト |
+| プロファイル名 | `ks`, `krumhansl`, `temperley`, `shaath`, `keyfinder`, `faraldo-edmt` / `edmt`, `faraldo-edma` / `edma`, `faraldo-edmm` / `edmm`, `bellman-budge` / `bellman` |
+| ジャンルヒント | `auto`, `edm`, `electronic`, `dance`, `pop`, `classical`, `jazz` |
+
+
+
+
 

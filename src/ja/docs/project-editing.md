@@ -274,7 +274,7 @@ project.set_track_route(drums, "strip-drums", "master")  # ミキサーシーン
 
 **aux** トラックは自前のクリップを持ちません。内容を録音する場所ではなく、ルーティング／リターン用のレーン（たとえばエフェクトリターンやサブミックス）です。
 
-`setTrackRoute` はプロジェクトトラックを、プロジェクトの[ミキサーシーン](./mixing-scene-json.md)（`setMixerSceneJson` で設定）内のストリップへリンクします。これにより、バウンスしたトラックがそのチャンネルストリップの処理を通ります。
+`setTrackRoute` はプロジェクトトラックを、プロジェクトの[ミキサーシーン](./mixing-scene-json.md)（`setMixerSceneJson` で設定）内のストリップへリンクします。これにより、バウンスしたトラックがそのチャンネルストリップの処理を通ります。`setMixerSceneJson` はシーンの読み込み警告を文字列のリストで返します（問題がなければ空）。そのため `faderDB` のような綴り間違いのキーは、フェーダーが既定値のまま気づかれないのではなく、`unknown scene key 'strips[0].faderDB'` として表れます。
 
 ## アンドゥとリドゥ
 

@@ -94,7 +94,7 @@ The demo above isolates just the **Retune** stage (pitch shift) so you can hear 
 |-------|---------|
 | High-pass | Removes sub-bass rumble and DC as a cleanup pre-filter (`eq.highpassHz`) |
 | Gate | Reduces low-level room or mic noise between phrases |
-| Retune | Shifts the whole signal up or down by the preset's fixed semitone amount (e.g. for a higher or lower voice) using grain overlap-add resampling — the pitch-shift stage of the chain. It does not detect pitch and does not snap notes to a scale; for that, use the offline pitch correction in [Editing DSP](./editing-dsp.md) |
+| Retune | Shifts the whole signal up or down by the preset's fixed semitone amount (e.g. for a higher or lower voice) using grain overlap-add resampling — the pitch-shift stage of the chain. The shift is exactly `2^(semitones / 12)`. It does not detect pitch and does not snap notes to a scale; for that, use the offline pitch correction in [Editing DSP](./editing-dsp.md) |
 | Formant | Changes perceived vocal size or character independently of note pitch |
 | EQ | Body, presence, and air tone shaping (`eq.bodyDb`/`presenceDb`/`airDb`) |
 | Compressor | Keeps level stable across blocks |
@@ -283,6 +283,36 @@ Each 0–1 macro maps onto its target's valid range rather than being written
 through raw — `macros.space` at `1.0` reaches the reverb mix ceiling of `0.45`,
 it does not write `1.0` into a parameter that would reject it.
 
+## Formant mode
+
+By default (`formantMode: 'relative'`) the formant stage runs after the retune, so `formantFactor` multiplies the displacement the pitch shift has already caused. With `formantMode: 'absolute'` the formants are warped to `formantFactor` times the *input's* ahead of the retune, so `formantFactor: 1` keeps them where they were whatever the shift. In the preset JSON this is `dsp.formant.mode`.
+
+| | `'relative'` (default) | `'absolute'` |
+|---|---|---|
+| `formantFactor` means | Warp applied after the retune | Formant position relative to the input |
+| `formantAmount` | Scales the formant displacement | Ignored |
+| Latency | Reported `latencySamples()` | One analysis frame more (1024 samples at 48 kHz, measured) |
+| Reachable range | `formantFactor` within its parameter bounds | `formantFactor / 2^(retuneSemitones / 12)` within [0.55, 1.65] |
+
+The mode is fixed when the changer is created and prepared. A config carrying a different mode is refused (`SonareError`, "formant mode is fixed at prepare()"), and so is an absolute config outside the reachable range; the error names the `formantFactor` range that is reachable at that pitch shift. Automation clamps instead of refusing.
+
+```typescript
+const cfg = realtimeVoiceChangerPresetConfig('neutral-monitor');
+const changer = new RealtimeVoiceChanger({
+  ...cfg,
+  formantMode: 'absolute',
+  retuneSemitones: 5,
+  formantFactor: 1, // +5 semitones, formants unmoved
+});
+changer.prepare(48000, 128, 1);
+```
+
+The flat POD config that `realtimeVoiceChangerPresetConfig(...)` returns and `setPodConfig(...)` accepts requires every field, `formantMode` included; omitting it throws a `TypeError`. The C struct carries a leading `struct_version` and `formant_mode`, and `SONARE_VOICE_CHANGER_ABI_VERSION` is 3, so C callers rebuild against the current header.
+
+## As a mixer insert
+
+The same chain is a realtime insert named `voice.changer` (catalog category `voice`) on mono and stereo strips. It publishes 37 parameters under the preset's flat keys (`retuneSemitones`, `formantFactor`, `compressorThresholdDb`, ...); 33 are automatable. `formantMode`, `retuneGrainSize`, `limiterEnableIspLimiter` and `reverbSeed` are construction-only. Construction refuses an out-of-range value with `InvalidParameter` naming the key, and automation clamps. The insert reports its latency, reverb tail, gain reduction and non-finite discards like other inserts; `masteringProcess` accepts it too. See [Effects Inserts](./effects-inserts.md) for the descriptor fields.
+
 ## Practical Notes
 
 Realtime voice processing is stateful. Reuse the same changer across blocks, keep block sizes within the prepared maximum, and release handles when the component or stream stops.
@@ -292,7 +322,7 @@ Large pitch, formant, or ambience moves can be useful for sound design, but they
 ::: info What "latency" means here
 **Latency** is the delay between sound going in and processed sound coming out, caused by the analysis the chain has to do. `latencySamples()` reports it in samples; divide by the sample rate for seconds.
 
-It is **fixed** for a given prepared chain: the retune and whole-chain dry paths are aligned to the overlap-add latency, so moving the wet or retune mix does not change the reported figure. That means you can read it once after `prepare(...)` and compensate for it, instead of re-reading it whenever a control moves. The dominant term is the retune stage's pitch-shift analysis window — a larger grain analyses more audio per step and adds more delay (see the [StreamingRetune](./js-api-streaming.md#streamingretune) `grainSize` field) — plus the true-peak (inter-sample peak, ISP) limiter's own delay when that limiter is active.
+It is **fixed** for a given prepared chain: the retune and whole-chain dry paths are aligned to the overlap-add latency, so moving the wet or retune mix does not change the reported figure. That means you can read it once after `prepare(...)` and compensate for it, instead of re-reading it whenever a control moves. The dominant term is the retune stage's pitch-shift analysis window — a larger grain analyses more audio per step and adds more delay (see the [StreamingRetune](./js-api-streaming.md#streamingretune) `grainSize` field) — plus the true-peak (inter-sample peak, ISP) limiter's own delay when that limiter is active. On top of the reported figure the wet path carries a shift-dependent delay of up to two grains.
 :::
 
 Every live control is smoothed per sample, so adopting a new config snapshot with

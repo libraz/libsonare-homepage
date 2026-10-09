@@ -66,10 +66,17 @@ interface MelSpectrogramResult {
   nFrames: number;
   sampleRate: number;
   hopLength: number;
+  nFft: number;       // FFT size of the source STFT
+  fmin: number;       // lower band edge in Hz, as applied
+  fmax: number;       // upper band edge in Hz, as applied (the Nyquist when fmax was 0)
+  htk: boolean;       // true for the HTK Mel formula, false for Slaney
+  isDb: boolean;      // true when `power` holds dB values; a forward transform reports false
   power: Float32Array;
   db: Float32Array;
 }
 ```
+
+The result carries the parameters of its forward transform, so it is enough on its own to invert: `melToStft({ result: mel })` and `melToAudio({ result: mel })` read the matrix and every parameter from it (see [Inverse Features](./inverse-features.md)).
 
 ### `mfcc(samples, sampleRate, nFft?, hopLength?, nMels?, nMfcc?)` <Badge type="info" text="Medium" />
 
@@ -92,6 +99,15 @@ function mfcc(
 interface MfccResult {
   nMfcc: number;
   nFrames: number;
+  sampleRate: number;
+  hopLength: number;
+  nFft: number;
+  nMels: number;      // Mel bands the coefficients were taken from
+  fmin: number;
+  fmax: number;       // as applied
+  htk: boolean;
+  isDb: boolean;      // always false: a cepstrum, not a dB spectrogram
+  lifter: number;     // cepstral lifter applied; 0 means none
   coefficients: Float32Array;
 }
 ```
@@ -99,9 +115,10 @@ interface MfccResult {
 Set `fmin`/`fmax` to bound the Mel band edges, and pass `htk: true` to use the
 HTK Mel formula instead of Slaney. `lifter` matches librosa's `lifter` argument
 (cepstral/sinusoidal liftering that de-emphasizes higher cepstral coefficients);
-`0` disables liftering. The inverse helpers (`melToStft`, `melToAudio`,
-`mfccToAudio`) take matching `fmin`/`fmax`/`htk` arguments, so a round-trip stays
-consistent when you keep the same values on both sides.
+`0` disables liftering. The inverse helpers (`melToStft`, `melToAudio`, `mfccToMel`,
+`mfccToAudio`) take matching `fmin`/`fmax`/`htk` arguments, or the forward result as
+`{ result }`, which carries them, so a round-trip stays consistent without
+repeating the values.
 
 ### `chroma(samples, sampleRate, nFft?, hopLength?)` <Badge type="info" text="Medium" />
 
@@ -243,17 +260,17 @@ These functions are not just "more features"; they solve different modeling prob
 | Need | Use | Why |
 |------|-----|-----|
 | Log-frequency pitch representation | `cqt(...)`, `pseudoCqt(...)`, `hybridCqt(...)` | Constant-Q bins align well with musical pitch over octaves; pseudo/hybrid variants trade accuracy and speed across bins. |
-| Variable bandwidth pitch representation | `vqt(...)` | Like CQT, but with a bandwidth offset for low-frequency stability. |
+| Variable bandwidth pitch representation | `vqt(...)` | Like CQT, but with a bandwidth offset for low-frequency stability. Omit `gamma` for the automatic ERB-derived bandwidth; `gamma: 0` is equivalent to CQT. A negative or non-finite `gamma` throws `RangeError`. |
 | Chord-friendly chroma | `chromaCqt(...)`, `nnlsChroma(...)`, `chromaCens(...)`, `bassChroma(...)` | Constant-Q, NNLS, CENS, and low-register chroma variants can be cleaner for chord or bass-register work than plain STFT chroma. |
 | Spectral shape detail | `spectralContrast(...)`, `polyFeatures(...)`, `zeroCrossings(...)`, `onsetStrengthMulti(...)` | Librosa-compatible contrast bands, polynomial coefficients, zero-crossing indices, and multi-band onset strength. |
-| Pitch/tuning offset | `pitchTuning(...)`, `estimateTuning(...)` | Estimate tuning in fractions of a bin from detected frequencies or directly from audio. |
+| Pitch/tuning offset | `pitchTuning(...)`, `estimateTuning(...)` | Estimate tuning in fractions of a bin from detected frequencies or directly from audio. At 12 bins per octave that is the semitone fraction the analysis options take as `tuning`; `tuningToReferenceHz(...)` and `referenceHzToTuning(...)` convert it to and from a reference pitch in Hz. |
 | Decomposition and remixing | `decompose(...)`, `decomposeWithInit(...)`, `decomposeStems(...)`, `decomposeStemsLinked(...)`, `nnFilter(...)`, `remix(...)`, `remixAlignedIntervals(...)`, `phaseVocoder(...)`, `hpssWithResidual(...)` | NMF factorization, selectable NMF initialization, mono and linked multichannel stem output, nearest-neighbor filtering, interval remixing, channel-consistent cut points, time scaling, and HPSS residual output. |
 | Reconstruct approximate audio/features | `melToStft`, `melToAudio`, `mfccToMel`, `mfccToAudio`, `cqtToAudio`, `vqtToAudio` | Griffin-Lim based inverse paths for visualization, debugging, and feature round-trips. CQT/VQT inputs are magnitude matrices. |
 | Delivery loudness measurements | `lufs`, `lufsInterleaved`, `momentaryLufs`, `shortTermLufs`, `ebur128LoudnessRange` | ITU-R BS.1770 / EBU R128 style loudness values, including multichannel integrated loudness and LRA (loudness range — how much the loudness varies over the program). |
 
 ```typescript
 const cqtResult = cqt(samples, sampleRate, 512, 32.7, 84, 12);
-const vqtResult = vqt(samples, sampleRate, 512, 32.7, 84, 12, -1);
+const vqtResult = vqt({ samples, sampleRate, hopLength: 512, fmin: 32.7, nBins: 84, binsPerOctave: 12 });
 const pseudo = pseudoCqt(samples, sampleRate);
 const hybrid = hybridCqt(samples, sampleRate);
 const cqtChroma = chromaCqt(samples, sampleRate);
@@ -276,9 +293,18 @@ const stretched = phaseVocoder(samples, sampleRate, 1.5);
 const hpssResidual = hpssWithResidual(samples, sampleRate);
 const multichannel = lufsInterleaved(interleavedStereo, 2, sampleRate);
 const lra = ebur128LoudnessRange(samples, sampleRate);
-const reconstructed = melToAudio(mel.power, mel.nMels, mel.nFrames, sampleRate);
+const reconstructed = melToAudio({ result: mel });
 const cqtPreview = cqtToAudio(cqtResult.magnitude, cqtResult.nBins, cqtResult.nFrames, sampleRate, 512, 32.7, 12);
-const vqtPreview = vqtToAudio(vqtResult.magnitude, vqtResult.nBins, vqtResult.nFrames, sampleRate, 512, 32.7, 12, 0, 32);
+const vqtPreview = vqtToAudio({
+  magnitude: vqtResult.magnitude,
+  nBins: vqtResult.nBins,
+  nFrames: vqtResult.nFrames,
+  sampleRate,
+  hopLength: 512,
+  fmin: 32.7,
+  binsPerOctave: 12,
+  nIter: 32,
+});
 ```
 
 `chromaCqt(samples, sampleRate?, hopLength?, nChroma?)` is the direct

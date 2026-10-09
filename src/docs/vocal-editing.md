@@ -112,6 +112,8 @@ with create_vocal_edit_session(samples, sample_rate) as session:
 
 :::
 
+Gate on `vocalEditAvailable()` and read the API version with `vocalEditApiVersion()` (Python `vocal_edit_api_version()`, C `sonare_vocal_edit_api_version`); `session.capabilities().apiVersion` reports the same counter. It is separate from the engine's ABI counters. A session, draft, snapshot and render job each release their handle with `dispose()`, `delete()` or `destroy()`, and also through `Symbol.dispose`, so `using session = createVocalEditSession(...)` works where the runtime supports explicit resource management.
+
 `session.notes()` returns notes and pitch transitions. A note contains its source span, analysis-frame span, median frequency, centre MIDI note, pitch stability, amplitude samples, and the current edit. `session.analysis()` returns the F0 and voiced arrays, the analysis grid, algorithm metadata, source digest, and settings. `session.capabilities()` reports the profile, the monophonic constraint, whether analysis cancellation is supported by the loaded profile, and the available formant-shift range. Read those values instead of baking profile limits into a UI.
 
 Revisions, generations, request IDs, and byte limits (`maxHistoryBytes` and `maxCacheBytes`) cross the JavaScript boundary as decimal strings (`VocalUint64`). Keep those values as strings; `maxUndoDepth` and `maxRenderJobs` are numbers. The Python binding uses snake_case method names, exposes those counters as Python integers, and closes a session at the end of a `with` block. `evaluatePitch(noteId)` returns measured, target, effective, and voiced arrays for a note; the coordinate mapping methods convert between source and destination samples after a timing edit.
@@ -148,11 +150,36 @@ session.undo({ expectedRevision: session.revision() });
 session.redo({ expectedRevision: session.revision() });
 ```
 
-The operation set covers `setEdit`, `setSourceSpan`, `split`, `merge`, `setTransition`, `removeTransition`, and `reset`. Splitting and merging can retire note IDs; follow `idChanges` and use the returned IDs for later operations. The expected revision and generation fields turn concurrent or out-of-order UI writes into an explicit revision conflict instead of silently overwriting a newer edit. An empty committed draft does not add a history entry.
+The operation set covers `setEdit`, `setSourceSpan`, `split`, `merge`, `setTransition`, `removeTransition`, and `reset`. Splitting and merging can retire note IDs; follow `idChanges` and use the returned IDs for later operations.
+
+Positions in `setSourceSpan` and `split` are samples or seconds, one spelling each (`sourceSample` / `sourceSec`, and `sourceStartSample` / `sourceStartSec`, `sourceEndSample` / `sourceEndSec`, `destinationStartSample` / `destinationStartSec`, `destinationLengthSamples` / `destinationLengthSec`). Seconds are rounded to the nearest sample at the session's rate; giving both spellings of one position is refused, and so is a negative position. `merge` takes `noteIds` and an optional `policy` (`'preserve'` or `'reset'`).
+
+```typescript
+const [first] = session.notes().notes;
+const split = session.beginEdit({ expectedRevision: session.revision() });
+const result = split.apply({
+  expectedGeneration: split.token().generation,
+  operations: [{ kind: 'split', noteId: first.id, sourceSec: 0.5 }],
+});
+console.log(result.idChanges); // [{ operationIndex: 0, retiredId, newIds: [a, b] }]
+split.commit({ expectedRevision: session.revision() });
+
+const [a, b] = result.idChanges[0].newIds;
+const join = session.beginEdit({ expectedRevision: session.revision() });
+join.apply({
+  expectedGeneration: join.token().generation,
+  operations: [{ kind: 'merge', noteIds: [a, b], policy: 'preserve' }],
+});
+join.commit({ expectedRevision: session.revision() });
+```
+
+In Python the operations are dataclasses: `VocalSplitNote(note_id, cut_source_sample=... or cut_source_sec=...)`, `VocalMergeNotes(note_ids, merge_policy)` and `VocalSetNoteSourceSpan(note_id, source_start_sec=..., ...)`. On `VocalSetNoteSourceSpan` the two destination sample fields default to 0, which reads as unset, so a destination in seconds is refused only beside a non-zero sample value.
+
+The expected revision and generation fields turn concurrent or out-of-order UI writes into an explicit revision conflict instead of silently overwriting a newer edit. An empty committed draft does not add a history entry.
 
 ## Render a committed snapshot
 
-Capture a snapshot after committing the edit. A snapshot keeps the state it captured, so a later session edit does not change an in-flight render. Render the complete destination output by omitting `range`, or render a half-open sample range for a preview.
+Capture a snapshot after committing the edit. A snapshot keeps the state it captured, so a later session edit does not change an in-flight render. Render the complete destination output by omitting `range`, or render a half-open range for a preview. A range bound is `startSample` / `endSample` or `startSec` / `endSec` (one spelling each, rounded to the nearest sample); an omitted start is 0, an omitted end is the end of the output, and a negative bound is refused. Python takes a `VocalRange` or a `(start, end)` pair, or `start_sec=` / `end_sec=` keywords, on `render()` and `begin_render_job()`.
 
 ```typescript
 const snapshot = session.captureRenderSnapshot();
@@ -179,7 +206,7 @@ try {
 
 ## Persist and restore a session
 
-`exportState()` serializes the committed edit state as an SVE1 byte array. It excludes source PCM, runtime caches, drafts, and undo history. Restore it with the same original mono source and sample rate; the source descriptor and digest are checked before the state is accepted.
+`exportState()` serializes the committed edit state as an SVE1 byte array. It excludes source PCM, runtime caches, drafts, and undo history. Restore it with the same original mono source and sample rate; the source descriptor and digest are checked before the state is accepted. Python restores with `restore_vocal_edit_session(samples, sample_rate, state, *, max_history_bytes=..., max_cache_bytes=..., max_undo_depth=..., max_render_jobs=...)`, or `VocalEditSession.restore(...)`, which takes the same arguments; the limits default to those of session creation.
 
 ```typescript
 import { restoreVocalEditSession } from '@libraz/libsonare';
@@ -228,6 +255,8 @@ try {
   client.dispose();
 }
 ```
+
+`client.restore(request)` opens a Worker session from persisted state the same way `create` does. The session handle is a `VocalEditWorkerSession` whose methods return cancellable tasks: reads (`notes()`, `analysis()`, `capabilities()`, `history()`, `evaluatePitch()`), draft control (`beginEdit()`, `apply()`, `commit()`, `cancel()`, `undo()`, `redo()`), `exportState()`, `preview()` and `dispose()`. `preview({ range: { startSec: 0.1, endSec: 0.2 } })` takes the same seconds-or-samples range as a direct render.
 
 Typed-array buffers are transferred by default (`copy: false`) and become detached on the calling thread. Use `copy: true` when the caller must keep using `samples`, the persisted state, or arrays in a mutation request. `AbortSignal` and `VocalEditWorkerTask.cancel()` cancel create, restore, and preview calls. Session mutations are FIFO and cannot be cancelled, so serialize UI writes and use expected revisions or generations. Pipelined replies that no longer match the client's latest intent reject with `VocalEditWorkerStaleResultError`; update UI state only from the latest accepted result.
 

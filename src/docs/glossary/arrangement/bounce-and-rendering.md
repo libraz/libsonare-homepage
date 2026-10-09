@@ -59,7 +59,7 @@ Recall from [Clips and Tracks](./clips-and-tracks.md) that a MIDI track holds no
 | The full patch-driven synth | bounce with the **NativeSynth** instrument |
 | A General-MIDI SoundFont | bounce with the **SoundFont** instrument |
 | A quick built-in oscillator | bounce with the built-in instrument |
-| Your own external instrument (Python) | bounce with host-provided instruments |
+| Your own external instrument (Python, JavaScript) | bounce with host-provided instruments |
 
 If you bounce *without* binding an instrument, MIDI tracks render silently — the notes are there, but nothing is performing them. Audio tracks always render their sound regardless. See [NativeSynth](../../native-synth.md) for the synth side.
 
@@ -78,7 +78,7 @@ PDC only works when the latency figure you provide matches what the instrument a
 :::
 
 ::: details How libsonare implements this
-Bouncing starts from the `Project` class. The plain `bounce(options?)` renders audio tracks and leaves MIDI tracks silent. To make MIDI audible you bind an instrument: `bounceWithSynthInstrument` (the patch-driven NativeSynth, accepting a `SynthPatch`, a preset name, or an array), `bounceWithSf2Instrument` (a GS-compatible SoundFont player using data loaded by `loadSoundFont`), and `bounceWithBuiltinInstrument` (the simple oscillator synth); in Python, `bounce_with_instruments` lets you host your own external instrument. When `totalFrames` is omitted (or `<= 0`) in `ProjectBounceOptions`, the render length is auto-derived from the arrangement plus the instrument's release tail. Every bounce renders through the mixer scene — per-track channel strip, sends, and buses — rather than summing clips. Latency compensation is supplied via `instrumentLatencySamples` in the bounce options and passed to the compiler so a latent instrument stays in time. The whole render is deterministic for a fixed project + options + instrument.
+Bouncing starts from the `Project` class. The plain `bounce(options?)` renders audio tracks and leaves MIDI tracks silent. To make MIDI audible you bind an instrument: `bounceWithSynthInstrument` (the patch-driven NativeSynth, accepting a `SynthPatch`, a preset name, or an array), `bounceWithSf2Instrument` (a GS-compatible SoundFont player using data loaded by `loadSoundFont`), and `bounceWithBuiltinInstrument` (the simple oscillator synth); `bounce_with_instruments` in Python and `bounceWithInstruments` / `bounceWithInstrument` in JavaScript let you host your own external instrument. When `totalFrames` is omitted (or `<= 0`) in `ProjectBounceOptions`, the render length is auto-derived from the arrangement plus the instrument's release tail. Every bounce renders through the mixer scene — per-track channel strip, sends, and buses — rather than summing clips. Latency compensation is supplied via `instrumentLatencySamples` in the bounce options and passed to the compiler so a latent instrument stays in time. The whole render is deterministic for a fixed project + options + instrument.
 :::
 
 Related: [Project Bounce](../../project-bounce.md), [NativeSynth](../../native-synth.md), [Warp and Tempo Sync](./warp-and-tempo.md)

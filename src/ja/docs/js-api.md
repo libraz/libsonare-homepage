@@ -101,10 +101,21 @@ try {
 
 Node と WASM は、値を黙って解釈し直さずに拒否します。型の合わないリペア・
 ダイナミクスのオプション、未知のトラック種別・キャプチャソース・ピッチ補正モード、
-負のスペクトラム設定、宣言されていない enum の綴りや序数、数値でも真偽値でもない
-マスタリングのオーバーライド値などです。インスタンスメソッドも `destroy()` 後は解放済み
-ハンドルに触れずに例外を投げます。不正な値は意外な既定値にならず、
-呼び出し地点で `SonareError` として現れます。
+負のスペクトラム設定、整数を読む箇所の小数、宣言されていない enum の綴りや序数、
+数値でも真偽値でもないマスタリングのオーバーライド値などです。インスタンスメソッドも
+`destroy()` 後は解放済みハンドルに触れずに例外を投げます。不正な値は意外な既定値にならず、
+呼び出し地点でエラーとして現れます。
+
+どのエラークラスになるかは、値を拒否したのが誰かで決まります。
+
+| 拒否した主体 | クラス | 例 |
+|--------------|--------|----|
+| JavaScript バインディング（型違い・欠落） | `TypeError` | サンプルを期待する箇所に文字列を渡した、必須フィールドがない |
+| JavaScript バインディング（定義域の外） | `RangeError` | 未知の名前、小数の整数引数、長さが揃うべき 2 つのバッファの不一致、NUL を含む文字列、対応範囲外の `sampleRate` |
+| ライブラリ、またはオブジェクトの状態 | コード付きの `SonareError` | マスタリング呼び出しの非有限なオーディオ、拒否されたストリーム設定、壊れたプロジェクトやシーンのドキュメント（`InvalidFormat`）、シーン内の未知の insert（`InvalidParameter`） |
+| 解放済み・破棄済み・未初期化のハンドル | `InvalidState` の `SonareError` | `init()` 前の解析関数の呼び出し、`destroy()` 後のメソッド呼び出し |
+
+`isSonareError` が一致するのは 3 行目と 4 行目だけなので、ユーザー入力の検証では 3 つのクラスすべてを扱う catch にしてください。バインディングの検査とライブラリの検査の境界は関数ごとに異なりえます。たとえば `detectBpm` は空のサンプルを JavaScript 側で `RangeError` として拒否しますが、`masterAudio` はライブラリへ渡して `InvalidParameter` を投げます。コード一覧は[エラー処理](./js-api.md#エラーハンドリング)を参照してください。
 
 ## 目的から API を選ぶ
 
@@ -163,6 +174,11 @@ WASM モジュールを初期化します。解析関数を使用する前に呼
 ```typescript
 async function init(options?: {
   locateFile?: (path: string, prefix: string) => string;
+  wasmBinary?: ArrayBuffer | Uint8Array;
+  moduleFactory?: (options?: {
+    locateFile?: (path: string, prefix: string) => string;
+    wasmBinary?: ArrayBuffer | Uint8Array;
+  }) => Promise<SonareModule>;
 }): Promise<void>
 ```
 
@@ -179,6 +195,8 @@ await init({
   locateFile: (path, prefix) => `/custom/wasm/path/${path}`
 });
 ```
+
+オプションが効くのは最初の呼び出しだけです。オプションなし、または同じオプション（関数は参照で比較）で `init()` を再度呼ぶとすぐに解決します。オプションが異なる 2 回目の呼び出しは、そのオプション名を挙げた `InvalidState` の `SonareError` を投げます。`init()` は読み込んだモジュールの ABI バージョンをパッケージのビルド時のものとも比較し、`.wasm` と JavaScript が別のビルドのもの（古いキャッシュや独自の `wasmBinary` / `locateFile` で起こりえます）なら `AbiMismatch`（コード 10）を投げます。`init()` が解決する前に、モジュールを必要とする関数を呼ぶと `InvalidState` を投げます。
 
 ### `isInitialized()`
 
@@ -239,7 +257,7 @@ function capabilities(): {
 返します。C ABI が公開し Python が `capability_catalog` として公開しているのと同じ正規
 JSON で、`schemas/capability-catalog.schema.json` で検証されます。
 
-カタログは実際の値を持っています。現行ビルドは 94 個のプロセッサと 5,484 個のパラメータ記述子を公開します。構築用キーにフォールバックがなければ `default` は `null` になります。値域はプロセッサの他のパラメータを既定値に置いて実測されます。`null` は「その側の制限をカタログが把握していない」という意味であって、範囲情報が一般に得られないという意味ではありません。
+カタログは実際の値を持っています。現行ビルドは 95 個のプロセッサ（うち 84 個がリアルタイムインサート可能）と 5,577 個のパラメータ記述子を公開します。構築用キーにフォールバックがなければ `default` は `null` になります。値域はプロセッサの他のパラメータを既定値に置いて実測されます。`null` は「その側の制限をカタログが把握していない」という意味であって、範囲情報が一般に得られないという意味ではありません。
 
 ::: warning 範囲は実測値であり、実測ゆえの注意点がある
 公開される範囲は**送ってよい値の厳密な制約であって、UI の推奨レンジではありません**。しかも、
@@ -271,6 +289,8 @@ function capabilityCatalog(): {
     realtimeCost: 'low' | 'moderate' | 'high' | null;
     channelPolicy: 'multichannel' | 'stereoPairOnly' | 'perChannel' | 'passthrough';
     category: string;
+    /** repair.declick、repair.declip、repair.trimSilence では false */
+    causal: boolean;
     params: Array<{
       name: string;
       id: number | null;
@@ -278,10 +298,20 @@ function capabilityCatalog(): {
       type: 'boolean' | 'number' | 'enum' | 'string' | 'array';
       min: number | null;
       max: number | null;
+      minExclusive: boolean;
+      maxExclusive: boolean;
+      maxRelativeTo: 'nyquist' | null;
       default: boolean | number | null;
-      unit: string | null;
+      /** 閉じた集合（'dB'、'Hz'、'ms'、's'、'samples' など）のいずれか。数値でないキーでは null */
+      unit: MasteringInsertParamUnit | null;
+      /** コントロールが描画すべき範囲（[min, max] の内側）。受け入れ範囲と同じなら null */
+      uiMin: number | null;
+      uiMax: number | null;
+      scale: 'linear' | 'log';
       choices: Array<{ name: string; value: number }> | null;
       slot: string | null;
+      /** このキーの値を制約する兄弟キー。`this <relation> sibling` として読む */
+      dependsOn: Array<{ key: string; relation: 'lt' | 'le' | 'gt' | 'ge' }>;
     }>;
     slots: Array<{
       name: string;
@@ -306,8 +336,9 @@ function capabilityCatalog(): {
 }
 ```
 
-汎用のパラメータ UI はこれを基に作れます。各スライダーの範囲と既定値は、手で管理する表では
-なくカタログから得られます。コアが把握していない範囲は明示的な `null` で報告されるので、
+汎用のパラメータ UI はこれを基に作れます。各スライダーの範囲・既定値・単位・軸（`uiMin` / `uiMax`、
+`scale`）は、手で管理する表ではなくカタログから得られます。各フィールドは
+[インサートエフェクト](./effects-inserts.md#パラメータ記述子)にまとまっています。コアが把握していない範囲は明示的な `null` で報告されるので、
 0 ではなく「上限・下限なし／不明」として扱ってください。
 
 バンドごとの EQ パラメータは、インデックス付きの各バンドフィールドについて記述子を公開するため、汎用 UI が手書きの表なしにバンドを並べられます。記述子には構築用キーとオートメーション対象の両方が含まれるので、オートメーション対象は `id !== null` で選び、条件付きのバンド群は `slot` とプロセッサの `slots` 配列で扱ってください。記述子を公開しても、どのキーが**読まれた**とみなされるかは変わりません。不完全に渡したバンドは、従来どおり余分なキーを「無視した」と報告します。
@@ -348,7 +379,7 @@ function realtimeVoiceChangerPresetConfig(preset: VoicePresetId | number): Realt
 `voiceCharacterPresetId(...)` は未知の数値序数で `null` を返します。未知の文字列 ID は例外になります。
 `realtimeVoiceChangerPresetConfig(...)` は解決済み POD 設定を返す必要があるため、無効な序数や未知の ID で例外になります。
 
-解決済みの `RealtimeVoiceChangerPodConfig` は両 JavaScript 公開 API で camelCase キー（`inputGainDb`、`wetMix`、`formantFactor`、`limiterIspCeilingDbtp` など）を使います。対応する C / Python の POD フィールドは snake_case のままです。
+解決済みの `RealtimeVoiceChangerPodConfig` は両 JavaScript 公開 API で camelCase キー（`inputGainDb`、`wetMix`、`formantFactor`、`formantMode`、`limiterIspCeilingDbtp` など）を使います。対応する C / Python の POD フィールドは snake_case のままです。エンジンに渡し戻す POD 設定は、`formantMode`（`'relative'` または `'absolute'`）を含むすべてのフィールドを持つ必要があります。
 
 ### リアルタイム環境ヘルパー
 
@@ -370,15 +401,33 @@ function hasFfmpegSupport(): boolean
 
 `hasFfmpegSupport()` は、読み込まれたビルドが FFmpeg 経由のデコードに対応しているかを返します。ブラウザ向け WASM npm パッケージはデコード済み PCM を扱うため通常 `false` で、ファイルの直接デコードは Python/native ビルド側で行います。
 
+## ネイティブハンドルの解放
+
+ネイティブハンドルを所有するクラス（`Mixer`、`StreamAnalyzer`、`Project`、`ProjectTimeline`、`RealtimeEngine`、`ClipPageProvider`、`ClipPageStreamer`、`StreamingEqualizer`、`StreamingMasteringChain`、`StreamingRetune`、`RealtimeVoiceChanger`、`PlaybackRenderer` など）はどれも冪等な `destroy()`（別名 `delete()`）を持ち、`[Symbol.dispose]()` を実装しています。そのため `using` 宣言を使えば、例外が起きてもスコープの終わりで解放されます。`Audio` はネイティブハンドルを持たないので `[Symbol.dispose]()` は何もしませんが、`using` はそのまま使えます。
+
+```typescript
+import { init, Mixer, mixingScenePresetJson } from '@libraz/libsonare';
+
+await init();
+{
+  using mixer = Mixer.fromSceneJson(mixingScenePresetJson('vocalReverbSend'), 48000, 512);
+  // ... ブロックを処理する。ミキサーは閉じ括弧で解放される。
+}
+```
+
+ホストに `Symbol.dispose` がなければパッケージが補うので、メソッドはどこでも存在します。`using` 構文そのものには、TypeScript 5.2 以降（`lib` に `esnext.disposable`）、構文を変換するバンドラー、またはネイティブ対応のランタイムが必要です。そうでなければ `finally` で `destroy()` を呼んでください。解放済みハンドルのメソッドを呼ぶと `InvalidState` の `SonareError` が投げられます。
+
 ## リファレンスのページ構成
 
 リファレンスは主題ごとに分かれています。以下のページはいずれも、ここまでのインストール・インポート・初期化を前提とします。
 
-- [解析](./js-api-analysis.md) — 楽曲レベルの解析、特徴抽出、スケール量子化、単位変換、librosa 互換ヘルパー、リサンプリング。
+- [解析](./js-api-analysis.md) — 楽曲レベルの解析、特徴抽出、ローマ数字によるコード分析。
+- [ヘルパーと変換](./js-api-helpers.md) — librosa 互換ヘルパー、スケール量子化、単位変換、リサンプリング、コード機能。
 - [エフェクト](./js-api-effects.md) — オーディオエフェクト、編集 DSP、ルーム音響の計測。
-- [マスタリング](./js-api-mastering.md) — マスタリングチェーン、名前付きプロセッサ、プリセット、ストリーミングマスタリング、ミキシング API。
-- [オーディオとストリーミング](./js-api-audio.md) — `Audio` クラス、メータリング、逐次処理のストリーミング API。
-- [型とエラー](./js-api-types.md) — 型定義、列挙型、エラーハンドリング、型エクスポート索引。
+- [マスタリング](./js-api-mastering.md) — マスタリングチェーン、名前付きプロセッサ、プリセット、単体のダイナミクス／リペアプロセッサ。
+- [ストリーミングとリアルタイム](./js-api-streaming.md) — ブロック単位のプロセッサ、ストリーミングマスタリングチェーン、逐次処理の `StreamAnalyzer`。
+- [オーディオ、メータリング、ミキシング](./js-api-audio.md) — `Audio` クラス、メータリング、テイクの位置合わせ、ミキサーストリップ、ミキシング API。
+- [型と列挙型](./js-api-types.md) — 型定義、列挙型、型エクスポート索引。エラーハンドリングは[このページ](#エラーハンドリング)にあります。
 
 ## プロジェクト、楽器、ライブ MIDI
 
@@ -396,7 +445,7 @@ function hasFfmpegSupport(): boolean
 | ライブエンジンへ MIDI クリップをサンプル精度でスケジュールする | `engine.setMidiClips(...)`、`engine.sampleAtPpq(ppq)` | [リアルタイムエンジン](./realtime-engine.md#midi-クリップスケジューリングと-sampleatppq) |
 | トラック単位のキューモニタリングを設定する | `engine.setTrackMonitorMode(laneIndex, 'off' | 'pfl' | 'afl')` | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
 | エンジンのトラックをレーン・バス・センド・ストリップでライブミックスする | `engine.setTrackLanes(...)`、`engine.setTrackBuses(...)`、ストリップ JSON セッター | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
-| トラックを外部 MIDI ハードウェアへ送り、必要ならクロック／トランスポートも転送する | `engine.setMidiDestinationExternal(...)`、`engine.setExternalMidiClockEnabled(...)`、`engine.drainExternalMidi(...)`。Worklet ファサードでは `onMidiOut(...)` | [リアルタイムエンジン](./realtime-engine.md#トラックを外部-midi-機器へ送る) |
+| トラックを外部 MIDI ハードウェアへ送り、必要ならクロック／トランスポートも転送する | `engine.setMidiDestinationExternal(...)`、`engine.setExternalMidiClockEnabled(...)`、`engine.drainExternalMidi(...)`。Worklet ファサードでは `onMidiOut(...)` | [リアルタイムエンジン](./project-editing-midi.md#トラックを外部-midi-機器へ送る) |
 | ハードウェア／Web MIDI デバイスからエンジンへ演奏イベントを送る | `bindWebMidi(engine, ...)` <Badge type="info" text="ブラウザ専用" /> | [MIDI 入力](./midi-input.md) |
 | ライブのマイク入力をエンジンに流す | `bindMicrophoneInput(context, engine, ...)` <Badge type="info" text="ブラウザ専用" /> | [録音とテイク](./recording-and-takes.md) |
 
@@ -450,3 +499,51 @@ const audio = project.bounceWithSynthInstrument(synthPresetNames()[0]);
 | Edge | 16+ |
 
 要件: WebAssembly、ES2017+ (async/await)、Web Audio API
+
+## エラーハンドリング
+
+モジュールの初期化前に関数を呼ぶと、コード `InvalidState` の `SonareError` がスローされます。まず `await init()` を呼んでください。オプションを変えて `init()` を 2 回目に呼ぶ場合も、そのオプション名を示した `InvalidState` になります（同じオプションの繰り返しは問題ありません）。
+
+ネイティブ（C++）側の失敗は、構造化された **`SonareError`** としてスローされます。`Error` のサブクラスで、C ABI のエラー enum をそのまま映した数値の `code` と正準名 `codeName` を持つため、メッセージ文字列の照合ではなく原因コードで分岐できます。同じ失敗はどのバインディング（WASM / Node ネイティブ / Python / C ABI）でも同じ数値コードを報告します。パッケージは `ErrorCode` enum、`SonareError` クラス、型ガード `isSonareError(value)` をエクスポートします。
+
+各 facade は非有限数、不正な enum／インデックス値、過大なリソースを DSP やシリアライズへ渡す前に一貫して拒否します。これらは入力不正として扱い、バインディングが暗黙にクランプしたり不正値を受理したりすることへ依存しないでください。
+
+バインディング自身が拒否する引数は、素の `TypeError`（型の誤りや欠落）か `RangeError`（範囲外、未知の名前、空または非有限のサンプル）になり、`isSonareError` には一致しません。エンジン側で起きる失敗にはコードが付きます。たとえば `synthesizeRir(...)` で音源が部屋の外にある場合は `InvalidParameter` です。解放済み・破棄済みのハンドルは `SonareError` の `InvalidState` をスローします。
+
+```typescript
+import { ErrorCode, isSonareError, Mixer } from '@libraz/libsonare';
+
+try {
+  const mixer = Mixer.fromSceneJson(sceneJson, 48000, 512);
+} catch (error) {
+  if (isSonareError(error) && error.code === ErrorCode.InvalidState) {
+    // 'failed to build mixer from scene JSON: send timing must be a string ("pre" or "post")'
+    console.error(`scene rejected: ${error.codeName}: ${error.message}`);
+  } else {
+    throw error;
+  }
+}
+```
+
+`Mixer.fromSceneJson` は、フィールド値が拒否された場合も JSON 自体が壊れている場合も、シーンの
+構築に失敗するあらゆる経路で `InvalidParameter` ではなく **`InvalidState`** を報告します。構築が
+ラップされているため、本来の原因は独立したコードではなく
+`failed to build mixer from scene JSON: <内側のメッセージ>` の末尾として届きます。
+`InvalidState` で分岐し、どのフィールドが問題かはメッセージを表示して特定してください。
+
+| `ErrorCode` | 値 |
+|-------------|----|
+| `Ok` | `0` |
+| `FileNotFound` | `1` |
+| `InvalidFormat` | `2` |
+| `DecodeFailed` | `3` |
+| `InvalidParameter` | `4` |
+| `OutOfMemory` | `5` |
+| `NotSupported` | `6` |
+| `InvalidState` | `7` |
+| `Cancelled` | `8` |
+| `EncodeFailed` | `9` |
+| `Unknown` | `99` |
+
+このコードは Python の `SonareError.code` および C ABI の `SonareError` enum と一致し、Python CLI は同じコードを[終了コード](./cli.md#終了コード)へ対応付けます。
+

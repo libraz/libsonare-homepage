@@ -43,6 +43,8 @@ description: オートメーションレーン、カーブの種類、ゴニオ�
 `AutomationTarget` はフェーダー・パン・センド・インサートパラメータを指し、`InsertAutomationLane` はインサート内部を自動化します。
 
 メーターは `MeterProcessor`（`MeterConfig`）でピーク／True Peak／RMS／LUFS と相関を計測し、ベクトルスコープ用に `GoniometerPoint` の `GoniometerBuffer` を持ちます。これらはすべてリアルタイム安全なので、オフラインでも AudioWorklet 内でもオートメーションが再生されメーターが更新され、UI 表示用にエンジン側のテレメトリも利用できます。
+
+True Peakメーターは、リコンストラクションフィルターの群遅延 1 つ分だけブロックより遅れて読み取ります。これによりメーターの値はブロックサイズに依存しません。そのため最後のブロックが終わった時点では、信号の末尾の数サンプルがまだ保留されています。オフラインレンダリングの最後のブロックの後に `Mixer.flushMeters()`（Python では `flush_meters()`）を呼ぶと、保留分を無音に対して読み取ってスナップショットに反映します。オフラインのエンジンレンダリングとワンショットのミックスは、すべてのメーターを自動的にフラッシュします。
 :::
 
 関連: [ミキシングの基礎](../concepts/mixing-basics.md)、[チャンネルストリップ](./channel-strip.md)、[True Peak](../true-peak.md)、[マスタリングメーターの読み方](../mastering/meter-reading.md)

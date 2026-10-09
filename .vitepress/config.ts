@@ -705,12 +705,12 @@ const enDocsSidebar = [
         items: [
           { text: 'Analysis', link: '/docs/js-api-analysis' },
           { text: 'Feature Extraction', link: '/docs/js-api-features' },
-          { text: 'librosa Helpers', link: '/docs/js-api-helpers' },
+          { text: 'Helpers & Conversions', link: '/docs/js-api-helpers' },
           { text: 'Effects', link: '/docs/js-api-effects' },
           { text: 'Mastering', link: '/docs/js-api-mastering' },
           { text: 'Streaming & Realtime', link: '/docs/js-api-streaming' },
-          { text: 'Audio & Streaming', link: '/docs/js-api-audio' },
-          { text: 'Types & Errors', link: '/docs/js-api-types' },
+          { text: 'Audio, Metering & Mixing', link: '/docs/js-api-audio' },
+          { text: 'Types & Enums', link: '/docs/js-api-types' },
         ],
       },
       {
@@ -1259,7 +1259,7 @@ export default defineConfig({
                   items: [
                     { text: '解析', link: '/ja/docs/js-api-analysis' },
                     { text: '特徴抽出', link: '/ja/docs/js-api-features' },
-                    { text: 'librosa 互換ヘルパー', link: '/ja/docs/js-api-helpers' },
+                    { text: 'ヘルパーと変換', link: '/ja/docs/js-api-helpers' },
                     { text: 'エフェクト', link: '/ja/docs/js-api-effects' },
                     { text: 'マスタリング', link: '/ja/docs/js-api-mastering' },
                     {
@@ -1267,10 +1267,10 @@ export default defineConfig({
                       link: '/ja/docs/js-api-streaming',
                     },
                     {
-                      text: 'オーディオとストリーミング',
+                      text: 'オーディオ、メータリング、ミキシング',
                       link: '/ja/docs/js-api-audio',
                     },
-                    { text: '型とエラー', link: '/ja/docs/js-api-types' },
+                    { text: '型と列挙型', link: '/ja/docs/js-api-types' },
                   ],
                 },
                 {

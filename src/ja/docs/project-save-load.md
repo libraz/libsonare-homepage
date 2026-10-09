@@ -97,6 +97,10 @@ try {
 
 Python では `project.to_json()`・`Project.from_json(json)`・`Project.from_json_with_diagnostics(json)` が対応します。
 
+読み込めない文書は、どのサーフェスでも C ABI 自身のコードで失敗し、メッセージは診断名で始まります。壊れた文書は `InvalidFormat`（`malformed_json: …`）で、対応範囲内の整数ヘルツでない `sample_rate` も同じく `InvalidFormat`（`invalid_sample_rate: …`）です。WASM と Node は `SonareError` を投げ、Python は同じ `code` を持つ `SonareValueError` を送出します。Python CLI も、ネイティブ CLI と同様に、壊れたプロジェクト文書では終了コード `5` で終了します。
+
+読み込みに成功したときの警告は `diagnostics` のテキストで返ります。埋め込まれたミキサーシーンのうちシーンリーダーが消費しないキーは、ドキュメントのルートからのパス付き（例: `scene.strips[0].faderDB`）で `unknown_scene_key` として報告されます。`$` または `x-` で始まるキーは対象外です。プロジェクト文書のそれ以外の部分は、未知のキーを検査しません。単体のシーンに対する同じ検査は[ミキシングシーン JSON](./mixing-scene-json.md)を参照してください。
+
 ### モデルを読み戻し、読み込み後に音声を再バインドする
 
 プロジェクト JSON が保存するのは**アレンジ**であって PCM ではありません。そのため読み込んだプロジェクトはソースの存在は分かっていても、その実体となるサンプルを持っていません。読み取り専用のディスクリプタ 3 系統と PCM／ソースメタデータのセッターを使えば、読み込んだプロジェクトに音声を戻せます。
@@ -128,6 +132,8 @@ const audio = loaded.bounce({ sampleRate: 48000 });
 `trackByIndex` / `clipByIndex` / `sourceByIndex` は保存順に対する 0 始まりのインデックスで、`trackCount()` / `clipCount()` / `sourceCount()` と対になります。返るのはハンドルではなくディスクリプタなので、返り値を書き換えても何も変わりません。ホストがディスクから読み込んだプロジェクトをレンダリングしたいときや、自前のコードが構築したのではないプロジェクトに対して UI を組むときに使います。
 
 `setSourceAudio(sourceId, samples, channels, sampleRate)` は、バウンス前にデコード済み PCM をソースへ再バインドします。「読み込んだだけのアレンジ」を「レンダリングできるプロジェクト」に変えるのがこの一手です。
+
+`unresolvedAudioSources()`（Python は `unresolved_audio_sources()`）は、同じ順序でそれらのソースの完全なディスクリプタを返すので、ローダーは追加の問い合わせなしに各 `nameOrUri` を読めます。`sourceByIndex` とディスクリプタは URI を切り詰めずに返します。
 
 `unresolvedAudioSourceIds()` は、デシリアライズ後もデコード済み PCM が必要なソース ID の公開リストです。ディスクリプタを走査するときの上の `kind !== 0` ガードは防御的なもので、`0` がオーディオ、`1` が MIDI です。MIDI ソースにはバインドする PCM も更新するソースメタデータもありません。オーディオソースのディスクリプタには所有メタデータ `contentHash` と `externalStemRole` もあり、MIDI ソースでは空文字列です。`setAudioSourceMetadata(sourceId, contentHash, externalStemRole)` は両方の文字列を 1 つのアンドゥ可能な編集として置き換え、空文字列で個別にクリアできます。WASM はこの位置引数形式を使い、Node は第 2 引数に `{ contentHash, externalStemRole }` のオブジェクトも受け付けます。Python は `set_audio_source_metadata(source_id, content_hash, external_stem_role)`（C ABI は `sonare_project_set_audio_source_metadata`）です。Python には `unresolved_audio_source_ids()` があり、ソースディスクリプタの名前は `content_hash` と `external_stem_role` です。C の getter が返すヒープ文字列は対応する free 関数で解放します。
 

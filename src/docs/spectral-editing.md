@@ -89,6 +89,14 @@ repaired = sonare.spectral_edit(
 
 :::
 
+A region given in seconds:
+
+```typescript
+const muted = spectralEdit(samples, sampleRate, [
+  { startSec: 0.5, endSec: 1.5, lowHz: 0, highHz: 0, mode: 'mute' },
+]);
+```
+
 ## Options
 
 You give the region in samples and hertz, but the edit lands on the STFT grid those two options build:
@@ -100,7 +108,8 @@ You give the region in samples and hertz, but the edit lands on the STFT grid th
 
 | Field | Meaning |
 |-------|---------|
-| `startSample` / `endSample` | Time rectangle in input samples. Omitting `endSample` (Python: leave `end_sample` at its default `-1` sentinel) spans to the end of the signal. In Python, `end_sample=0` is an empty region, not the full signal. |
+| `startSample` / `endSample` | Time rectangle in input samples; the start defaults to `0`. Omit `endSample` (Python: leave `end_sample` as `None`) to span to the end of the signal. `endSample: 0` is an empty region, not the full signal, on every surface. A negative position is refused (`RangeError` in JavaScript, `SonareValueError` in Python); `-1` is not a "to the end" sentinel. |
+| `startSec` / `endSec` | The same bounds in seconds (Python `start_sec` / `end_sec`), rounded to the nearest sample at the call's sample rate. Give one spelling per bound; both `startSample` and `startSec` (or both end spellings) is refused. |
 | `lowHz` / `highHz` | Frequency rectangle in Hz. Values are clamped to `[0, Nyquist]`; `highHz <= 0` means Nyquist. |
 | `gainDb` | Gain in dB. Applied identically by `gain` and `attenuate` as `magnitude *= 10^(gainDb/20)`; pass a negative value to reduce. Ignored by `mute`/`heal`. |
 | `nFft` | Power-of-two FFT size, default `2048`. |

@@ -59,6 +59,8 @@ True Peak リミッターは、ルックアヘッド・リンクピーク検出�
 
 デモでは 4 倍オーバーサンプリングを既定にしています。実行されたステージ名は JSON レポートにも出力されるため、最終チェーンの監査に利用できます。シーリングと LUFS 目標がぶつかった場合は、ピーク安全性が優先される設計です。「LUFS は届いていないが True Peak には到達した」という状態は、レポートの applied gain と output LUFS から判定でき、チェーンの結果では `loudnessTargetLimited` として直接フラグが立ちます。
 
+ストリーミングチェーンはファイル全体を先読みできないため、ラウドネスのゲインを数値として受け取ります。`streamingLoudnessGain`／`streamingLoudnessGainStereo`（Python では `streaming_loudness_gain`／`streaming_loudness_gain_stereo`）は、オフラインのチェーンをラウドネス段まで実行し、シーリングによる制限を含めて適用されるゲインと、その制限に使われたTrue Peakを返します。無音のときの値は 0 dB です。両方の値を `StreamingMasteringChain` に `loudnessStaticGainDb` と `loudnessStaticGainPeakDb` として渡します。
+
 ::::
 
 関連: [True Peak](../true-peak.md)、[True Peak 安全性](../concepts/true-peak-safety.md)、[ラウドネスマッチング](../concepts/loudness-matching.md)、[モノラル互換性](../concepts/mono-compatibility.md)

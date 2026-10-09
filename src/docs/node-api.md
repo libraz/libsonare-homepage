@@ -145,9 +145,15 @@ try {
 }
 ```
 
-Argument-shape problems caught before the call reaches the library — two arrays
-of unequal length, a `mode` that is not one of the accepted strings — are raised
-as plain `RangeError` or `TypeError`, which `isSonareError` does not match.
+Argument problems caught before the call reaches the library are raised as
+native errors, which `isSonareError` does not match: a wrong-typed or missing
+argument is a `TypeError`, and a value outside its domain — two arrays of unequal
+length, a `mode` that is not one of the accepted strings, a fractional number
+where an integer is read, a string or object property carrying an embedded NUL —
+is a `RangeError` naming the field. Everything the library or an object's state
+reports stays a coded `SonareError`: a released or destroyed handle throws
+`InvalidState`, and an addon built from a different tree than the package throws
+`AbiMismatch` (code 10) when the package is required.
 
 ### Audio
 
@@ -180,11 +186,22 @@ samples, build a new instance with `Audio.fromBuffer(edited, sampleRate)`. Cache
 the array yourself if you read it in a loop. The same applies on WASM.
 :::
 
-### Cleanup with `using` (Node 22+)
+### Decoding Every Channel
+
+`Audio.fromMemory(data)` and `Audio.fromFile(path)` fold a multichannel source to mono. `decodeChannels(data)` decodes bytes once and keeps every channel: it returns `{ sampleRate, channels }`, one `Float32Array` per channel in the source's own order (5.1 is L R C LFE Ls Rs). `downmix(channels, targetLayout)` folds channels to a narrower layout (`0` mono, `1` stereo, `2` 5.1, `3` 7.1) with the ITU-R BS.775 rule the decoders use: centre and surround at -3 dB, LFE dropped. It cannot upmix.
+
+```typescript
+import { decodeChannels, downmix } from '@libraz/libsonare-native';
+
+const { sampleRate, channels } = decodeChannels(fs.readFileSync('surround.wav'));
+const stereo = channels.length > 2 ? downmix(channels, 1) : channels;
+```
+
+### Cleanup with `using`
 
 Every native handle class — `Audio`, `RealtimeEngine`, `Project`, `Mixer`, and
-`ClipPageProvider` — implements `[Symbol.dispose]`, so on Node 22+ you can use
-the `using` keyword for automatic, throw-safe cleanup at scope exit:
+`ClipPageProvider` — implements `[Symbol.dispose]`, so you can use
+the `using` declaration for automatic, throw-safe cleanup at scope exit:
 
 ```typescript
 import { RealtimeEngine } from '@libraz/libsonare-native';
@@ -196,7 +213,9 @@ function render() {
 }
 ```
 
-On Node versions below 22, keep the explicit-release pattern in a `try/finally`.
+The `using` syntax needs TypeScript 5.2 or later (or another tool that lowers it)
+or a runtime that parses it natively; Node 22 does not, so there call `destroy()`
+in a `try/finally`.
 `destroy()` is the canonical native release method on every handle class;
 `Project` and `Mixer` also expose `delete()` as a WASM-compatible alias. GC also
 reclaims handles eventually, but `using`/explicit release gives deterministic
@@ -333,6 +352,21 @@ Only the `loudness` block of the stereo profile is measured from both channels: 
 Node declares two names for the profile and suggest requests — `MasteringAudioProfileStereoRequest` extends `MasteringAssistantSuggestStereoRequest` and adds no fields. The WASM package uses one shared `MasteringStereoParamsRequest` for both. The field set is identical, so only the type name has to change when porting code between the two surfaces.
 :::
 
+### Streaming Loudness Gain and Repair
+
+`streamingLoudnessGain({ samples, sampleRate, config })` (and `streamingLoudnessGainStereo({ left, right, ... })`) measure the loudness numbers a `StreamingMasteringChain` is built with, at the loudness stage's input where the offline chain measures them. The result is `{ loudnessStaticGainDb, truePeakDb, integratedLufs }`; the gain equals the one the offline chain applies, ceiling clamp included, and is 0 dB for silence. Pass `loudnessStaticGainDb` and `truePeakDb` (as `loudnessStaticGainPeakDb`) to the chain's constructor.
+
+`masteringRepairAnalyze({ channels, sampleRate })` measures the repair defects of any number of channels and recommends stages with their settings; `masteringRepairApply({ channels, sampleRate, stages, onProgress?, cancel? })` applies `stages` (each at most once, an unknown setting refused) in the fixed order declip, declick, decrackle, dehum, denoise, dereverb whatever order the array gives. Declip, declick, and dehum decide over the whole channel set and report per channel; decrackle runs each channel alone; denoise and dereverb apply one linked mask and report once.
+
+```typescript
+const analysis = masteringRepairAnalyze({ channels: [left, right], sampleRate: 48000 });
+const { channels, reports } = masteringRepairApply({
+  channels: [left, right],
+  sampleRate: 48000,
+  stages: analysis.recommended,
+});
+```
+
 ### Scale Quantization
 
 12-TET (twelve-tone equal temperament) scale helpers for building pitch-correction targets. `modeMask` is a 12-bit mask where bit *i* enables the *i*-th pitch class relative to `root` (`PitchClass`, C = 0); natural major is `0b101010110101`. `referenceMidi` is the tuning anchor (pass `0` for A4 = 69). Pair with `pitchCorrectToMidi(...)` to retune to the nearest scale degree.
@@ -342,6 +376,7 @@ Node declares two names for the profile and suggest requests — `MasteringAudio
 | `scaleQuantizeMidi(root, modeMask, midi, referenceMidi?)` | `number` | Snap a (fractional) MIDI number to the nearest enabled pitch class |
 | `scaleCorrectionSemitones(root, modeMask, midi, referenceMidi?)` | `number` | Correction (quantized − input), in semitones |
 | `scalePitchClassEnabled(root, modeMask, pitchClass)` | `boolean` | Whether `pitchClass` (0..11) is enabled relative to `root` |
+| `scaleMaskForMode(root, mode)` | `number` | The 12-bit `modeMask` of a church-mode name (`'major'`, `'minor'`, `'dorian'`, ...) or a `Mode` ordinal; `scaleMaskForMode(0, 'major')` is `0b101010110101` |
 
 ### Streaming and Realtime Classes
 

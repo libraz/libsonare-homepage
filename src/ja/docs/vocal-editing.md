@@ -112,6 +112,8 @@ with create_vocal_edit_session(samples, sample_rate) as session:
 
 :::
 
+利用可否は `vocalEditAvailable()` で確認し、API バージョンは `vocalEditApiVersion()`（Python は `vocal_edit_api_version()`、C は `sonare_vocal_edit_api_version`）で読めます。`session.capabilities().apiVersion` も同じカウンターを返します。これはエンジンの ABI カウンターとは別です。セッション、ドラフト、スナップショット、レンダージョブはそれぞれ `dispose()`、`delete()`、`destroy()` でハンドルを解放でき、`Symbol.dispose` にも対応するため、明示的リソース管理が使えるランタイムでは `using session = createVocalEditSession(...)` と書けます。
+
 `session.notes()` はノートとピッチ遷移を返します。ノートにはソース範囲、解析フレーム範囲、中央値周波数、中心 MIDI ノート、ピッチの安定度、振幅サンプル、現在の編集が含まれます。`session.analysis()` は F0 と有声音配列、解析グリッド、アルゴリズムのメタデータ、ソースダイジェスト、設定を返します。`session.capabilities()` ではプロファイル、単旋律の制約、読み込んだプロファイルが解析キャンセルに対応するか、利用できるフォルマントシフト範囲を調べられます。UI にプロファイルの制限を埋め込まず、これらの値を読み取ってください。
 
 リビジョン、世代、リクエスト ID、バイト数の上限（`maxHistoryBytes` と `maxCacheBytes`）は、JavaScript 境界を越えるときに 10 進文字列（`VocalUint64`）になります。これらの値は文字列のまま扱います。`maxUndoDepth` と `maxRenderJobs` は数値です。Python バインディングではメソッド名が snake_case になり、これらのカウンターは Python の整数として公開され、`with` ブロックの終了時にセッションが閉じられます。`evaluatePitch(noteId)` はノートの実測・ターゲット・有効ピッチ・有声音の配列を返し、座標変換メソッドは時間編集後のソースサンプルと出力サンプルを相互変換します。
@@ -148,11 +150,36 @@ session.undo({ expectedRevision: session.revision() });
 session.redo({ expectedRevision: session.revision() });
 ```
 
-操作の種類は `setEdit`、`setSourceSpan`、`split`、`merge`、`setTransition`、`removeTransition`、`reset` です。分割とマージではノート ID が廃止されることがあるため、`idChanges` に従い、後続の操作には返された ID を使います。期待リビジョンと世代を指定すると、同時または順序外の UI 書き込みが新しい編集を黙って上書きせず、明示的なリビジョン競合になります。空のドラフトをコミットしても履歴エントリーは増えません。
+操作の種類は `setEdit`、`setSourceSpan`、`split`、`merge`、`setTransition`、`removeTransition`、`reset` です。分割とマージではノート ID が廃止されることがあるため、`idChanges` に従い、後続の操作には返された ID を使います。
+
+`setSourceSpan` と `split` の位置は、サンプルまたは秒のどちらか一方の表記で指定します（`sourceSample` / `sourceSec`、および `sourceStartSample` / `sourceStartSec`、`sourceEndSample` / `sourceEndSec`、`destinationStartSample` / `destinationStartSec`、`destinationLengthSamples` / `destinationLengthSec`）。秒はセッションのサンプルレートで最も近いサンプルに丸められます。同じ位置に両方の表記を渡すと拒否され、負の位置も拒否されます。`merge` は `noteIds` と、省略可能な `policy`（`'preserve'` または `'reset'`）を取ります。
+
+```typescript
+const [first] = session.notes().notes;
+const split = session.beginEdit({ expectedRevision: session.revision() });
+const result = split.apply({
+  expectedGeneration: split.token().generation,
+  operations: [{ kind: 'split', noteId: first.id, sourceSec: 0.5 }],
+});
+console.log(result.idChanges); // [{ operationIndex: 0, retiredId, newIds: [a, b] }]
+split.commit({ expectedRevision: session.revision() });
+
+const [a, b] = result.idChanges[0].newIds;
+const join = session.beginEdit({ expectedRevision: session.revision() });
+join.apply({
+  expectedGeneration: join.token().generation,
+  operations: [{ kind: 'merge', noteIds: [a, b], policy: 'preserve' }],
+});
+join.commit({ expectedRevision: session.revision() });
+```
+
+Python では操作はデータクラスです。`VocalSplitNote(note_id, cut_source_sample=... または cut_source_sec=...)`、`VocalMergeNotes(note_ids, merge_policy)`、`VocalSetNoteSourceSpan(note_id, source_start_sec=..., ...)` を使います。`VocalSetNoteSourceSpan` の 2 つの移動先サンプルフィールドは既定で 0 で、0 は未指定として扱われるため、移動先を秒で指定した場合に拒否されるのは、0 でないサンプル値を併せて渡したときだけです。
+
+期待リビジョンと世代を指定すると、同時または順序外の UI 書き込みが新しい編集を黙って上書きせず、明示的なリビジョン競合になります。空のドラフトをコミットしても履歴エントリーは増えません。
 
 ## コミット済みスナップショットをレンダリングする
 
-編集をコミットした後にスナップショットを取得します。スナップショットは取得時点の状態を保持するため、その後にセッションを編集しても実行中のレンダーは変わりません。`range` を省略すると出力全体をレンダリングし、半開区間のサンプル範囲を指定するとプレビューになります。
+編集をコミットした後にスナップショットを取得します。スナップショットは取得時点の状態を保持するため、その後にセッションを編集しても実行中のレンダーは変わりません。`range` を省略すると出力全体をレンダリングし、半開区間を指定するとプレビューになります。範囲の境界は `startSample` / `endSample` または `startSec` / `endSec`（どちらか一方の表記で、最も近いサンプルに丸められます）で指定します。開始を省略すると 0、終了を省略すると出力の末尾になり、負の境界は拒否されます。Python では `render()` と `begin_render_job()` が `VocalRange`、`(start, end)` のペア、または `start_sec=` / `end_sec=` キーワードを受け取ります。
 
 ```typescript
 const snapshot = session.captureRenderSnapshot();
@@ -179,7 +206,7 @@ try {
 
 ## セッションを永続化して復元する
 
-`exportState()` はコミット済みの編集状態を SVE1 バイト列としてシリアライズします。ソース PCM、実行時キャッシュ、ドラフト、アンドゥ履歴は含まれません。元と同じモノラルソースおよびサンプルレートで復元し、ソースの記述子とダイジェストの検査を通過させます。
+`exportState()` はコミット済みの編集状態を SVE1 バイト列としてシリアライズします。ソース PCM、実行時キャッシュ、ドラフト、アンドゥ履歴は含まれません。元と同じモノラルソースおよびサンプルレートで復元し、ソースの記述子とダイジェストの検査を通過させます。Python では `restore_vocal_edit_session(samples, sample_rate, state, *, max_history_bytes=..., max_cache_bytes=..., max_undo_depth=..., max_render_jobs=...)` または同じ引数の `VocalEditSession.restore(...)` で復元し、上限の既定値はセッション作成時のものです。
 
 ```typescript
 import { restoreVocalEditSession } from '@libraz/libsonare';
@@ -228,6 +255,8 @@ try {
   client.dispose();
 }
 ```
+
+`client.restore(request)` は、`create` と同様に永続化した状態から Worker セッションを開きます。返される `VocalEditWorkerSession` のメソッドは、キャンセル可能なタスクを返します。読み取り（`notes()`、`analysis()`、`capabilities()`、`history()`、`evaluatePitch()`）、ドラフト操作（`beginEdit()`、`apply()`、`commit()`、`cancel()`、`undo()`、`redo()`）、`exportState()`、`preview()`、`dispose()` があります。`preview({ range: { startSec: 0.1, endSec: 0.2 } })` は、直接レンダリングと同じ秒またはサンプルの範囲を受け取ります。
 
 型付き配列のバッファは既定値（`copy: false`）で転送され、呼び出し元のスレッドでは切り離されます。`samples`、永続化した状態、状態変更要求内の配列を呼び出し元でも使い続ける場合は `copy: true` を指定します。`AbortSignal` と `VocalEditWorkerTask.cancel()` は作成・復元・プレビューをキャンセルします。セッションの状態変更は FIFO で実行され、キャンセルできないため、UI の書き込みを直列化し、期待リビジョンまたは世代を使います。最新の意図と一致しないパイプライン応答は `VocalEditWorkerStaleResultError` で拒否されるため、UI の状態は最新の受理済み結果だけで更新します。
 

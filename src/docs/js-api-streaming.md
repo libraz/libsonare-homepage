@@ -1,11 +1,11 @@
 ---
 title: JavaScript/TypeScript Streaming and Realtime API
-description: Block-by-block EQ, pitch retune, the realtime voice changer, and the streaming mastering chain of the libsonare JavaScript/TypeScript package.
+description: Block-by-block EQ, pitch retune, the realtime voice changer, the streaming mastering chain, and the incremental StreamAnalyzer of the libsonare JavaScript/TypeScript package.
 ---
 
 # JavaScript/TypeScript Streaming and Realtime API
 
-Block-by-block processors for the libsonare JavaScript/TypeScript package: `StreamingEqualizer`, `StreamingRetune`, `RealtimeVoiceChanger` with its `voiceChangeRealtime(...)` convenience call, and `StreamingMasteringChain`; see [Mastering API](./js-api-mastering.md) for the offline chain, presets, and one-shot processors.
+Block-by-block processors for the libsonare JavaScript/TypeScript package: `StreamingEqualizer`, `StreamingRetune`, `RealtimeVoiceChanger` with its `voiceChangeRealtime(...)` convenience call, `StreamingMasteringChain`, and the incremental `StreamAnalyzer`; see [Mastering API](./js-api-mastering.md) for the offline chain, presets, and one-shot processors.
 
 ## StreamingEqualizer
 
@@ -161,4 +161,256 @@ Without the flush, a bounce built from a streaming chain loses its last
 `latencySamples()` samples of the concatenated stream are the chain's delay and
 should be dropped for a time-aligned result.
 
-Stereo-only stages are skipped when `numChannels === 1`. The chain-config repair stages (`repair.declick`, `repair.dereverb`, `repair.denoise`, `repair.declip`, `repair.decrackle`, `repair.dehum`) are offline-only and throw if enabled on the streaming constructor — run them through `masteringChain*` / `masterAudio*`, or the one-shot `masteringRepair*` helpers. The `loudness` stage also throws unless you supply `loudnessStaticGainDb` (optionally with `loudnessStaticGainPeakDb`), since the streaming chain cannot measure whole-signal integrated LUFS. Call `reset()` between independent songs and `delete()` to free the handle.
+Stereo-only stages are skipped when `numChannels === 1`. Of the chain-config repair stages, only `repair.denoise` runs on the streaming chain, and only with a causal noise estimator (`noiseEstimator` 1 = MCRA, 2 = IMCRA or 3 = speech-presence probability); the quantile estimator (0) ranks the whole signal's frames, so the constructor refuses it. `repair.declick`, `repair.dereverb`, `repair.declip`, `repair.decrackle` and `repair.dehum` throw if enabled here — run them through `masteringChain*` / `masterAudio*`, the one-shot `masteringRepair*` helpers, or as [realtime inserts](./audio-repair.md#realtime-inserts) where the stage has one. The `loudness` stage also throws unless you supply `loudnessStaticGainDb` (optionally with `loudnessStaticGainPeakDb`), since the streaming chain cannot measure whole-signal integrated LUFS. Call `reset()` between independent songs and `delete()` to free the handle.
+
+## Streaming API
+
+The Streaming API enables real-time audio analysis for visualizations and live monitoring. Unlike batch analysis, streaming processes audio chunk by chunk with minimal latency.
+
+::: tip When to Use
+- **Batch API**: Pre-recorded files, all-in-one analysis (BPM, key, chords, sections)
+- **Streaming API**: Live audio, visualizations, real-time feedback
+:::
+
+This section is the `StreamAnalyzer` type/class reference. For the runnable recipe, the AudioWorklet bridge, output-format details, and the progressive-estimate walkthrough, see [Realtime and Streaming](./realtime-streaming.md).
+
+### StreamConfig
+
+Configuration options for StreamAnalyzer.
+
+```typescript
+interface StreamConfig {
+  sampleRate?: number;         // default: 44100 (stream default, not 22050)
+  nFft?: number;               // default: 2048, in samples at 44100 Hz
+  hopLength?: number;          // default: 512
+  nMels?: number;              // default: 128
+  fmin?: number;               // default: 0
+  fmax?: number;               // default: 0 (= sr/2)
+  tuningRefHz?: number;        // default: 440
+  computeMel?: boolean;        // default: true
+  computeChroma?: boolean;     // default: true
+  computeOnset?: boolean;      // default: true
+  computeSpectral?: boolean;   // default: true
+  emitEveryNFrames?: number;   // default: 1 (no throttling)
+  magnitudeDownsample?: number;// default: 1
+  maxPendingFrames?: number;   // default: 4096; overflow drops newly produced output frames
+  maxProgressionEntries?: number; // default: 4096; cap for each retained chord/bar progression, overflow drops oldest
+  keyUpdateIntervalSec?: number;  // default: 5
+  bpmUpdateIntervalSec?: number;  // default: 10
+  window?: number;             // 0=Hann (default), 1=Hamming, 2=Blackman, 3=Rectangular
+  outputFormat?: 0;            // legacy; omit it or use Float32 (0)
+}
+```
+
+`outputFormat` is retained only for source compatibility and must be `0` when
+provided. Choose a quantized read explicitly with `readFramesU8` or
+`readFramesI16`; analysis itself always runs in float. See [Realtime and
+Streaming](./realtime-streaming.md#reading-frames-and-output-format).
+
+`nFft` is a duration written as samples at 44100 Hz: on a stream at a lower `sampleRate` the window is rescaled to the analysis rate (never shorter than `hopLength`), and `hopLength` stays in input samples. The emitted bin count follows the FFT length the window is zero-padded to, not `nFft / 2 + 1`.
+
+There is no `computeMagnitude` flag: passing it makes the constructor throw,
+because magnitude frames are not exposed by the StreamAnalyzer read paths. Use `stft`/`stftDb` offline or the spectrum
+metering helpers for magnitude data.
+
+`streamAnalyzerConfigDefaults()` returns a fully-populated `StreamConfigDefaults`
+object (a `Required<StreamConfig>`) holding the library's default values for
+every field above. Use it to seed a settings UI or to compute a diff against a
+user-supplied config; `StreamAnalyzer` itself applies these same defaults for any
+field you omit.
+
+### StreamAnalyzer Class
+
+```typescript
+class StreamAnalyzer {
+  constructor(config: StreamConfig);
+
+  // Process audio chunk (internal offset tracking)
+  process(samples: Float32Array): void;
+
+  // Process with an explicit, contiguous sample offset. A gap, seek, or switch
+  // from process() requires reset() first.
+  processWithOffset(samples: Float32Array, sampleOffset: number): void;
+
+  // Number of frames ready to read
+  availableFrames(): number;
+
+  // Read processed frames (full float precision)
+  readFrames(maxFrames: number): FrameBuffer;
+
+  // Quantized reads for bandwidth-reduced transfer / visualization
+  // (optional quantizeConfig widens quantization ranges for unusually loud/quiet streams;
+  // see Realtime and Streaming → custom quantization ranges)
+  readFramesU8(maxFrames: number, quantizeConfig?: StreamQuantizeConfig): StreamFramesU8;   // Uint8 feature arrays
+  readFramesI16(maxFrames: number, quantizeConfig?: StreamQuantizeConfig): StreamFramesI16; // Int16 feature arrays
+
+  // Reset state for new stream
+  reset(baseSampleOffset?: number): void;
+
+  // Get statistics and estimates that update as audio arrives
+  stats(): AnalyzerStats;
+
+  // Total frames processed
+  frameCount(): number;
+
+  // Current time position (seconds)
+  currentTime(): number;
+
+  // Get the sample rate
+  sampleRate(): number;
+
+  // Set expected total duration for pattern lock timing
+  setExpectedDuration(durationSeconds: number): void;
+
+  // Set normalization gain for loud/compressed audio
+  setNormalizationGain(gain: number): void;
+
+  // Set tuning reference frequency (default: 440 Hz)
+  setTuningRefHz(refHz: number): void;
+
+  // Release resources (call when done). `delete()` is canonical; `dispose()` is an alias.
+  delete(): void;
+  dispose(): void;
+}
+```
+
+### FrameBuffer
+
+Structure-of-Arrays format for efficient transfer via `postMessage`.
+
+```typescript
+interface FrameBuffer {
+  nFrames: number;
+  nMels: number;
+  nChroma: number;             // 12 when chroma is present; otherwise 0
+  featureFlags: number;        // MEL=1, CHROMA=2, ONSET=4, SPECTRAL=8
+  timestamps: Float32Array;      // [nFrames]
+  mel: Float32Array;             // [nFrames * nMels], empty if MEL is absent
+  chroma: Float32Array;          // [nFrames * nChroma], empty if CHROMA is absent
+  onsetStrength: Float32Array;   // [nFrames], empty if ONSET is absent
+  rmsEnergy: Float32Array;       // [nFrames]
+  spectralCentroid: Float32Array;// [nFrames], empty if SPECTRAL is absent
+  spectralFlatness: Float32Array;// [nFrames], empty if SPECTRAL is absent
+  chordRoot: Int32Array;         // [nFrames], empty if CHROMA is absent
+  chordQuality: Int32Array;      // [nFrames], empty if CHROMA is absent
+  chordConfidence: Float32Array; // [nFrames], empty if CHROMA is absent
+}
+```
+
+### ChordChange
+
+A detected chord change in the progression.
+
+```typescript
+interface ChordChange {
+  root: PitchClass;
+  quality: ChordQuality;
+  name: string;         // chord symbol, e.g. "C", "C#m", "N.C."
+  startTime: number;
+  confidence: number;
+}
+```
+
+### BarChord
+
+A chord detected at bar boundary (beat-synchronized).
+
+```typescript
+interface BarChord {
+  barIndex: number;
+  root: PitchClass;
+  quality: ChordQuality;
+  name: string;         // chord symbol, spelled as the batch analysis spells it
+  startTime: number;
+  confidence: number;
+}
+```
+
+### PatternScore
+
+Match score for a known chord progression pattern.
+
+```typescript
+interface PatternScore {
+  name: string;   // pattern name (e.g., "royalRoad", "pop")
+  score: number;  // match score (0-1)
+}
+```
+
+### AnalyzerStats
+
+```typescript
+interface AnalyzerStats {
+  totalFrames: number;
+  totalSamples: number;
+  durationSeconds: number;
+  pendingFrames: number;       // unread frames currently buffered
+  droppedOutputFrames: number; // newly produced frames dropped at the configured cap
+  droppedChordProgressionEntries: number; // oldest chord-history entries dropped at the configured cap
+  droppedBarProgressionEntries: number;   // oldest bar-history entries dropped at the configured cap
+  estimate: ProgressiveEstimate;
+}
+```
+
+### ProgressiveEstimate
+
+BPM, key, and chord estimates that improve over time as more audio is processed.
+
+```typescript
+interface ProgressiveEstimate {
+  // BPM estimation
+  bpm: number;              // 0 if not yet estimated
+  bpmConfidence: number;    // 0-1, increases over time
+  bpmCandidateCount: number;
+
+  // Key estimation
+  key: PitchClass;          // 0-11 (C-B)
+  keyMinor: boolean;
+  keyConfidence: number;    // 0-1, increases over time
+  keyName: string | null;       // e.g. "A minor"; null while no key is estimated
+  keyShortName: string | null;  // e.g. "Am"; null while no key is estimated
+
+  // Chord estimation (current)
+  chordRoot: PitchClass;
+  chordQuality: ChordQuality;
+  chordName: string;        // current chord symbol; "N.C." while none is detected
+  chordConfidence: number;  // 0-1
+  chordStartTime: number;
+  chordProgression: ChordChange[];     // detected chord changes
+  barChordProgression: BarChord[];     // bar-synchronized chords
+  currentBar: number;                  // current bar index
+  barDuration: number;                 // bar duration in seconds
+
+  // Pattern detection
+  votedPattern: BarChord[];            // voted chord for each pattern position
+  patternLength: number;              // length of repeating pattern (default: 4 bars)
+  detectedPatternName: string;        // best matching pattern name (e.g., "royalRoad")
+  detectedPatternScore: number;       // match score (0-1)
+  allPatternScores: PatternScore[];   // all known pattern scores
+
+  // Statistics
+  accumulatedSeconds: number;
+  usedFrames: number;
+  updated: boolean;         // true if estimate changed this frame
+}
+```
+
+The key is estimated from the stream's own 186 ms chroma, so it trails the input by up to about a quarter second more than the frame outputs do. Every confidence, including per-frame `chordConfidence` and each `ChordChange` / `BarChord` confidence, stays in 0-1. `keyName`, `keyShortName` and `chordName` spell the estimate the way the batch analysis does, so a UI can show them without mapping `key` / `chordRoot` itself.
+
+### Usage, AudioWorklet integration, and timing
+
+The runnable `StreamAnalyzer` recipe — feeding blocks from an `AudioWorklet`,
+reading frames, throttling with `emitEveryNFrames`, and mapping the `FrameBuffer`
+stream-time timestamps onto `AudioContext.currentTime` — lives on
+[Realtime and Streaming](./realtime-streaming.md), with the AudioWorklet handshake
+and data-flow diagrams.
+
+::: tip Releasing WASM objects
+`StreamAnalyzer`, `Mixer`, `StreamingEqualizer`, and `StreamingMasteringChain` are
+**embind** handles onto WASM heap memory that the JavaScript garbage collector cannot
+reclaim — call `delete()` when done (`StreamAnalyzer` also accepts `dispose()`, and
+some classes expose `destroy()` as an alias). Plain functions like `analyze()` return
+ordinary JS values and need no cleanup. Node native cleanup differs; see
+[Native Bindings](./native-bindings.md).
+:::
+

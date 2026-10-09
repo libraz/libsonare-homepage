@@ -112,10 +112,11 @@ const estimate = estimateRoom(roomRecording, sampleRate, {
   referenceAbsorption: 0.15,
   nOctaveBands: 6,
 });
-console.log(estimate.volume, estimate.length, estimate.width, estimate.height);
-console.log(estimate.drrDb, estimate.confidence, estimate.absorptionBands, estimate.rt60Bands);
+console.log(estimate.volume, estimate.lengthM, estimate.widthM, estimate.heightM);
+console.log(estimate.drrDb, estimate.confidence, estimate.bandAbsorption, estimate.rt60Bands);
 
-const { rir, hasError } = synthesizeRir({
+// Throws a coded SonareError (e.g. acoustic.source_outside_room) for unusable geometry.
+const { rir, diagnostics: rirWarnings } = synthesizeRir({
   lengthM: 7,
   widthM: 5,
   heightM: 3,
@@ -156,11 +157,11 @@ blind = sonare.detect_acoustic(
 print(blind.confidence, blind.is_blind)
 
 estimate = sonare.estimate_room(audio.data, audio.sample_rate, n_octave_bands=6)
-print(estimate.volume, estimate.length, estimate.width, estimate.height)
+print(estimate.volume, estimate.length_m, estimate.width_m, estimate.height_m)
 print(estimate.drr_db, estimate.confidence, estimate.absorption_bands, estimate.rt60_bands)
 
 rir = sonare.synthesize_rir(7.0, 5.0, 3.0, absorption=0.2, sample_rate=audio.sample_rate)
-print(rir.sample_rate, len(rir.rir), rir.has_error)
+print(rir.sample_rate, len(rir.rir), rir.diagnostics)
 
 morphed = sonare.room_morph(
     audio.data,
@@ -200,14 +201,14 @@ Python `Audio` exposes the same calls as instance methods: `audio.analyze_impuls
 
 Use this section when you are not only measuring a recording, but also creating or applying a room model.
 
-`synthesizeRir(...)` builds a mono RIR from a rectangular room. You provide dimensions in meters, one wall-absorption value, and source/listener coordinates inside the room. If the geometry is invalid, JavaScript returns `hasError: true` and an empty `rir`; Python exposes the same state as `has_error`.
+`synthesizeRir(...)` builds a mono RIR from a rectangular room. You provide dimensions in meters, one wall-absorption value, and source/listener coordinates inside the room. Unusable geometry, such as a source or listener outside the room, throws a coded `SonareError` whose message leads with the diagnostic code (for example `acoustic.source_outside_room`); Python raises `SonareValueError`. A call that returns carries only warnings on `diagnostics`.
 
-`estimateRoom(...)` estimates an equivalent room from a recording. Treat it as a practical model, not exact geometry. Always check `confidence`, because ordinary recordings may not contain enough clear room decay.
+`estimateRoom(...)` estimates an equivalent room from a recording. Treat it as a practical model, not exact geometry. Always check `confidence`, because ordinary recordings may not contain enough clear room decay. Its `mode` option routes the analyzer by name: `'auto'` (the default), `'blind'` or `'impulse_response'`; a number is a `TypeError`.
 
 ::: warning What `estimateRoom(...)` actually solves
 It solves a *scale* only under the supplied shape and absorption priors; it does not recover the shape itself.
 
-- The length : width : height ratios come from `aspectHintLw` / `aspectHintLh`, which default to `1`. A call that omits them always returns three identical dimensions — a cube — so do not present `length`, `width`, and `height` as recovered proportions unless you passed hints.
+- The length : width : height ratios come from `aspectHintLw` / `aspectHintLh`, which default to `1`. A call that omits them always returns three identical dimensions — a cube — so do not present `lengthM`, `widthM`, and `heightM` as recovered proportions unless you passed hints.
 - A single decay constrains the ratio `V / A`, where `A` is equivalent absorption area, rather than determining volume and absorption separately. With a fixed shape, surface area grows with the square of linear scale while volume grows with its cube, so a larger room needs a higher mean absorption to keep the same RT60. `referenceAbsorption` (default `0.15`) supplies the missing prior that pins the volume down. Under Sabine, the reported volume scales approximately with the cube of that prior; the default Eyring model uses the corresponding `-ln(1 − α)` term, so treat the cube rule as a Sabine approximation. Keep it fixed when comparing recordings.
 
 The prior is clamped into `[0.01, 0.99]` rather than refused, so an out-of-range value still returns a successful estimate — computed from the clamped number, which at the low end is worth three orders of magnitude in the reported volume.
@@ -230,9 +231,34 @@ Every float in `SonareRoomEstimateConfig` reads `0` as *unset*, and `reference_a
 | `acoustic.rir_length_floored` | `maxSeconds` ended before the direct sound could arrive, so it was extended to fit it. The result is longer than you asked for. | Raise `maxSeconds`, or move the listener closer to the source. |
 | `acoustic.no_late_tail` | No usable diffuse tail existed at the mixing time, so the target room is early reflections only. Either the walls are fully rigid (absorption `0` in every band) or so absorptive that the tail ends before the crossover. | Move the absorption away from the extremes, or lower `mixingTimeMs`. |
 
-There is no `hasError` here, unlike `RirResult`: a morph that cannot be produced — invalid geometry, a listener outside the room, a climate outside the physical range — throws `InvalidParameter` instead, so every entry in `diagnostics` is a warning about a result you did get. Branch on `code`; the `message` text is for humans, and the `severity` of every entry on a returned morph is `'warning'`.
+Neither `RoomMorphResult` nor `RirResult` has an error flag: a morph that cannot be produced — invalid geometry, a listener outside the room, a climate outside the physical range — throws `InvalidParameter` instead (`synthesizeRir(...)` throws the same way), so every entry in `diagnostics` is a warning about a result you did get. Branch on `code`; the `message` text is for humans, and the `severity` of every entry on a returned morph is `'warning'`.
 
-The shape is the same on every surface. Node and the browser return the `RoomMorphResult` described on [JavaScript API Types](./js-api-types.md#roommorphresult). Python returns a `RoomMorphResult` dataclass whose `diagnostics` is a list of `RirDiagnostic`. The C ABI leaves the entries in `sonare_last_diagnostic_count()` / `sonare_last_diagnostic_code(i)` after a successful `sonare_room_morph`, as shown on [C++ API](./cpp-api.md#room-morph-through-the-c-abi). The `sonare room-morph` command prints each warning to stderr as `warning: <code>: <message>`, while the output file and any `--json` summary stay on stdout.
+The shape is the same on every surface. Node and the browser return the `RoomMorphResult` described on [JavaScript API Types](./js-api-types.md#roommorphresult). Python returns a `RoomMorphResult` dataclass whose `diagnostics` is a list of `RirDiagnostic`. The C ABI leaves the entries in `sonare_last_diagnostic_count()` / `sonare_last_diagnostic_code(i)` after a successful `sonare_room_morph`, as shown on [C++ API](./cpp-api-effects.md#room-morph-through-the-c-abi). The `sonare room-morph` command prints each warning to stderr as `warning: <code>: <message>`, while the output file and any `--json` summary stay on stdout.
+
+### From an estimate to a synthesized RIR
+
+An `estimateRoom(...)` result already uses the names `synthesizeRir(...)` takes (`lengthM`, `widthM`, `heightM`, `bandAbsorption`), so `roomGeometryFromEstimate(...)` only merges the placement in and returns geometry you can pass straight on. An estimate carries no source or listener position; give them as `{ x, y, z }` in meters, or the synthesizer's defaults apply, which can fall outside a small estimated room. Absorption bands that did not converge are left out, so the scalar `absorption` applies. An estimate with no measurable dimensions (`NaN`, `confidence` `0`) throws a `RangeError` (`SonareValueError` in Python).
+
+::: code-group
+
+```typescript [JavaScript]
+const estimate = estimateRoom(roomRecording, sampleRate, { nOctaveBands: 6 });
+const geometry = roomGeometryFromEstimate(estimate, {
+  source: { x: 1, y: 1, z: 1.2 },
+  listener: { x: 2, y: 1.5, z: 1.5 },
+});
+const { rir } = synthesizeRir({ ...geometry, sampleRate });
+```
+
+```python [Python]
+estimate = sonare.estimate_room(audio.data, audio.sample_rate, n_octave_bands=6)
+geometry = sonare.room_geometry_from_estimate(
+    estimate, source=(1, 1, 1.2), listener=(2, 1.5, 1.5)
+)
+rir = sonare.synthesize_rir(**geometry, sample_rate=audio.sample_rate)
+```
+
+:::
 
 ### Wall absorption and materials
 
@@ -241,11 +267,11 @@ Both `synthesizeRir(...)` and `roomMorph(...)` accept the shared shoebox geometr
 | Field | Type | Meaning |
 |-------|------|---------|
 | `absorption` | number | Uniform wall absorption for every band. Must be within `[0, 1]`; an accepted value is then clamped to `[0, 0.999]`. The simplest control. |
-| `bandAbsorption` | `Float32Array` / `number[]` | Per-octave-band wall absorption (125 / 250 / 500 / 1k / 2k / 4k… Hz). When provided it overrides `absorption`, unless `materialPreset` is set. |
-| `bandScattering` | `Float32Array` / `number[]` | Per-band wall scattering. Missing bands default to `0`. Applied to whichever wall material the absorption fields selected. |
-| `materialPreset` | number | A named wall-material preset: `1` concrete, `2` wood, `3` curtain, `4` carpet, `5` glass. One material covers every surface, so the rooms it makes are extreme: an all-carpet room absorbs almost nothing at 125 Hz. A non-zero preset wins over both `bandAbsorption` and `absorption`. It does not compete with `bandScattering`. |
+| `bandAbsorption` | `Float32Array` / `number[]` | Per-octave-band wall absorption (125 / 250 / 500 / 1k / 2k / 4k… Hz). When provided it overrides `absorption`, unless `materialPreset` is set. Python: `absorption_bands`. |
+| `bandScattering` | `Float32Array` / `number[]` | Per-band wall scattering. Missing bands default to `0`. Applied to whichever wall material the absorption fields selected. Python: `scattering_bands`. |
+| `materialPreset` | name | A named wall-material preset: `'concrete'`, `'wood'`, `'curtain'`, `'carpet'` or `'glass'` (`'none'` selects no preset). Python: `material_preset`. One material covers every surface, so the rooms it makes are extreme: an all-carpet room absorbs almost nothing at 125 Hz. Any preset but `'none'` wins over both `bandAbsorption` and `absorption`. It does not compete with `bandScattering`. |
 
-Precedence decides the **absorption** only, highest first: a non-zero `materialPreset` wins over everything; otherwise `bandAbsorption` (per band) wins over `absorption` (uniform). So to use your own per-band absorption, leave `materialPreset` at `0`.
+Precedence decides the **absorption** only, highest first: a `materialPreset` other than `'none'` wins over everything; otherwise `bandAbsorption` (per band) wins over `absorption` (uniform). So to use your own per-band absorption, leave `materialPreset` at `'none'` (the default).
 
 `bandScattering` sits outside that contest. It applies to whichever wall material the absorption precedence selected, so a preset *plus* a scattering array is a well-formed request: you get the preset's absorption with your roughness on top of it.
 
@@ -257,20 +283,20 @@ Precedence decides the **absorption** only, highest first: a non-zero `materialP
 A scalar `absorption` that is non-finite or outside `[0, 1]` fails with `InvalidParameter`. An accepted value is clamped to `[0, 0.999]` so the perfectly absorbing endpoint does not make the Eyring term `-ln(1 - absorption)` singular. `bandAbsorption` and `bandScattering` are validated the same way, so every wall-treatment field answers a bad value identically instead of one of them quietly building a different room than you asked for.
 :::
 
-The material presets map to integer codes: `0` none, `1` concrete, `2` wood, `3` curtain, `4` carpet, `5` glass. Concrete and glass are reflective and keep more high-frequency tail; curtain and carpet are absorptive and shorten it.
+`materialPreset` takes names only: a number is a `TypeError` and an unknown name a `RangeError` (`SonareValueError` in Python), both listing the valid names. Concrete and glass are reflective and keep more high-frequency tail; curtain and carpet are absorptive and shorten it.
 
 ```typescript
 // A concrete shoebox: bright, long tail
 const concrete = synthesizeRir({
   lengthM: 7, widthM: 5, heightM: 3,
-  materialPreset: 1, // concrete
+  materialPreset: 'concrete',
   sampleRate,
 });
 
 // Custom per-band walls (six octave bands), with scattering
 const custom = synthesizeRir({
   lengthM: 7, widthM: 5, heightM: 3,
-  materialPreset: 0, // no preset, so bandAbsorption decides the absorption
+  materialPreset: 'none', // no preset, so bandAbsorption decides the absorption
   bandAbsorption: [0.1, 0.15, 0.2, 0.3, 0.4, 0.5],
   bandScattering: [0.1, 0.1, 0.2, 0.2, 0.3, 0.3],
   sampleRate,
@@ -314,7 +340,7 @@ Air itself absorbs sound, far more at high frequencies than at low, and the loss
 | `airTemperatureC` | `20` | above −273.15 °C | Air temperature. `0` or omitted selects the ISO reference 20 °C, so a literal 0 °C is not distinguishable from unset — ask for a freezing room with `0.01`, which absorbs identically. |
 | `airHumidityPercent` | `50` | `0`–`100` | Relative humidity. `0` or omitted selects the ISO reference 50 %. |
 
-The climate pair is read only while `airAbsorptionEnabled` is set. A non-finite or out-of-range value is refused the way the surrounding geometry checks are, not pulled into range: `synthesizeRir(...)` returns `hasError` with `acoustic.invalid_air_absorption`, and `roomMorph(...)` throws `InvalidParameter`. Pressure is not an input; the model is evaluated at sea-level pressure.
+The climate pair is read only while `airAbsorptionEnabled` is set. A non-finite or out-of-range value is refused the way the surrounding geometry checks are, not pulled into range: `synthesizeRir(...)` throws a `SonareError` with code `acoustic.invalid_air_absorption`, and `roomMorph(...)` throws `InvalidParameter`. Pressure is not an input; the model is evaluated at sea-level pressure.
 
 ```typescript
 const hall = synthesizeRir({

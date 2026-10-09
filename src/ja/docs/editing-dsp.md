@@ -27,7 +27,7 @@ DSP は Digital Signal Processing の略で、音声信号を数値として測�
 | 音の高さを変えずに長さを変える | タイムストレッチ | `rate` は再生速度の倍率です。`rate=2.0` なら 2 倍速で再生され、長さは半分になります。`rate=0.5` なら半分の速度で 2 倍の長さになります。ピッチは変わりません。（`noteStretch` の `stretchRatio` は長さの倍率なので、向きが逆になります。） |
 | クリップ全体の音高を上下する | ピッチシフト | `semitones=12` は 1 オクターブ上、`-12` は 1 オクターブ下です |
 | ボーカルの音程を目標音へ寄せる | ピッチ補正 | 補正前に現在のピッチを推定または指定する必要があります |
-| 1 つのノート区間を伸ばす／縮める | ノートストレッチ | 区間は秒ではなくサンプル位置で指定します。`stretchRatio > 1` で置換区間が長くなり、クリップ全体の移動量は区間長の差分に従います |
+| 1 つのノート区間を伸ばす／縮める | ノートストレッチ | 区間はサンプル位置または秒（`onsetSec` / `offsetSec`）で指定し、負の位置は指定できません。`stretchRatio > 1` で置換区間が長くなり、クリップ全体の移動量は区間長の差分に従います |
 | 時間 x 周波数の領域を弱める／補修する | スペクトル編集 | サンプル位置と Hz で矩形を指定し、`gain`、`attenuate`、`mute`、`heal` を適用します |
 | 声のキャラクターを変える | ボイスチェンジ | ピッチは音高、フォルマントは声の太さや質感に影響します |
 | プリセット付きでライブ音声ブロックを処理する | リアルタイムボイスチェンジャー | AudioWorklet、モニタリング、チャンク処理など、ブロック間の DSP 状態を保ちたい場合に使います |
@@ -55,9 +55,10 @@ DSP は Digital Signal Processing の略で、音声信号を数値として測�
 | ある MIDI ノートから別の MIDI ノートへ補正する | `pitchCorrectToMidi(samples, sampleRate, currentMidi, targetMidi)` | `pitch_correct_to_midi(samples, sample_rate, current_midi, target_midi)` |
 | フレームごとのピッチ輪郭をたどって目標音へ寄せる | `pitchCorrectToMidiTimevarying(samples, f0Hz, targetMidi, sampleRate, hopLength, voiced?, voicedProb?)` | `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sample_rate, hop_length, voiced?, voiced_prob?)` |
 | ピッチ輪郭を音階へスナップ（オートチューン） | `pitchCorrectTimevarying(samples, f0Hz, sampleRate, hopLength, options)` | `pitch_correct_timevarying(samples, f0_hz, sample_rate, hop_length, *, mode=..., scale_root=..., ...)` |
+| 録音全体を検出した（または指定した）キーへスナップする | `autoTune({ samples, sampleRate, key, strength })` | `auto_tune(samples, sample_rate, key, strength=...)` |
 | ノート区間だけをストレッチする | `noteStretch(samples, sampleRate, { onsetSample, offsetSample, stretchRatio })` | `note_stretch(samples, sample_rate, onset_sample, offset_sample, stretch_ratio)` |
 | 時間 x 周波数の領域を編集する | `spectralEdit(samples, sampleRate, ops, options?)` | `spectral_edit(samples, sample_rate, ops, ...)` |
-| ピッチとフォルマントを別々に動かす | `voiceChange(samples, sampleRate, { pitchSemitones, formantFactor })` | `voice_change(samples, sample_rate, pitch_semitones, formant_factor)` |
+| ピッチとフォルマントを別々に動かす | `voiceChange(samples, sampleRate, { pitchSemitones, formantFactor, formantMode? })` | `voice_change(samples, sample_rate, pitch_semitones, formant_factor, formant_mode="relative")` |
 | 状態を持つリアルタイム音声プリセットチェーン | `RealtimeVoiceChanger` | `RealtimeVoiceChanger` |
 | リアルタイム音声プリセットを 1 回でレンダリング | `voiceChangeRealtime(samples, sampleRate, preset, options?)` | `voice_change_realtime(samples, sample_rate, preset)` |
 
@@ -108,6 +109,18 @@ const transposed = voiceChange(vocal, sampleRate, {
   formantFactor: 2 ** (-pitchSemitones / 12), // 0.749 — 声道を元の位置に保つ
 });
 ```
+
+`formantMode: 'absolute'` を指定すると、この計算を任せられます。`formantFactor` はピッチシフトにかかわらず*入力*に対するフォルマントの移動量になり、`1` ならフォルマントは元の位置のままです。実際に掛かるワープは `formantFactor / 2^(pitchSemitones / 12)` です。既定の `'relative'` は上で説明した動作です。
+
+```typescript
+const natural = voiceChange(vocal, sampleRate, {
+  pitchSemitones: 5,
+  formantFactor: 1,       // フォルマントは入力の位置のまま
+  formantMode: 'absolute',
+});
+```
+
+フォルマントワープの範囲は 0.55〜1.65 なので、絶対指定が届くのは `formantFactor / 2^(pitchSemitones / 12)` がこの範囲に入る場合だけです。範囲外では、そのピッチシフトで届く `formantFactor` の範囲を示した `RangeError` を投げ、値を丸めることはしません（+12 半音では `[1.1, 3.3]`）。Python と `voice-change` CLI（`--formant-mode`）も同様に拒否します。
 :::
 
 笛鳴りの減衰や短いアーティファクト補修のように、時間／周波数の矩形を直接編集したい場合は [スペクトル編集](./spectral-editing.md) を参照してください。
@@ -237,6 +250,27 @@ tuned = sonare.pitch_correct_timevarying(
 
 `referenceMidi`（既定 `69` = A4）は音階グリッドの基準となる音を固定し、各度数をその基準音から測ります。`maxCorrectionSemitones`（既定 `12`）は、後述の「補正量を小さく保つ」という指針を支える安全弁で、1 フレームで動かせる量を上限で抑えます。検出器が 1 フレームだけオクターブを取り違えても、そのフレームがまるまる 1 オクターブ引っ張られることはなく、上限内に収まります。検出が不安定なときや、テイクを原音に近く保ちたいときは値を下げてください。
 
+### 録音全体をキーに合わせる: `autoTune(...)`
+
+ここまでの関数は、自分で測った F0 輪郭を必要とします。`autoTune(...)` は、単旋律の録音に対してオフラインの処理一式を行います。キーを検出する（または指定されたキーを使う）、pYIN でピッチを追跡する、有声の音を音階へスナップする、という流れです。出力は入力と同じ長さで、無声区間や補正器が再ピッチできない音はそのまま通ります。
+
+```typescript
+import { autoTune, init } from '@libraz/libsonare';
+
+await init();
+
+// キーを検出し、そのキーへ補正する。
+const { samples: tuned, key } = autoTune({ samples: vocal, sampleRate, key: 'detect', strength: 0.8 });
+console.log(key.name, key.confidence); // 実際に使われたキー
+
+// キーを指定する場合: confidence は 1 で、検出は行われません。
+const inD = autoTune({ samples: vocal, sampleRate, key: { root: 2, mode: 'dorian' } });
+```
+
+`key` は `'detect'`（既定）または `{ root, mode }` で、`root` はピッチクラス（0 = C 〜 11 = B）、`mode` は `'major'`・`'minor'`・`'dorian'` などの名前または `Mode` の序数です。結果は `{ samples, key }` で、`key.mode` は `detectKey` と同じく名前で返ります。`strength`（既定 `1`）、`retuneSpeedMs`、`vibratoThresholdCents`、`maxCorrectionSemitones`、`referenceMidi` は `pitchCorrectTimevarying(...)` と同じ意味で、`strength` が `retuneAmount` に相当します。Python の `auto_tune(samples, sample_rate, key="detect", *, strength=...)` は、キーを文字列、`Key`、マッピング、`(root, mode)` のタプルのいずれかで受け取り、`samples` と `key` を持つ `AutoTuneResult` を返します。
+
+自分で測った輪郭をスナップしたい場合は、`scaleMaskForMode(root, mode)` でマスクを作り、`scaleModeMask` に渡します。教会旋法の 12 ビットマスクを返し（`scaleMaskForMode(0, 'major')` は `0b101010110101`）、`pitchCorrectTimevarying(...)` は `scaleModeMask` にモード名を直接渡すこともできます。
+
 ### MIDI ノート番号
 
 MIDI ノート番号は、音の高さを半音単位の番号で表す方法です。整数 1 つが 1 半音に対応し、小数も使えます。
@@ -254,15 +288,13 @@ MIDI ノート番号は、音の高さを半音単位の番号で表す方法で
 
 ### `noteStretch(...)` の区間指定
 
-`noteStretch(...)` は、伸ばしたい区間を秒ではなく**サンプル位置**で指定します。`onsetSample` の既定値は入力の先頭、`offsetSample` の既定値は入力の末尾です。区間が端まで続く場合は、その境界を省略できます。
-
-秒で指定したい場合は、次のように変換します。
+`noteStretch(...)` は、伸ばしたい区間をサンプル位置（`onsetSample`、`offsetSample`）または秒（`onsetSec`、`offsetSec`。呼び出しのサンプルレートで最も近いサンプルに丸められます）で指定します。各境界はどちらか一方の表記だけを渡してください。両方を渡すと拒否されます。`onsetSample` の既定値は入力の先頭、`offsetSample` の既定値は入力の末尾なので、区間が端まで続く場合はその境界を省略できます。負の位置は拒否されます（WASM と Node は `RangeError`、Python は `SonareValueError`）。
 
 ```typescript
-const onsetSample = Math.round(onsetSeconds * sampleRate);
-const offsetSample = Math.round(offsetSeconds * sampleRate);
-const heldNote = noteStretch(vocal, sampleRate, { onsetSample, offsetSample, stretchRatio: 1.25 });
+const heldNote = noteStretch(vocal, sampleRate, { onsetSec: 0.25, offsetSec: 0.5, stretchRatio: 1.25 });
 ```
+
+`noteMove(...)` も同じ境界に加えて、ノートの開始位置の移動先を表す `targetOnsetSample` / `targetOnsetSec` を、同じ規則で受け取ります。Python では `onset_sec`、`offset_sec`、`target_onset_sec` です。
 
 `stretchRatio` は、選択区間を置き換えるストレッチ後の長さの倍率です。`noteStretch` は置換区間の始端と終端で元のサンプルを equal-power クロスフェードで混ぜます。クロスフェードは置換区間内で完結し、隣接音声のサンプルを重ねて消費しません。そのため出力全体の長さと区間後の音声の移動量は、置換区間の長さの差分に従います。`stretchRatio: 1.0` ではクリップ全体の長さは変わりません。他の比率では時間ストレッチのサンプル丸めにより数サンプルの差が出ることがあります。入力の端に接する側には隣接音声がないため、その側のクロスフェードはありません。
 
@@ -282,7 +314,7 @@ const heldNote = noteStretch(vocal, sampleRate, { onsetSample, offsetSample, str
 
 標準プリセット ID には `neutral-monitor`、`bright-idol`、`soft-whisper`、`deep-narrator`、`robot-mascot`、`dark-villain` があります。
 
-同じ処理を複数ブロックに分けて呼び、呼び出し間で状態を保つ必要がある場合はリアルタイムクラスを使います。WASM では `prepare(...)` と `delete()` を明示的に呼びます。Python ではコンテキストマネージャーまたは `close()` を使えます。
+同じ処理を複数ブロックに分けて呼び、呼び出し間で状態を保つ必要がある場合はリアルタイムクラスを使います。WASM では `prepare(...)` と `delete()` を明示的に呼びます。Python ではコンテキストマネージャーまたは `close()` を使えます。同じチェーンは、モノラル／ステレオのミキサーストリップ上の `voice.changer` インサートとしても使えます（[リアルタイムボイスチェンジャー](./realtime-voice-changer.md#ミキサーインサートとして)）。
 
 ::: code-group
 

@@ -41,6 +41,8 @@ libsonare detects section boundaries by building frame-level features, computing
 
 `minSectionSec` (default 4 s) does two jobs. It sets the minimum spacing between novelty peaks, and a merge pass afterwards folds any span still shorter than it into a neighbour — so it is a real floor on the length of a returned section. The one exception is a lone whole-track section: when merging leaves a single span, it is returned whatever its length. The leading and trailing spans are bounded by the file edges rather than by two peaks, and very short edits, drops, or pickup bars are absorbed into neighboring spans rather than returned on their own.
 
+A novelty peak is kept when it reaches `threshold` of the largest novelty within `referenceWindow` seconds on either side (default 60; 0 disables the relative threshold), not of the whole-track maximum, so a dominant change does not hide weaker section changes far from it. A lone dominant event — one that no other event within the window comes within `threshold` of — is set aside when the reference is taken, so a short loud burst does not mask the section changes around it.
+
 For long-form input, the boundary detector mean-pools its feature sequence when the self-similarity matrix would exceed the native integer index cap. Boundary `time` values remain in the original audio timeline; on very long files, the diagnostic `frame` field refers to the pooled analysis grid, so UI code should place markers from `time`, not from `frame`.
 
 The boundary stage is reachable on its own, without the labelling that follows it: `detectBoundaries` / `detect_boundaries` returns the transitions **and** the novelty curve they were picked from, which is what a caller applying its own threshold needs. See [`detectBoundaries(request)`](../../js-api-analysis.md#detectboundaries-request).
@@ -53,7 +55,7 @@ After boundaries are found, the implementation classifies each span using severa
 
 | Clue | What it helps identify |
 |------|------------------------|
-| Normalized energy | Whether a span feels like a high-energy or low-energy section |
+| Normalized energy | The span's median frame RMS relative to the loudest span, so a short loud burst does not make its own section the loudest |
 | Chroma similarity to other spans | Whether the same harmonic material returns elsewhere |
 | Vocal-likelihood descriptor | Whether the span is likely to contain a lead vocal or vocal-like material |
 

@@ -217,6 +217,13 @@ for (const { key: candidate, correlation } of ranked.slice(0, 3)) {
 
 `detectKeyCandidates(...)` returns the raw `correlation` per candidate instead, unnormalised — reach for it when you want to inspect the shape of the decision rather than a single belief.
 
+`key.mode` is a name — `'major'`, `'minor'`, or a church mode such as `'dorian'` — and `detectKey(...)` also returns the `tuning` its chroma was built with. By default the chroma is read at concert A440; pass `tuning: 'auto'` to measure the offset from a recording that sits between semitones, and read the value back from the result. The same option exists on `detectChords(...)` and `analyze(...)`.
+
+```typescript
+const detected = detectKey({ samples, sampleRate, tuning: 'auto' });
+console.log(detected.mode, detected.tuning);   // e.g. "major", a semitone fraction in [-0.5, 0.5)
+```
+
 | Option | Effect |
 |--------|--------|
 | `profile` | Which key profile to correlate against: `'ks'`/`'krumhansl'`, `'temperley'`, `'shaath'`, the three EDM profiles, or `'bellman-budge'`. Genres differ enough that this is the first knob to try when results look systematically off. |
@@ -227,14 +234,14 @@ for (const { key: candidate, correlation } of ranked.slice(0, 3)) {
 ### Chords
 
 ```typescript
-import { detectChords, chordFunctionalAnalysis } from '@libraz/libsonare';
+import { Mode, detectChords, chordFunctions } from '@libraz/libsonare';
 
 const chordOptions = {
   useTriadsOnly: false,   // include the extended qualities
   useHmm: true,           // smooth the sequence instead of deciding per frame
   useKeyContext: true,
   keyRoot: key.root,
-  keyMode: key.mode,
+  keyMode: key.mode === 'minor' ? Mode.Minor : Mode.Major,   // Mode ordinal
   chromaMethod: 'nnls',
 } as const;
 
@@ -244,9 +251,12 @@ for (const chord of chords) {
   console.log(chord.name, chord.start.toFixed(2), chord.duration.toFixed(2), chord.confidence);
 }
 
-// The same options, so roman[i] labels chords[i].
-const roman = chordFunctionalAnalysis({ samples, sampleRate, ...chordOptions });
+// Label the chords you already have with their function in the key; nothing is re-detected.
+const labelled = chordFunctions({ chords, key });
+console.log(labelled[0].roman, labelled[0].function);   // e.g. "I", "tonic"
 ```
+
+`chordFunctions(...)` returns the same timed entries with a Roman numeral (`roman`) and a harmonic function (`'tonic'`, `'subdominant'`, `'dominant'`, `'chromatic'` for a root outside the key's scale, `'none'` for `N.C.`) added. `chordFunctionalAnalysis(...)` does detection and labelling in one call and returns the same entries; use it when you do not need the chord list otherwise.
 
 Each `Chord` carries `root`, `bass`, `quality`, `start`, `end`, `duration`, `confidence` and a `name` the core spells canonically, so `rootName`, `bassName` and `name` read identically from every binding. Chords inside `analyze(...)` additionally carry `romanNumeral` relative to `result.key`; it is empty for `N.C.`.
 
@@ -259,7 +269,8 @@ Quality coverage goes well past triads and plain sevenths. Beyond `maj`, `m`, `d
 | `useKeyContext` · `keyRoot` · `keyMode` | Bias the search toward chords that belong to a key you already detected. |
 | `chromaMethod` | `'stft'` or `'nnls'`. The second suppresses harmonics of the bass before matching, which helps on dense material. |
 | `detectInversions` | Report the bass note separately instead of folding it into the root. |
-| `tuning` | Shift the chord chroma by a tuning offset in fractions of a semitone. Use the unit returned by `estimateTuning(...)`; the value must be in `[-0.5, 0.5)` and defaults to `0` (A440). The same option on `analyze(...)` shifts the chroma used for key, chords and sections. |
+| `tuning` | Shift the chord chroma by a tuning offset in fractions of a semitone, in `[-0.5, 0.5)`; defaults to `0` (A440). `'auto'` measures it, and the result reports the value used. The same option on `analyze(...)` shifts the chroma used for key, chords and sections. |
+| `nFft` | The chroma window, in samples at 22050 Hz and rescaled to the input rate, so it spans the same time at every rate. |
 | `useBeatSync` · `minDuration` · `smoothingWindow` | Control how the frame-level decision is aggregated into segments. |
 
 ## Structure and melody
@@ -282,6 +293,8 @@ const { boundaries, noveltyCurve, noveltyPeak } = detectBoundaries({ samples, sa
 Two behaviours to plan for. A pre-chorus label has no detection branch, so filtering sections for it always comes back empty. And `unknown` covers three different situations: no boundary was found, the span matched no positive branch, or the evidence was too weak to assert a function — the first reports `confidence` 0, the last keeps its sub-threshold score, so the number tells you which one you got.
 
 `noveltyCurve` is scaled by its own maximum, so a peak of 1 means "the most novel frame in this track", not "a large change". Multiply by `noveltyPeak` to recover the raw response the absolute threshold is compared against.
+
+Each peak must reach `threshold` times the largest novelty within `referenceWindow` seconds (60 by default) on either side, so a dominant change does not hide weaker section changes far from it on a long track. Pass `referenceWindow: 0` to turn the relative threshold off, or a value at least the track length for a whole-track reference.
 
 ### Melody and pitch
 
@@ -317,7 +330,7 @@ const envelope = onsetEnvelope({ samples, sampleRate });
 const brightness = spectralCentroid({ samples, sampleRate });
 ```
 
-`nFft` sets how long one analysis window is and `hopLength` how far the next one starts after it — the trade between frequency detail and time detail, and the two parameters most likely to change a result. The feature set also covers CQT and its variants, tonnetz, spectral contrast, rolloff, flatness, bandwidth and flux, per-frame level and zero-crossing rate, and the inverse transforms that turn a spectrogram back into audio. The [JavaScript Features API](./js-api-features.md) is the full list.
+`nFft` sets how long one analysis window is and `hopLength` how far the next one starts after it — the trade between frequency detail and time detail, and the two parameters most likely to change a result. These feature functions read `nFft` as samples of the buffer you pass. The analyzers that take audio at its own rate (beats, tempo, onsets, key, rhythm, chords, timbre) read it as samples at 22050 Hz and rescale it to the input rate, so the same `nFft` covers the same duration at 44100 Hz or 48000 Hz; `hopLength` stays in samples of the input. The feature set also covers CQT and its variants, tonnetz, spectral contrast, rolloff, flatness, bandwidth and flux, per-frame level and zero-crossing rate, and the inverse transforms that turn a spectrogram back into audio. The [JavaScript Features API](./js-api-features.md) is the full list.
 
 ## This page or the compatibility layer
 

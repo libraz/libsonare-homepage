@@ -119,7 +119,7 @@ Room acoustics has five different entry points:
 | `analyze_impulse_response` / `analyzeImpulseResponse` | A clap, pop, sweep-derived IR, or other recording where the room response is isolated | Measures the decay curve directly after the impulse | Easier to treat as a measurement |
 | `detect_acoustic` / `detectAcoustic` | Normal music, speech, or environmental audio | Searches for regions where room decay appears to fall naturally, then estimates from them | Treat as a hint and always inspect `confidence` |
 | `estimate_room` / `estimateRoom` | A recording or impulse response | Estimates an equivalent room with volume, dimensions, DRR, absorption bands, RT60 bands, and confidence | Treat as a model fit, not exact geometry |
-| `synthesize_rir` / `synthesizeRir` | Shoebox dimensions plus source/listener placement | Synthesizes a mono RIR | Check `hasError` / `has_error` for invalid geometry |
+| `synthesize_rir` / `synthesizeRir` | Shoebox dimensions plus source/listener placement | Synthesizes a mono RIR | Invalid geometry or placement throws a coded error, so wrap the call when the dimensions come from user input |
 | `room_morph` / `roomMorph` | Source recording plus target room geometry | Adds a target-room character after gentle source-tail suppression | Creative effect, not dereverberation |
 
 A **decay curve** shows how quickly energy falls after the sound stops. In impulse-response analysis, that curve is measured directly and RT60/EDT are read from it.

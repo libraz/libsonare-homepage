@@ -89,6 +89,14 @@ repaired = sonare.spectral_edit(
 
 :::
 
+秒で指定した領域:
+
+```typescript
+const muted = spectralEdit(samples, sampleRate, [
+  { startSec: 0.5, endSec: 1.5, lowHz: 0, highHz: 0, mode: 'mute' },
+]);
+```
+
 ## オプション
 
 領域はサンプル位置と Hz で指定しますが、実際の編集は次の 2 つのオプションが作る STFT のグリッド上で行われます。
@@ -110,7 +118,8 @@ repaired = sonare.spectral_edit(
 
 | フィールド | 意味 |
 |------------|------|
-| `startSample` / `endSample` | 入力サンプル位置で指定する時間矩形。`endSample` を省略すると末尾まで（Python では `end_sample` を既定値の `-1` センチネルのままにする）。Python の `end_sample=0` は全体ではなく空の領域になります。 |
+| `startSample` / `endSample` | 入力サンプル位置で指定する時間矩形。開始の既定値は `0` です。`endSample` を省略する（Python では `end_sample` を `None` のままにする）と末尾まで及びます。`endSample: 0` は、どのサーフェスでも全体ではなく空の領域です。負の位置は拒否されます（JavaScript では `RangeError`、Python では `SonareValueError`）。`-1` は「末尾まで」を表すセンチネルではありません。 |
+| `startSec` / `endSec` | 同じ境界を秒で指定します（Python は `start_sec` / `end_sec`）。呼び出しのサンプルレートで最も近いサンプルに丸められます。境界ごとにどちらか一方の表記だけを指定してください。`startSample` と `startSec`（または終了側の両表記）を併用すると拒否されます。 |
 | `lowHz` / `highHz` | Hz で指定する周波数矩形。値は `[0, Nyquist]` に丸められ、`highHz <= 0` は Nyquist 扱い。 |
 | `gainDb` | dB 単位のゲイン量。`gain` と `attenuate` のどちらも `magnitude *= 10^(gainDb/20)` という同じ式で適用され、弱めるには負値を渡します。`mute`/`heal` では無視されます。 |
 | `nFft` | 2 のべき乗の FFT サイズ。既定値は `2048`。 |

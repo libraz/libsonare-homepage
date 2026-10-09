@@ -375,7 +375,7 @@ const audio = project.bounceWithSynthInstrument(
 - **バリエーションバンクフォールバック** — SoundFont がカバーしない GS バリエーションバンクは、キャピタル（バンク 0）の音色へフォールバックします。欠けたバリエーションでも無音にならず、正しいファミリーを鳴らします。
 - **チャンネル 10 のバンク 128 ドラムキット** — ドラムプログラムはバンク 128 にあり、慣習でチャンネル 10（インデックス 9）がドラムパートです。
 - **NRPN パート編集** — TVF カットオフ／レゾナンス、TVA エンベロープ、ビブラートを NRPN でパートごとに編集でき、さらに個別のドラム音用の**ドラムごとの NRPN** も使えます。
-- **GS／GM SysEx** — **GS Reset**、**GM System On**、「リズムパートに使用」の SysEx を認識します。ホストからのものと、アレンジ内に埋め込まれた SysEx イベントの両方に対応します。
+- **GS／GM SysEx** — **GS Reset**、**GM System On**、「リズムパートに使用」の SysEx を認識します。ホストからのものと、アレンジ内に埋め込まれた SysEx イベントの両方に対応します。プレイヤーのリセットはコントローラーとあわせてシステムエフェクトとマスター EQ もクリアするため、リセット前に設定したリバーブレベルや EQ の持ち上げは鳴り止みます。
 - **センドリターン方式のシステムエフェクト** — 16 パート共通の 1 つのセンドリターンバスに、リバーブ・コーラス・ディレイの 3 ユニットが載っています。各パートの送信量は 2 つの経路の合算です。チャンネル CC センドでは、**CC91** がリバーブ送信、**CC93** がコーラス送信、**CC94** がディレイ送信を担います。リバーブとコーラスには、SF2 ゾーンジェネレーター `reverbEffectsSend`／`chorusEffectsSend` の値がさらに上乗せされます（GS のディレイ送信は CC 専用で、対応する SF2 ジェネレーターはありません）。パワーオン時は、音楽的に聞き取れる既定のルーム感（リバーブ送信 40、コーラス送信 8）から始まるため、リセット SysEx を送らない SMF でも空間の響きが残ります。これとは別に、パートごとの**ドライブ**インサート（ゲイン補正付きサチュレーション）もこのバスに並んで存在し、後述する GS の**挿入エフェクト**（EFX）とは別のものです。
 - **システムディレイのモード** — リバーブの `CHARACTER` を 6 にすると Delay、7 にすると Panning Delay になり、それぞれの時間とフィードバック設定で動作します。Panning Delay は左右の出力を交互に鳴らします。独立した GS ディレイユニットは負のフィードバックも保持するため、繰り返すエコーの極性が交互に反転します。
 - **MIDI 2.0／GM2** — MIDI 2.0 のバンク付きプログラムチェンジをデコードします。**バンクセレクト LSB（CC#32）** の解釈は MSB によって 2 通りに分かれます。
@@ -531,6 +531,10 @@ SoundFont 音源をバインドまたはバウンスするとき、`gsEfxRealiza
 
 [GS 音源モジュールのデモ](/ja/gs-module) では、再生前に経路を選べます。選択中のパートを EFX に割り当て、エフェクトを選んで聴き比べてください。Thru には比較するインサーションエフェクトがありません。
 
+### レベルとバランスのバイト
+
+EFX のバランスのバイトは 2 段のランプ則に従います。ドライとエフェクトのうち大きいほうの側は常にフルレベルに保たれるため、既定の中央値ではどちらも等倍で鳴り、中央から外れると片側だけが下がります。出力とタップのレベルのバイトは、0 以外の値がそれぞれ固有のレベルに対応し、-24 dB で頭打ちになりません（0 は無音）。ディレイとモジュレーションのバイトは、エフェクト自身が許す上限まで届きます。フィードバックは 98% まで、コーラスとアンサンブルのプリディレイは 100 ms までです。
+
 ### ライブとオフラインでの実現方式
 
 - **オフライン**（バウンス） — アレンジに埋め込まれた EFX の SysEx はレンダー中にインラインで適用されます。バウンスの途中で EFX が変わっても、次のブロックから反映されます。
@@ -543,55 +547,6 @@ SoundFont 音源をバインドまたはバウンスするとき、`gsEfxRealiza
 ::: tip MIDI ヘルパーで GS バンクをオーサリングする
 `Project.midiBankProgram(ppq, group, channel, bankMsb, bankLsb, program)` は、バンクセレクトとプログラムチェンジを `setMidiEvents` が受け付ける MIDI イベントへ展開します。GS バリエーションやドラムキットを選ぶ正しい方法です。`Project.gmInstrumentName(program)`、`Project.gmDrumName(note)`、`Project.gm2InstrumentName(bankLsb, program)`、`Project.midiCcName(controller)` のような静的ヘルパーがスロットに名前を付けるので、オーサリングコードが読みやすくなります。逆方向も対称です。`Project.gmProgramForName(name)`、`Project.gmDrumNoteForName(name)`、`Project.midiCcIndexForName(name)` は正規名から番号を返し（未知の名前は `-1`）、`Project.gmFamilyName(family)` と `Project.gmFamilyFirstProgram(family)` は 16 の GM 楽器ファミリーを列挙します。`Project.gm2DrumSetName(bankLsb)` と `Project.gm2DrumName(bankLsb, note)` は GM2 のドラムセットバリエーションに名前を付けます。
 :::
-
-## NativeSynth と SoundFont フォールバック
-
-NativeSynth は [SoundFont プレイヤー](./soundfont-player.md)の下にあるセーフティネットです。`bounceWithSf2Instrument` でレンダーする（またはライブで SF2 をバインドする）と、libsonare はアレンジが実際に鳴らす各 `(channel, bank, program)` を解決します。
-
-- 読み込んだ SoundFont がそのプログラムをカバーしていれば、そのノートは **SF2** から鳴ります（GS バリエーションとドラムフォールバックを含む）。
-- そうでなければ — SoundFont を一切読み込んでいない場合も含めて — そのノートは **NativeSynth の GM フォールバックバンク**（128 種すべてのプログラムとドラムマップ）で鳴ります。
-
-レンダー前にプログラムごとのバックエンドを確認するには `soundFontManifest()` を使います。最初に使われる順に、各プログラムについて `'sf2'` か `'synth'` を報告します。
-
-```typescript
-project.loadSoundFont(sf2Bytes);
-const manifest = project.soundFontManifest();
-// [{ channel, bank, program, backend: 'sf2' | 'synth', presetName }, ...]
-```
-
-GM フォールバックバンクが常に存在するため、データがないという理由で MIDI が無音になることはありません。SF2 データの読み込みやチャンネル／プログラムごとの解決は [SoundFont プレイヤー](./soundfont-player.md) を参照してください。
-
-### GM フォールバックのプログラムルーティング
-
-フォールバックバンクは、GM プログラムのファミリーごとに最も近い NativeSynth エンジンを使います。楽器の挙動の違いが重要な箇所では、プログラム単位の上書きがあります。ピアノは調整済みですが、その他の物理フォールバックモデルはまだ調整・キャリブレーションを行っていません。下のアコースティック楽器系の行は、完成済みのサンプル楽器並みのリアリティではなく、ルーティング上の対応範囲として読んでください。
-
-| GM プログラム | 楽器 | フォールバックエンジン | 理由 |
-|---------------|------|------------------------|------|
-| 4-5 | Electric Piano 1 / 2 | `fm` | タイン／ベル的な明るさを位相変調で表現 |
-| 6 | Harpsichord | `harpsichord` | ジャック＆プレクトラム。打鍵の速さが音量をほとんど変えない |
-| 7 | Clavi | `fm` | 打弦とピックアップの色づけを、現状は FM で近似 |
-| 8, 10, 14 | Celesta, Music Box, Tubular Bells | `modal` | フェルトで打つスティールバー、ツインティースによるタインの揺らぎ、基音を持たない打撃ピッチ |
-| 9, 11-13 | Glockenspiel, Vibraphone, Marimba, Xylophone | `modal` | 調律されたバーの共鳴 |
-| 15 | Dulcimer | `karplus-strong` | 暫定実装。撥弦ではなく打弦 |
-| 16-23 | Organ family | `additive` / `pipe-organ` / `free-reed` | ドローバー系レジストレーション（16-18）、仮実装の教会オルガンのフルーパイプ（19）、フリーリードのリードオルガン、ハーモニカ、バンドネオン（20-23） |
-| 24-31 | Guitar family | `karplus-strong` | 撥弦の導波路モデル |
-| 32-37 | Acoustic, electric, fretless, slap bass | `karplus-strong` | ベース弦導波路。スラップ／偏波はプログラム別 |
-| 40-43 | Violin, Viola, Cello, Contrabass | `bowed-string` | 仮実装の摩擦励起型・持続弦導波路 |
-| 44 | Tremolo Strings | `subtractive` | デチューンしたのこぎり波セクションにアンプトレモロ LFO を重ねたもので、擦弦モデルではない |
-| 45-46 | Pizzicato Strings, Orchestral Harp | `karplus-strong` | ヴァイオリンボディまたはスチール弦のコーパスへの短い撥弦 |
-| 47 | Timpani | `percussion` | ノートトラッキングするケトルドラムのフォールバックボイス |
-| 48 | String Ensemble 1 | `subtractive` | ソロ弓弦ではなく、パッド的なアンサンブル音色 |
-| 52-54 | Choir Aahs, Voice Oohs, Synth Voice | `vocal` | ソースフィルター方式のボイス（声門音源＋母音フォルマントバンク）で、減算合成のパッドではない |
-| 56-60 | Trumpet, Trombone, Tuba, Muted Trumpet, French Horn | `brass` | 仮実装のリップリード金管導波路 |
-| 61-63 | Brass Section, Synth Brass 1 / 2 | `fm` | 金管導波路ではなく、設計上 FM |
-| 64-71 | Saxophones, Oboe, English Horn, Bassoon, Clarinet | `reed` | 仮実装のリードと管体の導波路 |
-| 72-79 | Piccolo, Flute, Recorder, Pan Flute, Bottle, Shakuhachi, Whistle, Ocarina | `flute` | 仮実装のエアジェット／開管導波路 |
-| 104, 106, 107 | Sitar, Shamisen, Koto | `plucked-string` | バズブリッジ（ジャワリ／サワリ）の撥弦。バンジョー（105）は `karplus-strong` のまま |
-| 112-119 | Tinkle Bell, Agogo, Steel Drums, Woodblock, Taiko Drum, Melodic Tom, Synth Drum, Reverse Cymbal | `percussion` | ノートトラッキングするパーカッションエンジンのボイスで、ドラムキットのマップとは別 |
-
-Bank Select は、フォールバックがバリエーションを持つキャピタルプログラムすべてで読み取られます。全体の対応は前述の [GS バリエーション音色](#gs-バリエーション音色)を参照してください。
-
-このルーティングは名前付きプリセットカタログとは別です。`synthPresetNames()` が返すのは手で設計されたプリセット（`e-piano`、`harp`、`drum-kit` など）であり、GM フォールバックバンクは SF2 フォールバック時に MIDI プログラム番号ごとの内部パッチを選びます。
 
 ## GM 音色マップ — 全128プログラム
 

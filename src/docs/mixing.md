@@ -378,6 +378,8 @@ Add a strip's group and group gain with `addVcaGroup(id, gainDb, members)`, adju
 
 Solo, mute, and solo-safe take effect on the next block **without** a graph recompile.
 
+A muted or solo-silenced strip is silent in full: its pre-fader sends go quiet with it, the gate reaches exactly zero gain when closed and exactly unity when open, and a solo-safe strip keeps sounding while another strip is soloed.
+
 They are not instantaneous jumps, though. A lane's mute/solo gate is a smoothed gain with a **10 ms** time constant, so a mute closes and opens without a click; for comparison, the pan smoother runs at 5 ms, because a pan move needs to track the gesture more tightly than a gate does. Both are fixed engine behavior — not the separate parameter-smoothing control that governs how bound insert parameters ramp.
 
 ### Pan modes and pan laws
@@ -462,6 +464,8 @@ Every strip (and the master) exposes a rich `MixMeterSnapshot`. Read it post-ren
 ::: info What is a goniometer?
 A goniometer (also called a vectorscope) is a dot-cloud display of the left vs. right signal. It shows the stereo image at a glance: a near-vertical line means mono, a wide blob means a wide stereo spread, and a horizontal smear warns of phase problems that may cancel in mono. It is the picture version of the `correlation` meter.
 :::
+
+The true-peak reading runs one reconstruction-filter group delay behind the block, so it does not depend on the block size. After the last block of a signal, call `mixer.flushMeters()` (Python `flush_meters()`) to read that pending stretch against silence and fold it into the snapshots; a later `processStereo` starts a new signal. Offline engine renders and the one-shot `mixStereo` do this for you. In a measurement with a 16-sample burst at the very end of one block, `truePeakDbL` read -1.99 dBFS before the flush and -1.79 dBFS after it, while the sample peak did not move.
 
 The **goniometer** is a separate, time-domain view: `readGoniometerLatest(strip, maxPoints)` returns the most recent left/right sample pairs (oldest → newest) for plotting a stereo vectorscope. The core read is allocation-free: it copies the points from the strip's pre-allocated ring into caller-owned storage, so UI polling does not add allocations to the audio thread. The WASM binding then allocates a temporary result and returns a plain JavaScript array of plain `{ left, right }` point objects. The JS call therefore allocates at the binding boundary, but its result is cloneable plain data that is safe to pass to `structuredClone` or `postMessage`.
 

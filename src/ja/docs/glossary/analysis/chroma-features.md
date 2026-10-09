@@ -44,17 +44,17 @@ description: クロマ、ピッチクラス、クロマグラム。libsonare が
 |------|------|
 | 基本設定 | `n_chroma = 12`。`fmin` と `n_octaves` も設定に含まれますが、STFT クロマのフィルターバンクはこれらを参照しません（CQT クロマ側の概念で、指定しても解析範囲は変わりません） |
 | 解析窓 | `n_fft = 2048`／`hop_length = 512`、Hann 窓 |
-| チューニング | 12 ビン構成では、`tuning` に A440 からのずれを半音分数で指定します。既定は 0（A440）で、信号からの自動推定は行いません |
+| チューニング | 12 ビン構成では、`tuning` に A440 からのずれを半音分数で指定します。既定は 0（A440）で、`analyze`・`detectChords`・`detectKey` に `tuning: 'auto'` を渡したときだけ信号から測定します |
 | 算出方式 | STFT ベース、CQT ベース（`chromaCqt` / `chroma_cqt`、`ChromaCqtConfig`。`librosa.feature.chroma_cqt` の直接の相当）、CENS（`ChromaCensConfig`） |
 | コード向け変種 | `NnlsChromaConfig`（非負最小二乗）で倍音の影響を抑える |
 
 クロマは `KeyAnalyzer`（Krumhansl-Schmuckler 系）と `ChordAnalyzer`（テンプレートマッチング）で使われるため、クロマ段を改善すると下流の 2 機能が同時に良くなります。
 :::
 
-::: warning チューニングは自動推定されません
-`ChromaConfig.tuning` の既定は `0`、つまり A440 で、libsonare がこれを信号から推定することはありません。`librosa.feature.chroma_stft` は既定の `tuning=None` でまず `estimate_tuning()` を実行するので、この点で挙動が異なります。A440 から半音の何分の一かずれた録音では、ピッチクラスの格子が実際の倍音列と合わなくなり、エネルギーが隣のビンへにじみ、キーやコードの結果が何の警告もないまま劣化します。
+::: warning チューニングは要求したときだけ測定されます
+`ChromaConfig.tuning` の既定は `0`、つまり A440 で、クロマ段が自分でこれを推定することはありません。`librosa.feature.chroma_stft` は既定の `tuning=None` でまず `estimate_tuning()` を実行するので、この点で挙動が異なります。A440 から半音の何分の一かずれた録音では、ピッチクラスの格子が実際の倍音列と合わなくなり、エネルギーが隣のビンへにじみ、キーやコードの結果が何の警告もないまま劣化します。
 
-古い録音、テープ、生演奏、意図的に別の基準ピッチで演奏されたものなど、素材が A440 でない可能性がある場合は、音声に対して `estimateTuning()`／`estimate_tuning()` を実行してください。戻り値は半音分数のずれです。C++ では `ChromaConfig.tuning` にそのまま渡します。JavaScript・Node・Python の `detectChords` と `analyze`（Python では `detect_chords` と `analyze`）は、この値を `tuning` で受け取ります。範囲は `[-0.5, 0.5)` です。これらのバインディングでは、単体の `chroma` と `detectKey`（Python では `chroma` と `detect_key`）は A440 固定で、チューニング引数を受け取りません。ストリーミングは別の単位を使い、作成時の `tuningRefHz` または処理中の `setTuningRefHz()` に A4 の基準周波数を Hz で指定します。値は 440 × 2^(ずれ / 12) で換算します。45 セント低く調律したハ長調のループは、A440 のままだと別のキーと判定され、この基準ピッチを渡すとハ長調に戻ります。[ビジュアルプレイヤー](/ja/analyzer)は、読み込んだファイルごとにずれを推定して適用しています。
+古い録音、テープ、生演奏、意図的に別の基準ピッチで演奏されたものなど、素材が A440 でない可能性がある場合は、`analyze`・`detectChords`・`detectKey`（Python では `analyze`・`detect_chords`・`detect_key`）に `tuning: 'auto'`（Python では `tuning="auto"`）を渡してください。エンジンが先にずれを測定し、その値でクロマを作ります。`estimateTuning()`／`estimate_tuning()` が返す半音分数の値（`[-0.5, 0.5)`）を直接渡すこともでき、C++ では `ChromaConfig.tuning` にそのまま渡します。どの結果も、実際に使った値を返します（`AnalysisResult`・`ChordAnalysisResult` の `tuning`、`detectKey` の `KeyDetection`）。45 セント低く調律した合成のハ長調和音は、A440 のままだとホ短調と判定され、`tuning: 'auto'` ではハ長調と判定されて、約 -0.43 のチューニングを報告しました。単体の `chroma` は A440 固定で、チューニング引数を受け取りません。`tuningToReferenceHz(tuning)` と `referenceHzToTuning(hz)` で、この単位と Hz 単位の基準ピッチを相互に換算できます。ストリーミングは Hz をそのまま使い、作成時の `tuningRefHz` または処理中の `setTuningRefHz()` に A4 の基準周波数を指定します。[ビジュアルプレイヤー](/ja/analyzer)は、読み込んだファイルごとにずれを推定して適用しています。
 :::
 
 関連: [MIR の全体像](../concepts/mir-overview.md)、[キー検出](./key-detection.md)、[コード認識](./chord-recognition.md)、[スペクトログラムと STFT](./spectrogram-stft.md)

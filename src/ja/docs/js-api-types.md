@@ -1,9 +1,9 @@
 ---
-title: JavaScript/TypeScript 型とエラー
-description: libsonare JavaScript/TypeScript パッケージの型定義、列挙型、エラーハンドリング、型エクスポート索引のリファレンスです。
+title: JavaScript/TypeScript 型と列挙型
+description: libsonare JavaScript/TypeScript パッケージの型定義、列挙型、型エクスポート索引のリファレンスです。
 ---
 
-# JavaScript/TypeScript 型とエラー
+# JavaScript/TypeScript 型と列挙型
 
 ## 型定義
 
@@ -241,7 +241,34 @@ interface RirDiagnostic {
 }
 ```
 
-生成できないモーフは例外になるため、ここに `hasError`／`errorMessage` の組はなく、`diagnostics` に入るのはすべて「結果は得られたが注意が要る」警告です。分岐は `code` で行ってください。`acoustic.ism_order_clamped`（鏡像音源の次数が安全上限まで下げられた）、`acoustic.rir_length_clamped`（テイルが `maxSeconds` か資源上限で切られた）、`acoustic.rir_length_floored`（`maxSeconds` が直接音の到達時間より短い）、`acoustic.no_late_tail`（拡散テイルが生成されなかった）はいずれも「指定したのとは別の部屋を通った」ことを意味しますが、音声そのものからは分かりません。`synthesizeRir(...)` も同じ形を `RirResult.diagnostics` で報告します。C ABI も同じ項目を構造化して公開しており — `sonare_last_diagnostic_count()`、`sonare_last_diagnostic_code(i)`、`sonare_last_diagnostic_message(i)`、`sonare_last_diagnostic_severity(i)` — そちらでも、連結済みの `sonare_last_warning_message()` 文字列を解析するのではなくコードで分岐できます。
+生成できないモーフは例外になり、使えない `synthesizeRir(...)` の呼び出しも同様に例外になるため、どちらの結果にもエラーフラグはなく、`diagnostics` に入るのはすべて「結果は得られたが注意が要る」警告です。分岐は `code` で行ってください。`acoustic.ism_order_clamped`（鏡像音源の次数が安全上限まで下げられた）、`acoustic.rir_length_clamped`（テイルが `maxSeconds` か資源上限で切られた）、`acoustic.rir_length_floored`（`maxSeconds` が直接音の到達時間より短い）、`acoustic.rir_tail_truncated`（`maxSeconds` が最も長いバンドを 60 dB 減衰する前に切った）、`acoustic.no_late_tail`（拡散テイルが生成されなかった）はいずれも「指定したのとは別の部屋を通った」ことを意味しますが、音声そのものからは分かりません。`synthesizeRir(...)` も同じ形を `RirResult.diagnostics` で報告します。C ABI も同じ項目を構造化して公開しており — `sonare_last_diagnostic_count()`、`sonare_last_diagnostic_code(i)`、`sonare_last_diagnostic_message(i)`、`sonare_last_diagnostic_severity(i)` — そちらでも、連結済みの `sonare_last_warning_message()` 文字列を解析するのではなくコードで分岐できます。
+
+### ルーム推定と RIR の型
+
+```typescript
+interface RoomEstimateResult {
+  volume: number;                // m^3。減衰を計測できなければ NaN（confidence は 0）
+  lengthM: number;               // synthesizeRir が受け取る名前と同じ
+  widthM: number;
+  heightM: number;
+  drrDb: number;
+  confidence: number;
+  bandAbsorption: Float32Array;
+  rt60Bands: Float32Array;
+}
+
+interface RirResult {
+  rir: Float32Array;
+  sampleRate: number;
+  diagnostics: RirDiagnostic[];  // 警告のみ。使えない合成は例外になる
+}
+
+type MaterialPresetName = 'none' | 'concrete' | 'wood' | 'curtain' | 'carpet' | 'glass';
+type AcousticModeName = 'auto' | 'blind' | 'impulse_response';
+interface RoomPlacement { x: number; y: number; z: number }  // メートル
+```
+
+`materialPreset` と推定の `mode` は、これらの名前だけを受け付けます。数値は `TypeError` です。`roomGeometryFromEstimate(...)` は `RoomEstimateResult` を `synthesizeRir(...)` 用の `RoomGeometryOptions` に変換します（[ルーム音響](./acoustic-analysis.md#推定結果から-rir-を合成する)を参照）。
 
 ### MasteringChainConfig
 
@@ -435,6 +462,8 @@ const PitchClass = {
 
 ### Mode
 
+`Mode` は入力用の enum です。`detectChords` と `chordFunctionalAnalysis` の `keyMode` オプションはこの表の序数を取り、モード名を渡すと `TypeError` になります。`autoTune` の `key.mode` はどちらでも受け付けます。結果ではモードが名前で報告されるので、`detectKey`、`detectKeyCandidates`、`analyze`、`autoTune` は `mode: 'major'`、`'minor'`、`'dorian'` のように返します。`Mode.Major` との比較には使わないでください。
+
 ```typescript
 const Mode = {
   Major: 0,
@@ -483,51 +512,6 @@ const SectionType = {
   Bridge: 4, Instrumental: 5, Outro: 6, Unknown: 7
 } as const;
 ```
-
-## エラーハンドリング
-
-モジュールが未初期化の場合、すべての関数はエラーをスローします。まず `await init()` を呼んでください。
-
-ネイティブ（C++）側の失敗は、構造化された **`SonareError`** としてスローされます。`Error` のサブクラスで、C ABI のエラー enum をそのまま映した数値の `code` と正準名 `codeName` を持つため、メッセージ文字列の照合ではなく原因コードで分岐できます。同じ失敗はどのバインディング（WASM / Node ネイティブ / Python / C ABI）でも同じ数値コードを報告します。パッケージは `ErrorCode` enum、`SonareError` クラス、型ガード `isSonareError(value)` をエクスポートします。
-
-各 facade は非有限数、不正な enum／インデックス値、過大なリソースを DSP やシリアライズへ渡す前に一貫して拒否します。これらは入力不正として扱い、バインディングが暗黙にクランプしたり不正値を受理したりすることへ依存しないでください。
-
-```typescript
-import { ErrorCode, isSonareError, Mixer } from '@libraz/libsonare';
-
-try {
-  const mixer = Mixer.fromSceneJson(sceneJson, 48000, 512);
-} catch (error) {
-  if (isSonareError(error) && error.code === ErrorCode.InvalidState) {
-    // 'failed to build mixer from scene JSON: send timing must be a string ("pre" or "post")'
-    console.error(`scene rejected: ${error.codeName}: ${error.message}`);
-  } else {
-    throw error;
-  }
-}
-```
-
-`Mixer.fromSceneJson` は、フィールド値が拒否された場合も JSON 自体が壊れている場合も、シーンの
-構築に失敗するあらゆる経路で `InvalidParameter` ではなく **`InvalidState`** を報告します。構築が
-ラップされているため、本来の原因は独立したコードではなく
-`failed to build mixer from scene JSON: <内側のメッセージ>` の末尾として届きます。
-`InvalidState` で分岐し、どのフィールドが問題かはメッセージを表示して特定してください。
-
-| `ErrorCode` | 値 |
-|-------------|----|
-| `Ok` | `0` |
-| `FileNotFound` | `1` |
-| `InvalidFormat` | `2` |
-| `DecodeFailed` | `3` |
-| `InvalidParameter` | `4` |
-| `OutOfMemory` | `5` |
-| `NotSupported` | `6` |
-| `InvalidState` | `7` |
-| `Cancelled` | `8` |
-| `EncodeFailed` | `9` |
-| `Unknown` | `99` |
-
-このコードは Python の `SonareError.code` および C ABI の `SonareError` enum と一致し、Python CLI は同じコードを[終了コード](./cli.md#終了コード)へ対応付けます。
 
 ## 型エクスポート索引
 

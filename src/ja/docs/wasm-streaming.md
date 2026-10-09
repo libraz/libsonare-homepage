@@ -203,7 +203,7 @@ source.connect(workletNode);
 ```
 
 ::: details 関連するエントリポイント（リアルタイムエンジン、MIDI）
-上の例は独自の analyzer worklet を作るものです。トラックレーン、チャンネルストリップ、バス、MIDI クリップ、ライブ MIDI、楽器、キャプチャといった再生エンジン全体を worklet 内で動かしたい場合は、`@libraz/libsonare/worklet` の AudioWorklet ブリッジを使います。ブリッジの `SonareEngine` API がそのエンジンを worklet へミラーします。詳しくは [リアルタイムとストリーミング](./realtime-streaming.md) を参照してください。
+上の例は独自の analyzer worklet を作るものです。プロセッサを書かずにオーディオグラフの一部を解析したい場合は、`@libraz/libsonare/worklet` の `SonareStreamAnalyzerNode` を使います。worklet 側はモノラルへのダウンミックスとチャンクの転送だけを行い、解析器はメインスレッドで動きます（[オーディオグラフの一部を解析する](./realtime-streaming.md#オーディオグラフの一部を解析する)を参照）。トラックレーン、チャンネルストリップ、バス、MIDI クリップ、ライブ MIDI、楽器、キャプチャといった再生エンジン全体を worklet 内で動かしたい場合は、`@libraz/libsonare/worklet` の AudioWorklet ブリッジを使います。ブリッジの `SonareEngine` API がそのエンジンを worklet へミラーします。詳しくは [リアルタイムとストリーミング](./realtime-streaming.md) を参照してください。
 
 メインエントリ（`@libraz/libsonare`）には、メインスレッド用のブラウザ連携ヘルパーが 2 つ同梱されています。`bindMicrophoneInput(...)` は `getUserMedia` を AudioWorklet のエンジンノードへつなぎ（[録音とテイク](./recording-and-takes.md) を参照）、`bindWebMidi(...)` は Web MIDI 入力をエンジンへ橋渡しします（[MIDI 入力](./midi-input.md) を参照）。
 :::
@@ -400,3 +400,147 @@ try {
 ユーザー作成プリセット JSON を受け入れる前には、`validateRealtimeVoiceChangerPresetJson(json)` で検証してください。`RealtimeVoiceChangerConfigInput` は、6 種類の厳密な `VoicePresetId` 文字列、または `dsp` と `macros` のどちらか一方だけを持つプリセットオブジェクトを受け取ります。`voiceCharacterPresetId(...)` は未知の数値序数で `null` を返し、未知の文字列 ID では例外になります。`realtimeVoiceChangerPresetConfig(...)` は解決できないプリセットで例外になります。
 
 正規 ID や解決済みのフラット POD 設定だけが必要な場合は、`voiceCharacterPresetId(...)` と `realtimeVoiceChangerPresetConfig(...)` を使います。
+
+## クリップ音声のページストリーミング
+
+長いアレンジは、一度にメモリへ載せきれないほどのクリップ音声を持つことがあります。エンジンはクリップ音声を**ページ**単位でストリーミングします。1 つの巨大なバッファの代わりに、クリップの音声は*クリップページプロバイダ*が受け持ち、必要に応じて固定サイズのページをエンジンへ渡します。
+
+この流れは設計上ロックフリーです。
+
+1. レンダースレッドがまだ持っていないページを必要とし、**ウェイトフリーのページ要求キュー**へ要求を積みます。
+2. メインスレッドが `engine.popClipPageRequest()` でそのキューを排出し、要求されたページの音声をストレージから読み、`provider.supply(pageIndex, channels)` を呼びます。
+3. 不要になったページは `provider.clear(pageIndex)` で解放します。
+4. これとは別に、レンダースレッドはこれから読もうとしていてまだ手元にないページも報告するため、ホストは再生位置が到達する前に供給できます。後述の [先読み](#先読み) を参照してください。
+
+音声スレッドは要求を積むことと、すでに読み込まれたページを読むことしか行わないため、ストレージやアロケーションでブロックしません。
+
+<FlowDiagram
+  title="ロックフリーなクリップページの受け渡し"
+  direction="TB"
+  :nodes="[
+    { id: 'need', label: 'レンダースレッドがページ N を要求', col: 0, row: 0, variant: 'accent', group: 'audio' },
+    { id: 'push', label: 'ウェイトフリーキューへ要求を積む', col: 0, row: 1, variant: 'accent', group: 'audio' },
+    { id: 'pop', label: 'popClipPageRequest() でキューを排出', col: 1, row: 2, group: 'main' },
+    { id: 'read', label: 'ストレージからページ音声を読む', col: 1, row: 3, group: 'main' },
+    { id: 'supply', label: 'provider.supply(pageIndex, channels)', col: 1, row: 4, variant: 'success', group: 'main' },
+    { id: 'consume', label: 'レンダースレッドが供給済みページを読む', col: 0, row: 5, variant: 'success', group: 'audio' },
+    { id: 'clear', label: 'provider.clear(pageIndex)', col: 1, row: 6, variant: 'muted', group: 'main' }
+  ]"
+  :edges="[
+    { from: 'need', to: 'push' },
+    { from: 'push', to: 'pop', label: 'ページ要求' },
+    { from: 'pop', to: 'read' },
+    { from: 'read', to: 'supply' },
+    { from: 'supply', to: 'consume', label: 'ページ準備完了' },
+    { from: 'consume', to: 'clear', label: '不要になったら', style: 'dashed' }
+  ]"
+  :groups="[
+    { id: 'audio', label: 'オーディオ／レンダースレッド' },
+    { id: 'main', label: 'メインスレッド' }
+  ]"
+  caption="音声スレッドは要求を積むことと供給済みページを読むことだけを行い、遅いストレージ読み取りはメインスレッドで行われます。"
+/>
+
+::: info ロックフリーとウェイトフリー（初心者向け）
+リアルタイム音声スレッドは止まってはいけません。ほんの一瞬でも停滞すると出力にノイズが乗ります。**ロックフリー**とは、音声スレッドが他スレッドの保持するロックの解放を待たないことです。ここで使うより強い保証が**ウェイトフリー**で、ページ欠落要求をページ要求キューへ積む処理は必ず有限ステップで完了します。そのため音声スレッドがそこで待ったりスピンしたりすることがありません。遅い部分（ストレージからのページ読み取り）は、代わりにメインスレッドで行われます。
+:::
+
+### 先読み
+
+読み出しが済んでからミスを報告したのでは、無音を避けるには遅すぎます。そのブロックの読み出しはすでに無音を出力しており、ホストが知るのはその後だからです。あらかじめ用意していないページ境界のたびに、1 ブロック分の無音が生じます。そこでプレイヤーは、これから到達するページも報告します。
+
+`prepare(...)` は先読みウィンドウをエンジンのサンプルレートで **0.5 秒** に設定し、`setClipPagePrefetchFrames(frames)` で音声の再生中にも変更できます（`clipPagePrefetchFrames()` で読み戻し、`0` で先読みを完全に無効化）。C の入口は `sonare_engine_set_clip_page_prefetch_frames` と `sonare_engine_clip_page_prefetch_frames` で、`SonareEngine` ワークレットファサードはセッターをワークレット側エンジンとこのスレッドのオフラインエンジンの両方へ転送します。
+
+先読みの要求も同じ `popClipPageRequest()` のキューから排出され、1 ブロックの中ではそのブロックの本当のミスの **後ろ** に積まれます。したがってクリップごとに最新の要求だけを保持するホストは、古いミスではなく先読みの先端を追いかけることになります。前述の「読んでからミスを報告する」経路はそのまま動き続けるので、先読みの要求を無視するホストは先読みが無い場合とまったく同じように振る舞います。ページがすべて常駐しているクリップは、どちらの場合も要求をまったく生みません。
+
+::: info `ClipPageStreamer` のウィンドウとは別ものです
+2 つの異なる仕組みが重なっており、どちらも必要です。ここでの先読みは **エンジン側** のもので、オーディオスレッドがこれから向かうページを教えてくれる機構です。`ClipPageStreamer` の `readAheadPages` / `retainBehindPages`（後述）は **JS 側** のスライディングウィンドウで、WASM メモリにどれだけの音声を常駐させておくかを決めます。エンジンの先読みがストリーマに何を取りに行くかを伝え、ストリーマのウィンドウが何を保持しておくかを決めます。
+:::
+
+### ブラウザの OPFS バックエンドプロバイダ
+
+パッケージには、[Origin Private File System（OPFS）](https://developer.mozilla.org/docs/Web/API/File_System_API/Origin_private_file_system) からワーカー上でページを読む既製プロバイダが同梱されており、ディスク読み取りをメインスレッドの外に保ちます。クリップは生のインターリーブ `Float32`（`L0, R0, L1, R1, …`）として OPFS に置き、ヘッダーがあれば `dataOffsetBytes` で読み飛ばします。WASM メモリに載るのは、現在のウィンドウに入るページだけです。
+
+この仕組みは 4 つのエクスポートで構成され、それぞれが 1 つ上の段を土台にしています。
+
+| エクスポート | 何か |
+|--------------|------|
+| `opfsClipPageWorkerSource` | 関数ではなく JavaScript の**文字列**で、ページを読むワーカーのソーステキストです。ページインデックスを受け取ると、同期アクセスハンドルでファイルを開き、`dataOffsetBytes + pageIndex * pageFrames * numChannels * 4` から `pageFrames` フレームを読み、チャンネルごとのバッファにデインターリーブして、転送リスト付きで送り返します。同じ `path` への読み取りはワーカー内で直列化されます。使うのは、`blob:` ワーカーを禁じる CSP の下など、ワーカーを自前でバンドルするときだけです。 |
+| `createOpfsClipPageWorker()` | そのソースの Blob URL から `new Worker(...)` を作り、生成直後に URL を破棄します。`worker` を渡さなければ内部で呼ばれます。 |
+| `createOpfsClipPageProvider(engine, options)` | エンジン側の `ClipPageProvider`（`engine.createClipPageProvider(numChannels, numSamples, pageFrames)`）を作り、ワーカーと組み合わせます。返るのはバインディングで、`provider`、`supplyPage(pageIndex)`、`supplyRequest(request)`、`clearPage(pageIndex)`、`close()` を持ちます。`numChannels`、`numSamples`、`pageFrames` のいずれかが正でなければ例外になります。 |
+| `writeOpfsClip(path, channels, options?)` | プレーナーな `Float32Array` のチャンネルを、リーダーが期待するレイアウト（ヘッダーなし、リトルエンディアン float32、インターリーブ、先頭バイトから）で `path` に書きます。存在しないディレクトリは作成され、既存のファイルは置き換えられます。書き込みは OPFS ワーカー（`options.worker`、なければ内部のもの）で実行されます。`{ path, numChannels, numSamples }` で解決します。ファイルにこれらは保存されないので、読み出し時に渡し直してください。開いているページプロバイダが読んでいるパスは `SonareError` の `InvalidState` で拒否され、空のチャンネル配列や長さの揃わないチャンネルは `RangeError` です。 |
+| `importOpfsClip(path, source, options?)` | `ArrayBuffer`、`Blob`、`AudioBuffer` をデコードして（全チャンネルを保持）`writeOpfsClip` で書きます。リサンプルはしません。結果にはソースの `sampleRate` が加わるので、これをクリップのソースレートとして渡してください。 |
+| `attachOpfsClipStream(streamer, engine, options)` | セッション向けの一括の入口です。バインディングを作り、先頭 `primePages` ページ（既定 `1`）をプライムして再生開始直後のミスを防ぎ、クリップを `ClipPageStreamer` に登録します。`{ binding, provider }` を返します。 |
+
+クリップ 1 本を手作業で処理する例です。
+
+```typescript
+import { createOpfsClipPageProvider } from '@libraz/libsonare';
+
+const binding = createOpfsClipPageProvider(engine, {
+  path: 'clips/long-take.f32',  // OPFS 上のインターリーブ Float32
+  numChannels: 2,
+  numSamples: totalFrames,      // ファイルの総フレーム数
+  pageFrames: 65536,            // フレーム単位のページサイズ
+  // dataOffsetBytes?: ヘッダーをスキップ
+  // worker?: 自前の Worker を再利用。terminateWorkerOnClose: true を
+  //          付けない限り close() 後も動き続ける
+});
+
+// UI tick で、レンダースレッドが要求した分を処理する:
+let request;
+while ((request = engine.popClipPageRequest()) !== null) {
+  await binding.supplyRequest(request);  // 該当ページを読み込んでプロバイダへ渡す
+}
+
+// 後始末:
+binding.close();  // プロバイダを解放し、所有していればワーカーも終了
+```
+
+`supplyRequest(request)` は排出した要求のサンプル位置をページインデックス（`Math.floor(request.sample / pageFrames)`）へ写像し、`supplyPage(pageIndex)` はページを直接プリフェッチします。どちらもページが常駐した時点で `true`、ファイル範囲外のページや途中で終わった読み取りでは `false` に解決し、`close()` 後は reject されます。1 つのバインディングを通る供給は呼び出し順に 1 件ずつ実行されます。各バインディングは自分の要求 id にしか応答しないので、1 つの `Worker` を複数のバインディングで共有できます。
+
+#### SharedArrayBuffer が要る場所と要らない場所
+
+ページの**データ**に `SharedArrayBuffer` は要りません。ワーカーは各ページを転送済みの `ArrayBuffer` として渡すため、所有権はコピーなしにメインスレッドへ移り、`provider.supply(...)` がそのチャンネルを WASM メモリへコピーします。Worklet ファサードでは、メインスレッドが同じバッファをもう一度転送して `AudioWorklet` へ送ります。
+
+**要求**の向きも不要です。ページミスはレンダースレッドで発生します。`'sab'` モードでは、ファサードが 8 ms ごとにポーリングする共有の要求リングを通ってメインスレッドへ届きます。`postMessage` モードでは、Worklet が確保なしでページミスを読み取り、ミスしているページの集合が変わるたびに要求を送ります。集合が変わらない間も 250 ms ごとに再送するので、読み取りに失敗しても再試行されます。`capabilities.clipPageRequestsRealtimeSafe` はリングを使っているかどうかを示します。`SonareEngine.attachOpfsClipStream(options)` はどちらでも動作するため、このサイトのように cross-origin isolation のないページでも、OPFS から Worklet エンジンへクリップをページングできます。
+
+ファサードでの呼び出しは `attachOpfsClipStream(engine, options)` の 2 引数で、ストリーマーは渡しません。ファサードが自前の `ClipPageStreamer` を持ち、要求リングからポンプします。返った `provider` は `engine.addClip(trackId, provider, startPpq, { id: clipId })` に渡し、`opts.id` を `options.clipId` と一致させます。この経路で作られていない `pageProvider` はファサードが拒否します。
+
+::: warning OPFS 対応はブラウザによって異なる
+OPFS プロバイダは `navigator.storage.getDirectory()` と同期アクセスハンドルに依存します。これらは現行の Chromium・Firefox と最近の Safari の WebKit では利用できますが、古いブラウザでは使えません。利用前に機能検出し、OPFS が無い環境向けにメモリだけで動くプロバイダ（または任意のソースから読み込む自前の `ClipPageProvider`）を用意してください。
+:::
+
+### 複数クリップの範囲限定ストリーミング
+
+上のループは 1 つのプロバイダを手作業で処理します。マルチトラックのアレンジでは、クリップが何本あっても、どれだけ長くても、常駐する音声を一定量に抑えたいはずです。`ClipPageStreamer` がそれを担います。各クリップの再生位置の周りにページのスライディングウィンドウ — クリップあたり `retainBehindPages + readAheadPages + 1` ページ — だけを保持し、ミスを先読みで取得し、後方に外れたページを破棄するため、セッション全体で PCM 全体を WASM メモリに抱えることがありません。
+
+`attachOpfsClipStream(...)` は、OPFS バックエンドのクリップ 1 本を共有ストリーマーへ 1 回の呼び出しで接続します。プロバイダを構築し、再生開始直後にミスが出ないよう先頭ページをプライムし、ウィンドウ破棄の対象として登録します。
+
+```typescript
+import { ClipPageStreamer, attachOpfsClipStream } from '@libraz/libsonare';
+
+const streamer = new ClipPageStreamer(engine, { readAheadPages: 2, retainBehindPages: 1 });
+
+// 長いクリップごとに接続し、`provider` をクリップスケジュールへ渡す。
+const take = await attachOpfsClipStream(streamer, engine, {
+  clipId: 1,                    // ページミス要求の clipId と一致させる
+  path: 'clips/long-take.f32',
+  numChannels: 2,
+  numSamples: totalFrames,
+  pageFrames: 65536,
+});
+engine.setClips([{ clipId: 1, /* ...タイミング... */ pageProvider: take.provider }]);
+
+// 制御スレッドのペースでミスを排出する（アニメーションフレームごとが一般的）:
+function tick() {
+  streamer.pump();              // 不足ページ＋先読みを取得し、ウィンドウ外を破棄
+  requestAnimationFrame(tick);
+}
+
+// 破棄すると、接続済みの全クリップのバインディングを閉じる:
+streamer.close();
+```
+
+`pump()` はメイン／制御スレッドでのみ呼びます — 取得は非同期なので、オーディオスレッドでは決して呼ばないでください。自前でプロバイダを作ったクリップの着脱には `addSource` / `removeSource` を使います。明示的なシークやループの後は `resetSource(clipId)` を呼び、古い再生ウィンドウを破棄して新しい取得世代を開始します。後方ページへのミスでもこのリセットは自動的に行われ、シーク前の処理中フェッチが後から常駐するのを防ぎます。
+

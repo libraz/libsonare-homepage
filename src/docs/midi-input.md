@@ -86,6 +86,8 @@ The built-in waveform synth (`setBuiltinInstrument`), NativeSynth (`setSynthInst
 
 The built-in synth and NativeSynth apply channel pressure, polyphonic key pressure, and per-note pitch bend. The SoundFont player applies full-width note velocity, channel pressure, pitch bend, and MIDI 2.0 per-note pitch, but intentionally ignores polyphonic key pressure. MPE-style member channels can therefore carry channel expression to each player, while poly-pressure expression is unavailable on SoundFont.
 
+A zone-wide command sent on an MPE manager channel, such as CC64 sustain, reaches every member channel of the zone on the built-in synth.
+
 NativeSynth and the SoundFont player use RPN 0 for bend range, and the built-in synth handles its MPE zone configuration. Generic high-resolution RPN/NRPN and 14-bit CC parameter mappings live one level up, in the engine's `bindMidiCcBinding(...)` layer described below. See [Native Synth](./native-synth.md) for NativeSynth's bend and expression details.
 :::
 
@@ -111,33 +113,33 @@ Live events are *queued*, not played synchronously. Each call hands the engine a
 
 There are two queueing paths, and you should pick one per destination. Rule of thumb: use the **immediate commands** when your own code generates the events (a sequencer step, an on-screen keyboard); use the **input source** when events arrive from outside with their own timestamps (a hardware keyboard via `bindWebMidi`), because that lane carries the per-port timestamp the Web MIDI bridge needs.
 
-- **Immediate engine commands** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` each take a `destinationId` and a `renderFrame` (or `-1` for "as soon as possible"). `pushMidiPanic(renderFrame)` takes only the `renderFrame` — it releases every sounding note on *all* destinations at once.
+- **Immediate engine commands** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` each take a `destinationId` and an optional `renderFrame`; omit it to fire as soon as possible. `pushMidiPanic(renderFrame?)` takes only the optional `renderFrame` — it releases every sounding note on *all* destinations at once. A negative `renderFrame` is refused (`RangeError` on Node and WASM, `SonareValueError` in Python); "not given" is absence, never `-1`.
 - **The engine-owned live input source** — `setMidiInputSource(destinationId)` opens a dedicated input lane, then `pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` send events with a `portTimeSamples` timestamp. `pushMidiInputPitchBend`, `pushMidiInputChannelPressure`, `pushMidiInputPolyPressure`, and `pushMidiInputUmp` add the corresponding expression and raw-packet paths. This is the lane the Web MIDI bridge feeds for you.
-- **Live SysEx** — `pushMidiSysex(destinationId, data, renderFrame = -1)` queues a full SysEx (System Exclusive, a free-form manufacturer-specific message) frame to a destination; `data` is the complete message including the leading `0xF0` and trailing `0xF7` (1..512 bytes), and `renderFrame` follows the same immediate/schedule convention as the other `pushMidi*` calls. Its primary use is delivering a GS/GM reset or a GS insertion-effect (EFX) selection to a live SF2-bound destination without stopping playback — see [SoundFont Player](./soundfont-player.md) for what that SysEx selects.
-- **Raw UMP messages** — `pushMidiUmp(destinationId, words, renderFrame = -1)` accepts an array or `Uint32Array` of 1–4 32-bit words, most significant first. The length must match the message type in the first word. MIDI 2.0 channel-voice messages (MT `0x4`) keep their full value width; SysEx7/data messages (MT `0x3`/`0x5`) are rejected, so use `pushMidiSysex` for those. The `SonareEngine` worklet facade accepts the same complete packet through `pushMidiUmp(trackId, words, renderFrame = -1)` (a legacy one-word number is also accepted), and its `pushMidiInputUmp(words, portTimeSamples = 0)` covers the engine-owned input source.
+- **Live SysEx** — `pushMidiSysex(destinationId, data, renderFrame?)` queues a full SysEx (System Exclusive, a free-form manufacturer-specific message) frame to a destination; `data` is the complete message including the leading `0xF0` and trailing `0xF7` (1..512 bytes), and `renderFrame` follows the same omit-for-immediate convention as the other `pushMidi*` calls. Its primary use is delivering a GS/GM reset or a GS insertion-effect (EFX) selection to a live SF2-bound destination without stopping playback — see [SoundFont Player](./soundfont-player.md) for what that SysEx selects.
+- **Raw UMP messages** — `pushMidiUmp(destinationId, words, renderFrame?)` accepts an array or `Uint32Array` of 1–4 32-bit words, most significant first. The length must match the message type in the first word. MIDI 2.0 channel-voice messages (MT `0x4`) keep their full value width; SysEx7/data messages (MT `0x3`/`0x5`) are rejected, so use `pushMidiSysex` for those. The `SonareEngine` worklet facade accepts the same complete packet through `pushMidiUmp(trackId, words, renderFrame?)` (a legacy one-word number is also accepted), and its `pushMidiInputUmp(words, portTimeSamples = 0)` covers the engine-owned input source.
 
-Every binding exposes the same SysEx call; only the naming convention changes. `data` is the complete frame (leading `0xF0`, trailing `0xF7`, 1..512 bytes) and the last argument is the same `-1`-for-immediate render frame as the other `pushMidi*` calls.
+Every binding exposes the same SysEx call; only the naming convention changes. `data` is the complete frame (leading `0xF0`, trailing `0xF7`, 1..512 bytes) and the last argument is the same optional render frame as the other `pushMidi*` calls (omitted, or `None` in Python, for immediate). Only the C ABI spells "immediate" as `-1`.
 
 The destination instrument prepares a live SysEx payload on the control thread before it is queued. If preparation is refused, the call reports `InvalidParameter`; retrying the same payload cannot fix that refusal. `setMidiClips` prepares every scheduled SysEx before publishing a replacement, so one refusal leaves the previously accepted schedule in place. Rebinding a destination also stages preparation for scheduled and already queued SysEx; a refusal leaves the previous instrument binding and pending operations unchanged. A later `prepare()` rechecks scheduled payloads; if the bound instrument refuses one, the schedule is cleared and `InvalidParameter` is reported.
 
 ::: code-group
 
 ```typescript [Browser]
-engine.pushMidiSysex(/* destinationId */ 0, gsResetOrEfxBytes, -1);
+engine.pushMidiSysex(/* destinationId */ 0, gsResetOrEfxBytes);
 ```
 
 ```typescript [Node]
 // Same surface as the browser; data is a Buffer or Uint8Array.
-engine.pushMidiSysex(0, gsResetOrEfxBytes, -1);
+engine.pushMidiSysex(0, gsResetOrEfxBytes);
 ```
 
 ```python [Python]
-# data is bytes / bytearray / memoryview; render_frame=-1 is immediate.
-engine.push_midi_sysex(0, gs_reset_or_efx_bytes, render_frame=-1)
+# data is bytes / bytearray / memoryview; render_frame=None (the default) is immediate.
+engine.push_midi_sysex(0, gs_reset_or_efx_bytes)
 ```
 
 ```c [C ABI]
-/* size must be 1..512; render_frame -1 = immediate. */
+/* size must be 1..512; the C ABI keeps render_frame -1 = immediate. */
 sonare_engine_push_midi_sysex(engine, /* destination_id */ 0,
                               data, size, /* render_frame */ -1);
 ```
@@ -146,9 +148,12 @@ sonare_engine_push_midi_sysex(engine, /* destination_id */ 0,
 
 ```typescript
 // Immediate path: fire a note at the start of the next block.
-engine.pushMidiNoteOn(/* destinationId */ 0, /* group */ 0, /* channel */ 0, /* note */ 60, /* velocity */ 100, -1);
-engine.pushMidiCc(0, 0, 0, /* controller */ 1, /* value */ 64, -1);
-engine.pushMidiNoteOff(0, 0, 0, 60, 0, -1);
+engine.pushMidiNoteOn(/* destinationId */ 0, /* group */ 0, /* channel */ 0, /* note */ 60, /* velocity */ 100);
+engine.pushMidiCc(0, 0, 0, /* controller */ 1, /* value */ 64);
+engine.pushMidiNoteOff(0, 0, 0, 60, 0);
+
+// Scheduled: the same call with a block-relative render frame.
+engine.pushMidiNoteOn(0, 0, 0, 64, 100, /* renderFrame */ 64);
 
 // Input-source path (what bindWebMidi uses under the hood):
 engine.setMidiInputSource(0);
@@ -203,6 +208,27 @@ For an offline "wiggle a knob, capture which CC moved" flow, the project API exp
 `options.minMovement` is an integer from `0` through `127` (default `0`) measured in 7-bit CC units. With `0`, the first observed standalone controller value binds immediately; a low-numbered CC (`0..31`) is held until the next message so it can still form a 14-bit pair. With a positive threshold, the controller must move by at least that many 7-bit units from its first value on the same UMP group and channel. MIDI 2.0 32-bit CC values are downscaled to those 7-bit units. The threshold applies only to standalone 7-bit controllers; 14-bit pairs and RPN/NRPN sequences are assembled without this gate.
 :::
 
+## Mapping a device gesture to an expression axis
+
+A **controller profile** says what a gesture means to the instrument on a destination: CC2 as breath force, channel pressure as loudness, a pitch bend as a pitch offset in cents. This is separate from `bindMidiCc`, which drives an *engine parameter*; a profile drives the instrument's own expression axes.
+
+- `controllerProfileNames()` lists the presets: `'gm'`, `'breath'`, `'breath-aftertouch'`, `'mpe'`.
+- `engine.setControllerProfile(destinationId, name)` replaces the destination's profile with a preset and clears every channel's accumulated axis values. An unknown name, a destination with no instrument, or an instrument with no profile throws.
+- `engine.bindController(destinationId, binding)` adds one `ControllerBinding` on top: `input` (`'control-change'`, `'channel-pressure'`, `'poly-pressure'`, `'pitch-bend'`, `'velocity'`), `index` (the CC number, used only by `'control-change'`), `axis` (`'excitation'`, `'position'`, `'brightness'`, `'morph'`, `'loudness'`, `'pitch-cents'`, `'vibrato-depth'`; `'none'` is refused), and optional `lo`, `hi` and `curve`. `lo > hi` inverts the gesture, and `curve` defaults to a linear `1`.
+- `clearControllerBindings(destinationId)`, `controllerBindingCount(destinationId)` and `setControllerVelocityMeaningful(destinationId, meaningful)` complete the set. Set the last to `false` when the device sends a constant velocity, so the bound axes carry the dynamics alone.
+- `setControllerNoteTracking(destinationId, dimension, tracking)` chooses which note a value addressed to a whole channel reaches when several sound on it: `dimension` is one of `MPE_DIMENSIONS` (`'bend'`, `'pressure'`, `'timbre'`) and `tracking` one of `NOTE_TRACKINGS` (`'last'`, `'lowest'`, `'highest'`, `'all'`). It matters only inside an MPE zone while a channel holds more than one note.
+
+```typescript
+import { controllerProfileNames } from '@libraz/libsonare';
+
+controllerProfileNames();                         // ['gm', 'breath', 'breath-aftertouch', 'mpe']
+engine.setControllerProfile(0, 'breath');         // breath CC drives the excitation force
+engine.bindController(0, { input: 'channel-pressure', axis: 'loudness', lo: 0.2, hi: 1 });
+engine.controllerBindingCount(0);                 // 5
+```
+
+Python uses `bind_controller(destination_id, input=..., index=0, axis=..., lo=0.0, hi=1.0, curve=1.0)` with keyword-only arguments, `set_controller_profile`, `clear_controller_bindings`, `controller_binding_count`, `set_controller_velocity_meaningful`, `set_controller_note_tracking`, and the module-level `controller_profile_names()`. Which axes each instrument voice reads is listed in [Physical Models](./physical-models.md).
+
 ## Swapping MIDI FX without hanging notes
 
 Each destination can carry one **MIDI-FX insert** — a non-destructive transform on the event stream (transpose, channel filter, velocity curve, …) configured from JSON.
@@ -247,10 +273,12 @@ The call publishes an immutable configuration from the control thread and the au
 A **stuck note** is a note-on whose matching note-off never arrived — a yanked cable, a dropped Bluetooth packet, an FX swap that ate the off. The cure is a **MIDI panic**: an all-notes-off that releases every sounding voice.
 
 ```typescript
-engine.pushMidiPanic(-1);   // -1 = immediate; or pass a renderFrame to schedule it
+engine.pushMidiPanic();   // immediate; or pass a renderFrame to schedule it
 ```
 
 Panic is realtime-safe and cheap — wire it to a visible "panic" button in any instrument UI. The Web MIDI bridge does not auto-panic on disconnect, so if you handle hot-unplug yourself, send a panic when a port you were playing goes away.
+
+Note-offs are not dropped under load: one that a full MIDI output refuses is retried every block, and a full MIDI-FX queue releases the note at once and withdraws its pending note-on. Scheduled MIDI lands on the same frame whatever block size the host runs, including MIDI-FX output, releases at a clip's end, and events after a loop wrap.
 
 ## The browser Web MIDI bridge
 
@@ -395,7 +423,7 @@ class KeyboardSynthProcessor extends AudioWorkletProcessor {
     } else if (msg.type === 'ump') {
       engine.pushMidiInputUmp(msg.words, 0);
     } else if (msg.type === 'panic') {
-      engine.pushMidiPanic(-1);
+      engine.pushMidiPanic(); // omitted frame = immediate
     }
   }
 

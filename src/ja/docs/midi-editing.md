@@ -76,7 +76,7 @@ project.set_program(midi_clip, 4)          # GM プログラム（例: 4 = エ�
 
 Python では静的パッカーが `Project.midi_note_on(...)` / `Project.midi_note_off(...)` で、それぞれ `(ppq, data0, data1)` タプルを返します。イベントリストはそのタプルの任意のシーケンスです。
 
-`setProgram` は 3 つ目の任意引数 `bank` を取ります——`setProgram(clipId, program, bank = -1)`。既定は `-1`（バンクセレクトを送出しない）で、`>= 0` を渡すとプログラムチェンジの前にバンクセレクトを送出します。クリップ既定ではなく特定の UMP（Universal MIDI Packet）グループ・チャンネルでプログラムを変えるには `setProgramOnChannel(clipId, group, channel, program, bank?)` を使います。どちらも WASM・Node・Python すべてで同じ任意の `bank` を取ります（`set_program(clip_id, program, bank=-1)`、`set_program_on_channel(clip_id, group, channel, program, bank=-1)`）。
+`setProgram` は 3 つ目の任意引数 `bank` を取ります——`setProgram(clipId, program, bank?)`。省略するとバンクセレクトは送出されず、`>= 0` を渡すとプログラムチェンジの前にバンクセレクトを送出します。負の `bank` は拒否されます（Node と WASM は `RangeError`、Python は `SonareValueError`）。`-1` は「なし」を表す値ではありません。クリップ既定ではなく特定の UMP（Universal MIDI Packet）グループ・チャンネルでプログラムを変えるには `setProgramOnChannel(clipId, group, channel, program, bank?)` を使います。どちらも WASM・Node・Python すべてで同じ任意の `bank` を取ります（`set_program(clip_id, program, bank=None)`、`set_program_on_channel(clip_id, group, channel, program, bank=None)`）。
 
 ::: warning `ppq` はティックではなく 4 分音符単位
 `ppq` 引数は **4 分音符単位の位置**（浮動小数点）であり、MIDI のティック数ではありません。`Project.midiNoteOn(1, …)` は 4 分音符 1 つ分あと、`Project.midiNoteOn(0.5, …)` は 8 分音符 1 つ分あとを指します。名前に反して **480 ティック/4 分音符ではありません** — `Project.midiNoteOn(480, …)` は 4 分音符 480 個分（120 小節）先にノートを置くため、ほぼ常にレンダリング範囲のはるか外となり、何も鳴らずに終わります。ティックベースのソース（480 PPQ の SMF など）から変換する場合は、まずソースの「4 分音符あたりのティック数」で割ってください。同じ単位が `addMidiClip(startPpq, lengthPpq)` と、本ページのすべてのクリップ／オートメーション位置に適用されます。

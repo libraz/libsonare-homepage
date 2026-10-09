@@ -74,7 +74,7 @@ The same SF2 player is exposed through WASM/JS, Node native, and Python. Names f
 
 ## Load a caller-supplied SF2
 
-Fetch the `.sf2` yourself and hand the player its raw bytes. The player makes its own copy during the call, so you can discard your buffer right after. A few things to know: loading a SoundFont **replaces** any previous one, and a rejected load throws while leaving the previously loaded SoundFont intact.
+Fetch the `.sf2` yourself and hand the player its raw bytes. The player makes its own copy during the call, so you can discard your buffer right after. A few things to know: loading a SoundFont **replaces** any previous one, and a rejected load throws while leaving the previously loaded SoundFont intact. A successful replacement silences any note still sounding from the old SoundFont, since its samples are released; notes played by the NativeSynth fallback keep going.
 
 ::: info A broken file and a broken call are different errors
 The load reports the two apart, so your handler can tell a user "this file is not usable" without also catching its own bugs:
@@ -355,6 +355,55 @@ const preview = project.bounceWithSf2Instrument(
 );
 ```
 ::::
+
+## NativeSynth and the SoundFont fallback
+
+NativeSynth is the safety net under the [SoundFont player](./soundfont-player.md). When you render with `bounceWithSf2Instrument` (or bind an SF2 live), libsonare resolves each `(channel, bank, program)` the arrangement actually plays:
+
+- if the loaded SoundFont covers the program, that note renders from the **SF2** (GS variation and drum fallbacks included);
+- otherwise — including when no SoundFont is loaded at all — the note plays through the **NativeSynth GM fallback bank** (all 128 programs plus the drum map).
+
+Inspect the per-program backend before rendering with `soundFontManifest()`, which reports `'sf2'` or `'synth'` for each program in first-use order:
+
+```typescript
+project.loadSoundFont(sf2Bytes);
+const manifest = project.soundFontManifest();
+// [{ channel, bank, program, backend: 'sf2' | 'synth', presetName }, ...]
+```
+
+Because the GM fallback bank is always present, MIDI never renders silent for lack of data. See [SoundFont Player](./soundfont-player.md) for loading SF2 data and per-channel/program resolution.
+
+### GM fallback program routing
+
+The fallback bank uses the closest NativeSynth engine for each GM program family, with a few program-level overrides where the instrument behavior matters. The piano has been tuned, while every other physical fallback model still awaits adjustment and calibration. Read the acoustic-style rows below as routing coverage, not as a claim of final sampled-instrument realism.
+
+| GM program | Instrument | Fallback engine | Why |
+|------------|------------|-----------------|-----|
+| 4-5 | Electric Piano 1 / 2 | `fm` | phase-modulated tine/bell brightness |
+| 6 | Harpsichord | `harpsichord` | jack and plectrum; key speed barely changes loudness |
+| 7 | Clavi | `fm` | struck string and pickup color, currently approximated by FM |
+| 8, 10, 14 | Celesta, Music Box, Tubular Bells | `modal` | felt-struck steel bar, twin-tooth tine shimmer, and a missing-fundamental strike pitch |
+| 9, 11-13 | Glockenspiel, Vibraphone, Marimba, Xylophone | `modal` | tuned-bar resonators |
+| 15 | Dulcimer | `karplus-strong` | provisional; hammered (struck, not plucked) string |
+| 16-23 | Organ family | `additive` / `pipe-organ` / `free-reed` | drawbar registrations (16-18), the provisional church-organ flue pipe (19), and free-reed reed-organ, harmonica, and bandoneon voices (20-23) |
+| 24-31 | Guitar family | `karplus-strong` | plucked string waveguide |
+| 32-37 | Acoustic, electric, fretless, and slap basses | `karplus-strong` | bass-string waveguide with program-specific slap/polarization |
+| 40-43 | Violin, Viola, Cello, Contrabass | `bowed-string` | provisional sustained friction-excited string waveguide |
+| 44 | Tremolo Strings | `subtractive` | detuned-saw section with an amplitude-tremolo LFO rather than a bowed model |
+| 45-46 | Pizzicato Strings, Orchestral Harp | `karplus-strong` | short pluck into a violin-body or steel-string corpus |
+| 47 | Timpani | `percussion` | note-tracked kettledrum fallback voice |
+| 48 | String Ensemble 1 | `subtractive` | pad-like ensemble fallback rather than solo bow model |
+| 52-54 | Choir Aahs, Voice Oohs, Synth Voice | `vocal` | source-filter voice (glottal source + vowel formant bank), not a subtractive pad |
+| 56-60 | Trumpet, Trombone, Tuba, Muted Trumpet, French Horn | `brass` | provisional lip-reed brass waveguide |
+| 61-63 | Brass Section, Synth Brass 1 / 2 | `fm` | FM by design, not the brass waveguide |
+| 64-71 | Saxophones, Oboe, English Horn, Bassoon, Clarinet | `reed` | provisional reed and bore waveguides |
+| 72-79 | Piccolo, Flute, Recorder, Pan Flute, Bottle, Shakuhachi, Whistle, Ocarina | `flute` | provisional air-jet / open-pipe waveguides |
+| 104, 106, 107 | Sitar, Shamisen, Koto | `plucked-string` | buzzing-bridge (jawari / sawari) plucked string; the banjo (105) stays on `karplus-strong` |
+| 112-119 | Tinkle Bell, Agogo, Steel Drums, Woodblock, Taiko Drum, Melodic Tom, Synth Drum, Reverse Cymbal | `percussion` | note-tracked percussion-engine voices, distinct from the drum-kit map |
+
+Bank Select is read on every capital program the fallback voices a variation for — see [GS variation tones](./gm-gs.md#gs-variation-tones) above for the full map.
+
+This routing is separate from the named preset catalog: `synthPresetNames()` still lists the hand-authored presets (`e-piano`, `harp`, `drum-kit`, and so on), while the GM fallback bank chooses the internal patch for each MIDI program number during SF2 fallback.
 
 ## Related
 

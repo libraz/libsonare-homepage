@@ -9,7 +9,7 @@ Use transcription when a recording needs a symbolic MIDI representation. Both en
 
 | Need | Call | PPQ clock | Result |
 |---|---|---|---|
-| Inspect or post-process a transcription | `transcribe({ samples, sampleRate, tempoBpm? })` | One constant tempo for this call; `tempoBpm` is supplied or detected | `{ events, noteCount, tempoBpm }`; the project is unchanged |
+| Inspect or post-process a transcription | `transcribe({ samples, sampleRate, tempoBpm? })` | One constant tempo for this call; `tempoBpm` is supplied or detected | `{ events, noteCount, tempoBpm, tuning }`; the project is unchanged |
 | Put notes into an existing arrangement | `project.transcribeToClip({ clipId, samples, sampleRate, ... })` | The project's tempo map | Replaces the target MIDI clip's event list and returns the written note count |
 
 The output is `ProjectMidiEvent[]`, a symbolic event list. Transcription does not modify the input audio. Its events are already shaped for `setMidiEvents`; a note produces two events, ordered with a note-off before a note-on at the same PPQ position.
@@ -18,7 +18,7 @@ The output is `ProjectMidiEvent[]`, a symbolic event list. Transcription does no
 
 ## Transcribe audio into a MIDI clip
 
-The standalone `transcribe(...)` function takes an optional `tempoBpm` and returns `{ events, noteCount, tempoBpm }` on its own constant-tempo grid. `Project.transcribeToClip(...)` uses the project's tempo map instead: after `autoTempo(...)` installs that map, it replaces the clip's event list and returns the number of notes written. Its request has no `tempoBpm`.
+The standalone `transcribe(...)` function takes an optional `tempoBpm` and returns `{ events, noteCount, tempoBpm, tuning }` on its own constant-tempo grid. `Project.transcribeToClip(...)` uses the project's tempo map instead: after `autoTempo(...)` installs that map, it replaces the clip's event list and returns the number of notes written. Its request has no `tempoBpm`.
 
 ::: code-group
 
@@ -63,14 +63,14 @@ The default monophonic path follows one pYIN-derived pitch line and segments it 
 
 `tempoBpm` is a coordinate system for the standalone function. Omit it to run tempo detection; if no usable tempo is found, the call uses 120 BPM. `Project.transcribeToClip` has no tempo option because it reads the project's map. Call `autoTempo` first when the project should follow the recording, then transcribe into the clip.
 
-The tuning reference defaults to 440 Hz and is not measured during transcription. Measure the take separately when it was recorded away from A440, then pass `referenceHz`. The audio must be non-empty, finite, mono samples with a sample rate in `[8000, 384000]`. Finding no notes is a successful result with an empty event list and `noteCount: 0`.
+The tuning reference defaults to 440 Hz. For a take recorded away from A440, pass `referenceHz: 'auto'` (Python `reference_hz="auto"`) to measure it from the audio before any pitch is tracked, or pass the reference in Hz. The result's `tuning` (a semitone fraction from A440) reports the reference used either way, so a transcription that sits a fraction off can be traced to it; `tuningToReferenceHz` and `referenceHzToTuning` convert between that unit and Hz. The audio must be non-empty, finite, mono samples with a sample rate in `[8000, 384000]`. Finding no notes is a successful result with an empty event list and `noteCount: 0`.
 
 ## Options and limits
 
 | Option | Meaning |
 |---|---|
 | `polyphonic` | `false` uses the monophonic pYIN segmentation; `true` uses multi-F0 tracking |
-| `referenceHz` | Positive tuning reference for MIDI note numbers; default `440` and not auto-measured |
+| `referenceHz` | Positive tuning reference in Hz for MIDI note numbers, or `'auto'` to measure it from the audio; default `440` |
 | `fmin`, `fmax` | F0 search range in Hz for either path; omit an endpoint for the selected path's default, or supply a positive value, with resolved `fmax > fmin` |
 | `minNoteMs` | Shortest monophonic note span; default `30` ms |
 | `segmentationThresholdCents` | Pitch movement that starts a new monophonic note; default `50` cents |

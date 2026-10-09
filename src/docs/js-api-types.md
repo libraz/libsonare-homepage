@@ -1,9 +1,9 @@
 ---
-title: JavaScript/TypeScript Types and Errors
-description: Type definitions, enumerations, error handling, and the type export index of the libsonare JavaScript/TypeScript package.
+title: JavaScript/TypeScript Types and Enumerations
+description: Type definitions, enumerations, and the type export index of the libsonare JavaScript/TypeScript package.
 ---
 
-# JavaScript/TypeScript Types and Errors
+# JavaScript/TypeScript Types and Enumerations
 
 ## Types
 
@@ -249,7 +249,34 @@ interface RirDiagnostic {
 }
 ```
 
-An unusable morph throws, so there is no `hasError`/`errorMessage` pair here and every entry in `diagnostics` is recoverable. Branch on `code`: `acoustic.ism_order_clamped` (image-source order reduced to the safe maximum), `acoustic.rir_length_clamped` (tail cut against `maxSeconds` or against a resource limit), `acoustic.rir_length_floored` (`maxSeconds` is shorter than the direct sound's flight time) and `acoustic.no_late_tail` (no diffuse tail produced) each mean the morph went through a room other than the one requested, and none is visible in the audio itself. `synthesizeRir(...)` reports the same shape on `RirResult.diagnostics`. The C ABI publishes the same entries structurally — `sonare_last_diagnostic_count()`, `sonare_last_diagnostic_code(i)`, `sonare_last_diagnostic_message(i)`, `sonare_last_diagnostic_severity(i)` — so a caller there branches on the code too rather than parsing the joined `sonare_last_warning_message()` string.
+An unusable morph throws, and so does an unusable `synthesizeRir(...)` call, so neither result has an error flag and every entry in `diagnostics` is recoverable. Branch on `code`: `acoustic.ism_order_clamped` (image-source order reduced to the safe maximum), `acoustic.rir_length_clamped` (tail cut against `maxSeconds` or against a resource limit), `acoustic.rir_length_floored` (`maxSeconds` is shorter than the direct sound's flight time), `acoustic.rir_tail_truncated` (`maxSeconds` cuts the longest band before it decays by 60 dB) and `acoustic.no_late_tail` (no diffuse tail produced) each mean the morph went through a room other than the one requested, and none is visible in the audio itself. `synthesizeRir(...)` reports the same shape on `RirResult.diagnostics`. The C ABI publishes the same entries structurally — `sonare_last_diagnostic_count()`, `sonare_last_diagnostic_code(i)`, `sonare_last_diagnostic_message(i)`, `sonare_last_diagnostic_severity(i)` — so a caller there branches on the code too rather than parsing the joined `sonare_last_warning_message()` string.
+
+### Room estimate and RIR types
+
+```typescript
+interface RoomEstimateResult {
+  volume: number;                // m^3; NaN with confidence 0 when no decay was measurable
+  lengthM: number;               // the names synthesizeRir takes
+  widthM: number;
+  heightM: number;
+  drrDb: number;
+  confidence: number;
+  bandAbsorption: Float32Array;
+  rt60Bands: Float32Array;
+}
+
+interface RirResult {
+  rir: Float32Array;
+  sampleRate: number;
+  diagnostics: RirDiagnostic[];  // warnings only; an unusable synthesis throws
+}
+
+type MaterialPresetName = 'none' | 'concrete' | 'wood' | 'curtain' | 'carpet' | 'glass';
+type AcousticModeName = 'auto' | 'blind' | 'impulse_response';
+interface RoomPlacement { x: number; y: number; z: number }  // meters
+```
+
+`materialPreset` and the estimate `mode` take these names only; a number is a `TypeError`. `roomGeometryFromEstimate(...)` turns a `RoomEstimateResult` into `RoomGeometryOptions` for `synthesizeRir(...)` (see [Room Acoustics](./acoustic-analysis.md#from-an-estimate-to-a-synthesized-rir)).
 
 ### MasteringChainConfig
 
@@ -441,6 +468,8 @@ const PitchClass = {
 
 ### Mode
 
+`Mode` is the input enum. The `keyMode` option of `detectChords` and `chordFunctionalAnalysis` takes an ordinal from this table and refuses a name with `TypeError`; `autoTune`'s `key.mode` accepts either. Results report the mode as a name instead, so `detectKey`, `detectKeyCandidates`, `analyze` and `autoTune` return `mode: 'major'`, `'minor'`, `'dorian'`, and so on; do not compare it against `Mode.Major`.
+
 ```typescript
 const Mode = {
   Major: 0,
@@ -491,51 +520,6 @@ const SectionType = {
   Bridge: 4, Instrumental: 5, Outro: 6, Unknown: 7
 } as const;
 ```
-
-## Error Handling
-
-All functions throw if the module is not initialized — call `await init()` first.
-
-Native (C++) failures throw a structured **`SonareError`**: an `Error` subclass carrying a numeric `code` and its canonical `codeName`, mirroring the C ABI error enum. The same failure reports the same numeric code on every binding (WASM, Node native, Python, C ABI), so you can branch on the cause instead of matching message text. The package exports the `ErrorCode` enum, the `SonareError` class, and an `isSonareError(value)` type guard.
-
-The facades consistently reject non-finite numbers, invalid enum/index values, and oversized resources before they reach DSP or serialization. Treat these failures as invalid input; do not rely on a binding silently clamping or accepting malformed values.
-
-```typescript
-import { ErrorCode, isSonareError, Mixer } from '@libraz/libsonare';
-
-try {
-  const mixer = Mixer.fromSceneJson(sceneJson, 48000, 512);
-} catch (error) {
-  if (isSonareError(error) && error.code === ErrorCode.InvalidState) {
-    // 'failed to build mixer from scene JSON: send timing must be a string ("pre" or "post")'
-    console.error(`scene rejected: ${error.codeName}: ${error.message}`);
-  } else {
-    throw error;
-  }
-}
-```
-
-`Mixer.fromSceneJson` reports **`InvalidState`**, not `InvalidParameter`, for
-every way a scene can fail to build — a rejected field value and malformed JSON
-alike. The construction is wrapped, so the underlying complaint arrives as the
-tail of a `failed to build mixer from scene JSON: <inner>` message rather than as
-its own code; branch on `InvalidState` and show the message to locate the field.
-
-| `ErrorCode` | Value |
-|-------------|-------|
-| `Ok` | `0` |
-| `FileNotFound` | `1` |
-| `InvalidFormat` | `2` |
-| `DecodeFailed` | `3` |
-| `InvalidParameter` | `4` |
-| `OutOfMemory` | `5` |
-| `NotSupported` | `6` |
-| `InvalidState` | `7` |
-| `Cancelled` | `8` |
-| `EncodeFailed` | `9` |
-| `Unknown` | `99` |
-
-The codes match Python's `SonareError.code` and the C ABI `SonareError` enum, and the Python CLI maps them onto its [exit codes](./cli.md#exit-codes).
 
 ## Type Export Index
 

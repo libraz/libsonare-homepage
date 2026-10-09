@@ -359,7 +359,7 @@ Python CLI には、上記のコア以外にも多くのサブコマンドがあ
 | `sonare estimate-room room.wav` | 等価ルーム推定（体積、寸法、吸音率、DRR、信頼度） | `--json`, `--aspect-lw`, `--aspect-lh`, `--reference-absorption`, `--sabine`, `--n-octave-bands` |
 | `sonare synthesize-rir --length 7 --width 5 --height 3 -o rir.wav` | シューボックス形状からモノラル RIR を合成 | `--source-x`, `--source-y`, `--source-z`, `--listener-x`, `--listener-y`, `--listener-z`, `--absorption`, `--sample-rate`, `--ism-order`, `--seed`, `--max-seconds` |
 | `sonare room-morph dry.wav --length 12 --width 9 --height 4 -o wet.wav` | 目標ルームへ寄せる音作り向けのルームモーフィング | `--wet`, `--suppression`, 形状・配置オプション、`--max-seconds` |
-| `sonare boundaries music.mp3` | 構造の転換点と、それを拾い出した元のノヴェルティ曲線 | ネイティブ CLI のみ。`--threshold`（0.3）, `--absolute-threshold`（0.005）, `--kernel-size`（64）, `--n-mfcc`（13）, `--n-chroma`（12）, `--peak-distance`（2.0）, `--no-mfcc`, `--no-chroma`, `--n-fft`（2048）, `--hop-length`（512） |
+| `sonare boundaries music.mp3` | 構造の転換点と、それを拾い出した元のノヴェルティ曲線 | ネイティブ CLI のみ。`--threshold`（0.3）, `--absolute-threshold`（0.005）, `--kernel-size`（64）, `--n-mfcc`（13）, `--n-chroma`（12）, `--peak-distance`（2.0）, `--reference-window`（60）, `--no-mfcc`, `--no-chroma`, `--n-fft`（2048）, `--hop-length`（512） |
 | `sonare melody music.mp3` | メロディ輪郭の要約。メロディの有無、音域（オクターブ）、平均周波数、ピッチの安定度、ビブラート速度、ピッチ点の数 | ネイティブ CLI のみ。`--threshold`（0.1）, `--hop-length`（512）, `--fmin`（80.0）, `--fmax`（1000.0） |
 | `sonare meter music.wav` | ピーク、RMS、クレスト、True Peak、クリッピング率、無音率、DC オフセット | ネイティブ CLI のみ。`--clip-threshold`, `--oversample` |
 | `sonare clipping music.wav` | クリップしたサンプルと区間を検出 | ネイティブ CLI のみ。`--threshold`, `--min-region` |
@@ -367,7 +367,7 @@ Python CLI には、上記のコア以外にも多くのサブコマンドがあ
 | `sonare stereo left.wav --reference right.wav` | 左右ファイルからステレオ相関と幅を測定 | ネイティブ CLI のみ |
 | `sonare phase left.wav --reference right.wav` | 左右ファイルからフェーズスコープ要約を測定 | ネイティブ CLI のみ |
 
-`boundaries` は検出器の全パラメータを公開しており、2 つのしきい値は役割が違います。`--threshold` はノヴェルティ曲線自身の最大値に対する相対値なので、「そもそも変化があったのか」を問えません。それを問えるのが下限の `--absolute-threshold` です。両者の関係と、下限を下げても何が拾えて何が拾えないかは [`detectBoundaries(request)`](./js-api-analysis.md#detectboundaries-request) で説明しています。`--no-mfcc` と `--no-chroma` はそれぞれ特徴量ストリームを 1 つ落としますが、両方の指定は拒否されます。2 つはフレーム単位で結合されるため、どちらも無効では結合する対象がなくなるからです。
+`boundaries` は検出器の全パラメータを公開しており、2 つのしきい値は役割が違います。`--threshold` は `--reference-window` 秒（片側の幅、既定 60。`0` で相対しきい値を無効化）の範囲内で最大のノヴェルティイベントに対する相対値なので、「そもそも変化があったのか」を問えません。それを問えるのが下限の `--absolute-threshold` です。両者の関係と、下限を下げても何が拾えて何が拾えないかは [`detectBoundaries(request)`](./js-api-analysis.md#detectboundaries-request) で説明しています。`--no-mfcc` と `--no-chroma` はそれぞれ特徴量ストリームを 1 つ落としますが、両方の指定は拒否されます。2 つはフレーム単位で結合されるため、どちらも無効では結合する対象がなくなるからです。
 
 ### その他の特徴量
 
@@ -400,7 +400,7 @@ Python CLI は行列特徴量の全データをそのまま出力せず、サマ
 | `sonare note-move take.wav --target-onset 48000 -o out.wav` | ノート区間を指定サンプル位置へ移動 | `--onset`, `--offset`, `--target-onset`（サンプル位置） |
 | `sonare note-stretch take.wav -o out.wav` | 単一ノート区間をストレッチ | `--onset`, `--offset`（サンプル位置）, `--ratio`（1.0） |
 | `sonare scale-quantize 68.7` | MIDI 値を音階へ量子化 | `--root`, `--mode-mask`, `--reference-midi` |
-| `sonare voice-change vocal.wav -o out.wav` | ボイスチェンジ（ピッチ＋フォルマント） | `--pitch-semitones`（0.0）, `--formant-factor`（1.0） |
+| `sonare voice-change vocal.wav -o out.wav` | ボイスチェンジ（ピッチ＋フォルマント） | `--pitch-semitones`（0.0）, `--formant-factor`（1.0）, `--formant-mode relative\|absolute`（relative） |
 | `sonare pitch-shift vocal.wav --semitones 3 -o out.wav` | 長さを変えずに移調 | `--semitones`（**必須**） |
 | `sonare time-stretch take.wav --rate 1.2 -o out.wav` | ピッチを変えずに長さを変更 | `--rate`（**必須**） |
 | `sonare normalize mix.wav -o out.wav` | ピークまたは RMS ノーマライズ | `--mode peak\|rms`, `--target-db` |
@@ -514,7 +514,7 @@ Error: take sample rate differs: t3_44.wav is 44100 Hz, the first take is 48000 
 | `sonare voice-preset` | 1 つのプリセット設定を JSON で出力 | `--preset`（既定: `neutral-monitor`）、`--json` |
 | `sonare voice-preset-validate preset.json` | プリセット JSON ファイルまたはプリセットパックを検証・正規化 | パック検証時は `--preset`、`--set PATH=VALUE`、`--json` |
 
-リアルタイムプリセット系のオプションを渡さない場合、`voice-change` は `--pitch-semitones` と `--formant-factor` で制御する単純なピッチ／フォルマント変換を使います。プリセット系のオプションを渡した場合はリアルタイム音声チェーンを使い、単純なピッチ／フォルマント指定との併用は無効パラメータとして拒否されます。
+リアルタイムプリセット系のオプションを渡さない場合、`voice-change` は `--pitch-semitones`、`--formant-factor`、`--formant-mode` で制御する単純なピッチ／フォルマント変換を使います。`relative`（既定）ではフォルマント係数はピッチシフトの後に掛かるワープで、フォルマントはピッチに追従します。`absolute` では入力に対するフォルマントシフトとなり、ピッチシフトの量に関わらず `1.0` でフォルマントが元の位置に留まります。フォルマントワープが届かない指定は、届く範囲を示して拒否されます。プリセット系のオプションを渡した場合はリアルタイム音声チェーンを使い、この 3 つの単純な指定との併用は無効パラメータとして拒否されます。
 
 プリセットの選択は明示的に行います。組み込みの `--preset ID`、`--preset-json FILE`、または `--preset-pack FILE --preset ID` の組み合わせから 1 つを選びます。パックファイルとエントリ ID はセットで 1 つの指定として扱われるため、`--preset-pack` だけを渡すと拒否されます（先頭エントリへのフォールバックはありません）。`--preset-json` とパックは併用できません。`--set PATH=VALUE` を使うには、いずれかのプリセット指定が必要です。
 

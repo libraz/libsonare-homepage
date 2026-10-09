@@ -51,6 +51,9 @@ class Key:
     name: str          # プロパティ -> "C major"、"A minor" など
     short_name: str    # プロパティ -> "C"、"Am" など
 
+class KeyDetection(Key):          # detect_key(...) の戻り値の型
+    tuning: float          # クロマの生成に使った半音の端数（指定値または測定値）
+
 class TimeSignature:
     numerator: int
     denominator: int
@@ -77,8 +80,17 @@ class Chord:
     name: str                # プロパティ -> "Cmaj7"、"Am"、"G/B"
     duration: float          # プロパティ -> end - start
 
+class FunctionalChord(Chord):   # chord_functions(...) の戻り値の型
+    roman: str               # "I"、"V7"、"vi"。未知のコードは "N.C."
+    function: str            # "tonic"、"subdominant"、"dominant"、"chromatic"、"none"
+
 class ChordAnalysisResult:
     chords: list[Chord]      # detect_chords(...) の戻り値の型
+    tuning: float            # クロマの生成に使った半音の端数（指定値または測定値）
+
+class AutoTuneResult:        # auto_tune(...) の戻り値の型
+    samples: list[float]     # 補正後の音声。入力と同じ長さ
+    key: Key                 # 検出したキー、または呼び出しで指定したキー（confidence 1）
 
 class AnalysisBeatObservations:
     onset_strength: list[float]        # 拍ごとの、窓処理済みアクセント値
@@ -96,6 +108,7 @@ class AnalysisResult:
     downbeat_phase: int            # 解析が第 1 小節の何拍目から始まるか
     beat_local_bpm: list[float]    # beat_times と平行。compute_tempo_curve=True
                                    #   でないかぎり空
+    tuning: float                  # クロマグラムの生成に使った半音の端数
     bpm_candidates: list[BpmHypothesis]
     time_signature_candidates: list[TimeSignature]
     beats: list[Beat]              # プロパティ: 各拍の強度を持つオブジェクト
@@ -147,11 +160,25 @@ class MelSpectrogramResult:
     hop_length: int
     power: list[float]       # n_mels × n_frames, row-major
     db: list[float]          # n_mels × n_frames, row-major
+    n_fft: int               # 順変換のパラメータ。結果だけで逆変換できる
+    fmin: float              # 適用された値
+    fmax: float              # 適用された値。リクエストが 0 のときはナイキスト
+    htk: bool
+    is_db: bool              # 順変換では False。power は線形パワー、db はその dB 表現
 
 class MfccResult:
     n_mfcc: int
     n_frames: int
     coefficients: list[float]  # n_mfcc × n_frames, row-major
+    sample_rate: int
+    hop_length: int
+    n_fft: int
+    n_mels: int
+    fmin: float
+    fmax: float
+    htk: bool
+    is_db: bool                # 常に False
+    lifter: float              # 0 は未適用
 
 class ChromaResult:
     n_chroma: int
@@ -217,6 +244,7 @@ class StreamFrames:
 class StreamChordChange:
     root: int
     quality: int
+    name: str                 # バッチ解析と同じ綴りのコード名
     start_time: float
     confidence: float
 
@@ -224,6 +252,7 @@ class StreamBarChord:
     bar_index: int
     root: int
     quality: int
+    name: str
     start_time: float
     confidence: float
 
@@ -245,8 +274,11 @@ class StreamStats:
     key: int
     key_minor: bool
     key_confidence: float
+    key_name: str | None            # "C major"。キーが未推定の間は None
+    key_short_name: str | None      # "C"、"Am"
     chord_root: int
     chord_quality: int
+    chord_name: str                 # コードなしは "N.C."
     chord_confidence: float
     chord_start_time: float
     current_bar: int
@@ -268,17 +300,21 @@ class StreamStats:
 | 分野 | クラス |
 |------|--------|
 | メータリング | `ClippingRegion`, `StreamFramesU8`, `StreamFramesI16`, `WaveformPeaksReport` |
-| マスタリング | `MasteringResult`, `MasteringStereoResult` |
-| ミキシング | `MixerStereoResult` |
+| マスタリング | `MasteringResult`, `MasteringStereoResult`, `StreamingLoudnessGain`（`streaming_loudness_gain*` の戻り値） |
+| マスタリングの JSON ドキュメント | アシスタント、プロファイル、解析ヘルパーが返す JSON 文字列に対応する `TypedDict`: `MasteringAudioProfile`（`MasteringAudioProfileLoudness`, `MasteringAudioProfileSpectral`, `MasteringAudioProfileDynamics`, `MasteringAudioProfileDefects`）、`MasteringAssistantProfile`, `MasteringAssistantResult`, `MasteringChainConfigDocument`, `MasteringStreamingPreviewResult`, `MasteringStreamingPreviewPlatform`, `MasteringRepairAnalysis`, `MatchReferenceLoudnessResult`, `MatchTonalBalanceResult`, `MatchTonalBalanceBand`, `MatchTonalBalanceLogBandsResult`, `MatchEqCurveResult`, `MatchEstimateReferenceDelaySamplesResult`, `StereoMonoCompatCheckResult`, `StereoMonoCompatBand`, `StereoMonoCompatCheckLogBandsResult`。関数は引き続き JSON 文字列を返すので、`json.loads` で解析し、結果にこれらの型を注釈します |
+| リペア | `RepairApplyResult`, `RepairStageReports`（`mastering_repair_apply` の戻り値） |
+| 音響 | `RoomGeometry`（`room_geometry_from_estimate` の戻り値となる `TypedDict`）、`MaterialPresetName`, `AcousticModeName` |
+| 解析のリテラル型 | `ChordFunctionName` |
+| ミキシング | `MixerStereoResult`, `SidechainCheck`（`ok` と、最初の拒否理由 `reason`。エンジンの `can_set_*_sidechain` の戻り値） |
 | プロジェクト | `AssistSidecar`（`project.get_assist_sidecar(index)` / `project.assist_sidecars()` の戻り値 — [プロジェクト編集](./project-editing-midi.md#アシストサイドカー) を参照）、`NotePairValidation` |
 | リアルタイムエンジンのジョブ／テレメトリ | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `MeterTelemetryRecord`, `MeterTelemetryRecordWide`, `ScopeTelemetryRecord` |
-| ビルド情報 | `Capabilities`, `CapabilityCatalog`, `CapabilityCatalogPresets`, `MasteringPresetCatalogEntry`, `MasteringInsertParamInfo`, `MasteringInsertSlot`, `MasteringInsertTiming`, `MasteringProcessorCatalogEntry`（[API サーフェス](./api-surface.md#機能カタログが返すもの) で説明している JSON ドキュメントに対応する `TypedDict`） |
+| ビルド情報 | `Capabilities`, `CapabilityCatalog`, `CapabilityCatalogPresets`, `MasteringPresetCatalogEntry`, `MasteringInsertParamInfo`, `MasteringInsertParamUnit`, `MasteringInsertParamScale`, `MasteringInsertParamRelation`, `MasteringInsertParamDependency`, `MasteringInsertSlot`, `MasteringInsertTiming`, `MasteringProcessorCatalogEntry`（[API サーフェス](./api-surface.md#機能カタログが返すもの) で説明している JSON ドキュメントに対応する `TypedDict`） |
 
-`CapabilityCatalog["masteringPresets"]` は `name`、`kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持つ `MasteringPresetCatalogEntry` を返します。修復プリセットでは 3 つの数値フィールドが `None` です。`MasteringProcessorCatalogEntry` の `slots` は条件付きキー群を列挙します。`MasteringInsertParamInfo` の記述子は `id`、`rtSafe`、`type`、`min`、`max`、`default`、`unit`、`choices`、`slot` を持ち、`MasteringInsertTiming` は指定したインサート構成の `latencySamples` と `tailSamples` を持ちます。
+`CapabilityCatalog["masteringPresets"]` は `name`、`kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持つ `MasteringPresetCatalogEntry` を返します。修復プリセットでは 3 つの数値フィールドが `None` です。`MasteringProcessorCatalogEntry` の `slots` は条件付きキー群を列挙し、`causal` は `repair.declick`、`repair.declip`、`repair.trimSilence` で false です。`MasteringInsertParamInfo` の記述子は `id`、`rtSafe`、`type`、`min`、`max`、`default`、`unit`（閉じた集合 `MasteringInsertParamUnit` の値）、`scale`（`linear` または `log`）、`uiMin` / `uiMax`（`[min, max]` の内側に置く任意の表示範囲）、`dependsOn`（現在値がこのキーの範囲を左右する兄弟キー）、`choices`、`slot` を持ち、`MasteringInsertTiming` は指定したインサート構成の `latencySamples` と `tailSamples` を持ちます。
 
 ### 例外
 
-失敗はすべて 2 つのクラスで表します。後者は前者を継承しているので、2 本ではなく 1 本の階層です。
+失敗はすべて 2 つのクラスで表します。後者は前者を継承しているので、2 本ではなく 1 本の階層です。`ErrorCode` は、それらが運ぶコードの `IntEnum` です。
 
 ```python
 class SonareError(RuntimeError):
@@ -286,10 +322,26 @@ class SonareError(RuntimeError):
     code_name: str     # プロパティ -> "InvalidParameter"、"FileNotFound" など
     # str(e) -> "[4] Invalid parameter": メッセージの先頭にコードが付く
 
+class ErrorCode(IntEnum):
+    OK = 0
+    FILE_NOT_FOUND = 1
+    INVALID_FORMAT = 2
+    DECODE_FAILED = 3
+    INVALID_PARAMETER = 4
+    OUT_OF_MEMORY = 5
+    NOT_SUPPORTED = 6
+    INVALID_STATE = 7
+    CANCELLED = 8
+    ENCODE_FAILED = 9
+    ABI_MISMATCH = 10  # バインディング専用: 読み込んだライブラリがバインディングと一致しない
+    UNKNOWN = 99
+
 class SonareValueError(SonareError, ValueError):
     code: int          # 送出側が別のコードを渡さないかぎり ErrorCode.INVALID_PARAMETER
     # str(e) -> "spectral_centroid: samples contains NaN or Inf at index 0": 接頭辞なし
 ```
+
+ライブラリまたはオブジェクトの状態に由来する失敗は、常に対応するコードを持つ `SonareError` です。読み込んだライブラリにエントリポイントがなければ `NOT_SUPPORTED`、閉じたオブジェクトなら `INVALID_STATE`、ネイティブの結果が健全性検査に通らなければ `UNKNOWN` です。そのため `except RuntimeError` は引き続き捕捉でき、`.code` で場合を区別できます。`ABI_MISMATCH` は、読み込んだライブラリの ABI バージョンがバインディングと異なるとき、ライブラリを最初に使う時点で送出されます。
 
 `SonareValueError` は、呼び出しがネイティブコードへ渡る前にバインディングが引数を拒否したときに送出されます。どの基底クラスを継承しているかによって、既存のハンドラでどう捕捉されるかが決まります。
 

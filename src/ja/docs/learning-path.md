@@ -55,7 +55,7 @@
 | MIDI 1.0 と MIDI 2.0 のイベントを扱う MIDI クリップエディタやシーケンサー | [MIDI クリップ編集](./midi-editing.md) | [MIDI 2.0 と UMP](./midi2.md)、[プロジェクトの MIDI](./project-editing-midi.md) |
 | ピアノ、擦弦、リード、金管、フルートといったアコースティック音源を聴き比べたり、コードから音作りする | [物理モデル](./physical-models.md) | [内蔵シンセサイザー](./native-synth.md#名前付きプリセットカタログ) |
 | SoundFont にないプログラムで、General MIDI の各プログラムがどのエンジンと音作りに落ちるかを調べる | [GM 音色マップ](./gm-tone-map.md) | [GM／GS フォールバックバンク](./gm-gs.md) |
-| 内蔵プレイヤーでの SoundFont（SF2）再生 | [SoundFont 2 プレイヤー](./soundfont-player.md) | [GM／GS フォールバックバンク](./gm-gs.md#nativesynth-と-soundfont-フォールバック)、[MIDI 入力](./midi-input.md) |
+| 内蔵プレイヤーでの SoundFont（SF2）再生 | [SoundFont 2 プレイヤー](./soundfont-player.md) | [GM／GS フォールバックバンク](./soundfont-player.md#nativesynth-と-soundfont-フォールバック)、[MIDI 入力](./midi-input.md) |
 | 解析やマスタリングは使わず、インストゥルメントだけが必要な C++ アプリ | [リンクターゲット](./cpp-api.md#リンクターゲット) | [内蔵シンセサイザー](./native-synth.md)、[SoundFont 2 プレイヤー](./soundfont-player.md) |
 
 ### ミキシング

@@ -76,7 +76,7 @@ sonare mix --scene scene.json --input vocal.wav --input music.wav -o mixed.wav
 
 `--scene` and `--preset` are a required, mutually exclusive pair: give exactly
 one. Passing both is a usage error, and passing neither exits 2 as well rather
-than falling back to a default scene.
+than falling back to a default scene. The Python CLI prints a `warning:` line on stderr for every scene key the reader does not consume (a misspelled `faderDB`, say) and still renders; keys starting with `$` or `x-` are exempt.
 
 `--input` takes `[ID=]WAV` and repeats. An `ID=` prefix names the strip the file
 feeds; a bare path uses the file's base name as the id. A strip that no entry
@@ -208,7 +208,7 @@ sonare project bounce --in project.json --synth saw-lead -o synth-bounce.wav
 | `sonare project validate` | Validate a project JSON; optionally write canonicalized JSON | `--in`, `-o`, `--strict` (any diagnostic fails) |
 | `sonare project compile` | Compile-check a project JSON; prints diagnostics, exits non-zero on errors (writes no file) | `--in`, `--json` |
 | `sonare project synth-presets` | List the NativeSynth preset names `--synth` accepts | `--json` |
-| `sonare project bounce` | Render a project to a WAV; positive `--channels` widths are `1`, `2`, `6`, or `8` (default `2`), capped by the master layout (mono, stereo, or no master allows up to two) | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--instrument-latency`, `--synth`, `--audio`, `--resolve-audio`, `-o` |
+| `sonare project bounce` | Render a project to a WAV (a project whose `sample_rate` is not a whole number of hertz exits 5); positive `--channels` widths are `1`, `2`, `6`, or `8` (default `2`), capped by the master layout (mono, stereo, or no master allows up to two) | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--instrument-latency`, `--synth`, `--audio`, `--resolve-audio`, `-o` |
 | `sonare project export-smf` | Export the project to a Standard MIDI File | `--in`, `-o` |
 | `sonare project import-smf` | Build a project from a Standard MIDI File | `--smf`, `-o` |
 | `sonare project export-midi2` | Export the project to a MIDI 2.0 Clip File | `--in`, `-o` |

@@ -48,6 +48,17 @@ Two guards make `Unknown` more common, on purpose. Adjacent segments whose chrom
 
 For downstream algorithms, prefer the raw signals over the labels: `boundaryTimes` and the chroma cosine self-similarity matrix are exposed precisely so a caller can apply their own thresholds.
 
+## What if the recording is not tuned to A = 440 Hz?
+
+Pass `tuning: 'auto'` to `analyze`, `detectChords`, or `detectKey` (Python: `tuning="auto"`) and the library measures the tuning from the audio before it reads pitch classes. `tuning` is a fraction of a semitone in `[-0.5, 0.5)` with 0 meaning A440, and every result reports the value it used, given or measured: `KeyDetection.tuning`, `AnalysisResult.tuning`, `ChordAnalysisResult.tuning`.
+
+```typescript
+const key = detectKey({ samples, sampleRate, tuning: 'auto' });
+console.log(key.name, key.tuning, tuningToReferenceHz(key.tuning));
+```
+
+A test chord generated 40 cents sharp read as C major with a measured `tuning` of 0.42, which `tuningToReferenceHz` turns into 450.8 Hz; without the option the key was still C major and `tuning` stayed 0. `referenceHzToTuning(hz)` converts the other way when you know the reference pitch.
+
 ## Are the modal keys as reliable as major and minor?
 
 No, and the difference is in where the profiles come from.

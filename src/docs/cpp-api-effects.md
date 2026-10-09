@@ -286,6 +286,8 @@ accept `n_fft` and `hop_length`; and `sonare_trim_ex` accepts `frame_length`
 and `hop_length`. `sonare_analyze_impulse_response_ex` adds `min_decay_db`,
 while `sonare_nnls_chroma_ex2` adds the CQT `hop_length` to the NNLS options.
 
+A project or engine sample rate must be a whole number of hertz within its supported range (`sonare_project_set_sample_rate` takes `[8000, 384000]`); a fractional rate returns `SONARE_ERROR_INVALID_PARAMETER`, and project JSON with a fractional `sample_rate` fails to load with `SONARE_ERROR_INVALID_FORMAT` and the diagnostic `invalid_sample_rate`.
+
 Project editing lives in `sonare_c_project.h`. `sonare_project_set_clip_loop(project, clip_id, loop_mode, loop_length_ppq, loop_crossfade_ppq)` accepts the optional equal-power seam crossfade as the final argument. It must be finite and non-negative; `0` keeps a hard loop. The engine clamps it to the available pre-roll and half the loop, and ignores it under warp.
 
 `SonareSynthPatch` — the NativeSynth patch accepted by `sonare_project_bounce_with_synth_instruments` and `sonare_engine_set_synth_instrument` — currently uses `SONARE_SYNTH_PATCH_STRUCT_VERSION` 7. `struct_version` 0 or 1 selects the original layout, 2 enables the trailing `present_fields` bitmask, 3 through 6 append the sample-engine, highpass, converter, and pitch-offset fields, and 7 reads the trailing `retrigger` field. `retrigger` is `SONARE_SYNTH_RETRIGGER_BASE` (0), `SONARE_SYNTH_RETRIGGER_FREE` (1), or `SONARE_SYNTH_RETRIGGER_NOTE` (2). `FREE` varies oscillator phases, unison jitter, drift, and engine-noise streams per note; `NOTE` derives them from the note number, so the same note after its tail ends renders the same samples. Neither mode resets state outside the voice, such as controllers, shared instrument resonances, or effect tails. The `present_fields` mask has 31 bits in use; a further extension appends a second word under a new `struct_version` rather than widening it. Enum fields have no presence bits because zero keeps the base, while every real enum value is non-zero. Setting `SONARE_SYNTH_FIELD_MOD_ROUTINGS` with `num_mod_routings == 0` clears the base mod matrix; a non-empty table replaces it.
@@ -340,7 +342,7 @@ For room acoustics in the C ABI:
 For surround/multichannel engine buses in the C ABI:
 
 - `SonareChannelLayout` enumerates the speaker bed: `SONARE_CHANNEL_LAYOUT_MONO` (0), `SONARE_CHANNEL_LAYOUT_STEREO` (1), `SONARE_CHANNEL_LAYOUT_5_1` (2), and `SONARE_CHANNEL_LAYOUT_7_1` (3). Values match `sonare::ChannelLayout` and are part of the ABI/JSON wire format.
-- `SonareEngineBus.channel_layout` sets a bus's speaker bed (the master bus carries the project output layout; defaults to stereo). `SonareEngineTrackLane.source_channel_layout` is serialized as source metadata but does not yet make a multichannel lane input discrete.
+- `SonareEngineBus.channel_layout` sets a bus's speaker bed (the master bus carries the project output layout; defaults to stereo). `SonareEngineTrackLane.source_channel_layout` must be `SONARE_CHANNEL_LAYOUT_STEREO`: `sonare_engine_set_track_lanes` returns `SONARE_ERROR_INVALID_PARAMETER` for a mono, 5.1 or 7.1 lane because multichannel lane input is not implemented. A zero-initialised lane reads as mono (`SONARE_CHANNEL_LAYOUT_MONO` is 0), so set `STEREO` explicitly on every lane.
 - The realtime lane mixer pans each mono/stereo lane into a 5.1/7.1 destination from the strip's `surroundPan` position, sums buses plane by plane, and publishes per-plane (wide) meters. `azimuth`, `divergence`, and `lfe` affect placement; `elevation` and `distance` are reserved. See [realtime engine surround group buses](./realtime-engine.md#surround-group-buses-and-wide-meters).
 
 For realtime insert automation and external MIDI in the C ABI:
@@ -406,9 +408,45 @@ SonareError sonare_mastering_insert_timing(const char* name, const char* params,
 SonareError sonare_mastering_preset_params_json(const char* preset, char** json_out);
 ```
 
-`sonare_mastering_insert_param_info` returns a thread-local JSON descriptor array; do not free it. `sonare_mastering_insert_timing` rejects unknown keys and reports the configured latency and tail. `sonare_mastering_preset_params_json` returns `{"version":1,"params":{...}}`; release its heap-owned string with `sonare_free_string`. `sonare_capability_catalog_json()` combines the processor catalog, built-in mastering, synth, mixing-scene, and voice-changer preset lists, and detailed `masteringPresets` entries.
+`sonare_mastering_insert_param_info` returns a thread-local JSON descriptor array; do not free it. Besides `name`, `id`, `rtSafe`, `type`, `min`, `max`, `default`, `choices` and `slot`, a descriptor declares what a control needs beyond the accepted range: `unit` (read from the processor that consumes the key, from a closed set: `dB`, `dBFS`, `LUFS`, `Hz`, `ms`, `s`, `samples`, `m`, `cm`, `deg`, `percent`, `degC`, `V`, `inPerSec`, `dBPerOct`, `semitones`, `cents`, `ratio`, `bits`, `count`, `none`), `scale` (`linear` or `log`), an optional display range `uiMin` / `uiMax` inside `[min, max]`, and `dependsOn`, the sibling keys whose live value bounds this one. `sonare_mastering_insert_param_info_at_rate(name, sample_rate)` returns the same array with every key whose `maxRelativeTo` is `"nyquist"` resolved to the bound accepted at that host rate (the lower of the host's Nyquist and any cap fixed when the insert is built); it returns `NULL` with `SONARE_ERROR_INVALID_PARAMETER` for a rate out of range, and the rate-less query is unchanged. `sonare_mastering_insert_timing` rejects unknown keys and reports the configured latency and tail. `sonare_mastering_preset_params_json` returns `{"version":1,"params":{...}}`; release its heap-owned string with `sonare_free_string`. The catalog's `repair.*` entries publish their parameters through the same descriptor, carry no automation `id`, and are never `rtSafe`; every entry also carries `causal` (false for `repair.declick`, `repair.declip` and `repair.trimSilence`, true for the other repair stages and every insert). `repair.decrackle`, `repair.dehum`, `repair.denoiseClassical` and `repair.dereverbClassical` are realtime inserts under their ids; declick and declip stay offline. `sonare_capability_catalog_json()` combines the processor catalog, built-in mastering, synth, mixing-scene, and voice-changer preset lists, and detailed `masteringPresets` entries.
 
 Realtime voice presets are exposed in C as `sonare_realtime_voice_changer_preset_names()`, `sonare_realtime_voice_changer_preset_json()`, and `sonare_realtime_voice_changer_validate_preset_json()`. The typed preset selector is the `SonareVoiceCharacterPreset` enum (`SONARE_VC_PRESET_NEUTRAL_MONITOR` = 0 through `SONARE_VC_PRESET_DARK_VILLAIN` = 5); `sonare_voice_character_preset_id(preset)` returns its canonical id string (NULL for unknown values), and the `SONARE_REALTIME_VOICE_CHANGER_PRESET_IDS` macro provides the newline-separated id list for compile-time binding generation. The native POD config ABI is `SONARE_VOICE_CHANGER_ABI_VERSION`; it is separate from the preset JSON `schemaVersion`.
+
+### Additional C ABI entry points
+
+Pitch, voice and repair (`sonare_c_effects.h`, `sonare_c_mastering.h`):
+
+| Function | Purpose |
+|----------|---------|
+| `sonare_auto_tune(samples, length, sample_rate, key, config, &out, &out_length, &out_key)` | Offline auto-tune of a monophonic recording to the scale of a key. `key` is a `SonareKey` or `NULL` to detect it (a named key is taken as certain, so `out_key` reports confidence 1); `config` may be `NULL`, and only `scale_reference_midi`, `retune_amount`, `max_correction_semitones`, `retune_speed_ms` and `vibrato_threshold_cents` are read. The output has the input's length; release it with `sonare_free_floats` |
+| `sonare_voice_change_ex(samples, length, sample_rate, &config, &out, &out_length)` | `sonare_voice_change` with a `SonareVoiceChangeConfig` (`struct_version` 0 or 1, `pitch_semitones`, `formant_factor`, `formant_mode`). `SONARE_FORMANT_MODE_RELATIVE` (0) is the warp applied after the pitch shift, so the formants follow the pitch; `SONARE_FORMANT_MODE_ABSOLUTE` (1) is the formant shift relative to the input, so `1` keeps the formants in place. An absolute request whose warp `formant_factor / 2^(semitones / 12)` leaves [0.55, 1.65] is refused with `SONARE_ERROR_INVALID_PARAMETER`, and the last error message names the reachable factor range |
+| `sonare_mastering_repair_analyze(channels, channel_count, length, sample_rate, request_json, &json)` | Per-channel repair defects plus the stages the assistant recommends, as JSON (`defects`, `channels`, `declipThresholdSafe`, `integratedLufs`, `recommended`, `explanation`). `request_json` is `NULL` or `{"preferStreamingSafe": true}`; dereverb is never recommended. Release the string with `sonare_free_string` |
+| `sonare_mastering_repair_apply(channels, channel_count, length, sample_rate, stages_json, progress, user_data, out_channels, &reports_json, cancel, cancel_user_data)` | Applies `[{"stage": ..., ...settings}]` to every channel in the fixed order declip, declick, decrackle, dehum, denoise, dereverb whatever order the array gives; a repeated stage, an unknown stage and an unknown setting are `SONARE_ERROR_INVALID_PARAMETER`. `out_channels` are caller-owned planes (they may alias the input) written only on success; the reports are `[{stage, scope, reports}]`, `scope` being `"channel"` (one report per channel) or `"linked"` (one for the set). Either callback may be `NULL`; a nonzero `cancel` result returns `SONARE_ERROR_CANCELLED` |
+| `sonare_streaming_loudness_gain(samples, length, sample_rate, params, param_count, &out)` and `_stereo(left, right, ...)` | Measures a `SonareStreamingLoudnessGain` (`loudness_static_gain_db`, `true_peak_db`, `integrated_lufs`) at the loudness stage's input, for `sonare_streaming_mastering_chain_create_ex`. The gain equals what the offline chain applies, ceiling clamp included; `params` takes the keys `sonare_mastering_chain` does |
+
+Realtime engine (`sonare_c_engine.h`; `render_frame` here stays an `int64_t` where a negative value means "next block head"):
+
+| Function | Purpose |
+|----------|---------|
+| `sonare_engine_upsert_clip(engine, &clip)`, `sonare_engine_remove_clip(engine, clip_id)` | Replace or add one clip, or remove one, leaving the rest of the published set as it was. A refused clip leaves the set unchanged; removing an unknown id is `SONARE_ERROR_INVALID_PARAMETER`. Control thread only |
+| `sonare_engine_reset_processor_state(engine, render_frame)` | Queues a reset of every mixer and effect processor to its prepared state, so playback queued after it starts from the state an offline bounce starts from. Instruments keep their state; while playing, it cuts running tails like a seek |
+| `sonare_engine_prime_offline_parameters(engine, num_channels, block_size)` | The offline pre-roll that bounce and freeze run, without rendering. A host driving `sonare_engine_render_offline` calls it once before the first chunk. A channel count or block size above the prepared maximum is `SONARE_ERROR_INVALID_PARAMETER`; an unprepared engine is `SONARE_ERROR_INVALID_STATE` |
+| `sonare_engine_tail_samples(engine, &samples)` | Upper bound of the longest audible tail after the last input, in samples (`2147483647` means unbounded) |
+| `sonare_engine_graph_latency_samples_q8(engine, &latency_q8)` | Processing latency in 1/256 samples, the value telemetry records carry |
+| `sonare_engine_can_set_lane_sidechain`, `sonare_engine_can_set_bus_sidechain`, `sonare_engine_can_set_master_sidechain` | Report, without changing anything, whether the matching `set_*_sidechain` would accept a binding. `out_refusal` receives a `SonareSidechainRefusal`: `NONE` (0), `INVALID_TARGET`, `INSERT_OUT_OF_RANGE`, `UNDECLARED_SOURCE`, `INVALID_SOURCE_KIND`, `SELF_KEY`, `CYCLE`, `TABLE_FULL`, `PLAN_REFUSED` (1 through 8) |
+| `sonare_engine_resolve_track_lane_automation_id(engine, track_id, "faderDb" or "pan", &id)`, `sonare_engine_resolve_bus_automation_id(engine, bus_id, "faderDb", &id)` | Reserved automation ids that name the track or bus rather than its position, so they keep driving it across `sonare_engine_set_track_lanes` and `sonare_engine_set_track_buses` reorders and fail as an unknown target once it is removed |
+
+An offline render, bounce, freeze or pre-roll with a block size larger than the one the engine was prepared with is refused with `SONARE_ERROR_INVALID_PARAMETER`. `sonare_engine_set_track_strip_json`, `sonare_engine_set_bus_strip_json` and `sonare_engine_set_master_strip_json` refuse a key the scene reader does not consume, naming it (`unknown strip key 'strips[0].faderDB'`); keys starting with `$` or `x-` and the snake_case aliases are still accepted.
+
+Mixer and project (`sonare_c_mixing.h`, `sonare_c_project_core.h`, `sonare_c_project_edit.h`):
+
+| Function | Purpose |
+|----------|---------|
+| `sonare_mixer_flush_meters(mixer)` | Marks the end of the signal for every strip and bus meter, folding the true-peak reading's pending group delay into the published snapshot. Call it after the last block of an offline or one-shot run; a later process call starts a new signal |
+| `sonare_project_unresolved_audio_source_by_index(project, index, &source)` | Reads an unresolved audio source descriptor by zero-based index, in the order of `sonare_project_unresolved_audio_source_id_by_index`. `name_or_uri` is truncated to 127 bytes |
+| `sonare_project_get_audio_source_uri(project, source_id, &uri)` | The full, untruncated URI of an audio source id, as a heap copy released with `sonare_free_string` |
+
+`sonare_project_add_loop_recording_takes` takes a `SonareProjectLoopRecordingDesc` whose `flags` word is `0` (keep a partial last take) or `SONARE_PROJECT_LOOP_RECORDING_DROP_PARTIAL_TAIL` (do not create it); any other bit is `SONARE_ERROR_INVALID_PARAMETER`. A partial last take is kept but not made active when an earlier complete take exists, and is marked `"partial": true` in the project JSON; a remainder of one frame or less creates no take.
 
 ## Mixing Engine
 
@@ -432,3 +470,104 @@ strip.prepare(48000.0, 512);
 ```
 
 For cross-runtime examples and scene-level guidance, see [Mixing Engine](./mixing.md).
+
+## Geometric Room Acoustics
+
+These APIs estimate, synthesize, or apply a room model. They live in focused module headers and require builds with `BUILD_ACOUSTIC_SIM=ON` (the default source-build setting).
+
+::: info Terms in this section
+- **Equivalent room** is a practical room model inferred from audio. It is not exact measured geometry.
+- **RIR** means room impulse response: samples that describe how a room reacts to a short sound.
+- **RT60** is the reverberation time: how long a tail takes to decay by 60 dB.
+- **DRR (direct-to-reverberant ratio)** compares the level of the direct sound against the reverberant tail, in dB. Higher means a drier, closer-sounding source.
+- **Room morphing** is a creative room-character effect, not dereverberation.
+:::
+
+```cpp
+#include <acoustic/rir_synthesizer.h>
+#include <analysis/room_estimator.h>
+#include <effects/acoustic/room_morph.h>
+
+using namespace sonare;
+
+acoustic::ShoeboxRoom room = acoustic::uniform_shoebox({7.0f, 5.0f, 3.0f}, 0.2f);
+acoustic::SourceListener placement{{1.0f, 1.0f, 1.2f}, {5.0f, 4.0f, 1.7f}};
+auto rir = acoustic::synthesize_rir(room, placement, 48000);
+if (!rir.rir.empty()) {
+  RoomEstimate estimate = estimate_room(rir.rir);
+}
+
+effects::acoustic::RoomMorphConfig morph_config;
+morph_config.target = room;
+morph_config.placement = placement;
+morph_config.wet = 0.6f;
+effects::acoustic::RoomMorphResult morphed = effects::acoustic::room_morph(recording, morph_config);
+// morphed.audio is the render; morphed.diagnostics lists what the target-RIR synthesis clamped.
+```
+
+The three calls cover different parts of the workflow:
+
+- `estimate_room(...)` returns volume, representative dimensions, absorption bands, RT60 bands, DRR, and confidence.
+- `synthesize_rir(...)` reports geometry problems through diagnostics. It returns an empty RIR when the source or listener placement is invalid.
+- `room_morph(...)` renders the input with the target room character and returns a `RoomMorphResult`: the audio plus the same diagnostics `synthesize_rir(...)` raises, since the target RIR is built by the same code. An unusable configuration throws `ErrorCode::InvalidParameter` instead of reporting an error entry.
+
+::: details Configuration details
+`acoustic::RirSynthConfig` controls RIR generation:
+
+- image-source order;
+- Sabine/Eyring late-tail model;
+- deterministic seed;
+- maximum RIR length;
+- early/late mixing time;
+- crossfade width.
+
+`RoomEstimateConfig` forwards analyzer settings through `AcousticConfig`. These include mode, octave-band count, minimum decay span, and noise-floor margin.
+
+Aspect hints and `reference_absorption` define the equivalent-room prior.
+:::
+
+### Names and estimate-to-geometry helpers in the C ABI
+
+`sonare_material_preset_name(preset)` and `sonare_acoustic_mode_name(mode)` return the name of a `SONARE_MATERIAL_PRESET_*` or `SONARE_ACOUSTIC_MODE_*` value (`"none"`, `"concrete"`, `"wood"`, `"curtain"`, `"carpet"`, `"glass"`; `"auto"`, `"blind"`, `"impulse_response"`), or `NULL` past the last one. The values are contiguous from 0, so counting up to `NULL` lists the valid names. The returned strings are static; do not free them.
+
+`sonare_room_geometry_from_estimate(&estimate, &config)` turns a `sonare_estimate_room` result into the geometry of a `SonareRirSynthConfig`: it sets the three dimensions and borrows the per-band absorption from the estimate, which therefore has to outlive the config. Source and listener stay zero because an estimate carries no placement, so set both before calling `sonare_synthesize_rir`. Non-finite absorption bands are left unset, and an estimate with no measurable decay (non-finite dimensions) is refused with `SONARE_ERROR_INVALID_PARAMETER`.
+
+### Room morph through the C ABI
+
+`sonare_room_morph` in `sonare_c_acoustic.h` takes the input samples, their sample rate and a `SonareRoomMorphConfig`, and hands back the morphed mono signal through an out-pointer pair. The diagnostics the target-room synthesis raised are not in the result: they travel on the thread-local structured channel, read after the call returns. Ownership and lifetime follow the code:
+
+```c
+float* out = NULL;
+size_t out_length = 0;
+SonareError err = sonare_room_morph(samples, length, sample_rate, &config, &out, &out_length);
+if (err != SONARE_OK) return err;  // nothing was allocated; sonare_last_error_message() has the detail
+for (size_t i = 0; i < sonare_last_diagnostic_count(); ++i) {
+  const char* code = sonare_last_diagnostic_code(i);  // e.g. "acoustic.rir_length_clamped"
+  // sonare_last_diagnostic_message(i) and sonare_last_diagnostic_severity(i) sit beside it
+}
+sonare_free_floats(out);
+```
+
+- `*out` is allocated by the library and released with `sonare_free_floats`. It holds `length` samples plus the target room's tail, at the input sample rate. An empty input yields `NULL` / `0`, which is safe to free; on a non-`SONARE_OK` return nothing was allocated.
+- The diagnostic strings are owned by the library, never `NULL`, and valid until the next C ABI call on the same thread that records or clears a diagnostic — `sonare_room_morph` and `sonare_synthesize_rir` both clear the channel on entry, and the count reads `0` after any other call. Reading does not consume an entry, and there is nothing to free; copy the strings you keep.
+- An index at or past the count returns `""` and `SONARE_DIAGNOSTIC_INFO`, so bound the loop by the count rather than by severity. Every entry a morph publishes is a recoverable clamp at `SONARE_DIAGNOSTIC_WARNING`; an unusable configuration is an error return, not an entry.
+- `sonare_last_warning_message()` carries the same entries flattened into one `code: message; code: message` string. It is kept for callers written against it — the structured accessors are the form to branch on, because a message containing the separator cannot be split back out and the severity is not in the text.
+
+### Air absorption in large rooms
+
+For a large hall, the geometry-only RT60 estimate can overstate the high-frequency tail because it does not account for air loss over a long path. The C++ acoustic core can add the ISO 9613-1 atmospheric-absorption term to the Sabine/Eyring calculation. It is opt-in: omitting the last argument keeps the earlier geometry-only result exactly.
+
+```cpp
+#include <acoustic/late_reverb.h>
+
+acoustic::AirAbsorption air;
+air.temperature_c = 20.0f;
+air.humidity_percent = 50.0f;
+
+const auto rt60 = acoustic::shoebox_reverb_time(
+    room, acoustic::ReverbModel::Eyring, &air);
+// rt60.rt60_bands: air loss shortens the high bands most.
+```
+
+`AirAbsorption` defaults to 20 °C and 50% relative humidity. This lower-level C++ calculation is not part of the C ABI, Node, Python, or WASM shoebox helpers; those public helpers continue to use the geometry-only model.
+

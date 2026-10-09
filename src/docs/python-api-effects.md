@@ -64,11 +64,15 @@ blind = sonare.detect_acoustic(
 print(blind.is_blind, blind.rt60_bands)
 
 estimate = sonare.estimate_room(room_recording, sample_rate, n_octave_bands=6)
-print(estimate.volume, estimate.length, estimate.width, estimate.height)
+print(estimate.volume, estimate.length_m, estimate.width_m, estimate.height_m)
 print(estimate.drr_db, estimate.confidence, estimate.absorption_bands)
 
 rir = sonare.synthesize_rir(7.0, 5.0, 3.0, absorption=0.2, sample_rate=sample_rate)
-print(rir.sample_rate, len(rir.rir), rir.has_error)
+print(rir.sample_rate, len(rir.rir), rir.diagnostics)  # warnings only
+
+# Re-synthesize the estimated room: positions are the only thing to add.
+geometry = sonare.room_geometry_from_estimate(estimate, source=(1, 1, 1.2), listener=(2, 1.5, 1.5))
+rir = sonare.synthesize_rir(**geometry, sample_rate=sample_rate, material_preset="none")
 
 morphed = sonare.room_morph(room_recording, sample_rate, 12.0, 9.0, 4.0, wet=0.6)
 ```
@@ -76,7 +80,9 @@ morphed = sonare.room_morph(room_recording, sample_rate, 12.0, 9.0, 4.0, wet=0.6
 Keep three cautions in mind:
 
 - `estimate_room(...)` returns an equivalent room, not guaranteed real geometry; inspect `confidence`.
-- `synthesize_rir(...)` reports invalid source/listener placement through `has_error`.
+- `synthesize_rir(...)` raises `SonareValueError` for an unusable geometry, such as a source or listener outside the room; the message leads with the diagnostic code (`acoustic.source_outside_room`). A returned `RirResult` carries only warnings on `diagnostics`.
+- `material_preset` (`"none"` by default, or `"concrete"`, `"wood"`, `"curtain"`, `"carpet"`, `"glass"`) and the `estimate_room` `mode` (`"auto"` by default, `"blind"`, `"impulse_response"`) take names only: a number is a `TypeError`, an unknown name a `SonareValueError`.
+- `room_geometry_from_estimate(estimate, source=None, listener=None)` returns a dict of `synthesize_rir` keyword arguments (`length_m`, `width_m`, `height_m`, optionally `absorption_bands`, `source`, `listener`); an estimate with no measurable dimensions (NaN) raises `SonareValueError`.
 - `room_morph(...)` is a creative effect, not dereverberation.
 
 See [Room Acoustics](./acoustic-analysis.md) for interpretation notes and when a blind estimate is appropriate.
@@ -95,7 +101,7 @@ See [Room Acoustics](./acoustic-analysis.md) for interpretation notes and when a
 | `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sample_rate?, hop_length?, voiced?, voiced_prob?)` | `list[float]` | Contour-following pitch correction: retunes every voiced frame toward `target_midi` along a per-frame `f0_hz` contour, preserving vibrato/drift instead of flattening it |
 | `note_stretch(samples, sample_rate, onset_sample?, offset_sample?, stretch_ratio?)` | `list[float]` | Stretch a single note region in place |
 | `note_move(samples, sample_rate, onset_sample?, offset_sample?, target_onset_sample?)` | `list[float]` | Move a note region to a new onset without changing its duration |
-| `voice_change(samples, sample_rate, pitch_semitones?, formant_factor?)` | `list[float]` | Independent pitch + formant shift |
+| `voice_change(samples, sample_rate, pitch_semitones?, formant_factor?, formant_mode?)` | `list[float]` | Independent pitch + formant shift. `formant_mode` is `"relative"` (default: `formant_factor` is a warp applied after the pitch shift) or `"absolute"` (`formant_factor` is the formant shift relative to the input whatever the pitch shift; `1.0` keeps the formants in place). An absolute request whose warp `formant_factor / 2**(pitch_semitones / 12)` leaves [0.55, 1.65] raises `SonareValueError` naming the reachable `formant_factor` range |
 | `voice_change_realtime(samples, sample_rate?, preset?, channels?)` | `np.ndarray` | One-shot render through the realtime voice preset chain |
 | `normalize(samples, sample_rate, target_db?)` | `list[float]` | Normalize peak level to target dB (default: 0.0) |
 | `normalize_rms(samples, sample_rate, target_db?)` | `list[float]` | Normalize RMS level to target dB (default: -20.0) |
@@ -192,7 +198,7 @@ helper matches.
 | `frame_signal(samples, frame_length, hop_length)` | `tuple[int, list[float]]` | `librosa.util.frame` — returns `(n_frames, row-major frames)` |
 | `pad_center(values, size, pad_value?)` | `list[float]` | `librosa.util.pad_center` |
 | `fix_length(values, size, pad_value?)` | `list[float]` | `librosa.util.fix_length` |
-| `fix_frames(frames, x_min?, x_max?, pad?)` | `list[int]` | `librosa.util.fix_frames` |
+| `fix_frames(frames, x_min?, x_max?, pad?)` | `list[int]` | `librosa.util.fix_frames`. `x_max` is the inclusive upper bound; omit it (`None`) for no upper bound — `-1` is refused |
 | `peak_pick(values, pre_max, post_max, pre_avg, post_avg, delta, wait)` | `list[int]` | `librosa.util.peak_pick` — returns peak indices |
 | `vector_normalize(values, norm_type?, threshold?)` | `list[float]` | `librosa.util.normalize`. `norm_type`: 0=inf, 1=L1, 2=L2, 3=power |
 | `pcen(values, n_bins, n_frames, sample_rate?, hop_length?, time_constant?, gain?, bias?, power?, eps?)` | `list[float]` | `librosa.pcen` — input is row-major `[n_bins x n_frames]` mel |
@@ -202,3 +208,20 @@ helper matches.
 | `cyclic_tempogram(onset_envelope, sample_rate?, hop_length?, win_length?, bpm_min?, n_bins?)` | `tuple[int, list[float]]` | Octave-folded cyclic tempogram |
 | `tempogram_ratio(tempogram_data, win_length?, sample_rate?, hop_length?, factors?)` | `list[float]` | Tempo-ratio features from a tempogram |
 | `plp(onset_envelope, sample_rate?, hop_length?, tempo_min?, tempo_max?, win_length?)` | `list[float]` | `librosa.beat.plp` — predominant local pulse |
+
+## Streaming Equalizer API
+
+`StreamingEqualizer` wraps the native block-by-block EQ engine. Use it for live preview, processor UIs, or matching a source tone to a reference without assembling a mastering chain.
+
+```python
+with sonare.StreamingEqualizer(sample_rate=48000, max_block_size=512) as eq:
+    eq.set_band(0, {"type": "bell", "frequencyHz": 2500, "gainDb": 2.5, "q": 1.0})
+    eq.set_phase_mode("natural")
+    eq.set_auto_gain(True)
+    eq.match(source_samples, reference_samples, max_bands=8)
+    out = eq.process_mono(input_block)
+    snapshot = eq.spectrum()
+```
+
+Bands can be Python dictionaries or JSON strings. `set_phase_mode(...)` accepts `zero` / `natural` / `linear` names or numeric values. The object also exposes output gain/pan, sidechain input for dynamic bands, `process_stereo(...)`, `spectrum()`, `latency_samples`, and `last_auto_gain_db`.
+

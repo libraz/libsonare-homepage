@@ -82,7 +82,7 @@ libsonare リポジトリには、STFT、Mel/MFCC、chroma、CQT について li
 |---------|-----------|-------|
 | `librosa.feature.melspectrogram()` | `MelSpectrogram::compute()` / `melSpectrogram()` | Slaney 正規化 |
 | `librosa.feature.mfcc()` | `MelSpectrogram::mfcc()` / `mfcc()` | DCT-II。librosa と合わせる場合は `n_mfcc` を明示してください。末尾の `lifter`（ケプストラルリフタリング、既定 0 = リフタリングなし）は librosa の `lifter` に対応します |
-| `librosa.feature.chroma_stft()` | `Chroma::compute()` / `chroma()` | STFT ベース。各フレームは 12 個のピッチクラス値の最大が 1.0 になるよう正規化され（L-infinity／最大値正規化）、librosa の既定 `norm=np.inf` と一致。ただし `tuning` の既定は 0（A440）で、自動推定は行いません（「既知の違い」を参照） |
+| `librosa.feature.chroma_stft()` | `Chroma::compute()` / `chroma()` | STFT ベース。各フレームは 12 個のピッチクラス値の最大が 1.0 になるよう正規化され（L-infinity／最大値正規化）、librosa の既定 `norm=np.inf` と一致。ただし `chroma()` は `tuning` を取らず、自動推定も行いません（「既知の違い」を参照） |
 | `librosa.feature.spectral_centroid()` | `spectralCentroid()` / `spectral_centroid()` | フレーム単位 |
 | `librosa.feature.spectral_bandwidth()` | `spectralBandwidth()` / `spectral_bandwidth()` | フレーム単位 |
 | `librosa.feature.spectral_rolloff()` | `spectralRolloff()` / `spectral_rolloff()` | `roll_percent` 対応 |
@@ -94,7 +94,7 @@ libsonare リポジトリには、STFT、Mel/MFCC、chroma、CQT について li
 | `librosa.feature.rms()` | `rmsEnergy()` / `rms_energy()` | フレーム単位 |
 | `librosa.feature.tonnetz()` | `tonnetz()` | 入力: row-major クロマグラム |
 | `librosa.cqt()` | `cqt()` | 定 Q 変換の振幅 |
-| `librosa.vqt()` | `vqt()` | 可変 Q 変換。`gamma` で Q を制御 |
+| `librosa.vqt()` | `vqt()` | 可変 Q 変換。`gamma` で Q を制御（省略、Python では `None` で自動の帯域幅） |
 | `librosa.feature.chroma_cqt()` | `chromaCqt()` / `chroma_cqt()` | 定 Q クロマグラム。`librosa.feature.chroma_cqt` の直接の相当 |
 | _（librosa に厳密な clone なし）_ | `nnlsChroma()` / `nnls_chroma()` | 追加の NNLS 音符活性化クロマ。librosa に厳密な相当なし |
 | `librosa.feature.chroma_cens()` | `chromaCens()` / `chroma_cens()` | CENS（Chroma Energy Normalized Statistics）クロマ。平滑化・L1 正規化済み |
@@ -109,7 +109,7 @@ libsonare リポジトリには、STFT、Mel/MFCC、chroma、CQT について li
 | `librosa.pyin()` | `pitchPyin()` / `pitch_pyin()` | 確率的 YIN。`fillNa` / `fill_na` で無声音 `f0` を `NaN` のままにするか `0` にするかを選択 |
 | `librosa.yin()` | `pitchYin()` / `pitch_yin()` | YIN。すべてのフレームで有限の周期推定値を返し、有声かどうかは別に報告 |
 | `librosa.pitch_tuning()` | `pitchTuning()` / `pitch_tuning()` | 周波数列からチューニングずれを推定 |
-| `librosa.estimate_tuning()` | `estimateTuning()` / `estimate_tuning()` | 音声からチューニングずれを推定 |
+| `librosa.estimate_tuning()` | `estimateTuning()` / `estimate_tuning()` | 音声からチューニングずれを推定。librosa と同じく `bins_per_octave` の 1 ビンに対する端数で、12 のときは解析の `tuning` オプションの単位と一致します（そちらは `'auto'` も受け付けます） |
 
 #### 分解とラウドネス
 
@@ -138,7 +138,7 @@ NNDSVD（`init='nndsvd'`）は入力の主成分特異ベクトルを倍精度�
 
 | librosa | libsonare | 備考 |
 |---------|-----------|-------|
-| `librosa.feature.inverse.mel_to_stft()` | `melToStft()` / `mel_to_stft()` | メルパワー → 線形 STFT **振幅**（librosa の既定 `power=2.0` を平方根で戻すため、呼び出し側でさらに平方根を取る必要はありません）。`fmin`／`fmax`／`htk` でカスタムメル域・HTK も往復可 |
+| `librosa.feature.inverse.mel_to_stft()` | `melToStft()` / `mel_to_stft()` | メルパワー → 線形 STFT **振幅**（librosa の既定 `power=2.0` を平方根で戻すため、呼び出し側でさらに平方根を取る必要はありません）。`fmin`／`fmax`／`htk` でカスタムメル域・HTK も往復可。順変換の結果（`melToStft({ result })`、`mel_result_to_stft`）を渡してパラメータを引き継ぐこともできます |
 | _（mel_to_stft + `librosa.griffinlim`）_ | `melToAudio()` / `mel_to_audio()` | メルパワー → 音声（Griffin-Lim） |
 | `librosa.feature.inverse.mfcc_to_mel()` | `mfccToMel()` / `mfcc_to_mel()` | MFCC → メルパワー |
 | `librosa.feature.inverse.mfcc_to_audio()` | `mfccToAudio()` / `mfcc_to_audio()` | MFCC → 音声（Griffin-Lim） |
@@ -343,7 +343,7 @@ sonare beats song.wav --json
 | パラメータ | librosa | libsonare |
 |-----------|---------|-----------|
 | `sr` | 22050 | 単体の解析／特徴量／ラウドネスヘルパーはすべて既定 22050。`lufs`／`true-peak` にはバッファの実レートを渡してください。`Audio`／`Spectrogram` クラスのメソッドは読み込んだファイルのレートを使います。 |
-| `n_fft` | 2048 | 2048 |
+| `n_fft` | 2048 | librosa 風の特徴量関数ではバッファのサンプル数で 2048。音声を元のレートで受け取る音楽解析器（テンポ、ビート、オンセット、キー、リズム、コード、音色）は 22050 Hz 換算のサンプル数として読み、入力のレートに合わせて再スケールするので、どのレートでもウィンドウは同じ時間幅になります |
 | `hop_length` | 512 | 512 |
 | `win_length` | n_fft | n_fft |
 | `window` | 'hann' | Hann |
@@ -425,9 +425,9 @@ mel_slaney = sonare.hz_to_mel(hz)  # Slaney（デフォルト）
 ### 4. クロマのチューニング基準
 
 - **librosa**: `chroma_stft` の既定は `tuning=None` で、`estimate_tuning()` を信号に対して実行し、ピッチクラスの格子を録音に合わせ直します
-- **libsonare**: `tuning` の既定は固定値 `0`（A440）で、推定は行いません
+- **libsonare**: 単体の `chroma()` は A440 固定で `tuning` を取りません。音楽解析の呼び出し（`analyze`、`detectChords`、`detectKey`）は既定 `0` の `tuning` を取り、`tuning: 'auto'`（Python は `tuning="auto"`）で音声から測定します
 
-A440 から外れた素材では、両者のクロマグラムは許容誤差の範囲ではなく構造的に食い違います。libsonare 側はエネルギーが隣のピッチクラスへにじみ、キーやコードの結果も劣化します。librosa に合わせるには、`estimateTuning()`／`estimate_tuning()` でずれを求め、その値を `tuning` に渡してください。
+A440 から外れた素材では、両者のクロマグラムは許容誤差の範囲ではなく構造的に食い違います。libsonare 側はエネルギーが隣のピッチクラスへにじみ、キーやコードの結果も劣化します。キーとコードには `tuning: 'auto'` を渡してください。各結果は使われたセミトーン端数を報告します。librosa のクロマグラムそのものに合わせるには、`estimateTuning()`／`estimate_tuning()` でずれを求め、自前のパイプラインで適用します。12 ビン／オクターブのとき、これは `tuning` オプションと同じ単位です。
 
 ## 移行ガイド
 

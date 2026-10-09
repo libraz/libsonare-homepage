@@ -178,6 +178,83 @@ const audio = project.bounce({ numChannels: 2 });
 
 アレンジがエラーなくコンパイルできたら、次は MIDI トラックを鳴らすことも含めて音声へ変換する番です。[プロジェクトバウンス & レンダリング](./project-bounce.md)へ進んでください。
 
+## トラックを外部 MIDI 機器へ送る
+
+**内部デスティネーション**は libsonare 内の NativeSynth／SF2 インストゥルメントで MIDI をレンダーします。**外部デスティネーション**はそのインストゥルメントを通さず、ホストがハードウェアや別アプリへ送るための MIDI 1.0 バイト列を出力キューへ入れます。libsonare はメッセージの変換と時刻付けを行いますが、OS／Web MIDI ポートを開くのはホスト側の役割です。
+
+デスティネーションを外部に設定し、通常どおり音声処理した後、出力キューを高頻度でドレインします。生エンジンのメソッド名はバインディング間で共通で、ブラウザと Node は camelCase、Python は snake_case です。
+
+::: code-group
+
+```typescript [Browser]
+engine.setMidiDestinationExternal(2, true); // デスティネーション 2 を外部機器へ送る
+engine.setExternalMidiClockEnabled(true);  // 任意: clock + start/continue/stop
+
+engine.process([leftBlock, rightBlock]);
+for (const event of engine.drainExternalMidi(256)) {
+  if (event.destinationId === 0xffffffff) {
+    // クロック／トランスポートは、ホストが選んだ全外部ポートへ配信する。
+    for (const output of externalOutputs.values()) output.send(event.bytes);
+  } else {
+    externalOutputs.get(event.destinationId)?.send(event.bytes);
+  }
+}
+```
+
+```typescript [Node]
+// Node は WASM と同じ camelCase の生エンジンメソッドを公開する。
+engine.setMidiDestinationExternal(2, true);
+engine.setExternalMidiClockEnabled(true);
+
+engine.process([leftBlock, rightBlock]);
+for (const event of engine.drainExternalMidi(256)) {
+  if (event.destinationId === 0xffffffff) {
+    // クロック／トランスポートを、開いている全ハードウェアポートへ転送する。
+    for (const port of externalPorts.values()) port.sendMessage([...event.bytes]);
+  } else {
+    externalPorts.get(event.destinationId)?.sendMessage([...event.bytes]);
+  }
+}
+```
+
+```python [Python]
+engine.set_midi_destination_external(2, True)  # デスティネーション 2 を外部機器へ送る
+engine.set_external_midi_clock_enabled(True)   # 任意: clock + start/continue/stop
+
+engine.process([left_block, right_block])
+for event in engine.drain_external_midi(256):
+    if event.destination_id == 0xFFFFFFFF:
+        # クロック／トランスポートを、開いている全ハードウェアポートへ配信する。
+        for port in external_ports.values():
+            port.send_message(list(event.bytes))
+    else:
+        port = external_ports.get(event.destination_id)
+        if port is not None:
+            port.send_message(list(event.bytes))
+
+# 目安: 値が増え続ける場合、ホストが読み出す前にキューが満杯になっている。
+dropped = engine.external_midi_dropped_count()
+```
+
+:::
+
+各イベントは `destinationId`、`renderFrame`、`bytes`（1〜3 バイトの変換済み MIDI 1.0 メッセージ 1 個。Python では snake_case の `destination_id` ／ `render_frame`）を持ちます。クロック／トランスポートはデスティネーションの番兵値 `0xFFFFFFFF` を使い、チャンネルメッセージは元のデスティネーション id を保ちます。`maxRecords` は戻り値のメッセージ数を制限し、残りは次回のドレインまでキューに残ります。`externalMidiDroppedCount()`（Python では `external_midi_dropped_count()`）が増え続ける場合、ホストが読み出す前に固定容量のリアルタイムキューが満杯になっています。
+
+`SonareEngine` AudioWorklet ファサード（ブラウザ専用）では `setMidiDestinationExternal(trackId, true)` と `onMidiOut(callback)` を使います。ワークレットはレンダーブロックごとに内部エンジンをすでにドレインし、メインスレッドへバッチを送るため、別の消費側として生のドレインを呼ばないでください。
+
+```typescript
+engine.setMidiDestinationExternal('hardware-lead', true);
+const unsubscribe = engine.onMidiOut((events) => {
+  for (const event of events) {
+    if (event.destinationId === 0xffffffff) {
+      for (const output of externalOutputs.values()) output.send(event.bytes);
+    } else {
+      externalOutputs.get(event.destinationId)?.send(event.bytes);
+    }
+  }
+});
+```
+
 ## 関連
 
 - [プロジェクト編集](./project-editing.md) — トラック、クリップ、テンポ、マーカー、ワープ、オートメーションを扱います

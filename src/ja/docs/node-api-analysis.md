@@ -12,12 +12,14 @@ description: '@libraz/libsonare-native パッケージの解析関数・エフ�
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
 | `detectBpm(samples, sampleRate?)` | `number` | テンポ（BPM） |
-| `detectKey(samples, sampleRate?)` | `Key` | ルート、モード、確信度 |
+| `detectKey(request)` / `detectKey(samples, sampleRate?, options?)` | `KeyDetection` | ルート、モード（`'major'` や `'dorian'` のような名前）、確信度、そしてクロマの構築に使った `tuning`。`options` は `detectKeyCandidates` のオプションに `tuning`（`[-0.5, 0.5)` の数値または `'auto'`）を加えたものです |
 | `detectBeats(samples, sampleRate?)` | `Float32Array` | ビート位置 |
 | `detectOnsets(samples, sampleRate?)` | `Float32Array` | オンセット位置 |
-| `detectChords(request)` / `detectChords(samples, sampleRate?, options?)` | `ChordAnalysisResult` | コード進行（開始／終了時刻付き）。`threshold` 未満のフレームは明示的な `N.C.` 区間として返ります。オプション形式では HMM 平滑化・キーコンテキスト・転回形・クロマ手法（既定 `'stft'`）・`tuning` を指定できます（従来の位置引数形式も利用可能） |
+| `detectChords(request)` / `detectChords(samples, sampleRate?, options?)` | `ChordAnalysisResult` | コード進行（開始／終了時刻付き）と、使われた `tuning`。`threshold` 未満のフレームは明示的な `N.C.` 区間として返ります。オプション形式では HMM 平滑化・キーコンテキスト・転回形・クロマ手法（既定 `'stft'`）・`tuning`（数値または `'auto'`）を指定できます（従来の位置引数形式も利用可能） |
+| `chordFunctionalAnalysis(request)` / `chordFunctionalAnalysis(samples, keyRoot, keyMode?, sampleRate?, options?)` | `FunctionalChord[]` | コードを検出したうえで、`roman`（`'I'`、`'V7'`、`'vi'`）と `function`（`'tonic'`、`'subdominant'`、`'dominant'`、`'chromatic'`、`'none'`）を加えた時刻付きエントリを返します。ここでは `keyRoot` と `keyMode` は序数です |
+| `chordFunctions(request)` | `FunctionalChord[]` | すでに手元にあるコードに、再検出せず `request.key` の中での `roman` と `function` を付けます。`request.chords` は `detectChords` の結果かその `chords`、`request.key` は `{ root, mode }` なので、`detectKey` の結果をそのまま渡せます（`root` はピッチクラス名か序数、`mode` は名前か序数） |
 | `detectDownbeats(samples, sampleRate?)` | `Float32Array` | 小節頭（ダウンビート）の位置 |
-| `detectKeyCandidates(samples, sampleRate?, options?)` | `KeyCandidate[]` | 相関スコア付きのキー候補ランキング |
+| `detectKeyCandidates(samples, sampleRate?, options?)` | `KeyCandidate[]` | 相関スコア付きのキー候補ランキング。`options`: `nFft`、`hopLength`、`useHpss`、`loudnessWeighted`、`highPassHz`、`modes`（`'major-minor'`、`'modal'`、`'all'`、または名前のリスト）、`profile`、`genreHint` |
 | `analyze(samples, sampleRate?, options?)` | `AnalysisResult` | 1 回の呼び出しで、BPM と順位付き BPM 仮説、キー、拍子と順位付き拍子候補、ビート、コード（検出キーを基準にした `romanNumeral` 付き）、セクション、音色、ダイナミクス、リズム、メロディ、フォームを解析。以下の専用 `detect*`／`analyze*` 関数は、個別解析やパラメータ指定の解析向けに引き続き利用できます |
 | `analyzeWithProgress(request)` / `analyzeWithProgress(samples, sampleRate, onProgress, options?)` | `AnalysisResult` | `analyze` と同じ結果を `(progress, stage)` で通知します。リクエスト形式では `options` と `cancel`、位置引数形式では `onProgress` の後ろの解析オプションを指定できます |
 | `estimateMeter(request)` | `MeterEstimate` | 呼び出し側が渡したビート列に対して拍子を採点します。音声も再解析も不要。リクエスト専用で `EstimateMeterRequest` を受け取ります |
@@ -26,7 +28,7 @@ description: '@libraz/libsonare-native パッケージの解析関数・エフ�
 | `analyzeDynamics(samples, sampleRate?, options?)` | `DynamicsResult` | ダイナミックレンジ・ラウドネスレンジ・クレストファクター。`options`: `windowSec`、`hopLength`、`compressionThreshold` |
 | `analyzeTimbre(samples, sampleRate?, options?)` | `TimbreResult` | 明るさ・暖かさ・密度・粗さ・複雑さと、窓ごとの `timbreOverTime`。`options`: `nFft`、`hopLength`、`nMels`、`nMfcc`、`windowSec` |
 | `analyzeSections(samples, sampleRate?, options?)` | `Section[]` | 構造セクション（イントロ／Aメロ／サビなど）と時刻。`options`: `nFft`、`hopLength`、`minSectionSec`。長尺入力では境界グリッドがプーリングされる場合があるため、配置には各セクションの `start` / `end` を使います |
-| `detectBoundaries(request)` | `BoundaryResult` | 構造の転換点と、それを拾い出した元のノヴェルティ曲線、および両者が乗るグリッド。`request`: `samples`、`sampleRate`、`nFft`、`hopLength`、`kernelSize`、`threshold`、`absoluteThreshold`、`nMfcc`、`nChroma`、`peakDistance`、`useMfcc`、`useChroma`。`analyzeSections` のラベル付き区間ではなく、自前のしきい値を当てたいときに使います |
+| `detectBoundaries(request)` | `BoundaryResult` | 構造の転換点と、それを拾い出した元のノヴェルティ曲線、および両者が乗るグリッド。`request`: `samples`、`sampleRate`、`nFft`、`hopLength`、`kernelSize`、`threshold`、`absoluteThreshold`、`nMfcc`、`nChroma`、`peakDistance`、`referenceWindow`（秒、既定 `60`。相対 `threshold` を測る範囲で、`0` なら無効）、`useMfcc`、`useChroma`。`analyzeSections` のラベル付き区間ではなく、自前のしきい値を当てたいときに使います |
 | `analyzeMelody(samples, sampleRate?, options?)` | `MelodyResult` | 主旋律の輪郭（フレームごとの F0）。`options`: `fmin`、`fmax`、`frameLength`、`hopLength`、`threshold`、`usePyin`、`center` |
 | `detectAcoustic(samples, sampleRate?, options?)` | `AcousticResult` | 録音からのルーム音響（残響が 60 dB 減衰するまでの時間である RT60 など）。`options`: `nOctaveBands`、`nThirdOctaveSubbands`、`minDecayDb`、`noiseFloorMarginDb` |
 | `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)` | `AcousticResult` | 測定済みインパルス応答（IR）からのルーム音響。`minDecayDb` は減衰フィットのしきい値（既定 `30`） |
@@ -63,7 +65,7 @@ description: '@libraz/libsonare-native パッケージの解析関数・エフ�
 
 | オプション | 既定値 | 説明 |
 |------------|--------|------|
-| `nFft` / `hopLength` | `2048` / `512` | パイプライン全体で共有する STFT 解像度 |
+| `nFft` / `hopLength` | `2048` / `512` | パイプライン全体で共有する STFT 解像度。`nFft` は 22050 Hz 換算のサンプル数で入力のレートに合わせて再スケールされ、`hopLength` は入力のサンプル数です |
 | `bpmMin` / `bpmMax` / `startBpm` | `60` / `200` / `120` | テンポ探索範囲と事前推定値 |
 | `useTriadsOnly` | `true` | コード探索を三和音に限定します |
 | `useHpss` | `true` | コード／キー検出で倍音成分のみのクロマを使います |
@@ -76,7 +78,7 @@ description: '@libraz/libsonare-native パッケージの解析関数・エフ�
 | `computeTempoCurve` | `false` | ビートごとの局所テンポ曲線を `beatLocalBpm` へデコードします |
 | `meterCandidateNumerators` | `[3, 4, 6]` | 拍子推定が採点する分子。最大 16 個、各値は `[2, 32]`。空リストは既定値へ戻らずエラーになり、候補を広げても広い拍子が選ばれやすくなるわけではありません |
 | `meterDenominator` | `4` | 検出された拍子の分母。`[1, 32]` の 2 の冪。複合拍子と判定した場合は推定側が自分で 8 を報告します |
-| `tuning` | `0` | `estimateTuning(...)` が返す単位で指定する、半音の分数単位の録音チューニングずれ。範囲は `[-0.5, 0.5)` で、キー・コード・セクションに使うクロマへ反映されます |
+| `tuning` | `0` | 半音の分数単位の録音チューニングずれ。範囲は `[-0.5, 0.5)`、または音声から測定する `'auto'`。キー・コード・セクションに使うクロマへ反映され、使われた値は結果の `tuning` になります。`estimateTuning(...)` は 12 ビン／オクターブのとき同じ単位を返します |
 
 ::: warning ここでは `useTriadsOnly` の既定値が逆向きです
 統合された `analyze()` の経路では `useTriadsOnly` が **`true`** で、スタンドアロンの
@@ -262,8 +264,8 @@ const tuned = pitchCorrectToMidiTimevarying(
 |------|--------|------|
 | `stft(samples, sr?, nFft?, hopLength?)` | `StftResult` | 短時間フーリエ変換 |
 | `stftDb(samples, sr?, nFft?, hopLength?)` | `StftDbResult` | dB 単位の STFT |
-| `melSpectrogram(samples, sr?, nFft?, hopLength?, nMels?)` | `MelSpectrogramResult` | メルスペクトログラム |
-| `mfcc(samples, sr?, nFft?, hopLength?, nMels?, nMfcc?, fmin?, fmax?, htk?, lifter?)` | `MfccResult` | メル周波数ケプストラム係数（`lifter` 既定 0 = リフタリングなし） |
+| `melSpectrogram(samples, sr?, nFft?, hopLength?, nMels?)` | `MelSpectrogramResult` | メルスペクトログラム。結果にはマトリクスのほか `nFft`、適用された `fmin`／`fmax`、`htk`、`isDb` が含まれます |
+| `mfcc(samples, sr?, nFft?, hopLength?, nMels?, nMfcc?, fmin?, fmax?, htk?, lifter?)` | `MfccResult` | メル周波数ケプストラム係数（`lifter` 既定 0 = リフタリングなし）。結果には計算に使ったメルのパラメータと `lifter` が含まれます |
 | `chroma(samples, sr?, nFft?, hopLength?)` | `ChromaResult` | クロマ特徴量 |
 | `spectralCentroid(samples, sr?, nFft?, hopLength?)` | `Float32Array` | フレームごとのスペクトル重心 |
 | `spectralBandwidth(samples, sr?, nFft?, hopLength?)` | `Float32Array` | フレームごとのスペクトル帯域幅 |
@@ -278,14 +280,16 @@ const tuned = pitchCorrectToMidiTimevarying(
 | `pitchYin(samples, sr?, frameLength?, hopLength?, fmin?, fmax?, threshold?, fillNa?)` | `PitchResult` | YIN ピッチ推定。無声音の `f0` は `fillNa` が true でない限り `NaN` |
 | `pitchPyin(samples, sr?, frameLength?, hopLength?, fmin?, fmax?, threshold?, fillNa?)` | `PitchResult` | pYIN ピッチ推定。無声音の `f0` は `fillNa` が true でない限り `NaN` |
 | `pitchTuning(frequencies, resolution?, binsPerOctave?)` | `number` | 周波数列からチューニングずれを推定 |
-| `estimateTuning(samples, sr?, nFft?, hopLength?, resolution?, binsPerOctave?)` | `number` | 音声からチューニングずれを推定 |
+| `estimateTuning(samples, sr?, nFft?, hopLength?, resolution?, binsPerOctave?)` | `number` | 音声からチューニングずれを推定。値は `binsPerOctave` の 1 ビンに対する端数（12 のとき解析の単位と一致） |
+| `tuningToReferenceHz(tuning, a4?)` / `referenceHzToTuning(hz, a4?)` | `number` | 解析の単位（セミトーン端数）と Hz 単位の基準ピッチを相互に変換します。`a4` の既定は `440` |
 | `cqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | 定 Q 変換の振幅 |
-| `vqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?, gamma?)` | `CqtResult` | 可変 Q 変換の振幅（`gamma` で Q を制御） |
+| `vqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?, gamma?)` | `CqtResult` | 可変 Q 変換の振幅（`gamma` で Q を制御。省略で自動値、`0` は CQT と等価、負または有限でない値は拒否） |
 | `chromaCqt(samples, sr?, hopLength?, nChroma?)` | `{ nChroma, nFrames, data }` | Constant-Q クロマグラム（`librosa.feature.chroma_cqt` 相当） |
 | `nnlsChroma(samples, sr?, options?)` | `{ nChroma, nFrames, data }` | NNLS クロマグラム（音符活性化クロマ）。`options.hopLength` の既定値は `512` |
 | `decompose(s, nFeatures, nFrames, nComponents, nIter?, beta?, init?)` | `DecomposeResult` | 行優先スペクトログラムから NMF（非負値行列因子分解）の分解行列を返す。`init` を選択できる（`'random'` 既定、`'nndsvd'`） |
 | `decomposeStems(request)` | `DecomposeStemsResult` | 元の位相を保持する NMF 分離。各成分をそのまま音として再生できます。リクエスト専用で `DecomposeStemsRequest` を受け取ります |
 | `decomposeStemsLinked(request)` | `DecomposeStemsLinkedResult` | 1 つ以上の同じ長さのチャンネル（最大 64）で NMF モデルとソフトマスクを共有し、各チャンネルの元の複素スペクトルへ適用してチャンネル間のレベルと位相を保ちます。リクエスト専用で、`components[k][c]` を返します。既定値は `decomposeStems` と同じで、1 チャンネルならビット単位で一致します |
+| `melToStft(request)` / `melToAudio(request)` / `mfccToMel(request)` / `mfccToAudio(request)` | `InverseStftResult` / `Float32Array` / `InverseMelResult` / `Float32Array` | 近似逆変換。リクエストは行列を `power`（メル）または `coefficients`（MFCC）と名付けるか、順変換の結果を `{ result, ...overrides }` として渡して全パラメータを読み取らせます。結果と食い違う上書きは `RangeError`、dB の結果も `RangeError` です（先に `dbToPower` で変換してください）。位置引数形式は `librosa.feature.inverse` に準じます |
 | `noteSegments(request)` | `NoteSegment[]` | 呼び出し側が渡した単旋律の F0 系列を、安定した音符区間へ分割します。リクエスト専用で `NoteSegmentsRequest` を受け取ります |
 | `hybridCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | ハイブリッド CQT 振幅（低域は真の CQT、高域は擬似 CQT） |
 | `pseudoCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | 近似（擬似）CQT 振幅（単一 FFT） |
@@ -297,7 +301,7 @@ const tuned = pitchCorrectToMidiTimevarying(
 
 主な既定値は、`nFft=2048`、`hopLength=512`、`nMels=128`、`nMfcc=20`、ピッチ検出の `fmin=65.0`、`fmax=2093.0`、`threshold=0.1`、`rollPercent=0.85` です。
 
-CQT/VQT は `fmin=32.70319566` Hz（C1）、`nBins=84`、`binsPerOctave=12` を使います。VQT の既定 `gamma=-1` は ERB 由来の帯域幅を自動選択します。`chromaCqt` の既定は `nChroma=12`、`nBins=252`、`binsPerOctave=36` です。`bassChroma` と `chromaCens` は `nChroma=12`、`onsetStrengthMulti` は `nBands=3`、`decompose` は `nIter=50`・`beta=2`・`init='random'` が既定です。
+CQT/VQT は `fmin=32.70319566` Hz（C1）、`nBins=84`、`binsPerOctave=12` を使います。VQT は `gamma` を省略すると ERB 由来の帯域幅を自動選択します。`chromaCqt` の既定は `nChroma=12`、`nBins=252`、`binsPerOctave=36` です。`bassChroma` と `chromaCens` は `nChroma=12`、`onsetStrengthMulti` は `nBands=3`、`decompose` は `nIter=50`・`beta=2`・`init='random'` が既定です。
 
 ### `decompose` と `decomposeStems` の違い
 

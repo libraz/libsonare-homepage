@@ -74,7 +74,7 @@ description: libsonare の GS 互換 SoundFont 2 インストゥルメントで�
 
 ## 呼び出し側が用意した SF2 を読み込む
 
-`.sf2` は自分で取得し、生のバイト列をプレイヤーへ渡します。プレイヤーは呼び出しの間に独自のコピーを作るので、渡したバッファは直後に破棄して構いません。押さえておくべき点が 2 つあります。読み込みは、それ以前に読み込んだ SoundFont を**置き換えます**。そして拒否された読み込みは例外を投げ、その場合は以前に読み込んだ SoundFont がそのまま保持されます。
+`.sf2` は自分で取得し、生のバイト列をプレイヤーへ渡します。プレイヤーは呼び出しの間に独自のコピーを作るので、渡したバッファは直後に破棄して構いません。押さえておくべき点が 2 つあります。読み込みは、それ以前に読み込んだ SoundFont を**置き換えます**。そして拒否された読み込みは例外を投げ、その場合は以前に読み込んだ SoundFont がそのまま保持されます。読み込みに成功して置き換わると、古い SoundFont のサンプルが解放されるため、そこから鳴っていたノートは無音になります。NativeSynth フォールバックで鳴っているノートは鳴り続けます。
 
 ::: info 壊れたファイルと壊れた呼び出しは別のエラー
 読み込みはこの 2 つを区別して返すので、自分の実装のバグまで巻き込むことなく、利用者に「このファイルは使えません」と伝えられます。
@@ -354,6 +354,55 @@ const preview = project.bounceWithSf2Instrument(
 );
 ```
 ::::
+
+## NativeSynth と SoundFont フォールバック
+
+NativeSynth は [SoundFont プレイヤー](./soundfont-player.md)の下にあるセーフティネットです。`bounceWithSf2Instrument` でレンダーする（またはライブで SF2 をバインドする）と、libsonare はアレンジが実際に鳴らす各 `(channel, bank, program)` を解決します。
+
+- 読み込んだ SoundFont がそのプログラムをカバーしていれば、そのノートは **SF2** から鳴ります（GS バリエーションとドラムフォールバックを含む）。
+- そうでなければ — SoundFont を一切読み込んでいない場合も含めて — そのノートは **NativeSynth の GM フォールバックバンク**（128 種すべてのプログラムとドラムマップ）で鳴ります。
+
+レンダー前にプログラムごとのバックエンドを確認するには `soundFontManifest()` を使います。最初に使われる順に、各プログラムについて `'sf2'` か `'synth'` を報告します。
+
+```typescript
+project.loadSoundFont(sf2Bytes);
+const manifest = project.soundFontManifest();
+// [{ channel, bank, program, backend: 'sf2' | 'synth', presetName }, ...]
+```
+
+GM フォールバックバンクが常に存在するため、データがないという理由で MIDI が無音になることはありません。SF2 データの読み込みやチャンネル／プログラムごとの解決は [SoundFont プレイヤー](./soundfont-player.md) を参照してください。
+
+### GM フォールバックのプログラムルーティング
+
+フォールバックバンクは、GM プログラムのファミリーごとに最も近い NativeSynth エンジンを使います。楽器の挙動の違いが重要な箇所では、プログラム単位の上書きがあります。ピアノは調整済みですが、その他の物理フォールバックモデルはまだ調整・キャリブレーションを行っていません。下のアコースティック楽器系の行は、完成済みのサンプル楽器並みのリアリティではなく、ルーティング上の対応範囲として読んでください。
+
+| GM プログラム | 楽器 | フォールバックエンジン | 理由 |
+|---------------|------|------------------------|------|
+| 4-5 | Electric Piano 1 / 2 | `fm` | タイン／ベル的な明るさを位相変調で表現 |
+| 6 | Harpsichord | `harpsichord` | ジャック＆プレクトラム。打鍵の速さが音量をほとんど変えない |
+| 7 | Clavi | `fm` | 打弦とピックアップの色づけを、現状は FM で近似 |
+| 8, 10, 14 | Celesta, Music Box, Tubular Bells | `modal` | フェルトで打つスティールバー、ツインティースによるタインの揺らぎ、基音を持たない打撃ピッチ |
+| 9, 11-13 | Glockenspiel, Vibraphone, Marimba, Xylophone | `modal` | 調律されたバーの共鳴 |
+| 15 | Dulcimer | `karplus-strong` | 暫定実装。撥弦ではなく打弦 |
+| 16-23 | Organ family | `additive` / `pipe-organ` / `free-reed` | ドローバー系レジストレーション（16-18）、仮実装の教会オルガンのフルーパイプ（19）、フリーリードのリードオルガン、ハーモニカ、バンドネオン（20-23） |
+| 24-31 | Guitar family | `karplus-strong` | 撥弦の導波路モデル |
+| 32-37 | Acoustic, electric, fretless, slap bass | `karplus-strong` | ベース弦導波路。スラップ／偏波はプログラム別 |
+| 40-43 | Violin, Viola, Cello, Contrabass | `bowed-string` | 仮実装の摩擦励起型・持続弦導波路 |
+| 44 | Tremolo Strings | `subtractive` | デチューンしたのこぎり波セクションにアンプトレモロ LFO を重ねたもので、擦弦モデルではない |
+| 45-46 | Pizzicato Strings, Orchestral Harp | `karplus-strong` | ヴァイオリンボディまたはスチール弦のコーパスへの短い撥弦 |
+| 47 | Timpani | `percussion` | ノートトラッキングするケトルドラムのフォールバックボイス |
+| 48 | String Ensemble 1 | `subtractive` | ソロ弓弦ではなく、パッド的なアンサンブル音色 |
+| 52-54 | Choir Aahs, Voice Oohs, Synth Voice | `vocal` | ソースフィルター方式のボイス（声門音源＋母音フォルマントバンク）で、減算合成のパッドではない |
+| 56-60 | Trumpet, Trombone, Tuba, Muted Trumpet, French Horn | `brass` | 仮実装のリップリード金管導波路 |
+| 61-63 | Brass Section, Synth Brass 1 / 2 | `fm` | 金管導波路ではなく、設計上 FM |
+| 64-71 | Saxophones, Oboe, English Horn, Bassoon, Clarinet | `reed` | 仮実装のリードと管体の導波路 |
+| 72-79 | Piccolo, Flute, Recorder, Pan Flute, Bottle, Shakuhachi, Whistle, Ocarina | `flute` | 仮実装のエアジェット／開管導波路 |
+| 104, 106, 107 | Sitar, Shamisen, Koto | `plucked-string` | バズブリッジ（ジャワリ／サワリ）の撥弦。バンジョー（105）は `karplus-strong` のまま |
+| 112-119 | Tinkle Bell, Agogo, Steel Drums, Woodblock, Taiko Drum, Melodic Tom, Synth Drum, Reverse Cymbal | `percussion` | ノートトラッキングするパーカッションエンジンのボイスで、ドラムキットのマップとは別 |
+
+Bank Select は、フォールバックがバリエーションを持つキャピタルプログラムすべてで読み取られます。全体の対応は前述の [GS バリエーション音色](./gm-gs.md#gs-バリエーション音色)を参照してください。
+
+このルーティングは名前付きプリセットカタログとは別です。`synthPresetNames()` が返すのは手で設計されたプリセット（`e-piano`、`harp`、`drum-kit` など）であり、GM フォールバックバンクは SF2 フォールバック時に MIDI プログラム番号ごとの内部パッチを選びます。
 
 ## 関連
 

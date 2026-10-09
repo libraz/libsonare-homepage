@@ -103,6 +103,22 @@ sonare mastering-streaming source.wav \
 
 :::
 
+### Typed results
+
+The helpers return JSON strings, and their declared types carry the parsed shape. In TypeScript, `masteringAudioProfile` returns `TypedJson<MasteringAudioProfile>`, `masteringAssistantSuggest` returns `TypedJson<MasteringAssistantResult>`, and `masteringStreamingPreview` returns `TypedJson<MasteringStreamingPreviewResult>` (the stereo forms return the same types). `TypedJson<R>` is a plain `string` at run time; `JsonResult<J>` reads the result type back, so a parse can be annotated without restating the shape:
+
+```typescript
+import { masteringAudioProfile, type JsonResult } from '@libraz/libsonare';
+
+const profile: JsonResult<ReturnType<typeof masteringAudioProfile>> = JSON.parse(
+  masteringAudioProfile(samples, sampleRate),
+);
+profile.spectral.midRmsDb;      // number
+profile.defects.measured;       // boolean
+```
+
+`MasteringAssistantResult.profile` is the flat `MasteringAssistantProfile` (`integratedLufs` is `null` for a silent or below-gate input), `chainConfig` is a `MasteringChainConfigDocument` (`version: 1 | 2`), and each streaming-preview row has `integratedLufs: number | null`. Python declares `MasteringAudioProfile`, `MasteringAssistantResult`, and `MasteringStreamingPreviewResult` as `TypedDict`s in `libsonare`.
+
 ::: warning Short clips: profile and suggest work, but need real spectral content to be meaningful
 `masteringAudioProfile` and `masteringAssistantSuggest` run a full [STFT](./glossary/analysis/spectrogram-stft.md) (short-time Fourier transform — a frequency analysis taken over short successive windows) based analysis (default `nFft` = 2048). They only reject a **completely empty** buffer (`SonareError`, "audio input must be a non-empty buffer") — any non-empty buffer, however short, is accepted and processed. The `nFft`-sized window (default 2048 samples) is advisory, not an error condition: a buffer shorter than one full window has too little spectral content to produce a meaningful profile, so treat "shorter than `nFft`" as a quality warning to show the user, not a failure to guard against. `masteringStreamingPreview` only measures loudness, so it tolerates any non-empty audio buffer; an empty `platforms` list is also fine — it falls back to a built-in default set (Spotify, Apple Music, YouTube). When feeding short captures or file-picker selections from the UI, wrap the profile/suggest calls in `try`/`catch` using `isSonareError` to handle the empty-buffer case, and consider a soft length hint (rather than a hard block) for buffers shorter than `nFft`.
 
@@ -131,7 +147,7 @@ try {
 
 A read-only summary of the input: how loud it is, how its energy is spread across the spectrum, how dynamic it is, and whether the optional defect detectors found damage. Nothing is processed.
 
-Optional `params` accept either JS-style or Python-style names: `nFft`/`n_fft` (default `2048`), `hopLength`/`hop_length` (default `512`), `truePeakOversample`/`true_peak_oversample` (default `4`), and `detectDefects`/`detect_defects` (default `false`).
+Optional `params` accept either JS-style or Python-style names: `nFft`/`n_fft` (default `2048`), `hopLength`/`hop_length` (default `512`) — both are sample counts at 48 kHz, rescaled to the input's rate, and band levels are normalised so they agree across rates, `truePeakOversample`/`true_peak_oversample` (default `4`), and `detectDefects`/`detect_defects` (default `false`).
 
 ::: info Why oversample for true peak?
 Stored samples have fixed positions, but a band-limited reconstruction can peak *between* them. Here, a 4× interpolation filter estimates those inter-sample peaks. The reported `truePeakDb` approximates the reconstructed signal under that filter; it is not a measurement of a particular converter's analogue output. Higher factors can improve the estimate but cost more CPU.
@@ -144,26 +160,30 @@ Use this result to explain the input, not to judge it. A profile can tell you th
 | Measures loudness, true peak, crest factor, spectrum, dynamics, and optional defects | It does not change the audio |
 | Gives your UI facts to display before rendering | It does not choose final settings by itself |
 
+The example is the profile of a synthetic four-second loop (kick, hats, and a pad, soft-clipped), so its numbers are only illustrative:
+
 ```json
 {
-  "durationSec": 2,
-  "bpm": 89.5,
-  "bpmConfidence": 0.24,
+  "durationSec": 4,
+  "bpm": 119.87,
+  "bpmConfidence": 0.76,
   "loudness": {
-    "integratedLufs": -8.71,
-    "lraLu": 0,
-    "truePeakDb": -2.41,
-    "crestFactorDb": 5.76
+    "integratedLufs": -9.47,
+    "lraLu": 0.02,
+    "truePeakDb": -1.94,
+    "crestFactorDb": 6.22
   },
   "spectral": {
-    "subRmsDb": 6.37, "lowRmsDb": 40.35, "lowMidRmsDb": 13.26, "midRmsDb": 23.56,
-    "highMidRmsDb": -1.96, "highRmsDb": -1.99, "airRmsDb": -1.92,
-    "centroidHz": 5806.83, "flatness": 0.0035, "rolloffHz": 15386.5
+    "subRmsDb": -29.0, "lowRmsDb": -9.29, "lowMidRmsDb": -15.2, "midRmsDb": -25.5,
+    "highMidRmsDb": -43.0, "highRmsDb": -41.44, "airRmsDb": -38.54,
+    "centroidHz": 1100.33, "flatness": 0.0017, "rolloffHz": 2327.98
   },
-  "dynamics": { "shortTermLufsStd": 0, "attackDensity": 3, "sustainRatio": 1 },
+  "dynamics": { "shortTermLufsStd": 0.009, "attackDensity": 3.75, "sustainRatio": 0.997 },
   "defects": { "measured": false }
 }
 ```
+
+`defects` is abbreviated here: with `detectDefects` off, `measured` is `false` and every other defect field is present at its default rather than a reading.
 
 | Group | Field | Meaning |
 |-------|-------|---------|
@@ -171,24 +191,26 @@ Use this result to explain the input, not to judge it. A profile can tell you th
 | | `lraLu` | Loudness range — how much the loudness moves over time |
 | | `truePeakDb` | Inter-sample [true peak](./glossary/true-peak.md) |
 | | `crestFactorDb` | Peak-to-RMS contrast — high = punchy, low = dense ([crest factor](./glossary/concepts/crest-factor.md)) |
-| `spectral` | `subRmsDb` … `airRmsDb` | Relative energy per band (sub → air) on an internal scale, not dBFS — compare against a reference, not across bands |
+| `spectral` | `subRmsDb` … `airRmsDb` | Energy per band (sub → air) in dBFS, on the mean-square convention of the noise fields: a full-scale sine reads −3.01 dBFS in its band |
 | | `centroidHz` | Spectral "center of mass" — a brightness proxy |
 | | `flatness` | 0 = tonal, 1 = noise-like |
 | | `rolloffHz` | Frequency below which most energy sits |
-| `dynamics` | `attackDensity` | How busy the transients are |
+| `dynamics` | `attackDensity` | Onsets per second whose percussive rise clears a fixed floor, so a steady tone reads 0 |
 | | `sustainRatio` | How sustained vs. transient the material is |
 | `defects` | object | Defect counters and measurements; `measured` is `false` unless `detectDefects` is enabled |
 
 ::: info Reading the spectral bands
 The `*RmsDb` fields go from low to high frequency: `sub` (deep bass) → `low`/`lowMid` (bass and warmth) → `mid` (body, vocals) → `highMid`/`high` (presence, clarity) → `air` (top-end sparkle).
 
-They are relative band levels on an internal FFT scale, not dBFS — the example above reads `lowRmsDb: 40.35`, well above 0. And because music has a natural downward spectral tilt, `air` reads far below `low` on essentially every normal master, so comparing the bands against each other would call almost any track dark. Judge dark versus bright by comparing a band against the *same* band on a reference track or on a previous render.
+They are dBFS on the mean-square convention of the profile's noise fields, so a band can be read against the noise floor and the other bands on one scale: a full-scale 1 kHz sine reads −3.01 dBFS in its band (measured −3.03 in the `mid` band) and −49 dBFS or lower elsewhere. The loop above reads `lowRmsDb: -9.29`, the loudest band, because the kick and pad sit there. Because music has a natural downward spectral tilt, `air` reads far below `low` on essentially every normal master, so comparing the bands against each other would call almost any track dark. Judge dark versus bright by comparing a band against the *same* band on a reference track or on a previous render.
 :::
 
 ::: details What do loudness range, attack density, and sustain ratio mean?
 - **Loudness range (LRA, in LU)** — how much the perceived loudness swings across the track. A high value means it gets noticeably quieter and louder (a dynamic classical piece); a low value means it stays at roughly one level (a dense EDM master). "LU" (loudness units) is the same scale as LUFS, measured as a spread rather than an absolute.
-- **Attack density** — roughly how many sharp note/drum onsets happen per second. High = busy and percussive, low = sparse or sustained.
+- **Attack density** — roughly how many sharp note/drum onsets happen per second. Only onset peaks above a fixed floor of percussive rise count, so a steady tone reads 0. High = busy and percussive, low = sparse or sustained.
 - **Sustain ratio** (0–1) — whether the material is dominated by long held tones (near 1) or short bursts and attacks (near 0). It is measured separately from attack density (from the RMS envelope, not the onsets) but usually moves in the opposite direction.
+
+Attack density, sustain ratio, and the mixing classifier's hit detection measure against the event maximum with the loudest events set aside: one per 10 s of audio, up to two. Under 10 s nothing is set aside.
 - **Short-term LUFS std-dev** — how much the moment-to-moment loudness wobbles. A higher number means the level is restless; near zero means it sits very steadily.
 :::
 
@@ -203,7 +225,7 @@ Builds on the profile to propose a ready-to-render mastering chain, plus a human
 Accepted keys are `preset`, `targetPlatform`/`target_platform`, `targetLufs`/`target_lufs`, `ceilingDb`/`ceiling_db`, `enableRepair`/`enable_repair`, `preferStreamingSafe`/`prefer_streaming_safe`, and `speechMonoAmount`/`speech_mono_amount`. `preset` and `targetPlatform` take names; the other keys are numeric or boolean.
 
 ::: details What the optional intent keys do
-`preset` chooses the chain to start from and defaults to `streaming`; the assistant never infers it from the audio. `targetPlatform` applies its loudness and ceiling only for targets with an explicit rule (`broadcast`, `podcast`, `club`, or `cd`), and only for values you have not supplied. `streaming`, `youtube`, `audiobook`, and `cinema` are accepted names but leave the assistant's current target and ceiling unchanged. `enableRepair` turns on the cleanup stages (declick, denoise, etc.) when the source has defects. `preferStreamingSafe` selects the streaming-safe denoise estimator when repair is enabled. `speechMonoAmount` (0–1) controls how much the speech preset collapses side energy below its 120 Hz mono-maker crossover.
+`preset` chooses the chain to start from and defaults to `streaming`; the assistant never infers it from the audio. `targetPlatform` applies its loudness and ceiling only for targets with an explicit rule (`broadcast`, `podcast`, `club`, or `cd`), and only for values you have not supplied. `streaming`, `youtube`, `audiobook`, and `cinema` are accepted names but leave the assistant's current target and ceiling unchanged. `enableRepair` turns on the cleanup stages (declick, denoise, etc.) when the source has defects. The declip stage is proposed only when runs of samples sit pinned at one level and no channel holds audio louder than that level, since the shared threshold would otherwise rewrite unclipped audio; mono input is held to the same rule, and the `explanation` then reads `declip withheld`. `preferStreamingSafe` selects the streaming-safe denoise estimator when repair is enabled. `speechMonoAmount` (0–1) controls how much the speech preset collapses side energy below its 120 Hz mono-maker crossover.
 :::
 
 Think of this helper as a preset generator with an explanation. It returns a full starting point that your app can render directly, but the intended workflow is still editable.
@@ -235,7 +257,7 @@ Think of this helper as a preset generator with an explanation. It returns a ful
     "base preset: pop",
     "target loudness and ceiling applied from AssistantConfig"
   ],
-  "profile": { "integratedLufs": -8.7, "truePeakDb": -2.43, "crestFactorDb": 5.75, "...": "flattened profile" }
+  "profile": { "integratedLufs": -9.47, "truePeakDb": -1.94, "crestFactorDb": 6.22, "...": "flattened profile" }
 }
 ```
 
@@ -320,8 +342,8 @@ This helper is easiest to read as a "what will the platform do?" report.
 ```json
 {
   "platforms": [
-    { "name": "YouTube", "integratedLufs": -8.70, "truePeakDb": -2.43, "normalizationGainDb": -5.30, "ceilingRisk": false },
-    { "name": "Podcast", "integratedLufs": -8.70, "truePeakDb": -2.43, "normalizationGainDb": -7.30, "ceilingRisk": false }
+    { "name": "YouTube", "integratedLufs": -9.47, "truePeakDb": -1.94, "normalizationGainDb": -4.53, "ceilingRisk": false },
+    { "name": "Podcast", "integratedLufs": -9.47, "truePeakDb": -1.94, "normalizationGainDb": -6.53, "ceilingRisk": false }
   ]
 }
 ```
@@ -333,7 +355,7 @@ This helper is easiest to read as a "what will the platform do?" report.
 | `ceilingRisk` | `true` if normalization would push the signal past the platform ceiling |
 
 ::: warning Louder is not better on streaming
-A master at −8 LUFS is not "louder" on YouTube — the platform applies the `normalizationGainDb` (here −5.3 dB) to bring everyone to roughly the same loudness, so over-compressing just sacrifices dynamics for no loudness gain. See [Delivery Targets](./glossary/mastering/delivery-targets.md) and [Loudness Matching](./glossary/concepts/loudness-matching.md).
+A master at −9.5 LUFS is not "louder" on YouTube — the platform applies the `normalizationGainDb` (here −4.5 dB) to bring everyone to roughly the same loudness, so over-compressing just sacrifices dynamics for no loudness gain. See [Delivery Targets](./glossary/mastering/delivery-targets.md) and [Loudness Matching](./glossary/concepts/loudness-matching.md).
 :::
 
 <SonareDemo id="loudness-meter" />
@@ -342,7 +364,7 @@ A master at −8 LUFS is not "louder" on YouTube — the platform applies the `n
 
 The three helpers above take a single buffer. To use them on a stereo track you have to hand them a `0.5 * (left + right)` downmix, and that downmix is not a neutral stand-in for the pair: it measures quieter than the program actually is, because content that differs between the channels partly cancels when you sum them.
 
-The size of the error depends on how correlated the two channels are. Measuring a decorrelated pair at 48 kHz, the downmix reports **−22.55 LUFS** where the stereo path reports **−16.44 LUFS** — a **6.11 dB** under-read. On a pair whose channels are identical the gap is 3.01 dB, and all of it comes from the stereo side: BS.1770 sums the two channels' mean squares, while the downmix of identical channels is not attenuated at all (`0.5 * (L + L)` is just `L`). The remaining ~3 dB on the decorrelated pair is the cancellation in the downmix itself. Wide, reverberant, or heavily stereo-imaged material sits near the larger figure.
+The size of the error depends on how correlated the two channels are. Measuring a decorrelated pink-noise pair (48 kHz, 4 s), the downmix reports **−18.45 LUFS** where the stereo path reports **−12.43 LUFS** — a **6.03 dB** under-read. On a pair whose channels are identical the gap is 3.01 dB, and all of it comes from the stereo side: BS.1770 sums the two channels' mean squares, while the downmix of identical channels is not attenuated at all (`0.5 * (L + L)` is just `L`). The remaining ~3 dB on the decorrelated pair is the cancellation in the downmix itself. Wide, reverberant, or heavily stereo-imaged material sits near the larger figure.
 
 That single measurement propagates:
 
@@ -353,7 +375,7 @@ That single measurement propagates:
 | `normalizationGainDb` in the delivery preview | The platform looks like it will turn you up more than it will |
 | `ceilingRisk` | Follows from that loudness, so a real ceiling risk can read as safe |
 
-On the same decorrelated pair, the Spotify row reports `normalizationGainDb` **+8.55** through the mono path against **+2.44** through the stereo path — the mono answer overstates the available headroom by the full 6 dB.
+On the same decorrelated pair, a −14 LUFS target reports `normalizationGainDb` **+4.45** through the mono path against **−1.57** through the stereo path — the mono answer overstates the available headroom by the full 6 dB.
 
 So reach for the stereo entry points whenever the source is genuinely stereo. Pass `left` and `right` and the helpers measure the pair directly, with BS.1770 channel summing for integrated loudness and the larger of the two channel true peaks.
 

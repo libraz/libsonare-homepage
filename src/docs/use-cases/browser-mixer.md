@@ -17,7 +17,7 @@ The [Mixing Studio](/mixing) is a working example: load local stems, place and f
 | Run a focused stem mixer with a custom playback bridge | [`Mixer`](../mixing.md#scene-based-mixing-mixer) | Feed blocks, manage transport, communicate UI changes, and render the same graph offline |
 | Keep timeline playback, controls, automation, and offline rendering together | [`SonareEngine`](../realtime-streaming.md#audioworklet-notes) from `@libraz/libsonare/worklet` | Load clips, declare lanes and routing, connect the output, and provide the UI and persistence |
 
-For a new app with interactive playback and export, start from the existing [SonareEngine setup and control table](../realtime-streaming.md#mastering-preview-in-the-render-realm). The facade mirrors controls to an AudioWorklet engine and an offline engine. Its `renderOffline` result is PCM; encoding and downloading a WAV remain app work. Long offline jobs need a worker strategy: an async method alone does not move computation off the main thread.
+For a new app with interactive playback and export, start from the existing [SonareEngine setup and control table](../realtime-streaming.md#mastering-preview-in-the-render-realm). The facade mirrors controls to an AudioWorklet engine and an offline engine. Its `renderOffline` result is PCM, and `bounceOffline` returns an interleaved buffer with the raw engine's options (see [Offline render, bounce, and freeze](../realtime-streaming.md#offline-render-bounce-and-freeze)); encoding and downloading a WAV remain app work. Long offline jobs need a worker strategy: an async method alone does not move computation off the main thread.
 
 Mixing Studio uses the third row. The facade plays the project live, and a worker bounces the same project on a plain `RealtimeEngine`. Continuous controls reach the engine through setters, so a fader move during playback keeps processor state such as reverb history. The few construction-only parameters, such as a gate's hold time, rebuild the strip's inserts, so the page applies them when the control is released.
 
@@ -66,7 +66,7 @@ The demo imports copied engine assets through `@/wasm`. In a separate app, use t
 
 The worker receives the track PCM transferred from the registry, so while a bounce, an analysis, or a loudness measurement runs the arrays are detached and editing is locked; they return to the registry when the job ends. Each source is held in the page, in the engine, and in the bounce worker, which raises peak memory use.
 
-The eight-track, five-minute, and twenty-minute-in-total limits are demo budgets, not engine limits. Raising them requires measuring memory and audio-thread load on target devices. For longer sessions, see [paged clip audio streaming](../realtime-streaming.md#paged-clip-audio-streaming); the realtime OPFS path requires SharedArrayBuffer support and cross-origin isolation, while the demo's playback runs without them.
+The eight-track, five-minute, and twenty-minute-in-total limits are demo budgets, not engine limits. Raising them requires measuring memory and audio-thread load on target devices. For longer sessions, see [paged clip audio streaming](../wasm-streaming.md#paged-clip-audio-streaming); OPFS paging into the worklet engine works with or without SharedArrayBuffer and cross-origin isolation, and the demo's playback runs without them.
 
 ## Verify an app before using it for a mix
 

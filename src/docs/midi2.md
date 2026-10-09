@@ -108,7 +108,7 @@ MIDI 1.0 packers remain useful for a target that expects 7-bit values: `midiNote
 
 ## Queue raw UMP in realtime
 
-`RealtimeEngine.pushMidiUmp(destinationId, words, renderFrame = -1)` accepts one to four most-significant-first 32-bit words. The array length must match the message type in its first word. An MT 0x4 MIDI 2.0 channel-voice message is delivered at full width. `pushMidiInputUmp(words, portTimeSamples = 0)` applies the same message rules to the engine-owned input source after `setMidiInputSource(...)`.
+`RealtimeEngine.pushMidiUmp(destinationId, words, renderFrame?)` accepts one to four most-significant-first 32-bit words. The array length must match the message type in its first word. An MT 0x4 MIDI 2.0 channel-voice message is delivered at full width. `pushMidiInputUmp(words, portTimeSamples = 0)` applies the same message rules to the engine-owned input source after `setMidiInputSource(...)`.
 
 ::: code-group
 
@@ -121,7 +121,7 @@ engine.setBuiltinInstrument({}, 0);
 engine.setMidiInputSource(0);
 const note = Project.midi2NoteOn(0, 0, 0, 60, 0xc000);
 try {
-  engine.pushMidiUmp(0, [note.data0, note.data1 ?? 0], -1);
+  engine.pushMidiUmp(0, [note.data0, note.data1 ?? 0]);
   engine.pushMidiInputUmp([note.data0, note.data1 ?? 0], 0);
 } finally {
   engine.destroy();
@@ -136,14 +136,14 @@ engine.set_builtin_instrument()
 engine.set_midi_input_source(0)
 try:
     note = sonare.Project.midi2_note_on(0.0, 0, 0, 60, 0xC000)
-    engine.push_midi_ump(0, [note[1], note[2]], render_frame=-1)
+    engine.push_midi_ump(0, [note[1], note[2]])
 finally:
     engine.close()
 ```
 
 :::
 
-The AudioWorklet `SonareEngine` facade accepts the same complete packet through `pushMidiUmp(trackId, words, renderFrame = -1)`: `words` can be the legacy one-word number or a one-to-four-word array / `Uint32Array`. `pushMidiInputUmp(words, portTimeSamples = 0)` accepts the same complete packet on its engine-owned input source. Raw MT 0x3 / MT 0x5 data messages are rejected by both raw UMP calls; send a complete SysEx frame through `pushMidiSysex` instead. Queue-full and malformed-word errors are reported by the binding.
+The AudioWorklet `SonareEngine` facade accepts the same complete packet through `pushMidiUmp(trackId, words, renderFrame?)`: `words` can be the legacy one-word number or a one-to-four-word array / `Uint32Array`. `pushMidiInputUmp(words, portTimeSamples = 0)` accepts the same complete packet on its engine-owned input source. Raw MT 0x3 / MT 0x5 data messages are rejected by both raw UMP calls; send a complete SysEx frame through `pushMidiSysex` instead. Queue-full and malformed-word errors are reported by the binding.
 
 ## What the built-in receivers apply
 
@@ -161,7 +161,7 @@ The UMP keeps the original message even when a receiver ignores one expression t
 
 A MIDI 2.0 Clip File is an in-memory UMP container with an `SMF2CLIP` header. `Project.exportClipFile()` exports the project tempo map and MIDI clips into a single clip container; `importClipFile(...)` adds the imported clip. The format keeps MIDI 2.0 channel-voice messages without converting their values.
 
-It preserves 16-bit velocity, 32-bit CC, per-note and registered controllers, and bank-valid Program Change. This is the interchange path to use when those values matter. Clip files also carry SysEx7/8 data. Export serializes the project’s separate SysEx store into the file; import restores it to that store.
+It preserves 16-bit velocity, 32-bit CC, per-note and registered controllers, and bank-valid Program Change. This is the interchange path to use when those values matter. Clip files also carry SysEx7/8 data. Export serializes the project’s separate SysEx store into the file; import restores it to that store. A SysEx8 payload keeps a leading `F0` or trailing `F7` data byte through SMF and Clip File export, and SMF import joins a SysEx message split across meta events.
 
 Time-signature Flex Data stores the denominator as a base-2 exponent `e`, decoded as `2^e`. Clip Files reserve `e = 0` for a non-standard denominator, so representable exponents are `1..7` (denominators 2..128); exporting a non-power-of-two denominator rounds up to the next representable power, capped at 128, and increments the skipped-event count. An imported exponent outside `1..7` is skipped, and Clip File import supplies 4/4 at PPQ 0 when no valid signature starts there. The `SMF2CLIP` header has no project-history or schema-version field, so the format carries current Clip File interchange data without project history or version negotiation.
 

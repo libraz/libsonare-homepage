@@ -178,6 +178,83 @@ const audio = project.bounce({ numChannels: 2 });
 
 Once your arrangement compiles cleanly, the natural next step is turning it into audio — including making MIDI tracks audible. Continue with [Project Bounce & Rendering](./project-bounce.md).
 
+## Sending a track to external MIDI gear
+
+An **internal destination** renders MIDI through a NativeSynth/SF2 instrument inside libsonare. An **external destination** skips that instrument and places MIDI 1.0 byte messages in an output queue for your host to send to hardware or another application. libsonare prepares and timestamps the messages; opening the OS/Web MIDI port remains the host's job.
+
+Mark the destination, process audio as usual, then drain the output queue frequently. The raw-engine methods carry the same names across bindings — camelCase in Browser and Node, snake_case in Python:
+
+::: code-group
+
+```typescript [Browser]
+engine.setMidiDestinationExternal(2, true); // destination 2 now drives external gear
+engine.setExternalMidiClockEnabled(true);  // optional: clock + start/continue/stop
+
+engine.process([leftBlock, rightBlock]);
+for (const event of engine.drainExternalMidi(256)) {
+  if (event.destinationId === 0xffffffff) {
+    // Clock/transport is broadcast to every external port selected by the host.
+    for (const output of externalOutputs.values()) output.send(event.bytes);
+  } else {
+    externalOutputs.get(event.destinationId)?.send(event.bytes);
+  }
+}
+```
+
+```typescript [Node]
+// Node exposes the same camelCase raw-engine methods as WASM.
+engine.setMidiDestinationExternal(2, true);
+engine.setExternalMidiClockEnabled(true);
+
+engine.process([leftBlock, rightBlock]);
+for (const event of engine.drainExternalMidi(256)) {
+  if (event.destinationId === 0xffffffff) {
+    // Forward clock/transport to every open hardware port.
+    for (const port of externalPorts.values()) port.sendMessage([...event.bytes]);
+  } else {
+    externalPorts.get(event.destinationId)?.sendMessage([...event.bytes]);
+  }
+}
+```
+
+```python [Python]
+engine.set_midi_destination_external(2, True)  # destination 2 drives external gear
+engine.set_external_midi_clock_enabled(True)   # optional: clock + start/continue/stop
+
+engine.process([left_block, right_block])
+for event in engine.drain_external_midi(256):
+    if event.destination_id == 0xFFFFFFFF:
+        # Broadcast clock/transport to every open hardware port.
+        for port in external_ports.values():
+            port.send_message(list(event.bytes))
+    else:
+        port = external_ports.get(event.destination_id)
+        if port is not None:
+            port.send_message(list(event.bytes))
+
+# Advisory: a rising count means the queue filled before the host drained it.
+dropped = engine.external_midi_dropped_count()
+```
+
+:::
+
+Each event contains `destinationId`, `renderFrame`, and `bytes` (one lowered MIDI 1.0 message of 1–3 bytes; snake_case `destination_id` / `render_frame` in Python). Clock and transport messages use the sentinel destination `0xFFFFFFFF`; channel messages retain their destination id. `maxRecords` limits the returned messages, not source events, and any remainder stays queued for the next drain. Check `externalMidiDroppedCount()` (`external_midi_dropped_count()` in Python) — a rising value means the fixed-capacity realtime queue filled before the host drained it.
+
+With the `SonareEngine` AudioWorklet facade (browser-only), use `setMidiDestinationExternal(trackId, true)` and subscribe with `onMidiOut(callback)`. The worklet already drains its engine once per render block and posts batches to the main thread, so do not try to call the raw drain as a second consumer:
+
+```typescript
+engine.setMidiDestinationExternal('hardware-lead', true);
+const unsubscribe = engine.onMidiOut((events) => {
+  for (const event of events) {
+    if (event.destinationId === 0xffffffff) {
+      for (const output of externalOutputs.values()) output.send(event.bytes);
+    } else {
+      externalOutputs.get(event.destinationId)?.send(event.bytes);
+    }
+  }
+});
+```
+
 ## Related
 
 - [Project Editing](./project-editing.md) — tracks, clips, tempo, markers, warp, and automation

@@ -8,7 +8,7 @@ description: The creative-FX insert catalog for the libsonare mixing and realtim
 **Effects inserts** are the creative-FX processors you load into mixer channel-strip and bus slots (and realtime engine inserts): reverbs, modulation effects, delays, and saturation pedals. They are built through the same insert factory that the [Mixing Engine](./mixing.md) uses for every channel-strip insert.
 
 ::: info Inserts are not mastering processors
-This page catalogs **mixer/engine inserts**. The named [Mastering Processors](./mastering-processors.md) registry — compressors, EQ, saturation, stereo, repair, and the loudness/maximizer stages — is a separate topic with its own scope. The two overlap only where noted: a few FX inserts are *also* exposed as one-shot mastering processors. If you are looking for the mastering registry, start on that page instead.
+This page catalogs **mixer/engine inserts**. The named [Mastering Processors](./mastering-processors.md) registry — compressors, EQ, saturation, stereo, repair, and the loudness/maximizer stages — is a separate topic with its own scope. The two overlap: every FX insert is *also* a one-shot mastering processor. If you are looking for the mastering registry, start on that page instead.
 :::
 
 An insert sits *in* the channel path, so everything downstream — the fader, the sends, the bus — sees its output. That position is what separates an insert from a send, and it is the first thing to be sure of before reading the catalog below.
@@ -17,24 +17,24 @@ An insert sits *in* the channel path, so everything downstream — the fader, th
 
 ## Discovering the insert set
 
-Mixer scene inserts use the same processor factory as mastering inserts, but the valid insert set is slightly broader than `masteringProcessorNames()`. Six runtime APIs describe what is available and how to configure it:
+Mixer scene inserts use the same processor factory as mastering inserts. Every insert id is also a name in `masteringProcessorNames()`; the reverse does not hold, because seven offline processors (`final.bitDepth`, `final.dither`, `final.outputChain`, `maximizer.loudnessOptimize`, `repair.declick`, `repair.declip`, and `repair.trimSilence`) run only as one-shot calls. Six runtime APIs describe what is available and how to configure it:
 
 | API | Returns |
 |-----|---------|
 | `masteringInsertNames()` | The full list of valid insert ids |
 | `masteringInsertParamNames(name)` | The construction keys one insert accepts (band/sub-band processors list their indexed `band{i}.*` keys; an unknown name returns an empty array) |
-| `masteringInsertParamInfo(name)` | A full descriptor for every construction key and realtime automation target — see [The parameter descriptor](#the-parameter-descriptor) |
+| `masteringInsertParamInfo(name, sampleRate?)` | A full descriptor for every construction key and realtime automation target — see [The parameter descriptor](#the-parameter-descriptor). Pass `sampleRate` to resolve a Nyquist-bounded ceiling for that processing rate |
 | `masteringProcessorCatalog()` | Machine-readable entries (`kind`, `realtimeInsertable`, `stereoOnly`, `latencySamples`, `tailSamples`, `channelPolicy`, `params`, and slot metadata) for picker/filter UIs. The representative 48 kHz / 512-sample probe reports latency and audible decay tail (both 0 for offline processors); query the live processor for exact configuration-dependent latency. Hosts can filter capabilities without hard-coding processor IDs. |
 | `masteringInsertTiming(name, params, sampleRate)` | The exact prepared latency and tail for one insert configuration; pass only finite numbers and booleans in `params` — see [Preset parameters and configured insert timing](./js-api-mastering.md#preset-parameters-and-configured-insert-timing) |
 | `capabilityCatalog()` | The build-wide document: every processor with the same descriptors `masteringInsertParamInfo` returns, plus the preset lists, in one read — see [From the catalog to an insert control surface](#from-the-catalog-to-an-insert-control-surface) |
 
-The Python equivalents are `mastering_insert_names()`, `mastering_insert_param_names(name)`, `mastering_insert_param_info(name)`, `mastering_processor_catalog()`, `mastering_insert_timing(name, params, sample_rate)`, and `capability_catalog()`.
+The Python equivalents are `mastering_insert_names()`, `mastering_insert_param_names(name)`, `mastering_insert_param_info(name, sample_rate=...)`, `mastering_processor_catalog()`, `mastering_insert_timing(name, params, sample_rate)`, and `capability_catalog()`.
 
 Keys outside an insert's list are ignored by the processor and reported through [`Mixer.sceneWarnings()`](./mixing-scene-json.md) when a scene carrying them loads.
 
 ### The parameter descriptor
 
-`masteringInsertParamInfo(name)` returns one descriptor for every construction key and every realtime automation target. Every descriptor carries all ten fields; none of them are optional.
+`masteringInsertParamInfo(name)` returns one descriptor for every construction key and every realtime automation target. Every descriptor carries all seventeen fields; none of them are optional.
 
 | Field | Type | Meaning |
 |-------|------|---------|
@@ -44,26 +44,40 @@ Keys outside an insert's list are ignored by the processor and reported through 
 | `type` | `'number'` \| `'boolean'` \| `'enum'` \| `'string'` \| `'array'` | How the config builder reads the key |
 | `min` | `number` \| `null` | The smallest accepted value, or `null` when the catalog knows of no limit |
 | `max` | `number` \| `null` | The largest accepted value, or `null` when the catalog knows of no limit |
+| `minExclusive`, `maxExclusive` | `boolean` | Whether the bound itself is refused (`true`) or accepted |
+| `maxRelativeTo` | `'nyquist'` \| `null` | `'nyquist'` marks a ceiling bounded by the processing rate; the effective ceiling is the lower of `max` and the Nyquist. Pass `sampleRate` to `masteringInsertParamInfo` to resolve it |
 | `default` | `number` \| `boolean` \| `null` | The value used when the key is absent |
-| `unit` | `string` \| `null` | The recognized unit — `dB`, `Hz`, `ms`, `samples`, or `referenceSamples@29761Hz` for the plate and Dattorro `modDepthSamples` — or `null` when the catalog has no recognized unit; `null` does not prove the key is dimensionless |
+| `unit` | `string` \| `null` | The unit the processor reads the key in, from a closed set (below), or `null` for a boolean, enum, string, or array key |
+| `scale` | `'linear'` \| `'log'` | The axis a slider should use |
+| `uiMin`, `uiMax` | `number` \| `null` | An optional display range inside `[min, max]`; `null` when the library declares none |
+| `dependsOn` | `{ key: string; relation: 'lt' \| 'le' \| 'ge' \| 'gt' }[]` | Sibling keys whose live value bounds this one, for example `cutoff0Hz` below `cutoff1Hz` |
 | `choices` | `{ name: string; value: number }[]` \| `null` | A closed named numeric set, including discrete values with gaps, or `null` when no closed set is published |
 | `slot` | `string` \| `null` | The processor slot group that owns the key, or `null` when the key belongs to no group |
 
-`unit` is `string | null`, not an optional field: a key whose suffix has no recognized unit reports `null` rather than omitting the key. That includes physical quantities such as `decaySec` or `lengthM`; use the key name and processor documentation when the catalog has no unit. A host can read all ten fields without a presence check. `id: null` identifies a construction-only key; `rtSafe: false` means that live automation is not supported, whether or not an id is present. The recognized unit is read off the key's suffix (`…Db`, `…Hz`, `…Ms`, `…Samples`), so unlike the bounds it is declared rather than measured; the one spelled-out exception exists because that depth is counted at the reverb's internal reference rate, not the session rate. The same `min` / `max` / `default` values appear in `capabilityCatalog()`, and [Reading a catalog bound](./mastering-processors.md#reading-a-catalog-bound) explains where they come from and how far to trust them.
+`unit` is one of `dB`, `dBFS`, `LUFS`, `Hz`, `ms`, `s`, `samples`, `m`, `cm`, `deg`, `percent`, `degC`, `V`, `inPerSec`, `dBPerOct`, `semitones`, `cents`, `ratio`, `bits`, `count`, or `none` (a dimensionless number). It is declared by the processor that consumes the key, not inferred from the key's spelling, so `decaySec` reports `s`, `lengthM` reports `m`, and the plate and Dattorro `modDepthSamples` reports `samples`. `null` appears only on non-numeric keys. A host can read all seventeen fields without a presence check. `id: null` identifies a construction-only key; `rtSafe: false` means that live automation is not supported, whether or not an id is present. The same fields appear in `capabilityCatalog()`, and [Reading a catalog bound](./mastering-processors.md#reading-a-catalog-bound) explains where `min` / `max` / `default` come from and how far to trust them. Bounds, display ranges, and `dependsOn` describe construction-time acceptance; the realtime parameter path clamps. Published bounds are rounded inward, so a published limit is always a value the insert accepts.
 
 ::: info The descriptor list includes construction keys and automation targets
-`masteringInsertParamNames(name)` remains the construction-read key list. `masteringInsertParamInfo(name)` now covers that list plus any realtime automation targets. Construction-only rows have `id: null` and `rtSafe: false`; some automation targets can have `rtSafe: false` when the prepared processor cannot change them safely. Build a picker from the parameter names, and enable live controls only for descriptors whose `rtSafe` is true.
+`masteringInsertParamNames(name)` remains the construction-read key list. `masteringInsertParamInfo(name)` covers that list plus any realtime automation targets. Construction-only rows have `id: null` and `rtSafe: false`; some automation targets can have `rtSafe: false` when the prepared processor cannot change them safely. Build a picker from the parameter names, and enable live controls only for descriptors whose `rtSafe` is true.
 :::
+
+A frequency key bounded by the processing rate publishes `maxRelativeTo: 'nyquist'` together with a `max` that holds at the default rate. Pass the session rate to get the ceiling that applies there:
+
+```typescript
+const band = (rate?: number) =>
+  masteringInsertParamInfo('eq.parametric', rate).find((p) => p.name === 'band0.frequencyHz')!;
+band().max;       // 24000 (exclusive)
+band(44100).max;  // 22050 (exclusive)
+```
 
 ## From the catalog to an insert control surface
 
-[What the capability catalog reports](./api-surface.md#what-the-capability-catalog-reports) covers the document itself — which surfaces return it, the ten fields, slot metadata, and how a bound is measured. This section is the insert-specific part: how a host goes from a processor id to a laid-out control surface without keeping a table of its own.
+[What the capability catalog reports](./api-surface.md#what-the-capability-catalog-reports) covers the document itself — which surfaces return it, the descriptor fields, slot metadata, and how a bound is measured. This section is the insert-specific part: how a host goes from a processor id to a laid-out control surface without keeping a table of its own.
 
 The route is three lookups in the one document rather than a call per processor:
 
-1. **Pick the insert set.** Filter `processors` on `realtimeInsertable`. That is 79 of the 94 entries, and it is the same set `masteringInsertNames()` returns; the other 15 — the 11 offline processors and the 4 pair processors — carry an empty `params` array. `category` groups the set the way a picker does (`effects` is the 19 creative-FX ids on this page; the other categories are the mastering families), and `channelPolicy` says how the mixer wraps the insert on a bus wider than stereo — every reverb, modulation and delay insert is `stereoPairOnly` except `effects.modulation.ringModulator`, which is `multichannel`.
-2. **Read the descriptors.** An entry's `params` is exactly the list `masteringInsertParamInfo(id)` returns for that id, in the same order, so a host holding the catalog never needs the per-processor call. Entries with `id: null` are construction-only; non-null ids are the automation ids used by `Mixer.scheduleInsertAutomation(strip, insertIndex, paramId, samplePos, value)` on Node and WASM, `Mixer.schedule_insert_automation(...)` on Python, and `sonare_strip_schedule_insert_automation` on the C ABI. The realtime engine's setters take the `name` instead (`setTrackStripInsertParamByName` and its master and bus variants).
-3. **Lay out each control** from `type`, `default`, `min`, `max`, `unit`, and `choices`. Construction-only keys now have descriptors too, so `stages` on the phaser, `attackMs` / `releaseMs` on the auto-wah, `stereoSpread` on the rotary, and room geometry can be represented as build-time fields. Use `slot` to identify a slot group, then read the processor's `slots` entry: `activation` (`anyKey` or `always`), the enclosing `parent`, and `minCrossoverCutoffs` determine whether that group is present.
+1. **Pick the insert set.** Filter `processors` on `realtimeInsertable`. That is 84 of the 95 entries, and it is the same set `masteringInsertNames()` returns. The other 11 are 7 offline processors and 4 pair processors; the pair processors, `final.*`, and `maximizer.loudnessOptimize` carry an empty `params` array, while `repair.declick`, `repair.declip`, and `repair.trimSilence` publish theirs as construction-only rows. `repair.decrackle`, `repair.dehum`, `repair.denoiseClassical`, and `repair.dereverbClassical` are realtime inserts, but their settings are likewise construction-only. `category` groups the set the way a picker does (`effects` is the 19 creative-FX ids on this page, `voice` holds the `voice.changer` insert; the other categories are the mastering families). Every entry also carries `causal`, which is `false` for `repair.declick`, `repair.declip`, and `repair.trimSilence` and `true` for every insert, and `channelPolicy` says how the mixer wraps the insert on a bus wider than stereo — every reverb, modulation and delay insert is `stereoPairOnly` except `effects.modulation.ringModulator`, which is `multichannel`.
+2. **Read the descriptors.** An insert's `params` is exactly the list `masteringInsertParamInfo(id)` returns for that id, in the same order, so a host holding the catalog never needs the per-processor call (the three offline repair processors publish their rows in the catalog only). Entries with `id: null` are construction-only; non-null ids are the automation ids used by `Mixer.scheduleInsertAutomation(strip, insertIndex, paramId, samplePos, value)` on Node and WASM, `Mixer.schedule_insert_automation(...)` on Python, and `sonare_strip_schedule_insert_automation` on the C ABI. The realtime engine's setters take the `name` instead (`setTrackStripInsertParamByName` and its master and bus variants).
+3. **Lay out each control** from `type`, `default`, `min`, `max`, `unit`, and `choices`. Construction-only keys have descriptors too, so `stages` on the phaser, `attackMs` / `releaseMs` on the auto-wah, `stereoSpread` on the rotary, and room geometry can be represented as build-time fields. Use `slot` to identify a slot group, then read the processor's `slots` entry: `activation` (`anyKey` or `always`), the enclosing `parent`, and `minCrossoverCutoffs` determine whether that group is present.
 
 The catalog also exposes `saturation.overdrive` and `saturation.distortion` in the `saturation` category. Both are multichannel realtime inserts and solo processors, so the same ids work in a mixer chain, a realtime engine, or the one-shot mastering apply path.
 
@@ -71,7 +85,7 @@ The same descriptor route covers the current insertable maximizer controls: `cei
 
 ```typescript
 const catalog = capabilityCatalog();
-const inserts = catalog.processors.filter((p) => p.realtimeInsertable);   // 79 of 94
+const inserts = catalog.processors.filter((p) => p.realtimeInsertable);   // 84 of 95
 const fx = inserts.filter((p) => p.category === 'effects');               // the 19 ids below
 const chorus = fx.find((p) => p.id === 'effects.modulation.chorus')!;
 for (const param of chorus.params) {
@@ -87,8 +101,8 @@ Four things the effects family reports that a general reading of the document wo
 
 - **`rtSafe: false` is a hard stop for automation, not a hint.** Scheduling automation on such a parameter returns `NotSupported` (code 6). Construction-only rows are marked with `id: null` and `rtSafe: false`; this page also contains id-bearing targets that remain unsafe, including every GS EFX raw byte and `modDepthSamples`. A UI that draws an automation lane per descriptor has to disable every row whose `rtSafe` is false, including an id-bearing row.
 - **The catalog has more than numeric toggles.** Effects descriptors include `number`, `boolean`, `enum`, `string`, and `array` types. `choices` can describe enum values or a closed numeric set with gaps. Do not infer a toggle from a name; use `type`, and use `choices` for discrete controls.
-- **Latency and tail are per insert, and non-zero for the reverbs.** `effects.reverb.convolution`, `effects.reverb.room` and `effects.acoustic.roomMorph` report 256 samples of latency; the reverbs report tails from 51,217 samples (`room`, `roomMorph`) up to 264,000 (`fdn`), and the stereo delay 59,795, all at the representative 48 kHz probe. `realtimeCost` is `moderate` for every reverb except `velvet`, which is `high`, and `low` for every modulation and delay insert; it is `null` only on the 15 non-inserts.
-- **The effects family is small in parameters.** Its 19 processors publish 229 descriptors between them; the per-band EQ processors account for most of the 5,484 descriptors in the full catalog (`multiband.dynamicEq` alone has 1,019). An insert UI that sizes itself by descriptor count should expect the two families to differ by an order of magnitude.
+- **Latency and tail are per insert, and non-zero for the reverbs.** `effects.reverb.convolution`, `effects.reverb.room` and `effects.acoustic.roomMorph` report 256 samples of latency; the reverbs report tails from 51,217 samples (`room`, `roomMorph`) through 72,000 (`convolution`) up to 446,957 (`fdn`), and the stereo delay 120,029, all at 48 kHz with default parameters. A reported tail covers the output down to 1e-5 of full scale, so it is an upper bound for sizing a bounce. `realtimeCost` is `moderate` for every reverb except `velvet`, which is `high`, and `low` for every modulation and delay insert; it is `null` only on the 11 non-inserts.
+- **The effects family is small in parameters.** Its 19 processors publish 235 descriptors between them; the per-band EQ processors account for most of the 5,577 descriptors in the full catalog (`multiband.dynamicEq` alone has 1,019). An insert UI that sizes itself by descriptor count should expect the two families to differ by an order of magnitude.
 
 ### Two things a null and a default do not tell you
 
@@ -161,12 +175,12 @@ The table below highlights representative keys and behavior; it is intentionally
 |--------|-----------|----------------|---------|------|
 | `saturation.overdrive` | `gainDb` | `0`–`41` | `20` | dB |
 |  | `toneHz` | `500`–`8000` | `3000` | Hz |
-|  | `levelDb` | no catalog minimum; maximum `770.637` | `0` | dB |
+|  | `levelDb` | no catalog minimum; maximum `770.636` | `0` | dB |
 | `saturation.distortion` | `gainDb` | `0`–`60` | `30` | dB |
 |  | `toneHz` | `475`–`20000` | `4000` | Hz |
-|  | `levelDb` | no catalog minimum; maximum `770.637` | `0` | dB |
+|  | `levelDb` | no catalog minimum; maximum `770.636` | `0` | dB |
 
-Each reports `48` samples of latency and a `0`-sample tail. All three parameters have realtime automation ids and are safe to change while the insert runs. The large `levelDb` maximum is the finite-gain limit measured by the catalog; it is not a useful musical range.
+Each reports `48` samples of latency and a tail of 10,513 (overdrive) or 15,793 (distortion) samples at 48 kHz. All three parameters have realtime automation ids and are safe to change while the insert runs. The large `levelDb` maximum is the finite-gain limit, rounded inward; it is not a useful musical range.
 
 ### Vowel filter
 
@@ -179,7 +193,7 @@ There are a few practical details to know:
 | Detail | Meaning |
 |--------|---------|
 | `effects.reverb.plate` and `effects.reverb.dattorro` | Two names for the same Dattorro processor |
-| Reverb params | `decaySec`, `decay`, `damping` / `hfDamping`, `dryWet`, `preDelayMs`, `reverbTimeS`, `densityHz`, `enableShelf` (which apply depend on the algorithm). `effects.reverb.convolution` clamps `decaySec` to its synthesized-tail ceiling of 12 seconds at construction time. The Dattorro/plate insert also accepts `modRateHz` (figure-8 tank LFO — low-frequency oscillator — rate in Hz, default `0.5`) and `modDepthSamples` (modulation depth in samples at the reverb's reference rate, default `6.0`) for its chorused tail. |
+| Reverb params | `decaySec`, `decay`, `damping` / `hfDamping`, `dryWet`, `preDelayMs`, `reverbTimeS`, `densityHz`, `enableShelf` (which apply depend on the algorithm). `effects.reverb.convolution` clamps `decaySec` to its synthesized-tail ceiling of 12 seconds at construction time. The Dattorro/plate insert also accepts `modRateHz` (figure-8 tank LFO — low-frequency oscillator — rate in Hz, default `0.5`) and `modDepthSamples` (modulation depth in samples at the reverb's internal reference rate, default `6.0`; unit `samples`) for its chorused tail. |
 | `effects.modulation.chorus` params | `rateHz`, `depthMs`, `centerDelayMs`, `dryWet` |
 | `effects.modulation.flanger` params | `rateHz`, `depthMs`, `centerDelayMs`, `feedback`, `dryWet` |
 | `effects.modulation.phaser` params | `rateHz`, `minHz`, `maxHz`, `stages`, `dryWet` |
@@ -218,7 +232,7 @@ A Solina-style BBD string-machine ensemble — the lush, chorused tone of vintag
 
 ## Inserts that are also one-shot mastering processors
 
-Use these in [Mixing Scene JSON](./mixing-scene-json.md) `insert.processor` fields. In the shipped FX-enabled WASM build, some of them are also one-shot mastering processors: `effects.reverb.plate`, `effects.reverb.dattorro`, `effects.reverb.fdn`, `effects.reverb.velvet`, `effects.reverb.convolution`, `effects.filter.vowel`, `effects.modulation.chorus`, `effects.modulation.flanger`, `effects.modulation.phaser`, `saturation.overdrive`, `saturation.distortion`, `stereo.binaural`, and `effects.delay.stereo` are returned by `masteringProcessorNames()` and run through the one-shot apply path. The geometry-driven insert and the newer modulation inserts — `effects.reverb.room`, `effects.acoustic.roomMorph`, `effects.modulation.ensemble`, `effects.modulation.wah`, `effects.modulation.autoWah`, `effects.modulation.rotary`, `effects.modulation.ringModulator`, and `effects.modulation.pitchShifter` — are insert-only and do **not** appear in `masteringProcessorNames()`; reach them through `masteringInsertNames()` and scene inserts.
+Use these ids in [Mixing Scene JSON](./mixing-scene-json.md) `insert.processor` fields. In the shipped FX-enabled WASM build every insert id, including the geometry-driven `effects.reverb.room` and `effects.acoustic.roomMorph` and the newer modulation inserts (`effects.modulation.ensemble`, `wah`, `autoWah`, `rotary`, `ringModulator`, and `pitchShifter`), is returned by `masteringProcessorNames()` and runs through the one-shot apply path, so one parameter map works in a mixer chain, a realtime engine, or `masteringProcess(...)`. A one-shot call reports the insert's latency in `latencySamples` (256 for the convolution and geometric room inserts).
 
 ## Related
 

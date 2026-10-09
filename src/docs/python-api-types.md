@@ -51,6 +51,9 @@ class Key:
     name: str          # property -> "C major", "A minor"
     short_name: str    # property -> "C", "Am"
 
+class KeyDetection(Key):          # return type of detect_key(...)
+    tuning: float          # fraction of a semitone the chroma was built with (given or measured)
+
 class TimeSignature:
     numerator: int
     denominator: int
@@ -77,8 +80,17 @@ class Chord:
     name: str                # property -> "Cmaj7", "Am", "G/B"
     duration: float          # property -> end - start
 
+class FunctionalChord(Chord):   # return type of chord_functions(...)
+    roman: str               # "I", "V7", "vi"; "N.C." for an unknown chord
+    function: str            # "tonic", "subdominant", "dominant", "chromatic", "none"
+
 class ChordAnalysisResult:
     chords: list[Chord]      # return type of detect_chords(...)
+    tuning: float            # fraction of a semitone the chroma was built with (given or measured)
+
+class AutoTuneResult:        # return type of auto_tune(...)
+    samples: list[float]     # corrected audio, the length of the input
+    key: Key                 # the detected key, or the one the call named (confidence 1)
 
 class AnalysisBeatObservations:
     onset_strength: list[float]        # windowed accent value, one per beat
@@ -96,6 +108,7 @@ class AnalysisResult:
     downbeat_phase: int            # which beat of the first bar the analysis starts on
     beat_local_bpm: list[float]    # parallel to beat_times; empty unless
                                    #   compute_tempo_curve=True
+    tuning: float                  # fraction of a semitone the chromagrams were built with
     bpm_candidates: list[BpmHypothesis]
     time_signature_candidates: list[TimeSignature]
     beats: list[Beat]              # property: per-beat objects with strength
@@ -147,11 +160,25 @@ class MelSpectrogramResult:
     hop_length: int
     power: list[float]       # n_mels × n_frames, row-major
     db: list[float]          # n_mels × n_frames, row-major
+    n_fft: int               # forward-transform parameters, so the result alone can be inverted
+    fmin: float              # as applied
+    fmax: float              # as applied: the Nyquist when the request left it at 0
+    htk: bool
+    is_db: bool              # False for a forward transform; power is linear, db its dB form
 
 class MfccResult:
     n_mfcc: int
     n_frames: int
     coefficients: list[float]  # n_mfcc × n_frames, row-major
+    sample_rate: int
+    hop_length: int
+    n_fft: int
+    n_mels: int
+    fmin: float
+    fmax: float
+    htk: bool
+    is_db: bool                # always False
+    lifter: float              # 0 means none
 
 class ChromaResult:
     n_chroma: int
@@ -217,6 +244,7 @@ class StreamFrames:
 class StreamChordChange:
     root: int
     quality: int
+    name: str                 # spelled as batch analysis spells a chord
     start_time: float
     confidence: float
 
@@ -224,6 +252,7 @@ class StreamBarChord:
     bar_index: int
     root: int
     quality: int
+    name: str
     start_time: float
     confidence: float
 
@@ -245,8 +274,11 @@ class StreamStats:
     key: int
     key_minor: bool
     key_confidence: float
+    key_name: str | None            # "C major"; None while no key is estimated
+    key_short_name: str | None      # "C", "Am"
     chord_root: int
     chord_quality: int
+    chord_name: str                 # "N.C." for no chord
     chord_confidence: float
     chord_start_time: float
     current_bar: int
@@ -268,17 +300,21 @@ Additional Python result classes used by focused APIs:
 | Area | Classes |
 |------|---------|
 | Metering | `ClippingRegion`, `StreamFramesU8`, `StreamFramesI16`, `WaveformPeaksReport` |
-| Mastering | `MasteringResult`, `MasteringStereoResult` |
-| Mixing | `MixerStereoResult` |
+| Mastering | `MasteringResult`, `MasteringStereoResult`, `StreamingLoudnessGain` (from `streaming_loudness_gain*`) |
+| Mastering JSON documents | `TypedDict`s over the JSON strings the assistant, profile and analysis helpers return: `MasteringAudioProfile` (`MasteringAudioProfileLoudness`, `MasteringAudioProfileSpectral`, `MasteringAudioProfileDynamics`, `MasteringAudioProfileDefects`), `MasteringAssistantProfile`, `MasteringAssistantResult`, `MasteringChainConfigDocument`, `MasteringStreamingPreviewResult`, `MasteringStreamingPreviewPlatform`, `MasteringRepairAnalysis`, `MatchReferenceLoudnessResult`, `MatchTonalBalanceResult`, `MatchTonalBalanceBand`, `MatchTonalBalanceLogBandsResult`, `MatchEqCurveResult`, `MatchEstimateReferenceDelaySamplesResult`, `StereoMonoCompatCheckResult`, `StereoMonoCompatBand`, `StereoMonoCompatCheckLogBandsResult`. The functions still return JSON strings; parse them with `json.loads` and annotate the result with these types |
+| Repair | `RepairApplyResult`, `RepairStageReports` (from `mastering_repair_apply`) |
+| Acoustics | `RoomGeometry` (a `TypedDict`, from `room_geometry_from_estimate`), `MaterialPresetName`, `AcousticModeName` |
+| Analysis literals | `ChordFunctionName` |
+| Mixing | `MixerStereoResult`, `SidechainCheck` (`ok` plus the first refusal `reason`; from the engine's `can_set_*_sidechain`) |
 | Projects | `AssistSidecar` (return type of `project.get_assist_sidecar(index)` / `project.assist_sidecars()` — see [Project Editing](./project-editing-midi.md#assist-sidecars)), `NotePairValidation` |
 | Realtime engine jobs/telemetry | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `MeterTelemetryRecord`, `MeterTelemetryRecordWide`, `ScopeTelemetryRecord` |
-| Build introspection | `Capabilities`, `CapabilityCatalog`, `CapabilityCatalogPresets`, `MasteringPresetCatalogEntry`, `MasteringInsertParamInfo`, `MasteringInsertSlot`, `MasteringInsertTiming`, `MasteringProcessorCatalogEntry` (`TypedDict`s over the JSON documents described on [API Surface](./api-surface.md#what-the-capability-catalog-reports)) |
+| Build introspection | `Capabilities`, `CapabilityCatalog`, `CapabilityCatalogPresets`, `MasteringPresetCatalogEntry`, `MasteringInsertParamInfo`, `MasteringInsertParamUnit`, `MasteringInsertParamScale`, `MasteringInsertParamRelation`, `MasteringInsertParamDependency`, `MasteringInsertSlot`, `MasteringInsertTiming`, `MasteringProcessorCatalogEntry` (`TypedDict`s over the JSON documents described on [API Surface](./api-surface.md#what-the-capability-catalog-reports)) |
 
-`CapabilityCatalog["masteringPresets"]` contains `MasteringPresetCatalogEntry` values with `name`, `kind`, `targetLufs`, `truePeakCeilingDb`, and `maxLimiterGainReductionDb`; restoration entries use `None` for the three numeric fields. `MasteringProcessorCatalogEntry` includes `slots` for conditional key groups. `MasteringInsertParamInfo` descriptors include `id`, `rtSafe`, `type`, `min`, `max`, `default`, `unit`, `choices`, and `slot`, while `MasteringInsertTiming` contains `latencySamples` and `tailSamples` for the requested insert configuration.
+`CapabilityCatalog["masteringPresets"]` contains `MasteringPresetCatalogEntry` values with `name`, `kind`, `targetLufs`, `truePeakCeilingDb`, and `maxLimiterGainReductionDb`; restoration entries use `None` for the three numeric fields. `MasteringProcessorCatalogEntry` includes `slots` for conditional key groups and `causal` (false for `repair.declick`, `repair.declip` and `repair.trimSilence`). `MasteringInsertParamInfo` descriptors include `id`, `rtSafe`, `type`, `min`, `max`, `default`, `unit` (from the closed `MasteringInsertParamUnit` set), `scale` (`linear` or `log`), `uiMin` / `uiMax` (an optional display range inside `[min, max]`), `dependsOn` (sibling keys whose live value bounds this one), `choices`, and `slot`, while `MasteringInsertTiming` contains `latencySamples` and `tailSamples` for the requested insert configuration.
 
 ### Exceptions
 
-Two classes cover every failure, and the second derives from the first, so they form one hierarchy rather than two:
+Two classes cover every failure, and the second derives from the first, so they form one hierarchy rather than two. `ErrorCode` is the `IntEnum` of the codes they carry:
 
 ```python
 class SonareError(RuntimeError):
@@ -286,10 +322,26 @@ class SonareError(RuntimeError):
     code_name: str     # property -> "InvalidParameter", "FileNotFound", ...
     # str(e) -> "[4] Invalid parameter": the code is prefixed to the message
 
+class ErrorCode(IntEnum):
+    OK = 0
+    FILE_NOT_FOUND = 1
+    INVALID_FORMAT = 2
+    DECODE_FAILED = 3
+    INVALID_PARAMETER = 4
+    OUT_OF_MEMORY = 5
+    NOT_SUPPORTED = 6
+    INVALID_STATE = 7
+    CANCELLED = 8
+    ENCODE_FAILED = 9
+    ABI_MISMATCH = 10  # binding-only: the loaded library does not match the binding
+    UNKNOWN = 99
+
 class SonareValueError(SonareError, ValueError):
     code: int          # ErrorCode.INVALID_PARAMETER unless the raiser passes another
     # str(e) -> "spectral_centroid: samples contains NaN or Inf at index 0": no prefix
 ```
+
+A failure that comes from the library or from an object's state is always a `SonareError` with the matching code — `NOT_SUPPORTED` when the loaded library lacks an entry point, `INVALID_STATE` for a closed object, `UNKNOWN` for a native result that fails a sanity check — so `except RuntimeError` keeps catching it and `.code` tells the cases apart. `ABI_MISMATCH` is raised on first library use when the loaded library's ABI version differs from the binding's.
 
 `SonareValueError` is what the binding raises when it refuses an argument before the call crosses into native code. Its bases decide what an existing handler sees:
 

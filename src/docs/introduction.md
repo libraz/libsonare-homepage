@@ -233,7 +233,7 @@ HPSS exploits this difference with median filters: a horizontal median filter ex
 ::: details Creative FX availability
 Reverb, modulation, and delay inserts (`effects.reverb.*`, `effects.modulation.*`, `effects.delay.stereo`) are reached through the mixer and realtime-engine insert catalog when the build has creative FX enabled; [Effects Inserts](./effects-inserts.md) lists every insert ID and its parameters.
 
-There is no standalone `chorus(...)`-style helper. In the FX-enabled WASM build, chorus, flanger, phaser, stereo delay, and the reverbs are also listed by `masteringProcessorNames()` and run through the one-shot processor path; the geometric room and the newer modulation inserts are insert-only.
+There is no standalone `chorus(...)`-style helper. In the FX-enabled WASM build every creative FX insert, the geometric room and every modulation insert included, is also listed by `masteringProcessorNames()` and runs through the one-shot processor path.
 
 Ducking is exposed as `dynamics.duckingProcessor` / mixer routing rather than a one-shot editing helper.
 :::

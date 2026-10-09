@@ -1,9 +1,9 @@
 ---
-title: JavaScript/TypeScript Audio and Streaming API
-description: The Audio class, offline metering, and the incremental streaming API of the libsonare JavaScript/TypeScript package.
+title: JavaScript/TypeScript Audio, Metering and Mixing API
+description: The Audio class, offline metering, take alignment, mixer strips, and the mixing API of the libsonare JavaScript/TypeScript package.
 ---
 
-# JavaScript/TypeScript Audio and Streaming API
+# JavaScript/TypeScript Audio, Metering and Mixing API
 
 ## Audio Class
 
@@ -29,12 +29,29 @@ const audio = Audio.fromMemory(new Uint8Array(await file.arrayBuffer()));
 
 ### `Audio.fromMemoryWithBrowserFallback(bytes, options?)`
 
-`async`; returns `Promise<Audio>`. Tries `Audio.fromMemory` first. If the bundled decoder cannot read the format, it uses the browser codec stack (`AudioContext.decodeAudioData`) for formats such as AAC, OGG, and FLAC. Browser-decoded multi-channel audio is mixed down to mono so the returned `Audio` object still contains one sample stream. Accepts an optional `BrowserAudioDecodeOptions` (`audioContext` / `createAudioContext` / `targetSampleRate`); a context this helper creates itself is closed afterward.
+`async`; returns `Promise<Audio>`. Tries `Audio.fromMemory` first. If the bundled decoder cannot read the format, it uses the browser codec stack (`AudioContext.decodeAudioData`) for formats such as AAC, OGG, and FLAC. Browser-decoded multi-channel audio is folded to mono with the same ITU-R BS.775 rule the native decoder applies (`downmix`, below), so a file yields the same samples whichever decoder ran and the returned `Audio` object still contains one sample stream. Accepts an optional `BrowserAudioDecodeOptions` (`audioContext` / `createAudioContext` / `targetSampleRate`); a context this helper creates itself is closed afterward.
 
 ```typescript
 const audio = await Audio.fromMemoryWithBrowserFallback(
   new Uint8Array(await file.arrayBuffer()),
 );
+```
+
+### `decodeChannels(bytes)`
+
+`Audio.fromMemory` folds a multichannel file to mono while decoding. `decodeChannels` decodes the same formats but keeps every channel, returning `{ sampleRate, channels }` with one `Float32Array` plane per source channel in the source's own order (a 5.1 file arrives as `L R C LFE Ls Rs`).
+
+### `downmix(channels, targetLayout)`
+
+Narrows planes to a smaller layout with the ITU-R BS.775 rule: centre and surround enter the front pair at -3 dB and the LFE plane is dropped. `targetLayout` is `0` mono, `1` stereo, `2` 5.1, `3` 7.1; the source layout is named by the channel count (1, 2, 6 or 8), and any other count folds to mono as the unweighted mean. An upmix or unknown layout throws `SonareError` (`InvalidParameter`); no channels, or planes of differing length, throw `RangeError`.
+
+```typescript
+import { init, decodeChannels, downmix } from '@libraz/libsonare';
+
+await init();
+
+const { sampleRate, channels } = decodeChannels(bytes);
+const stereo = channels.length > 2 ? downmix(channels, 1) : channels;
 ```
 
 ### Properties
@@ -356,244 +373,42 @@ settle(stripIndex: number): void
 
 `settle` is required before an **offline render from a freshly configured strip**. Every level control is smoothed for a live fader (~5 ms), so the first block after `setFaderDb` / `setPan` / `setWidth` / `setInputTrimDb` — or after `fromSceneJson` itself, whose fader smoother starts at unity — opens at the smoother's start and glides to the target: a one-strip scene at −3 dB measured 5.8 dB hot on its first sample. Call it after the last control change and before the first block; in a live loop the glide is the point and the call is unnecessary. It clears nothing — automation, meters, and insert state are untouched — and rejects an out-of-range index.
 
-## Streaming API
+## Mixing API
 
-The Streaming API enables real-time audio analysis for visualizations and live monitoring. Unlike batch analysis, streaming processes audio chunk by chunk with minimal latency.
-
-::: tip When to Use
-- **Batch API**: Pre-recorded files, all-in-one analysis (BPM, key, chords, sections)
-- **Streaming API**: Live audio, visualizations, real-time feedback
-:::
-
-This section is the `StreamAnalyzer` type/class reference. For the runnable recipe, the AudioWorklet bridge, output-format details, and the progressive-estimate walkthrough, see [Realtime and Streaming](./realtime-streaming.md).
-
-### StreamConfig
-
-Configuration options for StreamAnalyzer.
+The WASM package exposes the libsonare mixing engine. `mixStereo(...)` is a compact one-shot renderer for stem arrays. `Mixer` is a persistent scene-based mixer with channel strips, buses, sends, VCA groups, automation, strip meters, and goniometer buffers.
 
 ```typescript
-interface StreamConfig {
-  sampleRate?: number;         // default: 44100 (stream default, not 22050)
-  nFft?: number;               // default: 2048
-  hopLength?: number;          // default: 512
-  nMels?: number;              // default: 128
-  fmin?: number;               // default: 0
-  fmax?: number;               // default: 0 (= sr/2)
-  tuningRefHz?: number;        // default: 440
-  computeMel?: boolean;        // default: true
-  computeChroma?: boolean;     // default: true
-  computeOnset?: boolean;      // default: true
-  computeSpectral?: boolean;   // default: true
-  emitEveryNFrames?: number;   // default: 1 (no throttling)
-  magnitudeDownsample?: number;// default: 1
-  maxPendingFrames?: number;   // default: 4096; overflow drops newly produced output frames
-  maxProgressionEntries?: number; // default: 4096; cap for each retained chord/bar progression, overflow drops oldest
-  keyUpdateIntervalSec?: number;  // default: 5
-  bpmUpdateIntervalSec?: number;  // default: 10
-  window?: number;             // 0=Hann (default), 1=Hamming, 2=Blackman, 3=Rectangular
-  outputFormat?: 0;            // legacy; omit it or use Float32 (0)
-}
+import {
+  Mixer,
+  mixStereo,
+  mixingScenePresetJson,
+  mixingScenePresetNames,
+} from '@libraz/libsonare';
+
+mixingScenePresetNames(); // ['vocalReverbSend', ...]
+
+const offline = mixStereo([vocalL, musicL], [vocalR, musicR], sampleRate, {
+  inputTrimDb: [3, 0],
+  faderDb: [-3, -12],
+  pan: [0, -0.2],
+  width: [1, 0.9],
+  muted: [false, false],
+});
+
+const mixer = Mixer.fromSceneJson(mixingScenePresetJson('vocalReverbSend'), sampleRate, 512);
+mixer.sceneWarnings(); // non-fatal scene-load warnings: insert params no processor reads (typos)
+const latency = mixer.latencySamples(); // compiled graph latency for dry/wet alignment
+const block = mixer.processStereo([vocalBlockL, musicBlockL], [vocalBlockR, musicBlockR]);
+const meter = mixer.stripMeter(0, 'postFader');
+
+mixer.scheduleFaderAutomation(0, sampleRate * 8, -6, 's-curve');
+mixer.schedulePanAutomation(0, sampleRate * 8, -0.25, 'linear');
+mixer.scheduleSendAutomation(0, 0, sampleRate * 12, -12, 'hold');
+
+const goniometer = mixer.readGoniometerLatest(0, 256);
+const sceneJson = mixer.toSceneJson();
+mixer.delete();
 ```
 
-`outputFormat` is retained only for source compatibility and must be `0` when
-provided. Choose a quantized read explicitly with `readFramesU8` or
-`readFramesI16`; analysis itself always runs in float. See [Realtime and
-Streaming](./realtime-streaming.md#reading-frames-and-output-format).
+`Mixer.createRealtimeBuffer()` and `processStereoInto(...)` are intended for AudioWorklet-style render loops where avoiding per-block allocation matters. See [Mixing Engine](./mixing.md) for scene and routing details.
 
-There is no `computeMagnitude` flag: passing it makes the constructor throw,
-because magnitude frames are not exposed by the StreamAnalyzer read paths. Use `stft`/`stftDb` offline or the spectrum
-metering helpers for magnitude data.
-
-`streamAnalyzerConfigDefaults()` returns a fully-populated `StreamConfigDefaults`
-object (a `Required<StreamConfig>`) holding the library's default values for
-every field above. Use it to seed a settings UI or to compute a diff against a
-user-supplied config; `StreamAnalyzer` itself applies these same defaults for any
-field you omit.
-
-### StreamAnalyzer Class
-
-```typescript
-class StreamAnalyzer {
-  constructor(config: StreamConfig);
-
-  // Process audio chunk (internal offset tracking)
-  process(samples: Float32Array): void;
-
-  // Process with an explicit, contiguous sample offset. A gap, seek, or switch
-  // from process() requires reset() first.
-  processWithOffset(samples: Float32Array, sampleOffset: number): void;
-
-  // Number of frames ready to read
-  availableFrames(): number;
-
-  // Read processed frames (full float precision)
-  readFrames(maxFrames: number): FrameBuffer;
-
-  // Quantized reads for bandwidth-reduced transfer / visualization
-  // (optional quantizeConfig widens quantization ranges for unusually loud/quiet streams;
-  // see Realtime and Streaming → custom quantization ranges)
-  readFramesU8(maxFrames: number, quantizeConfig?: StreamQuantizeConfig): StreamFramesU8;   // Uint8 feature arrays
-  readFramesI16(maxFrames: number, quantizeConfig?: StreamQuantizeConfig): StreamFramesI16; // Int16 feature arrays
-
-  // Reset state for new stream
-  reset(baseSampleOffset?: number): void;
-
-  // Get statistics and estimates that update as audio arrives
-  stats(): AnalyzerStats;
-
-  // Total frames processed
-  frameCount(): number;
-
-  // Current time position (seconds)
-  currentTime(): number;
-
-  // Get the sample rate
-  sampleRate(): number;
-
-  // Set expected total duration for pattern lock timing
-  setExpectedDuration(durationSeconds: number): void;
-
-  // Set normalization gain for loud/compressed audio
-  setNormalizationGain(gain: number): void;
-
-  // Set tuning reference frequency (default: 440 Hz)
-  setTuningRefHz(refHz: number): void;
-
-  // Release resources (call when done). `delete()` is canonical; `dispose()` is an alias.
-  delete(): void;
-  dispose(): void;
-}
-```
-
-### FrameBuffer
-
-Structure-of-Arrays format for efficient transfer via `postMessage`.
-
-```typescript
-interface FrameBuffer {
-  nFrames: number;
-  nMels: number;
-  nChroma: number;             // 12 when chroma is present; otherwise 0
-  featureFlags: number;        // MEL=1, CHROMA=2, ONSET=4, SPECTRAL=8
-  timestamps: Float32Array;      // [nFrames]
-  mel: Float32Array;             // [nFrames * nMels], empty if MEL is absent
-  chroma: Float32Array;          // [nFrames * nChroma], empty if CHROMA is absent
-  onsetStrength: Float32Array;   // [nFrames], empty if ONSET is absent
-  rmsEnergy: Float32Array;       // [nFrames]
-  spectralCentroid: Float32Array;// [nFrames], empty if SPECTRAL is absent
-  spectralFlatness: Float32Array;// [nFrames], empty if SPECTRAL is absent
-  chordRoot: Int32Array;         // [nFrames], empty if CHROMA is absent
-  chordQuality: Int32Array;      // [nFrames], empty if CHROMA is absent
-  chordConfidence: Float32Array; // [nFrames], empty if CHROMA is absent
-}
-```
-
-### ChordChange
-
-A detected chord change in the progression.
-
-```typescript
-interface ChordChange {
-  root: PitchClass;
-  quality: ChordQuality;
-  startTime: number;
-  confidence: number;
-}
-```
-
-### BarChord
-
-A chord detected at bar boundary (beat-synchronized).
-
-```typescript
-interface BarChord {
-  barIndex: number;
-  root: PitchClass;
-  quality: ChordQuality;
-  startTime: number;
-  confidence: number;
-}
-```
-
-### PatternScore
-
-Match score for a known chord progression pattern.
-
-```typescript
-interface PatternScore {
-  name: string;   // pattern name (e.g., "royalRoad", "pop")
-  score: number;  // match score (0-1)
-}
-```
-
-### AnalyzerStats
-
-```typescript
-interface AnalyzerStats {
-  totalFrames: number;
-  totalSamples: number;
-  durationSeconds: number;
-  pendingFrames: number;       // unread frames currently buffered
-  droppedOutputFrames: number; // newly produced frames dropped at the configured cap
-  droppedChordProgressionEntries: number; // oldest chord-history entries dropped at the configured cap
-  droppedBarProgressionEntries: number;   // oldest bar-history entries dropped at the configured cap
-  estimate: ProgressiveEstimate;
-}
-```
-
-### ProgressiveEstimate
-
-BPM, key, and chord estimates that improve over time as more audio is processed.
-
-```typescript
-interface ProgressiveEstimate {
-  // BPM estimation
-  bpm: number;              // 0 if not yet estimated
-  bpmConfidence: number;    // 0-1, increases over time
-  bpmCandidateCount: number;
-
-  // Key estimation
-  key: PitchClass;          // 0-11 (C-B)
-  keyMinor: boolean;
-  keyConfidence: number;    // 0-1, increases over time
-
-  // Chord estimation (current)
-  chordRoot: PitchClass;
-  chordQuality: ChordQuality;
-  chordConfidence: number;
-  chordStartTime: number;
-  chordProgression: ChordChange[];     // detected chord changes
-  barChordProgression: BarChord[];     // bar-synchronized chords
-  currentBar: number;                  // current bar index
-  barDuration: number;                 // bar duration in seconds
-
-  // Pattern detection
-  votedPattern: BarChord[];            // voted chord for each pattern position
-  patternLength: number;              // length of repeating pattern (default: 4 bars)
-  detectedPatternName: string;        // best matching pattern name (e.g., "royalRoad")
-  detectedPatternScore: number;       // match score (0-1)
-  allPatternScores: PatternScore[];   // all known pattern scores
-
-  // Statistics
-  accumulatedSeconds: number;
-  usedFrames: number;
-  updated: boolean;         // true if estimate changed this frame
-}
-```
-
-### Usage, AudioWorklet integration, and timing
-
-The runnable `StreamAnalyzer` recipe — feeding blocks from an `AudioWorklet`,
-reading frames, throttling with `emitEveryNFrames`, and mapping the `FrameBuffer`
-stream-time timestamps onto `AudioContext.currentTime` — lives on
-[Realtime and Streaming](./realtime-streaming.md), with the AudioWorklet handshake
-and data-flow diagrams.
-
-::: tip Releasing WASM objects
-`StreamAnalyzer`, `Mixer`, `StreamingEqualizer`, and `StreamingMasteringChain` are
-**embind** handles onto WASM heap memory that the JavaScript garbage collector cannot
-reclaim — call `delete()` when done (`StreamAnalyzer` also accepts `dispose()`, and
-some classes expose `destroy()` as an alias). Plain functions like `analyze()` return
-ordinary JS values and need no cleanup. Node native cleanup differs; see
-[Native Bindings](./native-bindings.md).
-:::

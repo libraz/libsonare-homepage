@@ -144,9 +144,13 @@ try {
 }
 ```
 
-ライブラリへ届く前に弾かれる引数の形の問題（長さの食い違う 2 本の配列、許可されて
-いない文字列の `mode` など）は素の `RangeError` や `TypeError` で投げられるため、
-`isSonareError` では捕捉できません。
+ライブラリへ届く前に弾かれる引数の問題はネイティブのエラーとして投げられ、
+`isSonareError` では捕捉できません。型が違う、または値がない引数は `TypeError`、
+値が定義域の外（長さの食い違う 2 本の配列、許可されていない文字列の `mode`、整数を
+読む箇所の小数、NUL を含む文字列やオブジェクトプロパティ）の場合はフィールド名を挙げた
+`RangeError` です。ライブラリやオブジェクトの状態が報告する失敗はコード付きの
+`SonareError` のままです。解放済みまたは破棄済みのハンドルは `InvalidState`、パッケージと
+別のツリーからビルドされたアドオンは、パッケージの require 時に `AbiMismatch`（コード 10）を投げます。
 
 ### Audio
 
@@ -177,11 +181,22 @@ try {
 WASM でも同じ挙動です。
 :::
 
-### `using` によるクリーンアップ（Node 22 以上）
+### 全チャンネルのデコード
+
+`Audio.fromMemory(data)` と `Audio.fromFile(path)` はマルチチャンネルのソースをモノラルに畳み込みます。`decodeChannels(data)` はバイト列を一度デコードして全チャンネルを保持し、`{ sampleRate, channels }` を返します。`channels` は元のチャンネル順（5.1 は L R C LFE Ls Rs）の `Float32Array` の配列です。`downmix(channels, targetLayout)` は、デコーダーと同じ ITU-R BS.775 の規則（センターとサラウンドを -3 dB、LFE は除外）で、より狭いレイアウト（`0` モノラル、`1` ステレオ、`2` 5.1、`3` 7.1）へ折りたたみます。アップミックスはできません。
+
+```typescript
+import { decodeChannels, downmix } from '@libraz/libsonare-native';
+
+const { sampleRate, channels } = decodeChannels(fs.readFileSync('surround.wav'));
+const stereo = channels.length > 2 ? downmix(channels, 1) : channels;
+```
+
+### `using` によるクリーンアップ
 
 ネイティブハンドルを持つクラス（`Audio`、`RealtimeEngine`、`Project`、`Mixer`、
 `ClipPageProvider`）はすべて `[Symbol.dispose]` を実装しています。そのため
-Node 22 以上では `using` キーワードを使うと、スコープを抜けるときに例外発生時でも
+`using` 宣言を使うと、スコープを抜けるときに例外発生時でも
 安全に自動でクリーンアップできます。
 
 ```typescript
@@ -194,7 +209,7 @@ function render() {
 }
 ```
 
-Node 22 未満では、これまでどおり `try/finally` で明示的に解放するパターンを使ってください。
+`using` 構文には TypeScript 5.2 以降（または構文を変換する別のツール）か、ネイティブに解釈できるランタイムが必要です。Node 22 は解釈できないので、その場合は `try/finally` で `destroy()` を呼んでください。
 すべてのハンドルクラスでネイティブの正規の解放メソッドは `destroy()` です。`Project` と
 `Mixer` は WASM 互換のエイリアスとして `delete()` も公開します。ハンドルは最終的に GC でも
 回収されますが、`using` や明示的な解放のほうが決定的なクリーンアップになるため、
@@ -331,6 +346,21 @@ const preview = JSON.parse(
 Node はプロファイル用と提案用で 2 つの型名を宣言しています。`MasteringAudioProfileStereoRequest` は `MasteringAssistantSuggestStereoRequest` を継承し、フィールドを追加しません。WASM パッケージは両方に共通の `MasteringStereoParamsRequest` を使います。フィールドは同一なので、両者の間でコードを移植するときに変えるのは型名だけです。
 :::
 
+### ストリーミング用ラウドネスゲインとリペア
+
+`streamingLoudnessGain({ samples, sampleRate, config })`（ステレオは `streamingLoudnessGainStereo({ left, right, ... })`）は、`StreamingMasteringChain` の構築に使うラウドネスの値を、オフラインのチェーンが測るのと同じ位置、つまりラウドネス段の入力で測定します。結果は `{ loudnessStaticGainDb, truePeakDb, integratedLufs }` で、ゲインはシーリングのクランプを含めてオフラインのチェーンが適用するものと等しく、無音では 0 dB です。`loudnessStaticGainDb` と `truePeakDb`（`loudnessStaticGainPeakDb` として）をチェーンのコンストラクタに渡します。
+
+`masteringRepairAnalyze({ channels, sampleRate })` は任意のチャンネル数のリペア対象の欠陥を測定し、設定付きでステージを推奨します。`masteringRepairApply({ channels, sampleRate, stages, onProgress?, cancel? })` は `stages`（各ステージは最大 1 回、未知の設定は拒否）を、配列の順序によらず declip、declick、decrackle、dehum、denoise、dereverb の固定順で適用します。declip・declick・dehum はチャンネル全体で判断してチャンネルごとに報告し、decrackle は各チャンネルを単独で処理し、denoise と dereverb は連動した 1 つのマスクを適用して 1 回だけ報告します。
+
+```typescript
+const analysis = masteringRepairAnalyze({ channels: [left, right], sampleRate: 48000 });
+const { channels, reports } = masteringRepairApply({
+  channels: [left, right],
+  sampleRate: 48000,
+  stages: analysis.recommended,
+});
+```
+
 ### スケール量子化
 
 ピッチ補正ターゲットを構築するための 12-TET（12 平均律）スケールヘルパーです。
@@ -344,6 +374,7 @@ Node はプロファイル用と提案用で 2 つの型名を宣言していま
 | `scaleQuantizeMidi(root, modeMask, midi, referenceMidi?)` | `number` | 小数を含む MIDI 番号を最も近い有効なピッチクラスへスナップ |
 | `scaleCorrectionSemitones(root, modeMask, midi, referenceMidi?)` | `number` | 補正量（量子化後 − 入力）をセミトーンで返す |
 | `scalePitchClassEnabled(root, modeMask, pitchClass)` | `boolean` | `pitchClass`（0..11）が `root` を基準に有効か |
+| `scaleMaskForMode(root, mode)` | `number` | 教会旋法名（`'major'`、`'minor'`、`'dorian'` など）または `Mode` の序数に対応する 12 ビットの `modeMask`。`scaleMaskForMode(0, 'major')` は `0b101010110101` |
 
 ### ストリーミング／リアルタイムクラス
 

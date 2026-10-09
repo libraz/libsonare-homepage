@@ -1,11 +1,11 @@
 ---
-title: JavaScript/TypeScript librosa-Compatible Helpers
-description: Argument-for-argument librosa ports for pre-emphasis, test-signal generation, spectral reconstruction, structure, segmentation, and tempograms in the libsonare JavaScript/TypeScript package.
+title: JavaScript/TypeScript Helpers and Conversions
+description: Argument-for-argument librosa ports for pre-emphasis, test-signal generation, spectral reconstruction, structure, segmentation, and tempograms in the libsonare JavaScript/TypeScript package, plus scale quantization, unit conversion, resampling, and chord functions.
 ---
 
-# JavaScript/TypeScript librosa-Compatible Helpers
+# JavaScript/TypeScript Helpers and Conversions
 
-librosa-parity helper functions for the libsonare JavaScript/TypeScript package; see [Analysis API](./js-api-analysis.md) for BPM/key/beat detection, the all-in-one `analyze()` call, and unit conversions.
+librosa-parity helper functions for the libsonare JavaScript/TypeScript package, followed by scale quantization, unit conversion, resampling, and harmonic functions from a chord list; see [Analysis API](./js-api-analysis.md) for BPM/key/beat detection and the all-in-one `analyze()` call.
 
 ## librosa-Compatible Helpers
 
@@ -102,6 +102,8 @@ function noteSegments(request: NoteSegmentsRequest): Array<{
 `f0Hz` and `voicedProb` must be the same non-zero length. Zero-Hz frames and
 values below `voicedThreshold` (default `0.5`) count as unvoiced and break a
 note.
+
+`referenceHz` is in Hz. To start from an analysis `tuning` (fractions of a semitone), convert with `tuningToReferenceHz(tuning, a4 = 440)`; `referenceHzToTuning(hz, a4 = 440)` is the inverse (`tuningToReferenceHz(0.25)` is about 446.4 Hz).
 
 ::: danger Do not pass `pitchPyin`'s `voicedProb` here
 Despite the field name, this is **not** the place for pYIN's `voicedProb`. That
@@ -281,4 +283,124 @@ variant (`'auto'`, `'ac'`, `0`, and `1` aliases are also accepted). See
 [librosa Compatibility](/docs/librosa-compatibility) for the librosa feature each
 helper maps to, and [Realtime and Streaming](./realtime-streaming.md#tempograms-from-an-onset-envelope)
 for when to use each.
+
+## Scale Quantization
+
+12-TET (twelve-tone equal temperament) scale helpers for building pitch-correction targets. `modeMask` is a 12-bit mask where bit *i* enables the *i*-th pitch class relative to `root` (a `PitchClass`, C = 0); natural major is `0b101010110101`. `referenceMidi` is the tuning anchor (pass `0` for A4 = 69).
+
+```typescript
+// Snap a (possibly fractional) MIDI number to the nearest enabled pitch class
+function scaleQuantizeMidi(root: number, modeMask: number, midi: number, referenceMidi?: number): number
+// Correction (quantized − input), in semitones
+function scaleCorrectionSemitones(root: number, modeMask: number, midi: number, referenceMidi?: number): number
+// Is pitchClass (0..11) enabled by modeMask relative to root?
+function scalePitchClassEnabled(root: number, modeMask: number, pitchClass: number): boolean
+// The mask of a mode, in that layout. mode is a church-mode name or a Mode ordinal.
+function scaleMaskForMode(root: number, mode: KeyMode | Mode): number
+```
+
+```typescript
+scaleMaskForMode(0, 'major');   // 0b101010110101
+scaleMaskForMode(2, 'dorian');  // 0b11010101101, the same mask for any root
+```
+
+`scaleMaskForMode` takes the mode names `detectKey` reports, so a detected key becomes a correction target without a hand-written table; minor is the natural minor, and an unknown name throws `RangeError`. Pair `scaleQuantizeMidi(...)` with `pitchCorrectToMidi(...)` to retune a detected note to the nearest scale degree. To tune a whole recording to a detected or named key, see `autoTune` in [Vocal Editing](./vocal-editing.md).
+
+## Unit Conversion
+
+These functions are lightweight and fast.
+
+```typescript
+// Hz <-> Mel (Slaney formula)
+function hzToMel(hz: number): number
+function melToHz(mel: number): number
+
+// Hz <-> MIDI note number (A4 = 440 Hz = 69)
+function hzToMidi(hz: number): number
+function midiToHz(midi: number): number
+
+// Hz <-> Note name
+function hzToNote(hz: number): string      // "A4", "C#5"
+function noteToHz(note: string): number
+
+// Tuning (semitone fraction, as the analysis options take it) <-> reference pitch in Hz
+function tuningToReferenceHz(tuning: number, a4?: number): number   // a4 default 440
+function referenceHzToTuning(hz: number, a4?: number): number
+
+// Time <-> Frames
+function framesToTime(frames: number, sr: number, hopLength: number): number
+function timeToFrames(time: number, sr: number, hopLength: number): number
+
+// Frames <-> Samples (librosa.frames_to_samples / samples_to_frames)
+function framesToSamples(frames: number, hopLength?: number, nFft?: number): number
+function samplesToFrames(samples: number, hopLength?: number, nFft?: number): number
+
+// dB conversions (vectorised)
+function powerToDb(values: Float32Array, ref?: number, amin?: number, topDb?: number): Float32Array
+function amplitudeToDb(values: Float32Array, ref?: number, amin?: number, topDb?: number): Float32Array
+function dbToPower(values: Float32Array, ref?: number): Float32Array
+function dbToAmplitude(values: Float32Array, ref?: number): Float32Array
+```
+
+`noteToHz` throws `SonareError` for a name that does not parse, and `hzToNote` for a frequency that is not finite and positive, instead of returning `0` or `"?"`.
+
+The analysis options state tuning as a fraction of a semitone, while transcription's `referenceHz` and the stream analyzer's `tuningRefHz` are in Hz. `tuningToReferenceHz(tuning)` is `440 * 2 ** (tuning / 12)`, and `referenceHzToTuning(hz)` is its inverse; pass `a4` for a concert pitch other than 440.
+
+```typescript
+referenceHzToTuning(442);      // 0.0785 semitone
+tuningToReferenceHz(0.25);     // 446.4 Hz
+```
+
+## Resampling
+
+### `resample(samples, srcSr, targetSr)` <Badge type="info" text="Medium" />
+
+High-quality resampling using r8brain algorithm.
+
+```typescript
+function resample(
+  samples: Float32Array,
+  srcSr: number,
+  targetSr: number
+): Float32Array
+```
+
+## `chordFunctions({ chords, key })`
+
+Labels chords you already have with their Roman numeral and harmonic function in
+a key. Nothing is re-detected, so it costs nothing next to the detection that
+produced the chords. `chords` is `detectChords(...)`'s result or its `chords`
+array, or entries built by hand (only `root` and `quality` are read); `key` is
+`{ root, mode }`, so `detectKey(...)`'s result goes in unchanged. `mode` is a name
+or a `Mode` ordinal. Every mode other than minor reads the major scale.
+
+```typescript
+function chordFunctions<T extends ChordFunctionsInput>(request: {
+  chords: readonly T[] | { chords: readonly T[] };
+  key: { root: PitchClass; mode: KeyMode | Mode };
+}): FunctionalChord<T>[]
+```
+
+```typescript
+const key = detectKey(samples, sampleRate);
+const detected = detectChords(samples, sampleRate);
+const labelled = chordFunctions({ chords: detected, key });
+console.log(labelled.map((c) => c.roman));  // e.g. ["I", "IV", "V", "I"]
+```
+
+An unrecognised mode name throws `RangeError`.
+
+`detectKey(...)` and `detectKeyCandidates(...)` accept the same
+`KeyDetectionOptions`, and `detectKey(...)` adds `tuning` (`number | 'auto'`). The options include:
+
+| Option group | Values |
+|--------------|--------|
+| Controls | `modes`, `profile`, `genreHint`, `useHpss`, `loudnessWeighted`, `highPassHz`, `nFft`, `hopLength` |
+| Mode sets | `'major-minor'`, `'modal'`, `'all'`, or a list of names (`['major', 'minor']`) or `Mode` ordinals |
+| Profile names | `ks`, `krumhansl`, `temperley`, `shaath`, `keyfinder`, `faraldo-edmt` / `edmt`, `faraldo-edma` / `edma`, `faraldo-edmm` / `edmm`, `bellman-budge` / `bellman` |
+| Genre hints | `auto`, `edm`, `electronic`, `dance`, `pop`, `classical`, `jazz` |
+
+
+
+
 

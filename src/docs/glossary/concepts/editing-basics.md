@@ -67,11 +67,11 @@ This is why voice tools keep pitch and formant on separate controls.
 | Pitch | The musical note | The same voice singing higher or lower |
 | Formant | The vocal character | A smaller/brighter or larger/darker voice at the same note |
 
-Moving both together too aggressively creates the familiar artificial "chipmunk" effect.
+Moving both together too aggressively creates the familiar artificial "chipmunk" effect. In `voiceChange`, `formantFactor` is applied after the pitch shift by default (`formantMode: 'relative'`); `formantMode: 'absolute'` makes it relative to the input instead, so `1` keeps the formants where they were whatever the pitch shift.
 
 ## Samples vs seconds
 
-Editing functions that act on a *region* (like note stretch) usually take **sample offsets**, not seconds, because sample positions are exact and never drift. Convert with `samples = round(seconds × sampleRate)` — at 48 kHz, 0.25 s is sample 12000. See [Audio Basics](./audio-basics.md) for what a sample and sample rate are.
+Editing functions that act on a *region* (like note stretch) take **sample offsets**, because sample positions are exact and never drift. Most also accept the same position in seconds under a `*Sec` name (`onsetSec`, `offsetSec`, `startSec`, `endSec`, `paddingSec`), converted at the call's sample rate; give one spelling or the other, never both. The conversion is `samples = round(seconds × sampleRate)` — at 48 kHz, 0.25 s is sample 12000. See [Audio Basics](./audio-basics.md) for what a sample and sample rate are.
 
 :::: details How libsonare implements editing DSP
 
@@ -82,7 +82,8 @@ The implementation uses the same C++ DSP core as analysis and mastering, but the
 | Time stretch / pitch shift | Phase vocoder (rebuilds the signal from short overlapping spectral frames) plus resampling | Duration and pitch can be changed separately, but large moves create artifacts |
 | `voiceChange` | Shift the spectral envelope separately from harmonic pitch | Voice character can move without changing the target note |
 | `pitchCorrectToMidi` | Move from a caller-supplied current MIDI note to a target MIDI note | Estimate the current pitch first with `pitchYin`, `pitchPyin`, or your own detector |
-| `noteStretch` | Process an exact sample-offset region | Convert seconds to samples before calling it |
+| `autoTune` | Snap a monophonic recording to the notes of a detected (`key: 'detect'`) or named key, with a `strength` control | Returns the corrected samples and the key it used |
+| `noteStretch` | Process an exact sample-offset region | Pass `onsetSample` / `offsetSample`, or `onsetSec` / `offsetSec` |
 
 ::::
 

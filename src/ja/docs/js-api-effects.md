@@ -259,6 +259,7 @@ function voiceChange(
   options?: {
     pitchSemitones?: number,  // 負の値で下げる。既定 0
     formantFactor?: number,   // >1 で明るく、<1 で暗く。既定 1.0
+    formantMode?: 'relative' | 'absolute', // 既定 'relative'
   },
 ): Float32Array
 ```
@@ -269,6 +270,13 @@ function voiceChange(
 sonare pitch-correct vocal.wav --current-midi 68.7 --target-midi 69 -o corrected.wav
 sonare note-stretch take.wav --onset 12000 --offset 24000 --ratio 1.25 -o held.wav
 sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.05 -o voice.wav
+```
+
+`formantMode` は `formantFactor` を何に対して測るかを決めます。`'relative'`（既定）では、係数はピッチシフトの後にかけるワープで、フォルマントは `formantFactor * 2^(pitchSemitones / 12)` だけ動きます。`'absolute'` では、係数はピッチシフトに関係なく入力に対するフォルマントのシフト量になり（`1` ならフォルマントは元の位置のまま）、実際にかかるワープは `formantFactor / 2^(pitchSemitones / 12)` です。ワープが [0.55, 1.65] を外れる absolute の指定は、その `pitchSemitones` で到達できる `formantFactor` の範囲を示した `RangeError` になり、丸められることはありません。それ以外のモード文字列も `RangeError` です。CLI では同じ選択を `--formant-mode relative|absolute` で指定します。
+
+```typescript
+// 4 半音上げつつ、フォルマントは元の位置に残す
+const out = voiceChange(vocal, 48000, { pitchSemitones: 4, formantFactor: 1, formantMode: 'absolute' });
 ```
 
 `pitchCorrectTimevarying(...)` はスケールスナップ式オートチューンの経路です。スケールマスク、`mode`、リチューンの効き方の詳細は [編集 DSP](./editing-dsp.md) を参照してください。領域指定の例とオプションの考え方は [スペクトル編集](./spectral-editing.md) を参照してください。
@@ -344,6 +352,7 @@ function trim(
 | きれいなインパルス応答（IR）を測る | `analyzeImpulseResponse(...)` |
 | 通常音声から部屋の減衰を推定する | `detectAcoustic(...)` |
 | 音声から実用的な部屋モデルを推定する | `estimateRoom(...)` |
+| その推定結果を `synthesizeRir` の入力にする | `roomGeometryFromEstimate(...)` |
 | 寸法からモノラルのルームインパルス応答を作る | `synthesizeRir(...)` |
 | 目標ルームの響きを音作り効果として足す | `roomMorph(...)` |
 
@@ -367,15 +376,25 @@ const estimate = estimateRoom(roomRecording, sampleRate, {
   referenceAbsorption: 0.15,
   nOctaveBands: 6,
 });
-console.log(estimate.volume, estimate.length, estimate.width, estimate.height);
-console.log(estimate.drrDb, estimate.confidence, estimate.absorptionBands);
+console.log(estimate.volume, estimate.lengthM, estimate.widthM, estimate.heightM);
+console.log(estimate.drrDb, estimate.confidence, estimate.bandAbsorption);
 
-const rir = synthesizeRir({ lengthM: 7, widthM: 5, heightM: 3, absorption: 0.2 });
-console.log(rir.sampleRate, rir.rir.length, rir.hasError);
+// 使えない形状（例: acoustic.source_outside_room）は、コード付きの SonareError を投げる
+const rir = synthesizeRir({ lengthM: 7, widthM: 5, heightM: 3, absorption: 0.2, materialPreset: 'none' });
+console.log(rir.sampleRate, rir.rir.length, rir.diagnostics);
+
+// 推定結果は synthesizeRir と同じ名前を使っているので、ヘルパーは位置を足すだけ
+const geometry = roomGeometryFromEstimate(estimate, {
+  source: { x: 1, y: 1, z: 1.2 },
+  listener: { x: 2, y: 1.5, z: 1.5 },
+});
+const resynth = synthesizeRir({ ...geometry, sampleRate });
 
 const morphed = roomMorph(samples, sampleRate, { lengthM: 12, widthM: 9, heightM: 4, wet: 0.6 });
 ```
 
 `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)` の `minDecayDb` は減衰フィットのしきい値で、既定値は `30` です。
+
+`materialPreset`（`'none' | 'concrete' | 'wood' | 'curtain' | 'carpet' | 'glass'`、型は `MaterialPresetName`）と `estimateRoom` の `mode` オプション（`'auto' | 'blind' | 'impulse_response'`、型は `AcousticModeName`）は名前だけを受け付けます。数値は `TypeError`、未知の名前は `RangeError` です。`roomGeometryFromEstimate(estimate, { source?, listener? })` は `RoomPlacement`（メートル単位の `{ x, y, z }`）の位置を受け取り、`RoomGeometryOptions` を返します。計測できる寸法がない推定結果には `RangeError` を投げます。
 
 RT60、EDT、C50、C80、D50、バンド別配列、ルーム推定、生成 RIR、信頼度の読み方は [ルーム音響解析](./acoustic-analysis.md) を参照してください。

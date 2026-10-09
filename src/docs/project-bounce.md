@@ -54,7 +54,7 @@ By the end of this page you should be able to:
 - bounce a project of audio clips with plain `bounce`;
 - make MIDI audible by routing it through the built-in synth, the [NativeSynth](./native-synth.md), or an [SF2 player](./soundfont-player.md);
 - pass a NativeSynth patch by preset name, `va:` prefix, or patch object;
-- host your own instrument from Python via the `ExternalInstrument` protocol;
+- host your own instrument from JavaScript or Python through the `ExternalInstrument` protocol;
 - pre-flight a MIDI clip with `validateMidiNotes` and read the no-instrument compile warning;
 - let the engine auto-derive the render length, and write the result to a WAV file.
 
@@ -68,7 +68,7 @@ Start at the top and only move down when your MIDI needs a richer instrument.
 | MIDI you just need to *hear* | `bounceWithBuiltinInstrument` | Simple oscillator synth |
 | MIDI that needs real instrument character | `bounceWithSynthInstrument` | Full [NativeSynth](./native-synth.md) (subtractive / FM / modal / piano …) |
 | MIDI that should play a SoundFont | `bounceWithSf2Instrument` | GS-compatible [SF2 player](./soundfont-player.md) |
-| MIDI played by your own (Python) synth | `bounce_with_instruments` — **Python only** | Host-supplied [`ExternalInstrument`](#python-host-your-own-instrument) |
+| MIDI played by your own synth | `bounceWithInstruments` / `bounceWithInstrument` (Node, WASM); `bounce_with_instruments` (Python) | Host-supplied [`ExternalInstrument`](#host-your-own-instrument) |
 
 ::: info One Project, every runtime
 The same `Project` model and core bounce behavior are exposed through WASM/JS, Node native, and Python. Names follow each language's convention (`bounceWithSynthInstrument` ↔ `bounce_with_synth_instrument`). The CLI exposes the project workflow as commands (`project bounce` — including `--synth` to route MIDI through the built-in synth — plus SMF/MIDI 2.0 import-export), but not every per-destination instrument binding option is wired there. The arrangement model, the compiler, and the DSP are identical across runtimes.
@@ -120,7 +120,7 @@ Every field of the options object is optional:
 | Option | Meaning | Default |
 |--------|---------|---------|
 | `totalFrames` | Render length in output frames | auto-derived (see below) |
-| `blockSize` | Render block size | engine default (128) |
+| `blockSize` | Render block size; any positive value is used as given | engine default (128) |
 | `numChannels` | Output channel count: `1`, `2`, `6`, or `8` | 2 |
 | `sampleRate` | Output sample rate (Hz); a positive value must equal the project rate, so this option does not resample | the project sample rate |
 | `instrumentLatencySamples` | Host-instrument PDC (plugin delay compensation) fed to the compiler | 0 |
@@ -227,9 +227,55 @@ General MIDI (GM) is the standard 128-instrument set every SoundFont maps to, so
 
 Programs the SoundFont does not cover — including bouncing with no SoundFont loaded at all — fall back to the built-in synth's GM bank. Call [`soundFontManifest()`](./soundfont-player.md) to see, per `(channel, bank, program)`, whether each note resolves to `'sf2'` or falls back to `'synth'`.
 
-## Python: host your own instrument
+## Host your own instrument
 
-The Python binding can host **any** instrument you write through the `ExternalInstrument` protocol, dispatched by `bounce_with_instruments`. Only `render` is required; `prepare`, `on_event`, and the `latency_samples` / `tail_samples` attributes are optional (duck-typed). Events reach `on_event` as **UMP** (Universal MIDI Packet) words — the MIDI 2.0 packet encoding — so a note-on arrives as a tuple of packet words rather than a decoded object.
+Every runtime can host **any** instrument you write through the `ExternalInstrument` protocol: `bounceWithInstruments` / `bounceWithInstrument` on Node and WASM, `bounce_with_instruments` on Python. Events reach the instrument as **UMP** (Universal MIDI Packet) words — the MIDI 2.0 packet encoding — and the instrument adds its audio into scratch buffers the bounce hands it.
+
+### JavaScript (Node and WASM)
+
+Only `render` is required; `destinationId` (default `0`), `prepare`, `onEvent`, `latencySamples`, and `tailSamples` are optional. `onEvent` receives `{ destinationId, words, renderFrame }`. `render(outputs, frames)` gets one zero-filled `Float32Array` per channel (always two: the engine hosts an instrument as a stereo source whatever `numChannels` is); whatever the arrays hold when `render` returns is added into the bounce.
+
+```typescript
+class SineInstrument {
+  destinationId = 0;
+  tailSamples = 4096;                       // release tail that extends an auto-length bounce
+  voices = new Map<number, { phase: number; amp: number }>();
+  sampleRate = 48000;
+
+  prepare(sampleRate: number) {
+    this.sampleRate = sampleRate;
+    this.voices.clear();
+  }
+
+  onEvent({ words }: { words: number[] }) {
+    const status = (words[0] >>> 20) & 0xf;      // 0x9 note-on, 0x8 note-off
+    const note = (words[0] >>> 8) & 0xff;
+    const velocity = words[0] & 0xff;
+    if (status === 0x9 && velocity > 0) this.voices.set(note, { phase: 0, amp: (velocity / 127) * 0.3 });
+    else if (status === 0x8 || status === 0x9) this.voices.delete(note);
+  }
+
+  render(outputs: Float32Array[], frames: number) {
+    for (const [note, v] of this.voices) {
+      const step = (2 * Math.PI * 440 * 2 ** ((note - 69) / 12)) / this.sampleRate;
+      for (let i = 0; i < frames; i++) {
+        const s = Math.sin(v.phase) * v.amp;
+        for (const out of outputs) out[i] += s;
+        v.phase += step;
+      }
+    }
+  }
+}
+
+const audio = project.bounceWithInstrument(new SineInstrument(), { numChannels: 2 });
+// Several instruments at once: project.bounceWithInstruments([a, b], options), one per destinationId.
+```
+
+Every callback runs synchronously on the calling thread while the bounce is blocked, so a callback that returns a Promise is refused with a `TypeError`. A callback that throws stops all further callbacks and the bounce rethrows that first error once it returns (a native failure is reported ahead of it). Using the project from inside a callback — a mutation, a nested bounce, `delete` — throws `InvalidState`. One instrument shared by tracks that feed different channel strips is refused, because callback audio carries no source-track attribution; bind one destination per strip.
+
+### Python
+
+In Python, `bounce_with_instruments` dispatches the same protocol. Only `render` is required; `prepare`, `on_event`, and the `latency_samples` / `tail_samples` attributes are optional (duck-typed). Events reach `on_event` as **UMP** (Universal MIDI Packet) words — the MIDI 2.0 packet encoding — so a note-on arrives as a tuple of packet words rather than a decoded object.
 
 ```python
 import numpy as np

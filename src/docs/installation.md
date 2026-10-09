@@ -37,7 +37,7 @@ You can switch runtimes later. The core analysis and DSP behavior is shared; the
 
 ## npm (Browser / WASM)
 
-Requires Node.js 18.0.0 or later.
+Requires Node.js 22.12.0 or later (the package's `engines` field).
 
 `@libraz/libsonare` is the WebAssembly package. Most APIs are sample-based:
 pass decoded mono `Float32Array` samples. For loading convenience,
@@ -76,9 +76,21 @@ cases. Most app code should import from the main `@libraz/libsonare` entry.
 | `@libraz/libsonare/analysis` | Analysis-only module, built without mastering, mixing, realtime, or project bindings — a much smaller download when all you need is MIR (Music Information Retrieval) |
 | `@libraz/libsonare/worklet` | AudioWorklet bridge helpers, including `SonareRealtimeEngineNode`, `SonareEngine`, and worklet-side lifecycle exports |
 | `@libraz/libsonare/worker` | `OfflineWorkerClient`, which runs one-shot analysis and mastering calls in a dedicated Worker |
+| `@libraz/libsonare/vocal-edit-worker` | The Worker side of the vocal-edit worker client |
 | `@libraz/libsonare/wasm` | Raw main WASM asset for bundlers or custom loaders |
+| `@libraz/libsonare/wasm/analysis` | Raw WASM asset of the analysis-only module |
+| `@libraz/libsonare/hrtf/default.shrf` | The default HRTF set |
 | `@libraz/libsonare/schemas/realtime-voice-changer-preset.schema.json` | JSON Schema for a voice-changer preset document |
 | `@libraz/libsonare/schemas/realtime-voice-changer-preset-pack.schema.json` | JSON Schema for a preset pack |
+| `@libraz/libsonare/schemas/mixer-scene.schema.json` | JSON Schema for a mixer scene document |
+| `@libraz/libsonare/schemas/playback-renderer-config.schema.json` | JSON Schema for a playback renderer configuration |
+
+Every JavaScript entry is exported under the `import` and `default` conditions,
+and the package carries a `typesVersions` map for `analysis`, `worklet`,
+`worker`, and `vocal-edit-worker`, so a bundler or a TypeScript project using
+`moduleResolution: "node10"` resolves the subpaths too. The package is
+tree-shakeable apart from the two Worker entries and its `Symbol.dispose`
+shim, which it declares as side effects.
 
 ::: tip Pick the analysis bundle when you only analyze
 `@libraz/libsonare/analysis` compiles the same DSP with the mastering, mixing,

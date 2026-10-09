@@ -254,6 +254,22 @@ input.addEventListener('change', async (e) => {
 });
 ```
 
+### Keeping Every Channel
+
+`Audio.fromMemory(...)` folds a multichannel file to mono as it decodes. When you need the channels themselves, `decodeChannels(bytes)` decodes the bytes once and returns `{ sampleRate, channels }`, one `Float32Array` per source channel in the source's own order (5.1 is L R C LFE Ls Rs). `downmix(channels, targetLayout)` folds them to a narrower layout (`0` mono, `1` stereo, `2` 5.1, `3` 7.1) with the ITU-R BS.775 rule: centre and surround at -3 dB, LFE dropped. It cannot upmix. `Audio.fromMemoryWithBrowserFallback(...)` applies the same rule to a multichannel `AudioBuffer`, so a file folds to the same samples whichever decoder ran.
+
+```typescript
+import { decodeChannels, downmix, init } from '@libraz/libsonare';
+
+await init();
+const { sampleRate, channels } = decodeChannels(new Uint8Array(await file.arrayBuffer()));
+const stereo = channels.length > 2 ? downmix(channels, 1) : channels;
+```
+
+## Storing A Clip In OPFS
+
+`writeOpfsClip(path, channels)` writes planar `Float32Array` channels into the Origin Private File System as headerless little-endian interleaved float32, the layout the OPFS clip page readers already read. `importOpfsClip(path, source)` accepts an `ArrayBuffer`, a `Blob`, or an `AudioBuffer`, keeps every channel, and returns the source `sampleRate` without resampling. Both run in the OPFS worker, and writing to a path an open page provider is reading throws `InvalidState`. See [Realtime and Streaming](./realtime-streaming.md) for paging such a clip into the engine.
+
 ## Progress Reporting
 
 ```typescript
@@ -318,7 +334,7 @@ async function getMonoSamples(audioBuffer: AudioBuffer): Promise<Float32Array> {
     return audioBuffer.getChannelData(0);
   }
 
-  // Mix stereo to mono
+  // Mix stereo to mono. For 5.1 / 7.1 sources use decodeChannels() and downmix().
   const left = audioBuffer.getChannelData(0);
   const right = audioBuffer.getChannelData(1);
   const mono = new Float32Array(left.length);
@@ -351,9 +367,10 @@ The published package ships a few coordinated pieces:
 
 - **Main module** — `sonare.js` plus `sonare.wasm`, the Emscripten build behind every analysis, mastering, mixing, and editing API.
 - **Main API entry** — the package `index` (`index.js` / `index.d.ts`) is the tsup bundle behind `import ... from '@libraz/libsonare'`; it exposes the all-in-one analysis, mastering, mixing, and editing API.
-- **AudioWorklet entry** — `worklet.js` / `worklet.d.ts`, a separate, self-contained tsup bundle (no code-splitting, so it is fully portable into an `AudioWorkletGlobalScope`); it carries the `SonareEngine` API, the worklet processor classes and their registration helpers, and the ring-buffer protocol, and re-exports only `init` / `isInitialized` from the main entry so the worklet realm can initialize its own WASM instance.
-- **Analysis-only module** — `sonare-analysis.js` / `sonare-analysis.wasm` behind the `@libraz/libsonare/analysis` entry, compiled without the mastering, mixing, realtime, and project bindings. CI records its size in a report, but size growth alone does not fail the build.
+- **AudioWorklet entry** — `worklet.js` / `worklet.d.ts`, a separate, self-contained tsup bundle (no code-splitting, so it is fully portable into an `AudioWorkletGlobalScope`); it carries the `SonareEngine` API, the worklet processor classes and their registration helpers, `SonareStreamAnalyzerNode` (live analysis of an audio-graph branch), and the ring-buffer protocol, and re-exports only `init` / `isInitialized` from the main entry so the worklet realm can initialize its own WASM instance.
+- **Analysis-only module** — `sonare-analysis.js` / `sonare-analysis.wasm` behind the `@libraz/libsonare/analysis` entry (the raw asset is `@libraz/libsonare/wasm/analysis`), compiled without the mastering, mixing, realtime, and project bindings. CI records its size in a report, but size growth alone does not fail the build.
 - **Offline Worker entry** — `worker.js` behind `@libraz/libsonare/worker`, the Worker side of `OfflineWorkerClient`.
+- **Vocal-edit Worker entry** — `vocal_edit_worker.js` behind `@libraz/libsonare/vocal-edit-worker`, the Worker side of `VocalEditWorkerClient`.
 - **Voice-changer JSON Schemas** — both preset schemas ship in the package under `schemas/`, so a host can validate a preset document without fetching anything.
 
 ### Instantiating The Module Yourself
@@ -421,11 +438,33 @@ for (let start = 0; start < totalDuration; start += CHUNK_DURATION) {
 }
 ```
 
-### Native Failures Throw `SonareError`
+### Which Error You Get
 
-When the C++ core rejects an input, the WASM binding throws a structured `SonareError` carrying a numeric `code` and `codeName` — never a raw Emscripten pointer number or an opaque `[object Object]`. Catch it with the exported `isSonareError(...)` guard and branch on `ErrorCode`; see [Error Handling](./js-api-types.md#error-handling).
+When the C++ core rejects an input or an object is in the wrong state, the WASM binding throws a structured `SonareError` carrying a numeric `code` and `codeName` — never a raw Emscripten pointer number or an opaque `[object Object]`. Catch it with the exported `isSonareError(...)` guard and branch on `ErrorCode`; see [Error Handling](./js-api.md#error-handling).
 
-That holds for the mixing and project entry points too: each reports the error code its own C entry point documents rather than surfacing the underlying C++ exception. `Mixer.fromSceneJson` on a scene that names an unknown insert throws `InvalidState` with the wrapped message from the core, and malformed scene JSON throws `InvalidState` as well — not an unknown-error code. Code that only branches on success needs no change; code that branches on a specific code should branch on the documented one.
+An argument the JavaScript binding refuses itself is not a `SonareError`: a wrong type or a missing value is a native `TypeError`, and a value outside its domain (an unknown name, a fractional number where an integer is read, a sample rate outside the supported range, two buffers whose lengths must match, a string with an embedded NUL) is a `RangeError`. Handle all three:
+
+```typescript
+import { ErrorCode, init, isSonareError, Mixer } from '@libraz/libsonare';
+
+try {
+  await init();
+  const mixer = Mixer.fromSceneJson(sceneJson, sampleRate, 512);
+  // ...
+} catch (error) {
+  if (error instanceof TypeError || error instanceof RangeError) {
+    // The call was wrong: fix the argument.
+  } else if (isSonareError(error) && error.code === ErrorCode.InvalidFormat) {
+    // The scene document is malformed.
+  } else {
+    throw error;
+  }
+}
+```
+
+The mixing and project entry points report the error code their own C entry point documents rather than the underlying C++ exception. `Mixer.fromSceneJson` on malformed scene JSON throws `InvalidFormat`, and on a scene that names an unknown insert throws `InvalidParameter` with the core's message.
+
+Three state failures are always `InvalidState`: a call to the module before `init()` resolves, any method on a handle that was released with `destroy()`, `delete()`, or `using`, and a second `init()` whose options differ from the first (it names the differing option). A `.wasm` built from a different tree than the JavaScript throws `AbiMismatch` (code 10) from `init()`.
 
 ## Where the sections went
 

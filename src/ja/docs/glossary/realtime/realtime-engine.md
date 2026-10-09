@@ -33,6 +33,8 @@ libsonare のリアルタイム機能のうち、トランスポートと再生�
 
 ::: details libsonare がエンジンをどうモデル化するか
 `RealtimeEngine` は `EngineController` と連携してトランスポートを管理し、`ClipAudioBuffer` ストレージ上で `ClipPlayer`/`ClipSchedule` によりクリップをスケジュールし、`Metronome`（`MetronomeConfig` → `MetronomeEvent`）でクリックを生成し、ミキサーグラフ上でオートメーションを再生します。メーターは `MeterTelemetryRecord` を生む `MeterTelemetryTap` と、UI が音声スレッド外で読む汎用 `Telemetry` チャンネル（`TelemetryType`/`TelemetryErrorCode`）で公開されます。エンジン全体はリアルタイム安全で、オフライン（バウンス）でも AudioWorklet 内でも、フリーズやキャプチャの経路を含めて同じく動きます。
+
+ホストが待つべき量は、2 つの読み出し値で見積もれます。`tailSamples` はエンジンの最も長い可聴テールのサンプル数の上限で、`graphLatencySamplesQ8` は処理レイテンシーを 1/256 サンプル単位で表します。オフラインのバウンスやフリーズの前に、エンジンはレンダリングせずに自分をプライムします。キュー済みコマンドを適用し、ミキサーとエフェクトのすべてのプロセッサーを準備時の状態へリセットし（インストゥルメントは除く）、スムーザーをスナップします。このため鳴り続けるインサートのテールやディレイラインは断ち切られ、2 回目のバウンスは 1 回目と一致します。`primeOfflineParameters` と `resetProcessorState` は、ブロックごとにエンジンを駆動するホストにこれらの手順を公開します。準備時より大きなブロックサイズでのオフラインレンダリングは拒否されます。
 :::
 
 関連: [リアルタイムとストリーミング](../../realtime-streaming.md)、[ストリーミング解析](./streaming-analysis.md)、[リアルタイム安全性](./realtime-safety.md)、[オートメーションとメーター](../mixing/automation-metering.md)

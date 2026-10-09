@@ -281,6 +281,7 @@ function voiceChange(
   options?: {
     pitchSemitones?: number,  // negative shifts down; default 0
     formantFactor?: number,   // >1 brightens, <1 darkens; default 1.0
+    formantMode?: 'relative' | 'absolute', // default 'relative'
   },
 ): Float32Array
 ```
@@ -291,6 +292,13 @@ CLI equivalents:
 sonare pitch-correct vocal.wav --current-midi 68.7 --target-midi 69 -o corrected.wav
 sonare note-stretch take.wav --onset 12000 --offset 24000 --ratio 1.25 -o held.wav
 sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.05 -o voice.wav
+```
+
+`formantMode` sets what `formantFactor` is measured against. In `'relative'` (the default) the factor is a warp applied after the pitch shift, so the formants follow the pitch by `formantFactor * 2^(pitchSemitones / 12)`. In `'absolute'` the factor is the formant shift relative to the input whatever the pitch shift (`1` keeps the formants where they were), and the warp actually applied is `formantFactor / 2^(pitchSemitones / 12)`. An absolute request whose warp leaves [0.55, 1.65] throws a `RangeError` naming the reachable `formantFactor` range for that `pitchSemitones`; it is never clamped. Any other mode string is a `RangeError`. The CLI takes the same choice as `--formant-mode relative|absolute`.
+
+```typescript
+// Up four semitones, formants left where they were
+const out = voiceChange(vocal, 48000, { pitchSemitones: 4, formantFactor: 1, formantMode: 'absolute' });
 ```
 
 `pitchCorrectTimevarying(...)` is the scale-snap auto-tune path; see [Editing DSP](./editing-dsp.md) for the scale masks, `mode`, and retune-feel options in full. See [Spectral Editing](./spectral-editing.md) for region examples and option notes.
@@ -387,6 +395,7 @@ These functions describe or apply the recording space rather than the song itsel
 | Measure a clean impulse response | `analyzeImpulseResponse(...)` |
 | Estimate room decay from ordinary audio | `detectAcoustic(...)` |
 | Fit a practical room model from audio | `estimateRoom(...)` |
+| Turn that estimate into `synthesizeRir` input | `roomGeometryFromEstimate(...)` |
 | Create a mono room impulse response from dimensions | `synthesizeRir(...)` |
 | Add a target-room character as an effect | `roomMorph(...)` |
 
@@ -410,16 +419,26 @@ const estimate = estimateRoom(roomRecording, sampleRate, {
   referenceAbsorption: 0.15,
   nOctaveBands: 6,
 });
-console.log(estimate.volume, estimate.length, estimate.width, estimate.height);
-console.log(estimate.drrDb, estimate.confidence, estimate.absorptionBands);
+console.log(estimate.volume, estimate.lengthM, estimate.widthM, estimate.heightM);
+console.log(estimate.drrDb, estimate.confidence, estimate.bandAbsorption);
 
-const rir = synthesizeRir({ lengthM: 7, widthM: 5, heightM: 3, absorption: 0.2 });
-console.log(rir.sampleRate, rir.rir.length, rir.hasError);
+// Throws a coded SonareError (e.g. acoustic.source_outside_room) for unusable geometry.
+const rir = synthesizeRir({ lengthM: 7, widthM: 5, heightM: 3, absorption: 0.2, materialPreset: 'none' });
+console.log(rir.sampleRate, rir.rir.length, rir.diagnostics);
+
+// An estimate already uses synthesizeRir's names; the helper adds the placement.
+const geometry = roomGeometryFromEstimate(estimate, {
+  source: { x: 1, y: 1, z: 1.2 },
+  listener: { x: 2, y: 1.5, z: 1.5 },
+});
+const resynth = synthesizeRir({ ...geometry, sampleRate });
 
 const morphed = roomMorph(samples, sampleRate, { lengthM: 12, widthM: 9, heightM: 4, wet: 0.6 });
 ```
 
 `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)`
 uses `minDecayDb` to set the decay-fit threshold (default `30`).
+
+`materialPreset` (`'none' | 'concrete' | 'wood' | 'curtain' | 'carpet' | 'glass'`, type `MaterialPresetName`) and the `estimateRoom` `mode` option (`'auto' | 'blind' | 'impulse_response'`, type `AcousticModeName`) take names only: a number is a `TypeError`, an unknown name a `RangeError`. `roomGeometryFromEstimate(estimate, { source?, listener? })` takes `RoomPlacement` (`{ x, y, z }` in meters) positions and returns `RoomGeometryOptions`; it throws a `RangeError` for an estimate with no measurable dimensions.
 
 See [Room Acoustics](./acoustic-analysis.md) for how to interpret RT60, EDT, C50, C80, D50, band arrays, room estimates, generated RIRs, and confidence.

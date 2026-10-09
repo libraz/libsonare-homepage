@@ -119,23 +119,24 @@ with Audio.from_file("music.mp3") as audio:
 | Function | Return Type | Description |
 |----------|-------------|-------------|
 | `detect_bpm(samples, sample_rate)` | `float` | Tempo in BPM |
-| `detect_key(samples, sample_rate)` | `Key` | Root, mode, confidence |
+| `detect_key(samples, sample_rate, ..., tuning=0.0)` | `KeyDetection` | A `Key` (root, mode, confidence) plus `tuning`, the semitone fraction its chroma was built with; `tuning="auto"` measures it |
 | `detect_beats(samples, sample_rate)` | `list[float]` | Beat timestamps (seconds) |
 | `detect_onsets(samples, sample_rate)` | `list[float]` | Onset timestamps (seconds) |
 | `detect_downbeats(samples, sample_rate)` | `list[float]` | Downbeat timestamps (seconds) |
 | `detect_key_candidates(samples, sample_rate, ...)` | `list[KeyCandidate]` | Ranked key candidates with correlation |
-| `detect_chords(samples, sample_rate, ...)` | `ChordAnalysisResult` | Chord segments over time; frames below the detection threshold are explicit `N.C.` intervals |
+| `detect_chords(samples, sample_rate, ...)` | `ChordAnalysisResult` | Chord segments over time plus the `tuning` used; frames below the detection threshold are explicit `N.C.` intervals |
 | `analyze(samples, sample_rate)` | `AnalysisResult` | All-in-one analysis: BPM and its candidates, key, time signature and its candidates, beats, chords (each with `roman_numeral` relative to the detected key), sections, timbre, dynamics, rhythm, melody, form |
 | `analyze_with_progress(samples, sample_rate, on_progress?)` | `AnalysisResult` | Same result and analysis keyword options as `analyze`, with an optional `(progress, stage)` callback and keyword-only `cancel` callback |
 | `transcribe(samples, sample_rate, ...)` | `TranscribeResult` | Mono audio to MIDI events on a constant-tempo PPQ grid; returns `events`, `note_count`, and `tempo_bpm` |
 | `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | BPM with top candidates |
 | `estimate_meter(beat_times, beat_strengths, ...)` | `MeterEstimate` | Meter and accent grouping scored over a beat series you already have — no audio, no re-analysis |
-| `chord_functional_analysis(samples, key_root, key_mode?, ...)` | `list[str]` | Roman-numeral labels (`"I"`, `"IV"`, `"V"`, `"vi"`, ...) for detected chords, relative to a key |
+| `chord_functional_analysis(samples, key_root, key_mode?, ...)` | `list[FunctionalChord]` | Detects chords, then returns the timed entries (every `Chord` field) with `roman` (`"I"`, `"V7"`, `"vi"`, ...) and `function` (`"tonic"`, `"subdominant"`, `"dominant"`, `"chromatic"`, `"none"`) added |
+| `chord_functions(chords, key)` | `list[FunctionalChord]` | Labels chords you already have in `key`, without re-detecting. `chords` is a `detect_chords` result or its `chords` list; `key` is a `Key`, a `{"root": ..., "mode": ...}` mapping, or a `(root, mode)` pair |
 | `analyze_rhythm(samples, sample_rate, ...)` | `RhythmResult` | Syncopation, groove type, regularity |
 | `analyze_dynamics(samples, sample_rate, ...)` | `DynamicsResult` | Dynamic range, loudness range, crest factor |
 | `analyze_timbre(samples, sample_rate, ...)` | `TimbreResult` | Brightness, warmth, density, roughness, complexity, plus per-window `timbre_over_time` (`timbreOverTime` alias) |
 | `analyze_sections(samples, sample_rate, ...)` | `SectionResult` | Song-structure sections (intro/verse/chorus/...) |
-| `detect_boundaries(samples, sample_rate=22050, *, n_fft=2048, hop_length=512, kernel_size=64, threshold=0.3, absolute_threshold=0.005, n_mfcc=13, n_chroma=12, peak_distance=2.0, use_mfcc=True, use_chroma=True)` | `BoundaryResult` | Structural transitions plus the `novelty_curve` they were picked from, and the grid both live on. Reach for it when you want to apply your own threshold rather than take `analyze_sections`' labelled spans |
+| `detect_boundaries(samples, sample_rate=22050, *, n_fft=2048, hop_length=512, kernel_size=64, threshold=0.3, absolute_threshold=0.005, n_mfcc=13, n_chroma=12, peak_distance=2.0, reference_window=60.0, use_mfcc=True, use_chroma=True)` | `BoundaryResult` | Structural transitions plus the `novelty_curve` they were picked from, and the grid both live on. `threshold` is measured against the largest novelty within `reference_window` seconds of a peak (`0` disables it). Reach for it when you want to apply your own threshold rather than take `analyze_sections`' labelled spans |
 | `analyze_melody(samples, sample_rate, ...)` | `MelodyResult` | Monophonic melody contour (YIN) |
 | `analyze_impulse_response(samples, sample_rate=48000, n_octave_bands=6, min_decay_db=30.0)` | `AcousticResult` | Room acoustics from an impulse response (RT60/EDT/C50/C80); `min_decay_db` controls the decay-fit threshold |
 | `detect_acoustic(samples, sample_rate, ...)` | `AcousticResult` | Blind room-acoustic estimation |
@@ -189,7 +190,7 @@ chords = sonare.detect_chords(
     use_hmm=True,
     use_key_context=True,
     key_root=keys[0].key.root,
-    key_mode=keys[0].key.mode,
+    key_mode=keys[0].key.mode,   # a Mode
     chroma_method="nnls",
 )
 
@@ -200,7 +201,9 @@ sections = sonare.analyze_sections(audio.data, audio.sample_rate)
 
 `analyze(...)` takes the whole `MusicAnalyzerConfig` as keyword arguments: `n_fft=2048`, `hop_length=512`, `bpm_min=60.0`, `bpm_max=200.0`, `start_bpm=120.0`, `use_triads_only=True`, `use_hpss=True`, `chroma_highpass_hz=80.0`, `use_bass_weighted=True`, `chroma_hop_multiplier=4`, `use_chord_hmm=False`, `use_chord_key_context=False`, `chord_hmm_beam_width=24`, `detect_chord_inversions=False`, `adaptive_tempo=False`, `tempo_update_interval_beats=8`, `compute_tempo_curve=False`, `meter_candidate_numerators=None`, `meter_denominator=4`, and `tuning=0.0`.
 
-`tuning` is a recording offset in fractions of a semitone, using the unit returned by `estimate_tuning(...)`. It must be in `[-0.5, 0.5)`; the default `0.0` is concert A440. The same keyword is available on `analyze_with_progress(...)`, and shifts the chroma used for key, chords, and sections.
+`n_fft` is a window length in samples at 22050 Hz and is rescaled to the input rate (`hop_length` stays in samples of the input); the tempo, beat, onset, key, rhythm, chord and timbre analyzers read it the same way, so a window spans the same time at 44100 Hz or 48000 Hz.
+
+`tuning` is a recording offset in fractions of a semitone. It must be in `[-0.5, 0.5)`; the default `0.0` is concert A440, and `"auto"` measures it from the audio. The same keyword is available on `analyze_with_progress(...)`, `detect_chords(...)`, and `detect_key(...)`, and shifts the chroma used for key, chords, and sections. The value used, given or measured, comes back as `AnalysisResult.tuning`, `ChordAnalysisResult.tuning`, or `KeyDetection.tuning`. `estimate_tuning(...)` returns the same unit at 12 bins per octave. `tuning_to_reference_hz(tuning, a4=440.0)` and `reference_hz_to_tuning(hz, a4=440.0)` convert between that unit and a reference pitch in Hz.
 
 ::: warning `use_triads_only` defaults to **True** here
 The unified `analyze(...)` path searches triads alone until you say otherwise, while the standalone `detect_chords(...)` API defaults the same flag to `False`. If you expect sevenths and extensions from `analyze(...)`, pass `use_triads_only=False`.
@@ -256,17 +259,19 @@ def on_step(progress: float, stage: str) -> None:
 result = sonare.analyze_with_progress(audio.data, audio.sample_rate, on_progress=on_step)
 ```
 
-`detect_chords(...)` and `chord_functional_analysis(...)` accept `tuning` in the same fractions-of-a-semitone unit as `analyze(...)`. To label chords with Roman numerals relative to a key, use `chord_functional_analysis(...)`. It detects chords with the same algorithm as `detect_chords(...)`, then returns one label per detected chord, in chord order. The labels line up with a `detect_chords(...)` result only when both calls get the same options:
+`detect_chords(...)` and `chord_functional_analysis(...)` accept `tuning` in the same fractions-of-a-semitone unit as `analyze(...)`. To label chords with Roman numerals relative to a key, use `chord_functional_analysis(...)`. It detects chords with the same algorithm as `detect_chords(...)`, then returns the timed entries with `roman` and `function` added, so there is no separate list to keep in step. When you already hold the chords, `chord_functions(...)` labels them without detecting again:
 
 ```python
-labels = sonare.chord_functional_analysis(
+labelled = sonare.chord_functional_analysis(
     audio.data,
     key_root=keys[0].key.root,
     key_mode=keys[0].key.mode,
     sample_rate=audio.sample_rate,
     use_key_context=True,
 )
-print(labels)  # e.g. ['I', 'V', 'vi', 'IV']
+print([(c.start, c.roman, c.function) for c in labelled])  # e.g. [(0.0, 'I', 'tonic'), ...]
+
+labelled = sonare.chord_functions(chords, keys[0].key)
 ```
 
 ### Feature Extraction Functions
@@ -275,8 +280,8 @@ print(labels)  # e.g. ['I', 'V', 'vi', 'IV']
 |----------|-------------|-------------|
 | `stft(samples, sample_rate, n_fft?, hop_length?)` | `StftResult` | Short-Time Fourier Transform |
 | `stft_db(samples, sample_rate, n_fft?, hop_length?)` | `tuple` | STFT in decibels |
-| `mel_spectrogram(samples, sample_rate, n_fft?, hop_length?, n_mels?, fmin?, fmax?, htk?)` | `MelSpectrogramResult` | Mel spectrogram; `fmin`/`fmax` bound the band edges, `htk=True` uses the HTK Mel formula |
-| `mfcc(samples, sample_rate, n_fft?, hop_length?, n_mels?, n_mfcc?, fmin?, fmax?, htk?, lifter?)` | `MfccResult` | Mel-Frequency Cepstral Coefficients (`lifter=0.0` disables cepstral liftering) |
+| `mel_spectrogram(samples, sample_rate, n_fft?, hop_length?, n_mels?, fmin?, fmax?, htk?)` | `MelSpectrogramResult` | Mel spectrogram; `fmin`/`fmax` bound the band edges, `htk=True` uses the HTK Mel formula. The result carries `n_fft`, `fmin`, `fmax` as applied, `htk` and `is_db` beside the matrix |
+| `mfcc(samples, sample_rate, n_fft?, hop_length?, n_mels?, n_mfcc?, fmin?, fmax?, htk?, lifter?)` | `MfccResult` | Mel-Frequency Cepstral Coefficients (`lifter=0.0` disables cepstral liftering). The result carries the Mel parameters and `lifter` it was computed with |
 | `chroma(samples, sample_rate, n_fft?, hop_length?)` | `ChromaResult` | Chroma features (pitch class distribution) |
 | `spectral_centroid(samples, sample_rate, n_fft?, hop_length?)` | `list[float]` | Spectral centroid per frame |
 | `spectral_bandwidth(samples, sample_rate, n_fft?, hop_length?)` | `list[float]` | Spectral bandwidth per frame |
@@ -292,9 +297,10 @@ print(labels)  # e.g. ['I', 'V', 'vi', 'IV']
 | `pitch_yin(samples, sample_rate, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | YIN pitch estimation; every frame has a finite `f0`, while `voiced_flag` reports voicing |
 | `pitch_pyin(samples, sample_rate, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | pYIN pitch estimation; unvoiced `f0` stays `nan` unless `fill_na=True` |
 | `pitch_tuning(frequencies, resolution?, bins_per_octave?)` | `float` | Global tuning offset from detected frequencies, in fractions of a bin |
-| `estimate_tuning(samples, sample_rate?, n_fft?, hop_length?, resolution?, bins_per_octave?)` | `float` | Estimate tuning offset directly from audio |
+| `estimate_tuning(samples, sample_rate?, n_fft?, hop_length?, resolution?, bins_per_octave?)` | `float` | Estimate tuning offset directly from audio, as a fraction of a bin of `bins_per_octave` (the analysis unit at 12) |
+| `tuning_to_reference_hz(tuning, a4=440.0)` / `reference_hz_to_tuning(hz, a4=440.0)` | `float` | Convert between the analysis unit (a semitone fraction) and a reference pitch in Hz |
 | `cqt(samples, sample_rate, hop_length?, fmin?, n_bins?, bins_per_octave?)` | `CqtResult` | Constant-Q Transform magnitude |
-| `vqt(samples, sample_rate, hop_length?, fmin?, n_bins?, bins_per_octave?, gamma?)` | `CqtResult` | Variable-Q Transform magnitude |
+| `vqt(samples, sample_rate, hop_length?, fmin?, n_bins?, bins_per_octave?, gamma=None)` | `CqtResult` | Variable-Q Transform magnitude; `gamma=None` selects the automatic bandwidth, `0.0` is equivalent to CQT |
 | `hybrid_cqt(samples, sample_rate?, hop_length?, fmin?, n_bins?, bins_per_octave?)` | `CqtResult` | Hybrid CQT magnitude (CQT/pseudo-CQT blend across bins) |
 | `pseudo_cqt(samples, sample_rate?, hop_length?, fmin?, n_bins?, bins_per_octave?)` | `CqtResult` | Approximate (pseudo) CQT magnitude |
 | `bass_chroma(samples, sample_rate?, hop_length?, n_chroma?)` | `ChromaResult` | Bass-focused chroma (low-register pitch-class distribution) |
@@ -316,7 +322,7 @@ print(labels)  # e.g. ['I', 'V', 'vi', 'IV']
 
 Common defaults: `n_fft=2048`, `hop_length=512`, `n_mels=128`, `n_mfcc=20`, pitch `fmin=65.0`, `fmax=2093.0`, `threshold=0.1`, and `roll_percent=0.85`.
 
-CQT/VQT use `fmin=32.70319566` Hz (C1), `n_bins=84`, and `bins_per_octave=12`. VQT's default `gamma=-1` selects automatic ERB-derived bandwidth. `chroma_cqt` and `chroma_cens` default to `n_chroma=12` and `bins_per_octave=36`. `hpss(...)` and `hpss_with_residual(...)` default to `kernel_harmonic=31`, `kernel_percussive=31`, `n_fft=2048`, `hop_length=512`, and `hard_mask=False`.
+CQT/VQT use `fmin=32.70319566` Hz (C1), `n_bins=84`, and `bins_per_octave=12`. VQT's default `gamma=None` selects automatic ERB-derived bandwidth; a negative `gamma` is refused. `chroma_cqt` and `chroma_cens` default to `n_chroma=12` and `bins_per_octave=36`. `hpss(...)` and `hpss_with_residual(...)` default to `kernel_harmonic=31`, `kernel_percussive=31`, `n_fft=2048`, `hop_length=512`, and `hard_mask=False`.
 
 Additional effect helpers include `phase_vocoder(samples, sample_rate?, rate?)` and `hpss_with_residual(samples, sample_rate?, kernel_harmonic?, kernel_percussive?, n_fft?, hop_length?, hard_mask?)`. Use them when you need direct phase-vocoder time scaling, or HPSS with the residual signal preserved.
 
@@ -366,11 +372,13 @@ Reconstruct a spectrum or audio from a mel spectrogram or MFCC matrix. Phase is 
 | `mel_to_stft(mel, n_mels, n_frames, sample_rate?, n_fft?, fmin?, fmax?, htk?)` | `InverseResult` | Linear STFT power from a mel spectrogram |
 | `mel_to_audio(mel, n_mels, n_frames, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?)` | `list[float]` | Audio from a mel spectrogram (Griffin-Lim) |
 | `mfcc_to_mel(mfcc_coeffs, n_mfcc, n_frames, n_mels?, lifter?)` | `InverseResult` | Mel spectrogram (dB) from MFCC coefficients (`lifter` must match the forward `mfcc(...)` call) |
-| `mfcc_to_audio(mfcc_coeffs, n_mfcc, n_frames, n_mels?, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?)` | `list[float]` | Audio from MFCC coefficients |
+| `mfcc_to_audio(mfcc_coeffs, n_mfcc, n_frames, n_mels?, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?, lifter?)` | `list[float]` | Audio from MFCC coefficients |
+| `mel_result_to_stft(result)` / `mel_result_to_audio(result, n_iter=32)` | `InverseResult` / `list[float]` | `mel_to_stft` / `mel_to_audio` over a `mel_spectrogram(...)` result, reading the matrix and every forward parameter from it. Refuses a result in dB (`result.is_db`) with `SonareValueError` |
+| `mfcc_result_to_mel(result)` / `mfcc_result_to_audio(result, n_iter=32)` | `InverseResult` / `list[float]` | `mfcc_to_mel` / `mfcc_to_audio` over an `mfcc(...)` result, including its Mel parameters and lifter |
 | `cqt_to_audio(magnitude, n_bins, n_frames, sample_rate?, hop_length?, fmin?, bins_per_octave?, n_iter?)` | `list[float]` | Audio from a row-major CQT magnitude matrix (Griffin-Lim) |
-| `vqt_to_audio(magnitude, n_bins, n_frames, sample_rate?, hop_length?, fmin?, bins_per_octave?, gamma?, n_iter?)` | `list[float]` | Audio from a row-major VQT magnitude matrix (Griffin-Lim) |
+| `vqt_to_audio(magnitude, n_bins, n_frames, sample_rate?, hop_length?, fmin?, bins_per_octave?, gamma=None, n_iter?)` | `list[float]` | Audio from a row-major VQT magnitude matrix (Griffin-Lim) |
 
-Pass `0.0` for `fmin`/`fmax` to use the full-band defaults; `n_iter` defaults to `32`. Keep `fmin`/`fmax`/`htk` identical to the values used by the forward transform so the round-trip stays consistent.
+Pass `0.0` for `fmin`/`fmax` to use the full-band defaults; `n_iter` defaults to `32`. Keep `fmin`/`fmax`/`htk` identical to the values used by the forward transform so the round-trip stays consistent, or pass the forward result to a `*_result_to_*` function and let it carry them.
 
 ### Metering Functions
 
@@ -404,6 +412,7 @@ Prefer `metering_crest_factor_db_stereo(...)` over feeding a downmix to `meterin
 
 | Function | Return Type | Description |
 |----------|-------------|-------------|
+| `scale_mask_for_mode(root, mode)` | `int` | The 12-bit mask of a mode. `mode` is a `Mode`, its ordinal, or a church-mode name as `detect_key` reports it (`"major"`, `"minor"`, `"dorian"`, `"phrygian"`, `"lydian"`, `"mixolydian"`, `"locrian"`); minor is the natural minor |
 | `scale_quantize_midi(root, mode_mask, midi, reference_midi?)` | `float` | Snap a (fractional) MIDI number to the nearest enabled pitch class |
 | `scale_correction_semitones(root, mode_mask, midi, reference_midi?)` | `float` | Correction (quantized − input), in semitones |
 | `scale_pitch_class_enabled(root, mode_mask, pitch_class)` | `bool` | Whether `pitch_class` (0..11) is enabled relative to `root` |
@@ -416,8 +425,8 @@ Prefer `metering_crest_factor_db_stereo(...)` over feeding a downmix to `meterin
 | `mel_to_hz(mel)` | Mel scale → Hertz |
 | `hz_to_midi(hz)` | Hertz → MIDI note number |
 | `midi_to_hz(midi)` | MIDI note number → Hertz |
-| `hz_to_note(hz)` | Hertz → note name (e.g., "A4") |
-| `note_to_hz(note)` | Note name → Hertz |
+| `hz_to_note(hz)` | Hertz → note name (e.g., "A4"); `SonareValueError` if `hz` is not finite and positive |
+| `note_to_hz(note)` | Note name → Hertz; `SonareValueError` if the name does not parse or its octave is out of range |
 | `frames_to_time(frames, sr, hop_length)` | Frame index → seconds |
 | `time_to_frames(time, sr, hop_length)` | Seconds → frame index |
 | `frames_to_samples(frames, hop_length?, n_fft?)` | Frame index → sample index (librosa.frames_to_samples) |
@@ -443,3 +452,46 @@ note_to_hz("A4")       # → 440.0
 frames_to_time(100, sr=22050, hop_length=512)  # → seconds
 time_to_frames(2.32, sr=22050, hop_length=512) # → frame index
 ```
+
+## Streaming Analysis API
+
+Use `StreamAnalyzer` when audio arrives in blocks: live capture, a callback loop, a long file you do not want to analyze all at once, or a visualization that needs frame-by-frame features. It keeps a small internal buffer, emits mel/chroma/onset/spectral frames, and periodically updates BPM, key, chord, bar, and pattern estimates.
+
+```python
+import libsonare as sonare
+
+stream = sonare.StreamAnalyzer(
+    sonare.StreamConfig(
+        sample_rate=44100,
+        n_mels=64,
+        emit_every_n_frames=4,
+    )
+)
+
+for block in audio_blocks:
+    stream.process(block)
+
+    frames = stream.read_frames(stream.available_frames())
+    # frames.mel is flattened [n_frames * n_mels]
+    # check frames.feature_flags before optional arrays; chroma uses [n_frames * n_chroma]
+
+    stats = stream.stats()
+    if stats.bpm > 0:
+        print(stats.bpm, stats.bpm_confidence)
+
+stream.close()
+```
+
+For lower-bandwidth UI transfer, use a quantized read instead of `read_frames(max_frames)`. `output_format` is retained for source compatibility only; omit it or keep it at `0` and choose the desired read method explicitly:
+
+| Method | What changes |
+|--------|--------------|
+| `read_frames_u8(max_frames, quantize_config?)` | Feature arrays are quantized to unsigned 8-bit values. |
+| `read_frames_i16(max_frames, quantize_config?)` | Feature arrays are quantized to signed 16-bit values. |
+
+`quantize_config` is an optional `QuantizeConfig` (exported from `libsonare`) that widens the quantization ranges for streams much louder or quieter than the defaults; omit it to use the defaults. Its fields and defaults are `mel_db_min=-80.0`, `mel_db_max=0.0`, `onset_max=50.0`, `rms_max=1.0`, `centroid_max=11025.0`. The quantizers clamp normalized values to `[0, 1]`, so a signal outside these ranges otherwise saturates silently to the endpoints. This mirrors `StreamQuantizeConfig` in the JS/WASM streaming docs.
+
+Both return timestamps as floats. If you synchronize against an external audio clock, feed chunks with `process_with_offset(samples, sample_offset)` so returned timestamps follow that timeline.
+
+`process_with_offset` accepts only contiguous offsets. After a gap, seek, or switching from `process(...)`, call `reset(base_sample_offset)` before feeding the next block. `StreamConfig.max_progression_entries` (default `4096`) bounds each retained chord and bar progression; `stats()` exposes `dropped_chord_progression_entries` and `dropped_bar_progression_entries` when the oldest history is discarded.
+

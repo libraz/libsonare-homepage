@@ -52,6 +52,8 @@ const natural = voiceChange(vocal, sampleRate, { pitchSemitones, formantFactor }
 ```
 
 この逆数より大きい値は声を明るく小さく、小さい値は声を暗く大きく聞かせます。
+
+計算を省くには `formantMode: 'absolute'` を渡します。`formantFactor` はピッチシフトにかかわらず入力に対するフォルマントの移動量になり、`1` ならフォルマントは動きません。リアルタイムボイスチェンジャーにも同じモードがあり、こちらは作成時に固定されます（[リアルタイムボイスチェンジャー](../../realtime-voice-changer.md#フォルマントモード)を参照）。
 :::
 
 <SonareDemo id="formant-shift" />

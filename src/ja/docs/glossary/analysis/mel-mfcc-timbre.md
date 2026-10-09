@@ -75,6 +75,8 @@ MFCC は、音そのものを再生するためのデータではなく、分類
 | 追加指標 | スペクトル重心と平坦度はフレームごとの振幅スペクトルから直接計算 |
 
 いずれもリファレンス比較に足る程度に librosa の規約に従っています。スペクトル指標は `TimbreAnalyzer` などの上位記述子に再利用されます。メルと MFCC はプレビュー用に近似音声へ逆変換できます（逆変換特徴量を参照）。
+
+メルや MFCC の結果は順変換のパラメータ（`nFft`、適用された `fmin`・`fmax`、`htk`、`isDb`。MFCC ではさらに `sampleRate`、`hopLength`、`nMels`、`lifter`）を保持しているので、結果だけで逆変換できます。Node と WASM では `melToAudio({ result })` と `mfccToAudio({ result })`、Python では `mel_result_to_audio` と `mfcc_result_to_audio` です。
 :::
 
 関連: [MIR の全体像](../concepts/mir-overview.md)、[スペクトログラムと STFT](./spectrogram-stft.md)、[セクションと構成](./section-structure.md)、[クロマ特徴量](./chroma-features.md)

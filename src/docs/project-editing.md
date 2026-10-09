@@ -259,7 +259,7 @@ project.set_track_route(drums, "strip-drums", "master")  # wire to a mixer scene
 
 An **aux** track carries no clips of its own — it is a routing/return lane (for example an effect return or a submix) rather than a place to record content.
 
-`setTrackRoute` links a project track to a strip in the project's [mixer scene](./mixing-scene-json.md) (set with `setMixerSceneJson`) so the bounced track flows through that channel strip's processing.
+`setTrackRoute` links a project track to a strip in the project's [mixer scene](./mixing-scene-json.md) (set with `setMixerSceneJson`) so the bounced track flows through that channel strip's processing. `setMixerSceneJson` returns the scene's load warnings as a list of strings (empty when clean), so a misspelled key such as `faderDB` shows up as `unknown scene key 'strips[0].faderDB'` instead of leaving the fader at its default unnoticed.
 
 ## Undo and redo
 

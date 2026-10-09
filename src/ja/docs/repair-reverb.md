@@ -40,7 +40,7 @@ const cleaned = masteringRepairDereverbClassical({
 });
 ```
 
-`configForRoom` はルーム推定を読み、完全なデリバーブ設定を返します。それでも試聴は必要です。信頼度の低い推定や、実際には音楽的な余韻であるものは、リペアを正当化しない場合があります。
+`configForRoom` はルーム推定を読み、完全なデリバーブ設定を返します (Python では `mastering_repair_dereverb_config_for_room`)。それでも試聴は必要です。信頼度の低い推定や、実際には音楽的な余韻であるものは、リペアを正当化しない場合があります。
 
 ## ルーム設定が変えるもの
 
@@ -48,11 +48,11 @@ const cleaned = masteringRepairDereverbClassical({
 
 | オプション | 使い方 |
 |---|---|
-| `t60Sec` | 中域 RT60 の推定から決まる。該当帯域が収束しなかった場合は、利用できる帯域による文書化されたフォールバックを使う。 |
-| `lateDelayMs` | 推定容積から混合時刻に相当する遅延として決まり、後期の拡散領域を示す。 |
-| `attenuation`、`threshold`、`overSubtraction`、`spectralFloor` | 量とゲートの設定は維持または上書きする。ルーム形状で置き換わるものではない。`threshold` と `attenuation` は `[0, 1]` の範囲で検証される。 |
+| `t60Sec` | 中域 RT60 の推定から決まる。該当帯域が収束しなかった場合は、利用できる帯域による文書化されたフォールバックを使う。受け付ける範囲は `(0, 10]` 秒 (既定 `0.4`)。 |
+| `lateDelayMs` | 推定容積から混合時刻に相当する遅延として決まり、後期の拡散領域を示す。受け付ける範囲は `[0, 500]` ms (既定 `50`)。 |
+| `attenuation`、`threshold`、`overSubtraction`、`spectralFloor` | 量とゲートの設定は維持または上書きする。ルーム形状で置き換わるものではない。`threshold`、`attenuation`、`spectralFloor` は `[0, 1]`、`overSubtraction` は `[0, 16]` の範囲で検証される。 |
 | `nFft`、`hopLength` | STFT の幾何を設定する。`nFft` は `4` から `524288` までの 2 のべき乗、`hopLength` は正で `nFft / 2` 以下とし、Hann のオーバーラップで再構成できる組み合わせにする。 |
-| `wpeEnabled`、`wpeIterations`、`wpeTaps`、`wpeStrength` | 任意の WPE 前段を有効にし、形を設定する。指定しない場合、WPE 解析は無効。 |
+| `wpeEnabled`、`wpeIterations`、`wpeTaps`、`wpeStrength` | 任意の WPE 前段を有効にし、形を設定する。指定しない場合、WPE 解析は無効。`wpeIterations` は `[1, 16]`、`wpeTaps` は `[1, 32]`、`wpeStrength` は `[0, 1]`。 |
 
 [室内音響](./acoustic-analysis.md) で、等価ルーム推定、RT60 帯域、信頼度を説明しています。`roomMorph` は目標ルームの音色を加える効果であり、デリバーブとは別の処理です。
 

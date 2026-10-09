@@ -118,8 +118,8 @@ A few capabilities sit underneath the maximizer/final and analysis APIs:
 
 - Integrated LUFS measurement supports surround layouts up to 8 channels, applying the [BS.1770](./algorithm-references.md) channel weights. BS.1770-4 itself normatively defines layouts only up to 5.1 (6 channels); the 7.1/8-channel weighting (treating the side-surround pair like the rear surrounds, +1.5 dB) is a non-normative extrapolation, not part of the standard.
 - The internal oversampler and true-peak stages accept power-of-two oversampling factors from 1 to 16 (1, 2, 4, 8, 16; the live meter accepts the same factors), trading CPU for inter-sample-peak accuracy.
-- The loudness stage is not a gain trim followed by a separate limiter: it applies one static gain of `target - current` and then drives its own post-gain true-peak limiter to take back whatever that gain pushed over the ceiling. `loudness.maxLimiterGainReductionDb` (12 dB; must be finite and at least 0) bounds how far it will drive that limiter — the static gain may exceed the peak headroom toward the ceiling by at most this much. It decides how peaky an input the stage will still try to normalize, not how loud a master can get: the allowance never permits more gain than `target - current` asks for, and the ceiling itself is never exceeded. Every loudness path shares the same default, so the chain, the standalone helper and the named processor (`maximizer.loudnessOptimize` reads the same key as `maxLimiterGainReductionDb`) normalize alike. Setting it to `0` restores a strict headroom clamp, which on peak-normalized material leaves the loudest targets short — `sonare mastering song.wav --preset pop --params "loudness.maxLimiterGainReductionDb=0"` lands at -16.19 LUFS against -14.06 at the default. Whatever shortfall remains is the limiter's own gain reduction, which one non-iterating pass does not re-measure, and is reported through `loudnessTargetLimited`.
-- `maximizer.truePeakLimiter` enforces its ceiling sample by sample, never as a whole-block rescale, and every stage inside it carries its state across calls. Its output therefore does not depend on how the caller chunks the stream: the same material rendered in one block, in uniform blocks from 256 to 16384 samples, or in a ragged split that lands mid-transient comes out identical, so a streaming render and an offline render agree. What is left is a small inter-sample residue that is a property of measuring finer than the limiter runs, not of the block size — a meter at 8x oversampling reads about +0.02 dB above the ceiling set by the default 4x limiter, flat from 0 to +36 dB of drive. Meter at the limiter's own oversampling to see the ceiling held exactly, or raise its `oversampleFactor` to push the residue down.
+- The loudness stage is not a gain trim followed by a separate limiter: it applies one static gain and then drives its own post-gain true-peak limiter to take back whatever that gain pushed over the ceiling. The gain is solved for the gated target by remeasuring the signal at the candidate gain, so it is `target - current` only when the gain moves no blocks across the absolute gate; otherwise the solved gain is what lands the remeasured signal on the target. The same solve backs A/B loudness match, reference matching, LUFS normalize, and `maximizer.loudnessOptimize`. `loudness.maxLimiterGainReductionDb` (12 dB; must be finite and at least 0) bounds how far it will drive that limiter — the static gain may exceed the peak headroom toward the ceiling by at most this much. It decides how peaky an input the stage will still try to normalize, not how loud a master can get: the allowance never permits more gain than the solved target gain asks for, and the ceiling itself is never exceeded. Every loudness path shares the same default, so the chain, the standalone helper and the named processor (`maximizer.loudnessOptimize` reads the same key as `maxLimiterGainReductionDb`) normalize alike. Setting it to `0` restores a strict headroom clamp, which on peaky material leaves the loudest targets short — a 6 s kick loop at -16.78 LUFS with a -14 LUFS target and -1 dBTP ceiling lands at -17.32 LUFS with `0` against -16.14 LUFS at the default. Whatever shortfall remains is the limiter's own gain reduction, which one non-iterating pass does not re-measure, and is reported through `loudnessTargetLimited`.
+- `maximizer.truePeakLimiter` enforces its ceiling sample by sample, never as a whole-block rescale, and every stage inside it carries its state across calls. Its output guard rechecks every earlier position a correction can raise, so a short burst cannot overshoot the true-peak ceiling, and lowering the ceiling live re-evaluates output already queued. `maximizer.truePeakLimiter` and `maximizer.adaptiveRelease` each report 129 samples of latency at their defaults. Its output therefore does not depend on how the caller chunks the stream: the same material rendered in one block, in uniform blocks from 256 to 16384 samples, or in a ragged split that lands mid-transient comes out identical, so a streaming render and an offline render agree. What is left is a small inter-sample residue that is a property of measuring finer than the limiter runs, not of the block size — a meter at 8x oversampling reads about +0.02 dB above the ceiling set by the default 4x limiter, flat from 0 to +36 dB of drive. Meter at the limiter's own oversampling to see the ceiling held exactly, or raise its `oversampleFactor` to push the residue down.
 - For UI metering, pass `maxPoints` to `meteringVectorscope(...)` and `meteringPhaseScope(...)`: they thin the point series down to at most `maxPoints` points, so a busy scope stays cheap to draw. (Without `maxPoints` they emit one point per input sample. The older `meteringVectorscopeDecimated(...)` / `meteringPhaseScopeDecimated(...)` aliases are deprecated and just delegate.) `meteringSpectrumFrame(...)` reads a single, non-time-averaged spectrum frame for spectrum-analyzer snapshots.
 - Every `multiband.*` solo processor — `compressor`, `dynamicEq`, `expander`, `imager`, `limiter`, and `saturation` — shares the same crossover mechanism and accepts a custom number of crossover cutoffs, so you can split into the band count your material needs instead of a fixed three. This entry point exposes up to 8 `cutoffNHz` slots (`cutoff0Hz` … `cutoff7Hz`), so a single `multiband.*` call can address up to 9 bands.
 :::
@@ -131,11 +131,12 @@ Five processors shape the waveform hard enough to fold energy back down the spec
 |---|---|
 | `saturation.hardClipper` | none, ADAA1, ADAA2, 4x oversample |
 | `saturation.softClipper`, `saturation.waveshaper` | none, ADAA1, 4x oversample |
-| `saturation.exciter`, `spectral.presenceEnhancer` | none, 4x oversample |
+| `spectral.presenceEnhancer` | none, ADAA1, 4x oversample |
+| `saturation.exciter` | none, 4x oversample |
 
 A mode a processor does not implement is refused rather than silently ignored, and the message names the set that would have worked — `soft clipper ADAA2 anti-aliasing is not supported; use None, Adaa1, or Oversample4x`. Asking a processor outside this set of five for the parameter at all is refused by key: `unknown --params key for saturation.tube: aliasing`.
 
-The oversampled path aligns its dry signal and reports the delay it introduces: the up-and-down round trip through a 24-tap-per-phase polyphase filter costs 24 samples at the base rate, so the latency is `24` on the 4x path where the other modes report `0`. It reaches you wherever the processor's result does — `latencySamples` on the `MasteringResult` that `masteringProcess()` returns in the browser and in Node, `latency_samples` on the Python `MasteringResult` and on the C `SonareMasteringResult`, and `latency_samples()` on the processor itself when it is hosted as an insert. Compensate for it the same way you would for any other latency the chain reports.
+The oversampled path aligns its dry signal and reports the delay it introduces: the up-and-down round trip through the polyphase filter costs 48 samples at the base rate, so the latency is `48` on the 4x path where `None` and `ADAA1` report `0` (ADAA1's half-sample delay is tracked in Q8 and the dry path of a blend is delayed to match) and `saturation.hardClipper`'s ADAA2 reports `1`. It reaches you wherever the processor's result does — `latencySamples` on the `MasteringResult` that `masteringProcess()` returns in the browser and in Node, `latency_samples` on the Python `MasteringResult` and on the C `SonareMasteringResult`, and `latency_samples()` on the processor itself when it is hosted as an insert. Compensate for it the same way you would for any other latency the chain reports.
 :::
 
 ::: info What is a crossover?
@@ -155,7 +156,7 @@ A full chain — `masterAudio`, `masteringChain`, and every preset — runs its 
 
 For detection and processing workflows, start with [Audio Repair](./audio-repair.md), [Noise and Hum Removal](./repair-noise.md), [Clicks, Crackle, and Clipping](./repair-transients.md), or [Dereverberation](./repair-reverb.md).
 
-The repair family is the one people ask about, because six stages share one slot and their order matters. Whatever subset a configuration enables runs widest-damage-first, so each stage sees material the previous one has already made well-formed:
+The repair family is the one people ask about, because six stages share one slot and their order matters. The chain runs them offline; `decrackle`, `dehum`, `denoise` and `dereverb` are also available as causal realtime inserts under the registry ids `repair.decrackle`, `repair.dehum`, `repair.denoiseClassical` and `repair.dereverbClassical` (see [Audio Repair](./audio-repair.md#realtime-inserts)). `declick`, `declip` and `repair.trimSilence` are not causal and stay offline-only. Whatever subset a configuration enables runs widest-damage-first, so each stage sees material the previous one has already made well-formed:
 
 1. `declip` — before `declick`, because a flat-topped region has no transient for a click detector to measure.
 2. `declick`
@@ -165,9 +166,9 @@ The repair family is the one people ask about, because six stages share one slot
 6. `dereverb` — last, because a broadband noise floor reads as a stationary late tail and would bias the reverb estimate toward it.
 
 ::: details `repair.denoise.reductionDb` — depth, not floor
-The denoise stage's depth is `repair.denoise.reductionDb`: the deepest attenuation the gain mask may apply to any bin, in dB. It must be finite and non-negative and has no upper bound; the default is `26`. A larger value permits deeper attenuation, but does not guarantee that amount of noise reduction. At 26 dB the mask gain cannot fall below about 0.0501; actual attenuation depends on the estimated noise and signal. This gain floor reduces abrupt gating but does not eliminate artifacts. The report the standalone `masteringRepairDenoiseClassical` entry point returns says how often that floor bound: `maxReductionDb` saturating at `reductionDb` means the floor, not the estimator, set the depth, and `floorLimitedFraction` is the share of mask cells sitting on it.
+The denoise stage's depth is `repair.denoise.reductionDb`: the deepest attenuation the gain mask may apply to any bin, in dB. It must be finite and lie in `[0, 120]`; the default is `26`. A larger value permits deeper attenuation, but does not guarantee that amount of noise reduction. At 26 dB the mask gain cannot fall below about 0.0501; actual attenuation depends on the estimated noise and signal. This gain floor reduces abrupt gating but does not eliminate artifacts. The report the standalone `masteringRepairDenoiseClassical` entry point returns says how often that floor bound: `maxReductionDb` saturating at `reductionDb` means the floor, not the estimator, set the depth, and `floorLimitedFraction` is the share of mask cells sitting on it.
 
-The same knob is also accepted as a linear floor. A `repair.denoise.gainFloor` key is converted on read, `reductionDb = -20 * log10(gainFloor)`, and the conversion carries the old validity range with it: a floor above 1 becomes a negative depth and is refused. The shorthand keys `repair.reductionDb` and `repair.gainFloor` map to the same denoise slot. Flat overrides, the JSON chain document, and the nested `MasteringChainConfig` types in the browser and Node bindings all accept `gainFloor` this way, and the TypeScript types mark it deprecated in favour of `reductionDb`.
+The same knob is also accepted as a linear floor. A `repair.denoise.gainFloor` key is converted on read, `reductionDb = -20 * log10(gainFloor)`, and the conversion carries the old validity range with it: a floor above 1 becomes a negative depth and is refused, and a floor below `1e-6` becomes a depth above 120 dB and is refused too. The shorthand keys `repair.reductionDb` and `repair.gainFloor` map to the same denoise slot. Flat overrides, the JSON chain document, and the nested `MasteringChainConfig` types in the browser and Node bindings all accept `gainFloor` this way, and the TypeScript types mark it deprecated in favour of `reductionDb`.
 :::
 
 ## Solo processors
@@ -175,15 +176,17 @@ The same knob is also accepted as a linear floor. A `repair.denoise.gainFloor` k
 | Family | Processor names |
 |--------|-----------------|
 | Dynamics | `dynamics.brickwallLimiter`, `dynamics.compressor`, `dynamics.deesser`, `dynamics.expander`, `dynamics.gate`, `dynamics.limiter`, `dynamics.parallelComp`, `dynamics.sidechainRouter`, `dynamics.duckingProcessor`, `dynamics.transientShaper`, `dynamics.upwardCompressor`, `dynamics.upwardExpander`, `dynamics.vocalRider` |
-| Effects | `effects.gsEfx` |
+| Effects | `effects.acoustic.roomMorph`, `effects.delay.stereo`, `effects.filter.vowel`, `effects.gsEfx`, `effects.modulation.autoWah`, `effects.modulation.chorus`, `effects.modulation.ensemble`, `effects.modulation.flanger`, `effects.modulation.phaser`, `effects.modulation.pitchShifter`, `effects.modulation.ringModulator`, `effects.modulation.rotary`, `effects.modulation.wah`, `effects.reverb.convolution`, `effects.reverb.dattorro`, `effects.reverb.fdn`, `effects.reverb.plate`, `effects.reverb.room`, `effects.reverb.velvet` (FX builds; see [Effects Inserts](./effects-inserts.md)) |
 | EQ | `eq.apiStyle`, `eq.bandPass`, `eq.cutFilter`, `eq.dynamic`, `eq.equalizer`, `eq.graphic`, `eq.linearPhase`, `eq.midSide`, `eq.minimumPhase`, `eq.parametric`, `eq.pultec`, `eq.shelving`, `eq.tilt` |
 | Final | `final.bitDepth`, `final.dither`, `final.outputChain` |
 | Maximizer | `maximizer.adaptiveRelease`, `maximizer.loudnessOptimize`, `maximizer.maximizer`, `maximizer.softKneeMax`, `maximizer.truePeakLimiter` |
 | Multiband | `multiband.compressor`, `multiband.dynamicEq`, `multiband.expander`, `multiband.imager`, `multiband.limiter`, `multiband.saturation` |
-| Repair | `repair.declick`, `repair.declip`, `repair.decrackle`, `repair.dehum`, `repair.denoiseClassical`, `repair.dereverbClassical`, `repair.trimSilence` |
+| Repair | `repair.declick`, `repair.declip`, `repair.decrackle`, `repair.dehum`, `repair.denoiseClassical`, `repair.dereverbClassical`, `repair.trimSilence` (`decrackle`, `dehum`, `denoiseClassical` and `dereverbClassical` are also realtime inserts) |
 | Saturation | `saturation.ampSim`, `saturation.bitcrusher`, `saturation.distortion`, `saturation.exciter`, `saturation.hardClipper`, `saturation.multibandExciter`, `saturation.overdrive`, `saturation.softClipper`, `saturation.tape`, `saturation.transformer`, `saturation.tube`, `saturation.waveshaper` |
 | Spectral | `spectral.airBand`, `spectral.lowEndFocus`, `spectral.presenceEnhancer`, `spectral.spectralShaper` |
 | Stereo | `stereo.autoPan`, `stereo.binaural`, `stereo.haasEnhancer`, `stereo.imager`, `stereo.monoMaker`, `stereo.phaseAlign`, `stereo.stereoBalance` |
+| Utility | `utility.gain` |
+| Voice | `voice.changer` (see [Realtime Voice Changer](./realtime-voice-changer.md)) |
 
 ::: warning Stereo-family processors use a different entry point
 Most processors run through the single-array `masteringProcess()` (mono, or interleaved). The stereo-family processors (`stereo.imager`, `stereo.monoMaker`, `stereo.autoPan`, `stereo.binaural`, `stereo.haasEnhancer`, `stereo.phaseAlign`, `stereo.stereoBalance`) operate on true left/right channels, so call them through the separate stereo entry point `masteringProcessStereo()` / `mastering_process_stereo()`, which takes distinct `left` and `right` arrays. `stereo.monoMaker` uses `frequencyHz` as the crossover below which it collapses the signal toward mono; `amount` controls how strongly it does so. The same is true of `eq.midSide` and the `multiband.*` processors. Passing these to `masteringProcess()` cannot express independent channels — see [How to call them](#how-to-call-them) for the exact signatures.
@@ -230,12 +233,12 @@ These two realtime-safe, multichannel processors model drive pedals. They are al
 |-----------|-----------|----------------|---------|------|
 | `saturation.overdrive` | `gainDb` | `0`–`41` | `20` | dB |
 |  | `toneHz` | `500`–`8000` | `3000` | Hz |
-|  | `levelDb` | no catalog minimum; maximum `770.637` | `0` | dB |
+|  | `levelDb` | no catalog minimum; maximum `770.636` | `0` | dB |
 | `saturation.distortion` | `gainDb` | `0`–`60` | `30` | dB |
 |  | `toneHz` | `475`–`20000` | `4000` | Hz |
-|  | `levelDb` | no catalog minimum; maximum `770.637` | `0` | dB |
+|  | `levelDb` | no catalog minimum; maximum `770.636` | `0` | dB |
 
-Both report `48` samples of latency and `0` tail samples in the catalog. All three parameters are realtime-safe automation targets. The `levelDb` maximum is the finite-gain acceptance limit, not a recommended operating range.
+Both report `48` samples of latency; the catalog tail at 48 kHz is 10,513 samples for overdrive and 15,793 for distortion. All three parameters are realtime-safe automation targets. The `levelDb` maximum is the finite-gain acceptance limit, not a recommended operating range.
 :::
 
 ::: details What is `saturation.ampSim`?
@@ -253,10 +256,12 @@ The cabinet and microphone keys are included in `masteringInsertParamInfo('satur
 | `micModel`, `micAxis`, `micDistanceCm`, `micBlend` | The first microphone: type (`0` none, `1` dynamic, `2` ribbon, `3` condenser), on-axis position, distance, and blend |
 | `micBModel`, `micBAxis`, `micBDistanceCm`, `micBInvert` | The second microphone of a pair, with a polarity flip |
 | `cone`, `doppler` | Cone breakup and cone-motion Doppler; `doppler` moves the reported latency |
+
+The second microphone's path-length delay is aligned and counted in the reported latency, so the latency (48 samples at 48 kHz without Doppler) does not move with `micBlend` or with the power setting.
 :::
 
 ::: warning Drain the tail of an offline `saturation.ampSim` render
-The tail this processor reports includes the cabinet impulse response, not just the second microphone's path-length delay. A loaded or generated cabinet response runs to roughly 21 ms at 48 kHz at its longest, so an offline bounce that stops pulling output at the last input sample loses that much cabinet decay — the render simply ends early and a little dry, with nothing to indicate it happened. Keep reading output until the reported tail is drained.
+The tail this processor reports includes the cabinet impulse response, not just the second microphone's path-length delay. The default rig reports a tail of 8,939 samples at 48 kHz (4,419 with a generated cabinet response, 2,500 with `cab: false`), so an offline bounce that stops pulling output at the last input sample loses that much cabinet decay — the render simply ends early and a little dry, with nothing to indicate it happened. Keep reading output until the reported tail is drained.
 :::
 
 ::: info Prepare it for the channel count you will actually render
@@ -325,16 +330,16 @@ The creative-FX insert catalog — reverb, modulation, delay, and GS insert IDs,
 
 ## How to call them
 
-Use `capabilityCatalog()` / `capability_catalog()` when a host needs one build-aware picker across solo, pair, and creative-insert processors. It lists each processor's parameter descriptors — name, nullable id, type, unit, realtime-safety, `min` / `max` / nullable `default`, `choices`, and slot membership — plus the processor `slots` metadata, built-in preset lists, and mastering-preset metadata. `masteringProcessorCatalog()` is the narrower mastering registry classification used for mastering-specific pickers.
+Use `capabilityCatalog()` / `capability_catalog()` when a host needs one build-aware picker across solo, pair, and creative-insert processors. It lists each processor's parameter descriptors — name, nullable id, type, `unit`, realtime-safety, `min` / `max` / nullable `default`, `scale`, display range, sibling `dependsOn` bounds, `choices`, and slot membership — plus the processor `slots` metadata, built-in preset lists, and mastering-preset metadata. `masteringProcessorCatalog()` is the narrower mastering registry classification used for mastering-specific pickers.
 
 ### Reading a catalog bound
 
-Every descriptor carries the ten fields, so a host can size a control straight from the catalog instead of transcribing the per-processor tables on this page. Construction-only keys appear with `id: null` and `rtSafe: false`; an id-bearing descriptor with `rtSafe: false` is also unavailable for live automation. `default` may be `null` when there is no fallback. `choices` describes a closed named numeric set, including discrete values with gaps, and `slot` links a key to a slot group. The group's `activation`, `parent`, and `minCrossoverCutoffs` in the processor `slots` metadata determine whether that group is present. A `null` bound is not missing data — it states that the catalog knows of no limit on that side.
+Every descriptor carries the same seventeen fields (`name`, `id`, `rtSafe`, `type`, `min`, `max`, `minExclusive`, `maxExclusive`, `maxRelativeTo`, `default`, `unit`, `scale`, `uiMin`, `uiMax`, `dependsOn`, `choices`, `slot`; see [The parameter descriptor](./effects-inserts.md#the-parameter-descriptor)), so a host can size a control straight from the catalog instead of transcribing the per-processor tables on this page. Construction-only keys appear with `id: null` and `rtSafe: false`; an id-bearing descriptor with `rtSafe: false` is also unavailable for live automation. `default` may be `null` when there is no fallback. `choices` describes a closed named numeric set, including discrete values with gaps, and `slot` links a key to a slot group. The group's `activation`, `parent`, and `minCrossoverCutoffs` in the processor `slots` metadata determine whether that group is present. A `null` bound is not missing data — it states that the catalog knows of no limit on that side.
 
 The two kinds of value come from different places, and that decides how far a host can trust them:
 
 - The **default** is the processor config struct's own field initializer, recorded as each builder falls back to it. A field whose initializer changes therefore cannot leave a stale number behind in the catalog.
-- The **range is measured**, not declared. Candidate values go through the same construction path a caller uses, and the catalog reports the interval validation accepted.
+- The **range is measured**, not declared. Candidate values go through the same construction path a caller uses, and the catalog reports the interval validation accepted, rounded inward. The `unit`, `scale`, display range (`uiMin` / `uiMax`) and `dependsOn` relations are declared by the library instead. Every `repair.*` entry publishes its settings the same way, measured through the stage's own validation; those rows carry no automation `id` and are never `rtSafe`, even on the four realtime repair inserts.
 
 ::: warning A bound is a hard constraint, not a recommended range
 `min` and `max` describe what the processor will *accept*. They are not a musically sensible range to sweep a control over: a value inside the interval can still be a bad setting, and a value outside it is rejected rather than clamped.
@@ -343,8 +348,8 @@ The two kinds of value come from different places, and that decides how far a ho
 Because the range is measured rather than declared, three properties follow that a host has to allow for:
 
 - **Each bound is measured with the other parameters at their defaults.** Two controls that constrain each other therefore each report the *other's default* as their limit. `maximizer.adaptiveRelease` publishes `minReleaseMs` with a ceiling of 250 and `maxReleaseMs` with a floor of 20 for exactly that reason — those are the sibling's default values, not a limit on the pair as a whole.
-- **A sample-rate-derived bound reflects the un-prepared processor.** Every EQ `band*.frequencyHz` ceiling reads as 24000, and rises once the insert is prepared at a higher rate.
-- **An exclusive bound is reported as the limit it excludes.** `dynamics.compressor` publishes a `sidechainHpfHz` `min` of 0 and still rejects 0.
+- **A sample-rate-derived bound is marked, not resolved, until you give a rate.** Every EQ `band*.frequencyHz` ceiling reads as 24000 with `maxRelativeTo: 'nyquist'`; the effective ceiling is the lower of `max` and the Nyquist. `masteringInsertParamInfo(name, sampleRate)` resolves it for a rate: `eq.parametric` reports 11025 at 22050 Hz and 22050 at 44100 Hz, and stays at 24000 for rates above 48 kHz, which the insert refuses above as well.
+- **An exclusive bound is reported as the limit it excludes, and flagged.** `dynamics.compressor` publishes a `sidechainHpfHz` `min` of 0 and still rejects 0; `minExclusive` / `maxExclusive` say so.
 
 The per-band EQ surface is the bulk of the flat parameter set: `eq.parametric`, `eq.midSide`, and `multiband.dynamicEq` publish descriptors for every indexed `band*` field, including construction keys. Publishing them does not widen which keys count as *read* — a band supplied incompletely still has its remaining keys reported as ignored.
 
@@ -356,7 +361,7 @@ console.log(build.processors.length, build.presets.mastering);
 
 masteringProcessorNames();   // discover solo processor ids at runtime
 masteringProcessorCatalog(); // classify processors for picker/filter UIs
-masteringInsertParamInfo('eq.parametric'); // construction and automation metadata
+masteringInsertParamInfo('eq.parametric', sampleRate); // construction and automation metadata, Nyquist ceilings resolved for this rate
 masteringInsertTiming('eq.parametric', { 'band0.frequencyHz': 1000 }, sampleRate);
 masteringPresetParams('pop'); // flat overrides for masterAudio
 

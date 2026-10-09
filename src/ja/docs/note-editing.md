@@ -87,6 +87,36 @@ edited = sonare.render_notes(samples, sample_rate, notes, fade_ms=10)
 
 `NoteEdit` はサンプル移動、半音シフト、dB ゲイン、時間伸縮、フォルマントシフト、ミュート、振幅エンベロープ、ドリフト／ビブラート変更を扱います。通常の編集にピッチメタデータは不要です。カーブ編集（`vibratoDepthChange` と `driftChange`）には、レンダーリクエストにも元の `f0Hz` トラックと `frameRate` が必要で、JS/WASM では `f0Hz` を `Float32Array` にします。任意の `voiced` フラグ配列を渡す場合は `f0Hz` と同じ長さにします。`false` は正の F0 も抑制し、`true` でも 0 以下・有限でない・利用できない F0 は有効になりません。`decomposeNotePitch` も同じ任意フラグを受け付けます。`extractNotes` は有声音フラグまたは有声音確率を受け付け、0 以下または有限でない F0 フレームはピッチの計測に使いません。
 
+### 秒指定とサンプル指定
+
+`renderNotes` や `renderPercussiveEvents` に渡すノートまたはパーカッシブイベントは、区間の各境界をサンプル（`onsetSample`、`offsetSample`）または秒（`onsetSec`、`offsetSec`）で、編集の移動量を `timeOffsetSamples` または `timeOffsetSec`（負の値は前へ移動）で指定できます。秒は呼び出しのサンプルレートで最も近いサンプルに丸められます。各境界はどちらか一方の表記だけを渡してください。両方を渡すと拒否されます。Python では `onset_sec`、`offset_sec`、`time_offset_sec` です。
+
+```typescript
+const edited = renderNotes({
+  samples,
+  sampleRate,
+  notes: [{ onsetSec: 0.25, offsetSec: 0.75, edit: { timeOffsetSec: 0.1 } }],
+});
+```
+
+負の `onsetSample` や `offsetSample` は拒否されます（WASM と Node は `RangeError`、Python は `SonareValueError`）。`-1` は「末尾まで」を表す値ではないので、入力の端を使うなら境界を省略してください。
+
+### ノートの分割と結合
+
+`splitNote` は 1 つのノートをトラックのフレーム位置で切り、`mergeNotes` は連続するノートを 1 つに結合します。どちらも `extractNotes` と同じ入力（`samples`、`sampleRate`、`f0Hz`、`voiced`、`frameRate`）と現在の `notes` を受け取り、新しいノート集合全体を返します。すべてのノートが音声とトラックから再導出されるためで、ノートはオブジェクトの同一性ではなく `frameStart` / `frameEnd` で識別されます。
+
+```typescript
+import { mergeNotes, splitNote } from '@libraz/libsonare';
+
+const source = { samples, sampleRate, f0Hz: pitch.f0, voiced: pitch.voicedFlag, frameRate: sampleRate / 512 };
+const middle = Math.floor((notes[0].frameStart + notes[0].frameEnd) / 2);
+
+const halves = splitNote({ ...source, notes, index: 0, frame: middle }); // ノートが 1 つ増える
+const rejoined = mergeNotes({ ...source, notes: halves, first: 0, last: 1 }); // 元の個数に戻る
+```
+
+`frame` はノート区間の厳密に内側、`first < last < notes.length` である必要があり、満たさない場合は `SonareError`（`InvalidParameter`）を投げます。結合したノートは最初のノートの開始から最後のノートの終了まで（間の隙間も含む）に及び、最初のノートの編集を引き継ぎます。ノートごとに編集が異なっていた場合は、結合後に編集を設定し直してください。Python では `split_note(samples, sample_rate, f0_hz, frame_rate, notes, index, frame, voiced=...)` と `merge_notes(..., notes, first, last, voiced=...)` です。
+
 ## 保持する解析で重なった声を編集する
 
 `analyzePolyphonic` はスペクトログラムとノートごとの帰属セットをネイティブハンドルに保持します。返るノートは同じ `NoteObject` 形式で、`setNoteEdit(index, edit)` が保留中の編集だけを変更します。`render()` は入力と同じ長さの音声を返します。ハンドルは大きなメモリを所有するため、編集対象の区間だけを解析し、終わったら `destroy()` / `delete()` で解放します。Python では `with PolyphonicAnalysis.analyze(...)` または `close()` を使えます。

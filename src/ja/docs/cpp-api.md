@@ -84,7 +84,23 @@ C ABI はプロジェクト系のシンボルを常に *エクスポート* し�
 
 ### C ABI のバージョン
 
-フラットな POD 構造体を宣言する C ABI ヘッダーは、それぞれ構造体の正確なサイズとメンバーオフセットを保証するバージョンマクロを持ちます。`SONARE_FEATURE_ABI_VERSION` は `sonare_c_types.h` の 6 で、特徴量 POD のレイアウトに加えて、`voiced` 引数を含むノート API など、公開する一般 C 関数のシグネチャも保証します。`SONARE_PROJECT_ABI_VERSION` は `sonare_c_project.h` の 2、`SONARE_VOICE_CHANGER_ABI_VERSION` は `sonare_c_voice_changer.h` の 2、`SONARE_ACOUSTIC_ABI_VERSION` は `sonare_c_acoustic.h` の 4 です。`sonare_c.h` はこれらを `SONARE_ABI_VERSION` に詰め込み（ビット 0〜7 が Feature、8〜15 が Project、16〜23 が Voice changer、24〜31 が Acoustic）、`sonare_abi_version()` は読み込まれたライブラリがコンパイル時に持っていた値を返します。リアルタイムのコマンドキューは POD ではなく SharedArrayBuffer のレコードレイアウトを表すため、これとは別に `sonare_engine_abi_version()`（現在は 3）でバージョン管理されます。POD を境界越しに渡す利用側は、最初の呼び出しの前に一度だけ `sonare_abi_version()` を自分のコンパイル時の `SONARE_ABI_VERSION` と比較し、一致しなければ先へ進みません。値が違えば両者の構造体レイアウトまたは保証対象の関数契約は一致しておらず、POD 経路は失敗するのではなくメモリを壊します。JSON の入口はレイアウトのずれを許容するので、この関門は不要です。バージョンは、保証対象の構造体レイアウトまたは Feature の関数シグネチャが変わるたびに進みます（Project のバージョンはレイアウトが変わったリリースごとに 1 回）。したがって値が等しければレイアウトと契約は同一であり、保証対象の構造体へのフィールド追加は「追加的な変更」ではなくバージョンの更新です。各バインディングが読み込み時にどの値を照合するかは [ネイティブバインディング](./native-bindings.md#abi-バージョン) にまとめています。
+フラットな POD 構造体を宣言する C ABI ヘッダーは、それぞれ構造体の正確なサイズとメンバーオフセットを保証するバージョンマクロを持ちます。`SONARE_FEATURE_ABI_VERSION` は `sonare_c_types.h` の 7 で、特徴量 POD のレイアウトに加えて、`voiced` 引数を含むノート API など、公開する一般 C 関数のシグネチャも保証します。`SONARE_PROJECT_ABI_VERSION` は `sonare_c_project.h` の 2、`SONARE_VOICE_CHANGER_ABI_VERSION` は `sonare_c_voice_changer.h` の 3、`SONARE_ACOUSTIC_ABI_VERSION` は `sonare_c_acoustic.h` の 4 です。`sonare_c.h` はこれらを `SONARE_ABI_VERSION` に詰め込み（ビット 0〜7 が Feature、8〜15 が Project、16〜23 が Voice changer、24〜31 が Acoustic）、`sonare_abi_version()` は読み込まれたライブラリがコンパイル時に持っていた値を返します。リアルタイムのコマンドキューは POD ではなく SharedArrayBuffer のレコードレイアウトを表すため、これとは別に `sonare_engine_abi_version()`（現在は 3）でバージョン管理されます。POD を境界越しに渡す利用側は、最初の呼び出しの前に一度だけ `sonare_abi_version()` を自分のコンパイル時の `SONARE_ABI_VERSION` と比較し、一致しなければ先へ進みません。値が違えば両者の構造体レイアウトまたは保証対象の関数契約は一致しておらず、POD 経路は失敗するのではなくメモリを壊します。JSON の入口はレイアウトのずれを許容するので、この関門は不要です。バージョンは、保証対象の構造体レイアウトまたは Feature の関数シグネチャが変わるたびに進みます（Project のバージョンはレイアウトが変わったリリースごとに 1 回）。したがって値が等しければレイアウトと契約は同一であり、保証対象の構造体へのフィールド追加は「追加的な変更」ではなくバージョンの更新です。各バインディングが読み込み時にどの値を照合するかは [ネイティブバインディング](./native-bindings.md#abi-バージョン) にまとめています。
+
+#### バージョン付き構造体と既定値
+
+呼び出し側が埋める保証対象の構造体は自分のレイアウトバージョンを持ち、古いレイアウトでビルドされた呼び出しは、誤ったオフセットで読まれずに拒否されます。構造体をゼロ埋めするのではなく、対応する `*_default()` 関数から始めてください。ゼロ埋めの構造体は既定値ではありません。
+
+| 構造体 | バージョンフィールド | 開始点 |
+|--------|---------------------|--------|
+| `SonareMusicAnalyzeOptions` | 先頭の `struct_version`。`SONARE_MUSIC_ANALYZE_OPTIONS_VERSION`（2）でなければならず、`sonare_analyze_json_ex` は他の値を拒否します | `sonare_music_analyze_options_default()` |
+| `SonareChordDetectionOptions` | 先頭の `struct_version`。0 または `SONARE_CHORD_DETECTION_OPTIONS_VERSION`（2） | ゼロ埋めしてバージョンを設定するか、設定せず 0 のまま |
+| `SonareBoundaryOptions` | なし。44 バイトで、`use_chroma` の後に `reference_window` を持ちます（相対しきい値を測る片側の秒数。既定 60、`0` で相対しきい値を無効化） | `sonare_boundary_options_default()` |
+| `SonareTranscribeConfig` | `struct_version` は 1 または 2。バージョン 2 は `reference_auto`（`reference_hz` を読まずチューニング基準を測定する）を末尾に追加します。バージョン 1 も引き続き読まれます | `sonare_transcribe_config_default()` |
+| `SonareRealtimeVoiceChangerConfig` | 先頭の `struct_version`（0 または 1）に続いて `formant_mode`。レイアウトは `SONARE_VOICE_CHANGER_ABI_VERSION` が保証します | `sonare_realtime_voice_changer_config_default()`（ゼロ埋めは ISP リミッターを無効にします） |
+
+結果構造体の `SonareChordAnalysisResult`、`SonareMelResult`、`SonareMfccResult`、`SonareTranscribeResult` も先頭に `struct_version` を持ちます。これはライブラリが書き込むので、呼び出し側は読むだけです。結果は使用したチューニングを報告し（`SonareChordAnalysisResult.tuning`、`SonareTranscribeResult.tuning`）、Mel と MFCC の結果は逆変換に必要な順変換のパラメータを持ちます。`SonareProjectLoopRecordingDesc` では Project ABI バージョンは動きません。以前の `reserved` ワードが `flags` になり、`0` または `SONARE_PROJECT_LOOP_RECORDING_DROP_PARTIAL_TAIL` を受け付け、他のビットは拒否されるので、呼び出し側は 0 にしてください。
+
+ゼロ初期化した `SonareEngineTrackLane` はモノラルのソースとして読まれ、`sonare_engine_set_track_lanes` はステレオ以外のソースレイアウトを拒否します。すべてのレーンに `source_channel_layout = SONARE_CHANNEL_LAYOUT_STEREO` を設定してください。
 
 ### リンクターゲット
 
@@ -204,7 +220,12 @@ static Audio Audio::from_file(const std::string& path);
 // メモリ上のエンコード済み音声から。対応形式は from_file() と同じ
 // デコード失敗時は SonareException
 static Audio Audio::from_memory(const uint8_t* data, size_t size);
+
+// 同じデコードでダウンミックスなし。要素 i はソースのチャンネル i（ソース自身の順序）
+static std::vector<Audio> Audio::from_memory_channels(const uint8_t* data, size_t size);
 ```
+
+C ABI では `sonare_decode_channels(data, length, &samples, &frames, &channels, &sample_rate)` が対応します。プレーンをそのまま続けて返し（5.1 の順序は L R C LFE Ls Rs。解放は `sonare_free_floats`）、`sonare_downmix(channels, frames, channel_count, target_layout, &out)` は、プレーナーなチャンネルを、デコーダーと同じ ITU-R BS.775 の規則で、より狭い `SonareChannelLayout` に畳み込みます。センターとサラウンドは -3 dB でフロントペアに入り、LFE プレーンは破棄されます。アップミックスは拒否されます。
 
 #### プロパティ
 
@@ -316,100 +337,6 @@ namespace sonare::quick {
 }
 ```
 
-## 幾何ベースのルーム音響
-
-これらの API は、部屋モデルを推定・合成・適用するためのものです。専用モジュールヘッダーにあり、`BUILD_ACOUSTIC_SIM=ON` ビルドで使えます（ソースビルドの既定値です）。
-
-::: info このセクションの用語
-- **等価ルーム** は、音声から推定した実用上の部屋モデルです。実際の部屋の正確な形状ではありません。
-- **RIR** は room impulse response（ルームインパルス応答）の略で、部屋が短い音にどう反応するかを表すサンプル列です。
-- **RT60** は残響時間です。残響が 60 dB 減衰するまでの長さを指します。
-- **DRR (direct-to-reverberant ratio)** は直接音と残響の音量比を dB で表します。値が大きいほど、乾いた近い音になります。
-- **ルームモーフィング** は、部屋の響きを足す音作り効果です。残響除去ではありません。
-:::
-
-```cpp
-#include <acoustic/rir_synthesizer.h>
-#include <analysis/room_estimator.h>
-#include <effects/acoustic/room_morph.h>
-
-using namespace sonare;
-
-acoustic::ShoeboxRoom room = acoustic::uniform_shoebox({7.0f, 5.0f, 3.0f}, 0.2f);
-acoustic::SourceListener placement{{1.0f, 1.0f, 1.2f}, {5.0f, 4.0f, 1.7f}};
-auto rir = acoustic::synthesize_rir(room, placement, 48000);
-if (!rir.rir.empty()) {
-  RoomEstimate estimate = estimate_room(rir.rir);
-}
-
-effects::acoustic::RoomMorphConfig morph_config;
-morph_config.target = room;
-morph_config.placement = placement;
-morph_config.wet = 0.6f;
-effects::acoustic::RoomMorphResult morphed = effects::acoustic::room_morph(recording, morph_config);
-// morphed.audio がレンダー結果、morphed.diagnostics は目標 RIR 合成でクランプされた項目の一覧。
-```
-
-3 つの呼び出しは、ワークフローの別々の部分を担当します。
-
-- `estimate_room(...)` は、体積、代表寸法、吸音率バンド、RT60 バンド、DRR、信頼度を返します。
-- `synthesize_rir(...)` は、形状問題を診断情報で報告します。音源／聴取位置が不正な場合は空の RIR を返します。
-- `room_morph(...)` は、入力音声に目標ルームの響きを付けてレンダーし、`RoomMorphResult` を返します。音声に加えて、`synthesize_rir(...)` と同じ診断情報を持ちます。目標 RIR を同じコードで合成しているためです。使えない設定はエラー項目として報告されるのではなく、`ErrorCode::InvalidParameter` をスローします。
-
-::: details 設定項目の詳細
-`acoustic::RirSynthConfig` では、RIR 生成の設定を指定できます。
-
-- 鏡像音源法の反射次数
-- Sabine/Eyring の後期テールモデル
-- 決定的なシード
-- RIR の最大長
-- 初期反射と後期テールの混合時刻
-- クロスフェード幅
-
-`RoomEstimateConfig` は、`AcousticConfig` 経由で解析設定を渡します。主な項目は、解析モード、オクターブバンド数、最小減衰幅、ノイズフロア余裕です。
-
-アスペクトヒントと `reference_absorption` は、等価ルームの事前条件を決めます。
-:::
-
-### C ABI からのルームモーフ
-
-`sonare_c_acoustic.h` の `sonare_room_morph` は、入力サンプル、そのサンプルレート、`SonareRoomMorphConfig` を受け取り、モーフ後のモノラル信号を出力ポインタの組で返します。目標ルームの合成が出した診断情報は戻り値には含まれず、スレッドローカルの構造化チャンネルに置かれるので、呼び出しが返ってから読み出します。所有権と寿命は以下のとおりです。
-
-```c
-float* out = NULL;
-size_t out_length = 0;
-SonareError err = sonare_room_morph(samples, length, sample_rate, &config, &out, &out_length);
-if (err != SONARE_OK) return err;  // 何も確保されていない。詳細は sonare_last_error_message() にある
-for (size_t i = 0; i < sonare_last_diagnostic_count(); ++i) {
-  const char* code = sonare_last_diagnostic_code(i);  // 例: "acoustic.rir_length_clamped"
-  // sonare_last_diagnostic_message(i) と sonare_last_diagnostic_severity(i) が同じ添字で並ぶ
-}
-sonare_free_floats(out);
-```
-
-- `*out` はライブラリが確保し、`sonare_free_floats` で解放します。長さは入力の `length` サンプルに目標ルームのテールを足したもので、サンプルレートは入力と同じです。空の入力では `NULL` ／ `0` が返り、そのまま解放しても安全です。戻り値が `SONARE_OK` 以外なら何も確保されていません。
-- 診断情報の文字列はライブラリが所有し、`NULL` になることはなく、同じスレッドで診断情報を記録またはクリアする次の C ABI 呼び出しまで有効です。`sonare_room_morph` と `sonare_synthesize_rir` はどちらも入口でこのチャンネルをクリアし、それ以外の呼び出しの後は件数が `0` になります。読み出しても項目は消費されず、解放するものもありません。保持したい文字列はコピーしてください。
-- 件数以上の添字を渡すと `""` と `SONARE_DIAGNOSTIC_INFO` が返るので、ループは重要度ではなく件数で区切ります。モーフが出す項目はすべて回復可能なクランプで、重要度は `SONARE_DIAGNOSTIC_WARNING` です。使えない設定は項目ではなくエラー戻り値になります。
-- `sonare_last_warning_message()` には同じ項目が `code: message; code: message` の 1 本の文字列に畳まれて入ります。これは従来この形式を読んでいた呼び出し側のために残されているもので、分岐には構造化アクセサを使ってください。区切り文字を含むメッセージは元に戻せず、重要度も文字列には含まれないためです。
-
-### 大空間での空気吸収
-
-大きなホールでは、長い伝搬経路での空気損失を考慮しない幾何学のみの RT60 推定は、高域の残響を長く見積もりすぎることがあります。C++ の音響コアでは、Sabine/Eyring 計算に ISO 9613-1 の大気吸収項を加えられます。これはオプトインです。最後の引数を省略すれば、従来の幾何学のみの結果がそのまま得られます。
-
-```cpp
-#include <acoustic/late_reverb.h>
-
-acoustic::AirAbsorption air;
-air.temperature_c = 20.0f;
-air.humidity_percent = 50.0f;
-
-const auto rt60 = acoustic::shoebox_reverb_time(
-    room, acoustic::ReverbModel::Eyring, &air);
-// rt60.rt60_bands: 空気損失により、とくに高域が短くなる。
-```
-
-`AirAbsorption` の既定値は 20 ℃・相対湿度 50% です。この低レベル C++ 計算は C ABI、Node、Python、WASM のシューボックスヘルパーには含まれません。これらの公開ヘルパーは引き続き幾何学のみのモデルを使います。
-
 ## MusicAnalyzer <Badge type="warning" text="Heavy" />
 
 複数の音楽解析をまとめて扱う、遅延初期化のクラスです。
@@ -477,7 +404,8 @@ float mel_to_hz(float mel);
 float hz_to_midi(float hz);      // A4 = 440Hz = 69
 float midi_to_hz(float midi);
 
-// Hz <-> ノート名
+// Hz <-> ノート名。変換できない入力には SonareException（InvalidParameter）を送出する:
+// 解析できないノート名やオクターブが範囲外のもの、有限の正数でない hz
 std::string hz_to_note(float hz);    // "A4", "C#5"
 float note_to_hz(const std::string& note);
 
@@ -498,6 +426,10 @@ std::vector<float> amplitude_to_db(const std::vector<float>& values,
 std::vector<float> db_to_power(const std::vector<float>& values, float ref = 1.0f);
 std::vector<float> db_to_amplitude(const std::vector<float>& values, float ref = 1.0f);
 ```
+
+C ABI では同じ 2 つの変換は例外を投げられないため、失敗を戻り値で示します。`float sonare_note_to_hz(const char* note)` は NaN を、`const char* sonare_hz_to_note(float hz)` は NULL を返し、そのとき `sonare_last_error_code()` は `SONARE_ERROR_INVALID_PARAMETER` で、詳細は `sonare_last_error_message()` にあります。`sonare_hz_to_note` の戻り値は次の呼び出しで上書きされるスレッドローカル領域なので、コピーして使い、解放しないでください。
+
+解析のチューニング単位（半音の端数。`[-0.5, 0.5)`）は、`sonare_tuning_to_reference_hz(tuning, a4, &hz)`（`a4 * 2^(tuning / 12)`）と `sonare_reference_hz_to_tuning(hz, a4, &tuning)` で、基準音を表す Hz との間で変換できます。`a4` の既定は `440` です。`sonare_scale_mask_for_mode(root, mode, &mask)` は `SonareMode` の 12 ビットのスケールマスクを、スケール量子化器と `SonarePitchCorrectionConfig` が読むレイアウトで返します。
 
 ## マスタリング
 
@@ -588,10 +520,12 @@ try {
 }
 ```
 
+C ABI では、戻り値の `SonareError` が結果で、詳細は `sonare_last_error_message()` にあります。ハンドルやポインタを返す関数は失敗を `NULL` で報告し、`sonare_last_error_code()` がメッセージと並んで記録された `SonareError`（なければ `SONARE_OK`）を返すので、呼び出し側は理由を知ることができます。入口でメッセージをクリアする呼び出しは、このコードもクリアします。`SONARE_ERROR_ABI_MISMATCH`（10）は、バインディングが読み込んだライブラリがビルド時に想定したものと違うと判断したときのためのコードで、C ライブラリ自身が返すことはありません。
+
 ## 各節の移動先
 
 | セクション | 移動先 |
 |---|---|
 | StreamAnalyzer | [C++ ストリーミング API](./cpp-api-streaming.md) |
 | 特徴抽出、型 | [C++ 解析 API](./cpp-api-analysis.md) |
-| エフェクト、ミキシングエンジン、C API | [C++ エフェクト API](./cpp-api-effects.md) |
+| エフェクト、ミキシングエンジン、C API、幾何ベースのルーム音響 | [C++ エフェクト API](./cpp-api-effects.md) |

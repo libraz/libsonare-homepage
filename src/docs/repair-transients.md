@@ -100,6 +100,28 @@ console.log(decrackled.leftReport, decrackled.rightReport);
 
 The detector and repair use signal-level thresholds, not a promise that every damaged sample can be restored. Clipping discards information; reconstruction estimates the missing shape from nearby samples. Keep the original and compare the result at a controlled playback gain.
 
+## Settings and accepted ranges
+
+Each option has an upper bound. A value above it throws `InvalidParameter` on every surface, including the named-processor path.
+
+| Stage | Option | Default | Accepted |
+|---|---|---|---|
+| Declick | `threshold` | `0.8` | `(0, 10]` |
+| Declick | `neighborRatio` | `4` | `(0, 100]` |
+| Declick | `maxClickSamples` | `8` | `[1, 512]`; 512 is the longest gap the AR fill solves |
+| Declick | `lpcOrder` | `20` | `[0, 2048]` |
+| Declick | `residualRatio` | `8` | `(0, 1000]` |
+| Declip | `clipThreshold` | `0.98` | `(0, 1]` |
+| Declip | `lpcOrder` | `36` | `[0, 2048]` |
+| Declip | `iterations` | `2` | `[1, 8]` |
+| Declip | `lpcBlend` | `0.65` | `[0, 1]` |
+| Decrackle | `threshold` | `0.4` | `(0, 1000]` |
+| Decrackle | `levels` | `4` | `[1, 24]` |
+
+Declick fills every selected run linearly between its two anchoring samples before any run is solved with the AR model, so the context an AR solve reads never contains a click that has not been repaired yet. Runs that touch or overlap, including those selected by different channels in the stereo form, are joined into one region, because a neighbouring click cannot anchor the fill.
+
+The causal stages, decrackle in median mode among them, also run as realtime inserts; declick and declip do not. See [Audio Repair Workflow](./audio-repair.md#realtime-inserts).
+
 ## Limits and the shared order
 
-The complete repair order is `declip → declick → decrackle → dehum → denoise → dereverb`. Clipping is first because a flat region can hide a click; the remaining impulsive stages run before spectral noise and reverb estimation. The functions here are offline whole-buffer operations and do not perform LUFS matching. For the broader decision flow, see [Audio Repair Workflow](./audio-repair.md), and for exact option types see the [JavaScript mastering API](./js-api-mastering.md).
+The complete repair order is `declip → declick → decrackle → dehum → denoise → dereverb`. Clipping is first because a flat region can hide a click; the remaining impulsive stages run before spectral noise and reverb estimation. The functions here are offline whole-buffer operations (decrackle also exists as a realtime insert) and do not perform LUFS matching. For the broader decision flow, see [Audio Repair Workflow](./audio-repair.md), and for exact option types see the [JavaScript mastering API](./js-api-mastering.md).

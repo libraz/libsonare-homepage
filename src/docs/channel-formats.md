@@ -48,7 +48,7 @@ Decoders disagree on channel order — AAC uses `C L R Ls Rs LFE`, some framewor
 
 ## Narrowing (Downmix)
 
-Every module above that renders a surround bus to something narrower — file loading, the mixer graph, project bounce, and the playback renderer — uses the same ITU-R BS.775 coefficients (`downmix` in the mixing module): 5.1 to stereo and 7.1 to 5.1/stereo fold the surround pair in at reduced level, keeping the LFE channel out of the arithmetic so it can be handled by the LFE rules above instead. See [Surround group buses and wide meters](./realtime-engine.md#surround-group-buses-and-wide-meters) for the mixer graph's own narrowing rule.
+Every module above that renders a surround bus to something narrower — file loading, the mixer graph, project bounce, and the playback renderer — uses the same ITU-R BS.775 coefficients (`downmix` in the mixing module): 5.1 to stereo and 7.1 to 5.1/stereo fold the surround pair in at reduced level, keeping the LFE channel out of the arithmetic so it can be handled by the LFE rules above instead. In JavaScript the same coefficients are exposed as `downmix(channels, targetLayout)`: centre and surround enter the front pair at -3 dB and the LFE plane is dropped. `decodeChannels(bytes)` keeps every channel of a file so you can narrow it yourself, and the browser-codec fallback of `Audio.fromMemoryWithBrowserFallback` folds to mono through this rule, so both decoders give the same samples. See [JavaScript/TypeScript Audio and Streaming API](./js-api-audio.md) for the signatures, and [Surround group buses and wide meters](./realtime-engine.md#surround-group-buses-and-wide-meters) for the mixer graph's own narrowing rule.
 
 The playback renderer's own conversion table, by source and target:
 

@@ -354,13 +354,16 @@ Its `transport` API covers play/stop, seek by seconds or PPQ (musical position i
 | Transport, tempo, markers | `getTransportState`, `cachedTransportState`, `setTempoSegments`, `setTimeSignatureSegments`, marker methods (incl. the replace-all `setMarkers`, which returns the resolved marker list — each entry carries its engine `id`), `setLoopFromMarkers` |
 | Clip updates | `addClip`, `removeClip` — sends incremental clip deltas to the worklet |
 | Meters and telemetry | `onMeter` / `onTelemetry` / `onScope`, `pollMeters` / `pollTelemetry` / `pollScope`; meter records carry master, lane, bus, and input target ids. Offline/main-thread engines can also drain wide meter records and scope snapshots |
-| Offline export | `renderOffline` on the main-thread mirror |
+| Offline export | `renderOffline`, `finishOfflineRender`, `bounceOffline`, `freezeOffline` on the main-thread mirror (see [Offline render, bounce, and freeze](#offline-render-bounce-and-freeze)) |
+| Processor state and timing | `resetProcessorState(renderFrame?)`, `tailSamples()`, `graphLatencySamplesQ8()` |
 
 On the worklet API, strip-addressing methods take a track id *or name* (`target: string | number`), and `setSoloMute(target, solo, mute)` resolves the lane index for you. `setTrackStripEqBand` accepts an `EqBand` object directly, so you rarely hand-build band JSON.
 
-`automationParamId(target, 'faderDb' | 'pan')` and `busAutomationParamId(busId)` return reserved engine parameter ids in the mixer namespace, so you can pass them straight to `setAutomationLane(paramId, points)` to automate a track or master fader or pan, or a bus fader (which resolves to its fader gain in dB), without first registering a custom parameter via `addParameter`. The `target`/`busId` declares the mixer lane/bus on first use.
+`automationParamId(target, 'faderDb' | 'pan')` and `busAutomationParamId(busId)` return reserved engine parameter ids, so you can pass them straight to `setAutomationLane(paramId, points)` to automate a track or master fader or pan, or a bus fader (which resolves to its fader gain in dB), without first registering a custom parameter via `addParameter`. The `target`/`busId` declares the mixer lane/bus on first use. A track or bus id names that track or bus, not its position: it keeps driving it across `setTrackLanes` and `setTrackBuses` reorders and the removal of others, and applies nothing once its track or bus is removed. Resolve ids through these methods rather than computing them; the main-thread mirror and the worklet engine number them identically.
 
 For Worklet-side scope snapshots, pass `scopeIntervalFrames`, `scopeBands`, and optionally `scopeSharedBuffer` / `scopeRingCapacity` to `SonareRealtimeEngineNode.create(...)`. The SAB scope ring keeps the render callback allocation-free; `pollScope()` drains it, and `onScope()` receives the same `SonareWorkletScopeSnapshot` shape. When SAB is unavailable or `mode: 'postMessage'` is selected, the processor sends each snapshot with transferred `Float32Array` buffers for `bands` and `points`; `onScope()` receives the same shape, while `pollScope()` returns an empty array because there is no ring. The postMessage fallback materializes the bounded arrays for each snapshot before transfer. The lower-level `createSonareScopeRingBuffer(...)` and `readSonareScopeRingBuffer(...)` helpers are exported for custom shared-ring bridges.
+
+Meter snapshots reach `onMeter` the same way on both transports. A target wider than stereo (a 5.1 or 7.1 bus) adds `channelCount` plus per-plane `peakDb`, `rmsDb`, `truePeakDb`, and `inputPeakDb` arrays in canonical WAVE channel order; the stereo fields always hold planes 0 and 1. The SAB meter ring record is `SONARE_METER_RING_RECORD_FLOATS` (49) floats, and header slot 3 carries `SONARE_METER_RING_PROTOCOL_VERSION` (2). Size a custom reader from those constants, and do not share a ring between a main thread and a worklet from different package versions.
 
 ```typescript
 import { SonareEngine } from '@libraz/libsonare/worklet';
@@ -385,150 +388,87 @@ console.log(offline[0].length);
 engine.destroy();
 ```
 
+`SonareEngine.create`, `SonareRealtimeEngineNode.create`, the playback node, and `SonareStreamAnalyzerNode.create` take an optional `sampleRate`. The worklet always runs at the `AudioContext`'s rate, so a value that differs from `audioCtx.sampleRate` throws `RangeError` before any node exists; omit it.
+
+### Offline render, bounce, and freeze
+
+`renderOffline`, `bounceOffline`, and `freezeOffline` run on the facade's main-thread engine and block the calling thread for the whole render, so run long jobs where blocking is acceptable. Each returns after restoring the mirror's transport position, and OPFS-streamed clips are paged in for the span first. `bounceOffline` and `freezeOffline` take the options of the raw engine's methods of the same name and return its results; see [Realtime Engine](./realtime-engine.md).
+
+| Call | Behaviour |
+|------|-----------|
+| `renderOffline(totalFrames)` | Renders from the current position and returns one planar buffer per offline channel. |
+| `renderOffline({ totalFrames, blockSize?, finalize? })` | The request form. `blockSize` defaults to the engine's offline block size and must not exceed it (`RangeError`). `finalize: false` renders one chunk of a longer timeline, leaving held notes and delay tails running into the next call. |
+| `finishOfflineRender()` | Ends a chunked series: releases held notes, flushes the delay lines, and restores the transport position. |
+| `bounceOffline(options)` | Bounces the timeline to an interleaved buffer. `blockSize` has the same ceiling. |
+| `freezeOffline(options)` | Freezes the source layer into one clip. The facade, the mirror, and the worklet then hold only that clip. |
+
+```typescript
+const total = 4 * 48000;
+const chunkFrames = 48000;
+const left: Float32Array[] = [];
+for (let done = 0; done < total; done += chunkFrames) {
+  const last = done + chunkFrames >= total;
+  const chunk = await engine.renderOffline({
+    totalFrames: Math.min(chunkFrames, total - done),
+    finalize: last,
+  });
+  left.push(chunk[0]);
+}
+```
+
+Every offline entry point resets the mirror's mixer and effect processors to their prepared state first, so two renders of the same span are identical. `resetProcessorState(renderFrame?)` exposes that reset for the live engine: it cuts running insert tails and delay lines like a seek, applies at `renderFrame` (omitted: the next block head), and leaves instruments alone. `tailSamples()` is an upper bound on the longest audible tail in samples (`2147483647` means unbounded), and `graphLatencySamplesQ8()` is the processing latency in 1/256 samples; both answer from the mirror.
+
+### Node-level control and polling
+
+`engine.node` is the `SonareRealtimeEngineNode`; use it directly for sample-accurate commands and for draining the worklet's output queues.
+
+| Method | Use |
+|--------|-----|
+| `play`, `stop`, `seekSample(timelineSample, sampleTime?)`, `seekPpq(ppq, sampleTime?)`, `resetProcessorState`, `resetMasterLoudnessMeter` | Queue a transport or reset command at an absolute `sampleTime`. Omit it to apply at the next block head; a negative value throws `RangeError`. Each returns whether the command was queued. |
+| `hasCommandRoom()` | Whether one more well-formed command would fit the queue now; queues nothing. |
+| `requestTransportState()` | Resolves with the worklet's own transport state. |
+| `requestCaptureStatus()`, `requestCapturedAudio()`, `requestCaptureReset()` | Read the capture buffer held in the worklet. |
+| `pollMidiOut()` / `onMidiOut(cb)` | Drain external-MIDI events already lowered to MIDI 1.0 bytes, for a Web MIDI output port. While `onMidiOut` is subscribed it consumes the ring, so a manual poll sees only what arrived since. |
+| `pollClipPageRequests()` / `onClipPageRequests(cb)` | Drain batches of clip-page misses for your own paging code. |
+| `onSyncError(cb)` | Receives control messages the worklet rejected; returns an unsubscribe function. |
+
+### Analyzing a graph branch
+
+`SonareStreamAnalyzerNode` runs a `StreamAnalyzer` against any node in your audio graph without writing a processor. The worklet side only averages the input channels to mono and transfers fixed-size chunks (`chunkFrames`, default 4096, at least 128); the analyzer runs on the main thread, so it needs no WASM in the worklet realm and no `SharedArrayBuffer`, and its frames lag the audio by about one chunk. The node has one input and no output.
+
+```typescript
+// analyzer-worklet.ts
+import { registerSonareStreamAnalyzerWorkletProcessor } from '@libraz/libsonare/worklet';
+
+registerSonareStreamAnalyzerWorkletProcessor();
+```
+
+```typescript
+// main.ts
+import { init } from '@libraz/libsonare';
+import { SonareStreamAnalyzerNode } from '@libraz/libsonare/worklet';
+
+await init();
+await audioCtx.audioWorklet.addModule('/analyzer-worklet.js');
+const analyzer = await SonareStreamAnalyzerNode.create(audioCtx, {
+  config: { nMels: 64 },
+});
+source.connect(analyzer.node);
+
+const stopFrames = analyzer.onFrames((frames) => draw(frames.mel, frames.nFrames));
+const stopStats = analyzer.onStats((stats) => console.log(stats.estimate.bpm));
+
+// Later:
+stopFrames();
+stopStats();
+analyzer.destroy();
+```
+
+`config` takes the same fields as `new StreamAnalyzer(...)`; `sampleRate` defaults to the context's and any other value throws `RangeError`. `onFrames` delivers the `readFrames` format, and `onStats` fires when the key or tempo estimate was re-estimated. If a chunk is dropped or the processor restarts, the analyzer's sample offset is reset rather than splicing the two streams together.
+
 ::: tip Worklet sync messages
 `SonareEngine` runs the full embind engine inside the worklet. If your host worklet entry filters message names before forwarding, allowlist every `sync*`, `captureRequest`, and `transportRequest` message — otherwise lane/strip/MIDI sync messages are silently dropped.
 :::
-
-## Paged clip audio streaming
-
-A long arrangement can hold more clip audio than fits in memory at once. The engine streams clip audio in **pages**: instead of one giant buffer, a clip is backed by a *clip page provider* that hands the engine fixed-size pages on demand.
-
-The flow is lock-free by design:
-
-1. The render thread needs a page it does not have yet and pushes a request onto a **wait-free page-request queue**.
-2. The main thread drains that queue with `engine.popClipPageRequest()`, reads the audio for the requested page from storage, and calls `provider.supply(pageIndex, channels)`.
-3. When a page is no longer needed, `provider.clear(pageIndex)` releases it.
-4. Separately, the render thread also reports the pages it is *about to* read and does not have yet, so the host can supply them before the playhead arrives. See [Look-ahead](#look-ahead) below.
-
-Because the audio thread only enqueues requests and reads already-supplied pages, it never blocks on storage or allocation.
-
-<FlowDiagram
-  title="Lock-free paged-clip page handoff"
-  direction="TB"
-  :nodes="[
-    { id: 'need', label: 'Render thread needs page N', col: 0, row: 0, variant: 'accent', group: 'audio' },
-    { id: 'push', label: 'Push request onto wait-free queue', col: 0, row: 1, variant: 'accent', group: 'audio' },
-    { id: 'pop', label: 'popClipPageRequest() drains queue', col: 1, row: 2, group: 'main' },
-    { id: 'read', label: 'Read page audio from storage', col: 1, row: 3, group: 'main' },
-    { id: 'supply', label: 'provider.supply(pageIndex, channels)', col: 1, row: 4, variant: 'success', group: 'main' },
-    { id: 'consume', label: 'Render thread reads supplied page', col: 0, row: 5, variant: 'success', group: 'audio' },
-    { id: 'clear', label: 'provider.clear(pageIndex)', col: 1, row: 6, variant: 'muted', group: 'main' }
-  ]"
-  :edges="[
-    { from: 'need', to: 'push' },
-    { from: 'push', to: 'pop', label: 'page request' },
-    { from: 'pop', to: 'read' },
-    { from: 'read', to: 'supply' },
-    { from: 'supply', to: 'consume', label: 'page ready' },
-    { from: 'consume', to: 'clear', label: 'no longer needed', style: 'dashed' }
-  ]"
-  :groups="[
-    { id: 'audio', label: 'Audio / render thread' },
-    { id: 'main', label: 'Main thread' }
-  ]"
-  caption="The audio thread only enqueues a request and reads pages already supplied; the slow storage read runs on the main thread."
-/>
-
-::: info Lock-free and wait-free, for beginners
-A realtime audio thread must not pause — if it stalls for even a moment, the output glitches. **Lock-free** means the audio thread never waits to acquire a lock that another thread holds. **Wait-free** is the stronger guarantee used here: pushing a page-miss request onto the page-request queue always finishes in a bounded number of steps, so the audio thread never spins or blocks waiting on it. The slow part — reading the page from storage — happens on the main thread instead.
-:::
-
-### Look-ahead
-
-Reporting a miss only when the read has already happened is too late to be silent: the read produced silence for that block, and the host learns about it afterwards. At every page boundary it has not primed, that costs one block of silence. So the player also reports the pages it is about to reach.
-
-`prepare(...)` sets the look-ahead window to **half a second** at the engine's sample rate, and `setClipPagePrefetchFrames(frames)` changes it while audio is running (`clipPagePrefetchFrames()` reads it back; `0` disables the look-ahead entirely). The C entry points are `sonare_engine_set_clip_page_prefetch_frames` and `sonare_engine_clip_page_prefetch_frames`, and the `SonareEngine` worklet facade forwards the setter to both the worklet engine and this thread's offline engine.
-
-Look-ahead requests drain through the same `popClipPageRequest()` queue, and within a block they are queued **after** that block's genuine misses. A host that keeps only the newest request per clip therefore tracks the look-ahead frontier rather than a stale miss. The read-then-miss reporting above is unchanged and still runs, so a host that simply ignores look-ahead requests behaves exactly as it would without them. A clip whose pages are all resident produces no requests at all, either way.
-
-::: info This is not the `ClipPageStreamer` window
-Two different mechanisms sit on top of each other, and you want both. The look-ahead here is the **engine's** — the audio thread telling you which pages it is heading for. `ClipPageStreamer`'s `readAheadPages` / `retainBehindPages` (below) is the **JS-side** sliding window that decides how much audio stays resident in WASM memory. The engine's look-ahead tells the streamer what to fetch; the streamer's window decides what to keep.
-:::
-
-### OPFS-backed provider in the browser
-
-The package ships a ready-made provider that reads pages from the [Origin Private File System (OPFS)](https://developer.mozilla.org/docs/Web/API/File_System_API/Origin_private_file_system) on a worker, so disk reads stay off the main thread. The clip lives in OPFS as raw interleaved `Float32` (`L0, R0, L1, R1, …`), optionally behind a header you skip with `dataOffsetBytes`; only the pages inside the current window are ever in WASM memory.
-
-Four exports make up the mechanism, and they nest: each one is built from the one above it.
-
-| Export | What it is |
-|--------|------------|
-| `opfsClipPageWorkerSource` | A JavaScript **string**, not a function: the source text of the page-reading worker. Given a page index it opens the file with a synchronous access handle, reads `pageFrames` frames from `dataOffsetBytes + pageIndex * pageFrames * numChannels * 4`, de-interleaves them into one buffer per channel, and posts those buffers back with a transfer list. Reads for one `path` are serialized inside the worker. Use it only to bundle the worker yourself, for example under a CSP that forbids `blob:` workers. |
-| `createOpfsClipPageWorker()` | `new Worker(...)` over a Blob URL of that source; the URL is revoked right after construction. Called for you when no `worker` is passed. |
-| `createOpfsClipPageProvider(engine, options)` | Creates the engine-side `ClipPageProvider` (`engine.createClipPageProvider(numChannels, numSamples, pageFrames)`) and pairs it with the worker. Returns a binding: `provider`, `supplyPage(pageIndex)`, `supplyRequest(request)`, `clearPage(pageIndex)`, `close()`. Throws unless `numChannels`, `numSamples`, and `pageFrames` are all positive. |
-| `attachOpfsClipStream(streamer, engine, options)` | The one-call path for a session: builds the binding, primes the first `primePages` pages (default `1`) so playback can start without a miss, and registers the clip with a `ClipPageStreamer`. Returns `{ binding, provider }`. |
-
-Servicing one clip by hand:
-
-```typescript
-import { createOpfsClipPageProvider } from '@libraz/libsonare';
-
-const binding = createOpfsClipPageProvider(engine, {
-  path: 'clips/long-take.f32',  // interleaved Float32 in OPFS
-  numChannels: 2,
-  numSamples: totalFrames,      // total frames in the file
-  pageFrames: 65536,            // page size in frames
-  // dataOffsetBytes?: skip a header
-  // worker?: reuse your own Worker; it is left running on close()
-  //          unless terminateWorkerOnClose: true
-});
-
-// In a UI tick, service whatever the render thread asked for:
-let request;
-while ((request = engine.popClipPageRequest()) !== null) {
-  await binding.supplyRequest(request);  // reads and passes that page to the provider
-}
-
-// Later:
-binding.close();  // releases the provider and (if owned) terminates the worker
-```
-
-`supplyRequest(request)` maps a popped request's sample position to a page index (`Math.floor(request.sample / pageFrames)`); `supplyPage(pageIndex)` prefetches a page directly. Both resolve `true` once the page is resident and `false` for a page outside the file or a short read; after `close()` they reject. Supplies through one binding run one at a time, in call order. One `Worker` can serve several bindings, since each binding only answers its own request ids.
-
-#### Where SharedArrayBuffer matters, and where it does not
-
-Page **data** never needs `SharedArrayBuffer`. The worker hands each page over as transferred `ArrayBuffer`s, so ownership moves to the main thread without a copy, and `provider.supply(...)` then copies the channels into WASM memory. On the worklet facade the main thread forwards the same buffers into the `AudioWorklet` by transfer again. This site, and the engine's browser build as it ships here, run without cross-origin isolation, and that whole path works as is.
-
-What does need it is the **request** direction on the worklet facade. A page miss originates on the render thread, and the facade only accepts it through the shared request ring that `SonareRealtimeEngineNode.create(...)` sets up in `'sab'` mode, polled from the main thread every 8 ms; a `postMessage` from the render thread is not treated as realtime-safe. `SonareEngine.attachOpfsClipStream(options)` therefore throws when `capabilities.clipPageRequestsRealtimeSafe` is `false`. Without COOP/COEP headers, OPFS paging is available for a main-thread `RealtimeEngine` (offline render, or your own scheduling), where `popClipPageRequest()` is a direct call, and not for the worklet facade.
-
-On the facade the call takes two arguments, `attachOpfsClipStream(engine, options)`, with no streamer: the facade keeps its own `ClipPageStreamer` and pumps it from the request ring. Pass the returned `provider` to `engine.addClip(trackId, provider, startPpq, { id: clipId })`, with `opts.id` equal to `options.clipId`; the facade rejects a `pageProvider` it did not create this way.
-
-::: warning OPFS support varies by browser
-The OPFS provider relies on `navigator.storage.getDirectory()` and synchronous access handles, which are available in current Chromium and Firefox and in WebKit on recent Safari, but not in older browsers. Feature-detect before using it, and keep a fully in-memory provider (or your own `ClipPageProvider` loaded from any source) for environments without OPFS.
-:::
-
-### Bounded-window streaming across many clips
-
-The loop above services one provider by hand. For a multitrack arrangement you usually want the resident audio bounded no matter how many clips play or how long they are. `ClipPageStreamer` does that: it keeps only a sliding window of pages around each clip's live playback position — `retainBehindPages + readAheadPages + 1` pages per clip — fetching misses ahead of time and evicting pages that fall behind, so a whole session never holds its full PCM in WASM memory.
-
-`attachOpfsClipStream(...)` wires one OPFS-backed clip into a shared streamer in a single call: it builds the provider, primes the leading pages so playback starts without an immediate miss, and registers the clip for windowed eviction.
-
-```typescript
-import { ClipPageStreamer, attachOpfsClipStream } from '@libraz/libsonare';
-
-const streamer = new ClipPageStreamer(engine, { readAheadPages: 2, retainBehindPages: 1 });
-
-// Attach each long clip; `provider` goes into the clip schedule.
-const take = await attachOpfsClipStream(streamer, engine, {
-  clipId: 1,                    // matches the page-miss request clipId
-  path: 'clips/long-take.f32',
-  numChannels: 2,
-  numSamples: totalFrames,
-  pageFrames: 65536,
-});
-engine.setClips([{ clipId: 1, /* ...timing... */ pageProvider: take.provider }]);
-
-// Drain misses on a control-thread cadence (once per animation frame is typical):
-function tick() {
-  streamer.pump();              // fetch missing pages + read-ahead, evict out-of-window
-  requestAnimationFrame(tick);
-}
-
-// Teardown closes every attached clip's binding:
-streamer.close();
-```
-
-Call `pump()` on the main or control thread only — never the audio thread, since the fetches are asynchronous. Use `addSource`/`removeSource` to attach or drop clips you built providers for yourself. After an explicit seek or loop, call `resetSource(clipId)` to evict the old playback window and start a new fetch generation; backward page misses also trigger this reset automatically, preventing an older in-flight fetch from becoming resident after the seek.
 
 ## Display waveform peaks
 

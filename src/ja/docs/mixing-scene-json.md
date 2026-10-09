@@ -47,10 +47,20 @@ description: ミキサーシーンの交換形式を解説。ストリップ・�
 | `vcaGroups` | array | 複数ストリップを一括調整するレベルグループ（[VCA グループ](#vca-グループ)参照） |
 | `connections` | array | ルーティンググラフの辺（[接続](#接続)参照） |
 
-::: warning ローダーは未知のキーを読み飛ばすが、スキーマは飛ばさない
-パーサーは認識しないシーンフィールドを無視するため、前方互換のプロデューサは古いリーダーを壊さずにメタデータを追加できます。裏を返せば、**綴り間違いのシーンキーは黙って捨てられます** — `processorName`（誤）と `processor`（正）、あるいは `faderDb` のつもりの `faderDB` は、エラーも出さずにフェーダーを既定値のまま据え置きます。同梱のスキーマはまさにこの穴を塞ぎます。スキーマ内のすべてのオブジェクトが `additionalProperties: false` なので、バリデータがファイルの読み込み前に綴り間違いを報告します。
+::: warning ローダーは未知のキーを受け入れ、報告する
+パーサーは認識しないフィールドを含むシーンも読み込むため、前方互換のプロデューサは古いリーダーを壊さずにメタデータを追加できます。`$` または `x-` で始まるキーはそのための予約で、報告されません。それ以外でリーダーが消費しなかったキーはタイプミスの可能性が高く、効果を持ちません。`processorName`（誤）と `processor`（正）、あるいは `faderDb` のつもりの `faderDB` では、フィールドが既定値のまま据え置かれます。
 
-インサートの `params` キーには別のセーフティネットがあります。シーンの読み込み後、どのプロセッサも消費しなかったパラメータキーは**非致命的な警告**として `Mixer.sceneWarnings()`（Python は `scene_warnings()`）から読み出せます。シーン自体は読み込まれ、未知のキーは単に効果を持たないだけです — 「効かないつまみ」を探し回る代わりに、読み込み直後に警告を確認してタイプミスを見つけてください。インサートが実際に読むキーの一覧は `masteringInsertParamNames(name)`（Python は `mastering_insert_param_names(name)`）で列挙できます。
+こうしたキーはすべて、ドキュメントのルートからのパスつきで**非致命的な警告**として報告されます。例: `unknown scene key 'strips[0].faderDB'`。シーン自体は読み込まれます。「効かないつまみ」を探し回る代わりに、読み込み直後に警告を確認してください。
+
+- `Mixer.fromSceneJson(...)` の後の `Mixer.sceneWarnings()`（Python は `scene_warnings()`）
+- `Project.setMixerSceneJson(...)`（Python は `set_mixer_scene_json`）が返す文字列リスト。シーンが問題なければ空です
+- `Project.fromJsonWithDiagnostics(...)` が `diagnostics` テキストで返す診断 `unknown_scene_key`。プロジェクト文書に埋め込まれたシーンが対象で、パスは `scene.strips[2].faderDB` のようになります（`Project.fromJson` は同じ文書を読み込み、診断は捨てます）。プロジェクト文書のそれ以外の部分は、未知のキーを検査しません
+
+インサートの `params` キーも同じリストに載ります。どのプロセッサも消費しなかったパラメータキーも報告されます。インサートが実際に読むキーの一覧は `masteringInsertParamNames(name)`（Python は `mastering_insert_param_names(name)`）で列挙できます。
+
+同梱のスキーマは、読み込みの前に同じ誤りを捕まえます。スキーマ内のすべてのオブジェクトが `additionalProperties: false` なので、バリデータが検証の時点で綴り間違いを報告します。
+
+ライブエンジンのセッターは、シーン全体の読み込みより厳格です。`setTrackStripJson`、`setBusStripJson`、`setMasterStripJson`（およびその上に載る Node・WASM・Python のセッター）と、ストリップの EQ バンドセッター（`setTrackStripEqBand`、`setTrackStripEqBandJson`、バスとマスターの対応メソッド）は、消費しないキーを `InvalidParameter` で**拒否**し、メッセージにそのキーを示します: `unknown strip key 'strips[0].faderDB'`、`unknown band key 'gainDB'`。レガシーの snake_case 表記と `$` / `x-` のキーは受理されます。
 :::
 
 ## ストリップ
@@ -89,17 +99,17 @@ description: ミキサーシーンの交換形式を解説。ストリップ・�
 インサートの `slot` とセンドの `timing` は**必ず文字列で指定してください**。`"timing": 1` のような文字列以外の値は、読み込み時に `send timing must be a string ("pre" or "post")` という理由で拒否されます。常に `"pre"` か `"post"` と書いてください。
 :::
 
-::: warning シーンが拒否されたときの届き方は実行環境ごとに異なります
-シーンの構築を止める要因 — 壊れた JSON、範囲外のフィールド、文字列でない `timing` — は、同じ実行環境の中ではすべて同じ形で失敗します。ただし実行環境どうしでは形が揃っていません。具体的な理由はメッセージに載りますが、エラーの型で分岐しても意味がありません。
+::: warning シーンが拒否されたときの届き方
+シーンの構築を止める要因 — 壊れた JSON、未対応の `version`、範囲外のフィールド、文字列でない `timing` — は、C ABI 自身のコードと具体的な理由つきのメッセージで報告されます。
 
-| 実行環境 | 受け取るもの | 内側の理由 |
-|----------|--------------|------------|
-| WASM | `InvalidState`、メッセージは `failed to build mixer from scene JSON: <reason>` | 保持される |
-| Node ネイティブ | 型のない `Napi::Error`、メッセージは同じ | 保持される |
-| Python | 素の `RuntimeError` | **落ちる** — メッセージは `failed to build mixer from scene JSON` のみ |
-| C ABI | `sonare_mixer_from_scene_json` が `nullptr` を返す | `sonare_last_error_message()` を読む |
+| 実行環境 | 受け取るもの | コード |
+|----------|--------------|--------|
+| WASM | `SonareError`、メッセージは `failed to build mixer from scene JSON: <reason>` | 壊れた文書は `InvalidFormat`、未対応の version や範囲外のフィールドは `InvalidParameter` |
+| Node ネイティブ | 同じメッセージとコードの `SonareError` | 同上 |
+| Python | 同じメッセージとコードの `SonareError` | 同上 |
+| C ABI | `sonare_mixer_from_scene_json` が `nullptr` を返す | `sonare_last_error_code()`。理由は `sonare_last_error_message()` |
 
-例外からフィールド名を読み取ろうとするのではなく、ミキサーへ渡す前にシーンを検証してください。Python では例外と一緒にシーンそのものをログへ残してください。メッセージだけでは、どのフィールドが不正だったかは分かりません。
+分岐には `code` を使い、どのフィールドが不正だったかはメッセージをログで確認してください。ミキサーへ渡す前にシーンを検証すれば、パス付きのメッセージを最も早く得られます。
 :::
 
 ::: details フィールド用語: デュアルパン・ポラリティ反転・パンロー・PDC
@@ -122,6 +132,8 @@ description: ミキサーシーンの交換形式を解説。ストリップ・�
 
 ::: info サイドチェインとダッキング
 通常、プロセッサは自分を通過する音声に反応します。**サイドチェイン**を使うと、代わりに*別の*トラックに反応させられます。`sidechainKey` がその別ストリップを指定します。定番の用途は**ダッキング**です。音楽側にかけたコンプが、指定した声のストリップが大きいときに音楽を下げ、音楽ベッドの上で話声をクリアに保ちます。
+
+ライブの[リアルタイムエンジン](./realtime-engine.md)では、サイドチェインのキーを `setLaneSidechain`・`setBusSidechain`・`setMasterSidechain` でバインドします。ストリップ自身をキーにする、またはサイクルを閉じるバインドは `InvalidParameter` で拒否されます。`canSetLaneSidechain(trackId, insertIndex, sourceTrackId)`、`canSetBusSidechain`、`canSetMasterSidechain` は何も変更せずに同じ問いに答え、`{ ok, reason }` を返します（例: `{ ok: false, reason: 'selfKey' }` や `'cycle'`）。そのため UI は、不可能な選択をユーザーが行う前に無効化できます。
 :::
 
 ::: warning `params` はオブジェクト。エスケープ文字列の形はレガシー
@@ -236,11 +248,11 @@ check-jsonschema \
 
 ### スキーマとローダーの食い違い
 
-スキーマは、ローダーが誤りを黙って受け入れてしまう箇所ではローダーより**厳しく**なるように書かれています。逆方向では、スキーマが開けたままにしている境界をローダーがいくつか強制し、スキーマでは表現できない参照をミキサーの構築が検査します。まず検証し、次に読み込み、それから `sceneWarnings()` を読む — 各層は前の層が捕まえられないものを捕まえます。
+スキーマは、ローダーが誤りを黙って受け入れてしまう箇所ではローダーより**厳しく**なるように書かれています。逆方向では、スキーマが開けたままにしている境界をローダーがいくつか強制し、スキーマでは表現できない参照をミキサーの構築が検査します。まず検証し、次に読み込み、それから `sceneWarnings()`（または `Project.setMixerSceneJson` が返すリスト）を読む — 各層は前の層が捕まえられないものを捕まえます。
 
 | 入力 | スキーマ | ローダー |
 |------|----------|----------|
-| 未知または綴り間違いのキー（`faderDB`） | 拒否（`additionalProperties: false`） | 黙って無視。フィールドは既定値のまま |
+| 未知または綴り間違いのキー（`faderDB`） | 拒否（`additionalProperties: false`） | 効果なしで読み込まれ、`sceneWarnings()` に報告される。フィールドは既定値のまま。ライブのストリップ／EQ バンドセッターは拒否する |
 | レガシーの snake_case キー（`fader_db`、`params_json`、`processor_name`、`destination_bus_id`、`vca_groups` など） | 拒否 | 受理。ライターはこの綴りを書き出さない |
 | エスケープした JSON 文字列の `params` | 拒否（`type: object`） | レガシー形として受理 |
 | `version` の欠落 | 拒否（`required`） | `1` とみなす |

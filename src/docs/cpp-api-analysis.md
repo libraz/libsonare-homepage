@@ -163,6 +163,41 @@ nnls_config.enable_stft_blend = true;
 auto nnls_result = nnls_chroma(audio, nnls_config);
 ```
 
+## C ABI analysis additions
+
+These are declared in `sonare_c_features.h`, `sonare_c_types_functions.h` and `sonare_c.h`; the struct versions and defaults they depend on are under [C ABI versions](./cpp-api.md#c-abi-versions).
+
+| Function | Purpose |
+|----------|---------|
+| `sonare_detect_key_with_tuning(...)` | Key detection with a recording `tuning` (a fraction of a semitone in `[-0.5, 0.5)`) or `tuning_auto` to measure it; `out_tuning` receives the value used |
+| `sonare_chord_functions(chords, count, key_root, key_mode, &roman, &functions)` | Roman numeral and harmonic function of chords already in hand, as two `SonareStringArray`s of `count` entries released with `sonare_free_string_array`; no audio is analysed |
+| `sonare_tuning_to_reference_hz`, `sonare_reference_hz_to_tuning` | Convert between the analysis tuning unit and a reference in Hz |
+| `sonare_scale_mask_for_mode(root, mode, &mask)` | The 12-bit scale mask of a `SonareMode`, in the layout `sonare_scale_quantize_midi` and `SonarePitchCorrectionConfig` read |
+| `sonare_mfcc_to_mel_checked_ex(mfcc, input_length, n_mfcc, n_frames, n_mels, lifter, &out)` | Length-checked, lifter-aware MFCC-to-Mel inversion; `lifter` is the one the forward transform used (`0` = none) |
+| `sonare_mfcc_to_audio_checked_ex2(...)` | Length-checked MFCC-to-audio inversion with `htk` and `lifter` |
+
+`SonareMelResult` and `SonareMfccResult` carry the parameters of their forward transform (`n_fft`, `fmin`, `fmax` as applied, `htk`, `is_db`; MFCC also `sample_rate`, `hop_length`, `n_mels`, `lifter`), so a result is enough to invert it. `sonare_analyze_json_ex` takes a `SonareMusicAnalyzeOptions` whose `tuning` and `tuning_auto` fields select the tuning, and its JSON reports the value used under `tuning`.
+
+## Structural boundaries
+
+`BoundaryDetector` finds section transitions from a checkerboard-kernel novelty curve over MFCC and chroma features. `BoundaryConfig` exposes the detector's parameters; the two thresholds do different jobs.
+
+```cpp
+BoundaryConfig config;
+config.threshold = 0.3f;            // relative: fraction of the local novelty maximum
+config.absolute_threshold = 0.005f; // floor on the raw response: did anything change at all?
+config.reference_window = 60.0f;    // one-sided seconds the relative threshold is measured over
+
+BoundaryDetector detector(audio, config);
+for (const Boundary& b : detector.boundaries()) {
+  // b.time (seconds), b.strength (novelty scaled by the whole-track maximum)
+}
+```
+
+`threshold` is measured against the largest raw novelty event within `reference_window` seconds of the peak, with a lone dominant event set aside, so a dominant change further away than the window cannot gate a weaker one out. `0` makes each frame its own reference and disables `threshold`; a value at least the track length makes the reference whole-track. Because the reference is local, `Boundary::strength` (scaled by the whole-track maximum, a rank within the track) can be below `threshold`.
+
+The C ABI is `sonare_detect_boundaries(samples, length, sample_rate, &options, &out)` with a `SonareBoundaryOptions` that must start from `sonare_boundary_options_default()`: zeroing it sets `absolute_threshold` to 0, which segments a stationary input anyway. Release the result with `sonare_free_boundary_result`.
+
 ## Types
 
 ### Key
@@ -176,7 +211,12 @@ struct Key {
   std::string to_string() const;  // "C major"
   std::string to_short_string() const; // "C", "Am"
 };
+
+// Spell a key from raw ordinals, as to_string / to_short_string do ("" when root is not 0-11)
+std::string key_name(int root, bool minor, bool short_form);
 ```
+
+`KeyConfig::tuning`, `ChordConfig::tuning` and `MusicAnalyzerConfig::tuning` are a recording's offset from concert A440 in fractions of a semitone, in `[-0.5, 0.5)`. Set `auto_tuning = true` on any of the three to measure it from the audio (`measure_tuning(audio)` in `feature/pitch.h`) instead; `KeyAnalyzer::tuning()`, `ChordAnalyzer::tuning()` and `MusicAnalyzer::tuning()` report the value used, and `AnalysisResult::tuning` carries it. `tuning_to_reference_hz(tuning, a4 = 440)` and `reference_hz_to_tuning(hz, a4 = 440)` in `feature/chroma.h` convert to and from the Hz a reference pitch is stated in.
 
 ### Chord
 
@@ -191,7 +231,12 @@ struct Chord {
 
   std::string to_string() const;  // "C", "Am", "G7"
 };
+
+// Spell a chord from raw root / quality ordinals ("N.C." for no chord; never throws)
+std::string chord_symbol(int root, int quality);
 ```
+
+`ChordAnalyzer::chord_to_roman_numeral(chord, key_root, mode)` returns the Roman numeral of a chord in a key (`"N.C."` for an unknown chord), and `ChordAnalyzer::chord_function(chord, key_root, mode)` its harmonic function: `"tonic"`, `"subdominant"`, `"dominant"`, `"chromatic"` for a root outside the key's scale, or `"none"` for an unknown chord. Every mode other than minor reads the major scale. Both are static and analyse no audio.
 
 ### Section
 
@@ -226,6 +271,7 @@ struct AnalysisResult {
   RhythmFeatures rhythm;
   MelodyContour melody;
   std::string form;  // "IABABCO"
+  float tuning;      // fractions of a semitone the chromagrams were built with (given or measured)
 };
 ```
 

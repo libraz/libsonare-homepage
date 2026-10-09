@@ -112,10 +112,11 @@ const estimate = estimateRoom(roomRecording, sampleRate, {
   referenceAbsorption: 0.15,
   nOctaveBands: 6,
 });
-console.log(estimate.volume, estimate.length, estimate.width, estimate.height);
-console.log(estimate.drrDb, estimate.confidence, estimate.absorptionBands, estimate.rt60Bands);
+console.log(estimate.volume, estimate.lengthM, estimate.widthM, estimate.heightM);
+console.log(estimate.drrDb, estimate.confidence, estimate.bandAbsorption, estimate.rt60Bands);
 
-const { rir, hasError } = synthesizeRir({
+// 使えない形状（例: acoustic.source_outside_room）は、コード付きの SonareError を投げる
+const { rir, diagnostics: rirWarnings } = synthesizeRir({
   lengthM: 7,
   widthM: 5,
   heightM: 3,
@@ -156,11 +157,11 @@ blind = sonare.detect_acoustic(
 print(blind.confidence, blind.is_blind)
 
 estimate = sonare.estimate_room(audio.data, audio.sample_rate, n_octave_bands=6)
-print(estimate.volume, estimate.length, estimate.width, estimate.height)
+print(estimate.volume, estimate.length_m, estimate.width_m, estimate.height_m)
 print(estimate.drr_db, estimate.confidence, estimate.absorption_bands, estimate.rt60_bands)
 
 rir = sonare.synthesize_rir(7.0, 5.0, 3.0, absorption=0.2, sample_rate=audio.sample_rate)
-print(rir.sample_rate, len(rir.rir), rir.has_error)
+print(rir.sample_rate, len(rir.rir), rir.diagnostics)
 
 morphed = sonare.room_morph(
     audio.data,
@@ -200,14 +201,14 @@ Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_
 
 ここは、録音を測るだけでなく、部屋モデルを作る・適用する API の説明です。
 
-`synthesizeRir(...)` は、直方体の部屋からモノラル RIR を作ります。寸法はメートル、壁は一様な吸音率、音源と聴取位置は部屋の内側の座標で指定します。形状が不正な場合、JavaScript は `hasError: true` と空の `rir` を返し、Python では同じ状態を `has_error` として読めます。
+`synthesizeRir(...)` は、直方体の部屋からモノラル RIR を作ります。寸法はメートル、壁は一様な吸音率、音源と聴取位置は部屋の内側の座標で指定します。音源や聴取位置が部屋の外にあるなど、使えない形状は、コード付きの `SonareError` として例外になります。メッセージは診断コード（例: `acoustic.source_outside_room`）で始まり、Python では `SonareValueError` です。正常に返った呼び出しの `diagnostics` には警告だけが入ります。
 
-`estimateRoom(...)` は、録音から等価ルームを推定します。正確な実空間を復元するものではありません。通常録音には部屋の減衰がはっきり出ていないことがあるため、必ず `confidence` を確認してください。
+`estimateRoom(...)` は、録音から等価ルームを推定します。正確な実空間を復元するものではありません。通常録音には部屋の減衰がはっきり出ていないことがあるため、必ず `confidence` を確認してください。`mode` オプションは解析器の経路を名前で選びます。`'auto'`（既定）、`'blind'`、`'impulse_response'` のいずれかで、数値を渡すと `TypeError` になります。
 
 ::: warning `estimateRoom(...)` が実際に解いているもの
 この関数が解くのは、呼び出し側が与えた形状と吸音率の事前値のもとでの**スケール**で、形そのものではありません。
 
-- 奥行き : 幅 : 高さの比は `aspectHintLw` ／ `aspectHintLh` で決まります（既定はどちらも `1`）。これらを省いた呼び出しは常に 3 つとも同じ寸法 — 立方体 — を返すので、ヒントを渡していない限り `length`・`width`・`height` を「復元された比率」として提示しないでください。
+- 奥行き : 幅 : 高さの比は `aspectHintLw` ／ `aspectHintLh` で決まります（既定はどちらも `1`）。これらを省いた呼び出しは常に 3 つとも同じ寸法 — 立方体 — を返すので、ヒントを渡していない限り `lengthM`・`widthM`・`heightM` を「復元された比率」として提示しないでください。
 - 1 本の減衰が拘束するのは、等価吸音面積 `A` に対する容積 `V` の比 `V / A` で、容積と吸音率を別々には決められません。形状を固定すると、表面積は線寸法の 2 乗、容積は 3 乗で増えるため、同じ RT60 を保つには大きい部屋ほど平均吸音率を高くする必要があります。足りない情報を事前値 `referenceAbsorption`（既定 `0.15`）で補って容積を決めます。サビーンでは報告される容積が事前値のおおむね 3 乗で変わります。既定のアイリングでは対応する `-ln(1 − α)` の項を使うため、3 乗の規則はサビーンでの近似として扱ってください。録音どうしを比較するときは、この値を固定してください。
 
 この事前値は拒否されず `[0.01, 0.99]` にクランプされます。範囲外の値を渡しても推定は成功しますが、計算に使われるのはクランプ後の値です。低い側では、報告される容積が 3 桁ずれることになります。
@@ -230,9 +231,34 @@ Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_
 | `acoustic.rir_length_floored` | `maxSeconds` が直接音の到達より前に終わるため、直接音が収まるまで延長されました。結果は要求より長くなります。 | `maxSeconds` を上げるか、聴取位置を音源に近づけます。 |
 | `acoustic.no_late_tail` | 混合時刻の時点で使える拡散テイルがなく、目標ルームは初期反射だけになりました。全バンドで吸音率が `0` の完全な剛壁か、逆に吸音が強すぎてクロスオーバーの前にテイルが終わっているかのどちらかです。 | 吸音率を両極端から離すか、`mixingTimeMs` を下げます。 |
 
-`RirResult` と違って `hasError` はありません。生成できないモーフ — 不正な形状、部屋の外にある聴取位置、物理的にありえない気象条件 — は `InvalidParameter` として例外になるため、`diagnostics` に入るのは「結果は得られたが注意が要る」警告だけです。分岐は `code` で行ってください。`message` は人が読むための文字列で、返ってきたモーフに付く `severity` はすべて `'warning'` です。
+`RoomMorphResult` にも `RirResult` にもエラーフラグはありません。生成できないモーフ — 不正な形状、部屋の外にある聴取位置、物理的にありえない気象条件 — は `InvalidParameter` として例外になる（`synthesizeRir(...)` も同様に投げる）ため、`diagnostics` に入るのは「結果は得られたが注意が要る」警告だけです。分岐は `code` で行ってください。`message` は人が読むための文字列で、返ってきたモーフに付く `severity` はすべて `'warning'` です。
 
-この形はどの環境から呼んでも同じです。Node とブラウザは [JavaScript API の型](./js-api-types.md#roommorphresult) にある `RoomMorphResult` を返します。Python は `RoomMorphResult` データクラスを返し、その `diagnostics` は `RirDiagnostic` のリストです。C ABI では `sonare_room_morph` が成功したあとに `sonare_last_diagnostic_count()` / `sonare_last_diagnostic_code(i)` からエントリを読めます（[C++ API](./cpp-api.md#c-abi-からのルームモーフ) 参照）。`sonare room-morph` コマンドは各警告を `warning: <code>: <message>` の形で stderr に出力し、出力ファイルと `--json` のサマリは stdout 側に残ります。
+この形はどの環境から呼んでも同じです。Node とブラウザは [JavaScript API の型](./js-api-types.md#roommorphresult) にある `RoomMorphResult` を返します。Python は `RoomMorphResult` データクラスを返し、その `diagnostics` は `RirDiagnostic` のリストです。C ABI では `sonare_room_morph` が成功したあとに `sonare_last_diagnostic_count()` / `sonare_last_diagnostic_code(i)` からエントリを読めます（[C++ API](./cpp-api-effects.md#c-abi-からのルームモーフ) 参照）。`sonare room-morph` コマンドは各警告を `warning: <code>: <message>` の形で stderr に出力し、出力ファイルと `--json` のサマリは stdout 側に残ります。
+
+### 推定結果から RIR を合成する
+
+`estimateRoom(...)` の結果は `synthesizeRir(...)` が受け取る名前（`lengthM`、`widthM`、`heightM`、`bandAbsorption`）をそのまま使っているので、`roomGeometryFromEstimate(...)` は位置情報を足すだけで、そのまま渡せる形状を返します。推定結果には音源や聴取位置が含まれません。`{ x, y, z }`（メートル）で渡さないと合成側の既定値が使われ、小さな推定ルームでは部屋の外になることがあります。収束しなかった吸音バンドは省かれ、スカラーの `absorption` が適用されます。計測できる寸法がない推定（`NaN`、`confidence` が `0`）は `RangeError`（Python では `SonareValueError`）になります。
+
+::: code-group
+
+```typescript [JavaScript]
+const estimate = estimateRoom(roomRecording, sampleRate, { nOctaveBands: 6 });
+const geometry = roomGeometryFromEstimate(estimate, {
+  source: { x: 1, y: 1, z: 1.2 },
+  listener: { x: 2, y: 1.5, z: 1.5 },
+});
+const { rir } = synthesizeRir({ ...geometry, sampleRate });
+```
+
+```python [Python]
+estimate = sonare.estimate_room(audio.data, audio.sample_rate, n_octave_bands=6)
+geometry = sonare.room_geometry_from_estimate(
+    estimate, source=(1, 1, 1.2), listener=(2, 1.5, 1.5)
+)
+rir = sonare.synthesize_rir(**geometry, sample_rate=audio.sample_rate)
+```
+
+:::
 
 ### 壁の吸音率と材質
 
@@ -241,11 +267,11 @@ Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_
 | フィールド | 型 | 意味 |
 |------------|----|------|
 | `absorption` | number | 全バンド一様の壁吸音率。`[0, 1]` の範囲内である必要があり、受理された値はさらに `[0, 0.999]` にクランプされます。最も単純なコントロールです。 |
-| `bandAbsorption` | `Float32Array` / `number[]` | オクターブバンド別の壁吸音率（125 / 250 / 500 / 1k / 2k / 4k… Hz）。指定すると `absorption` を上書きします（ただし `materialPreset` が設定されている場合を除く）。 |
-| `bandScattering` | `Float32Array` / `number[]` | バンド別の壁の散乱。指定のないバンドは `0` になります。吸音率のフィールドが選んだ壁材質に対して適用されます。 |
-| `materialPreset` | number | 名前付きの壁材質プリセット。`1` コンクリート、`2` 木、`3` カーテン、`4` カーペット、`5` ガラス。1 つの材質がすべての面を覆うため、できる部屋は極端になります。全面カーペットの部屋は 125 Hz をほとんど吸音しません。非ゼロのプリセットは `bandAbsorption` と `absorption` の両方より優先されます。`bandScattering` とは優先順位を競いません。 |
+| `bandAbsorption` | `Float32Array` / `number[]` | オクターブバンド別の壁吸音率（125 / 250 / 500 / 1k / 2k / 4k… Hz）。指定すると `absorption` を上書きします（ただし `materialPreset` が設定されている場合を除く）。Python では `absorption_bands`。 |
+| `bandScattering` | `Float32Array` / `number[]` | バンド別の壁の散乱。指定のないバンドは `0` になります。吸音率のフィールドが選んだ壁材質に対して適用されます。 Python では `scattering_bands`。 |
+| `materialPreset` | 名前 | 名前付きの壁材質プリセット。`'concrete'`（コンクリート）、`'wood'`（木）、`'curtain'`（カーテン）、`'carpet'`（カーペット）、`'glass'`（ガラス）。`'none'` はプリセットなしです。Python では `material_preset`。1 つの材質がすべての面を覆うため、できる部屋は極端になります。全面カーペットの部屋は 125 Hz をほとんど吸音しません。`'none'` 以外のプリセットは `bandAbsorption` と `absorption` の両方より優先されます。`bandScattering` とは優先順位を競いません。 |
 
-優先順位が決めるのは**吸音率**だけです。高い順に、非ゼロの `materialPreset` がすべてに優先し、それ以外では `bandAbsorption`（バンド別）が `absorption`（一様）に優先します。したがって、自分のバンド別吸音率を効かせたいときは `materialPreset` を `0` のままにしてください。
+優先順位が決めるのは**吸音率**だけです。高い順に、`'none'` 以外の `materialPreset` がすべてに優先し、それ以外では `bandAbsorption`（バンド別）が `absorption`（一様）に優先します。したがって、自分のバンド別吸音率を効かせたいときは `materialPreset` を `'none'`（既定）のままにしてください。
 
 `bandScattering` はこの優先順位の外にあります。吸音率の優先順位が選んだ壁材質に対して適用されるので、プリセットと散乱配列を同時に渡す指定も成り立ちます。プリセットの吸音率に、指定した粗さが重なります。
 
@@ -257,20 +283,20 @@ Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_
 スカラーの `absorption` が非有限値、または `[0, 1]` の範囲外の場合は `InvalidParameter` で失敗します。受理された値は `[0, 0.999]` にクランプされます。完全吸音の端点では Eyring の項 `-ln(1 - absorption)` が特異になるためです。`bandAbsorption` と `bandScattering` も同じ検証を通るため、不正な値の扱いは壁の指定フィールドのどれでも同じで、1 つだけが黙って別の部屋を組み立てることはありません。
 :::
 
-材質プリセットは整数コードに対応します。`0` なし、`1` コンクリート、`2` 木材、`3` カーテン、`4` カーペット、`5` ガラスです。コンクリートとガラスは反射的で高域のテールが残りやすく、カーテンとカーペットは吸音的でテールが短くなります。
+`materialPreset` は名前だけを受け付けます。数値は `TypeError`、未知の名前は `RangeError`（Python では `SonareValueError`）で、どちらも有効な名前を列挙します。コンクリートとガラスは反射的で高域のテールが残りやすく、カーテンとカーペットは吸音的でテールが短くなります。
 
 ```typescript
 // コンクリートのシューボックス: 明るく長いテール
 const concrete = synthesizeRir({
   lengthM: 7, widthM: 5, heightM: 3,
-  materialPreset: 1, // concrete
+  materialPreset: 'concrete',
   sampleRate,
 });
 
 // バンド別の壁指定（6 オクターブバンド）と散乱
 const custom = synthesizeRir({
   lengthM: 7, widthM: 5, heightM: 3,
-  materialPreset: 0, // プリセットなし。吸音率は bandAbsorption が決める
+  materialPreset: 'none', // プリセットなし。吸音率は bandAbsorption が決める
   bandAbsorption: [0.1, 0.15, 0.2, 0.3, 0.4, 0.5],
   bandScattering: [0.1, 0.1, 0.2, 0.2, 0.3, 0.3],
   sampleRate,
@@ -314,7 +340,7 @@ const custom = synthesizeRir({
 | `airTemperatureC` | `20` | −273.15 °C より上 | 気温。`0` または省略で ISO 基準の 20 °C を選ぶため、`0 °C` そのものは未指定と区別できません。氷点の部屋は `0.01` で指定してください。吸収量は同じです。 |
 | `airHumidityPercent` | `50` | `0`〜`100` | 相対湿度。`0` または省略で ISO 基準の 50 % を選びます。 |
 
-気象条件の 2 つは `airAbsorptionEnabled` が ON のときだけ読まれます。非有限値や範囲外の値は、周囲のジオメトリ検査と同じく範囲へ丸めるのではなく拒否されます。`synthesizeRir(...)` は `acoustic.invalid_air_absorption` を付けて `hasError` を返し、`roomMorph(...)` は `InvalidParameter` を投げます。気圧は入力ではなく、モデルは海面気圧で評価されます。
+気象条件の 2 つは `airAbsorptionEnabled` が ON のときだけ読まれます。非有限値や範囲外の値は、周囲のジオメトリ検査と同じく範囲へ丸めるのではなく拒否されます。`synthesizeRir(...)` は `acoustic.invalid_air_absorption` のコード付き `SonareError` を投げ、`roomMorph(...)` は `InvalidParameter` を投げます。気圧は入力ではなく、モデルは海面気圧で評価されます。
 
 ```typescript
 const hall = synthesizeRir({

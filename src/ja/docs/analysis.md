@@ -250,6 +250,13 @@ for (const { key: candidate, correlation } of ranked.slice(0, 3)) {
 
 `detectKeyCandidates(...)` は代わりに候補ごとの生の `correlation` を正規化せずに返します。単一の確信度ではなく判断の形そのものを調べたいときはこちらです。
 
+`key.mode` は名前（`'major'`、`'minor'`、または `'dorian'` のような教会旋法）で返り、`detectKey(...)` はクロマの構築に使った `tuning` も返します。クロマは既定で A440 を基準に読まれます。半音の間にある録音には `tuning: 'auto'` を渡してずれを音声から測定し、使われた値を結果から読み取ります。同じオプションは `detectChords(...)` と `analyze(...)` にもあります。
+
+```typescript
+const detected = detectKey({ samples, sampleRate, tuning: 'auto' });
+console.log(detected.mode, detected.tuning);   // 例: "major"、[-0.5, 0.5) のセミトーン端数
+```
+
 | オプション | 効果 |
 |------------|------|
 | `profile` | 相関を取るキープロファイル。`'ks'` / `'krumhansl'`、`'temperley'`、`'shaath'`、3 種類の EDM 用、`'bellman-budge'` から選べます。ジャンルによる差が大きいので、結果が系統的にずれているときに最初に試す値です。 |
@@ -260,14 +267,14 @@ for (const { key: candidate, correlation } of ranked.slice(0, 3)) {
 ### コード
 
 ```typescript
-import { detectChords, chordFunctionalAnalysis } from '@libraz/libsonare';
+import { Mode, detectChords, chordFunctions } from '@libraz/libsonare';
 
 const chordOptions = {
   useTriadsOnly: false,   // 拡張クオリティを含める
   useHmm: true,           // フレームごとではなく系列として平滑化する
   useKeyContext: true,
   keyRoot: key.root,
-  keyMode: key.mode,
+  keyMode: key.mode === 'minor' ? Mode.Minor : Mode.Major,   // Mode の序数
   chromaMethod: 'nnls',
 } as const;
 
@@ -277,9 +284,12 @@ for (const chord of chords) {
   console.log(chord.name, chord.start.toFixed(2), chord.duration.toFixed(2), chord.confidence);
 }
 
-// 同じオプションを渡すので、roman[i] が chords[i] のラベルになる
-const roman = chordFunctionalAnalysis({ samples, sampleRate, ...chordOptions });
+// 手元のコードにキーの中での機能を付ける。再検出はしない
+const labelled = chordFunctions({ chords, key });
+console.log(labelled[0].roman, labelled[0].function);   // 例: "I", "tonic"
 ```
+
+`chordFunctions(...)` は同じ時刻付きエントリに、ローマ数字（`roman`）と和声機能（`'tonic'`、`'subdominant'`、`'dominant'`、キーのスケール外のルートは `'chromatic'`、`N.C.` は `'none'`）を加えて返します。`chordFunctionalAnalysis(...)` は検出とラベル付けを 1 回の呼び出しで行い、同じエントリを返します。コード一覧を別に使わないときに向いています。
 
 各 `Chord` は `root`、`bass`、`quality`、`start`、`end`、`duration`、`confidence`、そしてコアが正規の綴りで与える `name` を持ちます。`rootName`、`bassName`、`name` はどのバインディングから読んでも同一です。`analyze(...)` 内のコードには `result.key` を基準にした `romanNumeral` も付き、`N.C.` では空になります。
 
@@ -292,7 +302,8 @@ const roman = chordFunctionalAnalysis({ samples, sampleRate, ...chordOptions });
 | `useKeyContext` · `keyRoot` · `keyMode` | 検出済みのキーに属するコードへ探索を寄せます。 |
 | `chromaMethod` | `'stft'` か `'nnls'`。後者は照合前にベースの倍音を抑えるので、密度の高い素材で有効です。 |
 | `detectInversions` | ベース音をルートに畳み込まず、別に報告します。 |
-| `tuning` | チューニングのずれを半音の分数単位でコード用クロマへ反映します。`estimateTuning(...)` が返す単位を使い、範囲は `[-0.5, 0.5)`、既定値は `0`（A440）です。`analyze(...)` でも同じオプションを使うと、キー・コード・セクションに使うクロマへ反映されます。 |
+| `tuning` | チューニングのずれを半音の分数単位でコード用クロマへ反映します。範囲は `[-0.5, 0.5)`、既定値は `0`（A440）で、`'auto'` なら音声から測定し、結果は使われた値を報告します。`analyze(...)` でも同じオプションを使うと、キー・コード・セクションに使うクロマへ反映されます。 |
+| `nFft` | クロマのウィンドウ長。22050 Hz 換算のサンプル数で、入力のレートに合わせて再スケールされるため、どのレートでも同じ時間幅になります。 |
 | `useBeatSync` · `minDuration` · `smoothingWindow` | フレーム単位の判断を区間へまとめる方法を制御します。 |
 
 ## 構成とメロディ
@@ -315,6 +326,8 @@ const { boundaries, noveltyCurve, noveltyPeak } = detectBoundaries({ samples, sa
 想定しておくべき挙動が 2 つあります。プリコーラスには検出分岐が無いため、このラベルで絞り込むと常に空になります。そして不明は 3 つの異なる状況をまとめたラベルです。境界が見つからなかった、どの肯定分岐にも当てはまらなかった、機能を断定するには根拠が弱すぎた、の 3 つで、最初のものは `confidence` 0 を、最後のものはしきい値未満のスコアをそのまま保持するので、数値からどれなのかが分かります。
 
 `noveltyCurve` は自身の最大値でスケールされています。ピークの 1 は「この曲の中で最も変化の大きいフレーム」という意味であって「大きな変化」という意味ではありません。絶対しきい値と比較される生の応答に戻すには `noveltyPeak` を掛けます。
+
+各ピークは、前後 `referenceWindow` 秒（既定 60）の範囲で最大のノベルティの `threshold` 倍に達する必要があります。そのため長い曲でも、支配的な変化が遠く離れた弱いセクション変化を隠しません。`referenceWindow: 0` で相対しきい値を無効にでき、曲の長さ以上の値を渡すと基準が曲全体になります。
 
 ### メロディとピッチ
 
@@ -350,7 +363,7 @@ const envelope = onsetEnvelope({ samples, sampleRate });
 const brightness = spectralCentroid({ samples, sampleRate });
 ```
 
-`nFft` は 1 つの解析窓の長さ、`hopLength` は次の窓を何サンプル先から始めるかで、周波数の細かさと時間の細かさのトレードオフを決めます。結果を最も左右する 2 つのパラメータです。特徴量群はほかに CQT とその派生、トネッツ、スペクトルコントラスト、ロールオフ、平坦度、帯域幅、フラックス、フレームごとのレベルとゼロ交差率、そしてスペクトログラムを音声へ戻す逆変換も備えています。一覧は [JavaScript 特徴抽出 API](./js-api-features.md) にあります。
+`nFft` は 1 つの解析窓の長さ、`hopLength` は次の窓を何サンプル先から始めるかで、周波数の細かさと時間の細かさのトレードオフを決めます。結果を最も左右する 2 つのパラメータです。これらの特徴量関数は `nFft` を、渡したバッファのサンプル数として読みます。一方、音声を元のレートのまま受け取る解析器（ビート、テンポ、オンセット、キー、リズム、コード、音色）は `nFft` を 22050 Hz 換算のサンプル数として読み、入力のレートに合わせて再スケールします。そのため同じ `nFft` が 44100 Hz や 48000 Hz でも同じ時間幅になります。`hopLength` は入力のサンプル数のままです。特徴量群はほかに CQT とその派生、トネッツ、スペクトルコントラスト、ロールオフ、平坦度、帯域幅、フラックス、フレームごとのレベルとゼロ交差率、そしてスペクトログラムを音声へ戻す逆変換も備えています。一覧は [JavaScript 特徴抽出 API](./js-api-features.md) にあります。
 
 ## このページか、互換レイヤーか
 

@@ -125,9 +125,11 @@ Two exception classes cover every failure:
 | Raised when | Class | Message |
 |-------------|-------|---------|
 | The native library returns a non-OK code | `SonareError`, a `RuntimeError` subclass | Carries a `[4] ` numeric prefix |
+| The binding or an object's state refuses the call: the loaded library lacks the entry point, a closed object is used, a native result fails a sanity check | `SonareError` with `NOT_SUPPORTED`, `INVALID_STATE` or `UNKNOWN` | Same `[code] ` prefix; never a bare `RuntimeError` |
+| The loaded native library does not match the binding | `SonareError` with `ABI_MISMATCH` (10) | Raised on first library use, before any call is made |
 | Python-side argument or buffer validation rejects a call before it reaches the C ABI | `SonareValueError` | Plain validation text, no numeric prefix |
 
-`SonareValueError` subclasses **both** `SonareError` and `ValueError`, so `except ValueError:` and `except sonare.SonareError:` each catch it and neither style of handler has to know which class a given entry point picks. Its `.code` is `ErrorCode.INVALID_PARAMETER`, so code that branches on the code treats it exactly like the C-ABI rejection it stands in for. `SonareError.code` holds the same C-ABI values the JS bindings expose as `ErrorCode` (see [Error Handling](./js-api-types.md#error-handling)), `.code_name` gives the cross-binding spelling, and the CLI maps the codes onto its [exit codes](./cli.md#exit-codes).
+`SonareValueError` subclasses **both** `SonareError` and `ValueError`, so `except ValueError:` and `except sonare.SonareError:` each catch it and neither style of handler has to know which class a given entry point picks. Its `.code` is `ErrorCode.INVALID_PARAMETER`, so code that branches on the code treats it exactly like the C-ABI rejection it stands in for. `SonareError.code` holds the same C-ABI values the JS bindings expose as `ErrorCode` (see [Error Handling](./js-api.md#error-handling)), `.code_name` gives the cross-binding spelling, and the CLI maps the codes onto its [exit codes](./cli.md#exit-codes) (`ABI_MISMATCH` exits 13). A library whose ABI version differs from the one the package was built for, or which lacks a symbol the binding needs, fails with `ABI_MISMATCH` and a message beginning `libsonare ABI mismatch`; rebuild the library or point `SONARE_LIB_PATH` at a matching build.
 
 ```python
 try:
@@ -162,6 +164,10 @@ Handlers that catch `SonareError` or `ValueError`, or that branch on `.code`, ne
 The element-wise conversions keep their empty-in / empty-out contract: `power_to_db`, `amplitude_to_db`, `db_to_power`, `db_to_amplitude`, `preemphasis`, `deemphasis`, `vector_normalize`, `frame_signal`, `pad_center` and `fix_length` accept an empty sequence and return one. Among the tempo helpers only `tempogram_ratio` guards its input matrix; `tempogram`, `fourier_tempogram`, `cyclic_tempogram` and `plp` do not.
 
 `f0_hz` is never scanned for non-finite values. pYIN marks an unvoiced frame with `nan`, and that track representation has to pass straight into pitch correction, so `note_segments`, `extract_notes`, `decompose_note_pitch`, `split_note` and `merge_notes` check its shape but not its values.
+
+#### "Not given" is `None`
+
+An optional numeric argument that has no value is left out or passed as `None`; `-1` is not a spelling of "not given" and is refused with `SonareValueError`. This covers the engine's `render_frame` on every transport, parameter and MIDI call (`None` applies at the next block head), `SpectralRegionOp.end_sample` (`None` runs to the end of the signal), `fix_frames(x_max=...)`, `set_program(bank=...)` and `set_program_on_channel(bank=...)` (`None` emits no Bank Select), the percentiles of `metering_dynamic_range` and `Audio.dynamic_range`, and the `gamma` of `vqt` and `vqt_to_audio` (`None` selects the automatic bandwidth). The C ABI keeps `-1` as its own spelling.
 
 CLI **usage** errors raise a plain `ValueError`, not `SonareValueError`, because they report a command-line mistake rather than an API argument. Both exit with code `3`.
 
@@ -217,64 +223,6 @@ except sonare.SonareError as e:
     else:
         raise
 ```
-
-## Streaming Analysis API
-
-Use `StreamAnalyzer` when audio arrives in blocks: live capture, a callback loop, a long file you do not want to analyze all at once, or a visualization that needs frame-by-frame features. It keeps a small internal buffer, emits mel/chroma/onset/spectral frames, and periodically updates BPM, key, chord, bar, and pattern estimates.
-
-```python
-import libsonare as sonare
-
-stream = sonare.StreamAnalyzer(
-    sonare.StreamConfig(
-        sample_rate=44100,
-        n_mels=64,
-        emit_every_n_frames=4,
-    )
-)
-
-for block in audio_blocks:
-    stream.process(block)
-
-    frames = stream.read_frames(stream.available_frames())
-    # frames.mel is flattened [n_frames * n_mels]
-    # check frames.feature_flags before optional arrays; chroma uses [n_frames * n_chroma]
-
-    stats = stream.stats()
-    if stats.bpm > 0:
-        print(stats.bpm, stats.bpm_confidence)
-
-stream.close()
-```
-
-For lower-bandwidth UI transfer, use a quantized read instead of `read_frames(max_frames)`. `output_format` is retained for source compatibility only; omit it or keep it at `0` and choose the desired read method explicitly:
-
-| Method | What changes |
-|--------|--------------|
-| `read_frames_u8(max_frames, quantize_config?)` | Feature arrays are quantized to unsigned 8-bit values. |
-| `read_frames_i16(max_frames, quantize_config?)` | Feature arrays are quantized to signed 16-bit values. |
-
-`quantize_config` is an optional `QuantizeConfig` (exported from `libsonare`) that widens the quantization ranges for streams much louder or quieter than the defaults; omit it to use the defaults. Its fields and defaults are `mel_db_min=-80.0`, `mel_db_max=0.0`, `onset_max=50.0`, `rms_max=1.0`, `centroid_max=11025.0`. The quantizers clamp normalized values to `[0, 1]`, so a signal outside these ranges otherwise saturates silently to the endpoints. This mirrors `StreamQuantizeConfig` in the JS/WASM streaming docs.
-
-Both return timestamps as floats. If you synchronize against an external audio clock, feed chunks with `process_with_offset(samples, sample_offset)` so returned timestamps follow that timeline.
-
-`process_with_offset` accepts only contiguous offsets. After a gap, seek, or switching from `process(...)`, call `reset(base_sample_offset)` before feeding the next block. `StreamConfig.max_progression_entries` (default `4096`) bounds each retained chord and bar progression; `stats()` exposes `dropped_chord_progression_entries` and `dropped_bar_progression_entries` when the oldest history is discarded.
-
-## Streaming Equalizer API
-
-`StreamingEqualizer` wraps the native block-by-block EQ engine. Use it for live preview, processor UIs, or matching a source tone to a reference without assembling a mastering chain.
-
-```python
-with sonare.StreamingEqualizer(sample_rate=48000, max_block_size=512) as eq:
-    eq.set_band(0, {"type": "bell", "frequencyHz": 2500, "gainDb": 2.5, "q": 1.0})
-    eq.set_phase_mode("natural")
-    eq.set_auto_gain(True)
-    eq.match(source_samples, reference_samples, max_bands=8)
-    out = eq.process_mono(input_block)
-    snapshot = eq.spectrum()
-```
-
-Bands can be Python dictionaries or JSON strings. `set_phase_mode(...)` accepts `zero` / `natural` / `linear` names or numeric values. The object also exposes output gain/pan, sidechain input for dynamic bands, `process_stereo(...)`, `spectrum()`, `latency_samples`, and `last_auto_gain_db`.
 
 ## Mastering API
 
@@ -433,7 +381,16 @@ Every named stage is also a one-shot module-level function, so you can run a sin
 | `mastering_repair_dereverb_classical(samples, sample_rate?, *, ...)` | `np.ndarray` | `threshold=0.05`, `attenuation=0.5`, `n_fft=1024`, `hop_length=256`, `t60_sec=0.4`, `late_delay_ms=50.0`, `over_subtraction`, `spectral_floor`, `wpe_enabled`, `wpe_iterations`, `wpe_taps`, `wpe_strength` |
 | `mastering_repair_trim_silence(samples, sample_rate?, *, ...)` | `np.ndarray` | `threshold=0.001`, `padding_samples=0`, `mode='peak'`, `gate_lufs=-60.0`, `window_ms=400.0` |
 
-The repair stages are offline-only and are rejected by `StreamingMasteringChain` — run them with these one-shot helpers or inside `mastering_chain*` / `master_audio*`. See [Dynamics](./glossary/mastering/dynamics.md) and [Repair](./glossary/mastering/repair.md).
+The whole-signal repair stages (declick, declip, decrackle, dehum, dereverb) are rejected by `StreamingMasteringChain` — run them with these one-shot helpers or inside `mastering_chain*` / `master_audio*`. In the realtime engine, decrackle, dehum, the classical denoiser and the classical dereverb are also available as inserts under their catalog ids; declick and declip stay offline.
+
+To repair audio of any channel count in two calls, `mastering_repair_analyze(channels, sample_rate)` measures the defects per channel and returns the stages the assistant would run (`recommended`, ready to pass on; dereverb is never recommended), and `mastering_repair_apply(channels, sample_rate, stages=[...])` runs them. Stages always run in the fixed order declip, declick, decrackle, dehum, denoise, dereverb whatever order the list gives; a repeated stage or an unknown setting is refused. The result carries the repaired channels and one report per stage (per channel, or once for the linked denoise and dereverb), and `on_progress` / `cancel` work as in [Progress callbacks](#progress-callbacks).
+
+```python
+analysis = sonare.mastering_repair_analyze([left, right], 48000)
+result = sonare.mastering_repair_apply([left, right], 48000, stages=analysis["recommended"])
+```
+
+`streaming_loudness_gain(samples, sample_rate, config)` and `streaming_loudness_gain_stereo(left, right, sample_rate, config)` measure, at the loudness stage's input, the numbers a `StreamingMasteringChain` is constructed with. The returned `StreamingLoudnessGain` has `loudness_static_gain_db` (equal to the gain the offline chain applies, ceiling clamp included; 0 for silence), `true_peak_db` and `integrated_lufs`; pass the first two as the constructor's `loudness_static_gain_db` and `loudness_static_gain_peak_db`. See [Dynamics](./glossary/mastering/dynamics.md) and [Repair](./glossary/mastering/repair.md).
 
 ### Progress callbacks
 
@@ -547,11 +504,11 @@ The headless-DAW API is available in Python as well: author arrangements with `P
 | Author tracks, clips, tempo, markers, undo/redo | `Project` (a context manager — use `with`) | [Project Editing](./project-editing.md) |
 | Render MIDI through the built-in synthesizer | `Project.bounce_with_synth_instrument(...)`, `synth_preset_names()`, `synth_preset_patch(name)`, `SynthPatch` | [Built-in Synthesizer](./native-synth.md), [Bouncing Projects](./project-bounce.md) |
 | Render MIDI through a SoundFont | `Project.load_soundfont(data)`, `Project.bounce_with_sf2_instrument(...)` | [SoundFont Player](./soundfont-player.md) |
-| Host your own instrument during a bounce | `Project.bounce_with_instruments(...)` with the `ExternalInstrument` protocol — a `render(channels, num_frames)` callback plus optional `prepare`/`on_event` hooks and `latency_samples`. **Python-only.** | [Bouncing Projects](./project-bounce.md) |
+| Host your own instrument during a bounce | `Project.bounce_with_instruments(...)` with the `ExternalInstrument` protocol — a `render(channels, num_frames)` callback plus optional `prepare`/`on_event` hooks and `latency_samples`. Node and WASM have the callback form as `bounceWithInstruments` / `bounceWithInstrument`. | [Bouncing Projects](./project-bounce.md#host-your-own-instrument) |
 | Play instruments live from MIDI events and replace destination MIDI FX | `RealtimeEngine.set_synth_instrument(...)`, `RealtimeEngine.load_soundfont(...)`, `RealtimeEngine.set_midi_fx(...)`, plus the engine's MIDI input queue | [MIDI Input](./midi-input.md) |
 | Schedule MIDI clips into the live engine, sample-accurately | `RealtimeEngine.set_midi_clips([...])` with `EngineMidiClipSchedule` / `EngineMidiEvent`, `RealtimeEngine.sample_at_ppq(ppq)` — ppq is pulses per quarter note, the musical-time unit | [Realtime Engine](./realtime-engine.md#midi-clip-scheduling-and-sampleatppq) |
-| Set per-track cue monitoring | `RealtimeEngine.set_track_monitor_mode(lane_index, mode, render_frame=-1)` with `EngineTrackMonitorMode` (`off`/`pfl`/`afl` — PFL listens pre-fader, AFL post-fader) | [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
-| Send a destination to external MIDI hardware | `set_midi_destination_external(...)`, `set_external_midi_clock_enabled(...)`, `drain_external_midi(...)`, `external_midi_dropped_count()` | [Realtime Engine](./realtime-engine.md#sending-a-track-to-external-midi-gear) |
+| Set per-track cue monitoring | `RealtimeEngine.set_track_monitor_mode(lane_index, mode, render_frame=None)` with `EngineTrackMonitorMode` (`off`/`pfl`/`afl` — PFL listens pre-fader, AFL post-fader) | [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
+| Send a destination to external MIDI hardware | `set_midi_destination_external(...)`, `set_external_midi_clock_enabled(...)`, `drain_external_midi(...)`, `external_midi_dropped_count()` | [Realtime Engine](./project-editing-midi.md#sending-a-track-to-external-midi-gear) |
 | Mix and automate the engine's tracks live | Lane/strip methods plus `set_bus_strip_insert_param_by_name(...)`, `set_bus_strip_insert_bypassed(...)`, `resolve_track_insert_automation_id(...)`, `resolve_master_insert_automation_id(...)`, `resolve_bus_insert_automation_id(...)`, and `set_param_smoothing_ms(...)` | [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
 | Read wide meters and scopes | `drain_meter_telemetry_wide(...)`, `configure_scope_telemetry(...)`, `drain_scope_telemetry(...)` | [Realtime Engine](./realtime-engine.md#surround-group-buses-and-wide-meters) |
 
@@ -575,6 +532,26 @@ Every numeric `SynthPatch` field defaults to `None`, meaning "keep the base pres
 
 `Project` can carry per-project, undoable, module-owned opaque byte blobs (assist sidecars), scoped by module ID, target track, and a region. Set one with `project.set_assist_sidecar(module_id, payload, *, schema_version=0, target_track_id=0, region_start_ppq=0.0, region_end_ppq=0.0)`; read them back with `project.assist_sidecar_count()`, `project.get_assist_sidecar(index) -> AssistSidecar`, and `project.assist_sidecars()`. See [Project Editing](./project-editing-midi.md#assist-sidecars) for the cross-binding details.
 
+## More entry points
+
+Functions and types for areas covered by other pages; the full signatures are in the type stubs shipped with the package.
+
+| Task | API | Guide |
+|------|-----|-------|
+| Label detected chords with Roman numerals and functions without re-detecting | `chord_functions(chords, key)` returning `FunctionalChord` entries | [Analysis](./analysis.md) |
+| Let the analysis measure the tuning, and convert it to Hz | `tuning="auto"` on `analyze`, `detect_chords`, `detect_key` (`KeyDetection` carries the `tuning` used); `reference_hz="auto"` on `transcribe`; `tuning_to_reference_hz`, `reference_hz_to_tuning` | [Audio To Notes](./audio-to-notes.md) |
+| Tune a monophonic take to a detected or named key | `auto_tune(samples, sample_rate, key="detect")` returning `AutoTuneResult`; `scale_mask_for_mode(root, mode)` | [Python Effects API](./python-api-effects.md) |
+| Invert a Mel or MFCC result without restating its parameters | `mel_result_to_stft`, `mel_result_to_audio`, `mfcc_result_to_mel`, `mfcc_result_to_audio` | [Inverse Features](./inverse-features.md) |
+| Turn a room estimate into `synthesize_rir` input | `room_geometry_from_estimate(estimate, source=..., listener=...)` returning `RoomGeometry` | [Acoustic Analysis](./acoustic-analysis.md) |
+| Keep every decoded channel, or fold channels to a narrower layout | `decode_channels(data)` returning `(channels, sample_rate)`, `downmix(channels, target_layout)` (centre and surround at -3 dB, LFE dropped) | [Channel Formats](./channel-formats.md) |
+| Ask whether a sidechain binding would be accepted, and why not | `RealtimeEngine.can_set_lane_sidechain`, `can_set_bus_sidechain`, `can_set_master_sidechain` returning `SidechainCheck` | [Realtime Engine](./realtime-engine.md) |
+| Edit the engine's clip set one clip at a time | `RealtimeEngine.upsert_clip`, `remove_clip` | [Realtime Engine](./realtime-engine.md) |
+| Reset processors, prime a repeat render, read tail and latency | `reset_processor_state`, `prime_offline_parameters`, `tail_samples`, `graph_latency_samples_q8` | [Realtime Engine](./realtime-engine.md) |
+| Address fader and pan automation by track or bus | `resolve_track_lane_automation_id`, `resolve_bus_automation_id` | [Realtime Engine](./realtime-engine.md) |
+| Fold the true-peak meter's pending window in at the end of a signal | `Mixer.flush_meters()` | [Mixing Engine](./mixing.md) |
+| List audio sources a project could not resolve | `Project.unresolved_audio_sources()` | [Project Editing](./project-editing.md) |
+| Read the mixer scene's unrecognized keys | `Mixer.scene_warnings()` | [Mixing Scene JSON](./mixing-scene-json.md) |
+
 ## Where the sections went
 
 | Section | Now on |
@@ -593,3 +570,5 @@ Every numeric `SynthPatch` field defaults to `None`, meaning "keep the base pres
 | librosa-Compatible Helpers | [Python Effects API](./python-api-effects.md#librosa-compatible-helpers) |
 | Conversion Functions | [Python Analysis API](./python-api-analysis.md#conversion-functions) |
 | Types | [Python Types](./python-api-types.md#types) |
+| Streaming Analysis API | [Python Analysis API](./python-api-analysis.md#streaming-analysis-api) |
+| Streaming Equalizer API | [Python Effects API](./python-api-effects.md#streaming-equalizer-api) |

@@ -84,6 +84,8 @@ libsonare の `RealtimeEngine` は、トランスポート・クリップ・オ�
 ::: tip MIDI 2.0 と MPE 表現
 内蔵の波形シンセ（`setBuiltinInstrument`）、NativeSynth（`setSynthInstrument`）、SoundFont プレイヤー（`setSf2Instrument`）は、MIDI 2.0 のチャンネルボイス UMP を値の幅を落とさずに受け取ります。ノートベロシティ、コントローラー、プレッシャー、ピッチベンドは MIDI 2.0 メッセージから渡された分解能を保ちます。内蔵シンセと NativeSynth はチャンネルプレッシャー、ポリフォニックキープレッシャー、ノート単位のピッチベンドを適用します。SoundFont プレイヤーもフル幅のノートベロシティ、チャンネルプレッシャー、ピッチベンド、MIDI 2.0 のノート単位ピッチを適用しますが、ポリフォニックキープレッシャーは意図的に無視します。そのため MPE スタイルのメンバーチャンネルで各プレイヤーへチャンネル表現を送れますが、SoundFont ではポリフォニックプレッシャー表現を使えません。
 
+内蔵シンセでは、MPE のマネージャーチャンネルに送ったゾーン全体向けのコマンド（CC64 サステインなど）がゾーン内のすべてのメンバーチャンネルに届きます。
+
 NativeSynth と SoundFont プレイヤーのベンドレンジは RPN 0 で設定し、内蔵シンセは MPE ゾーンの設定を使います。汎用の高分解能 RPN／NRPN と 14 ビット CC のパラメータマッピングは、後述するエンジンの `bindMidiCcBinding(...)` 層にあります。NativeSynth のベンドと表現の詳細は [内蔵シンセサイザー](./native-synth.md) を参照してください。
 :::
 
@@ -109,33 +111,33 @@ engine.setSf2Instrument({ destinationId: 1, gain: 1 }, 1);
 
 キューイングの経路は 2 つあり、デスティネーションごとにどちらかを選びます。目安として、イベントを自分のコードで生成する場合（シーケンサーのステップ、オンスクリーンキーボード）は**即時コマンド**を使い、ハードウェアキーボードのように外部から独自のタイムスタンプ付きでイベントが届く場合（`bindWebMidi` 経由）は**入力ソース**を使います。後者のレーンは、Web MIDI ブリッジが必要とするポートごとのタイムスタンプを運ぶためです。
 
-- **即時エンジンコマンド** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` はそれぞれ `destinationId` と `renderFrame`（または「できるだけ早く」を表す `-1`）を取ります。`pushMidiPanic(renderFrame)` は `renderFrame` のみを取り、すべてのデスティネーションの発音中ノートを一括で解放します。
+- **即時エンジンコマンド** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` はそれぞれ `destinationId` と省略可能な `renderFrame` を取り、省略すると「できるだけ早く」発音します。`pushMidiPanic(renderFrame?)` は省略可能な `renderFrame` のみを取り、すべてのデスティネーションの発音中ノートを一括で解放します。負の `renderFrame` は拒否されます（Node と WASM は `RangeError`、Python は `SonareValueError`）。「指定なし」は引数の省略で表し、`-1` では表しません。
 - **エンジン側のライブ入力ソース** — `setMidiInputSource(destinationId)` で専用の入力レーンを開き、`pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` で `portTimeSamples` タイムスタンプ付きのイベントを送ります。`pushMidiInputPitchBend`、`pushMidiInputChannelPressure`、`pushMidiInputPolyPressure`、`pushMidiInputUmp` で表現情報や完全な UMP パケットも送れます。Web MIDI ブリッジはこのレーンへイベントを流します。
-- **ライブ SysEx** — `pushMidiSysex(destinationId, data, renderFrame = -1)` は、デスティネーションへ完全な SysEx（System Exclusive。メーカー独自の自由形式メッセージ）フレームをキューイングします。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なメッセージ（1〜512 バイト）で、`renderFrame` はほかの `pushMidi*` 呼び出しと同じ即時／スケジュール規約に従います。主な用途は、再生を止めずに、ライブの SF2 バインド済みデスティネーションへ GS/GM リセットや GS インサーションエフェクト（EFX）の選択を届けることです。そのバイト列が何を選ぶかは [SoundFont プレイヤー](./soundfont-player.md) を参照してください。
-- **UMP メッセージ** — `pushMidiUmp(destinationId, words, renderFrame = -1)` は、1〜4 個の 32 ビットワードからなる配列または `Uint32Array` を最上位ワードから順に受け取ります。個数は先頭ワードのメッセージ種別と一致させます。MIDI 2.0 チャンネルボイス（MT `0x4`）は値の幅を保ったまま処理し、SysEx7／データメッセージ（MT `0x3`／`0x5`）は拒否するため `pushMidiSysex` を使います。`SonareEngine` の worklet ファサードも `pushMidiUmp(trackId, words, renderFrame = -1)` で同じ完全なパケットを受け付けます（従来の 1 ワードの数値指定も使えます）。`pushMidiInputUmp(words, portTimeSamples = 0)` はエンジン側のライブ入力ソースへ送ります。
+- **ライブ SysEx** — `pushMidiSysex(destinationId, data, renderFrame?)` は、デスティネーションへ完全な SysEx（System Exclusive。メーカー独自の自由形式メッセージ）フレームをキューイングします。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なメッセージ（1〜512 バイト）で、`renderFrame` はほかの `pushMidi*` 呼び出しと同じく、省略すると即時になります。主な用途は、再生を止めずに、ライブの SF2 バインド済みデスティネーションへ GS/GM リセットや GS インサーションエフェクト（EFX）の選択を届けることです。そのバイト列が何を選ぶかは [SoundFont プレイヤー](./soundfont-player.md) を参照してください。
+- **UMP メッセージ** — `pushMidiUmp(destinationId, words, renderFrame?)` は、1〜4 個の 32 ビットワードからなる配列または `Uint32Array` を最上位ワードから順に受け取ります。個数は先頭ワードのメッセージ種別と一致させます。MIDI 2.0 チャンネルボイス（MT `0x4`）は値の幅を保ったまま処理し、SysEx7／データメッセージ（MT `0x3`／`0x5`）は拒否するため `pushMidiSysex` を使います。`SonareEngine` の worklet ファサードも `pushMidiUmp(trackId, words, renderFrame?)` で同じ完全なパケットを受け付けます（従来の 1 ワードの数値指定も使えます）。`pushMidiInputUmp(words, portTimeSamples = 0)` はエンジン側のライブ入力ソースへ送ります。
 
-同じ SysEx 呼び出しはどのバインディングにもあり、名前の付け方だけが変わります。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なフレーム（1〜512 バイト）で、最後の引数はほかの `pushMidi*` 呼び出しと同じく「即時」を表す `-1` のレンダーフレームです。
+同じ SysEx 呼び出しはどのバインディングにもあり、名前の付け方だけが変わります。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なフレーム（1〜512 バイト）で、最後の引数はほかの `pushMidi*` 呼び出しと同じ省略可能なレンダーフレームです（省略、Python では `None` で即時）。「即時」を `-1` で表すのは C ABI だけです。
 
 ライブ SysEx のペイロードはキューへ入れる前に制御スレッドでデスティネーションの楽器が準備します。準備を拒否された場合は `InvalidParameter` が報告され、同じペイロードを再試行しても解決しません。`setMidiClips` はスケジュールするすべての SysEx を公開前に準備するため、1 つでも拒否されると、直前に受理されたスケジュールを保持します。デスティネーションの再バインドでも、スケジュール済みおよびすでにキューへ入った SysEx の準備を先に行います。拒否された場合は以前の楽器バインドと保留中の処理を保持します。その後の `prepare()` でスケジュール済みペイロードを再確認し、バインド済みの楽器が拒否した場合はスケジュールをクリアして `InvalidParameter` を報告します。
 
 ::: code-group
 
 ```typescript [Browser]
-engine.pushMidiSysex(/* destinationId */ 0, gsResetOrEfxBytes, -1);
+engine.pushMidiSysex(/* destinationId */ 0, gsResetOrEfxBytes);
 ```
 
 ```typescript [Node]
 // ブラウザと同じ形。data は Buffer か Uint8Array。
-engine.pushMidiSysex(0, gsResetOrEfxBytes, -1);
+engine.pushMidiSysex(0, gsResetOrEfxBytes);
 ```
 
 ```python [Python]
-# data は bytes / bytearray / memoryview。render_frame=-1 が即時。
-engine.push_midi_sysex(0, gs_reset_or_efx_bytes, render_frame=-1)
+# data は bytes / bytearray / memoryview。render_frame=None（既定）が即時。
+engine.push_midi_sysex(0, gs_reset_or_efx_bytes)
 ```
 
 ```c [C ABI]
-/* size は 1〜512。render_frame -1 が即時。 */
+/* size は 1〜512。C ABI では render_frame -1 が即時のまま。 */
 sonare_engine_push_midi_sysex(engine, /* destination_id */ 0,
                               data, size, /* render_frame */ -1);
 ```
@@ -144,9 +146,12 @@ sonare_engine_push_midi_sysex(engine, /* destination_id */ 0,
 
 ```typescript
 // 即時経路: 次のブロック先頭でノートを発火
-engine.pushMidiNoteOn(/* destinationId */ 0, /* group */ 0, /* channel */ 0, /* note */ 60, /* velocity */ 100, -1);
-engine.pushMidiCc(0, 0, 0, /* controller */ 1, /* value */ 64, -1);
-engine.pushMidiNoteOff(0, 0, 0, 60, 0, -1);
+engine.pushMidiNoteOn(/* destinationId */ 0, /* group */ 0, /* channel */ 0, /* note */ 60, /* velocity */ 100);
+engine.pushMidiCc(0, 0, 0, /* controller */ 1, /* value */ 64);
+engine.pushMidiNoteOff(0, 0, 0, 60, 0);
+
+// スケジュール指定: 同じ呼び出しにブロック内相対のレンダーフレームを渡します。
+engine.pushMidiNoteOn(0, 0, 0, 64, 100, /* renderFrame */ 64);
 
 // 入力ソース経路（bindWebMidi が内部で使う経路）
 engine.setMidiInputSource(0);
@@ -201,6 +206,27 @@ engine.bindMidiCcBinding({
 `options.minMovement` は 7 ビット CC 単位で測る `0`〜`127` の整数（既定 `0`）です。`0` なら最初に観測したスタンドアロンのコントローラー値ですぐにバインドします。ただし番号の小さい CC（`0..31`）は、次のメッセージと 14 ビットペアを作れるよう一時的に保持します。正のしきい値を指定すると、同じ UMP グループとチャンネルで最初に観測した値から、その値以上動いたときにバインドします。MIDI 2.0 の 32 ビット CC 値も 7 ビット単位へ縮小して比較します。このしきい値はスタンドアロンの 7 ビットコントローラーだけに適用し、14 ビットペアと RPN／NRPN シーケンスはこのゲートを通らずに組み立てます。
 :::
 
+## デバイスのジェスチャーを表現軸に割り当てる
+
+**コントローラープロファイル**は、デスティネーション上のインストゥルメントにとってジェスチャーが何を意味するかを定めます。たとえば CC2 をブレスの強さ、チャンネルプレッシャーをラウドネス、ピッチベンドをセント単位のピッチオフセットとして扱います。エンジンのパラメータを動かす `bindMidiCc` とは別物で、プロファイルはインストゥルメント自身の表現軸を動かします。
+
+- `controllerProfileNames()` はプリセット名 `'gm'`、`'breath'`、`'breath-aftertouch'`、`'mpe'` を返します。
+- `engine.setControllerProfile(destinationId, name)` はデスティネーションのプロファイルをプリセットで置き換え、各チャンネルに蓄積された軸の値を消去します。未知の名前、インストゥルメントのないデスティネーション、プロファイルを持たないインストゥルメントでは例外になります。
+- `engine.bindController(destinationId, binding)` は `ControllerBinding` を 1 つ追加します。`input`（`'control-change'`、`'channel-pressure'`、`'poly-pressure'`、`'pitch-bend'`、`'velocity'`）、`index`（CC 番号。`'control-change'` のときだけ使用）、`axis`（`'excitation'`、`'position'`、`'brightness'`、`'morph'`、`'loudness'`、`'pitch-cents'`、`'vibrato-depth'`。`'none'` は拒否）、省略可能な `lo`、`hi`、`curve` で指定します。`lo > hi` でジェスチャーが反転し、`curve` の既定は線形の `1` です。
+- `clearControllerBindings(destinationId)`、`controllerBindingCount(destinationId)`、`setControllerVelocityMeaningful(destinationId, meaningful)` が残りの操作です。デバイスが一定のベロシティを送る場合は最後のものを `false` にすると、割り当てた軸だけがダイナミクスを担います。
+- `setControllerNoteTracking(destinationId, dimension, tracking)` は、1 つのチャンネルで複数のノートが鳴っているとき、チャンネル宛ての値がどのノートに届くかを選びます。`dimension` は `MPE_DIMENSIONS`（`'bend'`、`'pressure'`、`'timbre'`）、`tracking` は `NOTE_TRACKINGS`（`'last'`、`'lowest'`、`'highest'`、`'all'`）の値です。効くのは MPE ゾーン内で、1 チャンネルが複数ノートを保持しているときだけです。
+
+```typescript
+import { controllerProfileNames } from '@libraz/libsonare';
+
+controllerProfileNames();                         // ['gm', 'breath', 'breath-aftertouch', 'mpe']
+engine.setControllerProfile(0, 'breath');         // ブレス CC が励起の強さを動かす
+engine.bindController(0, { input: 'channel-pressure', axis: 'loudness', lo: 0.2, hi: 1 });
+engine.controllerBindingCount(0);                 // 5
+```
+
+Python ではキーワード専用引数の `bind_controller(destination_id, input=..., index=0, axis=..., lo=0.0, hi=1.0, curve=1.0)`、`set_controller_profile`、`clear_controller_bindings`、`controller_binding_count`、`set_controller_velocity_meaningful`、`set_controller_note_tracking`、モジュール関数の `controller_profile_names()` を使います。各音色がどの軸を読むかは [物理モデル](./physical-models.md) にあります。
+
 ## ノートを残さず MIDI FX を差し替える
 
 各デスティネーションは 1 つの **MIDI FX インサート**を持てます。イベントストリームへの非破壊な変換（トランスポーズ、チャンネルフィルタ、ベロシティカーブなど）を JSON で設定します。
@@ -245,10 +271,12 @@ sonare_engine_clear_midi_fx(engine, /* destination_id */ 0);
 **スタックノート**は、対応するノートオフが届かなかったノートオンです。ケーブルを抜いた、Bluetooth パケットを落とした、FX の差し替えがオフを飲み込んだ、などが原因です。対処は **MIDI パニック**、すなわち鳴っている全ボイスを解放する all-notes-off です。
 
 ```typescript
-engine.pushMidiPanic(-1);   // -1 = 即時。renderFrame を渡せばスケジュールも可能
+engine.pushMidiPanic();   // 即時。renderFrame を渡せばスケジュールも可能
 ```
 
 パニックはリアルタイム安全で軽量です。楽器 UI の見える位置に「パニック」ボタンを置いて割り当ててください。Web MIDI ブリッジは切断時に自動パニックしません。ホットアンプラグを自分で扱う場合は、演奏中だったポートが消えたらパニックを送ってください。
+
+負荷がかかってもノートオフは失われません。MIDI 出力が満杯で受け付けられなかったものは毎ブロック再送され、MIDI FX のキューが満杯のときはそのノートを即座に解放して保留中のノートオンを取り下げます。スケジュールされた MIDI は、ホストのブロックサイズによらず同じフレームに届きます。MIDI FX の出力、クリップ終端での解放、ループ折り返し後のイベントも同様です。
 
 ## ブラウザの Web MIDI ブリッジ
 
@@ -393,7 +421,7 @@ class KeyboardSynthProcessor extends AudioWorkletProcessor {
     } else if (msg.type === 'ump') {
       engine.pushMidiInputUmp(msg.words, 0);
     } else if (msg.type === 'panic') {
-      engine.pushMidiPanic(-1);
+      engine.pushMidiPanic(); // フレームを省略すると即時
     }
   }
 

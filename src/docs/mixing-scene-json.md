@@ -51,10 +51,20 @@ The fastest way to understand the format is to print a built-in preset and read 
 | `vcaGroups` | array | Level groups that trim several strips at once (see [VCA group](#vca-group)). |
 | `connections` | array | The routing graph edges (see [Connection](#connection)). |
 
-::: warning The loader skips unknown keys — the schema does not
-The parser ignores scene fields it does not recognize, so a forward-compatible producer can add metadata without breaking older readers. The flip side: a **misspelled scene key is silently dropped** — `processorName` (wrong) vs `processor` (right), or `faderDB` for `faderDb`, leaves the fader sitting at its default with no error. The shipped schema closes exactly this hole: every object in it is `additionalProperties: false`, so a validator reports the misspelling before the file is loaded.
+::: warning The loader accepts unknown keys, and reports them
+The parser still loads a scene that carries fields it does not recognize, so a forward-compatible producer can add metadata without breaking older readers. A key that starts with `$` or `x-` is reserved for that purpose and is never reported. Any other key the reader does not consume is a likely typo — `processorName` (wrong) vs `processor` (right), or `faderDB` for `faderDb` — and it takes no effect, so the field keeps its default.
 
-Insert `params` keys get a separate safety net: after a scene loads, every param key that no processor consumed is reported as a **non-fatal warning** through `Mixer.sceneWarnings()` (Python `scene_warnings()`). The scene still loads and the unknown keys simply take no effect — read the warnings right after loading to catch typos instead of hunting for a knob that "does nothing". Enumerate the keys an insert actually reads with `masteringInsertParamNames(name)` (Python `mastering_insert_param_names(name)`).
+Every such key is reported as a **non-fatal warning** with its path from the document root, e.g. `unknown scene key 'strips[0].faderDB'`. The scene still loads. Read the warnings right after loading instead of hunting for a knob that "does nothing":
+
+- `Mixer.sceneWarnings()` (Python `scene_warnings()`) after `Mixer.fromSceneJson(...)`;
+- the string list that `Project.setMixerSceneJson(...)` returns (Python `set_mixer_scene_json`), empty when the scene is clean;
+- the `unknown_scene_key` diagnostic that `Project.fromJsonWithDiagnostics(...)` returns in its `diagnostics` text for the scene embedded in a project document, with a path such as `scene.strips[2].faderDB` (`Project.fromJson` loads the same document and drops the diagnostics). The rest of the project document is not checked for unknown keys.
+
+Insert `params` keys are covered by the same list: a param key that no processor consumed is reported too. Enumerate the keys an insert actually reads with `masteringInsertParamNames(name)` (Python `mastering_insert_param_names(name)`).
+
+The shipped schema catches the same mistakes before any load: every object in it is `additionalProperties: false`, so a validator reports the misspelling at validation time.
+
+The live-engine setters are stricter than a whole-scene load. `setTrackStripJson`, `setBusStripJson`, `setMasterStripJson` (and the Node, WASM, and Python setters over them) and the strip EQ band setters (`setTrackStripEqBand`, `setTrackStripEqBandJson`, and the bus and master counterparts) **refuse** a key they do not consume with `InvalidParameter`, and the message names it: `unknown strip key 'strips[0].faderDB'`, `unknown band key 'gainDB'`. The legacy snake_case spellings and the `$` / `x-` keys are accepted.
 :::
 
 ## Strip
@@ -93,17 +103,17 @@ Serializing a scene after runtime pan edits preserves the strip's current `panMo
 **Insert `slot` and send `timing` must be strings.** A non-string value — e.g. a numeric `"timing": 1` — is rejected at load time, with the reason `send timing must be a string ("pre" or "post")`. Always write `"pre"` or `"post"`.
 :::
 
-::: warning How a rejected scene reaches you differs by runtime
-Everything that stops a scene from building — malformed JSON, an out-of-range field, a non-string `timing` — fails the same way within a runtime, but the runtimes do not agree with each other. The specific reason is carried in the message; the error type is not a discriminator worth branching on.
+::: warning How a rejected scene reaches you
+Everything that stops a scene from building — malformed JSON, an unsupported `version`, an out-of-range field, a non-string `timing` — is reported with the C ABI's own code and the specific reason in the message.
 
-| Runtime | What you catch | Inner reason |
-|---------|----------------|--------------|
-| WASM | `InvalidState`, message `failed to build mixer from scene JSON: <reason>` | Preserved |
-| Node native | An untyped `Napi::Error` with the same message | Preserved |
-| Python | A bare `RuntimeError` | **Dropped** — the message is only `failed to build mixer from scene JSON` |
-| C ABI | `nullptr` from `sonare_mixer_from_scene_json` | Read `sonare_last_error_message()` |
+| Runtime | What you catch | Code |
+|---------|----------------|------|
+| WASM | `SonareError`, message `failed to build mixer from scene JSON: <reason>` | `InvalidFormat` for a malformed document, `InvalidParameter` for an unsupported version or an out-of-range field |
+| Node native | `SonareError` with the same message and codes | Same |
+| Python | `SonareError` with the same message and codes | Same |
+| C ABI | `nullptr` from `sonare_mixer_from_scene_json` | `sonare_last_error_code()`; the reason is in `sonare_last_error_message()` |
 
-Validate a scene before you hand it to a mixer rather than relying on the exception to name the field, and on Python log the scene next to the exception — the message alone will not tell you which field was wrong.
+Branch on `code`; log the message to see which field was wrong. Validating a scene before you hand it to a mixer still gives the earliest, path-naming message.
 :::
 
 ::: details Field terms: dual pan, polarity invert, pan law, PDC
@@ -126,6 +136,8 @@ An insert is a named processor running in series inside the strip (or a bus).
 
 ::: info Sidechain and ducking
 Normally a processor reacts to the audio passing through it. A **sidechain** makes it react to a *different* track instead: `sidechainKey` names that other strip. The classic use is **ducking** — a compressor on the music that turns the music down whenever the named voice strip is loud, so speech stays clear over a music bed.
+
+On the live [realtime engine](./realtime-engine.md), sidechain keys are bound with `setLaneSidechain`, `setBusSidechain`, and `setMasterSidechain`, which refuse a binding that keys a strip from itself or closes a cycle with `InvalidParameter`. `canSetLaneSidechain(trackId, insertIndex, sourceTrackId)`, `canSetBusSidechain`, and `canSetMasterSidechain` ask the same question without changing anything and answer `{ ok, reason }` (for example `{ ok: false, reason: 'selfKey' }` or `'cycle'`), so a UI can grey out an impossible choice before the user makes it.
 :::
 
 ::: warning `params` is an object; the escaped-string form is legacy
@@ -240,11 +252,11 @@ check-jsonschema \
 
 ### Where the schema and the loader disagree
 
-The schema is written to be **stricter** than the loader wherever the loader would otherwise accept a mistake silently. In the other direction, the loader enforces a few bounds the schema leaves open, and the mixer build checks references no schema can express. Validate first, then load, then read `sceneWarnings()` — each layer catches what the previous one cannot.
+The schema is written to be **stricter** than the loader wherever the loader would otherwise accept a mistake silently. In the other direction, the loader enforces a few bounds the schema leaves open, and the mixer build checks references no schema can express. Validate first, then load, then read `sceneWarnings()` (or the list `Project.setMixerSceneJson` returns) — each layer catches what the previous one cannot.
 
 | Input | Schema | Loader |
 |-------|--------|--------|
-| Unknown or misspelled key (`faderDB`) | Rejected (`additionalProperties: false`) | Ignored silently; the field keeps its default |
+| Unknown or misspelled key (`faderDB`) | Rejected (`additionalProperties: false`) | Loaded without effect and reported in `sceneWarnings()`; the field keeps its default. The live strip and EQ band setters refuse it |
 | Legacy snake_case key (`fader_db`, `params_json`, `processor_name`, `destination_bus_id`, `vca_groups`, …) | Rejected | Accepted; the writer never emits this spelling |
 | `params` as an escaped JSON string | Rejected (`type: object`) | Accepted as the legacy form |
 | Missing `version` | Rejected (`required`) | Assumed `1` |

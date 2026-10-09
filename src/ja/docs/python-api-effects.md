@@ -64,11 +64,15 @@ blind = sonare.detect_acoustic(
 print(blind.is_blind, blind.rt60_bands)
 
 estimate = sonare.estimate_room(room_recording, sample_rate, n_octave_bands=6)
-print(estimate.volume, estimate.length, estimate.width, estimate.height)
+print(estimate.volume, estimate.length_m, estimate.width_m, estimate.height_m)
 print(estimate.drr_db, estimate.confidence, estimate.absorption_bands)
 
 rir = sonare.synthesize_rir(7.0, 5.0, 3.0, absorption=0.2, sample_rate=sample_rate)
-print(rir.sample_rate, len(rir.rir), rir.has_error)
+print(rir.sample_rate, len(rir.rir), rir.diagnostics)  # 警告のみ
+
+# 推定したルームを再合成する。足すのは位置だけ
+geometry = sonare.room_geometry_from_estimate(estimate, source=(1, 1, 1.2), listener=(2, 1.5, 1.5))
+rir = sonare.synthesize_rir(**geometry, sample_rate=sample_rate, material_preset="none")
 
 morphed = sonare.room_morph(room_recording, sample_rate, 12.0, 9.0, 4.0, wet=0.6)
 ```
@@ -76,7 +80,9 @@ morphed = sonare.room_morph(room_recording, sample_rate, 12.0, 9.0, 4.0, wet=0.6
 注意点は 3 つです。
 
 - `estimate_room(...)` は実空間そのものではなく等価ルームを返すため、`confidence` を確認してください。
-- `synthesize_rir(...)` は音源／聴取位置が不正な場合に `has_error` で知らせます。
+- `synthesize_rir(...)` は、音源や聴取位置が部屋の外にあるなど使えない形状では `SonareValueError` を送出します。メッセージは診断コード（`acoustic.source_outside_room` など）で始まります。正常に返った `RirResult` の `diagnostics` には警告だけが入ります。
+- `material_preset`（既定 `"none"`。ほかに `"concrete"`、`"wood"`、`"curtain"`、`"carpet"`、`"glass"`）と `estimate_room` の `mode`（既定 `"auto"`。ほかに `"blind"`、`"impulse_response"`）は名前だけを受け付けます。数値は `TypeError`、未知の名前は `SonareValueError` です。
+- `room_geometry_from_estimate(estimate, source=None, listener=None)` は `synthesize_rir` のキーワード引数の辞書（`length_m`、`width_m`、`height_m`、必要に応じて `absorption_bands`、`source`、`listener`）を返します。計測できる寸法がない推定結果（NaN）は `SonareValueError` になります。
 - `room_morph(...)` は音作り効果であり、残響除去ではありません。
 
 値の読み方とブラインド推定を使う場面は [ルーム音響解析](./acoustic-analysis.md) を参照してください。
@@ -95,7 +101,7 @@ morphed = sonare.room_morph(room_recording, sample_rate, 12.0, 9.0, 4.0, wet=0.6
 | `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sample_rate?, hop_length?, voiced?, voiced_prob?)` | `list[float]` | コントゥアに沿うピッチ補正。フレームごとの `f0_hz` コントゥアに沿って、有声フレームを `target_midi` へ寄せます。ビブラートやドリフトを平坦化せず保持します |
 | `note_stretch(samples, sample_rate, onset_sample?, offset_sample?, stretch_ratio?)` | `list[float]` | 単一ノート区間をその場でストレッチ |
 | `note_move(samples, sample_rate, onset_sample?, offset_sample?, target_onset_sample?)` | `list[float]` | ノート区間の長さを変えずに、新しいオンセット位置へ移動 |
-| `voice_change(samples, sample_rate, pitch_semitones?, formant_factor?)` | `list[float]` | ピッチとフォルマントを独立にシフト |
+| `voice_change(samples, sample_rate, pitch_semitones?, formant_factor?, formant_mode?)` | `list[float]` | ピッチとフォルマントを独立にシフト。`formant_mode` は `"relative"`（既定。`formant_factor` はピッチシフトの後にかけるワープ）か `"absolute"`（`formant_factor` はピッチシフトに関係なく入力に対するフォルマントのシフト量。`1.0` ならフォルマントは元の位置のまま）。ワープ `formant_factor / 2**(pitch_semitones / 12)` が [0.55, 1.65] を外れる absolute の指定は、到達できる `formant_factor` の範囲を示した `SonareValueError` になります |
 | `voice_change_realtime(samples, sample_rate?, preset?, channels?)` | `np.ndarray` | リアルタイム音声プリセットチェーンで 1 回レンダリング |
 | `normalize(samples, sample_rate, target_db?)` | `list[float]` | ピークを目標 dB にノーマライズ（既定値: 0.0） |
 | `normalize_rms(samples, sample_rate, target_db?)` | `list[float]` | RMS を目標 dB にノーマライズ（既定値: -20.0） |
@@ -192,7 +198,7 @@ JSON ではなく解決済みの POD 設定が必要な場合は、`realtime_voi
 | `frame_signal(samples, frame_length, hop_length)` | `tuple[int, list[float]]` | `librosa.util.frame`。`(n_frames, row-major フレーム)` を返す |
 | `pad_center(values, size, pad_value?)` | `list[float]` | `librosa.util.pad_center` |
 | `fix_length(values, size, pad_value?)` | `list[float]` | `librosa.util.fix_length` |
-| `fix_frames(frames, x_min?, x_max?, pad?)` | `list[int]` | `librosa.util.fix_frames` |
+| `fix_frames(frames, x_min?, x_max?, pad?)` | `list[int]` | `librosa.util.fix_frames`。`x_max` は上限（その値を含む）で、省略（`None`）すると上限なしです。`-1` は拒否されます |
 | `peak_pick(values, pre_max, post_max, pre_avg, post_avg, delta, wait)` | `list[int]` | `librosa.util.peak_pick`。ピーク位置のインデックスを返す |
 | `vector_normalize(values, norm_type?, threshold?)` | `list[float]` | `librosa.util.normalize`。`norm_type`: 0=inf, 1=L1, 2=L2, 3=power |
 | `pcen(values, n_bins, n_frames, sample_rate?, hop_length?, time_constant?, gain?, bias?, power?, eps?)` | `list[float]` | `librosa.pcen`。入力は row-major の `[n_bins x n_frames]` メル |
@@ -202,3 +208,20 @@ JSON ではなく解決済みの POD 設定が必要な場合は、`realtime_voi
 | `cyclic_tempogram(onset_envelope, sample_rate?, hop_length?, win_length?, bpm_min?, n_bins?)` | `tuple[int, list[float]]` | オクターブ畳み込みの循環テンポグラム |
 | `tempogram_ratio(tempogram_data, win_length?, sample_rate?, hop_length?, factors?)` | `list[float]` | テンポグラムからのテンポ比特徴量 |
 | `plp(onset_envelope, sample_rate?, hop_length?, tempo_min?, tempo_max?, win_length?)` | `list[float]` | `librosa.beat.plp`。Predominant Local Pulse |
+
+## ストリーミング EQ API
+
+`StreamingEqualizer` は、ネイティブのブロック処理 EQ エンジンを Python から扱うオブジェクトです。ライブプレビュー、プロセッサ UI、マスタリングチェーンを組まずにソースの音色をリファレンスへ寄せる用途に使えます。
+
+```python
+with sonare.StreamingEqualizer(sample_rate=48000, max_block_size=512) as eq:
+    eq.set_band(0, {"type": "bell", "frequencyHz": 2500, "gainDb": 2.5, "q": 1.0})
+    eq.set_phase_mode("natural")
+    eq.set_auto_gain(True)
+    eq.match(source_samples, reference_samples, max_bands=8)
+    out = eq.process_mono(input_block)
+    snapshot = eq.spectrum()
+```
+
+バンドは Python の辞書または JSON 文字列で渡せます。`set_phase_mode(...)` は `zero` / `natural` / `linear` の名前、または数値を受け取ります。出力ゲイン／パン、ダイナミックバンド用のサイドチェイン入力、`process_stereo(...)`、`spectrum()`、`latency_samples`、`last_auto_gain_db` も利用できます。
+

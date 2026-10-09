@@ -130,9 +130,11 @@ print(f"ビート数: {len(result.beat_times)}")
 | 送出されるタイミング | クラス | メッセージ |
 |---------------------|--------|-----------|
 | ネイティブライブラリが OK 以外のコードを返したとき | `SonareError`（`RuntimeError` のサブクラス） | `[4] ` という数値接頭辞が付きます |
+| バインディングまたはオブジェクトの状態が呼び出しを拒否したとき（読み込んだライブラリにエントリポイントがない、閉じたオブジェクトを使った、ネイティブの結果が健全性検査に通らない） | `NOT_SUPPORTED`、`INVALID_STATE`、`UNKNOWN` のいずれかを持つ `SonareError` | 同じ `[code] ` 接頭辞が付き、素の `RuntimeError` にはなりません |
+| 読み込んだネイティブライブラリがバインディングと一致しないとき | `ABI_MISMATCH`（10）を持つ `SonareError` | ライブラリを最初に使う時点で、呼び出しが行われる前に送出されます |
 | C ABI に到達する前に、Python 側の引数・バッファ検証が呼び出しを拒否したとき | `SonareValueError` | 検証メッセージのみで、数値接頭辞は付きません |
 
-`SonareValueError` は `SonareError` と `ValueError` の**両方**を継承します。そのため `except ValueError:` でも `except sonare.SonareError:` でも捕捉でき、どちらの書き方のハンドラも、個々のエントリポイントがどちらのクラスを選ぶかを知る必要がありません。`.code` は `ErrorCode.INVALID_PARAMETER` なので、`.code` で分岐するコードから見ると、同じ入力を C ABI 側で拒否された場合とまったく同じ扱いになります。`SonareError.code` は JS バインディングが `ErrorCode` として公開するのと同じ C ABI の値で（[エラーハンドリング](./js-api-types.md#エラーハンドリング)を参照）、`.code_name` はバインディング間で共通の名称を返します。CLI はこれらのコードを[終了コード](./cli.md#終了コード)へ対応付けます。
+`SonareValueError` は `SonareError` と `ValueError` の**両方**を継承します。そのため `except ValueError:` でも `except sonare.SonareError:` でも捕捉でき、どちらの書き方のハンドラも、個々のエントリポイントがどちらのクラスを選ぶかを知る必要がありません。`.code` は `ErrorCode.INVALID_PARAMETER` なので、`.code` で分岐するコードから見ると、同じ入力を C ABI 側で拒否された場合とまったく同じ扱いになります。`SonareError.code` は JS バインディングが `ErrorCode` として公開するのと同じ C ABI の値で（[エラーハンドリング](./js-api.md#エラーハンドリング)を参照）、`.code_name` はバインディング間で共通の名称を返します。CLI はこれらのコードを[終了コード](./cli.md#終了コード)へ対応付けます（`ABI_MISMATCH` は 13）。パッケージのビルド時と ABI バージョンが異なるライブラリ、またはバインディングが必要とするシンボルを持たないライブラリは、`libsonare ABI mismatch` で始まるメッセージとともに `ABI_MISMATCH` で失敗します。ライブラリをビルドし直すか、`SONARE_LIB_PATH` を一致するビルドに向けてください。
 
 ```python
 try:
@@ -167,6 +169,10 @@ spectral_centroid: samples contains NaN or Inf at index 0
 要素ごとの変換は「空を渡せば空が返る」という契約を保っています。`power_to_db`、`amplitude_to_db`、`db_to_power`、`db_to_amplitude`、`preemphasis`、`deemphasis`、`vector_normalize`、`frame_signal`、`pad_center`、`fix_length` は空のシーケンスを受け取り、空を返します。テンポ系ヘルパーで入力行列を検査するのは `tempogram_ratio` だけで、`tempogram`、`fourier_tempogram`、`cyclic_tempogram`、`plp` は検査しません。
 
 `f0_hz` は非有限値の走査を一切受けません。pYIN は無声フレームを `nan` で表し、そのトラック表現はピッチ補正へそのまま渡される必要があるためです。`note_segments`、`extract_notes`、`decompose_note_pitch`、`split_note`、`merge_notes` は `f0_hz` の形状だけを検査し、値は検査しません。
+
+#### 「未指定」は `None`
+
+値を持たない任意の数値引数は、省略するか `None` を渡します。`-1` は「未指定」の綴りではなく、`SonareValueError` で拒否されます。対象は、すべてのトランスポート・パラメータ・MIDI 呼び出しにおけるエンジンの `render_frame`（`None` は次のブロック先頭で適用）、`SpectralRegionOp.end_sample`（`None` は信号の末尾まで）、`fix_frames(x_max=...)`、`set_program(bank=...)` と `set_program_on_channel(bank=...)`（`None` は Bank Select を送出しない）、`metering_dynamic_range` と `Audio.dynamic_range` のパーセンタイル、`vqt` と `vqt_to_audio` の `gamma`（`None` は帯域幅の自動選択）です。C ABI では `-1` がそのまま使われます。
 
 CLI の**使い方**の誤りは `SonareValueError` ではなくプレーンな `ValueError` を送出します。API 引数ではなくコマンドラインの誤りを報告するものだからです。どちらも終了コードは `3` です。
 
@@ -219,66 +225,6 @@ except sonare.SonareError as e:
     else:
         raise
 ```
-
-## ストリーミング解析 API
-
-`StreamAnalyzer` は、音声がブロック単位で届く場面で使います。たとえば、ライブ入力、コールバックループ、一度に全体解析したくない長いファイル、フレーム単位の可視化です。
-
-内部バッファに音声を蓄積しながら、mel/chroma/onset/spectral フレームを出力します。BPM、キー、コード、小節、進行パターンの推定も定期的に更新します。
-
-```python
-import libsonare as sonare
-
-stream = sonare.StreamAnalyzer(
-    sonare.StreamConfig(
-        sample_rate=44100,
-        n_mels=64,
-        emit_every_n_frames=4,
-    )
-)
-
-for block in audio_blocks:
-    stream.process(block)
-
-    frames = stream.read_frames(stream.available_frames())
-    # frames.mel は [n_frames * n_mels] のフラット配列
-    # 任意配列は frames.feature_flags を確認してから読む。クロマは [n_frames * n_chroma]
-
-    stats = stream.stats()
-    if stats.bpm > 0:
-        print(stats.bpm, stats.bpm_confidence)
-
-stream.close()
-```
-
-UI 転送量を抑える場合は、`read_frames(max_frames)` の代わりに量子化読み出しを使います。`output_format` はソース互換性のためだけに残っているので、省略するか `0` のままにし、使いたい読み出しメソッドを明示してください。
-
-| メソッド | 変わる点 |
-|----------|----------|
-| `read_frames_u8(max_frames, quantize_config?)` | 特徴量配列を unsigned 8-bit 値へ量子化します。 |
-| `read_frames_i16(max_frames, quantize_config?)` | 特徴量配列を signed 16-bit 値へ量子化します。 |
-
-`quantize_config` は任意の `QuantizeConfig`（`libsonare` からエクスポート）で、既定より大幅に大きい／小さいストリームに合わせて量子化レンジを広げます。省略すると既定値を使います。フィールドと既定値は `mel_db_min=-80.0`、`mel_db_max=0.0`、`onset_max=50.0`、`rms_max=1.0`、`centroid_max=11025.0` です。量子化器は正規化値を `[0, 1]` にクランプするため、このレンジを外れた信号は警告なしに端点で飽和します。これは JS/WASM ストリーミングドキュメントの `StreamQuantizeConfig` に対応します。
-
-どちらもタイムスタンプは float のまま保持します。外部の音声クロックと同期したい場合は、`process_with_offset(samples, sample_offset)` でチャンク開始位置を明示してください。
-
-`process_with_offset` が受け付けるのは連続したオフセットだけです。ギャップやシークの後、または `process(...)` から切り替える前には、`reset(base_sample_offset)` を呼んでから次のブロックを渡してください。`StreamConfig.max_progression_entries`（既定 `4096`）はコード進行と小節進行をそれぞれ保持する上限です。最古の履歴が破棄された場合は、`stats()` の `dropped_chord_progression_entries` と `dropped_bar_progression_entries` で確認できます。
-
-## ストリーミング EQ API
-
-`StreamingEqualizer` は、ネイティブのブロック処理 EQ エンジンを Python から扱うオブジェクトです。ライブプレビュー、プロセッサ UI、マスタリングチェーンを組まずにソースの音色をリファレンスへ寄せる用途に使えます。
-
-```python
-with sonare.StreamingEqualizer(sample_rate=48000, max_block_size=512) as eq:
-    eq.set_band(0, {"type": "bell", "frequencyHz": 2500, "gainDb": 2.5, "q": 1.0})
-    eq.set_phase_mode("natural")
-    eq.set_auto_gain(True)
-    eq.match(source_samples, reference_samples, max_bands=8)
-    out = eq.process_mono(input_block)
-    snapshot = eq.spectrum()
-```
-
-バンドは Python の辞書または JSON 文字列で渡せます。`set_phase_mode(...)` は `zero` / `natural` / `linear` の名前、または数値を受け取ります。出力ゲイン／パン、ダイナミックバンド用のサイドチェイン入力、`process_stereo(...)`、`spectrum()`、`latency_samples`、`last_auto_gain_db` も利用できます。
 
 ## マスタリング API
 
@@ -438,7 +384,16 @@ stereo_preview = json.loads(sonare.mastering_streaming_preview_stereo(left, righ
 | `mastering_repair_dereverb_classical(samples, sample_rate?, *, ...)` | `np.ndarray` | `threshold=0.05`、`attenuation=0.5`、`n_fft=1024`、`hop_length=256`、`t60_sec=0.4`、`late_delay_ms=50.0`、`over_subtraction`、`spectral_floor`、`wpe_enabled`、`wpe_iterations`、`wpe_taps`、`wpe_strength` |
 | `mastering_repair_trim_silence(samples, sample_rate?, *, ...)` | `np.ndarray` | `threshold=0.001`、`padding_samples=0`、`mode='peak'`、`gate_lufs=-60.0`、`window_ms=400.0` |
 
-リペア系のステージはオフライン専用で、`StreamingMasteringChain` では拒否されます。これらの単発ヘルパー、または `mastering_chain*` / `master_audio*` の中で実行してください。詳細は [ダイナミクス](./glossary/mastering/dynamics.md) と [リペア](./glossary/mastering/repair.md) を参照してください。
+信号全体を対象とするリペアステージ（declick、declip、decrackle、dehum、dereverb）は `StreamingMasteringChain` では拒否されます。これらの単発ヘルパー、または `mastering_chain*` / `master_audio*` の中で実行してください。リアルタイムエンジンでは、decrackle、dehum、クラシックなデノイザー、クラシックなデリバーブがカタログ ID のインサートとしても使えます。declick と declip はオフラインのままです。
+
+任意のチャンネル数の音声は 2 回の呼び出しでリペアできます。`mastering_repair_analyze(channels, sample_rate)` はチャンネルごとの欠陥を測定し、アシスタントが実行するステージを `recommended` として返します（そのまま渡せます。デリバーブは推奨されません）。`mastering_repair_apply(channels, sample_rate, stages=[...])` はそれを実行します。ステージはリストの順序に関わらず、declip、declick、decrackle、dehum、denoise、dereverb の固定順で実行され、重複したステージや未知の設定は拒否されます。結果には、リペア後のチャンネルと、ステージごとのレポート（チャンネルごと、またはリンクされた denoise と dereverb では 1 回）が入り、`on_progress` / `cancel` は[進捗コールバック](#進捗コールバック)と同じ使い方です。
+
+```python
+analysis = sonare.mastering_repair_analyze([left, right], 48000)
+result = sonare.mastering_repair_apply([left, right], 48000, stages=analysis["recommended"])
+```
+
+`streaming_loudness_gain(samples, sample_rate, config)` と `streaming_loudness_gain_stereo(left, right, sample_rate, config)` は、`StreamingMasteringChain` の構築に使う数値を、ラウドネスステージの入力で測定します。戻り値の `StreamingLoudnessGain` は `loudness_static_gain_db`（オフラインチェーンが適用するゲインと等しく、シーリングのクランプを含みます。無音では 0）、`true_peak_db`、`integrated_lufs` を持ちます。前の 2 つをコンストラクタの `loudness_static_gain_db` と `loudness_static_gain_peak_db` に渡します。詳細は [ダイナミクス](./glossary/mastering/dynamics.md) と [リペア](./glossary/mastering/repair.md) を参照してください。
 
 ### 進捗コールバック
 
@@ -552,11 +507,11 @@ with sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512)
 | トラック、クリップ、テンポ、マーカー、undo/redo を編集する | `Project`（コンテキストマネージャ。`with` を使う） | [プロジェクト編集](./project-editing.md) |
 | 内蔵シンセサイザー（NativeSynth）で MIDI をレンダーする | `Project.bounce_with_synth_instrument(...)`、`synth_preset_names()`、`synth_preset_patch(name)`、`SynthPatch` | [内蔵シンセサイザー](./native-synth.md)、[プロジェクトのバウンス](./project-bounce.md) |
 | SoundFont で MIDI をレンダーする | `Project.load_soundfont(data)`、`Project.bounce_with_sf2_instrument(...)` | [SoundFont プレイヤー](./soundfont-player.md) |
-| バウンス中に自前のインストゥルメントをホストする | `ExternalInstrument` プロトコルを使う `Project.bounce_with_instruments(...)`。`render(channels, num_frames)` コールバックに加え、任意の `prepare`/`on_event` フックと `latency_samples` を持ちます。**Python 専用です**。 | [プロジェクトのバウンス](./project-bounce.md) |
+| バウンス中に自前のインストゥルメントをホストする | `ExternalInstrument` プロトコルを使う `Project.bounce_with_instruments(...)`。`render(channels, num_frames)` コールバックに加え、任意の `prepare`/`on_event` フックと `latency_samples` を持ちます。Node と WASM には、コールバック形式が `bounceWithInstruments` / `bounceWithInstrument` としてあります。 | [プロジェクトのバウンス](./project-bounce.md#自前のインストゥルメントをホストする) |
 | MIDI イベントからインストゥルメントをライブ演奏し、送出先（デスティネーション）の MIDI FX を差し替える | `RealtimeEngine.set_synth_instrument(...)`、`RealtimeEngine.load_soundfont(...)`、`RealtimeEngine.set_midi_fx(...)`、およびエンジンの MIDI 入力キュー | [MIDI 入力](./midi-input.md) |
 | ライブエンジンへ MIDI クリップをサンプル精度でスケジュールする | `EngineMidiClipSchedule` / `EngineMidiEvent` を渡す `RealtimeEngine.set_midi_clips([...])`、`RealtimeEngine.sample_at_ppq(ppq)`。ppq は音楽的時間の単位で、四分音符あたりのパルス数です | [リアルタイムエンジン](./realtime-engine.md#midi-クリップスケジューリングと-sampleatppq) |
-| トラック単位のキューモニタリングを設定する | `RealtimeEngine.set_track_monitor_mode(lane_index, mode, render_frame=-1)`。`EngineTrackMonitorMode`（`off`／`pfl`／`afl`）を使います。PFL はフェーダー前、AFL はフェーダー後を試聴します | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
-| デスティネーションを外部 MIDI ハードウェアへ送る | `set_midi_destination_external(...)`、`set_external_midi_clock_enabled(...)`、`drain_external_midi(...)`、`external_midi_dropped_count()` | [リアルタイムエンジン](./realtime-engine.md#トラックを外部-midi-機器へ送る) |
+| トラック単位のキューモニタリングを設定する | `RealtimeEngine.set_track_monitor_mode(lane_index, mode, render_frame=None)`。`EngineTrackMonitorMode`（`off`／`pfl`／`afl`）を使います。PFL はフェーダー前、AFL はフェーダー後を試聴します | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
+| デスティネーションを外部 MIDI ハードウェアへ送る | `set_midi_destination_external(...)`、`set_external_midi_clock_enabled(...)`、`drain_external_midi(...)`、`external_midi_dropped_count()` | [リアルタイムエンジン](./project-editing-midi.md#トラックを外部-midi-機器へ送る) |
 | エンジンのトラックをライブミックス／自動化する | レーン／ストリップ操作に加え、`set_bus_strip_insert_param_by_name(...)`、`set_bus_strip_insert_bypassed(...)`、`resolve_track_insert_automation_id(...)`、`resolve_master_insert_automation_id(...)`、`resolve_bus_insert_automation_id(...)`、`set_param_smoothing_ms(...)` | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
 | ワイドメーターとスコープを読む | `drain_meter_telemetry_wide(...)`、`configure_scope_telemetry(...)`、`drain_scope_telemetry(...)` | [リアルタイムエンジン](./realtime-engine.md#サラウンドグループバスとワイドメーター) |
 
@@ -580,6 +535,26 @@ with sonare.Project() as project:
 
 `Project` は、プロジェクトごとでアンドゥ可能、モジュールが所有する不透明なバイト列（アシストサイドカー）を保持できます。スコープはモジュール ID・ターゲットトラック・領域です。`project.set_assist_sidecar(module_id, payload, *, schema_version=0, target_track_id=0, region_start_ppq=0.0, region_end_ppq=0.0)` で設定し、`project.assist_sidecar_count()`、`project.get_assist_sidecar(index) -> AssistSidecar`、`project.assist_sidecars()` で読み出します。バインディング間の詳細は [プロジェクト編集](./project-editing-midi.md#アシストサイドカー) を参照してください。
 
+## その他のエントリポイント
+
+他のページが扱う分野の関数と型です。完全なシグネチャは、パッケージに同梱の型スタブにあります。
+
+| やりたいこと | API | ガイド |
+|------|-----|-------|
+| 検出済みのコードに、再検出なしでローマ数字と機能を付ける | `chord_functions(chords, key)`（`FunctionalChord` のリストを返す） | [解析](./analysis.md) |
+| 解析にチューニングを測定させ、Hz に変換する | `analyze`、`detect_chords`、`detect_key` の `tuning="auto"`（`KeyDetection` が使った `tuning` を持つ）、`transcribe` の `reference_hz="auto"`、`tuning_to_reference_hz`、`reference_hz_to_tuning` | [音声からノートへ](./audio-to-notes.md) |
+| モノフォニックなテイクを、検出または指定したキーに合わせる | `auto_tune(samples, sample_rate, key="detect")`（`AutoTuneResult` を返す）、`scale_mask_for_mode(root, mode)` | [Python エフェクト API](./python-api-effects.md) |
+| パラメータを言い直さずに Mel／MFCC の結果を逆変換する | `mel_result_to_stft`、`mel_result_to_audio`、`mfcc_result_to_mel`、`mfcc_result_to_audio` | [逆変換](./inverse-features.md) |
+| ルーム推定を `synthesize_rir` の入力にする | `room_geometry_from_estimate(estimate, source=..., listener=...)`（`RoomGeometry` を返す） | [音響解析](./acoustic-analysis.md) |
+| デコードした全チャンネルを保持する、またはチャンネルを狭いレイアウトに畳み込む | `decode_channels(data)`（`(channels, sample_rate)` を返す）、`downmix(channels, target_layout)`（センターとサラウンドは -3 dB、LFE は破棄） | [チャンネル形式](./channel-formats.md) |
+| サイドチェイン接続が受理されるか、されないならなぜかを尋ねる | `RealtimeEngine.can_set_lane_sidechain`、`can_set_bus_sidechain`、`can_set_master_sidechain`（`SidechainCheck` を返す） | [リアルタイムエンジン](./realtime-engine.md) |
+| エンジンのクリップ集合を 1 クリップずつ編集する | `RealtimeEngine.upsert_clip`、`remove_clip` | [リアルタイムエンジン](./realtime-engine.md) |
+| プロセッサのリセット、繰り返しレンダリングの準備、テールとレイテンシの読み取り | `reset_processor_state`、`prime_offline_parameters`、`tail_samples`、`graph_latency_samples_q8` | [リアルタイムエンジン](./realtime-engine.md) |
+| フェーダーとパンのオートメーションをトラックやバスで指定する | `resolve_track_lane_automation_id`、`resolve_bus_automation_id` | [リアルタイムエンジン](./realtime-engine.md) |
+| 信号の終わりでTrue Peakメーターの保留ウィンドウを反映する | `Mixer.flush_meters()` | [ミキシングエンジン](./mixing.md) |
+| プロジェクトで解決できなかったオーディオソースを列挙する | `Project.unresolved_audio_sources()` | [プロジェクト編集](./project-editing.md) |
+| ミキサーシーンの認識されないキーを読む | `Mixer.scene_warnings()` | [ミキシングシーン JSON](./mixing-scene-json.md) |
+
 ## 各節の移動先
 
 | 節 | 移動先 |
@@ -598,3 +573,5 @@ with sonare.Project() as project:
 | librosa 互換ヘルパー | [Python エフェクト API](./python-api-effects.md#librosa-互換ヘルパー) |
 | 変換関数 | [Python 解析 API](./python-api-analysis.md#変換関数) |
 | 型定義 | [Python 型定義](./python-api-types.md#型定義) |
+| ストリーミング解析 API | [Python 解析 API](./python-api-analysis.md#ストリーミング解析-api) |
+| ストリーミング EQ API | [Python エフェクト API](./python-api-effects.md#ストリーミング-eq-api) |

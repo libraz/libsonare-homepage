@@ -66,7 +66,7 @@ Most processors are not built from unique magic. They combine a small set of par
 |----------------|---------------------|---------|
 | Biquad and filter design | Low-latency IIR EQ, shelves, cuts, presence/air shaping, detector filtering | EQ, dynamics sidechains, spectral enhancers, stereo filters |
 | Envelope follower | Attack/release smoothing for level detectors and gain changes | Compressors, expanders, gates, de-esser, vocal rider, limiters |
-| Parameter smoother | Click-free parameter transitions in block processing | Mastering processors, mixer strip controls, automation |
+| Parameter smoother | Click-free parameter transitions in block processing; a glide settles exactly on its target at every sample rate, and an interrupted glide continues from the value already applied | Mastering processors, mixer strip controls, automation |
 | Lookahead and sliding maximum | Future-aware peak control without overshoot | Brickwall limiter, true-peak limiter, maximizers |
 | Oversampling and true-peak filter | Inter-sample peak estimation and anti-aliasing headroom | Limiters, clippers, saturation, final output |
 | Delay lines | Time alignment, Haas widening, modulation delay, ducking alignment | Stereo, delay, modulation, mixing alignment |
@@ -117,7 +117,9 @@ Offline-only processors can still appear in high-level workflows. Real-time rend
 
 Presets are not separate DSP algorithms. They are named configurations that enable selected repair, EQ, dynamics, saturation, spectral, stereo, maximizer, and loudness slots with genre/platform defaults.
 
-The fixed slot order is **repair → EQ → dynamics → saturation → spectral → stereo (stereo path only) → maximizer → loudness**. A configuration can skip a slot, but cannot reorder it. The [full chain figure](./mastering-processors.md#chain-order) shows every slot and which ones a sample preset enables. The loudness slot includes its own true-peak limiter after normalization; presets avoid enabling a separate maximizer limiter as well, which would limit twice.
+The fixed slot order is **repair → EQ → dynamics → saturation → spectral → stereo (stereo path only) → maximizer → loudness**. A configuration can skip a slot, but cannot reorder it. The [full chain figure](./mastering-processors.md#chain-order) shows every slot and which ones a sample preset enables. The loudness slot includes its own true-peak limiter after normalization; presets avoid enabling a separate maximizer limiter as well, which would limit twice. Its gain is solved by remeasuring the signal at the candidate gain, so it lands on the gated loudness target even when the gain moves blocks across the absolute gate; the streaming chain takes the same gain from `streamingLoudnessGain`.
+
+Every insert reports a latency and a tail. The tail is the number of samples the output keeps ringing after the input stops, counted down to 1e-5 of full scale, and it covers IIR EQs, filters, saturation, stereo inserts, modulated delays, oversampled stages, and multiband crossovers as well as reverbs; bounce and freeze lengths are sized from it. A stage switched off and back on starts from rest instead of replaying the history it held, and `set_config` rebuilds only the stage whose field changed, leaving the processor as it was when a configuration is refused.
 
 ## Dynamics
 
@@ -129,13 +131,13 @@ The fixed slot order is **repair → EQ → dynamics → saturation → spectral
 | `dynamics.expander` | Downward expansion below a threshold using envelope detection | Increase contrast and reduce low-level spill | Release time dominates audibility |
 | `dynamics.gate` | Threshold gate with hysteresis-style open/close behavior | Suppress background noise between events | Hold/release settings avoid chatter |
 | `dynamics.limiter` | Peak-oriented compressor with high ratio and short timing | Catch short transients before final output | Lower latency than lookahead brickwall limiting, less absolute |
-| `dynamics.parallelComp` | Compressed path blended with dry path | Add density while preserving transients | Blend and latency compensation must stay aligned |
+| `dynamics.parallelComp` | Compressed path blended with dry path | Add density while preserving transients | A shared combiner aligns every parallel path to the longest delay and reports it, so the blend stays phase-aligned |
 | `dynamics.sidechainRouter` | Routes an external or derived control signal into a dynamics detector | Sidechain-dependent compression or ducking | Primarily an internal routing helper exposed for advanced graphs |
 | `dynamics.duckingProcessor` | Sidechain envelope lowers the program path when the key signal is active | Voice-over music ducking and broadcast-style mixes | Attack/release shape determines speech intelligibility |
-| `dynamics.transientShaper` | Separates attack and sustain envelopes and applies independent gain | Emphasize or soften hits | Fast detector path is sensitive to block size |
+| `dynamics.transientShaper` | Separates attack and sustain envelopes and applies independent gain | Emphasize or soften hits | Fast detector path is sensitive to block size; reports its gain reduction |
 | `dynamics.upwardCompressor` | Raises material below a threshold instead of pushing loud material down | Increase detail and perceived density | Can raise noise floor; pair with denoise or gating when needed |
 | `dynamics.upwardExpander` | Lifts material above a lower threshold while leaving the quietest portions untouched | Restore articulation without hard gating | More musical than a gate for ambience-heavy sources |
-| `dynamics.vocalRider` | Slow envelope follower adjusts vocal level toward a target range | Automatic level riding for vocals or speech | Designed as gradual gain automation, not a peak limiter |
+| `dynamics.vocalRider` | Slow envelope follower adjusts vocal level toward a target range | Automatic level riding for vocals or speech | Designed as gradual gain automation, not a peak limiter; reports its gain reduction |
 
 ::: details Dynamics terms: knee, makeup gain, sidechain, ducking
 - **Knee** — the shape of the input/output curve around the threshold. A *hard knee* changes slope at the threshold; a *soft knee* blends into the compressed slope over a range. Attack and release determine how quickly the gain follows that curve.
@@ -170,11 +172,11 @@ The fixed slot order is **repair → EQ → dynamics → saturation → spectral
 | `final.bitDepth` | Quantizes samples to a target bit depth | Preview or export bit-depth reduction | Usually last or near-last |
 | `final.dither` | Adds shaped or unshaped low-level noise before quantization | Reduce quantization distortion | Export-stage processor |
 | `final.outputChain` | Groups output gain, ceiling, bit depth, dither, and final checks | Last-stage export preparation | Keep after tonal/dynamics stages |
-| `maximizer.adaptiveRelease` | Limiter release time adapts to signal behavior | Cleaner loudness increase with fewer pumping artifacts | Adds detector state |
+| `maximizer.adaptiveRelease` | Limiter release time adapts to signal behavior | Cleaner loudness increase with fewer pumping artifacts | Adds detector state; reports 129 samples of latency at its defaults |
 | `maximizer.loudnessOptimize` | Measures loudness and applies gain strategy toward a target | Hit LUFS (loudness units relative to full scale) targets for streaming/broadcast | Full-file optimization is offline by nature |
 | `maximizer.maximizer` | Loudness-oriented limiting with ceiling management | Raise perceived loudness | Use true-peak stage after aggressive settings |
 | `maximizer.softKneeMax` | Soft-knee limiting curve before hard ceiling | Less abrupt limiting | Useful before final true-peak protection |
-| `maximizer.truePeakLimiter` | Oversampled true-peak estimation and ceiling control | Avoid inter-sample overs | Adds oversampling cost and lookahead-style latency |
+| `maximizer.truePeakLimiter` | Oversampled true-peak estimation and ceiling control; an output guard rechecks every earlier position a correction can raise, so short bursts hold the ceiling | Avoid inter-sample overs | Adds oversampling cost and lookahead-style latency (129 samples at the defaults); lowering the ceiling live re-evaluates output already queued |
 
 <SonareDemo id="loudness-meter" />
 
@@ -183,10 +185,10 @@ The fixed slot order is **repair → EQ → dynamics → saturation → spectral
 | Processor | Implementation | Main use | Real-time notes |
 |-----------|----------------|----------|-----------------|
 | `multiband.compressor` | Crossover splits bands, each band runs compression, bands sum back | Frequency-dependent dynamics control | Crossover design and latency compensation matter |
-| `multiband.dynamicEq` | Dynamic EQ behavior applied across band regions | Control resonant or harsh ranges only when active | Detector smoothing is essential |
+| `multiband.dynamicEq` | Dynamic EQ behavior applied across band regions; a band switched back on restarts its detector, EQ slot, and gain glide from rest | Control resonant or harsh ranges only when active | Detector smoothing is essential |
 | `multiband.expander` | Per-band expansion below thresholds | Clean low-level noise or restore contrast by band | Can change tonal balance if overused |
 | `multiband.imager` | Per-band stereo width/mid-side processing | Keep lows mono while widening upper bands | Always check mono compatibility |
-| `multiband.limiter` | Per-band limiting before recombination | Catch band-specific peaks | Avoid excessive crossover artifacts |
+| `multiband.limiter` | Per-band limiting before recombination; bands with different lookahead or oversampling are time-aligned | Catch band-specific peaks | Avoid excessive crossover artifacts |
 | `multiband.saturation` | Per-band nonlinear drive and blend | Add harmonic color by range | Oversampling or conservative drive reduces aliasing |
 
 ## Repair
@@ -195,24 +197,26 @@ The fixed slot order is **repair → EQ → dynamics → saturation → spectral
 |-----------|----------------|----------|-----------------|
 | `repair.declick` | Detects isolated impulse-like discontinuities and interpolates or attenuates them | Remove clicks and small digital defects | Detection window introduces local lookaround |
 | `repair.declip` | Estimates clipped regions and reconstructs peaks | Repair hard-clipped audio | Offline-friendly because reconstruction uses context |
-| `repair.decrackle` | Tracks dense small impulses and smooths them | Reduce vinyl-like crackle | More expensive than single-click removal |
-| `repair.dehum` | Notch-style suppression of hum fundamentals and harmonics | Remove mains hum | Low latency when configured frequencies are known |
-| `repair.denoiseClassical` | Noise tracking and spectral attenuation | Reduce stationary background noise | Profile estimation is context-dependent |
-| `repair.dereverbClassical` | STFT-domain dereverb configuration with `t60_sec`, `late_delay_ms`, over-subtraction, spectral floor, and optional WPE settings | Reduce room tail and smear | File-level API returns a new `Audio` object |
+| `repair.decrackle` | Tracks dense small impulses and smooths them | Reduce vinyl-like crackle | More expensive than single-click removal; causal, also a realtime insert (median mode) |
+| `repair.dehum` | Notch-style suppression of hum fundamentals and harmonics | Remove mains hum | Low latency when configured frequencies are known; also a realtime insert |
+| `repair.denoiseClassical` | Noise tracking and spectral attenuation | Reduce stationary background noise | Profile estimation is context-dependent; also a realtime insert, delayed by its reported latency, with a streaming noise estimator (`spp` by default) |
+| `repair.dereverbClassical` | STFT-domain dereverb configuration with `t60_sec`, `late_delay_ms`, over-subtraction, spectral floor, and optional WPE settings | Reduce room tail and smear | File-level API returns a new `Audio` object; also a realtime insert that links its mask across channels |
 | `repair.trimSilence` | Threshold-based leading/trailing silence removal | Clean exports and batch assets | File-level utility, not a live insert |
+
+`repair.decrackle`, `repair.dehum`, `repair.denoiseClassical`, and `repair.dereverbClassical` are causal and run as realtime inserts; each equals its offline function for the same settings, delayed by the latency the instance reports, and an offline-only setting (wavelet mode, WPE, the quantile estimator) is refused by name. `repair.declick`, `repair.declip`, and `repair.trimSilence` are not causal and stay offline.
 
 ## Saturation
 
 | Processor | Implementation | Main use | Real-time notes |
 |-----------|----------------|----------|-----------------|
-| `saturation.ampSim` | Preamp drive → tone stack → optional power amp (sag/transformer/NFB) → cabinet voicing | Guitar/bass amp color insert | Discrete `cab`/`cabModel`/`ampModel` topology choices belong at construction time, not automation |
+| `saturation.ampSim` | Preamp drive → tone stack → optional power amp (sag/transformer/NFB) → cabinet voicing | Guitar/bass amp color insert | Discrete `cab`/`cabModel`/`ampModel` topology choices belong at construction time, not automation; the power stage's half-sample delay and the second microphone's path delay are always counted, so reported latency does not move with automation |
 | `saturation.bitcrusher` | Bit-depth and/or sample-rate style degradation | Lo-fi texture | Keep output gain controlled |
 | `saturation.exciter` | High-frequency harmonic generation and blend | Add brightness and perceived detail | Can become harsh quickly |
-| `saturation.hardClipper` | Hard nonlinear transfer curve | Aggressive peak shaving and distortion | Use oversampling or conservative drive |
+| `saturation.hardClipper` | Hard nonlinear transfer curve | Aggressive peak shaving and distortion | Use oversampling or conservative drive; the ADAA half sample is reported and the dry path of a blend is delayed to match |
 | `saturation.multibandExciter` | Band-split exciter with per-band drive/blend | Add sparkle without overloading lows | Crossover and drive balance matter |
 | `saturation.softClipper` | Smooth nonlinear curve | Gentle peak rounding | Common before maximizers |
-| `saturation.tape` | Nonlinear saturation with tone/soft compression behavior | Tape-like density | Drive changes loudness and tone together |
-| `saturation.transformer` | Low-order harmonic coloration and subtle saturation | Analog-style thickness | Usually subtle mastering color |
+| `saturation.tape` | Nonlinear saturation with tone/soft compression behavior, evaluated without small-signal cancellation error | Tape-like density | Drive changes loudness and tone together |
+| `saturation.transformer` | Low-order harmonic coloration and subtle saturation, evaluated without small-signal cancellation error | Analog-style thickness | Usually subtle mastering color |
 | `saturation.tube` | Asymmetric nonlinear transfer emphasizing musical harmonics | Warmth and vocal/instrument color | Watch DC and low-frequency buildup |
 | `saturation.waveshaper` | Configurable nonlinear transfer curve | General distortion and coloration | Parameter smoothing prevents clicks |
 
@@ -257,11 +261,11 @@ The fixed slot order is **repair → EQ → dynamics → saturation → spectral
 | Pitch shift | Resampling combined with time stretching | Transpose pitch while preserving approximate duration | Formants are not preserved unless using the voice-change path |
 | Pitch correction | Pitch estimation and correction toward a target MIDI note | Vocal or monophonic note tuning | Best on monophonic material |
 | Note stretch | Region-based stretch around a note span | Edit note duration | Offline editing operation |
-| Voice change | Pitch and formant controls | Voice transformation | More expensive than simple pitch shift |
+| Voice change | Pitch and formant controls; the pitch stage shifts by exactly `2^(semitones/12)` | Voice transformation | More expensive than simple pitch shift; also the `voice.changer` realtime insert for mono and stereo strips |
 | Normalize | Peak or target-level gain adjustment | Utility level matching | File-level operation unless gain is known ahead |
 | Trim/split silence | Threshold segmentation | Batch cleanup and asset prep | File-level utility |
 | Reverb inserts | Plate/Dattorro, FDN, velvet, convolution, geometric room, and room-morph inserts | Space, ambience, and room-character morphing in mixer/mastering insert graphs | Build flags and IR requirements vary |
-| Modulation/delay inserts | Chorus, ensemble, flanger, phaser, wah, auto-wah, rotary, ring modulator, pitch shifter, and stereo delay DSP live in source modules | Building blocks for creative FX | Exposed through insert factories and scene inserts; some IDs are also callable through the generic `masteringProcess` / `mastering_process` registry, but there are no dedicated top-level JS/Python helper functions |
+| Modulation/delay inserts | Chorus, ensemble, flanger, phaser, wah, auto-wah, rotary, ring modulator, pitch shifter, and stereo delay DSP live in source modules | Building blocks for creative FX | Exposed through insert factories and scene inserts; every ID is also callable through the generic `masteringProcess` / `mastering_process` registry, but there are no dedicated top-level JS/Python helper functions |
 
 ::: info Reverb insert availability
 `effects.reverb.plate` / `effects.reverb.dattorro`, `effects.reverb.fdn`, `effects.reverb.velvet`, `effects.reverb.convolution`, and the modulation/delay inserts require `SONARE_HAVE_FX`. `effects.reverb.room` and `effects.acoustic.roomMorph` also require `BUILD_ACOUSTIC_SIM`.
@@ -285,7 +289,7 @@ Automation lanes are sample-positioned and support `linear`, `exponential`, `hol
 
 It is not a replacement for the mastering processor registry. It is the scheduler and graph runtime that can host real-time-safe DSP blocks.
 
-File-wide analysis, heavier repair stages, and loudness optimization remain offline or latency-tolerant operations.
+File-wide analysis, the non-causal repair stages (declick, declip, trim silence), and loudness optimization remain offline or latency-tolerant operations; the causal repair stages (decrackle, dehum, denoise, dereverb) can run live as inserts.
 
 Realtime processing has to finish with the current block of audio before the next one arrives. That rules out anything that:
 

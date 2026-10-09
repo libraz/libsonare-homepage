@@ -94,7 +94,7 @@
 |----|------|
 | ハイパス | 低域のランブルや DC を最初に取り除くクリーンアップ用プリフィルター（`eq.highpassHz`） |
 | ゲート | フレーズの合間の小さな部屋ノイズやマイクノイズを抑える |
-| リチューン | プリセットが指定する固定の半音値だけ、グレインのオーバーラップアドで信号全体のピッチを上下させる（例: 声を高く／低く）。チェーンの中のピッチシフト段。ピッチ検出も音階へのスナップも行わないため、それが必要な場合は[編集 DSP](./editing-dsp.md) のオフラインのピッチ補正を使う |
+| リチューン | プリセットが指定する固定の半音値だけ、グレインのオーバーラップアドで信号全体のピッチを上下させる（例: 声を高く／低く）。チェーンの中のピッチシフト段で、シフト量はちょうど `2^(semitones / 12)` になる。ピッチ検出も音階へのスナップも行わないため、それが必要な場合は[編集 DSP](./editing-dsp.md) のオフラインのピッチ補正を使う |
 | フォルマント | 音高とは独立に、声の大きさやキャラクターの印象を変える |
 | EQ | ボディ・プレゼンス・エアの音色調整（`eq.bodyDb`／`presenceDb`／`airDb`） |
 | コンプレッサー | ブロックをまたいでレベルを安定させる |
@@ -274,6 +274,36 @@ import schema from '@libraz/libsonare/schemas/realtime-voice-changer-preset.sche
 `macros.space` を `1.0` にするとリバーブミックスの上限 `0.45` に到達します。範囲外の
 `1.0` がパラメータに書き込まれるわけではありません。
 
+## フォルマントモード
+
+既定（`formantMode: 'relative'`）では、フォルマント段はリチューンの後に動くため、`formantFactor` はピッチシフトがすでに起こした移動量に掛け算されます。`formantMode: 'absolute'` では、リチューンの前にフォルマントを*入力の* `formantFactor` 倍へワープするので、シフト量にかかわらず `formantFactor: 1` ならフォルマントは元の位置のままです。プリセット JSON では `dsp.formant.mode` にあたります。
+
+| | `'relative'`（既定） | `'absolute'` |
+|---|---|---|
+| `formantFactor` の意味 | リチューンの後に掛かるワープ | 入力に対するフォルマントの位置 |
+| `formantAmount` | フォルマント移動量を調整する | 無視される |
+| レイテンシ | `latencySamples()` の報告値 | 解析 1 フレーム分増える（48 kHz で 1024 サンプル、実測） |
+| 届く範囲 | `formantFactor` のパラメータ範囲内 | `formantFactor / 2^(retuneSemitones / 12)` が [0.55, 1.65] 内 |
+
+モードはチェンジャーの作成・prepare 時に固定されます。別のモードを持つ設定は拒否され（`SonareError`、"formant mode is fixed at prepare()"）、届かない範囲の絶対指定も拒否されます。後者のエラーには、そのピッチシフトで届く `formantFactor` の範囲が示されます。オートメーションは拒否せず範囲に丸めます。
+
+```typescript
+const cfg = realtimeVoiceChangerPresetConfig('neutral-monitor');
+const changer = new RealtimeVoiceChanger({
+  ...cfg,
+  formantMode: 'absolute',
+  retuneSemitones: 5,
+  formantFactor: 1, // +5 半音、フォルマントは動かさない
+});
+changer.prepare(48000, 128, 1);
+```
+
+`realtimeVoiceChangerPresetConfig(...)` が返し `setPodConfig(...)` が受け取るフラットな POD 設定は、`formantMode` を含むすべてのフィールドが必須で、省略すると `TypeError` になります。C の構造体は先頭に `struct_version` と `formant_mode` を持ち、`SONARE_VOICE_CHANGER_ABI_VERSION` は 3 なので、C の呼び出し側は現在のヘッダーで再ビルドしてください。
+
+## ミキサーインサートとして
+
+同じチェーンは、モノラル／ステレオのストリップ上でリアルタイムインサート `voice.changer`（カタログのカテゴリは `voice`）としても使えます。プリセットのフラットキー（`retuneSemitones`、`formantFactor`、`compressorThresholdDb` など）で 37 個のパラメータを公開し、うち 33 個はオートメーションできます。`formantMode`、`retuneGrainSize`、`limiterEnableIspLimiter`、`reverbSeed` は構築時のみ指定できます。範囲外の値は、構築時にキー名つきの `InvalidParameter` で拒否され、オートメーションでは範囲に丸められます。ほかのインサートと同様にレイテンシ、リバーブテール、ゲインリダクション、非有限値の破棄数を報告し、`masteringProcess` でも使えます。ディスクリプターのフィールドは[エフェクトインサート](./effects-inserts.md)を参照してください。
+
 ## 実用上の注意
 
 リアルタイム音声処理は状態を持ちます。同じチェンジャーをブロック間で再利用し、ブロックサイズは `prepare(...)` した最大値以内に保ち、コンポーネントやストリーム停止時にはハンドルを解放してください。
@@ -289,7 +319,7 @@ prepare 済みのチェーンでは値は**固定**です。リチューン経�
 `prepare(...)` の後に一度読んで補正すれば済みます。支配的な項はリチューン段がピッチシフトの
 ために解析する窓の大きさで、グレインが大きいほど 1 ステップで解析する音が増え遅延も増えます
 （[StreamingRetune](./js-api-streaming.md#streamingretune) の `grainSize` フィールドを参照）。
-True Peak（サンプル間ピーク、ISP）リミッターが有効な場合は、その遅延が加わります。
+True Peak（サンプル間ピーク、ISP）リミッターが有効な場合は、その遅延が加わります。報告値に加えて、ウェット経路にはシフト量に応じて最大 2 グレイン分の遅延が乗ります。
 :::
 
 ライブのコントロールはすべてサンプル単位でスムージングされるため、`setConfig(...)` で

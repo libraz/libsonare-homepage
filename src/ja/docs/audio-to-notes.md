@@ -9,7 +9,7 @@ description: モノラル音声を MIDI イベントへ変換し、Project の�
 
 | 目的 | 呼び出し | PPQ のクロック | 結果 |
 |---|---|---|---|
-| トランスクリプションを確認、後処理する | `transcribe({ samples, sampleRate, tempoBpm? })` | この呼び出しだけの一定テンポ。`tempoBpm` を指定するか検出します | `{ events, noteCount, tempoBpm }`。プロジェクトは変更しません |
+| トランスクリプションを確認、後処理する | `transcribe({ samples, sampleRate, tempoBpm? })` | この呼び出しだけの一定テンポ。`tempoBpm` を指定するか検出します | `{ events, noteCount, tempoBpm, tuning }`。プロジェクトは変更しません |
 | 既存アレンジへノートを書き込む | `project.transcribeToClip({ clipId, samples, sampleRate, ... })` | プロジェクトのテンポマップ | 対象 MIDI クリップのイベントリストを置き換え、書き込んだノート数を返します |
 
 出力は記号的な `ProjectMidiEvent[]` です。トランスクリプションは入力音声を変更しません。イベントはそのまま `setMidiEvents` に渡せます。1 つのノートは 2 イベントになり、同じ PPQ 位置ではノートオンより先にノートオフが並びます。
@@ -18,7 +18,7 @@ description: モノラル音声を MIDI イベントへ変換し、Project の�
 
 ## 音声を MIDI クリップへ変換する
 
-スタンドアロンの `transcribe(...)` は任意の `tempoBpm` を受け取り、独自の一定テンポのグリッド上で `{ events, noteCount, tempoBpm }` を返します。`Project.transcribeToClip(...)` はプロジェクトのテンポマップを使います。`autoTempo(...)` でマップを設定したあとに呼ぶと、クリップのイベント一覧を置き換え、書き込んだノート数を返します。こちらのリクエストには `tempoBpm` がありません。
+スタンドアロンの `transcribe(...)` は任意の `tempoBpm` を受け取り、独自の一定テンポのグリッド上で `{ events, noteCount, tempoBpm, tuning }` を返します。`Project.transcribeToClip(...)` はプロジェクトのテンポマップを使います。`autoTempo(...)` でマップを設定したあとに呼ぶと、クリップのイベント一覧を置き換え、書き込んだノート数を返します。こちらのリクエストには `tempoBpm` がありません。
 
 ::: code-group
 
@@ -63,14 +63,14 @@ with sonare.Project() as project:
 
 スタンドアロン関数の `tempoBpm` は座標系です。省略するとテンポ検出を実行し、使えるテンポが見つからなければ 120 BPM を使います。`Project.transcribeToClip` にテンポ引数がないのは、プロジェクトのマップを読むためです。録音に合わせたマップを使う場合は、先に `autoTempo` を呼んでからクリップへ変換します。
 
-チューニング基準は既定で 440 Hz です。トランスクリプション中に測定は行いません。A440 から外れて録音されたテイクでは別途測定し、`referenceHz` を渡してください。音声は空でない有限値のモノラルサンプルで、サンプルレートは `[8000, 384000]` の範囲が必要です。ノートが見つからない場合も成功であり、イベントリストは空、`noteCount` は `0` になります。
+チューニング基準は既定で 440 Hz です。A440 から外れて録音されたテイクには、`referenceHz: 'auto'`（Python は `reference_hz="auto"`）を渡すと、ピッチを追跡する前に音声から基準を測定します。Hz で直接指定することもできます。結果の `tuning`（A440 からのセミトーン端数）は、どちらの場合も使われた基準を報告するので、半音の端数だけずれた文字起こしの原因をたどれます。この単位と Hz は `tuningToReferenceHz` と `referenceHzToTuning` で相互に変換できます。音声は空でない有限値のモノラルサンプルで、サンプルレートは `[8000, 384000]` の範囲が必要です。ノートが見つからない場合も成功であり、イベントリストは空、`noteCount` は `0` になります。
 
 ## オプションと制限
 
 | オプション | 意味 |
 |---|---|
 | `polyphonic` | `false` はモノフォニック pYIN 分割、`true` は複数 F0 の追跡を使います |
-| `referenceHz` | MIDI ノート番号のチューニング基準。正の値で、既定は `440`。自動測定はしません |
+| `referenceHz` | MIDI ノート番号のチューニング基準。Hz 単位の正の値、または音声から測定する `'auto'`。既定は `440` |
 | `fmin`・`fmax` | どちらの経路にも使う F0 探索の Hz 範囲。端点を省略すると選択経路の既定値を使い、明示する場合は正の値にします。解決後の範囲は `fmax > fmin` が必要です |
 | `minNoteMs` | 保持するモノフォニックノートの最短長。既定は `30` ms です |
 | `segmentationThresholdCents` | モノフォニックノートを分けるピッチ移動。既定は `50` cents です |

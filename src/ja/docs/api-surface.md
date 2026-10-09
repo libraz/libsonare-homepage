@@ -75,25 +75,26 @@
 
 | ファミリー | 対象 | 主なページ |
 |------------|------|------------|
-| 解析 | BPM、キー、キー候補、ビート、ダウンビート、オンセット、コード、セクション、メロディ、音色、ダイナミクス、リズム、音響解析 | [JavaScript API](./js-api-analysis.md)、[Python API](./python-api.md)、[C++ API](./cpp-api.md) |
+| 解析 | BPM、キー、キー候補、ビート、ダウンビート、オンセット、コード、コード機能（`chordFunctions` は検出済みのコードに `roman` と `function` を付け足します）、セクション、メロディ、音色、ダイナミクス、リズム、測定したチューニング（`tuning: 'auto'`）、音響解析 | [JavaScript API](./js-api-analysis.md)、[Python API](./python-api.md)、[C++ API](./cpp-api.md) |
 | 拍子推定 | すでに手元にあるビート列に対して、拍子記号・ダウンビート位相・アクセントのグルーピングを採点します：`estimateMeter` / `estimate_meter` / `sonare_estimate_meter_json`。音声は受け取らず、どちらの CLI にも専用サブコマンドはありません | [拍子とグルーピング](./glossary/analysis/meter-and-grouping.md) |
 | 特徴量 | STFT、メル、MFCC、クロマ、定Qクロマ（`chromaCqt`）、spectral contrast/poly features、zero crossings、ピッチとチューニング、CQT/VQT、NNLS クロマ、NMF 分解、近傍フィルタリング、テンポグラム、Fourier tempogram、cyclic tempogram、PLP、LUFS/LRA | [JavaScript API](./js-api-features.md#特徴抽出)、[librosa 互換性](./librosa-compatibility.md) |
 | メータリング | レベル、ラウドネス、クレストファクター（モノラルとステレオペアの両方）、True Peak、DC オフセットのオフライン計測；クリッピング／ダイナミックレンジレポート；ステレオ相関・幅；ベクトルスコープ、フェーズスコープ、スペクトルスナップショット | [JavaScript API](./js-api-audio.md#メータリング)、[Python API](./python-api.md)、[ネイティブバインディング](./native-bindings.md) |
-| スケール量子化 | MIDI ノートをスケールにスナップし、補正量をセミトーンで測定、ピッチクラスの所属を判定 | [JavaScript API](./js-api-analysis.md#スケール量子化)、[Python API](./python-api.md) |
-| エフェクトと編集 | HPSS、残差付き HPSS、倍音成分／打撃成分の抽出、正規化、トリム、リミックス、フェーズボコーダー、タイムストレッチ、ピッチシフト、ピッチ補正、ノートストレッチ、ノート抽出とレンダリング、領域指定スペクトル編集、ボイスのピッチ／フォルマント変更、リアルタイム音声プリセット | [編集 DSP](./editing-dsp.md)、[音声内のノート編集](./note-editing.md)、[スペクトル編集](./spectral-editing.md)、[JavaScript API](./js-api-effects.md#オーディオエフェクト) |
+| スケール量子化 | MIDI ノートをスケールにスナップし、補正量をセミトーンで測定、ピッチクラスの所属を判定 | [JavaScript API](./js-api-helpers.md#スケール量子化)、[Python API](./python-api.md) |
+| エフェクトと編集 | HPSS、残差付き HPSS、倍音成分／打撃成分の抽出、正規化、トリム、リミックス、フェーズボコーダー、タイムストレッチ、ピッチシフト、ピッチ補正、ノートストレッチ、ノート抽出とレンダリング、領域指定スペクトル編集、ボイスのピッチ／フォルマント変更、検出したキーまたは指定したキーへのオートチューン（`autoTune`）、リアルタイム音声プリセット | [編集 DSP](./editing-dsp.md)、[音声内のノート編集](./note-editing.md)、[スペクトル編集](./spectral-editing.md)、[JavaScript API](./js-api-effects.md#オーディオエフェクト) |
 | ステム分解 | ソフトマスクによる分離。各成分がソース自身の位相を保ち、足し合わせると入力に戻ります：`decomposeStems` / `decompose_stems` / `sonare_decompose_stems`。マルチチャンネルを連動させる `decomposeStemsLinked` / `decompose_stems_linked` / `sonare_decompose_stems_linked` と、両方の CLI の `decompose-stems` も使えます | [音源分離](./source-separation.md)、[逆変換特徴量](./inverse-features.md)、[連動ステム](./js-api-features.md#decomposestemslinked-request)、[Python API](./python-api.md) |
-| リペア | 広帯域ノイズ、ハム、クリッピング、クリック、クラックル、拡散残響の検出器とオフラインリペア段 | [オーディオリペアの流れ](./audio-repair.md)、[広帯域ノイズとハムのリペア](./repair-noise.md)、[クリップ、クリック、クラックルのリペア](./repair-transients.md)、[拡散残響のリペア](./repair-reverb.md) |
+| リペア | 広帯域ノイズ、ハム、クリッピング、クリック、クラックル、拡散残響の検出器とリペア段。`masteringRepairAnalyze` / `masteringRepairApply` は任意のチャンネル数に対し、解析と固定順のリペア段を 1 回の呼び出しで実行します。デクラックル、ディハム、クラシック方式のデノイズとデリバーブの各段はリアルタイムインサートにもなります | [オーディオリペアの流れ](./audio-repair.md)、[広帯域ノイズとハムのリペア](./repair-noise.md)、[クリップ、クリック、クラックルのリペア](./repair-transients.md)、[拡散残響のリペア](./repair-reverb.md) |
 | ゼロ交差に揃えたリミックス区間 | カット位置をゼロ交差に一度だけスナップして解決し、テイクの全チャンネルを同じフレームで切り出せるようにします：`remixAlignedIntervals` / `remix_aligned_intervals` / `sonare_remix_aligned_intervals`。API のみで、どちらの CLI にもありません | [JavaScript API](./js-api-analysis.md)、[Python API](./python-api.md) |
 | ステレオ正規化 | 左右ペアのピークまたは RMS 正規化。JavaScript 側は `mode` を持つ `normalizeStereo` 1 つ、Python は `normalize_stereo` と `normalize_rms_stereo` の 2 関数です | [JavaScript API](./js-api-effects.md)、[Python API](./python-api.md) |
-| ルーム音響解析 | インパルス応答からの残響時間（RT60 / EDT）、明瞭度（C50 / C80）、定義度（D50）、ブラインド音響推定、等価ルーム推定、幾何ベースの RIR 合成、ルームモーフィング | [ルーム音響解析](./acoustic-analysis.md)、[JavaScript API](./js-api-effects.md#ルーム音響解析)、[Python API](./python-api-effects.md#ルーム音響解析) |
+| ルーム音響解析 | インパルス応答からの残響時間（RT60 / EDT）、明瞭度（C50 / C80）、定義度（D50）、ブラインド音響推定、等価ルーム推定、幾何ベースの RIR 合成（`roomGeometryFromEstimate` が推定結果を合成の入力に変換します）、ルームモーフィング | [ルーム音響解析](./acoustic-analysis.md)、[JavaScript API](./js-api-effects.md#ルーム音響解析)、[Python API](./python-api-effects.md#ルーム音響解析) |
 | ミキシング | チャンネルストリップ、バス、センド、VCA グループ、シーンプリセット、オートメーション、ステレオ／デュアルパン、リアルタイムエンジンの 5.1/7.1 サラウンドパン、メーター、ゴニオメーター、オフラインレンダー | [ミキシングエンジン](./mixing.md)、[ミキシングシーン JSON](./mixing-scene-json.md) |
 | ミキシングアシスタント | 複数トラックを計測し、判断ごとの理由を添えたミキサーシーンを返します。適用は一切行いません：`suggestMixScene` / `suggest_mix_scene` / `sonare_mixing_assistant_suggest_scene_json`、および両方の CLI の `suggest-mix` | [ミキシングアシスタント](./mixing-assistant.md) |
 | マスタリングアシスタント | 音源プロファイル、チェーン提案 JSON、配信プラットフォーム別プレビュー JSON、およびダウンミックスではなく左右のペアを測定する 3 つのステレオ版 | [マスタリングアシスタント](./mastering-assistant.md) |
-| マスタリング | プリセット、フルチェーン、名前付きプロセッサ、プロセッサカタログメタデータ、インサートパラメータメタデータ、ペアプロセッサ、ペア解析、ステレオ解析、ストリーミングチェーン、任意バンド数の構造化マルチバンドコンプレッサー（チェーン設定スキーマバージョン 2） | [マスタリングプロセッサ](./mastering-processors.md)、[DSP 実装解説](./dsp-implementation.md)、[アルゴリズム根拠](./algorithm-references.md)、[マスタリング実装](./mastering-implementation.md) |
-| ストリーミング MIR | ライブのメル／クロマ／オンセットフレーム、時間とともに更新される BPM／キー／コード推定、コード進行、パターンスコア | [リアルタイムとストリーミング](./realtime-streaming.md)、[WASM](./wasm-streaming.md#ストリーミング解析) |
+| マスタリング | プリセット、フルチェーン、名前付きプロセッサ、プロセッサカタログメタデータ、インサートパラメータメタデータ、ペアプロセッサ、ペア解析、ステレオ解析、ストリーミングチェーン（`streamingLoudnessGain` がチェーンの構築に使う静的ゲインを測定します）、任意バンド数の構造化マルチバンドコンプレッサー（チェーン設定スキーマバージョン 2） | [マスタリングプロセッサ](./mastering-processors.md)、[DSP 実装解説](./dsp-implementation.md)、[アルゴリズム根拠](./algorithm-references.md)、[マスタリング実装](./mastering-implementation.md) |
+| ストリーミング MIR | ライブのメル／クロマ／オンセットフレーム、時間とともに更新される BPM／キー／コード推定、コード進行、パターンスコア。WASM では `SonareStreamAnalyzerNode` がオーディオグラフの枝からアナライザーへ入力します | [リアルタイムとストリーミング](./realtime-streaming.md)、[WASM](./wasm-streaming.md#ストリーミング解析) |
 | リアルタイムエンジン | トランスポート、テンポ、構造化マーカー、メトロノーム、オートメーションレーン（`resolveInstrumentAutomationId` / `sonare_engine_resolve_instrument_automation_id` で解決するホスト側インストゥルメントのパラメータ対象を含む）、予約パラメータのメタデータを返す `parameterInfo` / `parameterInfoByIndex`、タイムストレッチのボイスプールを設定する `setWarpVoiceCapacity` / `warpVoiceCapacity`、グラフトポロジー、クリップページの先読み幅を設定できるクリップ（`setClipPagePrefetchFrames` / `clipPagePrefetchFrames`）、MIDI クリップスケジュール、トラックごとのレーンミキサー（レーン、バス、センド、チャンネルストリップ、サラウンドパン、インサートパラメータ）、外部 MIDI 出力／クロック、キャプチャ、トラックごとの PFL/AFL キューモニタリング、名前付きテレメトリエラー序数を伴うステレオ／ワイドメーターテレメトリ、スコープテレメトリと Worklet スコープリング、バウンス／フリーズ | [リアルタイムエンジン](./realtime-engine.md#パラメータオートメーション)、[ボイス予算](./realtime-engine.md#time-stretch-のボイス予算)、[リアルタイムとストリーミング](./realtime-streaming.md) |
 | プロジェクトとアレンジ | オーディオ／MIDI トラックとクリップ、メモリ上でのプロジェクト作成、上限付き履歴メモリを備えたアンドゥ/リドゥ、テイク／コンピング、ワープ（クリップのモードは `off`、`repitch`、`tempo-sync`、`time-stretch`）、MIDI シーケンス、SMF および MIDI 2.0 クリップファイル（`SMF2CLIP`）の入出力、JSON 保存／読込、アシストサイドカー、オフラインバウンス | [プロジェクト編集](./project-editing.md)、[音声から MIDI](./audio-to-notes.md)、[プロジェクトの MIDI](./project-editing-midi.md)、[プロジェクトの保存と読み込み](./project-save-load.md)、[プロジェクトバウンス](./project-bounce.md)、[録音・テイク](./recording-and-takes.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
 | インストゥルメントと MIDI | GM フォールバックバンクを備えたマルチエンジンシンセ、GS 互換 SoundFont 2 プレイヤー、ライブ MIDI 再生、ライブ SysEx で選択する GS インサーションエフェクト（EFX） | [内蔵シンセサイザー](./native-synth.md)、[SoundFont 2 プレイヤー](./soundfont-player.md)、[MIDI 入力](./midi-input.md#ライブイベントのキューイング)、[MIDI クリップ編集](./midi-editing.md)、[MIDI 2.0 と UMP](./midi2.md) |
+| 音声の読み込み | デコード済みサンプルを受け取る入口と `Audio.fromMemory*`。`decodeChannels` は元の全チャンネルを保持し、`downmix` は ITU-R BS.775 の規則でより狭いレイアウトへ折りたたみます。WASM では `writeOpfsClip` / `importOpfsClip` がクリップを Origin Private File System に保存します | [JavaScript API](./js-api-audio.md)、[WASM](./wasm.md#ファイル入力) |
 | 逆変換特徴量 | メルから STFT／音声、MFCC からメル／音声、CQT/VQT 振幅から音声 | [逆変換特徴量](./inverse-features.md) |
 | ユーティリティ / librosa 互換 | フレーム／サンプル／時間変換、dB 変換、pre/de-emphasis、無音 trim/split、frame/pad/fix、peak pick、vector normalize、PCEN、tonnetz、テスト信号生成（tone / chirp / clicks） | [librosa 互換性](./librosa-compatibility.md) |
 | 構造とセグメンテーション | クロス類似度、再帰行列／ラグ行列、パス強調、サブセグメンテーション、凝集型クラスタリング、F0 トラックからのノートセグメンテーション | [JavaScript API](./js-api-helpers.md#librosa-互換ヘルパー)、[Python API](./python-api-analysis.md#特徴抽出) |
@@ -105,9 +106,9 @@
 
 各ビルドは、自身が備えるプロセッサとそのパラメータを機械可読な形で報告できます。Node と WASM の `capabilityCatalog()`、Python の `capability_catalog()`、C ABI の `sonare_capability_catalog_json` は同じ JSON 文書を返します。内容は、ビルドのバージョンと ABI 番号、パラメータとスロットメタデータを持つ全プロセッサ、組み込みプリセット名一覧、マスタリングプリセットのメタデータです。どちらの CLI にもこのカタログはなく、`doctor` が出すのは別物のビルド診断レポートです。
 
-現行ビルドは **94 個のプロセッサと 5,484 個のパラメータ記述子** を公開します。どちらの数も鵜呑みにせず数え直せます。libsonare リポジトリは生成物を `tools/capability-catalog.json` として追跡しており、共有ライブラリが実際に返す内容とずれると `make capability-catalog-check` が失敗し、`schemas/capability-catalog.schema.json` が形を固定しています。
+現行ビルドは **95 個のプロセッサと 5,577 個のパラメータ記述子** を公開します。うち 84 個のプロセッサはリアルタイムインサート可能で、どのプロセッサも `category` を報告します（`voice` カテゴリには `voice.changer` があります）。これらの数も鵜呑みにせず数え直せます。libsonare リポジトリは生成物を `tools/capability-catalog.json` として追跡しており、共有ライブラリが実際に返す内容とずれると `make capability-catalog-check` が失敗し、`schemas/capability-catalog.schema.json` が形を固定しています。
 
-各パラメータ記述子は同じ 10 個のフィールドを持ちます。
+各パラメータ記述子は同じ 17 個のフィールドを持ちます。
 
 | フィールド | 内容 |
 |------------|------|
@@ -117,19 +118,26 @@
 | `type` | 設定ビルダーが読む値の型。`number`、`boolean`、`enum`、`string`、`array` のいずれかです |
 | `default` | 設定構造体のフィールドの初期化子。フォールバックがない場合は `null` です |
 | `min`、`max` | 探索時に構築が受け入れた区間。その側の制限をカタログが知らなければ `null` |
-| `unit` | `dB`、`Hz`、`ms`、`samples`、`referenceSamples@29761Hz`、またはキーに既知の単位がない場合の `null`。`null` でも無次元とは限りません |
+| `minExclusive`、`maxExclusive` | その境界の値自体が拒否されるか。その側が `null` のときは `false` |
+| `maxRelativeTo` | 実効上限が `max` とホストのナイキストの低いほうになるとき `'nyquist'`、それ以外は `null` |
+| `unit` | プロセッサがキーに宣言する単位。閉じた集合 `dB`、`dBFS`、`LUFS`、`Hz`、`ms`、`s`、`samples`、`m`、`cm`、`deg`、`percent`、`degC`、`V`、`inPerSec`、`dBPerOct`、`semitones`、`cents`、`ratio`、`bits`、`count`、`none` のいずれか。boolean、enum、string、array のキーには単位がなく `null` です |
+| `uiMin`、`uiMax` | コントロールが描画すべき範囲（`min` / `max` の内側）。受け入れ範囲がそのまま表示範囲なら `null` |
+| `scale` | コントロールが値を描く軸。`linear` または `log` |
 | `choices` | 名前付き数値選択肢の閉じた集合。間隔のある離散値も含み、閉じた集合を公開しない場合は `null` です |
 | `slot` | キーが属するプロセッサのスロット群。どの群にも属さないキーは `null` です |
+| `dependsOn` | 自分の値を（ライブの値で）制約する兄弟キー。`{ key, relation }` の配列で、`relation` は `lt`、`le`、`gt`、`ge` のいずれかを `this <relation> sibling` として読みます。独立したキーでは空です |
+
+各プロセッサ項目は `causal` も持ちます。`repair.declick`、`repair.declip`、`repair.trimSilence` は、あるサンプルの出力がそれ以前の入力だけで決まる構成を持たないため `false`、それ以外はすべて `true` です。リペア段のうち `repair.decrackle`、`repair.dehum`、`repair.denoiseClassical`、`repair.dereverbClassical` はリアルタイムインサート可能で、`repair.declick` と `repair.declip` はオフライン専用のままです。
 
 `id` が整数の項目はオートメーション対象で、構築時専用の項目は `id: null` かつ `rtSafe: false` です。`id` があっても `rtSafe: false` ならライブオートメーションへ渡せません。`choices` は名前付き数値の閉じた集合を示し、間隔のある離散値も含みます。`slot` はキーが属するスロット群を示し、`null` はどのスロットにも属さないことを示します。`slot` が非 null でも必ず条件付きとは限りません。各プロセッサの `slots` 配列にある `activation`（`anyKey` または `always`）、親スロットを示す `parent`、存在条件となる `minCrossoverCutoffs` を組み合わせて、スロットの有無を判断します。
 
-既定値は書き写したものではなくコードから読み取りますが、構築用キーにフォールバックがなければ `null` になります。範囲は実測です。候補値を呼び出し側と同じ構築経路に通し、そのプロセッサの他のパラメータは既定値のまま、検証が受け入れた区間をカタログが報告します。`null` の境界が意味するのは、その側ではどんな値も通る、または構築がそのキーを検証していない、のどちらかです。制限があるのに測っていない、という意味ではありません。スライダーを直結する前に押さえておきたい性質が 2 つあります。互いに制約し合う制御は相手の既定値を境界として報告すること、そして開区間の境界は除外される値そのものとして報告されることです。具体例は [JavaScript API](./js-api.md#capabilitycatalog) が順に追っています。
+既定値は書き写したものではなくコードから読み取りますが、構築用キーにフォールバックがなければ `null` になります。`uiMin` / `uiMax` と `dependsOn` はコントロールの描き方と順序の手がかりで、受け入れ範囲はあくまで `min` / `max` です。範囲は実測です。候補値を呼び出し側と同じ構築経路に通し、そのプロセッサの他のパラメータは既定値のまま、検証が受け入れた区間をカタログが報告します。`null` の境界が意味するのは、その側ではどんな値も通る、または構築がそのキーを検証していない、のどちらかです。制限があるのに測っていない、という意味ではありません。スライダーを直結する前に押さえておきたい性質が 2 つあります。互いに制約し合う制御は相手の既定値を境界として報告すること、そして開区間の境界は除外される値そのものとして報告されることです。具体例は [JavaScript API](./js-api.md#capabilitycatalog) が順に追い、各フィールドは[インサートエフェクト](./effects-inserts.md#パラメータ記述子)にまとまっています。
 
 `presets.mastering` は従来どおりマスタリングプリセット名の簡潔な配列です。トップレベルの `masteringPresets` は各名前について `kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持つオブジェクトを返します。レストレーション用の項目では、後ろ 3 つの数値が `null` です。選択したプリセットを展開した数値／真偽値のパラメータマップが必要なときは、バインディングの `masteringPresetParams` を使います。
 
 この記述子が役に立つ場面は 2 つあります。
 
-- **手書きの表を持たないコントロールサーフェス。** 各パラメータを `type`、`default`、`min`、`max`、`unit` から組み立てれば、新しいプロセッサや番号の振り直された帯域は、誰かが表を直したときではなくビルドが変わったときに UI へ現れます。
+- **手書きの表を持たないコントロールサーフェス。** 各パラメータを `type`、`default`、`min`、`max`、`uiMin`、`uiMax`、`scale`、`unit` から組み立てれば、新しいプロセッサや番号の振り直された帯域は、誰かが表を直したときではなくビルドが変わったときに UI へ現れます。
 - **境界を越える前の値チェック。** 公開された範囲の外の数値は構築時に拒否されます。先にカタログと突き合わせておけば、その実行時エラーは、ユーザーが値を入力した場所での検証メッセージに変わります。
 
 ```typescript
@@ -165,7 +173,7 @@ function accepts(value: number): boolean {
 `abiVersion`、`engineAbiVersion`、`projectAbiVersion`、`voiceChangerAbiVersion` は、各サブシステムがビルド時に対象とした ABI（バイナリインターフェース）のバージョンを返します。自分のコードが想定するバージョンと突き合わせることで、オブジェクトを使い始める前に、不一致や古い WASM ビルドを検出できます。
 :::
 
-同じ npm パッケージは、AudioWorklet ブリッジ用の `@libraz/libsonare/worklet` と、バンドラーや独自ローダー向けの生 WASM アセット用サブパス `@libraz/libsonare/wasm` も公開します。
+同じ npm パッケージは、AudioWorklet ブリッジ用の `@libraz/libsonare/worklet` と、バンドラーや独自ローダー向けの生 WASM アセット用サブパス `@libraz/libsonare/wasm`（解析専用モジュール用の `@libraz/libsonare/wasm/analysis` も）も公開します。全サブパスは[インストール](./installation.md#wasm-パッケージのサブパス)にあります。
 
 ## CLI コマンド系統
 

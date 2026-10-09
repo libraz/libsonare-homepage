@@ -120,8 +120,8 @@ description: libsonare の名前付きマスタリング API、プリセット�
 
 - インテグレーテッド LUFS 測定は最大 8 チャンネルのサラウンド構成に対応し、[BS.1770](./algorithm-references.md) のチャンネル重み付けを適用します。BS.1770-4 自体が規格として定めているのは 5.1（6 チャンネル）までで、7.1／8 チャンネルの重み付け（サイドサラウンドのペアをリアサラウンドと同様に +1.5 dB として扱う）は規格に含まれない非公式の拡張です。
 - 内部のオーバーサンプラーと True Peak 段はオーバーサンプリング係数として 1〜16 の 2 のべき乗（1, 2, 4, 8, 16）を受け付けます（ライブメーターも同じ係数）。CPU と引き換えにサンプル間ピーク（ISP）の精度を上げます。
-- ラウドネス段は「ゲイントリムの後ろに別のリミッターを置いたもの」ではありません。`target - current` の静的ゲインを 1 回かけ、そのゲインでシーリングを超えた分を、段が自前で持つポストゲインの True Peak リミッターに引き戻させます。`loudness.maxLimiterGainReductionDb`（既定 12 dB。有限かつ 0 以上）は、そのリミッターをどこまで駆動してよいかの上限で、静的ゲインがシーリングまでのピークヘッドルームを超えられるのは最大でこの量までです。決めているのはマスターの最大音量ではなく、どれだけピークの立った入力までノーマライズを試みるかで、許容量が `target - current` 以上のゲインを与えることはなく、シーリング自体を超えることもありません。この既定値はすべてのラウドネス経路で共有されるため、チェーン・単体ヘルパー・名前付きプロセッサ（`maximizer.loudnessOptimize` は同じキーを `maxLimiterGainReductionDb` として読む）のいずれでも同じようにノーマライズされます。`0` にするとヘッドルームで厳密に頭打ちになり、ピークノーマライズ済みの素材では大きな目標値に届かなくなります。`sonare mastering song.wav --preset pop --params "loudness.maxLimiterGainReductionDb=0"` の結果は -16.19 LUFS になり、既定の -14.06 LUFS と差が出ます。残る不足分はリミッター自身のゲインリダクションで、1 回で反復しないパスでは測り直されないため、`loudnessTargetLimited` で報告されます。
-- `maximizer.truePeakLimiter` はシーリングをサンプル単位で守り、ブロック全体を一括でスケーリングすることはありません。内部のすべての段が呼び出しをまたいで状態を持ち越すため、出力は呼び出し側がストリームをどう区切るかに依存しません。同じ素材を 1 ブロックで処理しても、256〜16384 サンプルの均等なブロックで処理しても、トランジェントの途中で切れる不揃いな分割で処理しても、結果は同一で、ストリーミングのレンダリングとオフラインのレンダリングは一致します。残るのはサンプル間のわずかな残差で、これはブロックサイズではなく「リミッターより細かく測る」ことに由来する性質です。既定の 4 倍リミッターが決めたシーリングを 8 倍オーバーサンプリングのメーターで読むと約 +0.02 dB 上に出ますが、ドライブ 0〜+36 dB の範囲で一定です。リミッターと同じオーバーサンプリングで測ればシーリングは正確に守られていることが確認でき、`oversampleFactor` を上げれば残差そのものを小さくできます。
+- ラウドネス段は「ゲイントリムの後ろに別のリミッターを置いたもの」ではありません。静的ゲインを 1 回かけ、そのゲインでシーリングを超えた分を、段が自前で持つポストゲインの True Peak リミッターに引き戻させます。このゲインは、候補ゲインで信号を測り直して、ゲート後のターゲットに合うように解かれます。ゲインによって絶対ゲートをまたぐブロックがなければ `target - current` に等しく、またぐ場合は、測り直した信号をターゲットに合わせる解が使われます。同じ解法は A/B のラウドネスマッチ、リファレンスマッチ、LUFS ノーマライズ、`maximizer.loudnessOptimize` にも使われます。`loudness.maxLimiterGainReductionDb`（既定 12 dB。有限かつ 0 以上）は、そのリミッターをどこまで駆動してよいかの上限で、静的ゲインがシーリングまでのピークヘッドルームを超えられるのは最大でこの量までです。決めているのはマスターの最大音量ではなく、どれだけピークの立った入力までノーマライズを試みるかで、許容量が、解かれたターゲットゲイン以上のゲインを与えることはなく、シーリング自体を超えることもありません。この既定値はすべてのラウドネス経路で共有されるため、チェーン・単体ヘルパー・名前付きプロセッサ（`maximizer.loudnessOptimize` は同じキーを `maxLimiterGainReductionDb` として読む）のいずれでも同じようにノーマライズされます。`0` にするとヘッドルームで厳密に頭打ちになり、ピークの立った素材では大きな目標値に届かなくなります。-16.78 LUFS の 6 秒のキックループをターゲット -14 LUFS、シーリング -1 dBTP で処理すると、`0` では -17.32 LUFS、既定の 12 では -16.14 LUFS に着地します。残る不足分はリミッター自身のゲインリダクションで、1 回で反復しないパスでは測り直されないため、`loudnessTargetLimited` で報告されます。
+- `maximizer.truePeakLimiter` はシーリングをサンプル単位で守り、ブロック全体を一括でスケーリングすることはありません。出力ガードは補正で持ち上がり得る過去の位置をすべて再確認するので、短いバーストが True Peak シーリングを超えることはなく、実行中にシーリングを下げると、すでにキューにある出力も再評価されます。`maximizer.truePeakLimiter` と `maximizer.adaptiveRelease` は、既定値でどちらも 129 サンプルのレイテンシを報告します。内部のすべての段が呼び出しをまたいで状態を持ち越すため、出力は呼び出し側がストリームをどう区切るかに依存しません。同じ素材を 1 ブロックで処理しても、256〜16384 サンプルの均等なブロックで処理しても、トランジェントの途中で切れる不揃いな分割で処理しても、結果は同一で、ストリーミングのレンダリングとオフラインのレンダリングは一致します。残るのはサンプル間のわずかな残差で、これはブロックサイズではなく「リミッターより細かく測る」ことに由来する性質です。既定の 4 倍リミッターが決めたシーリングを 8 倍オーバーサンプリングのメーターで読むと約 +0.02 dB 上に出ますが、ドライブ 0〜+36 dB の範囲で一定です。リミッターと同じオーバーサンプリングで測ればシーリングは正確に守られていることが確認でき、`oversampleFactor` を上げれば残差そのものを小さくできます。
 - UI 向けには `meteringVectorscope(...)` と `meteringPhaseScope(...)` に `maxPoints` を渡します。点列を最大 `maxPoints` 点まで間引くので、点数の多いスコープでも描画コストを抑えられます（`maxPoints` を省くと入力サンプル 1 個につき 1 点を返します。旧来の `meteringVectorscopeDecimated(...)` ／ `meteringPhaseScopeDecimated(...)` は非推奨で、内部で委譲するだけです）。`meteringSpectrumFrame(...)` は、スペクトラムアナライザーのスナップショット向けに単一フレーム（時間平均なし）のスペクトラムを読み取ります。
 - `multiband.*` のソロプロセッサ（`compressor`、`dynamicEq`、`expander`、`imager`、`limiter`、`saturation` の全 6 種）は、いずれも同じクロスオーバー機構を共有し、クロスオーバー数を任意に指定できます。固定 3 バンドではなく、素材に合わせたバンド数で分割できます。この入口が公開する `cutoffNHz` スロットは最大 8 個（`cutoff0Hz` 〜 `cutoff7Hz`）なので、`multiband.*` の呼び出し 1 回で最大 9 バンドまで扱えます。
 :::
@@ -133,11 +133,12 @@ description: libsonare の名前付きマスタリング API、プリセット�
 |---|---|
 | `saturation.hardClipper` | なし、ADAA1、ADAA2、4 倍オーバーサンプリング |
 | `saturation.softClipper`、`saturation.waveshaper` | なし、ADAA1、4 倍オーバーサンプリング |
-| `saturation.exciter`、`spectral.presenceEnhancer` | なし、4 倍オーバーサンプリング |
+| `spectral.presenceEnhancer` | なし、ADAA1、4 倍オーバーサンプリング |
+| `saturation.exciter` | なし、4 倍オーバーサンプリング |
 
 実装していないモードは黙って無視されるのではなく拒否され、メッセージが使えるモードの集合を示します。`soft clipper ADAA2 anti-aliasing is not supported; use None, Adaa1, or Oversample4x` のような形です。この 5 つ以外のプロセッサにこのパラメータを渡した場合は、キー自体が拒否されます。`unknown --params key for saturation.tube: aliasing` となります。
 
-オーバーサンプリング経路はドライ信号の時間を揃え、発生した遅延を報告します。1 フェーズあたり 24 タップのポリフェーズフィルターを上りと下りで往復するため、基本レートで 24 サンプルの遅延が生じ、4 倍経路ではレイテンシが `24`、他のモードでは `0` になります。この値はプロセッサの結果と一緒に返されます。ブラウザと Node では `masteringProcess()` が返す `MasteringResult` の `latencySamples`、Python では `MasteringResult` の `latency_samples`、C では `SonareMasteringResult` の `latency_samples`、インサートとして組み込んだ場合はプロセッサ自身の `latency_samples()` です。チェーンが報告する他の遅延と同じように補正してください。
+オーバーサンプリング経路はドライ信号の時間を揃え、発生した遅延を報告します。ポリフェーズフィルターを上りと下りで往復するため、基本レートで 48 サンプルの遅延が生じ、4 倍経路ではレイテンシが `48` になります。`なし` と `ADAA1` は `0` です（ADAA1 の半サンプルの遅延は Q8 で管理され、ブレンドのドライ経路はそれに合わせて遅らせます）。`saturation.hardClipper` の ADAA2 は `1` を報告します。この値はプロセッサの結果と一緒に返されます。ブラウザと Node では `masteringProcess()` が返す `MasteringResult` の `latencySamples`、Python では `MasteringResult` の `latency_samples`、C では `SonareMasteringResult` の `latency_samples`、インサートとして組み込んだ場合はプロセッサ自身の `latency_samples()` です。チェーンが報告する他の遅延と同じように補正してください。
 :::
 
 ::: info クロスオーバーとは？
@@ -171,7 +172,7 @@ description: libsonare の名前付きマスタリング API、プリセット�
 
 検出から処理までの手順は、[音声リペア](./audio-repair.md)、[ノイズ・ハム除去](./repair-noise.md)、[クリック・クラックル・クリッピング修復](./repair-transients.md)、[デリバーブ](./repair-reverb.md)で説明しています。
 
-リペア系は 6 つの段が 1 つのスロットを共有し、その順序が結果を左右するため、最もよく質問されるファミリーです。設定がどの部分集合を有効にしても、損傷の大きいものから順に実行され、各段は前の段が整えた後の素材を受け取ります。
+リペア系は 6 つの段が 1 つのスロットを共有し、その順序が結果を左右するため、最もよく質問されるファミリーです。設定がどの部分集合を有効にしても、損傷の大きいものから順に実行され、各段は前の段が整えた後の素材を受け取ります。チェーンはこれらをオフラインで実行しますが、`decrackle`、`dehum`、`denoise`、`dereverb` は因果的なリアルタイムインサートとしても、レジストリ id `repair.decrackle`、`repair.dehum`、`repair.denoiseClassical`、`repair.dereverbClassical` で使えます（[オーディオリペアの流れ](./audio-repair.md#リアルタイムインサート)を参照）。`declick`、`declip`、`repair.trimSilence` は因果的ではなく、オフライン専用です。
 
 1. `declip` — `declick` より前。平坦に潰れた領域にはクリック検出器が測るべきトランジェントがないためです。
 2. `declick`
@@ -181,9 +182,9 @@ description: libsonare の名前付きマスタリング API、プリセット�
 6. `dereverb` — 最後。広帯域のノイズフロアは定常的な残響の後部として読まれ、残響の推定をそちらへ引きずるためです。
 
 ::: details `repair.denoise.reductionDb` — フロアではなく深さ
-デノイズ段の深さは `repair.denoise.reductionDb` で決めます。ゲインマスクがどのビンにも適用できる最も深い減衰量を dB で表したもので、有限かつ 0 以上でなければならず、上限はありません。既定値は `26` です。値を大きくすると深い減衰を許可しますが、ノイズがその量だけ減る保証はありません。26 dB ではマスクのゲインが約 0.0501 より小さくならず、実際の減衰量はノイズと信号の推定に依存します。この下限は急なゲーティングを抑えますが、処理による音の崩れをなくすものではありません。単体の `masteringRepairDenoiseClassical` が返すレポートは、このフロアがどれだけ効いたかを示します。`maxReductionDb` が `reductionDb` で飽和していれば深さを決めたのは推定器ではなくフロアであり、`floorLimitedFraction` はフロアに張り付いたマスクセルの割合です。
+デノイズ段の深さは `repair.denoise.reductionDb` で決めます。ゲインマスクがどのビンにも適用できる最も深い減衰量を dB で表したもので、有限かつ `[0, 120]` の範囲でなければなりません。既定値は `26` です。値を大きくすると深い減衰を許可しますが、ノイズがその量だけ減る保証はありません。26 dB ではマスクのゲインが約 0.0501 より小さくならず、実際の減衰量はノイズと信号の推定に依存します。この下限は急なゲーティングを抑えますが、処理による音の崩れをなくすものではありません。単体の `masteringRepairDenoiseClassical` が返すレポートは、このフロアがどれだけ効いたかを示します。`maxReductionDb` が `reductionDb` で飽和していれば深さを決めたのは推定器ではなくフロアであり、`floorLimitedFraction` はフロアに張り付いたマスクセルの割合です。
 
-同じつまみは線形のフロアとしても受け付けます。`repair.denoise.gainFloor` キーは読み込み時に `reductionDb = -20 * log10(gainFloor)` で変換され、変換は元の有効範囲も引き継ぎます。1 を超えるフロアは負の深さになり拒否されます。短縮キーの `repair.reductionDb` と `repair.gainFloor` も同じデノイズスロットへ対応づけられます。フラットな上書き、JSON のチェーン設定ドキュメント、ブラウザと Node のネストした `MasteringChainConfig` 型のいずれも `gainFloor` をこの形で受け付け、TypeScript の型は `reductionDb` を優先するよう非推奨とマークしています。
+同じつまみは線形のフロアとしても受け付けます。`repair.denoise.gainFloor` キーは読み込み時に `reductionDb = -20 * log10(gainFloor)` で変換され、変換は元の有効範囲も引き継ぎます。1 を超えるフロアは負の深さになり拒否され、`1e-6` を下回るフロアは 120 dB を超える深さになるため、やはり拒否されます。短縮キーの `repair.reductionDb` と `repair.gainFloor` も同じデノイズスロットへ対応づけられます。フラットな上書き、JSON のチェーン設定ドキュメント、ブラウザと Node のネストした `MasteringChainConfig` 型のいずれも `gainFloor` をこの形で受け付け、TypeScript の型は `reductionDb` を優先するよう非推奨とマークしています。
 :::
 
 ## ソロプロセッサ
@@ -191,15 +192,17 @@ description: libsonare の名前付きマスタリング API、プリセット�
 | ファミリー | プロセッサ名 |
 |-----------|-------------|
 | Dynamics | `dynamics.brickwallLimiter`, `dynamics.compressor`, `dynamics.deesser`, `dynamics.expander`, `dynamics.gate`, `dynamics.limiter`, `dynamics.parallelComp`, `dynamics.sidechainRouter`, `dynamics.duckingProcessor`, `dynamics.transientShaper`, `dynamics.upwardCompressor`, `dynamics.upwardExpander`, `dynamics.vocalRider` |
-| Effects | `effects.gsEfx` |
+| Effects | `effects.acoustic.roomMorph`, `effects.delay.stereo`, `effects.filter.vowel`, `effects.gsEfx`, `effects.modulation.autoWah`, `effects.modulation.chorus`, `effects.modulation.ensemble`, `effects.modulation.flanger`, `effects.modulation.phaser`, `effects.modulation.pitchShifter`, `effects.modulation.ringModulator`, `effects.modulation.rotary`, `effects.modulation.wah`, `effects.reverb.convolution`, `effects.reverb.dattorro`, `effects.reverb.fdn`, `effects.reverb.plate`, `effects.reverb.room`, `effects.reverb.velvet`（FX ビルドのみ。[エフェクトインサート](./effects-inserts.md)を参照） |
 | EQ | `eq.apiStyle`, `eq.bandPass`, `eq.cutFilter`, `eq.dynamic`, `eq.equalizer`, `eq.graphic`, `eq.linearPhase`, `eq.midSide`, `eq.minimumPhase`, `eq.parametric`, `eq.pultec`, `eq.shelving`, `eq.tilt` |
 | Final | `final.bitDepth`, `final.dither`, `final.outputChain` |
 | Maximizer | `maximizer.adaptiveRelease`, `maximizer.loudnessOptimize`, `maximizer.maximizer`, `maximizer.softKneeMax`, `maximizer.truePeakLimiter` |
 | Multiband | `multiband.compressor`, `multiband.dynamicEq`, `multiband.expander`, `multiband.imager`, `multiband.limiter`, `multiband.saturation` |
-| Repair | `repair.declick`, `repair.declip`, `repair.decrackle`, `repair.dehum`, `repair.denoiseClassical`, `repair.dereverbClassical`, `repair.trimSilence` |
+| Repair | `repair.declick`, `repair.declip`, `repair.decrackle`, `repair.dehum`, `repair.denoiseClassical`, `repair.dereverbClassical`, `repair.trimSilence`（`decrackle`、`dehum`、`denoiseClassical`、`dereverbClassical` はリアルタイムインサートとしても使える） |
 | Saturation | `saturation.ampSim`, `saturation.bitcrusher`, `saturation.distortion`, `saturation.exciter`, `saturation.hardClipper`, `saturation.multibandExciter`, `saturation.overdrive`, `saturation.softClipper`, `saturation.tape`, `saturation.transformer`, `saturation.tube`, `saturation.waveshaper` |
 | Spectral | `spectral.airBand`, `spectral.lowEndFocus`, `spectral.presenceEnhancer`, `spectral.spectralShaper` |
 | Stereo | `stereo.autoPan`, `stereo.binaural`, `stereo.haasEnhancer`, `stereo.imager`, `stereo.monoMaker`, `stereo.phaseAlign`, `stereo.stereoBalance` |
+| Utility | `utility.gain` |
+| Voice | `voice.changer`（[リアルタイムボイスチェンジャー](./realtime-voice-changer.md)を参照） |
 
 ::: warning ステレオ系プロセッサは入口が異なります
 ほとんどのプロセッサは単一配列を取る `masteringProcess()`（モノラル、またはインターリーブ）で処理します。一方、ステレオ系プロセッサ（`stereo.imager`、`stereo.monoMaker`、`stereo.autoPan`、`stereo.binaural`、`stereo.haasEnhancer`、`stereo.phaseAlign`、`stereo.stereoBalance`）は左右チャンネルを別々に扱うため、`left` と `right` の 2 配列を取る専用の入口 `masteringProcessStereo()` / `mastering_process_stereo()` から呼び出します。`stereo.monoMaker` は `frequencyHz` をクロスオーバー周波数として使い、それより低い帯域をモノラルへ寄せます。寄せる強さは `amount` で決めます。`eq.midSide` と `multiband.*` も同様です。これらを `masteringProcess()` に渡してもチャンネルを独立して表現できません。正確なシグネチャは [呼び出し方](#呼び出し方) を参照してください。
@@ -246,12 +249,12 @@ DNN 音源分離やニューラルなスペクトル修復**ではありませ�
 |---|---|---|---|---|
 | `saturation.overdrive` | `gainDb` | `0`〜`41` | `20` | dB |
 |  | `toneHz` | `500`〜`8000` | `3000` | Hz |
-|  | `levelDb` | カタログ上の最小値なし、最大値 `770.637` | `0` | dB |
+|  | `levelDb` | カタログ上の最小値なし、最大値 `770.636` | `0` | dB |
 | `saturation.distortion` | `gainDb` | `0`〜`60` | `30` | dB |
 |  | `toneHz` | `475`〜`20000` | `4000` | Hz |
-|  | `levelDb` | カタログ上の最小値なし、最大値 `770.637` | `0` | dB |
+|  | `levelDb` | カタログ上の最小値なし、最大値 `770.636` | `0` | dB |
 
-どちらもカタログ上のレイテンシは `48` samples、テールは `0` samples です。3 つのパラメータはすべてリアルタイムオートメーションの対象です。`levelDb` の最大値は有限ゲインの受理上限であり、推奨する操作範囲ではありません。
+どちらもカタログ上のレイテンシは `48` samples で、48 kHz でのテールは overdrive が 10,513 samples、distortion が 15,793 samples です。3 つのパラメータはすべてリアルタイムオートメーションの対象です。`levelDb` の最大値は有限ゲインの受理上限であり、推奨する操作範囲ではありません。
 :::
 
 ::: details `saturation.ampSim` とは？
@@ -269,10 +272,12 @@ DNN 音源分離やニューラルなスペクトル修復**ではありませ�
 | `micModel`、`micAxis`、`micDistanceCm`、`micBlend` | 1 本目のマイク。種類（`0` なし、`1` ダイナミック、`2` リボン、`3` コンデンサ）、軸上位置、距離、ブレンド量 |
 | `micBModel`、`micBAxis`、`micBDistanceCm`、`micBInvert` | ペアの 2 本目のマイク。極性反転を含む |
 | `cone`、`doppler` | コーン分割振動とコーン運動によるドップラー。`doppler` は報告されるレイテンシを変える |
+
+2 本目のマイクの経路差による遅延は揃えられてレイテンシに計上されるため、レイテンシ（ドップラーなしの 48 kHz で 48 samples）は `micBlend` やパワー段の設定では動きません。
 :::
 
 ::: warning オフラインレンダリングでは `saturation.ampSim` のテールを出し切る
-このプロセッサが報告するテールには、2 本目のマイクの経路差による遅延だけでなくキャビネットインパルス応答が含まれます。読み込んだ／合成したキャビネット応答は最長で 48 kHz において約 21 ms あるため、最後の入力サンプルで出力の取り出しをやめるオフラインバウンスは、その分のキャビネットの減衰を失います。レンダリング結果がわずかに早く終わり、わずかにドライになるだけで、何の兆候も出ません。報告されたテールを出し切るまで出力を読み続けてください。
+このプロセッサが報告するテールには、2 本目のマイクの経路差による遅延だけでなくキャビネットインパルス応答が含まれます。既定のリグは 48 kHz で 8,939 samples のテールを報告する（合成したキャビネット応答では 4,419、`cab: false` では 2,500）ため、最後の入力サンプルで出力の取り出しをやめるオフラインバウンスは、その分のキャビネットの減衰を失います。レンダリング結果がわずかに早く終わり、わずかにドライになるだけで、何の兆候も出ません。報告されたテールを出し切るまで出力を読み続けてください。
 :::
 
 ::: info 実際にレンダリングするチャンネル数で prepare する
@@ -343,16 +348,16 @@ DNN 音源分離やニューラルなスペクトル修復**ではありませ�
 
 ## 呼び出し方
 
-単体・ペア・クリエイティブインサートのプロセッサを、現在のビルドに合わせた 1 つのピッカーへまとめる場合は `capabilityCatalog()` / `capability_catalog()` を使います。各プロセッサのパラメータ記述子（名前・nullable な id・型・単位・リアルタイム安全性、`min` / `max` / nullable な `default`、`choices`、スロット所属）と、プロセッサの `slots` メタデータ、組み込みプリセット一覧、マスタリングプリセットのメタデータも取得できます。`masteringProcessorCatalog()` は、マスタリング専用ピッカー向けの、より狭いレジストリ分類です。
+単体・ペア・クリエイティブインサートのプロセッサを、現在のビルドに合わせた 1 つのピッカーへまとめる場合は `capabilityCatalog()` / `capability_catalog()` を使います。各プロセッサのパラメータ記述子（名前・nullable な id・型・`unit`・リアルタイム安全性、`min` / `max` / nullable な `default`、`scale`、表示範囲、兄弟キーとの `dependsOn`、`choices`、スロット所属）と、プロセッサの `slots` メタデータ、組み込みプリセット一覧、マスタリングプリセットのメタデータも取得できます。`masteringProcessorCatalog()` は、マスタリング専用ピッカー向けの、より狭いレジストリ分類です。
 
 ### カタログの値域の読み方
 
-記述子は 10 個のフィールドをすべて持つため、本ページのプロセッサ別の表を書き写さなくても、カタログから直接コントロールの範囲を決められます。構築時専用キーは `id: null` かつ `rtSafe: false` で、id 付きでも `rtSafe: false` ならライブオートメーションには使えません。フォールバックがない場合は `default` も `null` です。`choices` は間隔のある離散値も含む名前付き数値の閉じた集合を、`slot` はキーが属するスロット群を表します。スロットの存在はプロセッサの `slots` メタデータにある `activation`、`parent`、`minCrossoverCutoffs` で決まります。`null` の値域はデータの欠落ではなく、その側に既知の制限がないことを表します。
+記述子は同じ 17 個のフィールド（`name`、`id`、`rtSafe`、`type`、`min`、`max`、`minExclusive`、`maxExclusive`、`maxRelativeTo`、`default`、`unit`、`scale`、`uiMin`、`uiMax`、`dependsOn`、`choices`、`slot`。[パラメータ記述子](./effects-inserts.md#パラメータ記述子)を参照）をすべて持つため、本ページのプロセッサ別の表を書き写さなくても、カタログから直接コントロールの範囲を決められます。構築時専用キーは `id: null` かつ `rtSafe: false` で、id 付きでも `rtSafe: false` ならライブオートメーションには使えません。フォールバックがない場合は `default` も `null` です。`choices` は間隔のある離散値も含む名前付き数値の閉じた集合を、`slot` はキーが属するスロット群を表します。スロットの存在はプロセッサの `slots` メタデータにある `activation`、`parent`、`minCrossoverCutoffs` で決まります。`null` の値域はデータの欠落ではなく、その側に既知の制限がないことを表します。
 
 2 種類の値は出どころが異なり、ホストがどこまで信頼できるかもそれで決まります。
 
 - **default** はプロセッサの設定構造体そのもののフィールド初期化子で、各ビルダーがそこへフォールバックする際に記録されます。そのため初期化子を変更したフィールドが、カタログに古い値を残したままになることはありません。
-- **値域は宣言ではなく実測**です。候補値は呼び出し側と同じ構築経路を通り、カタログにはバリデーションが受理した区間が載ります。
+- **値域は宣言ではなく実測**です。候補値は呼び出し側と同じ構築経路を通り、カタログにはバリデーションが受理した区間が内側へ丸められて載ります。一方、`unit`、`scale`、表示範囲（`uiMin` / `uiMax`）、`dependsOn` はライブラリが宣言します。すべての `repair.*` エントリも同じ方法で設定を公開します（そのステージ自身の検証を通して測定）。これらの行は、4 つのリアルタイムリペアインサートでも、オートメーション `id` を持たず、`rtSafe` にもなりません。
 
 ::: warning 値域は推奨レンジではなく受理条件
 `min` と `max` はプロセッサが**受け付ける**範囲を表します。コントロールを動かすうえで音楽的に妥当なレンジではありません。区間内の値でも不適切な設定はあり得ますし、区間外の値はクランプされずに拒否されます。
@@ -361,8 +366,8 @@ DNN 音源分離やニューラルなスペクトル修復**ではありませ�
 値域が宣言ではなく実測であることから、ホスト側で考慮すべき性質が 3 つあります。
 
 - **各値域は他のパラメータを既定値に置いたまま測定されます**。そのため互いを制約し合う 2 つのコントロールは、それぞれ**相手の既定値**を自分の限界として報告します。`maximizer.adaptiveRelease` が `minReleaseMs` の上限を 250、`maxReleaseMs` の下限を 20 として公開するのはこのためで、これらは相手側の既定値であり、ペア全体としての限界ではありません。
-- **サンプルレート由来の値域は prepare 前の状態を反映します**。EQ の `band*.frequencyHz` の上限がいずれも 24000 と読めるのはこのためで、インサートをより高いレートで prepare すれば上がります。
-- **開区間の境界は、除外される値そのものとして報告されます**。`dynamics.compressor` は `sidechainHpfHz` の `min` を 0 として公開しますが、0 は拒否します。
+- **サンプルレート由来の値域は、レートを渡すまで印が付くだけで解決されません**。EQ の `band*.frequencyHz` の上限はいずれも `maxRelativeTo: 'nyquist'` 付きで 24000 と読め、実効上限は `max` とナイキストの低いほうです。`masteringInsertParamInfo(name, sampleRate)` を使うとそのレートで解決されます。`eq.parametric` は 22050 Hz で 11025、44100 Hz で 22050 を返し、48 kHz を超えるレートでは 24000 のままです（インサート自体もそれを超える値を拒否します）。
+- **開区間の境界は、除外される値そのものとして報告されます**。`dynamics.compressor` は `sidechainHpfHz` の `min` を 0 として公開しますが、0 は拒否し、`minExclusive` / `maxExclusive` がそれを示します。
 
 フラットなパラメータ集合の大半を占めるのがバンド単位の EQ です。`eq.parametric`、`eq.midSide`、`multiband.dynamicEq` は、構築用キーも含め、インデックス付きの `band*` フィールドすべてについて記述子を公開します。公開されたからといって**読み取られる**キーが増えるわけではなく、不完全に指定したバンドの残りのキーは、これまでどおり無視されたものとして報告されます。
 
@@ -374,7 +379,7 @@ console.log(build.processors.length, build.presets.mastering);
 
 masteringProcessorNames();   // 実行時にソロプロセッサ id を取得
 masteringProcessorCatalog(); // ピッカー／フィルタ用にプロセッサを分類
-masteringInsertParamInfo('eq.parametric'); // 構築用／オートメーション用メタデータ
+masteringInsertParamInfo('eq.parametric', sampleRate); // 構築用／オートメーション用メタデータ（ナイキスト上限をこのレートで解決）
 masteringInsertTiming('eq.parametric', { 'band0.frequencyHz': 1000 }, sampleRate);
 masteringPresetParams('pop'); // masterAudio 用のフラットな上書き値
 

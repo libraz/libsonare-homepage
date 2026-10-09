@@ -91,7 +91,7 @@ These reference tests establish agreement on the covered low-level helper, not w
 |---------|-----------|-------|
 | `librosa.feature.melspectrogram()` | `MelSpectrogram::compute()` / `melSpectrogram()` | Slaney normalization |
 | `librosa.feature.mfcc()` | `MelSpectrogram::mfcc()` / `mfcc()` | DCT-II; specify `n_mfcc` explicitly when matching librosa; trailing `lifter` (cepstral liftering, default 0 = no liftering) matches librosa's `lifter` |
-| `librosa.feature.chroma_stft()` | `Chroma::compute()` / `chroma()` | STFT-based; each frame is scaled so its largest of the 12 pitch-class values is 1.0 (L-infinity / max normalization), matching librosa's default `norm=np.inf`. `tuning` defaults to 0 (A440) and is never auto-estimated — see Known Differences |
+| `librosa.feature.chroma_stft()` | `Chroma::compute()` / `chroma()` | STFT-based; each frame is scaled so its largest of the 12 pitch-class values is 1.0 (L-infinity / max normalization), matching librosa's default `norm=np.inf`. `chroma()` takes no `tuning` and never auto-estimates it — see Known Differences |
 | `librosa.feature.spectral_centroid()` | `spectralCentroid()` / `spectral_centroid()` | Per-frame |
 | `librosa.feature.spectral_bandwidth()` | `spectralBandwidth()` / `spectral_bandwidth()` | Per-frame |
 | `librosa.feature.spectral_rolloff()` | `spectralRolloff()` / `spectral_rolloff()` | `roll_percent` supported |
@@ -103,7 +103,7 @@ These reference tests establish agreement on the covered low-level helper, not w
 | `librosa.feature.rms()` | `rmsEnergy()` / `rms_energy()` | Per-frame |
 | `librosa.feature.tonnetz()` | `tonnetz()` | Input: row-major chromagram |
 | `librosa.cqt()` | `cqt()` | Constant-Q transform magnitude |
-| `librosa.vqt()` | `vqt()` | Variable-Q transform; `gamma` controls Q |
+| `librosa.vqt()` | `vqt()` | Variable-Q transform; `gamma` controls Q (omit it, or pass `None` in Python, for the automatic bandwidth) |
 | `librosa.feature.chroma_cqt()` | `chromaCqt()` / `chroma_cqt()` | Constant-Q chromagram; direct `librosa.feature.chroma_cqt` equivalent |
 | _(no strict librosa clone)_ | `nnlsChroma()` / `nnls_chroma()` | Additional NNLS note-activation chroma; no strict librosa equivalent |
 | `librosa.feature.chroma_cens()` | `chromaCens()` / `chroma_cens()` | CENS (Chroma Energy Normalized Statistics) chroma; smoothed/L1-normalized |
@@ -118,7 +118,7 @@ These reference tests establish agreement on the covered low-level helper, not w
 | `librosa.pyin()` | `pitchPyin()` / `pitch_pyin()` | Probabilistic YIN; `fillNa` / `fill_na` controls whether unvoiced `f0` is `NaN` or `0` |
 | `librosa.yin()` | `pitchYin()` / `pitch_yin()` | YIN; returns a finite period estimate for every frame and reports voicing separately |
 | `librosa.pitch_tuning()` | `pitchTuning()` / `pitch_tuning()` | Tuning offset from frequencies |
-| `librosa.estimate_tuning()` | `estimateTuning()` / `estimate_tuning()` | Tuning offset from audio |
+| `librosa.estimate_tuning()` | `estimateTuning()` / `estimate_tuning()` | Tuning offset from audio, a fraction of a bin of `bins_per_octave` as in librosa. At 12 it equals the unit of the analysis `tuning` options, which also accept `'auto'` |
 
 #### Decomposition and loudness
 
@@ -147,7 +147,7 @@ These mirror `librosa.feature.inverse.*` and use Griffin-Lim for phase, so round
 
 | librosa | libsonare | Notes |
 |---------|-----------|-------|
-| `librosa.feature.inverse.mel_to_stft()` | `melToStft()` / `mel_to_stft()` | Mel power → linear STFT **magnitude** (librosa's `power=2.0` default is undone by a square root, so no further root is needed); custom Mel ranges / HTK round-trip via `fmin`/`fmax`/`htk` |
+| `librosa.feature.inverse.mel_to_stft()` | `melToStft()` / `mel_to_stft()` | Mel power → linear STFT **magnitude** (librosa's `power=2.0` default is undone by a square root, so no further root is needed); custom Mel ranges / HTK round-trip via `fmin`/`fmax`/`htk`, or pass the forward result (`melToStft({ result })`, `mel_result_to_stft`) to reuse its parameters |
 | _(mel_to_stft + `librosa.griffinlim`)_ | `melToAudio()` / `mel_to_audio()` | Mel power → audio (Griffin-Lim) |
 | `librosa.feature.inverse.mfcc_to_mel()` | `mfccToMel()` / `mfcc_to_mel()` | MFCC → mel power |
 | `librosa.feature.inverse.mfcc_to_audio()` | `mfccToAudio()` / `mfcc_to_audio()` | MFCC → audio (Griffin-Lim) |
@@ -352,7 +352,7 @@ sonare beats song.wav --json
 | Parameter | librosa | libsonare |
 |-----------|---------|-----------|
 | `sr` | 22050 | 22050 (default for all standalone analysis/feature/loudness helpers; pass the buffer's true rate for `lufs`/`true-peak`. `Audio`/`Spectrogram` class methods use the loaded file's rate.) |
-| `n_fft` | 2048 | 2048 |
+| `n_fft` | 2048 | 2048 samples of the buffer for the librosa-style feature functions. The music analyzers that take audio at its own rate (tempo, beats, onsets, key, rhythm, chords, timbre) read it as samples at 22050 Hz and rescale it to the input rate, so a window spans the same time at every rate |
 | `hop_length` | 512 | 512 |
 | `win_length` | n_fft | n_fft |
 | `window` | 'hann' | Hann |
@@ -441,12 +441,15 @@ partly silent material that changes a level which was already correct.
 ### 4. Chroma Tuning Reference
 
 - **librosa**: `chroma_stft` defaults to `tuning=None`, which runs `estimate_tuning()` on the signal and re-centres the pitch-class grid on the recording
-- **libsonare**: `tuning` defaults to a fixed `0` (concert A440) and is never estimated
+- **libsonare**: the standalone `chroma()` reads a fixed concert A440 and takes no `tuning`. The music-analysis calls (`analyze`, `detectChords`, `detectKey`) take `tuning`, default `0`, and measure it from the audio with `tuning: 'auto'` (Python `tuning="auto"`)
 
 On material recorded away from A440 the two chromagrams diverge structurally,
 not within a tolerance: libsonare's bins smear across neighbouring pitch classes
-and key/chord results degrade. To match librosa, estimate the offset yourself
-with `estimateTuning()` / `estimate_tuning()` and pass it in as `tuning`.
+and key/chord results degrade. For key and chords, pass `tuning: 'auto'`; each
+result reports the semitone fraction it used. To match librosa's chromagram
+itself, estimate the offset with `estimateTuning()` / `estimate_tuning()` and
+apply it in your own pipeline; at 12 bins per octave it is the same unit the
+`tuning` options take.
 
 ## Migration Guide
 

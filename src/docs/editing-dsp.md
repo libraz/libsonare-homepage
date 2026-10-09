@@ -27,7 +27,7 @@ By the end of this page you should be able to:
 | Make a clip longer or shorter without changing the note | Time stretch | `rate` is a playback-speed multiplier: `rate=2.0` plays twice as fast, so the clip is half as long; `rate=0.5` is half speed and twice as long. The pitch does not change. (Note: `noteStretch`'s `stretchRatio` is a length multiplier, so it works the opposite way.) |
 | Move the whole clip up or down in pitch | Pitch shift | `semitones=12` means one octave up; `-12` means one octave down |
 | Nudge a vocal note toward a target note | Pitch correction | You must know or estimate the current pitch first |
-| Hold or shorten one note region | Note stretch | Region positions are sample offsets, not seconds; `stretchRatio > 1` lengthens the replacement region, and the whole-clip shift follows that region-length change |
+| Hold or shorten one note region | Note stretch | Region positions are samples or seconds (`onsetSec` / `offsetSec`), never negative; `stretchRatio > 1` lengthens the replacement region, and the whole-clip shift follows that region-length change |
 | Attenuate or heal a time-frequency region | Spectral edit | Draw a rectangle in samples and Hz, then apply `gain`, `attenuate`, `mute`, or `heal` |
 | Change vocal character | Voice change | Pitch changes the note; formant changes the perceived body or character of the voice |
 | Process live voice blocks with presets | Realtime voice changer | Use this for AudioWorklet, monitoring, or chunked processing where DSP state must continue across blocks |
@@ -55,9 +55,10 @@ Parameters like `f0Hz` (a per-frame pitch contour), `hopLength`, and `voiced` ar
 | Correct from one MIDI note to another | `pitchCorrectToMidi(samples, sampleRate, currentMidi, targetMidi)` | `pitch_correct_to_midi(samples, sample_rate, current_midi, target_midi)` |
 | Follow a per-frame pitch contour toward a note | `pitchCorrectToMidiTimevarying(samples, f0Hz, targetMidi, sampleRate, hopLength, voiced?, voicedProb?)` | `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sample_rate, hop_length, voiced?, voiced_prob?)` |
 | Snap a contour to a musical scale (auto-tune) | `pitchCorrectTimevarying(samples, f0Hz, sampleRate, hopLength, options)` | `pitch_correct_timevarying(samples, f0_hz, sample_rate, hop_length, *, mode=..., scale_root=..., ...)` |
+| Snap a whole recording to a detected or named key | `autoTune({ samples, sampleRate, key, strength })` | `auto_tune(samples, sample_rate, key, strength=...)` |
 | Stretch only a note region | `noteStretch(samples, sampleRate, { onsetSample, offsetSample, stretchRatio })` | `note_stretch(samples, sample_rate, onset_sample, offset_sample, stretch_ratio)` |
 | Edit a time-frequency region | `spectralEdit(samples, sampleRate, ops, options?)` | `spectral_edit(samples, sample_rate, ops, ...)` |
-| Shift pitch and formants independently | `voiceChange(samples, sampleRate, { pitchSemitones, formantFactor })` | `voice_change(samples, sample_rate, pitch_semitones, formant_factor)` |
+| Shift pitch and formants independently | `voiceChange(samples, sampleRate, { pitchSemitones, formantFactor, formantMode? })` | `voice_change(samples, sample_rate, pitch_semitones, formant_factor, formant_mode="relative")` |
 | Stateful realtime voice preset chain | `RealtimeVoiceChanger` | `RealtimeVoiceChanger` |
 | One-shot realtime voice preset render | `voiceChangeRealtime(samples, sampleRate, preset, options?)` | `voice_change_realtime(samples, sample_rate, preset)` |
 
@@ -108,6 +109,18 @@ const transposed = voiceChange(vocal, sampleRate, {
   formantFactor: 2 ** (-pitchSemitones / 12), // 0.749 — keeps the vocal tract where it was
 });
 ```
+
+`formantMode: 'absolute'` does that bookkeeping for you. `formantFactor` is then the formant shift relative to the *input*, whatever the pitch shift, and `1` keeps the formants where they were; the warp actually applied is `formantFactor / 2^(pitchSemitones / 12)`. The default, `'relative'`, is the behaviour described above.
+
+```typescript
+const natural = voiceChange(vocal, sampleRate, {
+  pitchSemitones: 5,
+  formantFactor: 1,       // formants stay at the input's position
+  formantMode: 'absolute',
+});
+```
+
+The formant warp covers 0.55 to 1.65, so an absolute request is only reachable when `formantFactor / 2^(pitchSemitones / 12)` falls in that range. Outside it the call throws a `RangeError` naming the reachable `formantFactor` range for that pitch shift (at +12 semitones, `[1.1, 3.3]`); it is never clamped. Python and the `voice-change` CLI (`--formant-mode`) refuse it the same way.
 :::
 
 For rectangular time/frequency edits such as whistle attenuation or short artifact repair, see [Spectral Editing](./spectral-editing.md).
@@ -237,6 +250,27 @@ tuned = sonare.pitch_correct_timevarying(
 
 `referenceMidi` (default `69` = A4) anchors where the scale grid sits, so every degree is measured from a fixed reference note. `maxCorrectionSemitones` (default `12`) is the safety valve behind the "keep correction intervals small" advice below: it hard-clamps how far a single frame can jump, so an octave-off detector glitch on one frame is bounded instead of yanking that frame a full octave. Lower it when the detector is noisy or the take should stay close to the original.
 
+### Tune a whole recording to a key: `autoTune(...)`
+
+The functions above need an F0 contour you measured yourself. `autoTune(...)` runs the whole offline chain on a monophonic recording: it detects the key (or takes the one you name), tracks pitch with pYIN, and snaps each voiced note to the scale. The output has the input's length; unvoiced stretches and notes the corrector cannot repitch pass through unchanged.
+
+```typescript
+import { autoTune, init } from '@libraz/libsonare';
+
+await init();
+
+// Detect the key, then tune toward it.
+const { samples: tuned, key } = autoTune({ samples: vocal, sampleRate, key: 'detect', strength: 0.8 });
+console.log(key.name, key.confidence); // the key actually used
+
+// Or name the key: confidence is 1, and no detection runs.
+const inD = autoTune({ samples: vocal, sampleRate, key: { root: 2, mode: 'dorian' } });
+```
+
+`key` is `'detect'` (the default) or `{ root, mode }`, where `root` is a pitch class (0 = C .. 11 = B) and `mode` is a name such as `'major'`, `'minor'`, `'dorian'` or a `Mode` ordinal. The result is `{ samples, key }`; `key.mode` is a name, as `detectKey` reports it. `strength` (default `1`), `retuneSpeedMs`, `vibratoThresholdCents`, `maxCorrectionSemitones` and `referenceMidi` mean what they do in `pitchCorrectTimevarying(...)`, with `strength` playing the part of `retuneAmount`. Python's `auto_tune(samples, sample_rate, key="detect", *, strength=...)` takes the key as a string, a `Key`, a mapping, or a `(root, mode)` tuple and returns an `AutoTuneResult` with `samples` and `key`.
+
+To snap a contour you measured yourself, build the mask with `scaleMaskForMode(root, mode)` and pass it as `scaleModeMask`. It returns the 12-bit mask of a church mode (`scaleMaskForMode(0, 'major')` is `0b101010110101`), and `pitchCorrectTimevarying(...)` also accepts the mode name directly as `scaleModeMask`.
+
 ### MIDI note numbers
 
 A MIDI note number represents pitch as a semitone index. Each whole number is one semitone, and fractional values are allowed.
@@ -254,15 +288,13 @@ For the full mapping table and the `freq ↔ midi` formula, see [Editing Basics]
 
 ### Region selection for `noteStretch(...)`
 
-`noteStretch(...)` takes the region in **sample offsets**, not seconds. `onsetSample` defaults to the start of the input; `offsetSample` defaults to its end. Omit a boundary when the region already reaches that edge.
-
-If your UI works in seconds, convert like this:
+`noteStretch(...)` takes the region in samples (`onsetSample`, `offsetSample`) or in seconds (`onsetSec`, `offsetSec`, rounded to the nearest sample at the call's sample rate). Give one spelling of each bound; both together is refused. `onsetSample` defaults to the start of the input and `offsetSample` to its end, so omit a boundary when the region already reaches that edge. A negative position is refused: `RangeError` on WASM and Node, `SonareValueError` in Python.
 
 ```typescript
-const onsetSample = Math.round(onsetSeconds * sampleRate);
-const offsetSample = Math.round(offsetSeconds * sampleRate);
-const heldNote = noteStretch(vocal, sampleRate, { onsetSample, offsetSample, stretchRatio: 1.25 });
+const heldNote = noteStretch(vocal, sampleRate, { onsetSec: 0.25, offsetSec: 0.5, stretchRatio: 1.25 });
 ```
+
+`noteMove(...)` takes the same bounds plus `targetOnsetSample` / `targetOnsetSec`, the position the note's onset moves to, under the same rules. Python spells them `onset_sec`, `offset_sec` and `target_onset_sec`.
 
 `stretchRatio` is the nominal length multiplier for the selected region. `noteStretch` blends the source samples at the replacement region's start and end with equal-power crossfades. Those crossfades stay inside the replacement region and do not consume neighboring samples. The output clip length and the shift of audio after the region therefore follow the replacement region's length change. `stretchRatio: 1.0` keeps the whole clip length neutral; for other ratios, the time-stretch backend can round the replacement length by a few samples. A clip edge has no neighboring audio on that side, so it has no crossfade there.
 
@@ -278,7 +310,7 @@ const heldNote = noteStretch(vocal, sampleRate, { onsetSample, offsetSample, str
 
 `RealtimeVoiceChanger` is the stateful preset chain used for live or chunked voice processing. It combines high-pass, gate, retune, formant, EQ, compressor, de-esser, reverb, and limiter stages. Factory preset IDs include `neutral-monitor`, `bright-idol`, `soft-whisper`, `deep-narrator`, `robot-mascot`, and `dark-villain`.
 
-Use the realtime class when you process repeated blocks and need continuity across calls. In WASM, call `prepare(...)` and `delete()` yourself. In Python, use the context manager or `close()`.
+Use the realtime class when you process repeated blocks and need continuity across calls. The same chain is also a `voice.changer` insert on mono and stereo mixer strips; see [Realtime Voice Changer](./realtime-voice-changer.md#as-a-mixer-insert). In WASM, call `prepare(...)` and `delete()` yourself. In Python, use the context manager or `close()`.
 
 ::: code-group
 

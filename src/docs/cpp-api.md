@@ -81,7 +81,23 @@ of its commands reach the pitch editor directly.
 
 ### C ABI versions
 
-Every C-ABI header that declares flat POD structs owns a version macro guarding their exact size and member offsets. `SONARE_FEATURE_ABI_VERSION` is 6 in `sonare_c_types.h` and also covers the shipped general C function contracts, including note APIs whose `voiced` argument is part of the call signature. `SONARE_PROJECT_ABI_VERSION` is 2 in `sonare_c_project.h`, `SONARE_VOICE_CHANGER_ABI_VERSION` is 2 in `sonare_c_voice_changer.h`, and `SONARE_ACOUSTIC_ABI_VERSION` is 4 in `sonare_c_acoustic.h`. `sonare_c.h` packs the four into `SONARE_ABI_VERSION` — feature in bits 0-7, project in 8-15, voice changer in 16-23, acoustic in 24-31 — and `sonare_abi_version()` returns the value the loaded library was compiled with. The realtime command queue is versioned apart from these through `sonare_engine_abi_version()` (currently 3), because it describes a SharedArrayBuffer record layout rather than a POD. A consumer that passes PODs across the boundary compares `sonare_abi_version()` against its own compile-time `SONARE_ABI_VERSION` once, before the first call, and refuses to continue on a mismatch: unequal values mean the two sides disagree on a struct layout or covered function contract, and the POD path would corrupt memory rather than fail. The JSON entry points tolerate layout drift and need no such gate. A version moves on any guarded struct layout change or covered feature function-signature change — the project version once per release that changes its layout — so equal numbers mean identical layout and contracts, and a field appended to a guarded struct is a bump, not an additive change. Which value each binding checks on load is on [Native Bindings](./native-bindings.md#abi-versions).
+Every C-ABI header that declares flat POD structs owns a version macro guarding their exact size and member offsets. `SONARE_FEATURE_ABI_VERSION` is 7 in `sonare_c_types.h` and also covers the shipped general C function contracts, including note APIs whose `voiced` argument is part of the call signature. `SONARE_PROJECT_ABI_VERSION` is 2 in `sonare_c_project.h`, `SONARE_VOICE_CHANGER_ABI_VERSION` is 3 in `sonare_c_voice_changer.h`, and `SONARE_ACOUSTIC_ABI_VERSION` is 4 in `sonare_c_acoustic.h`. `sonare_c.h` packs the four into `SONARE_ABI_VERSION` — feature in bits 0-7, project in 8-15, voice changer in 16-23, acoustic in 24-31 — and `sonare_abi_version()` returns the value the loaded library was compiled with. The realtime command queue is versioned apart from these through `sonare_engine_abi_version()` (currently 3), because it describes a SharedArrayBuffer record layout rather than a POD. A consumer that passes PODs across the boundary compares `sonare_abi_version()` against its own compile-time `SONARE_ABI_VERSION` once, before the first call, and refuses to continue on a mismatch: unequal values mean the two sides disagree on a struct layout or covered function contract, and the POD path would corrupt memory rather than fail. The JSON entry points tolerate layout drift and need no such gate. A version moves on any guarded struct layout change or covered feature function-signature change — the project version once per release that changes its layout — so equal numbers mean identical layout and contracts, and a field appended to a guarded struct is a bump, not an additive change. Which value each binding checks on load is on [Native Bindings](./native-bindings.md#abi-versions).
+
+#### Versioned structs and their defaults
+
+A guarded struct that a caller fills in carries its own layout version, so a build against an older layout is refused instead of read at the wrong offsets. Start from the matching `*_default()` function rather than zeroing the struct — a zeroed struct is not the defaults:
+
+| Struct | Version field | Start from |
+|--------|---------------|------------|
+| `SonareMusicAnalyzeOptions` | leading `struct_version`, must be `SONARE_MUSIC_ANALYZE_OPTIONS_VERSION` (2); `sonare_analyze_json_ex` refuses any other value | `sonare_music_analyze_options_default()` |
+| `SonareChordDetectionOptions` | leading `struct_version`, 0 or `SONARE_CHORD_DETECTION_OPTIONS_VERSION` (2) | zero-initialise, or set the version |
+| `SonareBoundaryOptions` | none; 44 bytes, with `reference_window` (one-sided seconds the relative threshold is measured over, default 60, `0` disables the relative threshold) after `use_chroma` | `sonare_boundary_options_default()` |
+| `SonareTranscribeConfig` | `struct_version` 1 or 2; version 2 appends `reference_auto` (measure the tuning reference instead of reading `reference_hz`), and version 1 is still read | `sonare_transcribe_config_default()` |
+| `SonareRealtimeVoiceChangerConfig` | leading `struct_version` (0 or 1), followed by `formant_mode`; `SONARE_VOICE_CHANGER_ABI_VERSION` guards the layout | `sonare_realtime_voice_changer_config_default()` (zeroing disables the ISP limiter) |
+
+The result structs `SonareChordAnalysisResult`, `SonareMelResult`, `SonareMfccResult` and `SonareTranscribeResult` also lead with a `struct_version`; the library writes it, so a caller only reads it. Results report the tuning they used (`SonareChordAnalysisResult.tuning`, `SonareTranscribeResult.tuning`), and the mel and MFCC results carry the forward-transform parameters needed to invert them. `SONARE_PROJECT_ABI_VERSION` does not move for `SonareProjectLoopRecordingDesc`: its former `reserved` word is now `flags`, which accepts `0` or `SONARE_PROJECT_LOOP_RECORDING_DROP_PARTIAL_TAIL` and refuses any other bit, so callers zero it.
+
+A zero-initialised `SonareEngineTrackLane` reads as a mono source, and `sonare_engine_set_track_lanes` refuses any source layout that is not stereo; set `source_channel_layout = SONARE_CHANNEL_LAYOUT_STEREO` on every lane.
 
 ### Link targets
 
@@ -202,7 +218,12 @@ static Audio Audio::from_file(const std::string& path);
 // From in-memory encoded audio bytes with the same format support as from_file()
 // Throws SonareException on decode error
 static Audio Audio::from_memory(const uint8_t* data, size_t size);
+
+// Same decode, no downmix: element i is source channel i, in the source's own order
+static std::vector<Audio> Audio::from_memory_channels(const uint8_t* data, size_t size);
 ```
+
+The C ABI mirrors this with `sonare_decode_channels(data, length, &samples, &frames, &channels, &sample_rate)`, which returns the planes one after another (5.1 order is L R C LFE Ls Rs; release with `sonare_free_floats`), and `sonare_downmix(channels, frames, channel_count, target_layout, &out)`, which folds planar channels to a narrower `SonareChannelLayout` with the ITU-R BS.775 rule the decoders use: centre and surround enter the front pair at -3 dB and the LFE plane is dropped. An upmix is refused.
 
 #### Properties
 
@@ -314,100 +335,6 @@ namespace sonare::quick {
 }
 ```
 
-## Geometric Room Acoustics
-
-These APIs estimate, synthesize, or apply a room model. They live in focused module headers and require builds with `BUILD_ACOUSTIC_SIM=ON` (the default source-build setting).
-
-::: info Terms in this section
-- **Equivalent room** is a practical room model inferred from audio. It is not exact measured geometry.
-- **RIR** means room impulse response: samples that describe how a room reacts to a short sound.
-- **RT60** is the reverberation time: how long a tail takes to decay by 60 dB.
-- **DRR (direct-to-reverberant ratio)** compares the level of the direct sound against the reverberant tail, in dB. Higher means a drier, closer-sounding source.
-- **Room morphing** is a creative room-character effect, not dereverberation.
-:::
-
-```cpp
-#include <acoustic/rir_synthesizer.h>
-#include <analysis/room_estimator.h>
-#include <effects/acoustic/room_morph.h>
-
-using namespace sonare;
-
-acoustic::ShoeboxRoom room = acoustic::uniform_shoebox({7.0f, 5.0f, 3.0f}, 0.2f);
-acoustic::SourceListener placement{{1.0f, 1.0f, 1.2f}, {5.0f, 4.0f, 1.7f}};
-auto rir = acoustic::synthesize_rir(room, placement, 48000);
-if (!rir.rir.empty()) {
-  RoomEstimate estimate = estimate_room(rir.rir);
-}
-
-effects::acoustic::RoomMorphConfig morph_config;
-morph_config.target = room;
-morph_config.placement = placement;
-morph_config.wet = 0.6f;
-effects::acoustic::RoomMorphResult morphed = effects::acoustic::room_morph(recording, morph_config);
-// morphed.audio is the render; morphed.diagnostics lists what the target-RIR synthesis clamped.
-```
-
-The three calls cover different parts of the workflow:
-
-- `estimate_room(...)` returns volume, representative dimensions, absorption bands, RT60 bands, DRR, and confidence.
-- `synthesize_rir(...)` reports geometry problems through diagnostics. It returns an empty RIR when the source or listener placement is invalid.
-- `room_morph(...)` renders the input with the target room character and returns a `RoomMorphResult`: the audio plus the same diagnostics `synthesize_rir(...)` raises, since the target RIR is built by the same code. An unusable configuration throws `ErrorCode::InvalidParameter` instead of reporting an error entry.
-
-::: details Configuration details
-`acoustic::RirSynthConfig` controls RIR generation:
-
-- image-source order;
-- Sabine/Eyring late-tail model;
-- deterministic seed;
-- maximum RIR length;
-- early/late mixing time;
-- crossfade width.
-
-`RoomEstimateConfig` forwards analyzer settings through `AcousticConfig`. These include mode, octave-band count, minimum decay span, and noise-floor margin.
-
-Aspect hints and `reference_absorption` define the equivalent-room prior.
-:::
-
-### Room morph through the C ABI
-
-`sonare_room_morph` in `sonare_c_acoustic.h` takes the input samples, their sample rate and a `SonareRoomMorphConfig`, and hands back the morphed mono signal through an out-pointer pair. The diagnostics the target-room synthesis raised are not in the result: they travel on the thread-local structured channel, read after the call returns. Ownership and lifetime follow the code:
-
-```c
-float* out = NULL;
-size_t out_length = 0;
-SonareError err = sonare_room_morph(samples, length, sample_rate, &config, &out, &out_length);
-if (err != SONARE_OK) return err;  // nothing was allocated; sonare_last_error_message() has the detail
-for (size_t i = 0; i < sonare_last_diagnostic_count(); ++i) {
-  const char* code = sonare_last_diagnostic_code(i);  // e.g. "acoustic.rir_length_clamped"
-  // sonare_last_diagnostic_message(i) and sonare_last_diagnostic_severity(i) sit beside it
-}
-sonare_free_floats(out);
-```
-
-- `*out` is allocated by the library and released with `sonare_free_floats`. It holds `length` samples plus the target room's tail, at the input sample rate. An empty input yields `NULL` / `0`, which is safe to free; on a non-`SONARE_OK` return nothing was allocated.
-- The diagnostic strings are owned by the library, never `NULL`, and valid until the next C ABI call on the same thread that records or clears a diagnostic — `sonare_room_morph` and `sonare_synthesize_rir` both clear the channel on entry, and the count reads `0` after any other call. Reading does not consume an entry, and there is nothing to free; copy the strings you keep.
-- An index at or past the count returns `""` and `SONARE_DIAGNOSTIC_INFO`, so bound the loop by the count rather than by severity. Every entry a morph publishes is a recoverable clamp at `SONARE_DIAGNOSTIC_WARNING`; an unusable configuration is an error return, not an entry.
-- `sonare_last_warning_message()` carries the same entries flattened into one `code: message; code: message` string. It is kept for callers written against it — the structured accessors are the form to branch on, because a message containing the separator cannot be split back out and the severity is not in the text.
-
-### Air absorption in large rooms
-
-For a large hall, the geometry-only RT60 estimate can overstate the high-frequency tail because it does not account for air loss over a long path. The C++ acoustic core can add the ISO 9613-1 atmospheric-absorption term to the Sabine/Eyring calculation. It is opt-in: omitting the last argument keeps the earlier geometry-only result exactly.
-
-```cpp
-#include <acoustic/late_reverb.h>
-
-acoustic::AirAbsorption air;
-air.temperature_c = 20.0f;
-air.humidity_percent = 50.0f;
-
-const auto rt60 = acoustic::shoebox_reverb_time(
-    room, acoustic::ReverbModel::Eyring, &air);
-// rt60.rt60_bands: air loss shortens the high bands most.
-```
-
-`AirAbsorption` defaults to 20 °C and 50% relative humidity. This lower-level C++ calculation is not part of the C ABI, Node, Python, or WASM shoebox helpers; those public helpers continue to use the geometry-only model.
-
 ## MusicAnalyzer <Badge type="warning" text="Heavy" />
 
 Facade class for comprehensive music analysis with lazy initialization.
@@ -475,7 +402,9 @@ float mel_to_hz(float mel);
 float hz_to_midi(float hz);      // A4 = 440Hz = 69
 float midi_to_hz(float midi);
 
-// Hz <-> Note name
+// Hz <-> Note name. Both throw SonareException (InvalidParameter) on input they cannot
+// convert: a note name that does not parse or whose octave is out of range, and an hz
+// that is not finite and positive.
 std::string hz_to_note(float hz);    // "A4", "C#5"
 float note_to_hz(const std::string& note);
 
@@ -496,6 +425,10 @@ std::vector<float> amplitude_to_db(const std::vector<float>& values,
 std::vector<float> db_to_power(const std::vector<float>& values, float ref = 1.0f);
 std::vector<float> db_to_amplitude(const std::vector<float>& values, float ref = 1.0f);
 ```
+
+In the C ABI the same two conversions cannot throw, so they signal failure in-band: `float sonare_note_to_hz(const char* note)` returns NaN and `const char* sonare_hz_to_note(float hz)` returns NULL, and `sonare_last_error_code()` is then `SONARE_ERROR_INVALID_PARAMETER` with the detail in `sonare_last_error_message()`. The `sonare_hz_to_note` result is thread-local storage that the next call overwrites; copy it and never free it.
+
+The analysis tuning unit (a fraction of a semitone, in `[-0.5, 0.5)`) converts to and from the Hz a reference is stated in with `sonare_tuning_to_reference_hz(tuning, a4, &hz)` (`a4 * 2^(tuning / 12)`) and `sonare_reference_hz_to_tuning(hz, a4, &tuning)`; pass `440` for `a4` by default. `sonare_scale_mask_for_mode(root, mode, &mask)` returns the 12-bit scale mask of a `SonareMode` in the layout the scale quantizer and `SonarePitchCorrectionConfig` read.
 
 ## Mastering
 
@@ -586,10 +519,12 @@ try {
 }
 ```
 
+In the C ABI, `SonareError` is the return value, and `sonare_last_error_message()` carries the detail. A function that returns a handle or pointer reports failure as `NULL`; `sonare_last_error_code()` returns the `SonareError` recorded beside the message (or `SONARE_OK`), so the caller learns why. The same calls that clear the message on entry clear the code. `SONARE_ERROR_ABI_MISMATCH` (10) exists for bindings that find the loaded library is not the one they were built for; the C library never returns it.
+
 ## Where the sections went
 
 | Section | Now on |
 |---|---|
 | StreamAnalyzer | [C++ Streaming API](./cpp-api-streaming.md) |
 | Feature Extraction, Types | [C++ Analysis API](./cpp-api-analysis.md) |
-| Effects, Mixing Engine, C API | [C++ Effects API](./cpp-api-effects.md) |
+| Effects, Mixing Engine, C API, Geometric Room Acoustics | [C++ Effects API](./cpp-api-effects.md) |

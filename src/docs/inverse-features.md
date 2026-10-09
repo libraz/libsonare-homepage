@@ -20,7 +20,7 @@ These helpers assume you already produce mel spectrograms or MFCCs. If you are j
 By the end of this page you should be able to:
 
 - explain why mel/MFCC inversion is approximate and why phase cannot be recovered from the feature alone;
-- keep the `sampleRate`, `nFft`, `hopLength`, `nMels`, `nMfcc`, `fmin`, `fmax`, `htk`, and MFCC `lifter` values needed for a correct round trip;
+- keep the `sampleRate`, `nFft`, `hopLength`, `nMels`, `nMfcc`, `fmin`, `fmax`, `htk`, and MFCC `lifter` values needed for a correct round trip, or hand the forward result back and let it carry them;
 - choose `melToStft`, `melToAudio`, `mfccToMel`, `mfccToAudio`, `cqtToAudio`, or `vqtToAudio` based on the feature matrix and whether you need preview audio;
 - compare JavaScript and Python return shapes without confusing row counts, frame counts, and flattened data.
 
@@ -71,6 +71,7 @@ The two forward transforms (dashed) produce the features you already know; the f
 | Mel power → audio | `melToAudio(...)` returns `Float32Array` | `mel_to_audio(...)` returns `list[float]` |
 | MFCCs → mel power | `mfccToMel(...)` returns `{ nMels, nFrames, power }` | `mfcc_to_mel(...)` returns `InverseResult(rows, n_frames, data)` |
 | MFCCs → audio | `mfccToAudio(...)` returns `Float32Array` | `mfcc_to_audio(...)` returns `list[float]` |
+| Forward result → any of the above | `melToStft({ result })`, `melToAudio({ result })`, `mfccToMel({ result })`, `mfccToAudio({ result })` | `mel_result_to_stft`, `mel_result_to_audio`, `mfcc_result_to_mel`, `mfcc_result_to_audio` |
 | CQT magnitude → audio | `cqtToAudio(...)` returns `Float32Array` | `cqt_to_audio(...)` returns `list[float]` |
 | VQT magnitude → audio | `vqtToAudio(...)` returns `Float32Array` | `vqt_to_audio(...)` returns `list[float]` |
 
@@ -85,6 +86,24 @@ The helper solves the non-negative least-squares problem in the power domain and
 :::
 
 If forward MFCC used a nonzero `lifter`, pass the same value to `mfccToMel` or `mfccToAudio`. The inverse then removes it.
+
+## Invert a result directly
+
+A mel or MFCC result carries the parameters of the transform that made it: `nFft`, `hopLength`, `sampleRate`, `fmin` and `fmax` as applied, `htk`, and for MFCC also `nMels` and `lifter`. In JavaScript the inverse takes the result itself as a request, so nothing has to be repeated and nothing can drift:
+
+```typescript
+const mel = melSpectrogram(samples, sampleRate, 2048, 512, 128);
+const spectrum = melToStft({ result: mel });
+const preview = melToAudio({ result: mel, nIter: 32 });
+
+const coeffs = mfcc(samples, sampleRate, 2048, 512, 128, 20, 0, 0, false, 22);
+const reMel = mfccToMel({ result: coeffs });
+const fromMfcc = mfccToAudio({ result: coeffs, nIter: 32 });
+```
+
+A field set beside `result` must agree with it, or the call throws `RangeError` naming both values, so an override can only restate what the forward transform used (`nIter` is free). A mel result already in dB (`isDb`) is refused with a message pointing to `dbToPower`; convert it first. The matrix-based request forms name the matrix `power` for mel and `coefficients` for MFCC (`melToStft({ power, nMels, nFrames, ... })`, `mfccToMel({ coefficients, nMfcc, nFrames, ... })`); any other field name for the matrix throws.
+
+In Python the same thing is `mel_result_to_stft(mel)`, `mel_result_to_audio(mel, n_iter=32)`, `mfcc_result_to_mel(coeffs)` and `mfcc_result_to_audio(coeffs, n_iter=32)`. The positional librosa-style functions below are unchanged.
 
 ::: code-group
 
@@ -125,13 +144,13 @@ sonare mel-to-audio song.wav --n-fft 2048 --hop-length 512 --n-mels 128 -o mel-p
 
 :::
 
-Both inputs are **row-major** matrices: `melPower` is `[nMels x nFrames]`, MFCC coefficients are `[nMfcc x nFrames]`. The `nMels`/`nMfcc`/`nFrames` arguments tell the helper how to read that flat array, so they must match the matrix you pass.
+Both inputs are **row-major** matrices: the mel `power` is `[nMels x nFrames]`, MFCC coefficients are `[nMfcc x nFrames]`. The `nMels`/`nMfcc`/`nFrames` arguments tell the helper how to read that flat array, so they must match the matrix you pass.
 
 ## Reconstruct audio
 
 `melToAudio` and `mfccToAudio` produce a mono `Float32Array` you can play or write to a file. Because the features carry no phase, both run **Griffin-Lim**: start from the magnitude with random (or zero) phase, repeatedly STFT → keep the new phase → impose the known magnitude → inverse-STFT, until the phase settles into something self-consistent.
 
-`cqtToAudio` and `vqtToAudio` use the same iterative idea for the row-major magnitude matrix returned by `cqt(...)` or `vqt(...)` — the constant-Q and variable-Q transforms, which space their frequency bins logarithmically instead of linearly. Keep the forward transform's `sampleRate`, `hopLength`, `fmin`, and `binsPerOctave` (plus `gamma` for VQT) unchanged. As with mel/MFCC reconstruction, this is an approximate mono preview, not a restoration.
+`cqtToAudio` and `vqtToAudio` use the same iterative idea for the row-major magnitude matrix returned by `cqt(...)` or `vqt(...)` — the constant-Q and variable-Q transforms, which space their frequency bins logarithmically instead of linearly. Keep the forward transform's `sampleRate`, `hopLength`, `fmin`, and `binsPerOctave` (plus `gamma` for VQT, omitted when the forward call omitted it) unchanged. As with mel/MFCC reconstruction, this is an approximate mono preview, not a restoration.
 
 ::: code-group
 
@@ -286,7 +305,7 @@ sonare mel-to-audio song.wav -o mel-preview.wav
 :::
 
 ::: warning Keep the same parameters on both sides
-Inverse helpers are only meaningful with the **same** `sampleRate`, `nFft`, `hopLength`, `nMels`, `fmin`, `fmax`, and `htk` used for the forward transform. A mismatch silently produces a wrong-but-plausible spectrum, which is the hardest kind of bug to spot. In particular, if the forward transform used `htk: true` or a custom `fmin`/`fmax`, the inverse **must** pass the same `htk`/`fmin`/`fmax` — otherwise the Mel filterbank is built differently and the reconstruction is silently wrong. Store these values alongside your features so the inverse call cannot drift. `mel_to_stft(...)` does not need `hop_length` because it stays in the frequency domain; the audio-producing helpers do.
+Inverse helpers are only meaningful with the **same** `sampleRate`, `nFft`, `hopLength`, `nMels`, `fmin`, `fmax`, and `htk` used for the forward transform. A mismatch silently produces a wrong-but-plausible spectrum, which is the hardest kind of bug to spot. In particular, if the forward transform used `htk: true` or a custom `fmin`/`fmax`, the inverse **must** pass the same `htk`/`fmin`/`fmax` — otherwise the Mel filterbank is built differently and the reconstruction is silently wrong. Store these values alongside your features so the inverse call cannot drift, or invert the forward result itself, which already carries them. `mel_to_stft(...)` does not need `hop_length` because it stays in the frequency domain; the audio-producing helpers do.
 :::
 
 ## Related

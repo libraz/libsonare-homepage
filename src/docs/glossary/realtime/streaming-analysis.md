@@ -22,7 +22,7 @@ Four words are easy to confuse, and mixing them up causes most streaming bugs:
 - **Block** (or chunk) — the slice of samples the host hands you each callback (e.g. 128 or 512 samples from an AudioWorklet). Its size is set by the audio system, not by you.
 - **Frame** — one [STFT (short-time Fourier transform)](../analysis/spectrogram-stft.md) analysis window's worth of output. The analyzer may emit several frames per block, or none, depending on sizes.
 - **Hop** (`hopLength`) — how far the analysis window advances between frames; it sets the frame rate, independent of the block size.
-- **`nFft`** — the analysis window size; bigger means finer frequency detail, blurrier timing.
+- **`nFft`** — the analysis window size; bigger means finer frequency detail, blurrier timing. Read as samples at 44100 Hz: below that rate the window is rescaled to the stream's rate (never shorter than `hopLength`), so a 22050 Hz stream emits more frames from a smaller magnitude spectrum.
 
 You feed **blocks**; you read **frames**. The two rates are decoupled, which is why the analyzer buffers internally.
 

@@ -51,8 +51,8 @@ libsonare C++ インターフェースのリアルタイムストリーミング
 ```cpp
 struct StreamConfig {
   int sample_rate = 44100;
-  int n_fft = 2048;
-  int hop_length = 512;
+  int n_fft = 2048;       // 解析窓の長さ。44100 Hz でのサンプル数で表した時間
+  int hop_length = 512;   // 解析レートでのサンプル数
   WindowType window = WindowType::Hann;
 
   // 特徴フラグ
@@ -82,6 +82,8 @@ struct StreamConfig {
   float bpm_update_interval_sec = 10.0f;
 };
 ```
+
+`n_fft` は 44100 Hz でのサンプル数で表した時間です。アナライザは構築時にこれを解析レートに換算し、`hop_length` より短ければ `hop_length` まで広げるので、同じ設定がどのサンプルレートでも同じ窓長を表します。`analyzer.analysis_window_length()` は解析レートでの窓のサンプル数を、`analyzer.fft_length()` は窓を中央に置いてゼロ埋めする FFT サイズを、`analyzer.n_bins()` はスペクトルフレームあたりのビン数（`fft_length() / 2 + 1`）を返します。`n_fft` から導くのではなく、これらを読んでください。
 
 `output_format` はソース互換性のために残っており、`OutputFormat::Float32` のままにする必要があります。`Int16` または `Uint8` のペイロードが必要な場合は、アナライザ設定を変えるのではなく、後述の明示的な量子化読み出しメソッドを使います。
 
@@ -199,6 +201,8 @@ struct ChordChange {
   float confidence;   // 0-1
 };
 ```
+
+構造体が持つのは序数だけです。コードやキーを表示するには、バッチ解析と同じ自由関数で綴ります。`analysis/chord_analyzer.h` の `chord_symbol(root, quality)`（コードなしは `"N.C."`）と、`analysis/key_analyzer.h` の `key_name(root, minor, short_form)`（キー不明なら空文字列）です。バインディングは結果を `name`、`keyName`、`keyShortName`、`chordName` として公開します。コードの根拠がないフレームは、推測せずに不明のセンチネル（`root = -1`、信頼度 0）を報告し、`BarChord` も記録しません。
 
 ### BarChord
 

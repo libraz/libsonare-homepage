@@ -402,7 +402,7 @@ The streaming pipeline processes audio in real time, maintaining overlap state b
 />
 
 ::: info Progressive Estimation
-As more audio streams in, the pipeline accumulates chroma and onset data, so its BPM/key estimates have more evidence to work from. Estimates are refreshed periodically (default: BPM every 10s, key every 5s) and grow more confident the longer the stream runs.
+As more audio streams in, the pipeline accumulates chroma and onset data, so its BPM/key estimates have more evidence to work from. Estimates are refreshed periodically (default: BPM every 10s, key every 5s) and grow more confident the longer the stream runs. The key comes from the stream's own 186 ms chroma, so it trails the frame outputs by up to about a quarter second.
 :::
 
 ## Key Design Decisions
@@ -448,7 +448,8 @@ The npm/WebAssembly package exposes mostly sample-based APIs. Most calls expect
 decoded mono `Float32Array` samples. For encoded bytes, `Audio.fromMemory(...)`
 decodes WAV/MP3 in memory, while `Audio.fromMemoryWithBrowserFallback(...)`
 can switch to the Web Audio API or another browser codec path before calling
-the same sample-based methods.
+the same sample-based methods. Both fold a multichannel file to mono with the ITU-R BS.775
+rule; `decodeChannels(...)` keeps every channel and `downmix(...)` applies the same rule on demand.
 
 WASM builds avoid native file I/O and FFmpeg-backed decoding. Runtime behavior is
 single-threaded unless a future build explicitly enables browser threading.

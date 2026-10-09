@@ -54,7 +54,7 @@ description: libsonare の Project を決定論的にオフラインレンダリ
 - オーディオクリップのプロジェクトをプレーンな `bounce` でレンダリングできる。
 - 内蔵シンセ、[NativeSynth](./native-synth.md)、[SF2 プレイヤー](./soundfont-player.md)を通して MIDI を音にできる。
 - NativeSynth のパッチをプリセット名・`va:` プレフィックス・パッチオブジェクトで指定できる。
-- Python から `ExternalInstrument` プロトコルで自前のインストゥルメントをホストできる。
+- JavaScript または Python から `ExternalInstrument` プロトコルで自前のインストゥルメントをホストできる。
 - `validateMidiNotes` で MIDI クリップを事前検査し、インストゥルメント未バインド時のコンパイル警告を読める。
 - レンダリング長をエンジンに自動導出させ、結果を WAV ファイルへ書き出せる。
 
@@ -68,7 +68,7 @@ description: libsonare の Project を決定論的にオフラインレンダリ
 | MIDI をとにかく*鳴らしたい* | `bounceWithBuiltinInstrument` | シンプルなオシレーターシンセ |
 | 本格的な楽器のキャラクターが必要な MIDI | `bounceWithSynthInstrument` | フル [NativeSynth](./native-synth.md)（減算 / FM / モーダル / ピアノ …） |
 | SoundFont で鳴らしたい MIDI | `bounceWithSf2Instrument` | GS 互換 [SF2 プレイヤー](./soundfont-player.md) |
-| 自前の（Python）シンセで鳴らす MIDI | `bounce_with_instruments` — **Python 専用** | ホスト側が用意する [`ExternalInstrument`](#python-自前のインストゥルメントをホストする) |
+| 自前のシンセで鳴らす MIDI | `bounceWithInstruments` / `bounceWithInstrument`（Node、WASM）、`bounce_with_instruments`（Python） | ホスト側が用意する [`ExternalInstrument`](#自前のインストゥルメントをホストする) |
 
 ::: info 1 つの Project、すべての実行環境
 同じ `Project` モデルと中核のバウンス挙動は、WASM/JS、Node ネイティブ、Python から使えます。名前は各言語の慣習に従います（`bounceWithSynthInstrument` ↔ `bounce_with_synth_instrument`）。CLI では `project bounce`（MIDI を内蔵シンセへ通す `--synth` を含む）や SMF/MIDI 2.0 入出力としてプロジェクトワークフローを使えますが、出力先ごとの楽器バインドオプションがすべて配線されているわけではありません。アレンジメントモデル・コンパイラ・DSP は実行環境を問わず同一です。
@@ -120,7 +120,7 @@ try {
 | オプション | 意味 | 既定 |
 |-----------|------|------|
 | `totalFrames` | 出力フレーム数でのレンダリング長 | 自動導出（後述） |
-| `blockSize` | レンダリングブロックサイズ | エンジン既定（128） |
+| `blockSize` | レンダリングブロックサイズ。正の値はそのまま使われます | エンジン既定（128） |
 | `numChannels` | 出力チャンネル数: `1`、`2`、`6`、`8` のいずれか | 2 |
 | `sampleRate` | 出力サンプルレート（Hz）。0 より大きい値はプロジェクトのレートと一致する必要があり、リサンプルはしません | プロジェクトのサンプルレート |
 | `instrumentLatencySamples` | コンパイラへ渡すホストインストゥルメントの PDC（プラグインディレイ補償） | 0 |
@@ -227,9 +227,55 @@ General MIDI（GM）は、どの SoundFont も対応づける標準の 128 音�
 
 SoundFont がカバーしないプログラム（SoundFont を 1 つも読み込まずにバウンスする場合を含む）は、内蔵シンセの GM バンクへフォールバックします。`(channel, bank, program)` ごとに `'sf2'` で解決されるか `'synth'` へフォールバックするかは、[`soundFontManifest()`](./soundfont-player.md) で確認できます。
 
-## Python: 自前のインストゥルメントをホストする
+## 自前のインストゥルメントをホストする
 
-Python バインディングは、`ExternalInstrument` プロトコルで書いた**任意**のインストゥルメントをホストでき、`bounce_with_instruments` がそれをディスパッチします。必須なのは `render` だけで、`prepare`、`on_event`、`latency_samples` / `tail_samples` 属性は任意（ダックタイピング）です。イベントは **UMP**（Universal MIDI Packet）ワード、つまり MIDI 2.0 のパケット形式として `on_event` に届くため、ノートオンもデコード済みのオブジェクトではなくパケットワードのタプルとして渡されます。
+どのランタイムでも、`ExternalInstrument` プロトコルで書いた**任意**のインストゥルメントをホストできます。Node と WASM は `bounceWithInstruments` / `bounceWithInstrument`、Python は `bounce_with_instruments` です。イベントは **UMP**（Universal MIDI Packet）ワード、つまり MIDI 2.0 のパケット形式でインストゥルメントに届き、インストゥルメントはバウンスが渡すスクラッチバッファへ音声を加算します。
+
+### JavaScript（Node と WASM）
+
+必須なのは `render` だけです。`destinationId`（既定 `0`）、`prepare`、`onEvent`、`latencySamples`、`tailSamples` は任意です。`onEvent` は `{ destinationId, words, renderFrame }` を受け取ります。`render(outputs, frames)` はチャンネルごとにゼロ埋めされた `Float32Array` を受け取ります（常に 2 本。`numChannels` に関係なく、エンジンはインストゥルメントをステレオソースとしてホストします）。`render` が返った時点で配列に入っている内容がバウンスへ加算されます。
+
+```typescript
+class SineInstrument {
+  destinationId = 0;
+  tailSamples = 4096;                       // 自動長バウンスを延長するリリーステイル
+  voices = new Map<number, { phase: number; amp: number }>();
+  sampleRate = 48000;
+
+  prepare(sampleRate: number) {
+    this.sampleRate = sampleRate;
+    this.voices.clear();
+  }
+
+  onEvent({ words }: { words: number[] }) {
+    const status = (words[0] >>> 20) & 0xf;      // 0x9 ノートオン、0x8 ノートオフ
+    const note = (words[0] >>> 8) & 0xff;
+    const velocity = words[0] & 0xff;
+    if (status === 0x9 && velocity > 0) this.voices.set(note, { phase: 0, amp: (velocity / 127) * 0.3 });
+    else if (status === 0x8 || status === 0x9) this.voices.delete(note);
+  }
+
+  render(outputs: Float32Array[], frames: number) {
+    for (const [note, v] of this.voices) {
+      const step = (2 * Math.PI * 440 * 2 ** ((note - 69) / 12)) / this.sampleRate;
+      for (let i = 0; i < frames; i++) {
+        const s = Math.sin(v.phase) * v.amp;
+        for (const out of outputs) out[i] += s;
+        v.phase += step;
+      }
+    }
+  }
+}
+
+const audio = project.bounceWithInstrument(new SineInstrument(), { numChannels: 2 });
+// 複数を同時に鳴らすには project.bounceWithInstruments([a, b], options)。destinationId ごとに 1 つ
+```
+
+コールバックはすべて、バウンスがブロックされたまま呼び出し元のスレッド上で同期的に実行されます。そのため Promise を返すコールバックは `TypeError` で拒否されます。コールバックが例外を投げると以降のコールバックは止まり、バウンスは戻った時点で最初のエラーを再送出します（ネイティブ側の失敗はそれより先に報告されます）。コールバックの中からプロジェクトを使うこと（変更、入れ子のバウンス、`delete`）は `InvalidState` になります。異なるチャンネルストリップへ流れるトラックが 1 つのインストゥルメントを共有する構成は、コールバックの音声に元トラックの情報がないため拒否されます。ストリップごとに 1 つのデスティネーションをバインドしてください。
+
+### Python
+
+Python では、`bounce_with_instruments` が同じプロトコルをディスパッチします。必須なのは `render` だけで、`prepare`、`on_event`、`latency_samples` / `tail_samples` 属性は任意（ダックタイピング）です。イベントは **UMP**（Universal MIDI Packet）ワード、つまり MIDI 2.0 のパケット形式として `on_event` に届くため、ノートオンもデコード済みのオブジェクトではなくパケットワードのタプルとして渡されます。
 
 ```python
 import numpy as np

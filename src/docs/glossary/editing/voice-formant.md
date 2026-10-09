@@ -56,6 +56,8 @@ const natural = voiceChange(vocal, sampleRate, { pitchSemitones, formantFactor }
 ```
 
 Anything above that reciprocal brightens and shrinks the voice; anything below it darkens and enlarges it.
+
+Pass `formantMode: 'absolute'` to skip the arithmetic: `formantFactor` is then the formant shift relative to the input whatever the pitch shift, so `1` holds the formants still. The same mode exists on the realtime voice changer, where it is fixed at creation; see [Realtime Voice Changer](../../realtime-voice-changer.md#formant-mode).
 :::
 
 <SonareDemo id="formant-shift" />

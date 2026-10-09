@@ -245,6 +245,22 @@ input.addEventListener('change', async (e) => {
 });
 ```
 
+### 全チャンネルを保持する
+
+`Audio.fromMemory(...)` はマルチチャンネルのファイルをデコードしながらモノラルに畳み込みます。チャンネルそのものが必要なときは、`decodeChannels(bytes)` がバイト列を一度だけデコードして `{ sampleRate, channels }` を返します。`channels` は元のチャンネル順（5.1 は L R C LFE Ls Rs）の `Float32Array` の配列です。`downmix(channels, targetLayout)` は ITU-R BS.775 の規則（センターとサラウンドを -3 dB、LFE は除外）で、より狭いレイアウト（`0` モノラル、`1` ステレオ、`2` 5.1、`3` 7.1）へ折りたたみます。アップミックスはできません。`Audio.fromMemoryWithBrowserFallback(...)` はマルチチャンネルの `AudioBuffer` に同じ規則を適用するので、どちらのデコーダーが動いても同じサンプルになります。
+
+```typescript
+import { decodeChannels, downmix, init } from '@libraz/libsonare';
+
+await init();
+const { sampleRate, channels } = decodeChannels(new Uint8Array(await file.arrayBuffer()));
+const stereo = channels.length > 2 ? downmix(channels, 1) : channels;
+```
+
+## クリップを OPFS に保存する
+
+`writeOpfsClip(path, channels)` は、チャンネルごとの `Float32Array` を、ヘッダーなしのリトルエンディアン・インターリーブ float32 として Origin Private File System に書き込みます。OPFS のクリップページリーダーが読む形式と同じです。`importOpfsClip(path, source)` は `ArrayBuffer`、`Blob`、`AudioBuffer` を受け取り、全チャンネルを保ち、リサンプリングせずに元の `sampleRate` を返します。どちらも OPFS ワーカーで動き、開いているページプロバイダーが読んでいるパスへ書くと `InvalidState` を投げます。そのクリップをエンジンへページングする方法は[リアルタイムとストリーミング](./realtime-streaming.md)を参照してください。
+
 ## 進捗レポート
 
 ```typescript
@@ -308,7 +324,7 @@ async function getMonoSamples(audioBuffer: AudioBuffer): Promise<Float32Array> {
     return audioBuffer.getChannelData(0);
   }
 
-  // ステレオをモノラルにミックス
+  // ステレオをモノラルにミックス。5.1 / 7.1 のソースには decodeChannels() と downmix() を使う。
   const left = audioBuffer.getChannelData(0);
   const right = audioBuffer.getChannelData(1);
   const mono = new Float32Array(left.length);
@@ -341,9 +357,10 @@ async function getMonoSamples(audioBuffer: AudioBuffer): Promise<Float32Array> {
 
 - **メインモジュール** — `sonare.js` と `sonare.wasm`。解析・マスタリング・ミキシング・編集の各 API を支える Emscripten ビルドです。
 - **メイン API エントリ** — パッケージの `index`（`index.js` / `index.d.ts`）は `import ... from '@libraz/libsonare'` を支える tsup バンドルです。解析・マスタリング・ミキシング・編集の全 API を公開します。
-- **AudioWorklet エントリ** — `worklet.js` / `worklet.d.ts`。独立した自己完結型の tsup バンドル（コード分割なし、`AudioWorkletGlobalScope` への移植を想定）で、`SonareEngine` API、worklet プロセッサクラスとその登録ヘルパー、リングバッファプロトコルを収録します。worklet レルムが独自の WASM インスタンスを初期化できるよう、メインエントリから `init` / `isInitialized` のみを再エクスポートします。
-- **解析専用モジュール** — `@libraz/libsonare/analysis` エントリの背後にある `sonare-analysis.js` / `sonare-analysis.wasm`。マスタリング・ミキシング・リアルタイム・プロジェクトのバインディングを外してコンパイルしています。CI はサイズをレポートに記録しますが、増加だけでビルドを失敗させません。
+- **AudioWorklet エントリ** — `worklet.js` / `worklet.d.ts`。独立した自己完結型の tsup バンドル（コード分割なし、`AudioWorkletGlobalScope` への移植を想定）で、`SonareEngine` API、worklet プロセッサクラスとその登録ヘルパー、`SonareStreamAnalyzerNode`（オーディオグラフの枝のライブ解析）、リングバッファプロトコルを収録します。worklet レルムが独自の WASM インスタンスを初期化できるよう、メインエントリから `init` / `isInitialized` のみを再エクスポートします。
+- **解析専用モジュール** — `@libraz/libsonare/analysis` エントリの背後にある `sonare-analysis.js` / `sonare-analysis.wasm`（生のアセットは `@libraz/libsonare/wasm/analysis`）。マスタリング・ミキシング・リアルタイム・プロジェクトのバインディングを外してコンパイルしています。CI はサイズをレポートに記録しますが、増加だけでビルドを失敗させません。
 - **オフライン Worker エントリ** — `@libraz/libsonare/worker` の背後にある `worker.js`。`OfflineWorkerClient` の Worker 側です。
+- **ボーカル編集 Worker エントリ** — `@libraz/libsonare/vocal-edit-worker` の背後にある `vocal_edit_worker.js`。`VocalEditWorkerClient` の Worker 側です。
 - **ボイスチェンジャーの JSON Schema** — 2 つのプリセットスキーマが `schemas/` 以下に同梱されるため、ホストは何も取得せずにプリセット文書を検証できます。
 
 ### モジュールを自分でインスタンス化する場合
@@ -410,11 +427,33 @@ for (let start = 0; start < totalDuration; start += CHUNK_DURATION) {
 }
 ```
 
-### ネイティブ側の失敗は `SonareError` をスロー
+### どのエラーが投げられるか
 
-C++ コアが入力を拒否したとき、WASM バインディングは数値の `code` と `codeName` を持つ構造化された `SonareError` をスローします。生の Emscripten ポインタ番号や不透明な `[object Object]` が漏れることはありません。エクスポートされた `isSonareError(...)` ガードで捕捉し、`ErrorCode` で分岐してください。詳細は[エラーハンドリング](./js-api-types.md#エラーハンドリング)を参照。
+C++ コアが入力を拒否したとき、またはオブジェクトが不正な状態にあるとき、WASM バインディングは数値の `code` と `codeName` を持つ構造化された `SonareError` をスローします。生の Emscripten ポインタ番号や不透明な `[object Object]` が漏れることはありません。エクスポートされた `isSonareError(...)` ガードで捕捉し、`ErrorCode` で分岐してください。詳細は[エラーハンドリング](./js-api.md#エラーハンドリング)を参照。
 
-これはミキシングとプロジェクトのエントリポイントにも当てはまります。いずれも、下位の C++ 例外がそのまま表に出るのではなく、対応する C エントリポイントが定めているエラーコードを報告します。未知のインサートを指すシーンを `Mixer.fromSceneJson` に渡した場合は、コア側のメッセージを伴う `InvalidState` がスローされ、壊れたシーン JSON も同じく `InvalidState` になります（不明なエラーコードにはなりません）。成功だけを見て分岐しているコードに変更は不要です。特定のコードで分岐しているコードは、ここに挙げたコードで分岐してください。
+JavaScript バインディング自身が拒否する引数は `SonareError` ではありません。型が違う、または値がない場合はネイティブの `TypeError`、値が定義域の外（未知の名前、整数を読む箇所の小数、対応範囲外のサンプルレート、長さが揃うべき 2 つのバッファの不一致、NUL を含む文字列）なら `RangeError` です。3 つとも扱ってください。
+
+```typescript
+import { ErrorCode, init, isSonareError, Mixer } from '@libraz/libsonare';
+
+try {
+  await init();
+  const mixer = Mixer.fromSceneJson(sceneJson, sampleRate, 512);
+  // ...
+} catch (error) {
+  if (error instanceof TypeError || error instanceof RangeError) {
+    // 呼び出し自体が誤り。引数を直す。
+  } else if (isSonareError(error) && error.code === ErrorCode.InvalidFormat) {
+    // シーンドキュメントが壊れている。
+  } else {
+    throw error;
+  }
+}
+```
+
+ミキシングとプロジェクトのエントリポイントは、下位の C++ 例外ではなく、対応する C エントリポイントが定めているエラーコードを報告します。`Mixer.fromSceneJson` に壊れたシーン JSON を渡すと `InvalidFormat`、未知のインサートを指すシーンを渡すとコアのメッセージを伴う `InvalidParameter` がスローされます。
+
+状態に起因する失敗は次の 3 つで、いずれも `InvalidState` です。`init()` が解決する前のモジュール呼び出し、`destroy()`・`delete()`・`using` で解放したハンドルのメソッド呼び出し、最初と異なるオプションでの 2 回目の `init()`（異なるオプション名を挙げます）。JavaScript とは別のツリーからビルドされた `.wasm` は、`init()` が `AbiMismatch`（コード 10）をスローします。
 
 ## 各節の移動先
 

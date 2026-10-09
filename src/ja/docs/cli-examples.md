@@ -72,7 +72,7 @@ sonare mix \
 sonare mix --scene scene.json --input vocal.wav --input music.wav -o mixed.wav
 ```
 
-`--scene` と `--preset` は排他かつ必須のペアで、どちらか一方を必ず指定します。両方渡すと使用方法エラーになり、どちらも省略した場合も既定のシーンにフォールバックせず終了コード 2 になります。
+`--scene` と `--preset` は排他かつ必須のペアで、どちらか一方を必ず指定します。両方渡すと使用方法エラーになり、どちらも省略した場合も既定のシーンにフォールバックせず終了コード 2 になります。Python CLI は、リーダーが読まないシーンのキー（たとえば綴りを誤った `faderDB`）ごとに stderr へ `warning:` 行を出力し、そのままレンダリングします。`$` または `x-` で始まるキーは対象外です。
 
 `--input` は `[ID=]WAV` の形式で、繰り返し指定できます。`ID=` を付けるとそのストリップに割り当てられ、パスだけを渡した場合はファイルのベース名が ID になります。どのエントリからも名前を指定されなかったストリップは、削除されるのではなく無音が供給されます。アシスタントが提案したシーンのようにエフェクトリターンをセンドで受けるストリップがあっても、リターンごとに無音 WAV を用意せずレンダリングできるのはこのためです。ストリップ名を一切指定しない書き方をした場合は位置指定として扱われ、シーン順に 1 つずつ割り当てられます。この 2 つの書き方を 1 回の実行で混ぜることはできません。長さが足りない入力は、最も長いものに合わせてパディングされます（短い方に切り詰められることはありません）。
 
@@ -176,7 +176,7 @@ sonare project bounce --in project.json --synth saw-lead -o synth-bounce.wav
 | `sonare project validate` | プロジェクト JSON を検証。正規化 JSON の書き出しも可 | `--in`, `-o`, `--strict`（診断が 1 件でもあれば失敗） |
 | `sonare project compile` | プロジェクト JSON をコンパイルチェック。診断を表示し、エラー時は非ゼロで終了（ファイルは書き出さない） | `--in`, `--json` |
 | `sonare project synth-presets` | `--synth` が受け付ける NativeSynth プリセット名を一覧表示 | `--json` |
-| `sonare project bounce` | プロジェクトを WAV にレンダリング。正の `--channels` 出力幅は `1`、`2`、`6`、`8`（既定は `2`）で、マスターレイアウトが上限。モノラル／ステレオ／マスターなしでは最大 2 チャンネル | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--instrument-latency`, `--synth`, `--audio`, `--resolve-audio`, `-o` |
+| `sonare project bounce` | プロジェクトを WAV にレンダリング（`sample_rate` が整数ヘルツでないプロジェクトは終了コード 5）。正の `--channels` 出力幅は `1`、`2`、`6`、`8`（既定は `2`）で、マスターレイアウトが上限。モノラル／ステレオ／マスターなしでは最大 2 チャンネル | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--instrument-latency`, `--synth`, `--audio`, `--resolve-audio`, `-o` |
 | `sonare project export-smf` | プロジェクトを Standard MIDI File に書き出し | `--in`, `-o` |
 | `sonare project import-smf` | Standard MIDI File からプロジェクトを構築 | `--smf`, `-o` |
 | `sonare project export-midi2` | プロジェクトを MIDI 2.0 Clip File に書き出し | `--in`, `-o` |

@@ -119,23 +119,24 @@ with Audio.from_file("music.mp3") as audio:
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
 | `detect_bpm(samples, sample_rate)` | `float` | テンポ（BPM） |
-| `detect_key(samples, sample_rate)` | `Key` | ルート、モード、確信度 |
+| `detect_key(samples, sample_rate, ..., tuning=0.0)` | `KeyDetection` | `Key`（ルート、モード、確信度）に、クロマの構築に使ったセミトーン端数 `tuning` を加えたもの。`tuning="auto"` で測定します |
 | `detect_beats(samples, sample_rate)` | `list[float]` | ビート位置（秒） |
 | `detect_onsets(samples, sample_rate)` | `list[float]` | オンセット位置（秒） |
 | `detect_downbeats(samples, sample_rate)` | `list[float]` | ダウンビート位置（秒） |
 | `detect_key_candidates(samples, sample_rate, ...)` | `list[KeyCandidate]` | 相関値つきのキー候補（順位付き） |
-| `detect_chords(samples, sample_rate, ...)` | `ChordAnalysisResult` | 時系列のコードセグメント。検出しきい値未満のフレームは明示的な `N.C.` 区間になります |
+| `detect_chords(samples, sample_rate, ...)` | `ChordAnalysisResult` | 時系列のコードセグメントと、使われた `tuning`。検出しきい値未満のフレームは明示的な `N.C.` 区間になります |
 | `analyze(samples, sample_rate)` | `AnalysisResult` | 総合解析: BPM とその候補・キー・拍子とその候補・ビート・検出キーを基準にした `roman_numeral` 付きコード・セクション・音色・ダイナミクス・リズム・メロディ・フォーム |
 | `analyze_with_progress(samples, sample_rate, on_progress?)` | `AnalysisResult` | `analyze` と同じ結果・解析キーワードオプションに、任意の `(progress, stage)` コールバックとキーワード専用の `cancel` コールバックを加えたもの |
 | `transcribe(samples, sample_rate, ...)` | `TranscribeResult` | モノラル音声を一定テンポの PPQ グリッド上の MIDI イベントへ変換。`events`、`note_count`、`tempo_bpm` を返します |
 | `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | 上位候補付きの BPM 解析 |
 | `estimate_meter(beat_times, beat_strengths, ...)` | `MeterEstimate` | 手元にあるビート系列だけから拍子とアクセントのグルーピングをスコアリング。音声も再解析も不要 |
-| `chord_functional_analysis(samples, key_root, key_mode?, ...)` | `list[str]` | 検出したコードに対する、キーを基準としたローマ数字ラベル（`"I"`、`"IV"`、`"V"`、`"vi"` …） |
+| `chord_functional_analysis(samples, key_root, key_mode?, ...)` | `list[FunctionalChord]` | コードを検出したうえで、時刻付きエントリ（`Chord` の全フィールド）に `roman`（`"I"`、`"V7"`、`"vi"` など）と `function`（`"tonic"`、`"subdominant"`、`"dominant"`、`"chromatic"`、`"none"`）を加えて返します |
+| `chord_functions(chords, key)` | `list[FunctionalChord]` | すでに手元にあるコードに、再検出せず `key` の中での機能を付けます。`chords` は `detect_chords` の結果かその `chords` リスト、`key` は `Key`、`{"root": ..., "mode": ...}` のマッピング、または `(root, mode)` のペアです |
 | `analyze_rhythm(samples, sample_rate, ...)` | `RhythmResult` | シンコペーション・グルーヴ・規則性 |
 | `analyze_dynamics(samples, sample_rate, ...)` | `DynamicsResult` | ダイナミックレンジ・ラウドネスレンジ・クレストファクター |
 | `analyze_timbre(samples, sample_rate, ...)` | `TimbreResult` | ブライトネス・ウォームス・密度・粗さ・複雑さと、窓ごとの `timbre_over_time`（`timbreOverTime` alias） |
 | `analyze_sections(samples, sample_rate, ...)` | `SectionResult` | 楽曲構造のセクション（イントロ／Aメロ／サビ…） |
-| `detect_boundaries(samples, sample_rate=22050, *, n_fft=2048, hop_length=512, kernel_size=64, threshold=0.3, absolute_threshold=0.005, n_mfcc=13, n_chroma=12, peak_distance=2.0, use_mfcc=True, use_chroma=True)` | `BoundaryResult` | 構造の転換点と、それを拾い出した元の `novelty_curve`、および両者が乗るグリッド。`analyze_sections` のラベル付き区間ではなく、自前のしきい値を当てたいときに使います |
+| `detect_boundaries(samples, sample_rate=22050, *, n_fft=2048, hop_length=512, kernel_size=64, threshold=0.3, absolute_threshold=0.005, n_mfcc=13, n_chroma=12, peak_distance=2.0, reference_window=60.0, use_mfcc=True, use_chroma=True)` | `BoundaryResult` | 構造の転換点と、それを拾い出した元の `novelty_curve`、および両者が乗るグリッド。`threshold` はピークの前後 `reference_window` 秒の範囲で最大のノヴェルティに対して測られます（`0` で無効）。`analyze_sections` のラベル付き区間ではなく、自前のしきい値を当てたいときに使います |
 | `analyze_melody(samples, sample_rate, ...)` | `MelodyResult` | 単音メロディの輪郭（YIN） |
 | `analyze_impulse_response(samples, sample_rate=48000, n_octave_bands=6, min_decay_db=30.0)` | `AcousticResult` | インパルス応答（IR）から求めるルーム音響（RT60／EDT／C50／C80）。`min_decay_db` は減衰フィットのしきい値 |
 | `detect_acoustic(samples, sample_rate, ...)` | `AcousticResult` | ブラインドなルーム音響推定 |
@@ -189,7 +190,7 @@ chords = sonare.detect_chords(
     use_hmm=True,
     use_key_context=True,
     key_root=keys[0].key.root,
-    key_mode=keys[0].key.mode,
+    key_mode=keys[0].key.mode,   # Mode
     chroma_method="nnls",
 )
 
@@ -200,7 +201,9 @@ sections = sonare.analyze_sections(audio.data, audio.sample_rate)
 
 `analyze(...)` は `MusicAnalyzerConfig` 全体をキーワード引数として受け取ります。`n_fft=2048`、`hop_length=512`、`bpm_min=60.0`、`bpm_max=200.0`、`start_bpm=120.0`、`use_triads_only=True`、`use_hpss=True`、`chroma_highpass_hz=80.0`、`use_bass_weighted=True`、`chroma_hop_multiplier=4`、`use_chord_hmm=False`、`use_chord_key_context=False`、`chord_hmm_beam_width=24`、`detect_chord_inversions=False`、`adaptive_tempo=False`、`tempo_update_interval_beats=8`、`compute_tempo_curve=False`、`meter_candidate_numerators=None`、`meter_denominator=4`、`tuning=0.0` です。
 
-`tuning` は `estimate_tuning(...)` が返す単位で指定する、半音の分数単位の録音チューニングずれです。範囲は `[-0.5, 0.5)`、既定値 `0.0` は A440 です。`analyze_with_progress(...)` でも同じキーワードを使え、キー・コード・セクションに使うクロマへ反映されます。
+`n_fft` は 22050 Hz 換算のサンプル数で表すウィンドウ長で、入力のレートに合わせて再スケールされます（`hop_length` は入力のサンプル数のまま）。テンポ・ビート・オンセット・キー・リズム・コード・音色の各解析器も同じ読み方をするので、44100 Hz や 48000 Hz でもウィンドウは同じ時間幅になります。
+
+`tuning` は半音の分数単位の録音チューニングずれです。範囲は `[-0.5, 0.5)`、既定値 `0.0` は A440 で、`"auto"` を渡すと音声から測定します。`analyze_with_progress(...)`、`detect_chords(...)`、`detect_key(...)` でも同じキーワードを使え、キー・コード・セクションに使うクロマへ反映されます。使われた値（指定値または測定値）は `AnalysisResult.tuning`、`ChordAnalysisResult.tuning`、`KeyDetection.tuning` として返ります。`estimate_tuning(...)` は 12 ビン／オクターブのとき同じ単位を返します。`tuning_to_reference_hz(tuning, a4=440.0)` と `reference_hz_to_tuning(hz, a4=440.0)` は、この単位と Hz 単位の基準ピッチを相互に変換します。
 
 ::: warning `use_triads_only` はここでは既定が **True** です
 統合された `analyze(...)` の経路は、明示的に指定しないかぎりトライアドだけを探索します。一方、単独の `detect_chords(...)` API は同じフラグの既定が `False` です。`analyze(...)` からセブンスやテンションを得たい場合は `use_triads_only=False` を渡してください。
@@ -256,17 +259,19 @@ def on_step(progress: float, stage: str) -> None:
 result = sonare.analyze_with_progress(audio.data, audio.sample_rate, on_progress=on_step)
 ```
 
-`detect_chords(...)` と `chord_functional_analysis(...)` の `tuning` も `analyze(...)` と同じ半音の分数単位です。コードをキー基準のローマ数字でラベル付けするには `chord_functional_analysis(...)` を使います。`detect_chords(...)` と同じアルゴリズムでコードを検出し、検出順に 1 コードあたり 1 ラベルを返します。`detect_chords(...)` の結果とラベルが対応するのは、両方に同じオプションを渡したときだけです。
+`detect_chords(...)` と `chord_functional_analysis(...)` の `tuning` も `analyze(...)` と同じ半音の分数単位です。コードをキー基準のローマ数字でラベル付けするには `chord_functional_analysis(...)` を使います。`detect_chords(...)` と同じアルゴリズムでコードを検出し、`roman` と `function` を加えた時刻付きエントリを返すので、別のリストと対応を取る必要はありません。すでにコードが手元にあるときは、`chord_functions(...)` が再検出せずにラベルを付けます。
 
 ```python
-labels = sonare.chord_functional_analysis(
+labelled = sonare.chord_functional_analysis(
     audio.data,
     key_root=keys[0].key.root,
     key_mode=keys[0].key.mode,
     sample_rate=audio.sample_rate,
     use_key_context=True,
 )
-print(labels)  # 例: ['I', 'V', 'vi', 'IV']
+print([(c.start, c.roman, c.function) for c in labelled])  # 例: [(0.0, 'I', 'tonic'), ...]
+
+labelled = sonare.chord_functions(chords, keys[0].key)
 ```
 
 ### 特徴抽出関数
@@ -275,8 +280,8 @@ print(labels)  # 例: ['I', 'V', 'vi', 'IV']
 |------|--------|------|
 | `stft(samples, sample_rate, n_fft?, hop_length?)` | `StftResult` | 短時間フーリエ変換 |
 | `stft_db(samples, sample_rate, n_fft?, hop_length?)` | `tuple` | デシベル単位の STFT |
-| `mel_spectrogram(samples, sample_rate, n_fft?, hop_length?, n_mels?, fmin?, fmax?, htk?)` | `MelSpectrogramResult` | メルスペクトログラム。`fmin`/`fmax` で帯域の端を指定し、`htk=True` で HTK 方式のメル公式を使います |
-| `mfcc(samples, sample_rate, n_fft?, hop_length?, n_mels?, n_mfcc?, fmin?, fmax?, htk?, lifter?)` | `MfccResult` | メル周波数ケプストラム係数（`lifter=0.0` でケプストラルリフタリング無効） |
+| `mel_spectrogram(samples, sample_rate, n_fft?, hop_length?, n_mels?, fmin?, fmax?, htk?)` | `MelSpectrogramResult` | メルスペクトログラム。`fmin`/`fmax` で帯域の端を指定し、`htk=True` で HTK 方式のメル公式を使います。結果にはマトリクスのほか `n_fft`、適用された `fmin`／`fmax`、`htk`、`is_db` が含まれます |
+| `mfcc(samples, sample_rate, n_fft?, hop_length?, n_mels?, n_mfcc?, fmin?, fmax?, htk?, lifter?)` | `MfccResult` | メル周波数ケプストラム係数（`lifter=0.0` でケプストラルリフタリング無効）。結果には計算に使ったメルのパラメータと `lifter` が含まれます |
 | `chroma(samples, sample_rate, n_fft?, hop_length?)` | `ChromaResult` | クロマ特徴（ピッチクラス分布） |
 | `spectral_centroid(samples, sample_rate, n_fft?, hop_length?)` | `list[float]` | フレームごとのスペクトル重心 |
 | `spectral_bandwidth(samples, sample_rate, n_fft?, hop_length?)` | `list[float]` | フレームごとのスペクトル帯域幅 |
@@ -292,9 +297,10 @@ print(labels)  # 例: ['I', 'V', 'vi', 'IV']
 | `pitch_yin(samples, sample_rate, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | YIN ピッチ推定。すべてのフレームの `f0` は有限で、有声かどうかは `voiced_flag` が示す |
 | `pitch_pyin(samples, sample_rate, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | pYIN ピッチ推定。無声音の `f0` は `fill_na=True` でない限り `nan` |
 | `pitch_tuning(frequencies, resolution?, bins_per_octave?)` | `float` | 検出済み周波数からビン単位のチューニングずれを推定 |
-| `estimate_tuning(samples, sample_rate?, n_fft?, hop_length?, resolution?, bins_per_octave?)` | `float` | 音声からチューニングずれを直接推定 |
+| `estimate_tuning(samples, sample_rate?, n_fft?, hop_length?, resolution?, bins_per_octave?)` | `float` | 音声からチューニングずれを直接推定。値は `bins_per_octave` の 1 ビンに対する端数（12 のとき解析の単位と一致） |
+| `tuning_to_reference_hz(tuning, a4=440.0)` / `reference_hz_to_tuning(hz, a4=440.0)` | `float` | 解析の単位（セミトーン端数）と Hz 単位の基準ピッチを相互に変換します |
 | `cqt(samples, sample_rate, hop_length?, fmin?, n_bins?, bins_per_octave?)` | `CqtResult` | 定Q変換の振幅 |
-| `vqt(samples, sample_rate, hop_length?, fmin?, n_bins?, bins_per_octave?, gamma?)` | `CqtResult` | 可変Q変換の振幅 |
+| `vqt(samples, sample_rate, hop_length?, fmin?, n_bins?, bins_per_octave?, gamma=None)` | `CqtResult` | 可変Q変換の振幅。`gamma=None` で自動の帯域幅、`0.0` は CQT と等価 |
 | `hybrid_cqt(samples, sample_rate?, hop_length?, fmin?, n_bins?, bins_per_octave?)` | `CqtResult` | ハイブリッド CQT の振幅（ビンごとに CQT／擬似 CQT を切り替えて合成） |
 | `pseudo_cqt(samples, sample_rate?, hop_length?, fmin?, n_bins?, bins_per_octave?)` | `CqtResult` | 擬似 CQT の近似振幅 |
 | `bass_chroma(samples, sample_rate?, hop_length?, n_chroma?)` | `ChromaResult` | 低域寄りのクロマ（低音域のピッチクラス分布） |
@@ -316,7 +322,7 @@ print(labels)  # 例: ['I', 'V', 'vi', 'IV']
 
 主な既定値は、`n_fft=2048`、`hop_length=512`、`n_mels=128`、`n_mfcc=20`、ピッチ検出の `fmin=65.0`、`fmax=2093.0`、`threshold=0.1`、`roll_percent=0.85` です。
 
-CQT/VQT は `fmin=32.70319566` Hz（C1）、`n_bins=84`、`bins_per_octave=12` を使います。VQT の既定 `gamma=-1` は ERB 由来の帯域幅を自動選択します。`chroma_cqt` と `chroma_cens` の既定は `n_chroma=12`、`bins_per_octave=36` です。`hpss(...)` と `hpss_with_residual(...)` は `kernel_harmonic=31`、`kernel_percussive=31`、`n_fft=2048`、`hop_length=512`、`hard_mask=False` を既定値とします。
+CQT/VQT は `fmin=32.70319566` Hz（C1）、`n_bins=84`、`bins_per_octave=12` を使います。VQT の既定 `gamma=None` は ERB 由来の帯域幅を自動選択し、負の `gamma` は拒否されます。`chroma_cqt` と `chroma_cens` の既定は `n_chroma=12`、`bins_per_octave=36` です。`hpss(...)` と `hpss_with_residual(...)` は `kernel_harmonic=31`、`kernel_percussive=31`、`n_fft=2048`、`hop_length=512`、`hard_mask=False` を既定値とします。
 
 追加のエフェクト系ヘルパーとして `phase_vocoder(samples, sample_rate?, rate?)`、`hpss_with_residual(samples, sample_rate?, kernel_harmonic?, kernel_percussive?, n_fft?, hop_length?, hard_mask?)` も利用できます。直接のフェーズボコーダー時間伸縮や、残差信号を保持した HPSS が必要な場合に使います。
 
@@ -359,11 +365,13 @@ print(linked["w"].shape, linked["h"].shape)
 | `mel_to_stft(mel, n_mels, n_frames, sample_rate?, n_fft?, fmin?, fmax?, htk?)` | `InverseResult` | メルスペクトログラムからリニア STFT パワー |
 | `mel_to_audio(mel, n_mels, n_frames, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?)` | `list[float]` | メルスペクトログラムから音声（Griffin-Lim） |
 | `mfcc_to_mel(mfcc_coeffs, n_mfcc, n_frames, n_mels?, lifter?)` | `InverseResult` | MFCC 係数からメルスペクトログラム（dB）。`lifter` は順方向の `mfcc(...)` と揃えます |
-| `mfcc_to_audio(mfcc_coeffs, n_mfcc, n_frames, n_mels?, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?)` | `list[float]` | MFCC 係数から音声 |
+| `mfcc_to_audio(mfcc_coeffs, n_mfcc, n_frames, n_mels?, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?, lifter?)` | `list[float]` | MFCC 係数から音声 |
+| `mel_result_to_stft(result)` / `mel_result_to_audio(result, n_iter=32)` | `InverseResult` / `list[float]` | `mel_spectrogram(...)` の結果に対する `mel_to_stft` / `mel_to_audio`。行列と順変換のパラメータをすべて結果から読み取ります。dB の結果（`result.is_db`）は `SonareValueError` で拒否されます |
+| `mfcc_result_to_mel(result)` / `mfcc_result_to_audio(result, n_iter=32)` | `InverseResult` / `list[float]` | `mfcc(...)` の結果に対する `mfcc_to_mel` / `mfcc_to_audio`。メルのパラメータとリフターも含みます |
 | `cqt_to_audio(magnitude, n_bins, n_frames, sample_rate?, hop_length?, fmin?, bins_per_octave?, n_iter?)` | `list[float]` | row-major CQT 振幅行列から音声（Griffin-Lim） |
-| `vqt_to_audio(magnitude, n_bins, n_frames, sample_rate?, hop_length?, fmin?, bins_per_octave?, gamma?, n_iter?)` | `list[float]` | row-major VQT 振幅行列から音声（Griffin-Lim） |
+| `vqt_to_audio(magnitude, n_bins, n_frames, sample_rate?, hop_length?, fmin?, bins_per_octave?, gamma=None, n_iter?)` | `list[float]` | row-major VQT 振幅行列から音声（Griffin-Lim） |
 
-`fmin`/`fmax` に `0.0` を渡すと全帯域の既定値、`n_iter` は既定 `32` です。往復変換の整合性を保つため、`fmin`/`fmax`/`htk` は順変換で使った値と同じにしてください。
+`fmin`/`fmax` に `0.0` を渡すと全帯域の既定値、`n_iter` は既定 `32` です。往復変換の整合性を保つため、`fmin`/`fmax`/`htk` は順変換で使った値と同じにするか、順変換の結果を `*_result_to_*` 関数に渡してパラメータを引き継がせてください。
 
 ### メータリング関数
 
@@ -405,6 +413,7 @@ print(linked["w"].shape, linked["h"].shape)
 
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
+| `scale_mask_for_mode(root, mode)` | `int` | モードの 12 ビットマスク。`mode` は `Mode`、その序数、または `detect_key` が返す教会旋法名（`"major"`、`"minor"`、`"dorian"`、`"phrygian"`、`"lydian"`、`"mixolydian"`、`"locrian"`）です。マイナーは自然短音階です |
 | `scale_quantize_midi(root, mode_mask, midi, reference_midi?)` | `float` | 小数を含む MIDI 番号を最も近い有効なピッチクラスへスナップ |
 | `scale_correction_semitones(root, mode_mask, midi, reference_midi?)` | `float` | 補正量（量子化後 − 入力）をセミトーンで返す |
 | `scale_pitch_class_enabled(root, mode_mask, pitch_class)` | `bool` | `pitch_class`（0..11）が `root` を基準に有効か |
@@ -417,8 +426,8 @@ print(linked["w"].shape, linked["h"].shape)
 | `mel_to_hz(mel)` | Melスケール → ヘルツ |
 | `hz_to_midi(hz)` | ヘルツ → MIDIノート番号 |
 | `midi_to_hz(midi)` | MIDIノート番号 → ヘルツ |
-| `hz_to_note(hz)` | ヘルツ → 音名（例: "A4"） |
-| `note_to_hz(note)` | 音名 → ヘルツ |
+| `hz_to_note(hz)` | ヘルツ → 音名（例: "A4"）。`hz` が有限でも正でもなければ `SonareValueError` |
+| `note_to_hz(note)` | 音名 → ヘルツ。名前が解釈できない、またはオクターブが範囲外なら `SonareValueError` |
 | `frames_to_time(frames, sr, hop_length)` | フレームインデックス → 秒 |
 | `time_to_frames(time, sr, hop_length)` | 秒 → フレームインデックス |
 | `frames_to_samples(frames, hop_length?, n_fft?)` | フレームインデックス → サンプルインデックス（librosa.frames_to_samples）|
@@ -444,3 +453,48 @@ note_to_hz("A4")       # → 440.0
 frames_to_time(100, sr=22050, hop_length=512)  # → 秒
 time_to_frames(2.32, sr=22050, hop_length=512) # → フレームインデックス
 ```
+
+## ストリーミング解析 API
+
+`StreamAnalyzer` は、音声がブロック単位で届く場面で使います。たとえば、ライブ入力、コールバックループ、一度に全体解析したくない長いファイル、フレーム単位の可視化です。
+
+内部バッファに音声を蓄積しながら、mel/chroma/onset/spectral フレームを出力します。BPM、キー、コード、小節、進行パターンの推定も定期的に更新します。
+
+```python
+import libsonare as sonare
+
+stream = sonare.StreamAnalyzer(
+    sonare.StreamConfig(
+        sample_rate=44100,
+        n_mels=64,
+        emit_every_n_frames=4,
+    )
+)
+
+for block in audio_blocks:
+    stream.process(block)
+
+    frames = stream.read_frames(stream.available_frames())
+    # frames.mel は [n_frames * n_mels] のフラット配列
+    # 任意配列は frames.feature_flags を確認してから読む。クロマは [n_frames * n_chroma]
+
+    stats = stream.stats()
+    if stats.bpm > 0:
+        print(stats.bpm, stats.bpm_confidence)
+
+stream.close()
+```
+
+UI 転送量を抑える場合は、`read_frames(max_frames)` の代わりに量子化読み出しを使います。`output_format` はソース互換性のためだけに残っているので、省略するか `0` のままにし、使いたい読み出しメソッドを明示してください。
+
+| メソッド | 変わる点 |
+|----------|----------|
+| `read_frames_u8(max_frames, quantize_config?)` | 特徴量配列を unsigned 8-bit 値へ量子化します。 |
+| `read_frames_i16(max_frames, quantize_config?)` | 特徴量配列を signed 16-bit 値へ量子化します。 |
+
+`quantize_config` は任意の `QuantizeConfig`（`libsonare` からエクスポート）で、既定より大幅に大きい／小さいストリームに合わせて量子化レンジを広げます。省略すると既定値を使います。フィールドと既定値は `mel_db_min=-80.0`、`mel_db_max=0.0`、`onset_max=50.0`、`rms_max=1.0`、`centroid_max=11025.0` です。量子化器は正規化値を `[0, 1]` にクランプするため、このレンジを外れた信号は警告なしに端点で飽和します。これは JS/WASM ストリーミングドキュメントの `StreamQuantizeConfig` に対応します。
+
+どちらもタイムスタンプは float のまま保持します。外部の音声クロックと同期したい場合は、`process_with_offset(samples, sample_offset)` でチャンク開始位置を明示してください。
+
+`process_with_offset` が受け付けるのは連続したオフセットだけです。ギャップやシークの後、または `process(...)` から切り替える前には、`reset(base_sample_offset)` を呼んでから次のブロックを渡してください。`StreamConfig.max_progression_entries`（既定 `4096`）はコード進行と小節進行をそれぞれ保持する上限です。最古の履歴が破棄された場合は、`stats()` の `dropped_chord_progression_entries` と `dropped_bar_progression_entries` で確認できます。
+

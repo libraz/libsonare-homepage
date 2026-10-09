@@ -51,7 +51,7 @@ Nothing in this area plays back a recording: the engine ships no sample data, an
 | A MIDI clip editor or sequencer with MIDI 1.0 and MIDI 2.0 events | [MIDI Editing](./midi-editing.md) | [MIDI 2.0 & UMP](./midi2.md), [Project MIDI](./project-editing-midi.md) |
 | The acoustic voices — piano, bowed string, reed, brass, flute — heard side by side or voiced from code | [Physical Models](./physical-models.md) | [Built-in Synthesizer](./native-synth.md#the-named-preset-catalog) |
 | A lookup of which engine and voicing a General MIDI program falls back to when no SoundFont covers it | [GM Tone Map](./gm-tone-map.md) | [GM and GS](./gm-gs.md) |
-| SoundFont (SF2) playback through a built-in player | [SoundFont 2 Player](./soundfont-player.md) | [GM and GS](./gm-gs.md#nativesynth-and-the-soundfont-fallback), [MIDI Input](./midi-input.md) |
+| SoundFont (SF2) playback through a built-in player | [SoundFont 2 Player](./soundfont-player.md) | [GM and GS](./soundfont-player.md#nativesynth-and-the-soundfont-fallback), [MIDI Input](./midi-input.md) |
 | A C++ app that needs the instruments only, without analysis or mastering | [Link targets](./cpp-api.md#link-targets) | [Built-in Synthesizer](./native-synth.md), [SoundFont 2 Player](./soundfont-player.md) |
 
 ### Mixing

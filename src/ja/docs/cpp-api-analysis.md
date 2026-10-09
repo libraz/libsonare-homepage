@@ -161,6 +161,41 @@ nnls_config.enable_stft_blend = true;
 auto nnls_result = nnls_chroma(audio, nnls_config);
 ```
 
+## C ABI の解析関数の追加分
+
+`sonare_c_features.h`、`sonare_c_types_functions.h`、`sonare_c.h` で宣言されています。前提となる構造体のバージョンと既定値は [C ABI のバージョン](./cpp-api.md#c-abi-のバージョン) にあります。
+
+| 関数 | 用途 |
+|------|------|
+| `sonare_detect_key_with_tuning(...)` | 録音の `tuning`（半音の端数、`[-0.5, 0.5)`）を指定するか、`tuning_auto` で測定させるキー検出。`out_tuning` に使われた値が入ります |
+| `sonare_chord_functions(chords, count, key_root, key_mode, &roman, &functions)` | 既に手元にあるコードのローマ数字と和声機能を、`count` 個ずつの `SonareStringArray` 2 つで返します。解放は `sonare_free_string_array`。音声は解析しません |
+| `sonare_tuning_to_reference_hz`, `sonare_reference_hz_to_tuning` | 解析のチューニング単位と Hz の基準音の間の変換 |
+| `sonare_scale_mask_for_mode(root, mode, &mask)` | `SonareMode` の 12 ビットのスケールマスク。`sonare_scale_quantize_midi` と `SonarePitchCorrectionConfig` が読むレイアウト |
+| `sonare_mfcc_to_mel_checked_ex(mfcc, input_length, n_mfcc, n_frames, n_mels, lifter, &out)` | 長さを検査し、リフターを考慮する MFCC から Mel への逆変換。`lifter` は順変換で使った値（`0` は未適用） |
+| `sonare_mfcc_to_audio_checked_ex2(...)` | 長さを検査し、`htk` と `lifter` を扱う MFCC から音声への逆変換 |
+
+`SonareMelResult` と `SonareMfccResult` は順変換のパラメータ（`n_fft`、適用された `fmin`／`fmax`、`htk`、`is_db`。MFCC はさらに `sample_rate`、`hop_length`、`n_mels`、`lifter`）を持つので、結果だけで逆変換できます。`sonare_analyze_json_ex` は、`tuning` と `tuning_auto` でチューニングを選ぶ `SonareMusicAnalyzeOptions` を受け取り、その JSON は使われた値を `tuning` で報告します。
+
+## 構造境界
+
+`BoundaryDetector` は、MFCC とクロマの特徴量に対するチェッカーボードカーネルのノヴェルティ曲線から、セクションの転換点を見つけます。`BoundaryConfig` は検出器のパラメータを公開し、2 つのしきい値は役割が違います。
+
+```cpp
+BoundaryConfig config;
+config.threshold = 0.3f;            // 相対: 局所ノヴェルティ最大値に対する割合
+config.absolute_threshold = 0.005f; // 生の応答に対する下限: そもそも変化があったか
+config.reference_window = 60.0f;    // 相対しきい値を測る片側の秒数
+
+BoundaryDetector detector(audio, config);
+for (const Boundary& b : detector.boundaries()) {
+  // b.time（秒）、b.strength（曲全体の最大値で正規化したノヴェルティ）
+}
+```
+
+`threshold` は、ピークから `reference_window` 秒以内で最大の生ノヴェルティイベントに対して測られ、孤立した支配的イベントは除かれます。そのため、窓より遠くにある支配的な変化が、より弱い変化を締め出すことはありません。`0` は各フレームを自分自身の基準にして `threshold` を無効にし、曲の長さ以上の値は基準を曲全体にします（孤立した支配的イベントを除く点は同じです）。基準が局所的なため、`Boundary::strength`（曲全体の最大値で正規化した曲内の順位）は `threshold` を下回ることがあります。
+
+C ABI は `sonare_detect_boundaries(samples, length, sample_rate, &options, &out)` で、`SonareBoundaryOptions` は必ず `sonare_boundary_options_default()` から始めます。ゼロ埋めにすると `absolute_threshold` が 0 になり、定常な入力でも区間が切られてしまいます。結果は `sonare_free_boundary_result` で解放します。
+
 ## 型
 
 ### Key
@@ -174,7 +209,12 @@ struct Key {
   std::string to_string() const;  // "C major"
   std::string to_short_string() const; // "C", "Am"
 };
+
+// 生の序数からキー名を綴る。to_string / to_short_string と同じ（root が 0〜11 でなければ ""）
+std::string key_name(int root, bool minor, bool short_form);
 ```
+
+`KeyConfig::tuning`、`ChordConfig::tuning`、`MusicAnalyzerConfig::tuning` は、録音の A440 からのずれを半音の端数（`[-0.5, 0.5)`）で表します。3 つのいずれでも `auto_tuning = true` にすると、値を読む代わりに音声から測定します（`feature/pitch.h` の `measure_tuning(audio)`）。使われた値は `KeyAnalyzer::tuning()`、`ChordAnalyzer::tuning()`、`MusicAnalyzer::tuning()` が報告し、`AnalysisResult::tuning` にも入ります。`feature/chroma.h` の `tuning_to_reference_hz(tuning, a4 = 440)` と `reference_hz_to_tuning(hz, a4 = 440)` は、基準音を表す Hz との間で変換します。
 
 ### Chord
 
@@ -189,7 +229,12 @@ struct Chord {
 
   std::string to_string() const;  // "C", "Am", "G7"
 };
+
+// 生のルート／クオリティの序数からコードを綴る（コードなしは "N.C."。例外は送出しない）
+std::string chord_symbol(int root, int quality);
 ```
+
+`ChordAnalyzer::chord_to_roman_numeral(chord, key_root, mode)` はキー内でのコードのローマ数字を返し（未知のコードは `"N.C."`）、`ChordAnalyzer::chord_function(chord, key_root, mode)` はその和声機能を返します。`"tonic"`、`"subdominant"`、`"dominant"`、キーのスケール外のルートなら `"chromatic"`、未知のコードなら `"none"` です。マイナー以外のモードはすべてメジャースケールとして読まれます。どちらも static で、音声は解析しません。
 
 ### Section
 
@@ -224,6 +269,7 @@ struct AnalysisResult {
   RhythmFeatures rhythm;
   MelodyContour melody;
   std::string form;  // "IABABCO"
+  float tuning;      // クロマグラムの生成に使った半音の端数（指定値または測定値）
 };
 ```
 

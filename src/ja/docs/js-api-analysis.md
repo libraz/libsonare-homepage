@@ -5,14 +5,15 @@ description: libsonare JavaScript/TypeScript パッケージの解析関数、�
 
 # JavaScript/TypeScript 解析 API
 
-このページは libsonare JavaScript/TypeScript パッケージの中核となる解析関数を扱います。BPM・キー・ビート・オンセット検出、総合解析の `analyze()` とその個別ヘルパー、構造境界・拍子推定、そしてスケール量子化・単位変換・リサンプリングです。関連する 2 つのリファレンスが並んで存在します。[特徴抽出](./js-api-features.md) は、STFT、mel/MFCC、クロマ、スペクトル特徴、ピッチ検出、CQT/VQT/分解系の関数を扱います。[librosa 互換ヘルパー](./js-api-helpers.md) は、プリエンファシス、テスト信号生成、スペクトル再構成、構造解析、セグメンテーション、テンポグラムといった librosa の引数対応ポートを扱います。
+このページは libsonare JavaScript/TypeScript パッケージの中核となる解析関数を扱います。BPM・キー・ビート・オンセット検出、総合解析の `analyze()` とその個別ヘルパー、構造境界・拍子推定、ローマ数字によるコード分析です。関連する 2 つのリファレンスが並んで存在します。[特徴抽出](./js-api-features.md) は、STFT、mel/MFCC、クロマ、スペクトル特徴、ピッチ検出、CQT/VQT/分解系の関数を扱います。[ヘルパーと変換](./js-api-helpers.md) は、プリエンファシス、テスト信号生成、スペクトル再構成、構造解析、セグメンテーション、テンポグラムといった librosa の引数対応ポートと、スケール量子化、単位変換、リサンプリング、`chordFunctions` を扱います。
 
 ## 各節の移動先
 
 | 節 | ページ |
 |---|---|
 | 特徴抽出 | [特徴抽出](./js-api-features.md) |
-| librosa 互換ヘルパー | [librosa 互換ヘルパー](./js-api-helpers.md) |
+| librosa 互換ヘルパー | [ヘルパーと変換](./js-api-helpers.md) |
+| スケール量子化、単位変換、リサンプリング、`chordFunctions` | [ヘルパーと変換](./js-api-helpers.md#スケール量子化) |
 
 ## 解析関数
 
@@ -49,7 +50,7 @@ console.log(`BPM: ${bpm}`);
 
 ### `detectKey(samples, sampleRate)`
 
-オーディオサンプルから音楽キーを検出します。ルート音（C, D, E...）とモード（メジャー/マイナー）を返します。
+オーディオサンプルから音楽キーを検出します。ルート音（C, D, E...）、モード（メジャー/マイナー、または教会旋法）、そしてクロマの構築に使ったチューニングを返します。
 
 ::: info ユースケース
 - **ハーモニックミキシング**: DJがスムーズなトランジションのためにキーをマッチング（カメロットホイール）
@@ -59,18 +60,29 @@ console.log(`BPM: ${bpm}`);
 :::
 
 ```typescript
-function detectKey(samples: Float32Array, sampleRate?: number): Key  // sampleRate 既定: 22050
+function detectKey(request: DetectKeyRequest): KeyDetection
+function detectKey(
+  samples: Float32Array,
+  sampleRate?: number,             // 既定: 22050
+  options?: DetectKeyOptions,
+): KeyDetection
 ```
 
-**戻り値:** `Key` オブジェクト
+**戻り値:** `KeyDetection` オブジェクト
 
 ```typescript
+type KeyMode = 'major' | 'minor' | 'dorian' | 'phrygian' | 'lydian' | 'mixolydian' | 'locrian';
+
 interface Key {
   root: PitchClass;      // 0-11 (C=0, B=11)
-  mode: Mode;            // Major、Minor、またはモード値。Mode enum 参照
+  mode: KeyMode;         // Mode の序数ではなく名前
   confidence: number;    // 候補集合に対する事後確率シェア [0, 1)。下記参照
   name: string;          // "C major", "A minor"
   shortName: string;     // "C", "Am"
+}
+
+interface KeyDetection extends Key {
+  tuning: number;        // クロマの構築に使ったセミトーン単位の端数
 }
 
 const KeyProfile = {
@@ -88,6 +100,15 @@ const KeyProfile = {
 const key = detectKey(samples, sampleRate);
 console.log(`キー: ${key.name}`);
 console.log(`信頼度: ${(key.confidence * 100).toFixed(1)}%`);
+console.log(key.mode);                  // 'major'
+```
+
+`detectKey`、`detectKeyCandidates`、`analyze` は、Node パッケージと同じく `mode` を名前で返します。`Mode` enum（`Mode.Major` は `0`）は、コード関数の `keyMode` オプションが受け取る値です。`modes` はどちらの表記も受け付け、`chordFunctions` と `scaleMaskForMode` は名前も序数も受け付けます。
+
+クロマは `tuning` を指定しない限りコンサートピッチ A440 で読まれます。`tuning` は `[-0.5, 0.5)` の範囲のセミトーン単位の端数で、`'auto'` を渡すと音声から測定します。実際に使われた値（指定値または測定値）は `KeyDetection.tuning` として返ります。`analyze()` と `detectChords()` も同様に `AnalysisResult.tuning`、`ChordAnalysisResult.tuning` で報告します。Hz で扱いたい場合は [`tuningToReferenceHz` と `referenceHzToTuning`](./js-api-helpers.md#単位変換) を参照してください。
+
+```typescript
+const { name, tuning } = detectKey(samples, sampleRate, { tuning: 'auto' });
 ```
 
 ::: warning `confidence` が表しているもの
@@ -169,8 +190,8 @@ function analyze(
 
 interface MusicAnalyzeOptions {
   // フレーミング
-  nFft?: number;                   // 既定 2048
-  hopLength?: number;              // 既定 512
+  nFft?: number;                   // 既定 2048。22050 Hz 換算のサンプル数。下記参照
+  hopLength?: number;              // 既定 512。入力のサンプル数
 
   // テンポとビート
   bpmMin?: number;                 // 既定 60
@@ -194,8 +215,13 @@ interface MusicAnalyzeOptions {
   useChordKeyContext?: boolean;    // 既定 false
   chordHmmBeamWidth?: number;      // 既定 24
   detectChordInversions?: boolean; // 既定 false
+
+  // チューニング
+  tuning?: number | 'auto';        // 既定 0 (A440)。[-0.5, 0.5) のセミトーン端数
 }
 ```
+
+`nFft` は **22050 Hz 換算** のサンプル数で表すウィンドウ長で、入力のレートに合わせて再スケールされます。そのため 44100 Hz や 48000 Hz でも同じ時間幅をカバーします。`hopLength` は入力のサンプル数のままです。テンポ・ビート・オンセット・キー・リズム・コード・音色の各ヘルパーも同じ扱いなので、レートが違っても結果は揃い、22050 Hz の入力は書いたとおりに読まれます。`tuning` は解析が作るすべてのクロマ（キー、コード、セクション）をずらし、`'auto'` なら測定します。使われた値は `result.tuning` です。
 
 **戻り値:** 総合的な `AnalysisResult`。`analyze()` を 1 回呼ぶだけで、コード、セクション、音色、ダイナミクス、リズム、メロディ、楽曲形式、拍ごとの強度まで含む結果が、どのバインディングでも返ります。そのため、1 つのフィールドだけが欲しい場合を除き、個別のヘルパーを使う必要はほとんどありません。結果のコードには `result.key` を基準にした `romanNumeral` も付き、`N.C.` では空文字列になります。
 
@@ -271,6 +297,7 @@ interface TranscribeRequest {
   sampleRate: number;
   tempoBpm?: number;  // 省略すると検出
   polyphonic?: boolean;
+  referenceHz?: number | 'auto';  // Hz 単位のチューニング基準。既定 440、'auto' で測定
   // その他の TranscribeOptions の検出設定も省略可能
 }
 
@@ -278,6 +305,7 @@ interface TranscribeResult {
   events: ProjectMidiEvent[];
   noteCount: number;
   tempoBpm: number;
+  tuning: number;     // ノート番号の基準にしたセミトーン端数
 }
 
 function transcribe(request: TranscribeRequest): TranscribeResult
@@ -312,23 +340,27 @@ PPQ グリッドをプロジェクトのテンポマップに合わせる場合�
 | リズム傾向 | `analyzeRhythm(samples, sampleRate, ...)` | グルーヴ、シンコペーション、規則性を見ます。 |
 | ダイナミクス | `analyzeDynamics(samples, sampleRate, ...)` | ダイナミックレンジ、ラウドネスレンジ、クレストファクター、圧縮傾向を見ます。 |
 | 音色 | `analyzeTimbre(samples, sampleRate, ...)` | ブライトネス、ウォームス、密度、粗さ、複雑さを返します。 |
-| コード | `detectChords(samples, sampleRate, options?)` | コード区間を `{ chords }` として返します。HMM 平滑化、キー文脈、転回形、`chromaMethod: 'stft' \| 'nnls'` を指定できます。 |
+| コード | `detectChords(samples, sampleRate, options?)` | コード区間と、使われたチューニングを `{ chords, tuning }` として返します。HMM 平滑化、キー文脈、転回形、`chromaMethod: 'stft' \| 'nnls'`、`tuning` を指定できます。 |
+| コードの機能 | `chordFunctions({ chords, key })` | 手元にあるコードに、再検出せずにローマ数字と和声機能を付けます。 |
 | セクション | `analyzeSections(samples, sampleRate, ...)` | イントロ、Aメロ、サビ、ブリッジ、アウトロなどの構造を推定します。長尺入力で内部の境界グリッドがプーリングされても、`start` / `end` は元タイムライン上の正確な秒数を保ちます。 |
 | 構造境界 | `detectBoundaries(request)` | 転換点そのものと、それを拾い出した元のノヴェルティ曲線を返します。自前のしきい値を当てたいときに使います。 |
 | メロディ | `analyzeMelody(samples, sampleRate, ...)` | ピッチ追跡ベースの単音メロディ輪郭です。 |
 
 ```typescript
 const keys = detectKeyCandidates(samples, sampleRate, {
-  modes: [Mode.Major, Mode.Minor],
+  modes: ['major', 'minor'],
   profile: 'krumhansl',
   genreHint: 'pop',
 });
+
+// keyMode は Mode の序数。候補の mode は名前。
+const modeOrdinal = (name: KeyMode) => Mode[(name[0].toUpperCase() + name.slice(1)) as keyof typeof Mode];
 
 const { chords } = detectChords(samples, sampleRate, {
   useHmm: true,
   useKeyContext: true,
   keyRoot: keys[0].key.root,
-  keyMode: keys[0].key.mode,
+  keyMode: modeOrdinal(keys[0].key.mode),
   chromaMethod: 'nnls',
 });
 
@@ -356,17 +388,21 @@ for (const { time, strength } of boundaries) {
 | `nFft` | 2048 | 構造特徴量に使う FFT サイズ |
 | `hopLength` | 512 | ホップ長（サンプル数） |
 | `kernelSize` | 64 | チェッカーボードカーネルのサイズ（フレーム数） |
-| `threshold` | 0.3 | 相対ノヴェルティしきい値。曲線を自身の最大値で正規化した *後* に適用される |
+| `threshold` | 0.3 | 相対ノヴェルティしきい値。ピークが、`referenceWindow` の範囲内で最大のノヴェルティに対してこの割合に達している必要がある |
 | `absoluteThreshold` | 0.005 | ノヴェルティの下限。正規化の *前* の生の応答に適用される |
 | `nMfcc` | 13 | MFCC の次数 |
 | `nChroma` | 12 | クロマのビン数 |
 | `peakDistance` | 2.0 | ピーク同士の最小間隔（秒） |
+| `referenceWindow` | 60 | 相対しきい値を測る範囲（片側、秒）。`0` で相対しきい値を無効にし、曲の長さ以上にすると基準が曲全体になる |
 | `useMfcc` | `true` | MFCC 特徴量を使う |
 | `useChroma` | `true` | クロマ特徴量を使う |
 
 ::: tip 2 つのしきい値は役割が違います
-`threshold` は「その曲の中でどれだけ突出したピークか」を問います。曲線が先に自身の最大値で
-正規化されるため、特徴量が実際にどれだけ変化したかについては何も示しません。
+`threshold` は「周囲と比べてどれだけ突出したピークか」を問います。各ピークは曲全体の最大値
+ではなく、前後 `referenceWindow` 秒の範囲で最大のノヴェルティと比較されるので、支配的な
+変化が遠く離れた弱いセクション変化を隠すことはありません。範囲内のどのイベントも
+`threshold` の割合に届かない孤立した支配的イベントは、この基準から除外されます。
+特徴量が実際にどれだけ変化したかについては何も示しません。
 `absoluteThreshold` のほうが「そもそも変化があったのか」を問う下限です。これを `0` にしても
 検出が有意に敏感になるわけではありません。正規化によって残留する揺らぎが 1.0 のピークに
 化けるので、定常的な入力でも区切られてしまいます。
@@ -384,7 +420,7 @@ for (const { time, strength } of boundaries) {
 
 `useMfcc: false` と `useChroma: false` を同時に渡すと、`InvalidParameter` の `SonareError` を
 投げます。2 つの特徴量ストリームはフレーム単位で結合されるため、どちらも無効では結合する対象が
-ありません。
+ありません。負または有限でない `referenceWindow` は `RangeError` を投げます。
 
 ### `estimateMeter(request)`
 
@@ -470,95 +506,33 @@ interface MeterEstimate {
 
 ### `chordFunctionalAnalysis(samples, keyRoot, keyMode, sampleRate?, options?)`
 
-指定したキーを基準に、検出されたコード進行を機能（ローマ数字）和声解析します。内部でコード検出を実行し、検出された各コードにラベルを付けるため、`detectKey(...)` から得た `keyRoot`／`keyMode` と、`detectChords(...)` に渡すのと同じ `options` をそのまま渡します。
+指定したキーを基準に、検出されたコード進行を機能（ローマ数字）和声解析します。内部でコード検出を実行したうえで、検出された各コードにラベルを付けるため、`options` には `detectChords(...)` に渡すのと同じものを渡します。
 
-ラベルには時刻が付きません。`detectChords(...)` の結果と 1 対 1 に対応するのは、両方に同じオプションを渡したときだけです。オプションが違うと、返る配列の長さが変わることがあります。`analyze(...)` は独自の設定でコードを別に検出するため、そのコード一覧はこれらのラベルとは対応しません。`analyze(...)` の結果に含まれる各コードには `result.key` を基準にした `romanNumeral` が付き、`N.C.` では空文字列になります。
+戻り値は時刻付きのコードエントリそのものです。`Chord` の全フィールド（`root`、`bass`、`quality`、`start`、`end`、`duration`、`confidence`、`name`）に `roman` と `function` が加わります。別に呼んだ `detectChords(...)` と対応を取る必要はありません。`analyze(...)` は独自の設定でコードを別に検出し、結果の各コードには `result.key` を基準にした `romanNumeral` が付きます（`N.C.` では空文字列）。
 
 ```typescript
 function chordFunctionalAnalysis(
   samples: Float32Array,
   keyRoot: PitchClass,
-  keyMode?: Mode,
+  keyMode?: Mode,                  // Mode の序数。既定は Mode.Major
   sampleRate?: number,
   options?: ChordDetectionOptions,
-): string[]   // 検出されたコードごとに 1 つのローマ数字ラベル。例: ["I", "IV", "V", "vi"]
+): FunctionalChord[]
+
+type ChordFunction = 'tonic' | 'subdominant' | 'dominant' | 'chromatic' | 'none';
+
+type FunctionalChord = Chord & {
+  roman: string;                   // 'I'、'V7'、'vi'。不明なコードは 'N.C.'
+  function: ChordFunction;         // キーのスケール外のルートは 'chromatic'
+};
 ```
 
 ```typescript
 const key = detectKey(samples, sampleRate);
-const roman = chordFunctionalAnalysis(samples, key.root, key.mode, sampleRate);
-console.log(roman);  // 例: ["I", "IV", "V", "vi"]
-```
+const modeOrdinal = key.mode === 'minor' ? Mode.Minor : Mode.Major;
+const functional = chordFunctionalAnalysis(samples, key.root, modeOrdinal, sampleRate);
 
-`detectKey(...)` と `detectKeyCandidates(...)` は同じ `KeyDetectionOptions` を受け取ります。
-
-| グループ | 値 |
-|----------|----|
-| 制御項目 | `modes`, `profile`, `genreHint`, `useHpss`, `loudnessWeighted`, `highPassHz` |
-| プロファイル名 | `ks`, `krumhansl`, `temperley`, `shaath`, `keyfinder`, `faraldo-edmt` / `edmt`, `faraldo-edma` / `edma`, `faraldo-edmm` / `edmm`, `bellman-budge` / `bellman` |
-| ジャンルヒント | `auto`, `edm`, `electronic`, `dance`, `pop`, `classical`, `jazz` |
-
-## スケール量子化
-
-ピッチ補正のターゲットを構築するための 12-TET（12 平均律）スケールヘルパーです。
-
-`modeMask` は 12 ビットのマスクで、ビット *i* が `root`（`PitchClass`、C = 0）を基準とした *i* 番目のピッチクラスを有効化します。自然な長調は `0b101010110101` です。
-
-`referenceMidi` はチューニングの基準音です。A4 = 69 にするには `0` を渡します。
-
-```typescript
-// (小数を含む)MIDI 番号を最も近い有効なピッチクラスにスナップ
-function scaleQuantizeMidi(root: number, modeMask: number, midi: number, referenceMidi?: number): number
-// 補正量(量子化後 − 入力)をセミトーンで返す
-function scaleCorrectionSemitones(root: number, modeMask: number, midi: number, referenceMidi?: number): number
-// pitchClass(0..11)が root を基準に modeMask で有効か
-function scalePitchClassEnabled(root: number, modeMask: number, pitchClass: number): boolean
-```
-
-`scaleQuantizeMidi(...)` を `pitchCorrectToMidi(...)` と組み合わせると、検出した音を最も近いスケール構成音へリチューンできます。
-
-## 単位変換
-
-これらの関数は軽量で高速です。
-
-```typescript
-// Hz <-> Mel (Slaney 式)
-function hzToMel(hz: number): number
-function melToHz(mel: number): number
-
-// Hz <-> MIDI ノート番号 (A4 = 440 Hz = 69)
-function hzToMidi(hz: number): number
-function midiToHz(midi: number): number
-
-// Hz <-> ノート名
-function hzToNote(hz: number): string      // "A4", "C#5"
-function noteToHz(note: string): number
-
-// 時間 <-> フレーム
-function framesToTime(frames: number, sr: number, hopLength: number): number
-function timeToFrames(time: number, sr: number, hopLength: number): number
-
-// フレーム <-> サンプル (librosa.frames_to_samples / samples_to_frames 相当)
-function framesToSamples(frames: number, hopLength?: number, nFft?: number): number
-function samplesToFrames(samples: number, hopLength?: number, nFft?: number): number
-
-// dB 変換（ベクトル）
-function powerToDb(values: Float32Array, ref?: number, amin?: number, topDb?: number): Float32Array
-function amplitudeToDb(values: Float32Array, ref?: number, amin?: number, topDb?: number): Float32Array
-function dbToPower(values: Float32Array, ref?: number): Float32Array
-function dbToAmplitude(values: Float32Array, ref?: number): Float32Array
-```
-
-## リサンプリング
-
-### `resample(samples, srcSr, targetSr)` <Badge type="info" text="中負荷" />
-
-r8brain アルゴリズムを使用した高品質リサンプリング。
-
-```typescript
-function resample(
-  samples: Float32Array,
-  srcSr: number,
-  targetSr: number
-): Float32Array
+for (const { start, name, roman, function: role } of functional) {
+  console.log(`${start.toFixed(1)}s  ${name}  ${roman}  ${role}`);  // 例: "0.0s  C  I  tonic"
+}
 ```

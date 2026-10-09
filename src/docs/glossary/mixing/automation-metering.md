@@ -39,6 +39,8 @@ Meters describe; they do not decide. Use them to catch problems your ears miss, 
 
 ::: details How libsonare models automation and metering
 Automation is scheduled on `AutomationLane`s as sample-accurate `AutomationEvent`s with an `AutomationCurve` (`linear`/`exponential`/`s-curve`/`hold`); an `AutomationTarget` points at a fader, pan, send, or insert parameter, and `InsertAutomationLane` automates inside an insert. Metering uses a `MeterProcessor` (`MeterConfig`) for peak/true-peak/RMS/LUFS and correlation, plus a `GoniometerBuffer` of `GoniometerPoint`s for the vectorscope. All of this is real-time-safe, so automation plays back and meters update both offline and inside an AudioWorklet, with engine-side telemetry available for UI displays.
+
+The true-peak meter reads one reconstruction-filter group delay behind the block, which is what makes its reading independent of the block size. The last few samples of a signal are therefore still pending when the final block ends; call `Mixer.flushMeters()` (Python: `flush_meters()`) after the last block of an offline render to read them against silence and fold them into the snapshot. Offline engine renders and the one-shot mix flush every meter themselves.
 :::
 
 Related: [Mixing Basics](../concepts/mixing-basics.md), [Channel Strip](./channel-strip.md), [True Peak](../true-peak.md), [Reading Mastering Meters](../mastering/meter-reading.md)

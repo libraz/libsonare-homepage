@@ -5,7 +5,7 @@ description: libsonare JavaScript/TypeScript パッケージのマスタリン�
 
 # JavaScript/TypeScript マスタリング API
 
-このページは libsonare JavaScript/TypeScript パッケージのオフラインマスタリングの入口を扱います。チェーンとプリセットの呼び出し、説明可能なマスタリングのヘルパー、単体のダイナミクス／リペアプロセッサ、そしてミキシング API です。関連する 2 つのリファレンスが並んで存在します。[ストリーミング／リアルタイム API](./js-api-streaming.md) は `StreamingEqualizer`、`StreamingRetune`、`RealtimeVoiceChanger`、`voiceChangeRealtime(...)`、`StreamingMasteringChain` を扱い、`MasteringChainConfig` のスキーマと結果型は [型とエラー](./js-api-types.md#masteringchainconfig) にあります。
+このページは libsonare JavaScript/TypeScript パッケージのオフラインマスタリングの入口を扱います。チェーンとプリセットの呼び出し、説明可能なマスタリングのヘルパー、単体のダイナミクス／リペアプロセッサです。関連する 2 つのリファレンスが並んで存在します。[ストリーミング／リアルタイム API](./js-api-streaming.md) は `StreamingEqualizer`、`StreamingRetune`、`RealtimeVoiceChanger`、`voiceChangeRealtime(...)`、`StreamingMasteringChain` を扱い、`MasteringChainConfig` のスキーマと結果型は [型と列挙型](./js-api-types.md#masteringchainconfig) にあります。
 
 ## 各節の移動先
 
@@ -16,7 +16,8 @@ description: libsonare JavaScript/TypeScript パッケージのマスタリン�
 | RealtimeVoiceChanger | [ストリーミング／リアルタイム API](./js-api-streaming.md) |
 | `voiceChangeRealtime(samples, sampleRate?, preset?, options?)` | [ストリーミング／リアルタイム API](./js-api-streaming.md) |
 | StreamingMasteringChain | [ストリーミング／リアルタイム API](./js-api-streaming.md) |
-| MasteringChainConfig | [型とエラー](./js-api-types.md) |
+| MasteringChainConfig | [型と列挙型](./js-api-types.md) |
+| ミキシング API | [オーディオ、メータリング、ミキシング API](./js-api-audio.md#ミキシング-api) |
 
 ## マスタリング API
 
@@ -89,16 +90,16 @@ drawTiltCurve(report.bandEnergyDeltaDb);   // 32 バンド。正なら処理後�
 同じオブジェクトが C ABI・ctypes・Node・Python・両 CLI のレポートファイルにも同じ形で
 含まれるため、CLI から書き出したレポートとブラウザで読むレポートは同じ形になります。
 
-説明可能なマスタリングのヘルパー（`masteringAudioProfile(...)`、`masteringAssistantSuggest(...)`、`masteringStreamingPreview(...)`）は JSON 文字列を返します。正確な形、受け付けるオプション、提案をレンダー済みマスターに変換する方法は [マスタリングアシスタント](./mastering-assistant.md) を参照してください。リファレンストラック用途では `masteringPairProcessorNames()` と `masteringPairAnalyze()` を使います（サンプルレートを揃え、長さも近づける）。`masteringPairProcess()` はモノラルの 2 入力 `match.*` プロセッサを実行し、そのステレオ版である `masteringPairProcessStereo()` は後述します。
+説明可能なマスタリングのヘルパー（`masteringAudioProfile(...)`、`masteringAssistantSuggest(...)`、`masteringStreamingPreview(...)`）は、それぞれ `TypedJson<MasteringAudioProfile>`、`TypedJson<MasteringAssistantResult>`、`TypedJson<MasteringStreamingPreviewResult>` として型付けされた JSON 文字列を返します（パース後の型は `JsonResult<J>` で取り出せます）。正確な形、受け付けるオプション、提案をレンダー済みマスターに変換する方法は [マスタリングアシスタント](./mastering-assistant.md) を参照してください。リファレンストラック用途では `masteringPairProcessorNames()` と `masteringPairAnalyze()` を使います（サンプルレートを揃え、長さも近づける）。`masteringPairProcess()` はモノラルの 2 入力 `match.*` プロセッサを実行し、そのステレオ版である `masteringPairProcessStereo()` は後述します。
 
 #### 説明可能なヘルパーのステレオ版
 
-この 3 つには、チャンネルペアを直接計測するステレオ版があります。いずれも、**リクエストオブジェクト専用です**。位置引数のオーバーロードはなく、位置引数で呼ぶと例外になります。
+この 3 つには、チャンネルペアを直接計測するステレオ版があります。いずれも、**リクエストオブジェクト専用です**。位置引数のオーバーロードはなく、位置引数で呼ぶと `TypeError` になります。
 
 ```typescript
-function masteringAudioProfileStereo(request: MasteringStereoParamsRequest): string
-function masteringAssistantSuggestStereo(request: MasteringAssistantStereoParamsRequest): string
-function masteringStreamingPreviewStereo(request: MasteringStreamingPreviewStereoRequest): string
+function masteringAudioProfileStereo(request: MasteringStereoParamsRequest): TypedJson<MasteringAudioProfile>
+function masteringAssistantSuggestStereo(request: MasteringAssistantStereoParamsRequest): TypedJson<MasteringAssistantResult>
+function masteringStreamingPreviewStereo(request: MasteringStreamingPreviewStereoRequest): TypedJson<MasteringStreamingPreviewResult>
 
 interface MasteringStereoParamsRequest {
   left: Float32Array;
@@ -139,7 +140,7 @@ const preview = JSON.parse(
 );
 ```
 
-ステレオ素材ならこちらを使ってください。モノラル版は `0.5 * (left + right)` のダウンミックスを計測するため、相関の低い素材では約 6 dB 低く出ます。積分ラウドネス、そこから導かれる正規化ゲイン、天井に当たるリスクの判断が、そろって同じぶんだけ過小に報告されます。相関の低いピンクノイズのペア（48 kHz、4 秒）での実測値は、ダウンミックス経由が **-22.55 LUFS**、ステレオ版が **-16.44 LUFS** で、差は **6.11 dB** でした。Spotify の `normalizationGainDb` もダウンミックス経由が **+8.55**、ステレオ版が **+2.44** です。相関の高いペアでは差が 3.01 dB まで縮みますが、これは単純に半分になったぶんで、残りの約 3 dB がデコリレーションによるものです。
+ステレオ素材ならこちらを使ってください。モノラル版は `0.5 * (left + right)` のダウンミックスを計測するため、相関の低い素材では約 6 dB 低く出ます。積分ラウドネス、そこから導かれる正規化ゲイン、天井に当たるリスクの判断が、そろって同じぶんだけ過小に報告されます。相関の低いピンクノイズのペア（48 kHz、4 秒）での実測値は、ダウンミックス経由が **-18.45 LUFS**、ステレオ版が **-12.43 LUFS** で、差は **6.03 dB** でした。-14 LUFS ターゲットの `normalizationGainDb` もダウンミックス経由が **+4.45**、ステレオ版が **-1.57** です。相関の高いペアでは差が 3.01 dB まで縮みますが、これは単純に半分になったぶんで、残りの約 3 dB がデコリレーションによるものです。
 
 ステレオプロファイルのうち、左右両チャンネルから計測されるのは `loudness` ブロックだけです。積分 LUFS と LRA はチャンネル加算したプログラムから求め、True Peak は左右の大きいほうを採ります。スペクトル、ダイナミクス、テンポの各フィールドは絶対レベルではなく形と時間を表すため、引き続きダウンミックス上で計測され、`masteringAudioProfile` の値とそのまま比較できます。
 
@@ -172,6 +173,34 @@ const mastered = masterAudioStereo({ left, right, sampleRate, overrides: chain }
 ステレオ用エントリポイントと同じ理由によります。Python での綴りは
 `mastering_assistant_suggest_chain` と `mastering_assistant_suggest_chain_stereo` です。
 
+#### `streamingLoudnessGain(request)`
+
+`StreamingMasteringChain` は信号全体のラウドネスを測れないため、ラウドネス段には事前に計算した固定ゲインが必要です。`streamingLoudnessGain` は `config` が表すオフラインチェーンをラウドネス段の手前まで実行してそこで測定するので、返るゲインは天井クランプを含めて `masteringChain` が適用するゲインと一致します。
+
+```typescript
+function streamingLoudnessGain(request: StreamingLoudnessGainRequest): StreamingLoudnessGainResult
+function streamingLoudnessGainStereo(request: StreamingLoudnessGainStereoRequest): StreamingLoudnessGainResult
+// request: { samples | left + right: Float32Array; sampleRate?: number; config?: MasteringChainConfig }
+
+interface StreamingLoudnessGainResult {
+  loudnessStaticGainDb: number;  // オフラインのラウドネス段が適用するゲイン
+  truePeakDb: number;            // ラウドネス段の入力の dBTP。デジタル無音では -120
+  integratedLufs: number;        // その入力の LUFS。絶対ゲート未満では -Infinity
+}
+```
+
+```typescript
+const config = { loudness: { enabled: true, targetLufs: -14, ceilingDb: -1 } };
+const { loudnessStaticGainDb, truePeakDb } = streamingLoudnessGain({ samples, sampleRate, config });
+const chain = new StreamingMasteringChain({
+  ...config,
+  loudnessStaticGainDb,
+  loudnessStaticGainPeakDb: truePeakDb,
+});
+```
+
+測定はソースではなく、オフラインチェーンが測るのと同じ、ラウドネス段の入力で行われます。ゲインはラウドネス段が有効かどうかにかかわらず `config.loudness` から計算され、無音またはゲート未満の入力では 0 dB です。-9.47 LUFS のソフトクリップした合成ループを、ターゲット -14 LUFS、天井 -1 dBTP で測るとゲインは -4.53 dB で、チェーンの `report.appliedGainDb` と一致しました。ステレオ版は BS.1770 の重みで 2 チャンネルを合算します。Python では `streaming_loudness_gain` と `streaming_loudness_gain_stereo` で、`loudness_static_gain_db`、`true_peak_db`、`integrated_lufs` を持つ `StreamingLoudnessGain` を返します。
+
 #### `masteringPlatformNames()`
 
 ```typescript
@@ -198,7 +227,7 @@ interface LoudnessMatchResult {
   sampleRate: number;
   referenceLufs: number;        // BS.1770 の積分値
   sourceLufs: number;           // ゲイン適用前
-  appliedGainDb: number;        // referenceLufs - sourceLufs
+  appliedGainDb: number;        // 再計測したソースを referenceLufs に合わせるゲイン
   matchedTruePeakDbtp: number;  // ゲイン適用後の True Peak
 }
 ```
@@ -206,7 +235,7 @@ interface LoudnessMatchResult {
 受け取るのはリクエストオブジェクトのみです。2 つのバッファは長さが異なっていても構いません。それぞれ自身のプログラムとして計測されます。
 
 ::: warning ゲインに上限はなく、結果が 0 dBTP を超えることがある
-`appliedGainDb` には上限がなく、ヘッドルームのクランプも行われないため、`matchedTruePeakDbtp` が **`0` を超える**ことがあります。これは意図的です。ヘッドルームのためにクランプすると、すでにフルスケール近くにある音源ではマッチングが暗黙に無効化されてしまい、それこそ A/B でもっとも調べたいケースだからです。レンダリングする場合は、試聴とは別に `matchedTruePeakDbtp` を自分で確認し、ペアごとまとめて減衰させてください。
+`appliedGainDb` は、再計測したソースを `referenceLufs` に合わせるゲインです。ゲインによってブロックが絶対ゲートをまたぐ場合を除けば `referenceLufs - sourceLufs` に等しく、またぐ場合はターゲットに合うように解いた値になります。上限がなく、ヘッドルームのクランプも行われないため、`matchedTruePeakDbtp` が **`0` を超える**ことがあります。これは意図的です。ヘッドルームのためにクランプすると、すでにフルスケール近くにある音源ではマッチングが暗黙に無効化されてしまい、それこそ A/B でもっとも調べたいケースだからです。レンダリングする場合は、試聴とは別に `matchedTruePeakDbtp` を自分で確認し、ペアごとまとめて減衰させてください。
 
 どちらかのテイクが無音、または計測ゲートを下回る場合、その LUFS フィールドは**非有限値**になり、`appliedGainDb` は `0`、source はそのまま返ります。値を表示する前に `Number.isFinite(result.sourceLufs)` を確認してください。
 :::
@@ -220,7 +249,7 @@ function masteringAbMatchLoudnessStereo(request: MasteringAbMatchLoudnessStereoR
 // request: { sourceLeft, sourceRight, referenceLeft, referenceRight: Float32Array; sampleRate?: number } -> { left, right, sampleRate, referenceLufs, sourceLufs, appliedGainDb, matchedTruePeakDbtp }
 ```
 
-`masteringAbMatchLoudness` のステレオ版です。ステレオプログラムで計測した 1 つのゲインを両方のソースチャンネルに適用するため、左右のバランスは変わりません。受け取るのはリクエストオブジェクトのみです。同じペアの 2 チャンネルは同じ長さでなければ例外になり、ソースのペアとリファレンスのペアは互いに長さが異なっていても構いません。実測では、-22.64 LUFS を -10.60 LUFS に合わせると 12.04 dB が適用され、両チャンネルとも入力の RMS のちょうど 4.0000 倍で返りました。`matchedTruePeakDbtp` は両チャンネルの最大値です。ゲインに上限がないことと、無音のテイクで LUFS が非有限値になることはモノラル版と同じで、無音のソースでは `sourceLufs` が `-Infinity`、`appliedGainDb` が `0` になり、サンプルは変わりません。
+`masteringAbMatchLoudness` のステレオ版です。ステレオプログラムで計測した 1 つのゲインを両方のソースチャンネルに適用するため、左右のバランスは変わりません。受け取るのはリクエストオブジェクトのみです。同じペアの 2 チャンネルは同じ長さでなければ `RangeError` になり、ソースのペアとリファレンスのペアは互いに長さが異なっていても構いません。相関のないピンクノイズでの実測では、-12.43 LUFS を -1.99 LUFS に合わせると 10.44 dB が適用され、両チャンネルとも入力の RMS の 3.3256 倍で返りました。`matchedTruePeakDbtp` は両チャンネルの最大値です。ゲインに上限がないことと、無音のテイクで LUFS が非有限値になることはモノラル版と同じで、無音のソースでは `sourceLufs` が `-Infinity`、`appliedGainDb` が `0` になり、サンプルは変わりません。
 
 #### `masteringPairProcessStereo(request)`
 
@@ -229,7 +258,7 @@ function masteringPairProcessStereo(request: MasteringPairProcessStereoRequest):
 // request: { processorName: 'match.abCrossfade', sourceLeft, sourceRight, referenceLeft, referenceRight, sampleRate?, params? }; 同じ順の位置引数も可
 ```
 
-`StereoPairProcessor` は `match.abCrossfade` のみで、ほかの名前は `unsupported stereo pair processor` で例外になります。結果は静的なリニアブレンド `(1 - mix) * source + mix * reference` で、長さは短いほうのペアに揃います。`mix` の既定値は `0.5` で、範囲は `[0, 1]` です（範囲外は例外）。`0` なら source、`1` なら reference が返ります。同位相のトーンでの実測（source の RMS 0.0707、reference の RMS 0.2828）では、既定値で 0.1768、`mix: 0.25` で 0.1237、4 秒の source と 2 秒の reference では 2 秒分が返り、`latencySamples` は 0 でした。
+`StereoPairProcessor` は `match.abCrossfade` のみで、ほかの名前は `SonareError`（`unsupported stereo pair processor`）で例外になります。結果は静的なリニアブレンド `(1 - mix) * source + mix * reference` で、長さは短いほうのペアに揃います。`mix` の既定値は `0.5` で、範囲は `[0, 1]` です（範囲外は `SonareError`）。`0` なら source、`1` なら reference が返ります。同位相のトーンでの実測（source の RMS 0.0707、reference の RMS 0.2828）では、既定値で 0.1768、`mix: 0.25` で 0.1237、4 秒の source と 2 秒の reference では 2 秒分が返り、`latencySamples` は 0 でした。
 
 #### `lufsSeriesInterleaved(...)`
 
@@ -275,6 +304,7 @@ interface LufsSeriesResult {
 | 進捗付きフルチェーン実行（モノラル） | `masteringChainWithProgress()` |
 | 進捗付きフルチェーン実行（ステレオ） | `masteringChainStereoWithProgress()` |
 | ストリーミング（ブロック単位）チェーン | `StreamingMasteringChain` |
+| ストリーミングチェーンに渡すラウドネス値を測定 | `streamingLoudnessGain()` / `streamingLoudnessGainStereo()` |
 | マスタリング判断用の音源プロファイルを取得 | `masteringAudioProfile()` |
 | ステレオペアの音源プロファイルを取得 | `masteringAudioProfileStereo()` |
 | 音源解析からマスタリングの提案を取得 | `masteringAssistantSuggest()` |
@@ -286,7 +316,7 @@ interface LufsSeriesResult {
 | プロセッサ分類カタログを取得 | `masteringProcessorCatalog()` |
 | チェーンのインサートプロセッサ一覧 | `masteringInsertNames()` |
 | インサートが受け付けるパラメータキー一覧 | `masteringInsertParamNames(name)` |
-| 構築用キーとリアルタイムインサートパラメータを記述 | `masteringInsertParamInfo(name)` |
+| 構築用キーとリアルタイムインサートパラメータを記述 | `masteringInsertParamInfo(name, sampleRate?)` |
 | 構成済みインサートのレイテンシとテールを測定 | `masteringInsertTiming(name, params, sampleRate)` |
 | モノラル音声を処理 | `masteringProcess()` |
 | ステレオ音声を処理 | `masteringProcessStereo()` |
@@ -296,6 +326,7 @@ interface LufsSeriesResult {
 | ソース／リファレンスのペアを解析 | `masteringPairAnalyze()` |
 | ステレオ解析の一覧 | `masteringStereoAnalysisNames()` |
 | ステレオチャンネルを解析 | `masteringStereoAnalyze()` |
+| 任意のチャンネル数を 1 回の呼び出しで解析・リペア | `masteringRepairAnalyze()` / `masteringRepairApply()`（[オーディオリペアの流れ](./audio-repair.md#測定と修復を-1-回の呼び出しで行う)を参照） |
 
 ### アンププリセットのカタログ
 
@@ -321,7 +352,7 @@ function masteringInsertTiming(
 ): { latencySamples: number; tailSamples: number }
 ```
 
-`masteringInsertTiming` は指定した構築用パラメータを適用し、そのサンプルレートでの正確なレイテンシとテールを返します。ラッパーが受け付けるのは有限の数値と真偽値だけなので、カタログで `string` や `array` 型のキーはこの問い合わせに渡せません。未知のキーと不正なサンプルレートを拒否し、プロセッサを prepare できなければ例外にします。48 kHz で `{}` を渡すとプロセッサカタログの既定構成に相当します。トポロジーやスロットでタイミングが変わる場合は、実際のインサートパラメータを渡してください。
+`masteringInsertTiming` は指定した構築用パラメータを適用し、そのサンプルレートでの正確なレイテンシとテールを返します。ラッパーが受け付けるのは有限の数値と真偽値だけなので、カタログで `string` や `array` 型のキーはこの問い合わせに渡せません。未知のキー、有限でない値や真偽値以外の値、不正なサンプルレートを `SonareError` で拒否し、プロセッサを prepare できなければ例外にします。48 kHz で `{}` を渡すとプロセッサカタログの既定構成に相当します。トポロジーやスロットでタイミングが変わる場合は、実際のインサートパラメータを渡してください。
 
 関連するマスタリングガイド: [処理チェーン](./glossary/mastering.md)、[トーンと Air](./glossary/mastering/tone-air.md)、[ダイナミクス](./glossary/mastering/dynamics.md)、[ステレオ、リミッター、ラウドネス](./glossary/mastering/stereo-limiter-loudness.md)、[リファレンスマッチ](./glossary/mastering/reference-match.md)。
 
@@ -345,7 +376,7 @@ function masteringRepairDereverbClassical(samples: Float32Array, sampleRate: num
 function masteringRepairTrimSilence(samples: Float32Array, sampleRate: number, options?: TrimSilenceOptions): Float32Array
 ```
 
-リペア系のステージはオフライン専用で、`StreamingMasteringChain` では拒否されます。これらの単発ヘルパー、または `masteringChain*`／`masterAudio*` の中で実行してください。[ダイナミクス](./glossary/mastering/dynamics.md)と[リペア](./glossary/mastering/repair.md)を参照してください。
+単発のリペアヘルパーとチェーン設定のリペア段はオフライン処理です。`StreamingMasteringChain` は `repair.declick`、`repair.declip`、`repair.decrackle`、`repair.dehum`、`repair.dereverb` を拒否し、`repair.denoise` はストリーミング向けのノイズ推定器（`mcra`、`imcra`、`spp`。既定のクォンタイル推定器は不可）のときだけ受け付けます。`repair.decrackle`、`repair.dehum`、`repair.denoiseClassical`、`repair.dereverbClassical` の 4 つは、同じ id の因果的なリアルタイムインサートとしても使えます（[リアルタイムインサート](./audio-repair.md#リアルタイムインサート)を参照）。[ダイナミクス](./glossary/mastering/dynamics.md)と[リペア](./glossary/mastering/repair.md)を参照してください。
 
 #### ステレオ／リンクされたリペア
 
@@ -542,42 +573,3 @@ interface MasteringRepairNoiseBandBinsRequest {
 1 つも入らなかったからです。バンド配列だけでは両者を区別できず、バンド数からも復元できま
 せんが、このグリッドなら判別できます。空のバンドはフロア値の棒としてプロットするのではなく、
 「未計測」として表示してください。
-
-## ミキシング API
-
-WASM パッケージから libsonare のミキシングエンジンを使えます。`mixStereo(...)` はステム配列を手早くレンダーする一括処理用の入口です。`Mixer` は、チャンネルストリップ、バス、センド、VCA グループ、オートメーション、ストリップメーター、ゴニオメーターバッファを持つ、シーンベースのミキサーです。
-
-```typescript
-import {
-  Mixer,
-  mixStereo,
-  mixingScenePresetJson,
-  mixingScenePresetNames,
-} from '@libraz/libsonare';
-
-mixingScenePresetNames(); // ['vocalReverbSend', ...]
-
-const offline = mixStereo([vocalL, musicL], [vocalR, musicR], sampleRate, {
-  inputTrimDb: [3, 0],
-  faderDb: [-3, -12],
-  pan: [0, -0.2],
-  width: [1, 0.9],
-  muted: [false, false],
-});
-
-const mixer = Mixer.fromSceneJson(mixingScenePresetJson('vocalReverbSend'), sampleRate, 512);
-mixer.sceneWarnings(); // シーン読み込み時の非致命的な警告（どのプロセッサも読まない insert パラメータ＝タイプミス）
-const latency = mixer.latencySamples(); // ドライ／ウェット整列用のコンパイル済みグラフ遅延
-const block = mixer.processStereo([vocalBlockL, musicBlockL], [vocalBlockR, musicBlockR]);
-const meter = mixer.stripMeter(0, 'postFader');
-
-mixer.scheduleFaderAutomation(0, sampleRate * 8, -6, 's-curve');
-mixer.schedulePanAutomation(0, sampleRate * 8, -0.25, 'linear');
-mixer.scheduleSendAutomation(0, 0, sampleRate * 12, -12, 'hold');
-
-const goniometer = mixer.readGoniometerLatest(0, 256);
-const sceneJson = mixer.toSceneJson();
-mixer.delete();
-```
-
-AudioWorklet のようにレンダーブロックごとのアロケーションを避けたいループでは、`Mixer.createRealtimeBuffer()` と `processStereoInto(...)` を使います。シーンやルーティングの詳細は [ミキシングエンジン](./mixing.md) を参照してください。

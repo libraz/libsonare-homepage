@@ -84,9 +84,9 @@ yarn build
 
 | ABI | 現在の値 | 対象 |
 |-----|---------|------|
-| Feature | 6 | フラットな解析・特徴量の結果構造体と、公開する一般 C 関数の契約（`SonareKey`、`SonareAnalysisResult`、`SonareChordDetectionOptions` など） |
+| Feature | 7 | フラットな解析・特徴量の結果構造体と、公開する一般 C 関数の契約（`SonareKey`、`SonareAnalysisResult`、`SonareChordDetectionOptions` など） |
 | Project | 2 | ヘッドレス DAW のプロジェクト・アレンジ構造体。アレンジ機能なしのビルドでは `0` を返します |
-| Voice changer | 2 | リアルタイムボイスチェンジャーの設定構造体 |
+| Voice changer | 3 | リアルタイムボイスチェンジャーの設定構造体 |
 | Acoustic | 4 | ルーム音響の構造体 |
 | Engine | 3 | リアルタイムコマンドキュー |
 
@@ -94,8 +94,8 @@ yarn build
 
 この値をどう使うかはバインディングごとに異なり、古いライブラリがどこで露見するかもそれで決まります。
 
-- **Python** は import 時、個々のシンボルを設定する前に、詰め込まれた値をビルド時に想定した値と比較し、`libsonare ABI mismatch` で始まるメッセージの `RuntimeError` を送出します。別のチェックアウトの共有ライブラリは最初の呼び出しではなく `import libsonare` の時点で失敗します。
-- **Node ネイティブと WASM** は `EXPECTED_PROJECT_ABI_VERSION` と `EXPECTED_ENGINE_ABI_VERSION`、および問い合わせ関数 `abiVersion()`・`projectAbiVersion()`・`engineAbiVersion()`・`voiceChangerAbiVersion()` をエクスポートします。`projectAbiVersion()` はアレンジ機能がコンパイルされていれば想定定数と等しく、そうでなければ `0` です。WASM の `engineCapabilities()` は `engineAbiVersion`・`expectedEngineAbiVersion`・`abiCompatible` を報告します。これらは関門ではなく問い合わせなので、`Project` や `RealtimeEngine` を構築する前の比較は利用側の仕事です。
+- **Python** はライブラリを最初に読み込むとき、個々のシンボルを設定する前に、詰め込まれた値をビルド時に想定した値と比較し、`libsonare ABI mismatch` で始まるメッセージの `ErrorCode.ABI_MISMATCH`（10）の `SonareError` を送出します。別のチェックアウトの共有ライブラリは、呼び出しの途中ではなく最初のライブラリ使用時に失敗します。Python CLI は終了コード 13 で終了します。
+- **Node ネイティブと WASM** も同じ比較を自分で行い、`ErrorCode.AbiMismatch`（10）の `SonareError` を投げます。Node はアドオンの require 時、WASM は `init()` です。あわせて `EXPECTED_PROJECT_ABI_VERSION` と `EXPECTED_ENGINE_ABI_VERSION`、および問い合わせ関数 `abiVersion()`・`projectAbiVersion()`・`engineAbiVersion()`・`voiceChangerAbiVersion()` をエクスポートします。`projectAbiVersion()` はアレンジ機能がコンパイルされていれば想定定数と等しく、そうでなければ `0` です。WASM の `engineCapabilities()` は `engineAbiVersion`・`expectedEngineAbiVersion`・`abiCompatible` を報告します。エンジン ABI はパック値に含まれないので、`RealtimeEngine` を構築する前の比較は利用側の仕事です。
 - **C の呼び出し側** は `sonare_abi_version()` をコンパイル時の `SONARE_ABI_VERSION` と一度だけ比較します。JSON の入口（ボイスチェンジャーの JSON 設定、機能カタログ）はレイアウトのずれを許容するので関門は不要です。[C ABI のバージョン](./cpp-api.md#c-abi-のバージョン) も参照してください。
 
 構造体へのフィールド追加は、構造体ごとの `struct_version` で段階的に有効化されるため、既存の C 呼び出し側はソースレベルでも呼び出しレベルでも影響を受けません。覚えておくとよい例が `SonareNoteSegmenterConfig` です。末尾の `voiced_threshold` は `struct_version` が `2` のときだけ読まれるので、従来どおりに埋めた設定はそのまま同じ挙動になり、ゼロ初期化した設定は既定値 0.5 を保ちます。変わるのはライブラリが報告するバージョンのほうです。自分のコードに手を入れていなくてもライブラリをバインディングと一緒に再ビルドする必要があるのは、このためです。
@@ -219,6 +219,7 @@ WASM パッケージは、ブラウザデモと同じ camelCase のマスタリ�
 | プリセットと簡易入口 | `mastering()`、`masteringPresetNames()`、`masteringPresetParams()`、`masteringPlatformNames()`、`masterAudio()`、`masterAudioStereo()`、`masterAudioWithProgress()`、`masterAudioStereoWithProgress()` |
 | フルチェーン | `masteringChain()`、`masteringChainStereo()`、`masteringChainWithProgress()`、`masteringChainStereoWithProgress()` |
 | オフラインのダイナミクス（単発） | `masteringDynamicsCompressor()`、`masteringDynamicsGate()`、`masteringDynamicsTransientShaper()` |
+| 1 回の呼び出しで測定と修復（任意のチャンネル数） | `masteringRepairAnalyze()`、`masteringRepairApply()` — [測定と修復を 1 回の呼び出しで行う](./audio-repair.md#測定と修復を-1-回の呼び出しで行う) を参照 |
 | オフラインのリペア — モノラル | `masteringRepairDeclick()`、`masteringRepairDeclip()`、`masteringRepairDecrackle()`、`masteringRepairDehum()`、`masteringRepairDenoiseClassical()`、`masteringRepairDereverbClassical()`、`masteringRepairTrimSilence()` |
 | オフラインのリペア — ステレオペア | `masteringRepairDeclickStereo()`、`masteringRepairDeclipStereo()`、`masteringRepairDecrackleStereo()`、`masteringRepairDehumStereo()`、`masteringRepairDenoiseClassicalStereo()`、`masteringRepairDereverbClassicalStereo()`、`masteringRepairTrimSilenceStereo()` |
 | オフラインのリペア — チャンネルリンク（任意のチャンネル数） | `masteringRepairDenoiseClassicalLinked()`、`masteringRepairDereverbClassicalLinked()` |
@@ -270,19 +271,19 @@ Node ネイティブは同じ基本名を使いますが、進捗は個別の `*
 
 永続ミキサーでは、Node ネイティブは多くのストリップ制御メソッドで `StripRef`（`number | string`）を受け取ります。WASM メソッドは数値のストリップインデックスを使い、ID からは `stripById(id)` で引きます。
 
-Node の `stripMeter(strip)` はポストフェーダーメーターを読みます。タップを明示したい場合は `meterTap(strip, 'preFader' | 'postFader')` を使います。シーン JSON の読み込み後は、`mixer.sceneWarnings()` がどのプロセッサも消費しなかった insert パラメータ（典型的にはタイプミス）を非致命的な警告として一覧します。
+Node の `stripMeter(strip)` はポストフェーダーメーターを読みます。タップを明示したい場合は `meterTap(strip, 'preFader' | 'postFader')` を使います。シーン JSON の読み込み後は、`mixer.sceneWarnings()` がシーンリーダーの消費しなかったすべてのキー（典型的にはタイプミス）を、パス付きの非致命的な警告として一覧します。
 
 ## プロジェクト・インストゥルメント・ライブ MIDI
 
 Node ネイティブアドオンは、WASM や Python と同じヘッドレス DAW 向け API を公開しています。`Project` クラス（トラック、クリップ、テンポ、undo/redo、SMF／MIDI 2.0 入出力）と、インストゥルメント付きバウンス（`bounceWithSynthInstrument(s)` と SoundFont のロード）が使えます。NativeSynth プリセットカタログ（`synthPresetNames()`／`synthPresetPatch()`／`SynthPatch`）、`chordFunctionalAnalysis(...)`、ライブ MIDI 入力付きの `RealtimeEngine` も使えます。
 
-エンジンには他のバインディングと同じレーンミキサーと MIDI クリップスケジュールが載っています。`setTrackLanes` / `setTrackBuses`、トラック／マスター／バスのストリップ JSON とインサート操作、インサートオートメーション id の解決、`setParamSmoothingMs`、ワイド／スコープテレメトリ、`setMidiClips`、`sampleAtPpq` を、WASM と同じ camelCase 名で使えます。外部機器へのルーティングも `setMidiDestinationExternal`、`setExternalMidiClockEnabled`、`drainExternalMidi`、`externalMidiDroppedCount` から利用できます（[リアルタイムエンジン](./realtime-engine.md#トラックを外部-midi-機器へ送る)を参照）。ブラウザ専用のつなぎ込み（`bindWebMidi`、`bindMicrophoneInput`）は WASM 固有で、ネイティブアドオンには含まれません。
+エンジンには他のバインディングと同じレーンミキサーと MIDI クリップスケジュールが載っています。`setTrackLanes` / `setTrackBuses`、トラック／マスター／バスのストリップ JSON とインサート操作、インサートオートメーション id の解決、`setParamSmoothingMs`、ワイド／スコープテレメトリ、`setMidiClips`、`sampleAtPpq` を、WASM と同じ camelCase 名で使えます。外部機器へのルーティングも `setMidiDestinationExternal`、`setExternalMidiClockEnabled`、`drainExternalMidi`、`externalMidiDroppedCount` から利用できます（[リアルタイムエンジン](./project-editing-midi.md#トラックを外部-midi-機器へ送る)を参照）。ブラウザ専用のつなぎ込み（`bindWebMidi`、`bindMicrophoneInput`）は WASM 固有で、ネイティブアドオンには含まれません。
 
 詳細は各ガイドを参照してください: [プロジェクト編集](./project-editing.md)、[プロジェクトのバウンス](./project-bounce.md)、[内蔵シンセサイザー](./native-synth.md)、[SoundFont プレイヤー](./soundfont-player.md)、[MIDI 入力](./midi-input.md)。
 
 ## エラーハンドリング
 
-WASM パッケージと同じく、ネイティブアドオンもネイティブ側の失敗をすべて構造化された `SonareError` としてスローします。`Error` のサブクラスで、C ABI のエラー enum を映した数値の `code` と正準名 `codeName` を持ちます。両パッケージとも `ErrorCode`・`SonareError`・型ガード `isSonareError(value)` をエクスポートし、同じ失敗はどのバインディングでも同じ数値コードを報告します。コード表と使用例は[エラーハンドリング](./js-api-types.md#エラーハンドリング)を参照してください。
+WASM パッケージと同じく、ネイティブアドオンもライブラリやオブジェクトの状態が報告する失敗を構造化された `SonareError` としてスローします。`Error` のサブクラスで、C ABI のエラー enum を映した数値の `code` と正準名 `codeName` を持ちます。両パッケージとも `ErrorCode`・`SonareError`・型ガード `isSonareError(value)` をエクスポートし、同じ失敗はどのバインディングでも同じ数値コードを報告します。呼び出しがライブラリに届く前にバインディングが拒否する引数は、どちらのパッケージでもネイティブの `TypeError`（型違い・欠落）または `RangeError`（定義域外。NUL を含む文字列も含む）で、`isSonareError` は一致しません。解放済みまたは破棄済みのハンドルは `InvalidState` を投げます。コード表と使用例は[エラーハンドリング](./js-api.md#エラーハンドリング)を参照してください。
 
 `SonareError` は両パッケージとも実行時のクラスです。値としてインポートすればコンストラクタが得られ、共有の TypeScript モジュールがどちらのパッケージからインポートしても同じ種類のものが手に入ります。`instanceof` はプロトタイプ判定ではなくブランド判定で、`SonareError` という名前を持ち数値の `code` を持つ `Error` であれば絞り込めます。
 
@@ -318,7 +319,7 @@ Node ネイティブの `Audio` オブジェクトは、ネイティブアドオ
 |------|-----------------|------|
 | 追加の `Audio` メソッド | より詳細な解析・ルーム音響系メソッドをインスタンスメソッドとして持つ | 使えるところはスタンドアロンの詳細ヘルパーを使う |
 | ファイル構築 | `Audio.fromFile(...)`、`Audio.fromMemory(...)` | `Audio.fromBuffer(...)`、`Audio.fromMemory(...)`、`Audio.fromMemoryWithBrowserFallback(...)` |
-| サンプル取得 | `audio.getData()` はコピーを返す | `audio.data` はインスタンスが持つ可変な `Float32Array` そのもの |
+| サンプル取得 | `audio.getData()` はコピーを返す | `audio.data` もコピーを返す |
 
 共通メソッドに加えて、用途を絞った次のヘルパーも `Audio` のメソッドとして持ちます。`analyzeBpm(...)`、`analyzeImpulseResponse(...)`、`detectAcoustic(...)`、`analyzeRhythm(...)`、`analyzeDynamics(...)`、`analyzeTimbre(...)`。ルーム系ヘルパーの `estimateRoom(...)`、`synthesizeRir(...)`、`roomMorph(...)` はスタンドアロン関数のままです。
 

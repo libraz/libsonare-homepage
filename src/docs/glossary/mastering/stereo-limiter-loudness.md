@@ -65,6 +65,8 @@ When the ceiling and the LUFS target conflict, the design favors peak safety. A 
 
 That state is identifiable from the report's applied gain and output LUFS values, and the chain result flags it directly as `loudnessTargetLimited`.
 
+A streaming chain cannot look ahead at a whole file, so it takes the loudness gain as a number. `streamingLoudnessGain` / `streamingLoudnessGainStereo` (Python: `streaming_loudness_gain` / `streaming_loudness_gain_stereo`) run the offline chain up to its loudness stage and return the gain it would apply, ceiling clamp included, together with the true peak that clamp used; the value is 0 dB for silence. Hand both to `StreamingMasteringChain` as `loudnessStaticGainDb` and `loudnessStaticGainPeakDb`.
+
 ::::
 
 Related: [True Peak](../true-peak.md), [True Peak Safety](../concepts/true-peak-safety.md), [Loudness Matching](../concepts/loudness-matching.md), [Mono Compatibility](../concepts/mono-compatibility.md)

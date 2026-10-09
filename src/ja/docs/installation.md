@@ -37,7 +37,7 @@
 
 ## npm（ブラウザ / WASM）
 
-Node.js 18.0.0 以上が必要です。
+Node.js 22.12.0 以上が必要です（パッケージの `engines` フィールド）。
 
 `@libraz/libsonare` は WebAssembly パッケージです。多くの API はサンプルベースなので、
 デコード済みのモノラル `Float32Array` サンプルを渡します。読み込み用途では
@@ -73,9 +73,16 @@ pnpm add @libraz/libsonare
 | `@libraz/libsonare/analysis` | 解析専用モジュール。マスタリング・ミキシング・リアルタイム・プロジェクトのバインディングを含まないため、MIR（音楽情報検索）だけが必要な場合はダウンロードがはるかに小さくなります |
 | `@libraz/libsonare/worklet` | `SonareRealtimeEngineNode`、`SonareEngine`、Worklet 側ライフサイクルエクスポートを含む AudioWorklet ブリッジヘルパー |
 | `@libraz/libsonare/worker` | ワンショットの解析・マスタリングを専用 Worker で実行する `OfflineWorkerClient` |
+| `@libraz/libsonare/vocal-edit-worker` | ボーカル編集 Worker クライアントの Worker 側 |
 | `@libraz/libsonare/wasm` | バンドラーや独自ローダー用の通常 WASM アセット |
+| `@libraz/libsonare/wasm/analysis` | 解析専用モジュールの WASM アセット |
+| `@libraz/libsonare/hrtf/default.shrf` | 既定の HRTF セット |
 | `@libraz/libsonare/schemas/realtime-voice-changer-preset.schema.json` | ボイスチェンジャープリセットの JSON Schema |
 | `@libraz/libsonare/schemas/realtime-voice-changer-preset-pack.schema.json` | プリセットパックの JSON Schema |
+| `@libraz/libsonare/schemas/mixer-scene.schema.json` | ミキサーシーンドキュメントの JSON Schema |
+| `@libraz/libsonare/schemas/playback-renderer-config.schema.json` | プレイバックレンダラー設定の JSON Schema |
+
+JavaScript のエントリはすべて `import` と `default` の両条件でエクスポートされ、`analysis`、`worklet`、`worker`、`vocal-edit-worker` には `typesVersions` のマップもあります。そのため、バンドラーや `moduleResolution: "node10"` の TypeScript プロジェクトでもサブパスを解決できます。パッケージはツリーシェイキングに対応しており、副作用として宣言しているのは 2 つの Worker エントリと `Symbol.dispose` のシムだけです。
 
 ::: tip 解析だけならアナリシスバンドルを選ぶ
 `@libraz/libsonare/analysis` は同じ DSP からマスタリング・ミキシング・リアルタイム・プロジェクトの各サーフェスを外してビルドしたものです。CI はサイズをレポートに記録しますが、増加だけでビルドを失敗させません。BPM・キー・コード検出やスペクトログラム表示だけを行い、マスタリングやミキシングをしないページなら、メインエントリの代わりにこちらをインポートすると WASM のダウンロード量を大きく減らせます。

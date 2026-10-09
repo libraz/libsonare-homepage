@@ -97,6 +97,10 @@ try {
 
 Python mirrors this with `project.to_json()`, `Project.from_json(json)`, and `Project.from_json_with_diagnostics(json)`.
 
+A document that cannot load fails with the C ABI's own code on every surface, and the message starts with a diagnostic name: a malformed document is `InvalidFormat` (`malformed_json: …`), and so is a `sample_rate` that is not a whole number of hertz in the supported range (`invalid_sample_rate: …`). WASM and Node throw `SonareError`; Python raises `SonareValueError` carrying the same `code`. The Python CLI exits `5` for a malformed project document, as the native CLI does.
+
+Warnings from a successful load come back as text in `diagnostics`. A key in the embedded mixer scene that the scene reader does not consume is reported as `unknown_scene_key` with its path from the document root, for example `scene.strips[0].faderDB`; keys starting with `$` or `x-` are exempt. The rest of the project document is not checked for unknown keys. See [Mixing Scene JSON](./mixing-scene-json.md) for the same check on a standalone scene.
+
 ### Reading the model back, and rebinding audio after a load
 
 Project JSON stores the *arrangement*, not the PCM. A loaded project therefore knows it has a source, but has no samples behind it. Three read-only descriptor families plus the PCM and source-metadata setters close that loop.
@@ -128,6 +132,8 @@ const audio = loaded.bounce({ sampleRate: 48000 });
 `trackByIndex` / `clipByIndex` / `sourceByIndex` are 0-based over the stored order, paired with `trackCount()` / `clipCount()` / `sourceCount()`. They are descriptors, not handles: mutating the returned object changes nothing. Use them to render a project the host loaded from disk, or to build a UI over a project your own code did not construct.
 
 `setSourceAudio(sourceId, samples, channels, sampleRate)` rebinds decoded PCM to a source before a bounce — the step that turns "loaded arrangement" into "renderable project".
+
+`unresolvedAudioSources()` (Python `unresolved_audio_sources()`) returns the full descriptors of those sources in the same order, so a loader can read each `nameOrUri` without a second lookup; `sourceByIndex` and the descriptors return the URI untruncated.
 
 `unresolvedAudioSourceIds()` is the public list of source ids that still need decoded PCM after deserialization. The `kind !== 0` guard above is defensive when walking descriptors (`0` is audio, `1` is MIDI): MIDI sources have no PCM to bind and no source metadata to update. `contentHash` and `externalStemRole` are owning metadata on audio-source descriptors (they are empty for MIDI sources). `setAudioSourceMetadata(sourceId, contentHash, externalStemRole)` replaces both strings as one undoable edit; pass an empty string to clear either value. WASM uses that positional form, Node also accepts `{ contentHash, externalStemRole }` as its second argument, and Python uses `set_audio_source_metadata(source_id, content_hash, external_stem_role)` (the C ABI is `sonare_project_set_audio_source_metadata`). Python uses `unresolved_audio_source_ids()` and source descriptors named `content_hash` / `external_stem_role`; the C getter returns heap strings that the matching free function must release.
 

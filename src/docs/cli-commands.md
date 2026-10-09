@@ -362,7 +362,7 @@ The metrics these commands report are decay and clarity descriptors: **RT60** is
 | `sonare estimate-room room.wav` | Equivalent room estimate: volume, dimensions, absorption, DRR, confidence | `--json`, `--aspect-lw`, `--aspect-lh`, `--reference-absorption`, `--sabine`, `--n-octave-bands` |
 | `sonare synthesize-rir --length 7 --width 5 --height 3 -o rir.wav` | Mono RIR from shoebox geometry | `--source-x`, `--source-y`, `--source-z`, `--listener-x`, `--listener-y`, `--listener-z`, `--absorption`, `--sample-rate`, `--ism-order`, `--seed`, `--max-seconds` |
 | `sonare room-morph dry.wav --length 12 --width 9 --height 4 -o wet.wav` | Creative room-character morph toward a target room | `--wet`, `--suppression`, geometry and placement options, `--max-seconds` |
-| `sonare boundaries music.mp3` | Structural transitions plus the novelty curve they were picked from | Native CLI only. `--threshold` (0.3), `--absolute-threshold` (0.005), `--kernel-size` (64), `--n-mfcc` (13), `--n-chroma` (12), `--peak-distance` (2.0), `--no-mfcc`, `--no-chroma`, `--n-fft` (2048), `--hop-length` (512) |
+| `sonare boundaries music.mp3` | Structural transitions plus the novelty curve they were picked from | Native CLI only. `--threshold` (0.3), `--absolute-threshold` (0.005), `--kernel-size` (64), `--n-mfcc` (13), `--n-chroma` (12), `--peak-distance` (2.0), `--reference-window` (60), `--no-mfcc`, `--no-chroma`, `--n-fft` (2048), `--hop-length` (512) |
 | `sonare melody music.mp3` | Melody contour summary: whether a melody was found, pitch range in octaves, mean frequency, pitch stability, vibrato rate, and the pitch-point count | Native CLI only. `--threshold` (0.1), `--hop-length` (512), `--fmin` (80.0), `--fmax` (1000.0) |
 | `sonare meter music.wav` | Basic level meters: peak, RMS, crest, true peak, clipping ratio, silence ratio, DC offset | Native CLI only. `--clip-threshold`, `--oversample` |
 | `sonare clipping music.wav` | Clipped sample and region detection | Native CLI only. `--threshold`, `--min-region` |
@@ -370,7 +370,7 @@ The metrics these commands report are decay and clarity descriptors: **RT60** is
 | `sonare stereo left.wav --reference right.wav` | Stereo correlation and width from left/right files | Native CLI only |
 | `sonare phase left.wav --reference right.wav` | Phase-scope summary from left/right files | Native CLI only |
 
-`boundaries` exposes the whole detector, and its two thresholds do different jobs: `--threshold` is relative to the novelty curve's own maximum and so cannot ask whether anything changed at all, while `--absolute-threshold` is the floor that can. [`detectBoundaries(request)`](./js-api-analysis.md#detectboundaries-request) explains the pair and what lowering the floor will and will not recover. `--no-mfcc` and `--no-chroma` each drop one feature stream; giving both is refused, because the two are combined frame for frame and neither leaves nothing to combine.
+`boundaries` exposes the whole detector, and its two thresholds do different jobs: `--threshold` is relative to the largest novelty event within `--reference-window` seconds (a one-sided span, default 60; `0` disables the relative threshold) and so cannot ask whether anything changed at all, while `--absolute-threshold` is the floor that can. [`detectBoundaries(request)`](./js-api-analysis.md#detectboundaries-request) explains the pair and what lowering the floor will and will not recover. `--no-mfcc` and `--no-chroma` each drop one feature stream; giving both is refused, because the two are combined frame for frame and neither leaves nothing to combine.
 
 ### More features
 
@@ -403,7 +403,7 @@ These transform audio and write a WAV with `-o`:
 | `sonare note-move take.wav --target-onset 48000 -o out.wav` | Move one note region to a sample offset | `--onset`, `--offset`, `--target-onset` (sample indices) |
 | `sonare note-stretch take.wav -o out.wav` | Time-stretch a single note region | `--onset`, `--offset` (sample indices), `--ratio` (1.0) |
 | `sonare scale-quantize 68.7` | Quantize one MIDI value to a scale | `--root`, `--mode-mask`, `--reference-midi` |
-| `sonare voice-change vocal.wav -o out.wav` | Voice change (pitch + formant) | `--pitch-semitones` (0.0), `--formant-factor` (1.0) |
+| `sonare voice-change vocal.wav -o out.wav` | Voice change (pitch + formant) | `--pitch-semitones` (0.0), `--formant-factor` (1.0), `--formant-mode relative\|absolute` (relative) |
 | `sonare pitch-shift vocal.wav --semitones 3 -o out.wav` | Transpose without changing length | `--semitones` (**required**) |
 | `sonare time-stretch take.wav --rate 1.2 -o out.wav` | Change length without changing pitch | `--rate` (**required**) |
 | `sonare normalize mix.wav -o out.wav` | Peak or RMS normalization | `--mode peak\|rms`, `--target-db` |
@@ -542,7 +542,7 @@ These commands inspect, validate, or render the realtime voice-changer preset ch
 | `sonare voice-preset` | Print one preset's config as JSON | `--preset` (`neutral-monitor`), `--json` |
 | `sonare voice-preset-validate preset.json` | Validate and normalize a preset JSON file or preset pack | `--preset` when validating a pack, `--set PATH=VALUE`, `--json` |
 
-Without realtime preset options, `voice-change` uses the simple pitch/formant helper controlled by `--pitch-semitones` and `--formant-factor`. With preset options, it uses the realtime voice chain; combining preset options with either simple control is rejected as an invalid-parameter error.
+Without realtime preset options, `voice-change` uses the simple pitch/formant helper controlled by `--pitch-semitones`, `--formant-factor` and `--formant-mode`. With `relative` (the default) the formant factor is a warp applied after the pitch shift, so the formants follow the pitch; with `absolute` it is the formant shift relative to the input whatever the pitch shift (`1.0` keeps the formants where they were), and a request the formant warp cannot reach is refused with the reachable range. With preset options, it uses the realtime voice chain; combining preset options with any of the three simple controls is rejected as an invalid-parameter error.
 
 Preset selection is explicit: choose a built-in `--preset ID`, a
 `--preset-json FILE`, or the pair `--preset-pack FILE --preset ID`. The pack file

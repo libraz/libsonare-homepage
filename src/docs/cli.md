@@ -150,6 +150,7 @@ Display version information.
 ```bash
 sonare version
 sonare version --json
+sonare --version
 ```
 
 **Output:**
@@ -383,9 +384,10 @@ with the C ABI error classes:
 | 10 | Other error |
 | 11 | Cancelled |
 | 12 | Encode failed |
+| 13 | ABI mismatch (Python CLI only) |
 
 Usage/parse errors use exit code 2; semantic invalid parameters use 3, and a
-cancelled run uses 11. Exit 12 covers every stage of producing an output file, so
+cancelled run uses 11. Exit 13 exists only in the Python CLI: the pip package loads its native library at run time, and a library whose ABI version differs from the one the package was built against is refused before any work starts. The native CLI links its library statically and cannot skew. Exit 12 covers every stage of producing an output file, so
 the commonest cause is a `-o` path that cannot be written — most often one that
 resolves to a directory. Set `SONARE_LEGACY_EXIT=1` for either CLI to fold every
 failure back to exit `1` for scripts that hardcode the old all-failures-are-1
@@ -396,7 +398,9 @@ Two details worth knowing before you branch on a specific code:
 - **Treat 5 and 6 as one category.** For an input that will not decode, which of
   the two you get depends on whether the build has FFmpeg, not on the file: a
   build without it reports 5 where an FFmpeg build reports 6. A malformed
-  project or preset document is always 5.
+  project or preset document is always 5 on both CLIs, and so is a project
+  whose `sample_rate` is not a whole number of hertz (`project bounce` does not
+  round it).
 - **A Python-side usage mistake can surface as 3, not 2.** Exit 2 is argparse's,
   so it covers what the parser rejects. A mistake the handler catches — `mix
   --output` with no `--input`, an `--init` the factorization does not know —

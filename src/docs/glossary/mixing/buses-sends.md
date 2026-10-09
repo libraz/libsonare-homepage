@@ -34,6 +34,8 @@ A send taps either **before** the fader or **after** it, and this is the routing
 | Pre-fader | No | Headphone/cue mixes, effects that should stay constant while you ride the fader |
 | Post-fader | Yes | Reverb/delay that should stay proportional to the balance |
 
+A pre-fader send ignores the fader but not mute and solo: when a lane is silenced by mute or by another lane's solo, its pre-fader sends go silent with it, and a solo-safe lane keeps sounding while another lane is soloed. A disabled send contributes exactly nothing.
+
 <SonareDemo id="pre-post-fader" />
 
 ## VCA groups vs submixes

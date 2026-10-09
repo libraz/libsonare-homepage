@@ -66,10 +66,17 @@ interface MelSpectrogramResult {
   nFrames: number;
   sampleRate: number;
   hopLength: number;
+  nFft: number;       // 元の STFT の FFT サイズ
+  fmin: number;       // 適用された帯域下端 (Hz)
+  fmax: number;       // 適用された帯域上端 (Hz)。fmax が 0 だったときはナイキスト
+  htk: boolean;       // true で HTK 方式、false で Slaney 方式
+  isDb: boolean;      // power が dB 値のとき true。順変換は false を報告する
   power: Float32Array;
   db: Float32Array;
 }
 ```
+
+結果は順変換のパラメータを持っているので、それだけで逆変換できます。`melToStft({ result: mel })` と `melToAudio({ result: mel })` は、行列とすべてのパラメータを結果から読み取ります（[逆特徴量](./inverse-features.md) を参照）。
 
 ### `mfcc(samples, sampleRate, nFft?, hopLength?, nMels?, nMfcc?)` <Badge type="info" text="中負荷" />
 
@@ -92,11 +99,20 @@ function mfcc(
 interface MfccResult {
   nMfcc: number;
   nFrames: number;
+  sampleRate: number;
+  hopLength: number;
+  nFft: number;
+  nMels: number;      // 係数の元になったメルバンド数
+  fmin: number;
+  fmax: number;       // 適用された値
+  htk: boolean;
+  isDb: boolean;      // 常に false。係数はケプストラムで dB スペクトログラムではない
+  lifter: number;     // 適用されたケプストラルリフター。0 は無し
   coefficients: Float32Array;
 }
 ```
 
-`fmin`／`fmax` で Mel 帯域の端を制限でき、`htk: true` で Slaney ではなく HTK の Mel 式を使います。`lifter` は librosa の `lifter` 引数に対応し、高次のケプストラム係数を弱めるケプストラム／正弦リフタリングを行います（`0` でリフタリングなし）。逆変換ヘルパー（`melToStft`、`melToAudio`、`mfccToAudio`）も対応する `fmin`／`fmax`／`htk` 引数を取るため、両側で同じ値を保てば往復しても結果が一致します。
+`fmin`／`fmax` で Mel 帯域の端を制限でき、`htk: true` で Slaney ではなく HTK の Mel 式を使います。`lifter` は librosa の `lifter` 引数に対応し、高次のケプストラム係数を弱めるケプストラム／正弦リフタリングを行います（`0` でリフタリングなし）。逆変換ヘルパー（`melToStft`、`melToAudio`、`mfccToMel`、`mfccToAudio`）も対応する `fmin`／`fmax`／`htk` 引数を取るか、順変換の結果を `{ result }` として受け取ります。結果はこれらの値を持っているので、同じ値を繰り返さなくても往復の結果が一致します。
 
 ### `chroma(samples, sampleRate, nFft?, hopLength?)` <Badge type="info" text="中負荷" />
 
@@ -238,17 +254,17 @@ interface WaveformPeaksReport {
 | 目的 | 使う API | 理由 |
 |------|----------|------|
 | 音楽的なピッチ軸の表現 | `cqt(...)`, `pseudoCqt(...)`, `hybridCqt(...)` | オクターブ方向に音高と対応しやすい Constant-Q 表現です。擬似／ハイブリッド版はビンごとの速度と精度のバランスを変えます。 |
-| 帯域幅を調整したピッチ表現 | `vqt(...)` | CQT に近く、低域の安定性を調整できます。 |
+| 帯域幅を調整したピッチ表現 | `vqt(...)` | CQT に近く、低域の安定性を調整できます。`gamma` を省略すると ERB 由来の自動帯域幅になり、`gamma: 0` は CQT と等価です。負または有限でない `gamma` は `RangeError` を投げます。 |
 | コード検出向けのクロマ | `chromaCqt(...)`, `nnlsChroma(...)`, `chromaCens(...)`, `bassChroma(...)` | Constant-Q、NNLS、CENS、低域寄りのクロマは、通常の STFT クロマよりコードや低音域の処理に向く場合があります。 |
 | スペクトル形状の詳細 | `spectralContrast(...)`, `polyFeatures(...)`, `zeroCrossings(...)`, `onsetStrengthMulti(...)` | librosa 互換のコントラスト帯域、多項式係数、ゼロ交差インデックス、マルチバンドオンセット強度を返します。 |
-| ピッチ／チューニングずれ | `pitchTuning(...)`, `estimateTuning(...)` | 検出済み周波数または音声から、ビン単位のチューニングずれを推定します。 |
+| ピッチ／チューニングずれ | `pitchTuning(...)`, `estimateTuning(...)` | 検出済み周波数または音声から、ビン単位のチューニングずれを推定します。12 ビン／オクターブのとき、解析オプションの `tuning` が受け取るセミトーン端数と一致します。`tuningToReferenceHz(...)` と `referenceHzToTuning(...)` で Hz 単位の基準ピッチと相互に変換できます。 |
 | 分解とリミックス | `decompose(...)`, `decomposeWithInit(...)`, `decomposeStems(...)`, `decomposeStemsLinked(...)`, `nnFilter(...)`, `remix(...)`, `remixAlignedIntervals(...)`, `phaseVocoder(...)`, `hpssWithResidual(...)` | NMF 分解、初期化方式を選べる NMF、モノラル／連動マルチチャンネルのステム出力、近傍フィルタ、区間リミックス、チャンネル間で一貫したカット位置、時間スケーリング、残差付き HPSS。 |
 | 特徴量や音声の近似復元 | `melToStft`, `melToAudio`, `mfccToMel`, `mfccToAudio`, `cqtToAudio`, `vqtToAudio` | 可視化、デバッグ、特徴量の往復確認に使います。CQT/VQT の入力は振幅行列です。 |
 | 配信向けラウドネス測定 | `lufs`, `lufsInterleaved`, `momentaryLufs`, `shortTermLufs`, `ebur128LoudnessRange` | ITU-R BS.1770 / EBU R128 系のラウドネス値。マルチチャンネル Integrated LUFS と LRA（ラウドネスレンジ。曲全体でラウドネスがどれだけ変動するか）も含みます。 |
 
 ```typescript
 const cqtResult = cqt(samples, sampleRate, 512, 32.7, 84, 12);
-const vqtResult = vqt(samples, sampleRate, 512, 32.7, 84, 12, -1);
+const vqtResult = vqt({ samples, sampleRate, hopLength: 512, fmin: 32.7, nBins: 84, binsPerOctave: 12 });
 const pseudo = pseudoCqt(samples, sampleRate);
 const hybrid = hybridCqt(samples, sampleRate);
 const cqtChroma = chromaCqt(samples, sampleRate);
@@ -271,9 +287,18 @@ const stretched = phaseVocoder(samples, sampleRate, 1.5);
 const hpssResidual = hpssWithResidual(samples, sampleRate);
 const multichannel = lufsInterleaved(interleavedStereo, 2, sampleRate);
 const lra = ebur128LoudnessRange(samples, sampleRate);
-const reconstructed = melToAudio(mel.power, mel.nMels, mel.nFrames, sampleRate);
+const reconstructed = melToAudio({ result: mel });
 const cqtPreview = cqtToAudio(cqtResult.magnitude, cqtResult.nBins, cqtResult.nFrames, sampleRate, 512, 32.7, 12);
-const vqtPreview = vqtToAudio(vqtResult.magnitude, vqtResult.nBins, vqtResult.nFrames, sampleRate, 512, 32.7, 12, 0, 32);
+const vqtPreview = vqtToAudio({
+  magnitude: vqtResult.magnitude,
+  nBins: vqtResult.nBins,
+  nFrames: vqtResult.nFrames,
+  sampleRate,
+  hopLength: 512,
+  fmin: 32.7,
+  binsPerOctave: 12,
+  nIter: 32,
+});
 ```
 
 `chromaCqt(samples, sampleRate?, hopLength?, nChroma?)` は `librosa.feature.chroma_cqt` に直接対応します（対数周波数／Constant-Q でのピッチ畳み込み）。一方 `nnlsChroma(samples, sampleRate?, options?)` は別物の音符活性化クロマで、NNLS（非負最小二乗法）で倍音の漏れを抑えます。コードや低音域の処理ではこちらの方がすっきりする場合が多いです。`options.hopLength` の既定値は `512` です。

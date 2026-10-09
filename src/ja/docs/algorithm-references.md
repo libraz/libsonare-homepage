@@ -119,7 +119,7 @@ libsonare は、公開されている General MIDI・General MIDI 2 の楽器／
 | `analyze_impulse_response` / `analyzeImpulseResponse` | 拍手、風船破裂音、スターターピストル音、スイープ由来 IR など、部屋の反応だけが分かりやすい短い励振音の録音 | 音が鳴った後の減衰曲線を直接測る | 測定値として扱いやすい |
 | `detect_acoustic` / `detectAcoustic` | 通常の音楽、会話、環境録音など | 録音の中から「部屋の残響だけが自然に減っている区間」を探して推定する | 目安として扱い、`confidence` を必ず見る |
 | `estimate_room` / `estimateRoom` | 録音またはインパルス応答 | 体積、寸法、直接音対残響音比（DRR）、吸音率バンド、RT60 バンド、信頼度を含む等価ルームを推定する | 正確な実寸ではなくモデルフィットとして扱う |
-| `synthesize_rir` / `synthesizeRir` | シューボックス寸法と音源／聴取位置 | モノラル RIR を合成する | 不正な形状は `hasError` / `has_error` を確認する |
+| `synthesize_rir` / `synthesizeRir` | シューボックス寸法と音源／聴取位置 | モノラル RIR を合成する | 不正な形状や配置はコード付きのエラーを投げるので、寸法がユーザー入力のときは呼び出しを try で囲む |
 | `room_morph` / `roomMorph` | 録音と目標ルーム形状 | 元の残響尾部を少し抑えて目標ルームの響きを足す | 残響除去ではなく音作り効果として扱う |
 
 ここでいう **decay curve**（減衰曲線） は、音が止まった後にエネルギーがどれくらいの速さで小さくなるかを表す曲線です。インパルス応答解析では、この曲線を直接作って RT60 や EDT を読みます。
