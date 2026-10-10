@@ -125,7 +125,7 @@ export interface EngineTarget {
   setPan(target: FaderTarget, pan: number): void;
   setTrackStripScalars(trackId: number, scalars: TrackStripScalars): void;
   setSoloMute(trackId: number, solo: boolean, mute: boolean): void;
-  setSends(trackId: number, sends: readonly LaneSend[]): void;
+  setTrackSends(trackId: number, sends: readonly LaneSend[]): void;
   setBusGain(busId: number, db: number): void;
   setEqBand(strip: StripRef, bandIndex: number, band: EqBand): void;
   setInsertBypassed(strip: StripRef, insertIndex: number, bypassed: boolean): void;
@@ -194,7 +194,7 @@ export function applyOps(target: EngineTarget, ops: readonly EngineOp[]): void {
         target.setSoloMute(op.trackId, op.solo, op.mute);
         break;
       case 'sends':
-        target.setSends(op.trackId, op.sends);
+        target.setTrackSends(op.trackId, op.sends);
         break;
       case 'busGain':
         target.setBusGain(op.busId, op.db);
@@ -324,7 +324,7 @@ export function createFacadeTarget(engine: SonareEngine): EngineTarget {
     setPan: (t, pan) => void engine.setStripPan(t, pan),
     setTrackStripScalars: (trackId, scalars) => applyScalars(engine, trackId, scalars),
     setSoloMute: (trackId, solo, mute) => void engine.setSoloMute(trackId, solo, mute),
-    setSends: (trackId, sends) => engine.setSends(trackId, toEngineSends(sends)),
+    setTrackSends: (trackId, sends) => engine.setTrackSends(trackId, toEngineSends(sends)),
     setBusGain: (busId, db) => void engine.setBusGain(busId, db),
     setEqBand(strip, bandIndex, band) {
       if (strip.kind === 'track') engine.setTrackStripEqBand(strip.trackId, bandIndex, band);
@@ -377,8 +377,7 @@ const MASTER_PAN_ID = 0x4d58ff02;
 
 /**
  * Adapter over a plain `RealtimeEngine` (the export Worker's). It keeps the
- * topology so solo/mute can take the lane index and sends can re-declare the
- * lanes; fader, pan and bus gain are smoothed sets of the reserved mixer ids
+ * topology so solo/mute can take the lane index; fader, pan and bus gain are smoothed sets of the reserved mixer ids
  * the engine resolves, and clips are replaced with one `setClips` of every
  * track's clips.
  */
@@ -408,21 +407,18 @@ export function createRawTarget(engine: RealtimeEngine): EngineTarget {
     if (id < 0) throw new RangeError(`bus ${busId} is not in the topology`);
     return id;
   };
-  const declareLanes = () =>
-    engine.setTrackLanes(
-      lanes.map((lane) => ({
-        trackId: lane.trackId,
-        sends: toEngineSends(lane.sends),
-        outputBusId: lane.outputBusId ?? 0,
-      })),
-    );
-
   const target: EngineTarget = {
     setTopology(nextBuses, nextLanes) {
       buses = nextBuses.map((bus) => ({ ...bus }));
       lanes = nextLanes.map((lane) => ({ ...lane }));
       engine.setTrackBuses(buses.map((bus) => ({ ...bus })));
-      declareLanes();
+      engine.setTrackLanes(
+        lanes.map((lane) => ({
+          trackId: lane.trackId,
+          sends: toEngineSends(lane.sends),
+          outputBusId: lane.outputBusId ?? 0,
+        })),
+      );
     },
     setTrackClips(trackId, trackClips) {
       clips.delete(trackId);
@@ -438,10 +434,7 @@ export function createRawTarget(engine: RealtimeEngine): EngineTarget {
     setPan: (t, pan) => engine.setParameterSmoothed(stripParamId(t, 'pan'), pan),
     setTrackStripScalars: (trackId, scalars) => applyScalars(engine, trackId, scalars),
     setSoloMute: (trackId, solo, mute) => engine.setSoloMute(laneIndex(trackId), solo, mute),
-    setSends(trackId, sends) {
-      lanes[laneIndex(trackId)] = { ...lanes[laneIndex(trackId)], sends: [...sends] };
-      declareLanes();
-    },
+    setTrackSends: (trackId, sends) => engine.setTrackSends(trackId, toEngineSends(sends)),
     setBusGain(busId, db) {
       buses[busIndex(busId)] = { ...buses[busIndex(busId)], gainDb: db };
       engine.setParameterSmoothed(busGainId(busId), db);
