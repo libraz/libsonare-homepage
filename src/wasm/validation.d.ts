@@ -37,6 +37,21 @@ export declare function assertSamples(fnName: string, samples: ArrayLike<number>
 export declare function assertSamplesInWindow(fnName: string, samples: ArrayLike<number>, validate: boolean, windowStart: number, windowLength: number, argName?: string): void;
 export declare function assertFiniteScalar(fnName: string, value: number, argName: string): void;
 export declare function assertSampleRate(fnName: string, sampleRate: number, argName?: string): void;
+/**
+ * The preflight every one-shot taking samples and a sample rate runs before it
+ * touches the native layer: a wrong-typed argument is a `TypeError` naming it,
+ * and empty or non-finite audio and an out-of-range rate are a `RangeError`.
+ *
+ * `options.validate === false` skips only the O(n) finiteness scan. A stereo or
+ * paired entry point calls this once per buffer, naming each through `argName`.
+ */
+export declare function assertAudioInput(fnName: string, samples: unknown, sampleRate: unknown, options?: object, argName?: string): void;
+/** {@link assertAudioInput} for an entry point that takes no sample rate. */
+export declare function assertAudioSamples(fnName: string, samples: unknown, options?: object, argName?: string): void;
+/** {@link assertAudioInput} over a list of equal-rate channel planes. */
+export declare function assertAudioChannels(fnName: string, channels: unknown, sampleRate: unknown, options?: object, argName?: string): void;
+/** A string argument the native layer reads through embind; anything else is a `TypeError`, never a raw `BindingError`. */
+export declare function assertString(fnName: string, value: unknown, argName: string): void;
 /** Validate and retain the public Audio.fromBuffer construction contract. */
 export declare function validateAudioBuffer(samples: Float32Array, sampleRate: number): void;
 /** Bounds of the native `int` every embind argument below is narrowed into. */
@@ -162,3 +177,11 @@ export declare function resolveOptionalNonNegative(fnName: string, value: number
  * (-1), and a negative frame is refused rather than read as the same thing.
  */
 export declare function resolveRenderFrame(fnName: string, renderFrame: number | null | undefined): number;
+/**
+ * The request-object form of a positional entry point: its first argument is
+ * either the audio buffer or a request, so anything else (null, a number, an
+ * array, another typed array) is a wrong-typed buffer and is reported as one,
+ * naming the field, instead of failing on a property read. An entry point that
+ * takes only a request (`requestOnly`) reports the request itself instead.
+ */
+export declare function requestObject<T>(fnName: string, value: T, argName?: string, requestOnly?: boolean): T;

@@ -1,4 +1,4 @@
-import type { SynthEnumTables, SynthPatch } from './instrument_types.js';
+import { type SynthEngineMode, type SynthEnumTables, type SynthParamInfo, type SynthPatch } from './instrument_types.js';
 /**
  * Runtime ABI version of the flat project POD layout exposed by this WASM
  * build. Equals {@link EXPECTED_PROJECT_ABI_VERSION} when the arrangement
@@ -69,5 +69,18 @@ export declare function controllerProfileNames(): string[];
  * throw.
  */
 export declare function synthPresetPatch(name: string): SynthPatch;
+/**
+ * Describe the engine-section fields {@link SynthPatch.engineParams} accepts
+ * for an engine mode: key, type, range, unit and the engine's base preset's
+ * value. `[]` for modes with no section (`'default'`, `'subtractive'`,
+ * `'sample'`). Throws for an unknown mode.
+ */
+export declare function synthEngineParamInfo(engineMode: SynthEngineMode | number): SynthParamInfo[];
+/**
+ * Describe every numeric {@link SynthPatch} wrapper field: range it is clamped
+ * to, unit and the init patch's default. Enum fields, the preset name and the
+ * mod matrix are not listed.
+ */
+export declare function synthPatchParamInfo(): SynthParamInfo[];
 export declare function synthEnumTables(): SynthEnumTables;
 export declare function synthPatchRoundTripForTest(patch: SynthPatch): SynthPatch;

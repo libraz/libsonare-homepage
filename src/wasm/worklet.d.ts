@@ -1,7 +1,7 @@
 import './lifetime.js';
 export type { OpfsClipStream, OpfsClipStreamOptions } from './clip_page_streamer.js';
 export { attachOpfsClipStream } from './clip_page_streamer.js';
-export { init, isInitialized } from './index.js';
+export { EXPECTED_ABI_VERSION, init, isInitialized } from './index.js';
 export type { StreamingMasteringChainConfig } from './public_types.js';
 export { StreamingMasteringChain } from './streaming_processors.js';
 export { SonareEngine } from './worklet/engine.js';

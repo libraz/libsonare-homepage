@@ -4,11 +4,6 @@
  */
 import type { PercussiveEvent, PercussiveEventInput } from './public_types.js';
 import type { ValidateOptions } from './validation.js';
-/**
- * The separation a percussive event's signal is lifted out with. Extraction
- * measures events against it and rendering has to repeat it, so both calls take
- * the same four fields and a render must be given what the extraction was.
- */
 export interface PercussiveSeparationOptions {
     /**
      * FFT size and hop the separation and the onset detector share. They cannot be

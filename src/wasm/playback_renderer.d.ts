@@ -128,6 +128,7 @@ export declare class PlaybackLoudnessMeter {
  * Offline one-shot playback render: builds a renderer internally, feeds the
  * whole interleaved signal through it, and removes the renderer's own latency
  * so the output aligns with the input frame for frame.
- * An empty or non-finite `samples` is refused with an `InvalidParameter` error.
+ * An empty or non-finite `samples`, or a `sampleRate` outside `[8000, 384000]`, is refused with a
+ * `RangeError`.
  */
 export declare function renderPlayback(request: RenderPlaybackRequest): RenderPlaybackResult;

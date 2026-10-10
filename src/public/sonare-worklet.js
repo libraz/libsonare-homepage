@@ -38,7 +38,7 @@ var EXPECTED_ABI_VERSION;
 var init_abi = __esm({
   "src/abi.ts"() {
     "use strict";
-    EXPECTED_ABI_VERSION = 67305991;
+    EXPECTED_ABI_VERSION = 84083207;
   }
 });
 
@@ -374,6 +374,9 @@ function assertFiniteScalar(fnName, value, argName) {
   }
 }
 function assertSampleRate(fnName, sampleRate, argName = "sampleRate") {
+  if (typeof sampleRate !== "number") {
+    throw new TypeError(`${fnName}: ${argName} must be a number`);
+  }
   if (!Number.isInteger(sampleRate)) {
     throw new RangeError(`${fnName}: ${argName} must be an integer`);
   }
@@ -446,19 +449,32 @@ function flattenChainConfig(config) {
       const path = prefix ? `${prefix}.${key}` : key;
       if (typeof value === "number" || typeof value === "boolean") {
         out[path] = value;
+      } else if (typeof value === "string") {
+        const resolved = getSonareModule().masteringEnumValue("", path, value);
+        if (resolved === null) {
+          throw new TypeError(notAValue(path));
+        }
+        out[path] = resolved;
       } else if (value !== null && typeof value === "object") {
+        if (Array.isArray(value) && value.length === 0) {
+          throw new TypeError(emptyList(path));
+        }
         walk(value, path);
       } else if (value !== void 0) {
-        throw new TypeError(`Mastering override '${path}' must be a number or boolean.`);
+        throw new TypeError(notAValue(path));
       }
     }
   };
   walk(config, "");
   return out;
 }
+var emptyList, notAValue;
 var init_chain_config = __esm({
   "src/_chain_config.ts"() {
     "use strict";
+    init_module_state();
+    emptyList = (path) => `Mastering override '${path}' is an empty list, which has no flat spelling.`;
+    notAValue = (path) => `Mastering override '${path}' must be a number or boolean.`;
   }
 });
 
@@ -1041,6 +1057,7 @@ async function attachOpfsClipStream(streamerOrEngine, engineOrOptions, maybeOpti
 
 // src/index.ts
 init_module_state();
+init_abi();
 
 // src/project_internal.ts
 init_errors();
@@ -1336,11 +1353,39 @@ var PlaybackRenderer = class {
   }
 };
 
+// src/_midi_program_pack.ts
+function programArg(fnName, value, argName, max) {
+  if (!Number.isInteger(value)) {
+    throw new TypeError(`${fnName}: ${argName} must be an integer`);
+  }
+  if (value < 0 || value > max) {
+    throw new RangeError(`${fnName}: ${argName} must be in [0, ${max}]`);
+  }
+  return value;
+}
+function packMidi2Program(fnName, group, channel, program, bankValid, bankMsb, bankLsb) {
+  const g = programArg(fnName, group, "group", 15);
+  const ch = programArg(fnName, channel, "channel", 15);
+  const p = programArg(fnName, program, "program", 127);
+  const msb = programArg(fnName, bankMsb, "bank_msb", 127);
+  const lsb = programArg(fnName, bankLsb, "bank_lsb", 127);
+  if (!bankValid && (msb !== 0 || lsb !== 0)) {
+    throw new RangeError(`${fnName}: bank MSB and LSB must be 0 when bank-valid is false`);
+  }
+  const word0 = (4 << 28 | g << 24 | 12 << 20 | ch << 16 | (bankValid ? 1 : 0)) >>> 0;
+  const word1 = (p << 24 | msb << 8 | lsb) >>> 0;
+  return [word0, word1];
+}
+
 // src/realtime_engine.ts
 init_codes();
 init_errors();
 init_module_state();
 init_validation();
+function resolveRenderFrame2(fnName, renderFrame) {
+  const frame = resolveRenderFrame(fnName, renderFrame);
+  return frame < 0 ? void 0 : frame;
+}
 var EXPECTED_ENGINE_ABI_VERSION = 3;
 var UMP_WORD_MIN = -2147483648;
 var UMP_WORD_MAX = 4294967295;
@@ -1428,16 +1473,21 @@ var RealtimeEngine = class _RealtimeEngine {
     );
     this.sampleRate = sampleRate;
   }
-  /** Queue a sample-accurate parameter change (engine kSetParam). */
+  /**
+   * Queue a sample-accurate parameter change (engine kSetParam).
+   * A reserved mixer id (`0x4d58xxxx`) other than a master id names no strip and
+   * throws `InvalidParameter`; resolve per-strip ids with the `resolve*AutomationId`
+   * methods.
+   */
   setParameter(paramId, value, renderFrame) {
-    this.native.setParameter(paramId, value, resolveRenderFrame("setParameter", renderFrame));
+    this.native.setParameter(paramId, value, resolveRenderFrame2("setParameter", renderFrame));
   }
   /** Queue a smoothed parameter change (engine kSetParamSmoothed). */
   setParameterSmoothed(paramId, value, renderFrame) {
     this.native.setParameterSmoothed(
       paramId,
       value,
-      resolveRenderFrame("setParameterSmoothed", renderFrame)
+      resolveRenderFrame2("setParameterSmoothed", renderFrame)
     );
   }
   /**
@@ -1452,14 +1502,14 @@ var RealtimeEngine = class _RealtimeEngine {
     this.native.setParamSmoothingMs(smoothingMs);
   }
   setSoloMute(laneIndex, solo, mute, renderFrame) {
-    this.native.setSoloMute(laneIndex, solo, mute, resolveRenderFrame("setSoloMute", renderFrame));
+    this.native.setSoloMute(laneIndex, solo, mute, resolveRenderFrame2("setSoloMute", renderFrame));
   }
   /** Queue a per-track PFL/AFL monitor tap mode change. */
   setTrackMonitorMode(laneIndex, mode, renderFrame) {
     this.native.setTrackMonitorMode(
       laneIndex,
       trackMonitorModeCode(mode),
-      resolveRenderFrame("setTrackMonitorMode", renderFrame)
+      resolveRenderFrame2("setTrackMonitorMode", renderFrame)
     );
   }
   setMidiClips(clips) {
@@ -1763,7 +1813,7 @@ var RealtimeEngine = class _RealtimeEngine {
       channel,
       note,
       velocity,
-      resolveRenderFrame("pushMidiNoteOn", renderFrame)
+      resolveRenderFrame2("pushMidiNoteOn", renderFrame)
     );
   }
   pushMidiNoteOff(destinationId, group, channel, note, velocity = 0, renderFrame) {
@@ -1773,7 +1823,7 @@ var RealtimeEngine = class _RealtimeEngine {
       channel,
       note,
       velocity,
-      resolveRenderFrame("pushMidiNoteOff", renderFrame)
+      resolveRenderFrame2("pushMidiNoteOff", renderFrame)
     );
   }
   /**
@@ -1789,7 +1839,7 @@ var RealtimeEngine = class _RealtimeEngine {
       channel,
       controller,
       value,
-      resolveRenderFrame("pushMidiCc", renderFrame)
+      resolveRenderFrame2("pushMidiCc", renderFrame)
     );
   }
   /**
@@ -1804,7 +1854,7 @@ var RealtimeEngine = class _RealtimeEngine {
       group,
       channel,
       bend14,
-      resolveRenderFrame("pushMidiPitchBend", renderFrame)
+      resolveRenderFrame2("pushMidiPitchBend", renderFrame)
     );
   }
   /**
@@ -1818,7 +1868,7 @@ var RealtimeEngine = class _RealtimeEngine {
       group,
       channel,
       pressure,
-      resolveRenderFrame("pushMidiChannelPressure", renderFrame)
+      resolveRenderFrame2("pushMidiChannelPressure", renderFrame)
     );
   }
   /**
@@ -1834,7 +1884,7 @@ var RealtimeEngine = class _RealtimeEngine {
       channel,
       note,
       pressure,
-      resolveRenderFrame("pushMidiPolyPressure", renderFrame)
+      resolveRenderFrame2("pushMidiPolyPressure", renderFrame)
     );
   }
   /**
@@ -1852,7 +1902,45 @@ var RealtimeEngine = class _RealtimeEngine {
     this.native.pushMidiUmp(
       destinationId,
       assertUmpWords("pushMidiUmp", list),
-      resolveRenderFrame("pushMidiUmp", renderFrame)
+      resolveRenderFrame2("pushMidiUmp", renderFrame)
+    );
+  }
+  /**
+   * Queue a live MIDI 2.0 Program Change, with an optional bank, to a MIDI
+   * destination. The bank is applied only when `bankValid` is true; a non-zero
+   * `bankMsb`/`bankLsb` with `bankValid` false is refused. `group`/`channel` are
+   * 0..15, `program`/`bankMsb`/`bankLsb` 0..127. The message takes the same
+   * receive path as {@link pushMidiUmp}, so a receiver that selects no programs
+   * (builtin synth, a part with RX PROGRAM CHANGE off, an MPE member channel)
+   * accepts and ignores it. Throws when the slot ring or command queue is full.
+   * `renderFrame` is the frame to fire at (omit for immediate).
+   */
+  pushMidiProgram(destinationId, group, channel, program, bankValid = false, bankMsb = 0, bankLsb = 0, renderFrame) {
+    this.native.pushMidiProgram(
+      destinationId,
+      group,
+      channel,
+      program,
+      bankValid,
+      bankMsb,
+      bankLsb,
+      resolveRenderFrame2("pushMidiProgram", renderFrame)
+    );
+  }
+  /**
+   * Push a live MIDI 2.0 Program Change to the engine-owned MIDI input source.
+   * The arguments and refusals match {@link pushMidiProgram}; `portTimeSamples`
+   * is the port timestamp in samples.
+   */
+  pushMidiInputProgram(group, channel, program, bankValid = false, bankMsb = 0, bankLsb = 0, portTimeSamples = 0) {
+    this.native.pushMidiInputProgram(
+      group,
+      channel,
+      program,
+      bankValid,
+      bankMsb,
+      bankLsb,
+      portTimeSamples
     );
   }
   /**
@@ -1876,7 +1964,7 @@ var RealtimeEngine = class _RealtimeEngine {
     this.native.pushMidiSysex(
       destinationId,
       data,
-      resolveRenderFrame("pushMidiSysex", renderFrame)
+      resolveRenderFrame2("pushMidiSysex", renderFrame)
     );
   }
   /**
@@ -1884,7 +1972,7 @@ var RealtimeEngine = class _RealtimeEngine {
    * `renderFrame` (omitted = immediate). Mirrors the C-ABI `pushMidiPanic`.
    */
   pushMidiPanic(renderFrame) {
-    this.native.pushMidiPanic(resolveRenderFrame("pushMidiPanic", renderFrame));
+    this.native.pushMidiPanic(resolveRenderFrame2("pushMidiPanic", renderFrame));
   }
   /**
    * Remove all registered parameters. Automation lanes stay in place, as they do
@@ -1901,31 +1989,30 @@ var RealtimeEngine = class _RealtimeEngine {
   /** Queues an integrated-loudness reset; short-term and momentary windows are retained. */
   resetMasterLoudnessMeter(renderFrame) {
     this.native.resetMasterLoudnessMeter(
-      resolveRenderFrame("resetMasterLoudnessMeter", renderFrame)
+      resolveRenderFrame2("resetMasterLoudnessMeter", renderFrame)
     );
   }
   /** Reads the immutable factory value for a resolved insert parameter id. */
   insertParameterConstructedValue(paramId) {
     return this.native.insertParameterConstructedValue(paramId);
   }
+  /** Starts transport playback, at `renderFrame` when given. */
   play(renderFrame) {
-    this.native.play(resolveRenderFrame("play", renderFrame));
+    this.native.play(resolveRenderFrame2("play", renderFrame));
   }
   /**
+   * Stops transport playback, at `renderFrame` when given.
+   *
    * A loop wrap, seek or stop sends note-offs plus CC64=0, CC121, CC123 and a
    * centred pitch bend on every channel played since the last reset, so
    * controller values set before a loop region are not restored at the wrap.
    */
   stop(renderFrame) {
-    this.native.stop(resolveRenderFrame("stop", renderFrame));
+    this.native.stop(resolveRenderFrame2("stop", renderFrame));
   }
-  /**
-   * A loop wrap, seek or stop sends note-offs plus CC64=0, CC121, CC123 and a
-   * centred pitch bend on every channel played since the last reset, so
-   * controller values set before a loop region are not restored at the wrap.
-   */
+  /** Moves the transport to `timelineSample`, a position in timeline samples. */
   seekSample(timelineSample, renderFrame) {
-    this.native.seekSample(timelineSample, resolveRenderFrame("seekSample", renderFrame));
+    this.native.seekSample(timelineSample, resolveRenderFrame2("seekSample", renderFrame));
   }
   /**
    * Snaps every in-flight parameter ramp (engine-level smoothed params, mixer
@@ -1970,7 +2057,7 @@ var RealtimeEngine = class _RealtimeEngine {
    * @throws If the command queue is full
    */
   resetProcessorState(renderFrame) {
-    this.native.resetProcessorState(resolveRenderFrame("resetProcessorState", renderFrame));
+    this.native.resetProcessorState(resolveRenderFrame2("resetProcessorState", renderFrame));
   }
   /**
    * Longest audible tail after the last input, in samples: an upper bound made
@@ -1998,13 +2085,9 @@ var RealtimeEngine = class _RealtimeEngine {
   applyCommandsDueNowPreservingFuture() {
     this.native.applyCommandsDueNowPreservingFuture();
   }
-  /**
-   * A loop wrap, seek or stop sends note-offs plus CC64=0, CC121, CC123 and a
-   * centred pitch bend on every channel played since the last reset, so
-   * controller values set before a loop region are not restored at the wrap.
-   */
+  /** Moves the transport to `ppq`, a position in quarter notes. */
   seekPpq(ppq, renderFrame) {
-    this.native.seekPpq(ppq, resolveRenderFrame("seekPpq", renderFrame));
+    this.native.seekPpq(ppq, resolveRenderFrame2("seekPpq", renderFrame));
   }
   /** Set a finite tempo in the range (0, 100000] BPM. */
   setTempo(bpm) {
@@ -2022,11 +2105,7 @@ var RealtimeEngine = class _RealtimeEngine {
   sampleAtPpq(ppq) {
     return Number(this.native.sampleAtPpq(ppq));
   }
-  /**
-   * A loop wrap, seek or stop sends note-offs plus CC64=0, CC121, CC123 and a
-   * centred pitch bend on every channel played since the last reset, so
-   * controller values set before a loop region are not restored at the wrap.
-   */
+  /** Sets the loop region between two quarter-note positions and enables or disables it. */
   setLoop(startPpq, endPpq, enabled = true) {
     this.native.setLoop(startPpq, endPpq, enabled);
   }
@@ -2042,6 +2121,12 @@ var RealtimeEngine = class _RealtimeEngine {
   parameterInfo(id) {
     return this.native.parameterInfo(id);
   }
+  /**
+   * Replaces the automation lane driving `paramId`.
+   * A reserved mixer id (`0x4d58xxxx`) other than a master id names no strip and
+   * throws `InvalidParameter`; resolve per-strip ids with the `resolve*AutomationId`
+   * methods.
+   */
   setAutomationLane(paramId, points) {
     this.native.setAutomationLane(paramId, points);
   }
@@ -2061,7 +2146,7 @@ var RealtimeEngine = class _RealtimeEngine {
     return this.native.marker(id);
   }
   seekMarker(markerId, renderFrame) {
-    this.native.seekMarker(markerId, resolveRenderFrame("seekMarker", renderFrame));
+    this.native.seekMarker(markerId, resolveRenderFrame2("seekMarker", renderFrame));
   }
   setLoopFromMarkers(startMarkerId, endMarkerId) {
     this.native.setLoopFromMarkers(startMarkerId, endMarkerId);
@@ -2140,6 +2225,25 @@ var RealtimeEngine = class _RealtimeEngine {
         };
       })
     );
+  }
+  /**
+   * Replaces the sends of one lane, leaving its output bus, layout and every
+   * other lane unchanged; an empty array clears them. An unchanged send list
+   * keeps its in-flight level ramps. Throws for an unknown track id, an
+   * undeclared bus, a duplicate send bus or a level outside the send range.
+   * Unlike the worklet engine's `setTrackSends`, the lane must already be
+   * declared through {@link setTrackLanes}.
+   */
+  setTrackSends(trackId, sends) {
+    this.native.setTrackSends(trackId, _RealtimeEngine.normalizeSends(sends));
+  }
+  /**
+   * Sets the output bus of one lane (`0` = master mix), leaving its sends,
+   * layout and every other lane unchanged. Throws for an unknown track id or an
+   * undeclared bus; the lane must already be declared through {@link setTrackLanes}.
+   */
+  setTrackOutputBus(trackId, busId) {
+    this.native.setTrackOutputBus(trackId, busId);
   }
   /**
    * Keys one insert of a lane strip from another lane's post-strip audio
@@ -2420,7 +2524,8 @@ var RealtimeEngine = class _RealtimeEngine {
    * `filterAttackMs`, `filterDecayMs`, `filterSustain`, `filterReleaseMs`,
    * `lfoRateHz`, `lfoToPitchCents`, `lfo2RateHz`, `glideMs`, `bodyMix`,
    * `stereoSpread`, `detuneCents`, `driftCents`, `pitchOffsetCents`,
-   * `hpCutoffHz`, `sampleHoldHz`, `bitDepth`.
+   * `hpCutoffHz`, `sampleHoldHz`, `bitDepth`, `driftRateHz`, `ampDelayMs`,
+   * `ampHoldMs`, `filterDelayMs`, `filterHoldMs`.
    *
    * Structural fields (`preset`, `engineMode`, `waveform`, `filterModel`,
    * `unison`, `polyphony`, `body`, `modRoutings`) are not automatable and
@@ -3181,6 +3286,9 @@ var Mixer = class _Mixer {
    * @param blockSize - Maximum block size per {@link processStereo} call (default: 512)
    */
   static fromSceneJson(json, sampleRate = 48e3, blockSize = 512) {
+    if (typeof json !== "string") {
+      throw new TypeError("Mixer.fromSceneJson: json must be a string");
+    }
     assertSampleRate("Mixer.fromSceneJson", sampleRate);
     const module2 = getSonareModule();
     return new _Mixer(module2.createMixerFromSceneJson(json, sampleRate, blockSize), blockSize);
@@ -3405,6 +3513,21 @@ var Mixer = class _Mixer {
   /** Remove a bus by id. Marks the routing graph dirty. */
   removeBus(id) {
     this.mixer.removeBus(id);
+  }
+  /**
+   * Re-route the strip or non-master bus `sourceId` into the bus `busId` (a
+   * declared bus id or the master's resolved id; `"master"` is not an alias for
+   * a master bus with another id). Every existing connection out of `sourceId`
+   * is replaced, including a scene-authored strip-to-strip edge. Takes ids, not
+   * the strip index the other strip methods take, because the source may be a
+   * bus. Lazy like {@link addBus}: call {@link compile} (or
+   * {@link processStereo}) to rebuild. An unknown id, a destination that is not
+   * a bus, the master as source, a self-route or an edit that would close a
+   * cycle throws a coded `SonareError` (`InvalidParameter`) naming the ids and
+   * leaves the topology unchanged.
+   */
+  setOutputBus(sourceId, busId) {
+    this.mixer.setOutputBus(sourceId, busId);
   }
   /** Number of buses in the mixer topology. */
   busCount() {
@@ -3772,6 +3895,18 @@ var Mixer = class _Mixer {
 
 // src/realtime_voice_changer.ts
 init_module_state();
+function requirePodFormantMode(config) {
+  if (config === null || typeof config !== "object" || !("retuneSemitones" in config)) {
+    return;
+  }
+  const pod = config;
+  if (!("formantMode" in pod)) {
+    throw new TypeError("voice changer POD config.formantMode is required");
+  }
+  if (typeof pod.formantMode !== "string") {
+    throw new TypeError("voice changer POD config.formantMode must be a string");
+  }
+}
 var RealtimeVoiceChanger = class {
   /**
    * Creates a voice changer. Supplying `sampleRate` prepares it immediately,
@@ -3780,6 +3915,7 @@ var RealtimeVoiceChanger = class {
    */
   constructor(config = "neutral-monitor", sampleRate, maxBlockSize = 128, channels = 1) {
     this.released = false;
+    requirePodFormantMode(config);
     const module2 = getSonareModule();
     this.changer = module2.createRealtimeVoiceChanger(config);
     if (sampleRate !== void 0) {
@@ -3801,6 +3937,7 @@ var RealtimeVoiceChanger = class {
     this.changer.reset();
   }
   setConfig(config) {
+    requirePodFormantMode(config);
     this.changer.setConfig(config);
   }
   /**
@@ -6404,7 +6541,7 @@ function ensureSidechainSource(ctx, sourceKind, sourceId) {
     ctx.ensureTrackLane(sourceId);
   }
 }
-function setSends(ctx, target, sends) {
+function setTrackSends(ctx, target, sends) {
   const draft = cloneMixerRouting(ctx);
   const laneIndex = ensureTrackLaneInDraft(draft, target);
   const trackId = draft.trackLaneIds[laneIndex];
@@ -7640,6 +7777,18 @@ function pushMidiUmp(ctx, trackId, word0, renderFrame) {
     renderFrame: resolveRenderFrame("pushMidiUmp", renderFrame)
   });
 }
+function pushMidiProgram(ctx, trackId, group, channel, program, bankValid, bankMsb, bankLsb, renderFrame) {
+  const words = packMidi2Program(
+    "pushMidiProgram",
+    group,
+    channel,
+    program,
+    bankValid,
+    bankMsb,
+    bankLsb
+  );
+  pushMidiUmp(ctx, trackId, Uint32Array.from(words), renderFrame);
+}
 function setBuiltinInstrument(ctx, trackId, config) {
   const destinationId = ctx.resolveTargetId(trackId);
   commitSync(
@@ -8194,8 +8343,8 @@ var SonareEngine = class _SonareEngine {
   setLaneSidechain(target, insertIndex, sourceTarget) {
     setLaneSidechain(this.mixerContext, target, insertIndex, sourceTarget);
   }
-  setSends(target, sends) {
-    setSends(this.mixerContext, target, sends);
+  setTrackSends(target, sends) {
+    setTrackSends(this.mixerContext, target, sends);
   }
   setTrackBuses(buses) {
     setTrackBuses(this.mixerContext, buses);
@@ -8618,6 +8767,19 @@ var SonareEngine = class _SonareEngine {
   }
   pushMidiUmp(trackId, words, renderFrame) {
     pushMidiUmp(this.stripContext, trackId, words, renderFrame);
+  }
+  pushMidiProgram(trackId, group, channel, program, bankValid = false, bankMsb = 0, bankLsb = 0, renderFrame) {
+    pushMidiProgram(
+      this.stripContext,
+      trackId,
+      group,
+      channel,
+      program,
+      bankValid,
+      bankMsb,
+      bankLsb,
+      renderFrame
+    );
   }
   pushMidiSysex(trackId, data, renderFrame) {
     pushMidiSysex(this.stripContext, trackId, data, renderFrame);
@@ -11764,6 +11926,7 @@ function registerSonareRealtimeVoiceChangerWorkletProcessor(name = "sonare-realt
   scope.registerProcessor(name, RegisteredSonareRealtimeVoiceChangerWorkletProcessor);
 }
 export {
+  EXPECTED_ABI_VERSION,
   SONARE_CLIP_PAGE_REQUEST_RING_HEADER_INTS,
   SONARE_CLIP_PAGE_REQUEST_RING_RECORD_UINT32S,
   SONARE_ENGINE_COMMAND_RECORD_BYTES,

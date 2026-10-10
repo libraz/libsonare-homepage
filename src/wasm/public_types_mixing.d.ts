@@ -143,6 +143,11 @@ export interface MixAssistantTrack {
     left: Float32Array;
     /** Right plane; omit for a mono track. */
     right?: Float32Array;
+    /**
+     * Rate of this track, in Hz. Omitted: the request's `sampleRate`. A track at
+     * another rate is resampled onto the request's rate before analysis.
+     */
+    sampleRate?: number;
 }
 /**
  * Tunables for {@link suggestMixScene}. Every field is optional and falls back

@@ -1,4 +1,4 @@
-import type { AcousticOptions, AcousticResult, AnalysisResult, AnalyzeBpmOptions, AnalyzeDynamicsOptions, AnalyzeRhythmOptions, AnalyzeTimbreOptions, Chord, ChordAnalysisResult, ChordDetectionOptions, ChordFunctionsInput, ChordFunctionsKey, DetectKeyOptions, FunctionalChord, KeyCandidate, KeyDetection, KeyDetectionOptions, MeterEstimate, RirResult, RirSynthOptions, RoomEstimateOptions, RoomEstimateResult, RoomGeometryFromEstimateOptions, RoomGeometryOptions, RoomMorphOptions, RoomMorphResult } from './public_types.js';
+import type { AcousticOptions, AcousticResult, AnalysisResult, AnalyzeBpmOptions, AnalyzeDynamicsOptions, AnalyzeRhythmOptions, AnalyzeTimbreOptions, Chord, ChordAnalysisResult, ChordDetectionOptions, ChordFunctionsInput, ChordFunctionsKey, DetectKeyOptions, FunctionalChord, KeyCandidate, KeyDetection, KeyDetectionOptions, KeyMode, MeterEstimate, PitchClassName, RirResult, RirSynthOptions, RoomEstimateOptions, RoomEstimateResult, RoomGeometryFromEstimateOptions, RoomGeometryOptions, RoomMorphOptions, RoomMorphResult, RoomMorphStereoResult } from './public_types.js';
 import { Mode, PitchClass } from './public_types.js';
 import type { ProgressCallback } from './sonare.js';
 import type { ValidateOptions } from './validation.js';
@@ -41,9 +41,10 @@ export interface DetectChordsRequest extends ChordDetectionOptions, SamplesReque
 }
 /** Canonical request form for functional chord analysis. */
 export interface ChordFunctionalAnalysisRequest extends DetectChordsRequest {
-    keyRoot: PitchClass;
-    /** Musical mode; defaults to {@link Mode.Major}. */
-    keyMode?: Mode;
+    /** Pitch class ordinal or name (`'C'`, `'C#'`, ...), e.g. {@link detectKey}'s `root`. */
+    keyRoot: PitchClass | PitchClassName;
+    /** Mode ordinal or name (`'major'`, `'minor'`, ...); defaults to {@link Mode.Major}. */
+    keyMode?: Mode | KeyMode;
 }
 /** Canonical request form for labelling known chords with their function in a key. */
 export interface ChordFunctionsRequest<T extends ChordFunctionsInput = Chord> {
@@ -76,6 +77,14 @@ export interface RoomGeometryFromEstimateRequest extends RoomGeometryFromEstimat
 export interface RoomMorphRequest extends RoomMorphOptions, GuardedOptions {
     samples: Float32Array;
     sampleRate: number;
+}
+/** Canonical request form for stereo room-reverb morphing. */
+export interface RoomMorphStereoRequest extends RoomMorphOptions, GuardedOptions {
+    left: Float32Array;
+    right: Float32Array;
+    sampleRate?: number;
+    /** Receiver spacing in metres, in (0, 4]; omitted = 0.5. */
+    receiverSpacingM?: number;
 }
 /** Canonical request forms for detailed music-analysis APIs. */
 export interface AnalyzeBpmRequest extends AnalyzeBpmOptions, SamplesRequest {
@@ -172,7 +181,7 @@ export declare function chordFunctions<T extends ChordFunctionsInput>(request: C
  *   `function` added
  */
 export declare function chordFunctionalAnalysis(request: ChordFunctionalAnalysisRequest): FunctionalChord[];
-export declare function chordFunctionalAnalysis(samples: Float32Array, keyRoot: PitchClass, keyMode?: Mode, sampleRate?: number, options?: ChordDetectionOptions): FunctionalChord[];
+export declare function chordFunctionalAnalysis(samples: Float32Array, keyRoot: PitchClass | PitchClassName, keyMode?: Mode | KeyMode, sampleRate?: number, options?: ChordDetectionOptions): FunctionalChord[];
 /**
  * Options for {@link analyze}. Every field is optional and falls back to the
  * core default when omitted.
@@ -388,6 +397,19 @@ export declare function roomGeometryFromEstimate(estimate: RoomGeometryEstimate,
  */
 export declare function roomMorph(request: RoomMorphRequest): RoomMorphResult;
 export declare function roomMorph(samples: Float32Array, sampleRate: number, options?: RoomMorphOptions): RoomMorphResult;
+/**
+ * Morph a stereo recording's reverberation toward a target room, as heard by two
+ * omnidirectional receivers `receiverSpacingM` apart (receiver spacing in
+ * metres, in (0, 4]; omitted = 0.5).
+ *
+ * Returns both channels (input length plus the reverb tail) and the target-room
+ * synthesis `diagnostics`, with the same codes as {@link RoomMorphResult}.
+ * `sampleRate` defaults to 48000.
+ *
+ * @throws RangeError if the channel lengths differ or `receiverSpacingM` is
+ *   non-finite or outside (0, 4].
+ */
+export declare function roomMorphStereo(request: RoomMorphStereoRequest): RoomMorphStereoResult;
 /**
  * Perform complete music analysis with progress reporting.
  *

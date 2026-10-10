@@ -53,15 +53,17 @@ export interface SonareCapabilities {
     hardwareConcurrency: number;
 }
 /** Closed vocabulary of units a numeric insert parameter declares; `none` is a declaration (a fraction, a selector index, a seed). */
-export type MasteringInsertParamUnit = 'dB' | 'dBFS' | 'LUFS' | 'Hz' | 'ms' | 's' | 'samples' | 'm' | 'cm' | 'deg' | 'percent' | 'degC' | 'V' | 'inPerSec' | 'dBPerOct' | 'semitones' | 'cents' | 'ratio' | 'bits' | 'count' | 'none';
+export type MasteringInsertParamUnit = 'dB' | 'dBFS' | 'LUFS' | 'Hz' | 'ms' | 's' | 'samples' | 'm' | 'cm' | 'mm' | 'deg' | 'percent' | 'degC' | 'V' | 'inPerSec' | 'dBPerOct' | 'semitones' | 'cents' | 'ratio' | 'bits' | 'count' | 'none';
 /** Axis a control draws an insert parameter on. */
 export type MasteringInsertParamScale = 'linear' | 'log';
-/** How a parameter's value is ordered against a sibling's, read as `this <relation> sibling`. */
+/** How a parameter's value is ordered against a sibling's, read as `this <relation> factor * sibling`. */
 export type MasteringInsertParamRelation = 'lt' | 'le' | 'gt' | 'ge';
 /** A sibling whose live value bounds an insert parameter. */
 export interface MasteringInsertParamDependency {
     key: string;
     relation: MasteringInsertParamRelation;
+    /** Positive multiplier on the sibling's value; 1 for a plain ordering. */
+    factor: number;
 }
 /** One named value an enum- or closed-integer-typed insert param accepts. */
 export interface MasteringInsertParamChoice {
@@ -123,7 +125,8 @@ export interface MasteringInsertSlot {
  * (every declared enumerator, or a `"number"` key whose accepted integers
  * have holes), and then both bounds are null. Three properties to plan for: a
  * bound is measured with every other parameter at its default, so two
- * parameters that constrain each other each report the other's default; a
+ * parameters that constrain each other each report the other's default (unless
+ * it is a `dependsOn` entry, which leaves the bound null); a
  * sample-rate-derived bound reflects the un-prepared processor and rises once
  * the insert is prepared at a higher rate; and an exclusive bound is reported
  * as its limit value and flagged by `minExclusive` / `maxExclusive`, so a
@@ -159,8 +162,8 @@ export interface CapabilityCatalogParameter {
      */
     slot: string | null;
     /**
-     * Siblings whose live value bounds this key, each read as `this <relation> sibling`;
-     * empty for an independent key. `min` and `max` are measured with every sibling at its default.
+     * Siblings whose live value bounds this key, each read as `this <relation> factor * sibling`;
+     * empty for an independent key. A bound that only restates this dependency at the sibling's default is left null, so `min` and `max` are limits of the key's own.
      */
     dependsOn: MasteringInsertParamDependency[];
 }
@@ -205,11 +208,42 @@ export interface CapabilityCatalogMasteringPreset {
     truePeakCeilingDb: number | null;
     maxLimiterGainReductionDb: number | null;
 }
+/** One flat mastering chain stage: `<prefix>.<leaf>` keys are `processor`'s parameters. */
+export interface CapabilityCatalogChainStage {
+    prefix: string;
+    /** Catalog processor id, or null when every key of the stage is chain-only. */
+    processor: string | null;
+    enabledKey: string;
+}
+/**
+ * An indexed chain list. `<key>.<i>` is the chain parameter `key` when
+ * `processor` is null; otherwise `<key>.<i>.<field>` is that processor's `field`.
+ */
+export interface CapabilityCatalogChainList {
+    key: string;
+    processor: string | null;
+    minItems: number;
+    maxItems: number;
+}
+/** The other spellings of a canonical chain key; `<i>` stands for a list index. */
+export interface CapabilityCatalogChainAlias {
+    key: string;
+    aliases: string[];
+}
+/** How each flat mastering chain key is described. */
+export interface CapabilityCatalogChain {
+    stages: CapabilityCatalogChainStage[];
+    lists: CapabilityCatalogChainList[];
+    /** Keys no processor describes, with bounds measured through the chain's own validator. */
+    params: CapabilityCatalogParameter[];
+    aliases: CapabilityCatalogChainAlias[];
+}
 /** Complete runtime catalog exposed by {@link capabilityCatalog}. */
 export interface CapabilityCatalog {
     version: string;
     abi: SonareCapabilities['abi'];
     processors: CapabilityCatalogProcessor[];
+    chain: CapabilityCatalogChain;
     presets: CapabilityCatalogPresets;
     masteringPresets: CapabilityCatalogMasteringPreset[];
 }

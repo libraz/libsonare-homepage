@@ -212,7 +212,7 @@ export declare class SonareEngine {
      * refused binding is never recorded, so it is not replayed on resync.
      */
     setLaneSidechain(target: string | number, insertIndex: number, sourceTarget: string | number | null): void;
-    setSends(target: string | number, sends: EngineTrackSend[]): void;
+    setTrackSends(target: string | number, sends: EngineTrackSend[]): void;
     setTrackBuses(buses: EngineBus[]): void;
     /**
      * Keys one insert of a bus strip from a track lane or another bus
@@ -375,6 +375,7 @@ export declare class SonareEngine {
     pushMidiChannelPressure(trackId: string | number, group: number, channel: number, pressure: number, renderFrame?: number): void;
     pushMidiPolyPressure(trackId: string | number, group: number, channel: number, note: number, pressure: number, renderFrame?: number): void;
     pushMidiUmp(trackId: string | number, words: number | UmpWords, renderFrame?: number): void;
+    pushMidiProgram(trackId: string | number, group: number, channel: number, program: number, bankValid?: boolean, bankMsb?: number, bankLsb?: number, renderFrame?: number): void;
     pushMidiSysex(trackId: string | number, data: Uint8Array, renderFrame?: number): void;
     bindMidiCc(channel: number, controller: number, paramId: number, options?: MidiCcBindOptions): void;
     setMidiInputSource(destinationId?: number): void;

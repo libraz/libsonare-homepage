@@ -351,6 +351,13 @@ export interface WasmRoomMorphResult {
   diagnostics: WasmRirDiagnostic[];
 }
 
+export interface WasmRoomMorphStereoResult {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate: number;
+  diagnostics: WasmRirDiagnostic[];
+}
+
 export interface WasmRirResult {
   rir: Float32Array;
   sampleRate: number;
@@ -576,6 +583,11 @@ export interface WasmTrimSilenceStereoResult {
 export interface WasmRoomMorphOptions extends WasmRoomGeometryOptions {
   wet?: number;
   sourceTailSuppression?: number;
+}
+
+export interface WasmRoomMorphStereoOptions extends WasmRoomMorphOptions {
+  /** Receiver spacing in metres, in (0, 4]; omitted = 0.5. */
+  receiverSpacingM?: number;
 }
 
 export interface WasmHpssResult {
@@ -1453,6 +1465,8 @@ export interface WasmRealtimeEngine {
   prebakedClipChannels: (clipId: number) => Float32Array[] | null;
   clipCount: () => number;
   setTrackLanes: (lanes: Array<number | WasmEngineTrackLane>) => void;
+  setTrackSends: (trackId: number, sends: WasmEngineTrackSend[]) => void;
+  setTrackOutputBus: (trackId: number, busId: number) => void;
   setLaneSidechain: (trackId: number, insertIndex: number, sourceTrackId: number) => void;
   canSetLaneSidechain: (trackId: number, insertIndex: number, sourceTrackId: number) => number;
   canSetBusSidechain: (
@@ -1735,6 +1749,25 @@ export interface WasmRealtimeEngine {
     renderFrame?: number,
   ) => void;
   pushMidiInputUmp: (words: Uint32Array | readonly number[], portTimeSamples: number) => void;
+  pushMidiProgram: (
+    destinationId: number,
+    group: number,
+    channel: number,
+    program: number,
+    bankValid: boolean,
+    bankMsb: number,
+    bankLsb: number,
+    renderFrame?: number,
+  ) => void;
+  pushMidiInputProgram: (
+    group: number,
+    channel: number,
+    program: number,
+    bankValid: boolean,
+    bankMsb: number,
+    bankLsb: number,
+    portTimeSamples: number,
+  ) => void;
   pushMidiSysex: (destinationId: number, data: Uint8Array, renderFrame?: number) => void;
   pushMidiPanic: (renderFrame?: number) => void;
   setMidiDestinationExternal: (destinationId: number, external: boolean) => void;
@@ -1947,6 +1980,8 @@ export interface SonareModule {
   projectAbiVersion: () => number;
   synthPresetNames: () => string[];
   synthPresetPatch: (name: string) => unknown;
+  synthEngineParamInfo: (engineMode: number) => string;
+  synthPatchParamInfo: () => string;
   synthGsDrumKitName: (program: number) => string | null;
   synthGsDrumKitIsVoicedApart: (program: number) => number;
   synthGsVariationIsVoicedApart: (bank: number, program: number) => number;
@@ -1997,8 +2032,11 @@ export interface SonareModule {
     reference: Float32Array,
     take: Float32Array,
     sampleRate: number,
+    takeSampleRate: number,
     config: unknown,
   ) => unknown;
+  chordSymbolFromAnalysis: (root: number, quality: number, bass: number) => unknown;
+  keyModeFromAnalysis: (mode: number) => number;
   _analysisResultSchemaPaths: () => string[];
   _analysisResultSchemaFixture: () => WasmAnalysisResult;
   analyzeImpulseResponse: (
@@ -2033,6 +2071,12 @@ export interface SonareModule {
     sampleRate: number,
     options: WasmRoomMorphOptions,
   ) => WasmRoomMorphResult;
+  roomMorphStereo?: (
+    left: Float32Array,
+    right: Float32Array,
+    sampleRate: number,
+    options: WasmRoomMorphStereoOptions,
+  ) => WasmRoomMorphStereoResult;
   roomGeometryFromEstimate?: (estimate: {
     lengthM: number;
     widthM: number;
@@ -2612,6 +2656,7 @@ export interface SonareModule {
   masteringInsertParamInfoAtRate: (name: string, sampleRate: number) => string;
   masteringProcessorCatalog: () => string;
   masteringAmpPresetCatalog: () => string;
+  masteringEnumValue: (processor: string, key: string, choice: string) => number | null;
   masteringInsertTiming: (
     name: string,
     paramsJson: string,
@@ -2635,6 +2680,7 @@ export interface SonareModule {
     source: Float32Array,
     reference: Float32Array,
     sampleRate: number,
+    referenceSampleRate: number,
     params: Record<string, number | boolean>,
   ) => WasmMasteringResult;
   masteringPairAnalyze: (
@@ -2642,6 +2688,7 @@ export interface SonareModule {
     source: Float32Array,
     reference: Float32Array,
     sampleRate: number,
+    referenceSampleRate: number,
     params: Record<string, number | boolean>,
   ) => string;
   masteringPairProcessStereo: (
@@ -2651,12 +2698,14 @@ export interface SonareModule {
     referenceLeft: Float32Array,
     referenceRight: Float32Array,
     sampleRate: number,
+    referenceSampleRate: number,
     params: Record<string, number | boolean>,
   ) => WasmMasteringStereoResult;
   masteringAbMatchLoudness: (
     source: Float32Array,
     reference: Float32Array,
     sampleRate: number,
+    referenceSampleRate: number,
   ) => WasmLoudnessMatchResult;
   masteringAbMatchLoudnessStereo: (
     sourceLeft: Float32Array,
@@ -2664,6 +2713,7 @@ export interface SonareModule {
     referenceLeft: Float32Array,
     referenceRight: Float32Array,
     sampleRate: number,
+    referenceSampleRate: number,
   ) => WasmLoudnessMatchStereoResult;
   masteringStereoAnalyze: (
     analysisName: string,
@@ -2959,6 +3009,7 @@ export interface SonareModule {
     rightChannels: (Float32Array | null)[] | null,
     trackIds: string[],
     trackNames: (string | null)[] | null,
+    trackSampleRates: number[] | null,
     sampleRate: number,
     params: Record<string, number | boolean>,
   ) => string;
@@ -2967,6 +3018,7 @@ export interface SonareModule {
     rightChannels: (Float32Array | null)[] | null,
     trackIds: string[],
     trackNames: (string | null)[] | null,
+    trackSampleRates: number[] | null,
     sampleRate: number,
     params: Record<string, number | boolean>,
   ) => string;
@@ -3947,6 +3999,7 @@ export interface WasmMixer {
   addStrip: (id: string, metering: StripMeteringOptions) => void;
   addBus: (id: string, role: string) => void;
   removeBus: (id: string) => void;
+  setOutputBus: (sourceId: string, busId: string) => void;
   busCount: () => number;
   addVcaGroup: (id: string, gainDb: number, members: string[]) => void;
   setVcaGroupGainDb: (id: string, gainDb: number) => void;

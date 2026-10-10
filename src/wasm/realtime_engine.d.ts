@@ -193,7 +193,12 @@ export declare class RealtimeEngine {
      * far larger than the number given here.
      */
     prepare(sampleRate: number, maxBlockSize: number, commandCapacity?: number, telemetryCapacity?: number, maxChannels?: number): void;
-    /** Queue a sample-accurate parameter change (engine kSetParam). */
+    /**
+     * Queue a sample-accurate parameter change (engine kSetParam).
+     * A reserved mixer id (`0x4d58xxxx`) other than a master id names no strip and
+     * throws `InvalidParameter`; resolve per-strip ids with the `resolve*AutomationId`
+     * methods.
+     */
     setParameter(paramId: number, value: number, renderFrame?: number): void;
     /** Queue a smoothed parameter change (engine kSetParamSmoothed). */
     setParameterSmoothed(paramId: number, value: number, renderFrame?: number): void;
@@ -465,6 +470,23 @@ export declare class RealtimeEngine {
      */
     pushMidiUmp(destinationId: number, words: UmpWords | number, renderFrame?: number): void;
     /**
+     * Queue a live MIDI 2.0 Program Change, with an optional bank, to a MIDI
+     * destination. The bank is applied only when `bankValid` is true; a non-zero
+     * `bankMsb`/`bankLsb` with `bankValid` false is refused. `group`/`channel` are
+     * 0..15, `program`/`bankMsb`/`bankLsb` 0..127. The message takes the same
+     * receive path as {@link pushMidiUmp}, so a receiver that selects no programs
+     * (builtin synth, a part with RX PROGRAM CHANGE off, an MPE member channel)
+     * accepts and ignores it. Throws when the slot ring or command queue is full.
+     * `renderFrame` is the frame to fire at (omit for immediate).
+     */
+    pushMidiProgram(destinationId: number, group: number, channel: number, program: number, bankValid?: boolean, bankMsb?: number, bankLsb?: number, renderFrame?: number): void;
+    /**
+     * Push a live MIDI 2.0 Program Change to the engine-owned MIDI input source.
+     * The arguments and refusals match {@link pushMidiProgram}; `portTimeSamples`
+     * is the port timestamp in samples.
+     */
+    pushMidiInputProgram(group: number, channel: number, program: number, bankValid?: boolean, bankMsb?: number, bankLsb?: number, portTimeSamples?: number): void;
+    /**
      * Push one raw UMP message (1 to 4 words) to the engine-owned MIDI input
      * source. The message rules match {@link pushMidiUmp}. `portTimeSamples` is
      * the port timestamp in samples.
@@ -497,18 +519,17 @@ export declare class RealtimeEngine {
     resetMasterLoudnessMeter(renderFrame?: number): void;
     /** Reads the immutable factory value for a resolved insert parameter id. */
     insertParameterConstructedValue(paramId: number): number;
+    /** Starts transport playback, at `renderFrame` when given. */
     play(renderFrame?: number): void;
     /**
+     * Stops transport playback, at `renderFrame` when given.
+     *
      * A loop wrap, seek or stop sends note-offs plus CC64=0, CC121, CC123 and a
      * centred pitch bend on every channel played since the last reset, so
      * controller values set before a loop region are not restored at the wrap.
      */
     stop(renderFrame?: number): void;
-    /**
-     * A loop wrap, seek or stop sends note-offs plus CC64=0, CC121, CC123 and a
-     * centred pitch bend on every channel played since the last reset, so
-     * controller values set before a loop region are not restored at the wrap.
-     */
+    /** Moves the transport to `timelineSample`, a position in timeline samples. */
     seekSample(timelineSample: number, renderFrame?: number): void;
     /**
      * Snaps every in-flight parameter ramp (engine-level smoothed params, mixer
@@ -565,11 +586,7 @@ export declare class RealtimeEngine {
     flushControlCommands(): void;
     /** Applies commands already due on a control-only mirror, retaining future commands. */
     applyCommandsDueNowPreservingFuture(): void;
-    /**
-     * A loop wrap, seek or stop sends note-offs plus CC64=0, CC121, CC123 and a
-     * centred pitch bend on every channel played since the last reset, so
-     * controller values set before a loop region are not restored at the wrap.
-     */
+    /** Moves the transport to `ppq`, a position in quarter notes. */
     seekPpq(ppq: number, renderFrame?: number): void;
     /** Set a finite tempo in the range (0, 100000] BPM. */
     setTempo(bpm: number): void;
@@ -577,16 +594,18 @@ export declare class RealtimeEngine {
     setTimeSignature(numerator: number, denominator: number): void;
     setTimeSignatureSegments(segments: readonly EngineTimeSignatureSegment[]): void;
     sampleAtPpq(ppq: number): number;
-    /**
-     * A loop wrap, seek or stop sends note-offs plus CC64=0, CC121, CC123 and a
-     * centred pitch bend on every channel played since the last reset, so
-     * controller values set before a loop region are not restored at the wrap.
-     */
+    /** Sets the loop region between two quarter-note positions and enables or disables it. */
     setLoop(startPpq: number, endPpq: number, enabled?: boolean): void;
     addParameter(info: EngineParameterInfo): void;
     parameterCount(): number;
     parameterInfoByIndex(index: number): Required<EngineParameterInfo>;
     parameterInfo(id: number): Required<EngineParameterInfo>;
+    /**
+     * Replaces the automation lane driving `paramId`.
+     * A reserved mixer id (`0x4d58xxxx`) other than a master id names no strip and
+     * throws `InvalidParameter`; resolve per-strip ids with the `resolve*AutomationId`
+     * methods.
+     */
     setAutomationLane(paramId: number, points: EngineAutomationPoint[]): void;
     automationLaneCount(): number;
     setMarkers(markers: EngineMarker[]): void;
@@ -630,6 +649,21 @@ export declare class RealtimeEngine {
      */
     private static normalizeSends;
     setTrackLanes(lanes: Array<number | EngineTrackLane>): void;
+    /**
+     * Replaces the sends of one lane, leaving its output bus, layout and every
+     * other lane unchanged; an empty array clears them. An unchanged send list
+     * keeps its in-flight level ramps. Throws for an unknown track id, an
+     * undeclared bus, a duplicate send bus or a level outside the send range.
+     * Unlike the worklet engine's `setTrackSends`, the lane must already be
+     * declared through {@link setTrackLanes}.
+     */
+    setTrackSends(trackId: number, sends: EngineTrackSend[]): void;
+    /**
+     * Sets the output bus of one lane (`0` = master mix), leaving its sends,
+     * layout and every other lane unchanged. Throws for an unknown track id or an
+     * undeclared bus; the lane must already be declared through {@link setTrackLanes}.
+     */
+    setTrackOutputBus(trackId: number, busId: number): void;
     /**
      * Keys one insert of a lane strip from another lane's post-strip audio
      * (ducking/sidechainRouter inserts). sourceTrackId 0 removes the binding.
@@ -786,7 +820,8 @@ export declare class RealtimeEngine {
      * `filterAttackMs`, `filterDecayMs`, `filterSustain`, `filterReleaseMs`,
      * `lfoRateHz`, `lfoToPitchCents`, `lfo2RateHz`, `glideMs`, `bodyMix`,
      * `stereoSpread`, `detuneCents`, `driftCents`, `pitchOffsetCents`,
-     * `hpCutoffHz`, `sampleHoldHz`, `bitDepth`.
+     * `hpCutoffHz`, `sampleHoldHz`, `bitDepth`, `driftRateHz`, `ampDelayMs`,
+     * `ampHoldMs`, `filterDelayMs`, `filterHoldMs`.
      *
      * Structural fields (`preset`, `engineMode`, `waveform`, `filterModel`,
      * `unison`, `polyphony`, `body`, `modRoutings`) are not automatable and

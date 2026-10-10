@@ -101,7 +101,8 @@ export declare class Project {
     static midi2PitchBend(ppq: number, group: number, channel: number, bend32: number): ProjectMidiEvent;
     /**
      * Pack a MIDI 2.0 program-change event. The bank travels in the same message
-     * and is applied only when `bankValid` is true.
+     * and is applied only when `bankValid` is true; a non-zero bank with
+     * `bankValid` false is refused.
      */
     static midi2Program(ppq: number, group: number, channel: number, program: number, bankValid?: boolean, bankMsb?: number, bankLsb?: number): ProjectMidiEvent;
     /** Pack a MIDI 2.0 registered controller (RPN) event. */

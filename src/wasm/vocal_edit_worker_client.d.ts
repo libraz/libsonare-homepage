@@ -1,7 +1,12 @@
 import type { VocalAnalysis, VocalApplyRequest, VocalCapabilities, VocalCreateRequest, VocalEditResult, VocalHistoryState, VocalNotesResult, VocalPitchEvaluation, VocalRenderRequest, VocalRenderResult, VocalRestoreRequest, VocalStateBytes, VocalStateToken, VocalUint64 } from './public_types_vocal_edit.js';
 import { type VocalWorkerCreateResult, type VocalWorkerMutation } from './vocal_edit_worker_protocol.js';
+/**
+ * A browser Worker or a Node `worker_threads.Worker`. The transfer list is
+ * `readonly unknown[]` because the DOM and Node `Transferable` unions are not
+ * subsets of each other, so neither Worker type would otherwise be assignable.
+ */
 export interface VocalEditWorker {
-    postMessage(message: unknown, transfer?: Transferable[]): void;
+    postMessage(message: unknown, transfer?: readonly unknown[]): void;
     terminate(): unknown;
     addEventListener?(type: string, listener: EventListener): void;
     removeEventListener?(type: string, listener: EventListener): void;

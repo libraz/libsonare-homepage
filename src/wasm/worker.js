@@ -38,7 +38,7 @@ var EXPECTED_ABI_VERSION;
 var init_abi = __esm({
   "src/abi.ts"() {
     "use strict";
-    EXPECTED_ABI_VERSION = 67305991;
+    EXPECTED_ABI_VERSION = 84083207;
   }
 });
 
@@ -319,6 +319,9 @@ function assertSamples(fnName, samples, validate, argName = "samples") {
   assertFiniteSamples(fnName, samples, validate, argName);
 }
 function assertSampleRate(fnName, sampleRate, argName = "sampleRate") {
+  if (typeof sampleRate !== "number") {
+    throw new TypeError(`${fnName}: ${argName} must be a number`);
+  }
   if (!Number.isInteger(sampleRate)) {
     throw new RangeError(`${fnName}: ${argName} must be an integer`);
   }
@@ -327,6 +330,34 @@ function assertSampleRate(fnName, sampleRate, argName = "sampleRate") {
       `${fnName}: ${argName} out of supported range [${MIN_AUDIO_SAMPLE_RATE}, ${MAX_AUDIO_SAMPLE_RATE}]`
     );
   }
+}
+function assertAudioInput(fnName, samples, sampleRate, options = {}, argName = "samples") {
+  assertFloat32Array(fnName, samples, argName);
+  assertSampleRate(fnName, sampleRate);
+  assertSamples(fnName, samples, options.validate !== false, argName);
+}
+function assertAudioSamples(fnName, samples, options = {}, argName = "samples") {
+  assertFloat32Array(fnName, samples, argName);
+  assertSamples(fnName, samples, options.validate !== false, argName);
+}
+function assertFloat32Array(fnName, value, argName) {
+  if (!(value instanceof Float32Array)) {
+    throw new TypeError(`${fnName}: ${argName} must be a Float32Array`);
+  }
+}
+function assertString(fnName, value, argName) {
+  if (typeof value !== "string") {
+    throw new TypeError(`${fnName}: ${argName} must be a string`);
+  }
+}
+function requestObject(fnName, value, argName = "samples", requestOnly = false) {
+  if (typeof value !== "object" || value === null || Array.isArray(value) || ArrayBuffer.isView(value)) {
+    if (requestOnly) {
+      throw new TypeError(`${fnName}: request must be an object`);
+    }
+    assertAudioSamples(fnName, value, {}, argName);
+  }
+  return value;
 }
 var MIN_AUDIO_SAMPLE_RATE, MAX_AUDIO_SAMPLE_RATE;
 var init_validation = __esm({
@@ -452,6 +483,19 @@ function keyModeName(ordinal) {
   }
   return name;
 }
+function assertNameOrOrdinal(value, field, what) {
+  if (typeof value !== "number" && typeof value !== "string") {
+    throw new TypeError(`${field} must be ${what} name or ordinal`);
+  }
+}
+function keyModeOrdinal(mode, field = "key mode") {
+  assertNameOrOrdinal(mode, field, "a mode");
+  return resolveEnumOrdinal(mode, KEY_MODE_VALUES, field);
+}
+function pitchClassOrdinal(root, field = "pitch class") {
+  assertNameOrOrdinal(root, field, "a pitch class");
+  return resolveEnumOrdinal(root, PITCH_CLASS_VALUES, field);
+}
 function keyModeValues(modes) {
   if (!modes) {
     return [];
@@ -561,7 +605,7 @@ function convertAnalysisResult(wasm) {
     tuning: wasm.tuning
   };
 }
-var PITCH_CLASS_NAMES, KEY_MODE_NAMES, KEY_MODE_VALUES, KEY_PROFILE_VALUES;
+var PITCH_CLASS_NAMES, KEY_MODE_NAMES, KEY_MODE_VALUES, KEY_PROFILE_VALUES, PITCH_CLASS_VALUES;
 var init_analysis_helpers = __esm({
   "src/analysis_helpers.ts"() {
     "use strict";
@@ -614,6 +658,9 @@ var init_analysis_helpers = __esm({
       "bellman-budge": KeyProfile.BellmanBudge,
       bellman: KeyProfile.BellmanBudge
     };
+    PITCH_CLASS_VALUES = Object.fromEntries(
+      PITCH_CLASS_NAMES.map((name, ordinal) => [name, ordinal])
+    );
   }
 });
 
@@ -625,19 +672,32 @@ function flattenChainConfig(config) {
       const path = prefix ? `${prefix}.${key}` : key;
       if (typeof value === "number" || typeof value === "boolean") {
         out[path] = value;
+      } else if (typeof value === "string") {
+        const resolved = getSonareModule().masteringEnumValue("", path, value);
+        if (resolved === null) {
+          throw new TypeError(notAValue(path));
+        }
+        out[path] = resolved;
       } else if (value !== null && typeof value === "object") {
+        if (Array.isArray(value) && value.length === 0) {
+          throw new TypeError(emptyList(path));
+        }
         walk(value, path);
       } else if (value !== void 0) {
-        throw new TypeError(`Mastering override '${path}' must be a number or boolean.`);
+        throw new TypeError(notAValue(path));
       }
     }
   };
   walk(config, "");
   return out;
 }
+var emptyList, notAValue;
 var init_chain_config = __esm({
   "src/_chain_config.ts"() {
     "use strict";
+    init_module_state();
+    emptyList = (path) => `Mastering override '${path}' is an empty list, which has no flat spelling.`;
+    notAValue = (path) => `Mastering override '${path}' must be a number or boolean.`;
   }
 });
 
@@ -645,7 +705,7 @@ var init_chain_config = __esm({
 function requireModule() {
   return getSonareModule();
 }
-function masterAudioRequest(requestOrSamples, sampleRate, preset, overrides, onProgress) {
+function masterAudioRequest(fnName, requestOrSamples, sampleRate, preset, overrides, onProgress) {
   if (requestOrSamples instanceof Float32Array) {
     return {
       samples: requestOrSamples,
@@ -655,9 +715,9 @@ function masterAudioRequest(requestOrSamples, sampleRate, preset, overrides, onP
       onProgress
     };
   }
-  return requestOrSamples;
+  return requestObject(fnName, requestOrSamples);
 }
-function masterAudioStereoRequest(requestOrLeft, right, sampleRate, preset, overrides, onProgress) {
+function masterAudioStereoRequest(fnName, requestOrLeft, right, sampleRate, preset, overrides, onProgress) {
   if (requestOrLeft instanceof Float32Array) {
     return {
       left: requestOrLeft,
@@ -668,10 +728,19 @@ function masterAudioStereoRequest(requestOrLeft, right, sampleRate, preset, over
       onProgress
     };
   }
-  return requestOrLeft;
+  return requestObject(fnName, requestOrLeft, "left");
 }
 function masterAudio(samples, sampleRate = 22050, presetName = "pop", overrides = {}, onProgress) {
-  const request = masterAudioRequest(samples, sampleRate, presetName, overrides, onProgress);
+  const request = masterAudioRequest(
+    "masterAudio",
+    samples,
+    sampleRate,
+    presetName,
+    overrides,
+    onProgress
+  );
+  assertString("masterAudio", request.preset ?? "pop", "preset");
+  assertAudioInput("masterAudio", request.samples, request.sampleRate ?? 22050);
   const flat = flattenChainConfig(request.overrides ?? {});
   if (request.onProgress || request.cancel) {
     return requireModule().masterAudioWithProgress(
@@ -693,6 +762,7 @@ function masterAudio(samples, sampleRate = 22050, presetName = "pop", overrides 
 }
 function masterAudioStereo(left, right = void 0, sampleRate = 22050, presetName = "pop", overrides = {}, onProgress) {
   const request = masterAudioStereoRequest(
+    "masterAudioStereo",
     left,
     right,
     sampleRate,
@@ -700,6 +770,9 @@ function masterAudioStereo(left, right = void 0, sampleRate = 22050, presetName 
     overrides,
     onProgress
   );
+  assertString("masterAudioStereo", request.preset ?? "pop", "preset");
+  assertAudioInput("masterAudioStereo", request.left, request.sampleRate ?? 22050, {}, "left");
+  assertAudioInput("masterAudioStereo", request.right, request.sampleRate ?? 22050, {}, "right");
   const flat = flattenChainConfig(request.overrides ?? {});
   if (request.left.length !== request.right.length) {
     throw new RangeError("Stereo channel lengths must match.");
@@ -729,6 +802,7 @@ var init_mastering_chain = __esm({
     "use strict";
     init_chain_config();
     init_module_state();
+    init_validation();
   }
 });
 
@@ -736,18 +810,14 @@ var init_mastering_chain = __esm({
 function requireModule2() {
   return getSonareModule();
 }
-function validateAnalysisInput(fnName, samples, sampleRate, options = {}) {
-  assertSampleRate(fnName, sampleRate);
-  assertSamples(fnName, samples, options.validate !== false);
-}
 function detectBpm(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
-  validateAnalysisInput("detectBpm", request.samples, request.sampleRate ?? 22050, request);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("detectBpm", samples);
+  assertAudioInput("detectBpm", request.samples, request.sampleRate ?? 22050, request);
   return requireModule2().detectBpm(request.samples, request.sampleRate ?? 22050);
 }
 function detectKey(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
-  validateAnalysisInput("detectKey", request.samples, request.sampleRate ?? 22050, request);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("detectKey", samples);
+  assertAudioInput("detectKey", request.samples, request.sampleRate ?? 22050, request);
   const result = requireModule2()._detectKeyWithOptions(
     request.samples,
     request.sampleRate ?? 22050,
@@ -771,8 +841,8 @@ function detectKey(samples, sampleRate = 22050, options = {}) {
   };
 }
 function detectChords(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
-  validateAnalysisInput("detectChords", request.samples, request.sampleRate ?? 22050, request);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("detectChords", samples);
+  assertAudioInput("detectChords", request.samples, request.sampleRate ?? 22050, request);
   const result = requireModule2().detectChords(
     request.samples,
     request.sampleRate ?? 22050,
@@ -786,8 +856,8 @@ function detectChords(samples, sampleRate = 22050, options = {}) {
     request.useHmm ?? false,
     request.hmmBeamWidth ?? 24,
     request.useKeyContext ?? false,
-    request.keyRoot ?? PitchClass.C,
-    request.keyMode ?? Mode.Major,
+    pitchClassOrdinal(request.keyRoot ?? PitchClass.C, "keyRoot"),
+    keyModeOrdinal(request.keyMode ?? Mode.Major, "keyMode"),
     request.detectInversions ?? false,
     chordChromaMethodValue(request.chromaMethod ?? "stft"),
     request.tuning ?? 0
@@ -795,13 +865,8 @@ function detectChords(samples, sampleRate = 22050, options = {}) {
   return convertChordAnalysisResult(result);
 }
 function analyzeWithProgress(samples, sampleRate = 22050, onProgress, options) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, onProgress, options } : samples;
-  validateAnalysisInput(
-    "analyzeWithProgress",
-    request.samples,
-    request.sampleRate ?? 22050,
-    request
-  );
+  const request = samples instanceof Float32Array ? { samples, sampleRate, onProgress, options } : requestObject("analyzeWithProgress", samples);
+  assertAudioInput("analyzeWithProgress", request.samples, request.sampleRate ?? 22050, request);
   const result = requireModule2().analyzeWithProgress(
     request.samples,
     request.sampleRate ?? 22050,

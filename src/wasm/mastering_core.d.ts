@@ -1,4 +1,4 @@
-import type { LoudnessMatchResult, LoudnessMatchStereoResult, MasteringAssistantParams, MasteringAssistantResult, MasteringInsertParamChoice, MasteringInsertParamDependency, MasteringInsertParamScale, MasteringInsertParamUnit, MasteringInsertSlot, MasteringOptions, MasteringProcessorParams, MasteringResult, MasteringStereoResult, MasteringStreamingPreviewResult, MatchEqCurveResult, MatchEstimateReferenceDelaySamplesResult, MatchReferenceLoudnessResult, MatchTonalBalanceLogBandsResult, MatchTonalBalanceResult, PairAnalysis, PairAnalysisResultMap, PairProcessor, SoloProcessor, StereoAnalysis, StereoAnalysisResultMap, StereoMonoCompatCheckLogBandsResult, StereoMonoCompatCheckResult, StereoPairProcessor, StreamingPlatform, TypedJson } from './public_types.js';
+import type { LoudnessMatchResult, LoudnessMatchStereoResult, MasteringAssistantParams, MasteringAssistantResult, MasteringInsertParamChoice, MasteringInsertParamDependency, MasteringInsertParamScale, MasteringInsertParams, MasteringInsertParamUnit, MasteringInsertSlot, MasteringOptions, MasteringProcessorParams, MasteringResult, MasteringSoloProcessorParams, MasteringStereoResult, MasteringStreamingPreviewResult, MatchEqCurveResult, MatchEstimateReferenceDelaySamplesResult, MatchReferenceLoudnessResult, MatchTonalBalanceLogBandsResult, MatchTonalBalanceResult, PairAnalysis, PairAnalysisResultMap, PairProcessor, SoloProcessor, StereoAnalysis, StereoAnalysisResultMap, StereoMonoCompatCheckLogBandsResult, StereoMonoCompatCheckResult, StereoPairProcessor, StreamingPlatform, TypedJson } from './public_types.js';
 export type { MasteringInsertParamChoice, MasteringInsertSlot };
 /** Canonical request form for loudness/true-peak mastering. */
 export interface MasteringRequest extends MasteringOptions {
@@ -9,14 +9,14 @@ export interface MasteringProcessRequest {
     processorName: SoloProcessor;
     samples: Float32Array;
     sampleRate?: number;
-    params?: MasteringProcessorParams;
+    params?: MasteringSoloProcessorParams;
 }
 export interface MasteringProcessStereoRequest {
     processorName: SoloProcessor;
     left: Float32Array;
     right: Float32Array;
     sampleRate?: number;
-    params?: MasteringProcessorParams;
+    params?: MasteringSoloProcessorParams;
 }
 /** Canonical request form for a two-input match processor. */
 export interface MasteringPairProcessRequest {
@@ -24,6 +24,11 @@ export interface MasteringPairProcessRequest {
     source: Float32Array;
     reference: Float32Array;
     sampleRate?: number;
+    /**
+     * Rate of the reference, in Hz. Omitted: `sampleRate`. A reference at another
+     * rate is resampled onto `sampleRate` first.
+     */
+    referenceSampleRate?: number;
     params?: MasteringProcessorParams;
 }
 /** Canonical request form for a stereo two-input match processor. */
@@ -34,6 +39,11 @@ export interface MasteringPairProcessStereoRequest {
     referenceLeft: Float32Array;
     referenceRight: Float32Array;
     sampleRate?: number;
+    /**
+     * Rate of the reference, in Hz. Omitted: `sampleRate`. A reference at another
+     * rate is resampled onto `sampleRate` first.
+     */
+    referenceSampleRate?: number;
     params?: MasteringProcessorParams;
 }
 /** Canonical request form for {@link masteringAbMatchLoudness}. */
@@ -43,6 +53,11 @@ export interface MasteringAbMatchLoudnessRequest {
     /** The take whose loudness `source` is matched to; returned untouched. */
     reference: Float32Array;
     sampleRate?: number;
+    /**
+     * Rate of the reference, in Hz. Omitted: `sampleRate`. A reference at another
+     * rate is resampled onto `sampleRate` and measured there.
+     */
+    referenceSampleRate?: number;
 }
 /** Canonical request form for stereo AB loudness matching. */
 export interface MasteringAbMatchLoudnessStereoRequest {
@@ -51,6 +66,11 @@ export interface MasteringAbMatchLoudnessStereoRequest {
     referenceLeft: Float32Array;
     referenceRight: Float32Array;
     sampleRate?: number;
+    /**
+     * Rate of the reference, in Hz. Omitted: `sampleRate`. A reference at another
+     * rate is resampled onto `sampleRate` and measured there.
+     */
+    referenceSampleRate?: number;
 }
 /** Canonical request form for a two-input match analysis. */
 export interface MasteringPairAnalyzeRequest<N extends PairAnalysis = PairAnalysis> {
@@ -58,6 +78,11 @@ export interface MasteringPairAnalyzeRequest<N extends PairAnalysis = PairAnalys
     source: Float32Array;
     reference: Float32Array;
     sampleRate?: number;
+    /**
+     * Rate of the reference, in Hz. Omitted: `sampleRate`. A reference at another
+     * rate is resampled onto `sampleRate` first, so a delay estimate is in source-rate samples.
+     */
+    referenceSampleRate?: number;
     params?: MasteringProcessorParams;
 }
 /** Canonical request form for a stereo analysis. */
@@ -203,8 +228,8 @@ export interface MasteringInsertParamInfo {
      */
     slot: string | null;
     /**
-     * Siblings whose live value bounds this key, each read as `this <relation> sibling`;
-     * empty for an independent key. `min` and `max` are measured with every sibling at its default.
+     * Siblings whose live value bounds this key, each read as `this <relation> factor * sibling`;
+     * empty for an independent key. A bound that only restates this dependency at the sibling's default is left null, so `min` and `max` are limits of the key's own.
      */
     dependsOn: MasteringInsertParamDependency[];
 }
@@ -216,15 +241,18 @@ export interface MasteringInsertParamInfo {
  * {@link RealtimeEngine.setTrackStripInsertParamByName}, `id` non-null); then,
  * sorted by name, every other construction key with `id` null and `rtSafe`
  * false. The name set matches {@link masteringInsertParamNames} plus any
- * automation target construction does not read. Returns an empty array for an
- * unknown name.
+ * automation target construction does not read. Any id of the processor
+ * catalog is served, an offline repair stage (`repair.declick`,
+ * `repair.declip`, `repair.trimSilence`) included, with the rows its catalog
+ * entry's `params` carries; those rows have a null `id`. Returns an empty array
+ * for an unknown name.
  *
  * @param name - Insert processor name (see {@link masteringInsertNames}).
  * @param sampleRate - Optional host rate in Hz. A key whose `maxRelativeTo` is
  *   `"nyquist"` then reports, as `max` and `maxExclusive`, the bound accepted
- *   when the insert is built and prepared at that rate, which includes any cap
- *   fixed at build time (an EQ band frequency stays at 24000 for a 96000 Hz
- *   host). Omitted, the rate-less answer is returned. Throws for a rate outside
+ *   when the insert is built and prepared at that rate (an EQ band frequency
+ *   reaches 48000 for a 96000 Hz host). Omitted, the rate-less answer is
+ *   returned, with the 24000 cap of the 48 kHz probe. Throws for a rate outside
  *   the supported range.
  */
 export declare function masteringInsertParamInfo(name: string, sampleRate?: number): MasteringInsertParamInfo[];
@@ -267,13 +295,17 @@ export declare function masteringAmpPresetCatalog(): MasteringAmpPresetCatalogEn
  * ask for.
  *
  * @param name - Insert processor name (see {@link masteringInsertNames}).
- * @param params - Flat parameter values, keyed as in {@link masteringInsertParamInfo}.
+ * @param params - Parameter values, keyed as in {@link masteringInsertParamInfo}
+ *   and shaped as the document a scene or strip insert is built from: each
+ *   value matches its key's declared `type` (a finite number or boolean, the
+ *   `choices` name of an `enum` key, a string for a `string` key, a list of
+ *   finite numbers for an `array` key).
  * @param sampleRate - Rate the insert is prepared at.
- * @throws For an unknown `name`, a key the insert does not read, a value its
- *   construction or `prepare` refuses, or a `params` value that is not a
- *   finite number or boolean.
+ * @throws For an unknown `name`, a key the insert does not read, or a value its
+ *   construction or `prepare` refuses; a `TypeError` for a value of the wrong
+ *   type, a `RangeError` for a non-finite number.
  */
-export declare function masteringInsertTiming(name: string, params: Record<string, number | boolean>, sampleRate: number): MasteringInsertTiming;
+export declare function masteringInsertTiming(name: string, params: MasteringInsertParams, sampleRate: number): MasteringInsertTiming;
 /**
  * How a processor handles a buffer with more than two channels (a surround
  * bed). "multichannel" processes every plane in one call; "stereoPairOnly"
@@ -351,13 +383,14 @@ export declare function masteringPairProcessorNames(): PairProcessor[];
 export declare function masteringPairAnalysisNames(): PairAnalysis[];
 export declare function masteringStereoAnalysisNames(): StereoAnalysis[];
 export declare function masteringProcess(request: MasteringProcessRequest): MasteringResult;
-export declare function masteringProcess(processorName: SoloProcessor, samples: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): MasteringResult;
+export declare function masteringProcess(processorName: SoloProcessor, samples: Float32Array, sampleRate?: number, params?: MasteringSoloProcessorParams): MasteringResult;
 export declare function masteringProcessStereo(request: MasteringProcessStereoRequest): MasteringStereoResult;
-export declare function masteringProcessStereo(processorName: SoloProcessor, left: Float32Array, right: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): MasteringStereoResult;
+export declare function masteringProcessStereo(processorName: SoloProcessor, left: Float32Array, right: Float32Array, sampleRate?: number, params?: MasteringSoloProcessorParams): MasteringStereoResult;
 /**
  * Apply a two-input `match.*` processor. `source` and `reference` may have
  * independent lengths — the match primitives consume each buffer at its own
- * length.
+ * length — and, in the request form, independent rates: a reference at
+ * `referenceSampleRate` is resampled onto `sampleRate` first.
  */
 export declare function masteringPairProcess(request: MasteringPairProcessRequest): MasteringResult;
 export declare function masteringPairProcess(processorName: PairProcessor, source: Float32Array, reference: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): MasteringResult;
@@ -369,7 +402,8 @@ export declare function masteringPairProcessStereo(request: MasteringPairProcess
 export declare function masteringPairProcessStereo(processorName: StereoPairProcessor, sourceLeft: Float32Array, sourceRight: Float32Array, referenceLeft: Float32Array, referenceRight: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): MasteringStereoResult;
 /**
  * Analyze a `source` against a `reference` with a two-input analysis. The two
- * buffers may have independent lengths.
+ * buffers may have independent lengths and, in the request form, rates; a
+ * delay estimate is in samples at `sampleRate`.
  *
  * Returns JSON whose shape depends on the analysis name; the overload for
  * each analysis name carries its entry of {@link PairAnalysisResultMap}, which
@@ -390,7 +424,8 @@ export declare function masteringPairAnalyze(analysisName: PairAnalysis, source:
 /**
  * Gain-match `source` to `reference`'s integrated loudness, so an A/B between
  * the two is not decided by level. `source` and `reference` may have
- * independent lengths.
+ * independent lengths and rates; a reference at `referenceSampleRate` is
+ * resampled onto `sampleRate` before it is measured.
  *
  * The gain is applied with no upper bound and `matchedTruePeakDbtp` reports
  * where that left the peak, rather than the call capping it: a headroom clamp

@@ -8,6 +8,7 @@
 import './lifetime.js';
 import type { SonareCapabilities } from './public_types.js';
 import type { SonareModule } from './sonare.js';
+export { EXPECTED_ABI_VERSION } from './abi.js';
 export { ErrorCode, isSonareError, SonareError } from './errors.js';
 export * from './feature_core.js';
 export type * from './feature_decompose.js';

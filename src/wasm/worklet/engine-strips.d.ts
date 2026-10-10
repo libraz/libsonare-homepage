@@ -55,6 +55,7 @@ export declare function pushMidiPitchBend(ctx: EngineStripContext, trackId: stri
 export declare function pushMidiChannelPressure(ctx: EngineStripContext, trackId: string | number, group: number, channel: number, pressure: number, renderFrame: number | undefined): void;
 export declare function pushMidiPolyPressure(ctx: EngineStripContext, trackId: string | number, group: number, channel: number, note: number, pressure: number, renderFrame: number | undefined): void;
 export declare function pushMidiUmp(ctx: EngineStripContext, trackId: string | number, word0: number | UmpWords, renderFrame: number | undefined): void;
+export declare function pushMidiProgram(ctx: EngineStripContext, trackId: string | number, group: number, channel: number, program: number, bankValid: boolean, bankMsb: number, bankLsb: number, renderFrame: number | undefined): void;
 export declare function setBuiltinInstrument(ctx: EngineStripContext, trackId: string | number, config: {
     destinationId?: number;
 } & Record<string, unknown>): void;

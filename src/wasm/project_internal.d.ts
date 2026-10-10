@@ -229,7 +229,14 @@ export interface ProjectModule {
     midiCcToBreakpoint: (bindings: ReadonlyArray<ProjectMidiCcBinding>, event: ProjectMidiEvent) => ProjectAutomationPoint | null;
     midiParamToCc: (bindings: ReadonlyArray<ProjectMidiCcBinding>, paramId: number, unitValue: number, group: number, ppq: number) => ProjectMidiEvent | null;
     transcribe: (samples: Float32Array, sampleRate: number, tempoBpm: number | undefined, config: TranscribeOptions) => TranscribeResult;
-    alignTakeToReference: (reference: Float32Array, take: Float32Array, sampleRate: number, config: AlignTakeToReferenceRequest) => AlignTakeToReferenceResult;
+    alignTakeToReference: (reference: Float32Array, take: Float32Array, sampleRate: number, takeSampleRate: number, config: AlignTakeToReferenceRequest) => AlignTakeToReferenceResult;
+    chordSymbolFromAnalysis: (root: number, quality: number, bass: number) => {
+        rootPc: number;
+        quality: number;
+        extensions: number[];
+        slashBassPc: number;
+    };
+    keyModeFromAnalysis: (mode: number) => number;
 }
 export declare function projectModule(): ProjectModule;
 export declare function projectMidi1Event(fnName: string, ppq: number, group: number, status: number, channel: number, data1: number, data2?: number): ProjectMidiEvent;

@@ -4,7 +4,9 @@ import type { WasmAnalysisResult, WasmChordAnalysisResult, WasmKeyCandidateResul
 export declare function keyModeName(ordinal: number): KeyMode;
 export declare function convertKeyCandidate(wasm: WasmKeyCandidateResult): KeyCandidate;
 /** Ordinal of a key mode given by name or ordinal; anything else is refused. */
-export declare function keyModeOrdinal(mode: unknown): number;
+export declare function keyModeOrdinal(mode: unknown, field?: string): number;
+/** Ordinal of a pitch class given by name (`'C'`, `'C#'`, ...) or ordinal; anything else is refused. */
+export declare function pitchClassOrdinal(root: unknown, field?: string): number;
 export declare function keyModeValues(modes: KeyDetectionOptions['modes'] | undefined): number[];
 export declare function keyProfileValue(profile: KeyDetectionOptions['profile'] | undefined): number;
 export declare function convertChordAnalysisResult(wasm: WasmChordAnalysisResult): ChordAnalysisResult;

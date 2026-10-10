@@ -4,7 +4,8 @@ export interface SuggestMixSceneRequest {
     /** Tracks to mix, in the order their profiles are reported. */
     tracks: MixAssistantTrack[];
     /**
-     * Shared sample rate in Hz for every track. Required: every band edge,
+     * Analysis rate in Hz, and the rate of every track that does not state its
+     * own; a track at another rate is resampled onto it. Required: every band edge,
      * high-pass corner, sibilance band and alignment lag is derived from it, so a
      * guessed rate would silently misread 44.1 kHz material by 8.8% and report
      * `channelDelaySamples` and `durationSec` wrong with it.
@@ -28,7 +29,7 @@ export interface SuggestMixSceneRequest {
  * Degenerate input is not an error: no tracks, all-silent tracks or tracks too
  * short to measure yield an empty scene and an empty `explanation`.
  *
- * @param request - Tracks, shared sample rate and assistant options
+ * @param request - Tracks, analysis sample rate and assistant options
  * @returns The suggested scene, per-track profiles, cross-track measurements
  *   and the explanation behind each change
  */
@@ -41,7 +42,7 @@ export declare function suggestMixScene(request: SuggestMixSceneRequest): MixAss
  * suggestion neither digs the scene out of the fuller result nor re-serializes
  * it.
  *
- * @param request - Tracks, shared sample rate and assistant options
+ * @param request - Tracks, analysis sample rate and assistant options
  * @returns Scene JSON string
  */
 export declare function suggestMixSceneJson(request: SuggestMixSceneRequest): string;

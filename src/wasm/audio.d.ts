@@ -1,6 +1,6 @@
 import type { VoiceChangeOptions } from './effects_mastering.js';
 import type { ClippingReport, DynamicRangeReport, MeteringDetectClippingOptions, MeteringDynamicRangeOptions, SpectrumOptions, SpectrumReport } from './metering.js';
-import type { AnalysisResult, ChordAnalysisResult, ChordDetectionOptions, ChromaResult, DetectKeyOptions, FunctionalChord, HpssResult, KeyCandidate, KeyDetection, KeyDetectionOptions, LufsResult, MasteringChainConfig, MasteringChainResult, MasteringOptions, MasteringPreset, MasteringProcessorParams, MasteringResult, MelSpectrogramResult, MfccResult, Mode, NoteStretchOptions, PitchClass, PitchResult, SoloProcessor, StftResult } from './public_types.js';
+import type { AnalysisResult, ChordAnalysisResult, ChordDetectionOptions, ChromaResult, DetectKeyOptions, FunctionalChord, HpssResult, KeyCandidate, KeyDetection, KeyDetectionOptions, KeyMode, LufsResult, MasteringChainConfig, MasteringChainResult, MasteringOptions, MasteringPreset, MasteringResult, MasteringSoloProcessorParams, MelSpectrogramResult, MfccResult, Mode, NoteStretchOptions, PitchClass, PitchClassName, PitchResult, SoloProcessor, StftResult } from './public_types.js';
 import type { MusicAnalyzeOptions } from './quick_analysis.js';
 import type { ProgressCallback, WasmNnlsChromaResult } from './sonare.js';
 import type { ValidateOptions } from './validation.js';
@@ -150,7 +150,7 @@ export declare class Audio {
     detectBeats(): Float32Array;
     detectDownbeats(): Float32Array;
     detectChords(options?: ChordDetectionOptions): ChordAnalysisResult;
-    chordFunctionalAnalysis(keyRoot: PitchClass, keyMode: Mode, options?: ChordDetectionOptions): FunctionalChord[];
+    chordFunctionalAnalysis(keyRoot: PitchClass | PitchClassName, keyMode: Mode | KeyMode, options?: ChordDetectionOptions): FunctionalChord[];
     /**
      * Full music analysis of the held buffer.
      *
@@ -173,7 +173,7 @@ export declare class Audio {
     mastering(options?: MasteringOptions): MasteringResult;
     masteringChain(config?: MasteringChainConfig, onProgress?: ProgressCallback): MasteringChainResult;
     masterAudio(presetName?: MasteringPreset, overrides?: MasteringChainConfig | null, onProgress?: ProgressCallback): MasteringChainResult;
-    masteringProcess(processorName: SoloProcessor, params?: MasteringProcessorParams): MasteringResult;
+    masteringProcess(processorName: SoloProcessor, params?: MasteringSoloProcessorParams): MasteringResult;
     trim(thresholdDb?: number): Float32Array;
     stft(nFft?: number, hopLength?: number): StftResult;
     stftDb(nFft?: number, hopLength?: number): {

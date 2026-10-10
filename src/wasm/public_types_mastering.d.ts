@@ -285,6 +285,20 @@ export interface MasteringResult {
 }
 export type MasteringProcessorParams = Record<string, number | boolean>;
 /**
+ * Params of a solo processor, keyed as in `masteringInsertParamInfo`. An
+ * enum-valued key also takes its `choices` name (`noiseEstimator: 'mcra'`).
+ */
+export type MasteringSoloProcessorParams = Record<string, number | boolean | string>;
+/** An insert parameter value: a solo value, or a list of numbers for an `array`-typed key. */
+export type MasteringInsertParamValue = number | boolean | string | readonly number[];
+/**
+ * Insert parameters, keyed as in `masteringInsertParamInfo`; the shape an insert
+ * is built from. Each value matches its key's declared `type`: a number or
+ * boolean, an enum name, a string for a `string` key, a list of numbers for an
+ * `array` key.
+ */
+export type MasteringInsertParams = Record<string, MasteringInsertParamValue>;
+/**
  * Params accepted by the assistant entry points. Every key is numeric except
  * two NAMES: `targetPlatform`, a delivery target (`'broadcast'`, `'podcast'`,
  * `'club'`, ...), and `preset`, the mastering preset the suggestion starts from
@@ -294,6 +308,26 @@ export type MasteringProcessorParams = Record<string, number | boolean>;
  * string, not part of the JavaScript vocabulary.
  */
 export type MasteringAssistantParams = Record<string, number | boolean | string>;
+/**
+ * One band of the multiband compressor, addressed by index in
+ * `dynamics.multibandComp.bands`. Every field is optional: an omitted field
+ * keeps the base (preset) value, or the compressor default for a band the base
+ * does not have.
+ */
+export interface MultibandCompressorBand {
+    thresholdDb?: number;
+    ratio?: number;
+    attackMs?: number;
+    releaseMs?: number;
+    kneeDb?: number;
+    makeupGainDb?: number;
+    autoMakeup?: boolean;
+    detector?: 'peak' | 'rms' | 'logRms' | number;
+    sidechainHpfEnabled?: boolean;
+    sidechainHpfHz?: number;
+    pdrTimeMs?: number;
+    pdrReleaseScale?: number;
+}
 /**
  * Nested mastering-chain configuration. A boolean toggles a module/processor's
  * `enabled` flag; setting any field implicitly enables its module unless
@@ -310,10 +344,10 @@ export interface MasteringChainConfig {
         /** `boolean` is retained as a deprecated shorthand for `{ enabled }`. */
         denoise?: boolean | {
             enabled?: boolean;
-            /** 0 = log-MMSE, 1 = MMSE-STSA, 2 = spectral subtraction. */
-            mode?: number;
-            /** 0 = quantile, 1 = MCRA, 2 = IMCRA, 3 = speech-presence probability. */
-            noiseEstimator?: number;
+            /** 0 / `'logMmse'`, 1 / `'mmseStsa'`, 2 / `'spectralSubtraction'`. */
+            mode?: number | 'logMmse' | 'mmseStsa' | 'spectralSubtraction';
+            /** 0 / `'quantile'`, 1 / `'mcra'`, 2 / `'imcra'`, 3 / `'spp'` (speech-presence probability). */
+            noiseEstimator?: number | 'quantile' | 'mcra' | 'imcra' | 'spp';
             nFft?: number;
             hopLength?: number;
             ddAlpha?: number;
@@ -342,8 +376,8 @@ export interface MasteringChainConfig {
         decrackle?: {
             enabled?: boolean;
             threshold?: number;
-            /** 0 = median, 1 = wavelet shrinkage. */
-            mode?: number;
+            /** 0 / `'median'`, 1 / `'waveletShrinkage'`. */
+            mode?: number | 'median' | 'waveletShrinkage';
             levels?: number;
         };
         dehum?: {
@@ -356,8 +390,8 @@ export interface MasteringChainConfig {
             adaptation?: number;
             frameSize?: number;
             pllBandwidth?: number;
-            /** 0 = subtract the tracked harmonics, 1 = cascaded notches. */
-            mode?: number;
+            /** 0 / `'subtract'` the tracked harmonics, 1 / `'notch'` (cascaded notches). */
+            mode?: number | 'subtract' | 'notch';
         };
         declick?: {
             enabled?: boolean;
@@ -445,6 +479,25 @@ export interface MasteringChainConfig {
             highRatio?: number;
             highAttackMs?: number;
             highReleaseMs?: number;
+            /**
+             * Crossover structure. `cutoffsHz` replaces the cutoff list and sets the
+             * band count to `length + 1`; do not combine it with `lowCutoffHz` /
+             * `highCutoffHz` in one call. An empty list is refused.
+             */
+            crossover?: {
+                /** Ascending split frequencies in Hz; N values give N + 1 bands. */
+                cutoffsHz?: number[];
+                slope?: 'lr2' | 'lr4' | 'lr8' | number;
+                mode?: 'linkwitzRiley' | 'butterworth' | 'bessel' | 'firLinearPhase' | number;
+                firKernelSize?: number;
+            };
+            /**
+             * Per-band compressor settings by band index. An omitted band or field
+             * keeps the base (preset) value, or the compressor default for a band the
+             * base does not have. Do not combine with the `low*` / `mid*` / `high*`
+             * shorthand for the same field in one call.
+             */
+            bands?: MultibandCompressorBand[];
         };
     };
     saturation?: {
@@ -469,9 +522,10 @@ export interface MasteringChainConfig {
             q?: number;
             evenOddMix?: number;
             /**
-             * Antialiasing mode ordinal: 0 = none, 3 = 4x oversampling. The ADAA
-             * modes (1, 2) name a member the exciter does not implement and are
-             * rejected; an ordinal outside 0-3 is rejected as out of range.
+             * Antialiasing mode ordinal: 0 = none, 3 = 4x oversampling, which adds
+             * 48 samples of latency at any host rate. The ADAA modes (1, 2) name a
+             * member the exciter does not implement and are rejected; an ordinal
+             * outside 0-3 is rejected as out of range.
              */
             aliasing?: number;
         };
@@ -531,9 +585,10 @@ export interface MasteringChainConfig {
      * ABI carries parameters in, so a caller assembling overrides dynamically can
      * emit it directly; the core validates the key and rejects an unknown one.
      * The nested spelling is canonical — prefer it in hand-written code, where it
-     * is checked field by field while a dotted key is only checked at run time.
+     * is checked field by field while a dotted key is only checked at run time. An
+     * enum-valued key also takes its name (`'repair.denoise.noiseEstimator': 'mcra'`).
      */
-    [flatKey: `${string}.${string}`]: number | boolean | undefined;
+    [flatKey: `${string}.${string}`]: number | boolean | string | undefined;
 }
 /**
  * Configuration for the block-by-block {@link StreamingMasteringChain}.

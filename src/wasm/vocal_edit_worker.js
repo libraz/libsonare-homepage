@@ -8,7 +8,7 @@ var EXPECTED_ABI_VERSION;
 var init_abi = __esm({
   "src/abi.ts"() {
     "use strict";
-    EXPECTED_ABI_VERSION = 67305991;
+    EXPECTED_ABI_VERSION = 84083207;
   }
 });
 
@@ -252,9 +252,56 @@ var init_module_state = __esm({
 });
 
 // src/validation.ts
+function assertNonEmptySamples(fnName, samples, argName = "samples") {
+  if (samples.length === 0) {
+    throw new RangeError(`${fnName}: ${argName} must not be empty`);
+  }
+}
+function assertFiniteSamples(fnName, samples, validate, argName = "samples") {
+  if (!validate) {
+    return;
+  }
+  for (let i = 0; i < samples.length; i++) {
+    const v = samples[i];
+    if (!Number.isFinite(v)) {
+      throw new RangeError(`${fnName}: ${argName} contains NaN or Inf at index ${i}`);
+    }
+  }
+}
+function assertSamples(fnName, samples, validate, argName = "samples") {
+  assertNonEmptySamples(fnName, samples, argName);
+  assertFiniteSamples(fnName, samples, validate, argName);
+}
 function assertFiniteScalar(fnName, value, argName) {
   if (!Number.isFinite(value)) {
     throw new RangeError(`${fnName}: ${argName} must be a finite number`);
+  }
+}
+function assertSampleRate(fnName, sampleRate, argName = "sampleRate") {
+  if (typeof sampleRate !== "number") {
+    throw new TypeError(`${fnName}: ${argName} must be a number`);
+  }
+  if (!Number.isInteger(sampleRate)) {
+    throw new RangeError(`${fnName}: ${argName} must be an integer`);
+  }
+  if (sampleRate < MIN_AUDIO_SAMPLE_RATE || sampleRate > MAX_AUDIO_SAMPLE_RATE) {
+    throw new RangeError(
+      `${fnName}: ${argName} out of supported range [${MIN_AUDIO_SAMPLE_RATE}, ${MAX_AUDIO_SAMPLE_RATE}]`
+    );
+  }
+}
+function assertAudioInput(fnName, samples, sampleRate, options = {}, argName = "samples") {
+  assertFloat32Array(fnName, samples, argName);
+  assertSampleRate(fnName, sampleRate);
+  assertSamples(fnName, samples, options.validate !== false, argName);
+}
+function assertAudioSamples(fnName, samples, options = {}, argName = "samples") {
+  assertFloat32Array(fnName, samples, argName);
+  assertSamples(fnName, samples, options.validate !== false, argName);
+}
+function assertFloat32Array(fnName, value, argName) {
+  if (!(value instanceof Float32Array)) {
+    throw new TypeError(`${fnName}: ${argName} must be a Float32Array`);
   }
 }
 function secondsToSampleCount(fnName, seconds, sampleRate, argName) {
@@ -287,9 +334,21 @@ function resolveSampleBound(fnName, sampleValue, secValue, sampleRate, sampleNam
   }
   return value === 0 ? 0 : value;
 }
+function requestObject(fnName, value, argName = "samples", requestOnly = false) {
+  if (typeof value !== "object" || value === null || Array.isArray(value) || ArrayBuffer.isView(value)) {
+    if (requestOnly) {
+      throw new TypeError(`${fnName}: request must be an object`);
+    }
+    assertAudioSamples(fnName, value, {}, argName);
+  }
+  return value;
+}
+var MIN_AUDIO_SAMPLE_RATE, MAX_AUDIO_SAMPLE_RATE;
 var init_validation = __esm({
   "src/validation.ts"() {
     "use strict";
+    MIN_AUDIO_SAMPLE_RATE = 8e3;
+    MAX_AUDIO_SAMPLE_RATE = 384e3;
   }
 });
 
@@ -408,13 +467,6 @@ function requireUint32(value, field) {
   requireSample(value, field);
   if (value > 4294967295) {
     throw new RangeError(`${field} must fit uint32`);
-  }
-  return value;
-}
-function requireSampleRate(value) {
-  requireSample(value, "sampleRate");
-  if (value < 8e3 || value > 384e3) {
-    throw new RangeError("sampleRate must be an integer in [8000, 384000]");
   }
   return value;
 }
@@ -617,13 +669,7 @@ function validateCreate(request) {
   if (!request || typeof request !== "object") {
     throw new TypeError("request must be an object");
   }
-  if (!(request.samples instanceof Float32Array) || request.samples.length === 0) {
-    throw new TypeError("samples must be a non-empty Float32Array");
-  }
-  for (const sample of request.samples) {
-    requireFinite(sample, "samples");
-  }
-  requireSampleRate(request.sampleRate);
+  assertAudioInput("createVocalEditSession", request.samples, request.sampleRate);
   if (request.outputLengthSamples !== void 0) {
     requireSample(request.outputLengthSamples, "outputLengthSamples");
   }
@@ -683,16 +729,11 @@ function createVocalEditSession(request) {
   );
 }
 function restoreVocalEditSession(request) {
-  if (!(request.samples instanceof Float32Array) || request.samples.length === 0) {
-    throw new TypeError("samples must be a non-empty Float32Array");
-  }
+  requestObject("restoreVocalEditSession", request, "request", true);
+  assertAudioInput("restoreVocalEditSession", request.samples, request.sampleRate);
   if (!(request.state instanceof Uint8Array)) {
     throw new TypeError("state must be a Uint8Array");
   }
-  for (const sample of request.samples) {
-    requireFinite(sample, "samples");
-  }
-  requireSampleRate(request.sampleRate);
   validateSessionLimits(request.limits);
   if (!vocalEditAvailable()) {
     throw new SonareError(

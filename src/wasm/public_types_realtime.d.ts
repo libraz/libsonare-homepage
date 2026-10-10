@@ -104,7 +104,14 @@ export interface StreamingRetuneConfig {
 }
 /** Options for {@link StreamingEqualizer.match}. */
 export interface EqMatchOptions {
+    /** Rate of `source`, in Hz. Omitted: the equalizer's own rate. */
     sampleRate?: number;
+    /**
+     * Rate of `reference`, in Hz. Omitted: `sampleRate`. A reference at another
+     * rate is resampled onto the source's before its spectrum is taken.
+     */
+    referenceSampleRate?: number;
+    /** Most bands the match may set; at least 1. Default 8. */
     maxBands?: number;
 }
 export type VoicePresetId = 'neutral-monitor' | 'bright-idol' | 'soft-whisper' | 'deep-narrator' | 'robot-mascot' | 'dark-villain';

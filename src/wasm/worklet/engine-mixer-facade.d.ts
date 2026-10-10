@@ -140,7 +140,7 @@ export declare function setBusSidechain(ctx: EngineMixerContext, busId: number, 
  * rules as {@link setBusSidechain}.
  */
 export declare function setMasterSidechain(ctx: EngineMixerContext, insertIndex: number, kind: SidechainSourceKind | number, sourceId: number): void;
-export declare function setSends(ctx: EngineMixerContext, target: string | number, sends: EngineTrackSend[]): void;
+export declare function setTrackSends(ctx: EngineMixerContext, target: string | number, sends: EngineTrackSend[]): void;
 export declare function setTrackBuses(ctx: EngineMixerContext, buses: EngineBus[]): void;
 export declare function setBusGain(ctx: EngineMixerContext, busId: number, db: number): boolean;
 /** Control-side state a strip-scene replacement reads and updates. */
