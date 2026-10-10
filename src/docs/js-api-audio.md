@@ -41,9 +41,13 @@ const audio = await Audio.fromMemoryWithBrowserFallback(
 
 `Audio.fromMemory` folds a multichannel file to mono while decoding. `decodeChannels` decodes the same formats but keeps every channel, returning `{ sampleRate, channels }` with one `Float32Array` plane per source channel in the source's own order (a 5.1 file arrives as `L R C LFE Ls Rs`).
 
+### `decodeChannelsWithBrowserFallback(bytes, options?)`
+
+`async`; returns `Promise<DecodedChannels>`, the same `{ sampleRate, channels }` as `decodeChannels`. Formats the bundled decoder does not carry (AAC, OGG, FLAC) go through the browser codec stack as in `Audio.fromMemoryWithBrowserFallback`, taking the same `BrowserAudioDecodeOptions`, and every channel the browser returns is kept.
+
 ### `downmix(channels, targetLayout)`
 
-Narrows planes to a smaller layout with the ITU-R BS.775 rule: centre and surround enter the front pair at -3 dB and the LFE plane is dropped. `targetLayout` is `0` mono, `1` stereo, `2` 5.1, `3` 7.1; the source layout is named by the channel count (1, 2, 6 or 8), and any other count folds to mono as the unweighted mean. An upmix or unknown layout throws `SonareError` (`InvalidParameter`); no channels, or planes of differing length, throw `RangeError`.
+Narrows planes to a smaller layout with the ITU-R BS.775 rule: centre and surround enter the front pair at -3 dB and the LFE plane is dropped. `targetLayout` is `0` mono, `1` stereo, `2` 5.1, `3` 7.1; the source layout is named by the channel count (1, 2, 6 or 8), and any other count folds to mono as the unweighted mean. An upmix or unknown layout throws `SonareError` (`InvalidParameter`); no channels, planes of differing length, or a `targetLayout` that is not an integer in the 32-bit range throw `RangeError`, and a non-number `targetLayout` throws `TypeError`.
 
 ```typescript
 import { init, decodeChannels, downmix } from '@libraz/libsonare';

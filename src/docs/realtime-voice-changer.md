@@ -294,7 +294,7 @@ By default (`formantMode: 'relative'`) the formant stage runs after the retune, 
 | Latency | Reported `latencySamples()` | One analysis frame more (1024 samples at 48 kHz, measured) |
 | Reachable range | `formantFactor` within its parameter bounds | `formantFactor / 2^(retuneSemitones / 12)` within [0.55, 1.65] |
 
-The mode is fixed when the changer is created and prepared. A config carrying a different mode is refused (`SonareError`, "formant mode is fixed at prepare()"), and so is an absolute config outside the reachable range; the error names the `formantFactor` range that is reachable at that pitch shift. Automation clamps instead of refusing.
+The mode is fixed when the changer is created and prepared. A config carrying a different mode is refused (`SonareError`, "formant mode is fixed at prepare()"), and so is an absolute config outside the reachable range; the error names the `formantFactor` range that is reachable at that pitch shift and the `formantFactor` bound that range is intersected with (at +12 semitones: reachable `[1.1, 1.65]`, the warp reaching `[1.1, 3.3]`, limited by `formantFactor`'s `[0.55, 1.65]`). Automation clamps instead of refusing.
 
 ```typescript
 const cfg = realtimeVoiceChangerPresetConfig('neutral-monitor');

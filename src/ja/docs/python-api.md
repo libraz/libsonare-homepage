@@ -359,9 +359,9 @@ stereo_preview = json.loads(sonare.mastering_streaming_preview_stereo(left, righ
 
 ストリーミング入力の最終ブロック後は、空のリストが返るまで `flush_mono()` を呼び、ステレオでは 2 つの空リストが返るまで `flush_stereo()` を呼びます。
 
-リファレンストラックを使う処理では `mastering_pair_processor_names()`、`mastering_pair_process()`、`mastering_pair_process_stereo()`、`mastering_pair_analysis_names()`、`mastering_pair_analyze()` を使います。モノラルの `mastering_pair_process(processor_name, source, reference, sample_rate=22050, params=None)` は `MasteringResult` を返し、ソースとリファレンスの長さが異なっていても処理できます。ステレオ版は `source_left`、`source_right`、`reference_left`、`reference_right` を受け取り、`left`、`right`、`sample_rate`、`input_lufs`、`output_lufs`、`applied_gain_db`、`latency_samples`、`loudness_target_limited`、`non_finite_substitution_count` を持つ `MasteringStereoResult` を返します。各ソースペアと各リファレンスペアは左右の長さを揃える必要がありますが、ソースペアとリファレンスペアの長さは異なって構いません。ステレオの `match.abCrossfade` は短い方のペア長を使います。
+リファレンストラックを使う処理では `mastering_pair_processor_names()`、`mastering_pair_process()`、`mastering_pair_process_stereo()`、`mastering_pair_analysis_names()`、`mastering_pair_analyze()` を使います。モノラルの `mastering_pair_process(processor_name, source, reference, sample_rate=22050, params=None, *, reference_sample_rate=None)` は `MasteringResult` を返し、ソースとリファレンスの長さが異なっていても処理できます。ステレオ版は `source_left`、`source_right`、`reference_left`、`reference_right` を受け取り、`left`、`right`、`sample_rate`、`input_lufs`、`output_lufs`、`applied_gain_db`、`latency_samples`、`loudness_target_limited`、`non_finite_substitution_count` を持つ `MasteringStereoResult` を返します。各ソースペアと各リファレンスペアは左右の長さを揃える必要がありますが、ソースペアとリファレンスペアの長さは異なって構いません。ステレオの `match.abCrossfade` は短い方のペア長を使います。ペアプロセッサ、ペア解析、A/B マッチはいずれも `reference_sample_rate`（既定は `sample_rate`）を受け取ります。別のレートのリファレンスはソースのレートへリサンプルされ、遅延推定はソースのレートのサンプル数で返ります。
 
-ラウドネスを揃えた A/B 比較には、`mastering_ab_match_loudness(source, reference, sample_rate=22050, *, with_match=True)` を使うと `(np.ndarray, LoudnessMatch | None)` が返ります。`mastering_ab_match_loudness_stereo(source_left, source_right, reference_left, reference_right, sample_rate=22050, *, with_match=True)` は `((np.ndarray, np.ndarray), LoudnessMatch | None)` を返します。ステレオの各ソース／リファレンスペアは左右の長さを揃えますが、ソースとリファレンスの長さは異なって構いません。ステレオ版はソースの両チャンネルに 1 つのゲインを共有して適用し、シーリングは行いません。
+ラウドネスを揃えた A/B 比較には、`mastering_ab_match_loudness(source, reference, sample_rate=22050, *, with_match=True, reference_sample_rate=None)` を使うと `(np.ndarray, LoudnessMatch | None)` が返ります。`mastering_ab_match_loudness_stereo(source_left, source_right, reference_left, reference_right, sample_rate=22050, *, with_match=True, reference_sample_rate=None)` は `((np.ndarray, np.ndarray), LoudnessMatch | None)` を返します。ステレオの各ソース／リファレンスペアは左右の長さを揃えますが、ソースとリファレンスの長さは異なって構いません。ステレオ版はソースの両チャンネルに 1 つのゲインを共有して適用し、シーリングは行いません。
 
 ### 単発のダイナミクスとリペア
 
@@ -421,7 +421,9 @@ result = sonare.mastering_chain(
 )
 ```
 
-`mastering_insert_param_info(name)` は、インサートが構築時に読むキーとリアルタイムオートメーション対象の記述子を返します。型、範囲、既定値、選択肢、条件付きの `slot` を確認できます。`mastering_insert_timing(name, params, sample_rate)` はそのパラメータでインサートを構築し、`latencySamples` と `tailSamples` を返します。インサートが読まないキーは拒否されます。`mastering_preset_params(preset)` はプリセットのフラットな上書きマップを返し、そのまま `master_audio(..., overrides=...)` に渡せます。
+`mastering_insert_param_info(name, sample_rate=None)` は、インサートが構築時に読むキーとリアルタイムオートメーション対象の記述子を返します。型、範囲、既定値、選択肢、条件付きの `slot` を確認できます。`sample_rate` を渡すと、ナイキスト周波数で決まる上限がそのレートで解決され、オフラインのリペアステージを含むすべてのカタログ id に答えます。`mastering_insert_timing(name, params, sample_rate)` はそのパラメータでインサートを構築し、`latencySamples` と `tailSamples` を返します。インサートが読まないキーは拒否されます。`params` は記述子が宣言するあらゆる値の型（数値、真偽値、列挙名、文字列、数値のリスト）を受け付け、型の違う値は `TypeError`、有限でない数値は `SonareValueError` です。`mastering_preset_params(preset)` はプリセットのフラットな上書きマップを返し、そのまま `master_audio(..., overrides=...)` に渡せます。
+
+設定 dict からは、任意バンド数のマルチバンドコンプレッサーも扱えます。`dynamics.multibandComp` は `crossover`（`cutoffsHz`、`slope`、`mode`、`firKernelSize`）と `bands`（バンドごとの dict）を受け付けます。`overrides` ではフラットキーの `dynamics.multibandComp.crossover.cutoffsHz.<i>` と `dynamics.multibandComp.bands.<i>.<field>` も使えます。バンド数は 2 から 64 で、`cutoffsHz` はカットオフ一覧を置き換えて、バンド数を要素数 + 1 に決めます。列挙型のキーは数値と並んで `choices` の名前でも指定できます（`"repair.denoise.noiseEstimator": "spp"`、`dynamics.compressor.detector`、マルチバンドのスロープ・モード・ディテクターのキー）。`mastering_process`、`mastering_process_stereo`、`mastering_insert_timing` の params も同じ名前を受け付けます。`repair.denoise.enabled` を有効にしたストリーミングチェーンは、ノイズ推定器の既定が `spp` で、`quantile` は名前を示して拒否されます。
 
 マスタリング API は次の系統に分かれます。
 

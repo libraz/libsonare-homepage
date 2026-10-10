@@ -103,7 +103,7 @@ console.log(`Confidence: ${(key.confidence * 100).toFixed(1)}%`);
 console.log(key.mode);                  // 'major'
 ```
 
-`detectKey`, `detectKeyCandidates` and `analyze` report `mode` as a name, as the Node package does. The `Mode` enum (`Mode.Major` is `0`) is what the chord functions' `keyMode` option takes; `modes` accepts either spelling, and `chordFunctions` and `scaleMaskForMode` accept a name or an ordinal.
+`detectKey`, `detectKeyCandidates` and `analyze` report `mode` as a name, as the Node package does. `keyRoot` / `keyMode` of `detectChords` and `chordFunctionalAnalysis`, and the `key` of `chordFunctions`, take a pitch-class name (`'C#'`) or number and a mode name or a `Mode` ordinal (`Mode.Major` is `0`), so a detected key passes straight back; an unknown name is a `RangeError` naming the field. `modes` and `scaleMaskForMode` accept either spelling too.
 
 The chroma is read at concert A440 unless `tuning` says otherwise. `tuning` is a semitone fraction in `[-0.5, 0.5)`, and `'auto'` measures it from the audio. The value used, given or measured, comes back as `KeyDetection.tuning`; `analyze()` and `detectChords()` report theirs the same way (`AnalysisResult.tuning`, `ChordAnalysisResult.tuning`). To work in Hz instead, see [`tuningToReferenceHz` and `referenceHzToTuning`](./js-api-helpers.md#unit-conversion).
 
@@ -365,14 +365,11 @@ const keys = detectKeyCandidates(samples, sampleRate, {
   genreHint: 'pop',
 });
 
-// keyMode is a Mode ordinal; the candidate's mode is a name.
-const modeOrdinal = (name: KeyMode) => Mode[(name[0].toUpperCase() + name.slice(1)) as keyof typeof Mode];
-
 const { chords } = detectChords(samples, sampleRate, {
   useHmm: true,
   useKeyContext: true,
   keyRoot: keys[0].key.root,
-  keyMode: modeOrdinal(keys[0].key.mode),
+  keyMode: keys[0].key.mode,       // a detected key passes straight back
   chromaMethod: 'nnls',
 });
 
@@ -415,7 +412,7 @@ for (const { time, strength } of boundaries) {
 gated against the largest novelty within `referenceWindow` seconds on either
 side, not against the whole track's maximum, so a dominant change does not hide
 weaker section changes far from it. A lone dominant event, one that no other
-event in the window comes within `threshold` of, is set aside from that
+event in the window comes within 30% of, is set aside from that
 reference. It says nothing about how much the features actually changed.
 `absoluteThreshold` is the floor that asks whether anything changed at all. Setting it to `0` does not make the detector more sensitive in a
 useful way — self-scaling turns residual fluctuation into peaks of 1.0, so a
@@ -545,8 +542,8 @@ each chord in its result carries `romanNumeral` relative to `result.key`
 ```typescript
 function chordFunctionalAnalysis(
   samples: Float32Array,
-  keyRoot: PitchClass,
-  keyMode?: Mode,                  // a Mode ordinal, default Mode.Major
+  keyRoot: PitchClass | PitchClassName,
+  keyMode?: Mode | KeyMode,        // default Mode.Major
   sampleRate?: number,
   options?: ChordDetectionOptions,
 ): FunctionalChord[]
@@ -561,8 +558,7 @@ type FunctionalChord = Chord & {
 
 ```typescript
 const key = detectKey(samples, sampleRate);
-const modeOrdinal = key.mode === 'minor' ? Mode.Minor : Mode.Major;
-const functional = chordFunctionalAnalysis(samples, key.root, modeOrdinal, sampleRate);
+const functional = chordFunctionalAnalysis(samples, key.root, key.mode, sampleRate);
 
 for (const { start, name, roman, function: role } of functional) {
   console.log(`${start.toFixed(1)}s  ${name}  ${roman}  ${role}`);  // e.g. "0.0s  C  I  tonic"

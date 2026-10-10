@@ -112,7 +112,7 @@ You give the region in samples and hertz, but the edit lands on the STFT grid th
 | `startSec` / `endSec` | The same bounds in seconds (Python `start_sec` / `end_sec`), rounded to the nearest sample at the call's sample rate. Give one spelling per bound; both `startSample` and `startSec` (or both end spellings) is refused. |
 | `lowHz` / `highHz` | Frequency rectangle in Hz. Values are clamped to `[0, Nyquist]`; `highHz <= 0` means Nyquist. |
 | `gainDb` | Gain in dB. Applied identically by `gain` and `attenuate` as `magnitude *= 10^(gainDb/20)`; pass a negative value to reduce. Ignored by `mute`/`heal`. |
-| `nFft` | Power-of-two FFT size, default `2048`. |
+| `nFft` | Power-of-two FFT size in `[4, 262144]`, default `2048`; any other value is refused with an error naming `nFft` and the rule. |
 | `hopLength` | STFT hop, default `512`; must satisfy `0 < hopLength <= nFft / 2`. |
 | `window` | `hann`, `hamming`, `blackman`, or `rectangular`. |
 | `healRadiusFrames` | Neighbor frames on each side used by `heal`, default `2`; must be `>= 1`. |

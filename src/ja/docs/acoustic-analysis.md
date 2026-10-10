@@ -158,7 +158,7 @@ print(blind.confidence, blind.is_blind)
 
 estimate = sonare.estimate_room(audio.data, audio.sample_rate, n_octave_bands=6)
 print(estimate.volume, estimate.length_m, estimate.width_m, estimate.height_m)
-print(estimate.drr_db, estimate.confidence, estimate.absorption_bands, estimate.rt60_bands)
+print(estimate.drr_db, estimate.confidence, estimate.band_absorption, estimate.rt60_bands)
 
 rir = sonare.synthesize_rir(7.0, 5.0, 3.0, absorption=0.2, sample_rate=audio.sample_rate)
 print(rir.sample_rate, len(rir.rir), rir.diagnostics)
@@ -235,6 +235,22 @@ Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_
 
 この形はどの環境から呼んでも同じです。Node とブラウザは [JavaScript API の型](./js-api-types.md#roommorphresult) にある `RoomMorphResult` を返します。Python は `RoomMorphResult` データクラスを返し、その `diagnostics` は `RirDiagnostic` のリストです。C ABI では `sonare_room_morph` が成功したあとに `sonare_last_diagnostic_count()` / `sonare_last_diagnostic_code(i)` からエントリを読めます（[C++ API](./cpp-api-effects.md#c-abi-からのルームモーフ) 参照）。`sonare room-morph` コマンドは各警告を `warning: <code>: <message>` の形で stderr に出力し、出力ファイルと `--json` のサマリは stdout 側に残ります。
 
+### ステレオのルームモーフ
+
+`roomMorphStereo({ left, right, sampleRate, ...options })`（Python は `room_morph_stereo(left, right, sample_rate, length_m, width_m, height_m, ...)`、C は `sonare_room_morph_stereo`、CLI は 2 チャンネルファイルに対する `sonare room-morph`）は、モノラルではなくステレオ録音をモーフします。`roomMorph` のオプションをすべて受け取るほか、`receiverSpacingM`（Python は `receiver_spacing_m`、CLI は `--receiver-spacing`）を取ります。目標ルームは、聴取位置をはさんでこの距離だけ離れた 2 本の無指向性レシーバーで聴いた響きとして扱われ、既定は `0.5` m です。(0, 4] m の範囲外の間隔や、長さの異なる左右チャンネルは `RangeError`（Python では `SonareValueError`）で拒否されます。
+
+各チャンネルは、自分側のレシーバーの応答とたたみ込まれます。初期反射はレシーバーごとに異なり、後期テールはその距離だけ離れた 2 点の拡散音場コヒーレンスに従うため、低域は左右で相関を保ち、高域は保ちません。結果は `{ left, right, sampleRate, diagnostics }` で、両チャンネルとも入力長に目標ルームの残響テイルを足した長さです。`diagnostics` には上の表と同じコードが入ります。元の残響尾部を抑える処理は、音量の大きいほうのチャンネルから求めたゲインを両チャンネルに同じだけ適用するため、抑制によってステレオイメージがずれることはありません。
+
+```typescript
+const { left: wetL, right: wetR } = roomMorphStereo({
+  left, right, sampleRate,
+  lengthM: 12, widthM: 9, heightM: 4, wet: 0.6,
+  receiverSpacingM: 0.5,
+});
+```
+
+モノラルに合算すると、足された響きは約 300 Hz 以上で、両チャンネルが同じ応答を共有した場合より約 3 dB 小さくなります。2 つのテールが同位相で足し合わさらないためです。オフラインのモノラル `roomMorph(...)` は単一の聴取点の応答で、レシーバーのペアは置きません。`effects.reverb.room` と `effects.acoustic.roomMorph` のインサートは、ステレオストリップでこのペアを使います。どちらかのレシーバーが部屋の外に出る配置は `InvalidParameter` で拒否されるため、側壁までの距離が間隔の半分（既定では 0.25 m）より近い聴取位置は、モノラルのストリップでも拒否されます。機能カタログの測定済み境界もこれに合わせてあり、`listenerX` と `listenerY` には壁の内側に収まる最小値と最大値が載り、`lengthM` と `widthM` の最小値はそれに応じて大きくなっています。
+
 ### 推定結果から RIR を合成する
 
 `estimateRoom(...)` の結果は `synthesizeRir(...)` が受け取る名前（`lengthM`、`widthM`、`heightM`、`bandAbsorption`）をそのまま使っているので、`roomGeometryFromEstimate(...)` は位置情報を足すだけで、そのまま渡せる形状を返します。推定結果には音源や聴取位置が含まれません。`{ x, y, z }`（メートル）で渡さないと合成側の既定値が使われ、小さな推定ルームでは部屋の外になることがあります。収束しなかった吸音バンドは省かれ、スカラーの `absorption` が適用されます。計測できる寸法がない推定（`NaN`、`confidence` が `0`）は `RangeError`（Python では `SonareValueError`）になります。
@@ -267,8 +283,8 @@ rir = sonare.synthesize_rir(**geometry, sample_rate=audio.sample_rate)
 | フィールド | 型 | 意味 |
 |------------|----|------|
 | `absorption` | number | 全バンド一様の壁吸音率。`[0, 1]` の範囲内である必要があり、受理された値はさらに `[0, 0.999]` にクランプされます。最も単純なコントロールです。 |
-| `bandAbsorption` | `Float32Array` / `number[]` | オクターブバンド別の壁吸音率（125 / 250 / 500 / 1k / 2k / 4k… Hz）。指定すると `absorption` を上書きします（ただし `materialPreset` が設定されている場合を除く）。Python では `absorption_bands`。 |
-| `bandScattering` | `Float32Array` / `number[]` | バンド別の壁の散乱。指定のないバンドは `0` になります。吸音率のフィールドが選んだ壁材質に対して適用されます。 Python では `scattering_bands`。 |
+| `bandAbsorption` | `Float32Array` / `number[]` | オクターブバンド別の壁吸音率（125 / 250 / 500 / 1k / 2k / 4k… Hz）。指定すると `absorption` を上書きします（ただし `materialPreset` が設定されている場合を除く）。Python では `band_absorption`。 |
+| `bandScattering` | `Float32Array` / `number[]` | バンド別の壁の散乱。指定のないバンドは `0` になります。吸音率のフィールドが選んだ壁材質に対して適用されます。 Python では `band_scattering`。 |
 | `materialPreset` | 名前 | 名前付きの壁材質プリセット。`'concrete'`（コンクリート）、`'wood'`（木）、`'curtain'`（カーテン）、`'carpet'`（カーペット）、`'glass'`（ガラス）。`'none'` はプリセットなしです。Python では `material_preset`。1 つの材質がすべての面を覆うため、できる部屋は極端になります。全面カーペットの部屋は 125 Hz をほとんど吸音しません。`'none'` 以外のプリセットは `bandAbsorption` と `absorption` の両方より優先されます。`bandScattering` とは優先順位を競いません。 |
 
 優先順位が決めるのは**吸音率**だけです。高い順に、`'none'` 以外の `materialPreset` がすべてに優先し、それ以外では `bandAbsorption`（バンド別）が `absorption`（一様）に優先します。したがって、自分のバンド別吸音率を効かせたいときは `materialPreset` を `'none'`（既定）のままにしてください。

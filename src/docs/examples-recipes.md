@@ -151,6 +151,7 @@ Start from the input you have:
 | Practical room model inferred from audio | `estimateRoom()` |
 | Room dimensions you want to turn into an impulse response | `synthesizeRir()` |
 | Creative effect that pushes audio toward a target room | `roomMorph()` |
+| The same effect on a stereo recording, keeping the image | `roomMorphStereo()` |
 
 ::: info RIR and equivalent room
 **RIR** means room impulse response: audio samples that describe how a room reacts to a short sound. An **equivalent room** is a useful inferred model, not a scan of the exact physical room.
@@ -161,7 +162,7 @@ Blind estimates and equivalent-room estimates are useful for tagging or monitori
 ::: code-group
 
 ```typescript [Browser]
-import { init, analyzeImpulseResponse, detectAcoustic, estimateRoom, synthesizeRir, roomMorph } from '@libraz/libsonare';
+import { init, analyzeImpulseResponse, detectAcoustic, estimateRoom, synthesizeRir, roomMorph, roomMorphStereo } from '@libraz/libsonare';
 
 await init();
 
@@ -178,6 +179,9 @@ console.log(`Estimated room: ${estimate.lengthM.toFixed(1)} x ${estimate.widthM.
 
 const rir = synthesizeRir({ lengthM: 7, widthM: 5, heightM: 3, absorption: 0.2 });
 const morphed = roomMorph(samples, sampleRate, { lengthM: 12, widthM: 9, heightM: 4, wet: 0.6 });
+
+// A stereo pair: the target room is heard at two receivers `receiverSpacingM` apart (default 0.5 m).
+const { left: wetL, right: wetR } = roomMorphStereo({ left, right, sampleRate, lengthM: 12, widthM: 9, heightM: 4, wet: 0.6 });
 ```
 
 ```python [Python]
@@ -207,7 +211,7 @@ sonare acoustic room-ir.wav --ir --json
 # Estimate acoustic parameters from ordinary audio:
 sonare acoustic recording.wav --json
 
-# Estimate, synthesize, or morph a geometric room:
+# Estimate, synthesize, or morph a geometric room (a two-channel file is morphed as a stereo pair):
 sonare estimate-room recording.wav --json
 sonare synthesize-rir --length 7 --width 5 --height 3 -o room-ir.wav
 sonare room-morph recording.wav --length 12 --width 9 --height 4 --wet 0.6 -o morphed.wav

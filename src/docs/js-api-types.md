@@ -251,6 +251,10 @@ interface RirDiagnostic {
 
 An unusable morph throws, and so does an unusable `synthesizeRir(...)` call, so neither result has an error flag and every entry in `diagnostics` is recoverable. Branch on `code`: `acoustic.ism_order_clamped` (image-source order reduced to the safe maximum), `acoustic.rir_length_clamped` (tail cut against `maxSeconds` or against a resource limit), `acoustic.rir_length_floored` (`maxSeconds` is shorter than the direct sound's flight time), `acoustic.rir_tail_truncated` (`maxSeconds` cuts the longest band before it decays by 60 dB) and `acoustic.no_late_tail` (no diffuse tail produced) each mean the morph went through a room other than the one requested, and none is visible in the audio itself. `synthesizeRir(...)` reports the same shape on `RirResult.diagnostics`. The C ABI publishes the same entries structurally — `sonare_last_diagnostic_count()`, `sonare_last_diagnostic_code(i)`, `sonare_last_diagnostic_message(i)`, `sonare_last_diagnostic_severity(i)` — so a caller there branches on the code too rather than parsing the joined `sonare_last_warning_message()` string.
 
+### RoomMorphStereoResult
+
+`roomMorphStereo({ left, right, sampleRate?, receiverSpacingM?, ... })` takes the same room options as `roomMorph(...)` and returns one morphed channel per input channel. The target room is heard at two omnidirectional receivers `receiverSpacingM` apart across the listener (metres, in (0, 4], default 0.5); each channel is convolved with its own receiver's response. `RoomMorphStereoResult` is `{ left, right, sampleRate, diagnostics }`: both `Float32Array` channels are the input length plus the reverb tail, and `diagnostics` carries the same codes as `RoomMorphResult.diagnostics`. Channels of different length, or a `receiverSpacingM` that is non-finite or outside (0, 4], throw `RangeError`. `sampleRate` defaults to 48000.
+
 ### Room estimate and RIR types
 
 ```typescript
@@ -364,7 +368,13 @@ interface MasteringChainConfig {
                       midThresholdDb?: number;  midRatio?: number;
                       midAttackMs?: number;     midReleaseMs?: number;
                       highThresholdDb?: number; highRatio?: number;
-                      highAttackMs?: number;    highReleaseMs?: number; };
+                      highAttackMs?: number;    highReleaseMs?: number;
+                      /** Arbitrary band count (2..64); `cutoffsHz` sets it to length + 1. */
+                      crossover?: { cutoffsHz?: number[]; slope?: 'lr2' | 'lr4' | 'lr8' | number;
+                                    mode?: 'linkwitzRiley' | 'butterworth' | 'bessel' | 'firLinearPhase' | number;
+                                    firKernelSize?: number; };
+                      /** Per-band compressor settings by band index. */
+                      bands?: MultibandCompressorBand[]; };
   };
   saturation?: {
     tape?: { driveDb?: number; saturation?: number; hysteresis?: number; outputGainDb?: number;
@@ -450,6 +460,8 @@ interface MasteringChainStereoResult {
 
 :::
 
+The multiband compressor is configured from every chain call, not only from a version 2 chain document. `crossover.cutoffsHz` replaces the cutoff list and sets the band count (up to 64); `bands` addresses each band by index with a `MultibandCompressorBand`: `thresholdDb`, `ratio`, `attackMs`, `releaseMs`, `kneeDb`, `makeupGainDb`, `autoMakeup`, `detector` (`'peak'`, `'rms'`, `'logRms'` or the ordinal), `sidechainHpfEnabled`, `sidechainHpfHz`, `pdrTimeMs` and `pdrReleaseScale`, all optional (an omitted field keeps the base value). As flat keys these are `dynamics.multibandComp.crossover.cutoffsHz.<i>` and `dynamics.multibandComp.bands.<i>.<field>`, beside the in-place `cutoff<i>Hz` / `band<i>.<field>` spellings and the low/mid/high shorthand. Key order does not matter, and two spellings of one field in one call are refused. A stage with a single band is refused (`multiband stage needs at least two bands; one band is the compressor stage`). Enum names resolve on `dynamics.compressor.detector` and on the multiband slope, mode and per-band detector keys.
+
 The glossary mastering guides explain when to reach for each section:
 [Repair](./glossary/mastering/repair.md), [Tone and Air](./glossary/mastering/tone-air.md),
 [Dynamics](./glossary/mastering/dynamics.md),
@@ -468,7 +480,9 @@ const PitchClass = {
 
 ### Mode
 
-`Mode` is the input enum. The `keyMode` option of `detectChords` and `chordFunctionalAnalysis` takes an ordinal from this table and refuses a name with `TypeError`; `autoTune`'s `key.mode` accepts either. Results report the mode as a name instead, so `detectKey`, `detectKeyCandidates`, `analyze` and `autoTune` return `mode: 'major'`, `'minor'`, `'dorian'`, and so on; do not compare it against `Mode.Major`.
+`Mode` is the ordinal enum. Results report the mode as a name (`KeyMode`), so `detectKey`, `detectKeyCandidates`, `analyze` and `autoTune` return `mode: 'major'`, `'minor'`, `'dorian'`, and so on; do not compare it against `Mode.Major`. Inputs take either: `keyRoot` / `keyMode` of `detectChords`, `chordFunctionalAnalysis` and `Audio.chordFunctionalAnalysis` (request and positional forms), `chordFunctions`' `key` and `autoTune`'s `key` accept a pitch-class name (`'C#'`, `PitchClassName`) or number and a mode name or `Mode` ordinal, so a detected key passes straight back. An unknown name is a `RangeError` naming the field.
+
+`KeyMode` is `'major' | 'minor' | 'dorian' | 'phrygian' | 'lydian' | 'mixolydian' | 'locrian'`; `PitchClassName` is `'C' | 'C#' | ... | 'B'` (sharps only).
 
 ```typescript
 const Mode = {
@@ -527,12 +541,12 @@ The WASM package exports TypeScript helper types in addition to functions and cl
 
 | Area | Exported types/constants |
 |------|--------------------------|
-| Environment and engine | `EXPECTED_ENGINE_ABI_VERSION`, `EXPECTED_PROJECT_ABI_VERSION`, `EngineCapabilities`, `ProgressCallback` |
+| Environment and engine | `EXPECTED_ABI_VERSION`, `EXPECTED_ENGINE_ABI_VERSION`, `EXPECTED_PROJECT_ABI_VERSION`, `EngineCapabilities`, `ProgressCallback` |
 | Engine lane mixer, markers, and MIDI clips | `EngineTrackLane`, `EngineTrackSend`, `EngineBus`, `EngineMarker`, `EngineMidiClipSchedule`, `EngineMidiEvent`, `ExternalMidiEvent`, `MarkerKind`, `ProjectMarker` |
-| Key/chord/rhythm/timbre analysis | `ChordDetectionOptions`, `KeyProfileName`, `RhythmAnalysisResult`, `TimbreAnalysisResult`, `TimbreFrame`, `DynamicsAnalysisResult` |
+| Key/chord/rhythm/timbre analysis | `ChordDetectionOptions`, `KeyMode`, `PitchClassName`, `KeyProfileName`, `RhythmAnalysisResult`, `TimbreAnalysisResult`, `TimbreFrame`, `DynamicsAnalysisResult` |
 | Spectral, pitch, and feature transforms | `MelPowerResult`, `StftPowerResult`, `PitchCorrectOptions`, `VoicedFlags`, `SpectralRegionOp`, `SpectralEditOptions`, `TempogramMode` |
 | Paged clip streaming | `ClipPageStreamerEngine`, `ClipPageStreamerOptions`, `ClipPageStreamSource`, `OpfsClipStream`, `OpfsClipStreamOptions`, `OpfsClipPageProviderOptions` |
-| Mastering and capability catalog | `MasteringProcessorParams`, `MasteringProcessorCatalogEntry`, `MasteringInsertParamInfo`, `MasteringInsertParamChoice`, `MasteringInsertSlot`, `MasteringInsertTiming`, `CapabilityCatalog`, `CapabilityCatalogParameter`, `CapabilityCatalogProcessor`, `CapabilityCatalogPresets`, `CapabilityCatalogMasteringPreset`, `MasteringChannelPolicy`, `MasteringChainStereoResult`, `MasteringStereoParamsRequest`, `MasteringStreamingPreviewStereoRequest` |
+| Mastering and capability catalog | `MasteringProcessorParams`, `MasteringProcessorCatalogEntry`, `MasteringInsertParamInfo`, `MasteringInsertParamChoice`, `MasteringInsertSlot`, `MasteringInsertTiming`, `CapabilityCatalog`, `CapabilityCatalogParameter`, `CapabilityCatalogProcessor`, `CapabilityCatalogPresets`, `CapabilityCatalogMasteringPreset`, `CapabilityCatalogChain`, `CapabilityCatalogChainStage`, `CapabilityCatalogChainList`, `CapabilityCatalogChainAlias`, `MultibandCompressorBand`, `MasteringInsertParamDependency`, `MasteringChannelPolicy`, `MasteringChainStereoResult`, `MasteringStereoParamsRequest`, `MasteringStreamingPreviewStereoRequest` |
 | Metering requests | `MeteringStereoRequest`, `MeteringStereoDecimatedRequest` |
 | Streaming retune | `StreamingRetuneConfig` |
 | Streaming EQ | `StreamingEqualizerConfig`, `EqBandType`, `EqBandPhase`, `EqCoeffMode`, `EqMatchOptions`, `EqStereoPlacement` |
@@ -549,7 +563,7 @@ These exported string-literal unions name the values a field or call accepts. Ea
 
 | Type | Values | Where it appears |
 |------|--------|------------------|
-| `SynthEngineMode` | `'default'`, `'subtractive'`, `'fm'`, `'karplus-strong'`, `'modal'`, `'additive'`, `'percussion'`, `'piano'`, `'pipe-organ'`, `'bowed-string'`, `'reed'`, `'brass'`, `'flute'`, `'plucked-string'`, `'vocal'`, `'free-reed'`, `'harpsichord'`, `'sample'` | `SynthPatch.engineMode`; `'fm'`, `'modal'`, `'percussion'` and `'sample'` are silent until their section is supplied |
+| `SynthEngineMode` | `'default'`, `'subtractive'`, `'fm'`, `'karplus-strong'`, `'modal'`, `'additive'`, `'percussion'`, `'piano'`, `'pipe-organ'`, `'bowed-string'`, `'reed'`, `'brass'`, `'flute'`, `'plucked-string'`, `'vocal'`, `'free-reed'`, `'harpsichord'`, `'sample'` | `SynthPatch.engineMode`; a patch that sets only an engine mode voices that engine's base preset; `'sample'` is silent until a bank is supplied |
 | `SynthOscWaveform` | `'default'`, `'sine'`, `'saw'`, `'square'`, `'triangle'`, `'noise'` | `SynthPatch.waveform` |
 | `SynthFilterModel` | `'default'`, `'svf'`, `'moog-ladder'`, `'diode-ladder'`, `'sallen-key'` | `SynthPatch.filterModel` |
 | `SynthFilterOutput` | `'default'`, `'lowpass'`, `'bandpass'`, `'highpass'` | `SynthPatch.filterOutput` (SVF only) |
@@ -578,4 +592,4 @@ These exported string-literal unions name the values a field or call accepts. Ea
 | `SpectralEditMode` / `SpectralEditWindow` | `'gain'`, `'attenuate'`, `'mute'`, `'heal'` / `'hann'`, `'hamming'`, `'blackman'`, `'rectangular'`, `'rect'` | `SpectralRegionOp.mode` / `SpectralEditOptions.window` for `spectralEdit` |
 | `NoteTargetUnmatchedPolicy` | `'leave'` (default), `'mute'`, `'nearest'` | `unmatchedPolicy` of `assignNoteTargets` |
 
-`MasteringInsertParamInfo` and `CapabilityCatalogParameter` use `id: number | null`, `choices: MasteringInsertParamChoice[] | null`, and `slot: string | null`. `CapabilityCatalogProcessor.slots` lists the conditional key groups described by `MasteringInsertSlot`. `CapabilityCatalog.masteringPresets` contains entries with `name`, `kind`, `targetLufs`, `truePeakCeilingDb`, and `maxLimiterGainReductionDb`; the three numeric fields are `null` for restoration presets. For the voice-start behavior of `SynthPatch.retrigger`, see [Built-in Synthesizer](./native-synth.md#the-synthpatch-object).
+`MasteringInsertParamInfo` and `CapabilityCatalogParameter` use `id: number | null`, `choices: MasteringInsertParamChoice[] | null`, and `slot: string | null`. `CapabilityCatalogProcessor.slots` lists the conditional key groups described by `MasteringInsertSlot`. `CapabilityCatalog.masteringPresets` contains entries with `name`, `kind`, `targetLufs`, `truePeakCeilingDb`, and `maxLimiterGainReductionDb`; the three numeric fields are `null` for restoration presets. `SynthParamInfo` (returned by `synthEngineParamInfo(engineMode)` and `synthPatchParamInfo()`) has `name`, `type` (`'number'` or `'boolean'`), optional `integer`, `min` and `max`, `default` and `unit`; `synthEngineParamInfo` is `[]` for the modes that have no section. For the voice-start behavior of `SynthPatch.retrigger`, see [Built-in Synthesizer](./native-synth.md#the-synthpatch-object).

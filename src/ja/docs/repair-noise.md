@@ -65,7 +65,7 @@ const cleaned = masteringRepairDenoiseClassical({
 | オプション | 値または既定値 | 用途 |
 |---|---|---|
 | `mode` | 既定は `logMmse`、ほかに `mmseStsa`、`spectralSubtraction` | ゲイン関数を選ぶ。スペクトルサブトラクションでは `overSubtraction` と `spectralFloor` も読む。 |
-| `noiseEstimator` | 既定は `quantile`、ほかに `mcra`、`imcra`、`spp` | ノイズスペクトルの追跡方法を選ぶ。 |
+| `noiseEstimator` | 既定は `quantile`、ほかに `mcra`、`imcra`、`spp` | ノイズスペクトルの追跡方法を選ぶ。チェーンの上書きも同じ名前を受け付ける（`repair.denoise.noiseEstimator`、`repair.denoise.mode`、`repair.dehum.mode`）。ストリーミングのマスタリングチェーンは既定が `spp` で、`quantile` は名前を示して拒否する。 |
 | `nFft` / `hopLength` | 既定は `1024` / `256` | STFT の幾何を設定する。`nFft` は `4` から `524288` までの 2 のべき乗、`hopLength` は正で `nFft / 2` 以下とし、Hann のオーバーラップで再構成できる組み合わせにする。 |
 | `reductionDb` | 既定は `26`、有限で `[0, 120]` | ゲインマスクの各ビンに許す最大減衰を設定する。ラウドネス目標ではなく残留ノイズの下限。 |
 | `noiseEstimationQuantile` | 既定は `0.1` | ノイズスペクトルの推定に使う、静かなフレームの割合。 |

@@ -145,6 +145,7 @@ sonare analyze song.mp3 --json > analysis.json
 | 音声から実用的な部屋モデルを推定する | `estimateRoom()` |
 | 部屋寸法からインパルス応答を作る | `synthesizeRir()` |
 | 目標ルームへ寄せる音作り効果 | `roomMorph()` |
+| ステレオ録音に同じ効果をかけ、音像を保つ | `roomMorphStereo()` |
 
 ::: info RIR と等価ルーム
 **RIR** は room impulse response（ルームインパルス応答）の略で、部屋が短い音にどう反応するかを表す音声サンプルです。**等価ルーム** は、音声から推定した実用上のモデルであり、実際の部屋を正確にスキャンした結果ではありません。
@@ -155,7 +156,7 @@ sonare analyze song.mp3 --json > analysis.json
 ::: code-group
 
 ```typescript [ブラウザ]
-import { init, analyzeImpulseResponse, detectAcoustic, estimateRoom, synthesizeRir, roomMorph } from '@libraz/libsonare';
+import { init, analyzeImpulseResponse, detectAcoustic, estimateRoom, synthesizeRir, roomMorph, roomMorphStereo } from '@libraz/libsonare';
 
 await init();
 
@@ -172,6 +173,9 @@ console.log(`推定ルーム: ${estimate.lengthM.toFixed(1)} x ${estimate.widthM
 
 const rir = synthesizeRir({ lengthM: 7, widthM: 5, heightM: 3, absorption: 0.2 });
 const morphed = roomMorph(samples, sampleRate, { lengthM: 12, widthM: 9, heightM: 4, wet: 0.6 });
+
+// ステレオペア：目標ルームを `receiverSpacingM`（既定 0.5 m）離した 2 つのレシーバーで聴いたものとして扱う
+const { left: wetL, right: wetR } = roomMorphStereo({ left, right, sampleRate, lengthM: 12, widthM: 9, heightM: 4, wet: 0.6 });
 ```
 
 ```python [Python]
@@ -201,7 +205,7 @@ sonare acoustic room-ir.wav --ir --json
 # 通常の音声から音響パラメータを推定する:
 sonare acoustic recording.wav --json
 
-# 幾何ベースのルームを推定・合成・モーフィングする:
+# 幾何ベースのルームを推定・合成・モーフィングする（2 チャンネルファイルはステレオペアとしてモーフィングされる）:
 sonare estimate-room recording.wav --json
 sonare synthesize-rir --length 7 --width 5 --height 3 -o room-ir.wav
 sonare room-morph recording.wav --length 12 --width 9 --height 4 --wet 0.6 -o morphed.wav

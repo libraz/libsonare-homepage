@@ -25,8 +25,8 @@ description: libsonare のミキシング／リアルタイムエンジン向け
 | `masteringInsertParamNames(name)` | 1 つのインサートが受け付ける構築用キー（バンド／サブバンド型はインデックス付きの `band{i}.*` キーを列挙し、未知の名前には空配列を返す） |
 | `masteringInsertParamInfo(name, sampleRate?)` | 構築用キーとリアルタイムオートメーション対象ごとの完全な記述子。[パラメータ記述子](#パラメータ記述子)を参照。`sampleRate` を渡すと、そのレートで決まるナイキスト上限を解決します |
 | `masteringProcessorCatalog()` | `kind`、`realtimeInsertable`、`stereoOnly`、`latencySamples`、`tailSamples`、`channelPolicy`、`params`、条件付き `slots` を持つ機械処理しやすいエントリ。代表的な既定構成（48 kHz／512 サンプル）のプローブでレイテンシと可聴な減衰テールを返し（オフライン専用はどちらも 0）、構成依存の正確なレイテンシは実際のプロセッサへ問い合わせます。プロセッサ ID をハードコードせず能力で絞り込めます。 |
-| `masteringInsertTiming(name, params, sampleRate)` | 1 つのインサート構成を prepare した正確なレイテンシとテール。`params` には有限の数値と真偽値だけを渡します。[プリセットパラメータと構成済みインサートのタイミング](./js-api-mastering.md#プリセットパラメータと構成済みインサートのタイミング)を参照 |
-| `capabilityCatalog()` | ビルド全体のドキュメント。全プロセッサを `masteringInsertParamInfo` と同じ記述子付きで、プリセット一覧とともに 1 回で読めます。[カタログからインサートの操作面へ](#カタログからインサートの操作面へ) を参照 |
+| `masteringInsertTiming(name, params, sampleRate)` | 1 つのインサート構成を prepare した正確なレイテンシとテール。`params` にはインサートの記述子が宣言するあらゆる値の型（数値、真偽値、列挙名、文字列、数値配列）を渡せます。[プリセットパラメータと構成済みインサートのタイミング](./js-api-mastering.md#プリセットパラメータと構成済みインサートのタイミング)を参照 |
+| `capabilityCatalog()` | ビルド全体のドキュメント。全プロセッサを `masteringInsertParamInfo` と同じ記述子付きで、チェーンキーのセクションとプリセット一覧とともに 1 回で読めます。[カタログからインサートの操作面へ](#カタログからインサートの操作面へ) を参照 |
 
 Python の対応関数は `mastering_insert_names()`、`mastering_insert_param_names(name)`、`mastering_insert_param_info(name, sample_rate=...)`、`mastering_processor_catalog()`、`mastering_insert_timing(name, params, sample_rate)`、`capability_catalog()` です。
 
@@ -49,8 +49,8 @@ Python の対応関数は `mastering_insert_names()`、`mastering_insert_param_n
 | `default` | `number` \| `boolean` \| `null` | キーを省略したときに使われる値 |
 | `unit` | `string` \| `null` | プロセッサがそのキーを読む単位。閉じた集合（下記）から選ばれ、boolean・enum・string・array のキーでは `null` |
 | `scale` | `'linear'` \| `'log'` | スライダーに使う軸 |
-| `uiMin`、`uiMax` | `number` \| `null` | `[min, max]` の内側にある任意の表示範囲。ライブラリが宣言していなければ `null` |
-| `dependsOn` | `{ key: string; relation: 'lt' \| 'le' \| 'ge' \| 'gt' }[]` | このキーの値域を、現在の値で縛る兄弟キー（たとえば `cutoff0Hz` は `cutoff1Hz` 未満） |
+| `uiMin`、`uiMax` | `number` \| `null` | `[min, max]` の内側にある任意の表示範囲。ライブラリが宣言していなければ `null`。対数軸（`scale: 'log'`）のパラメータは、必ず正の `uiMin` と有限の `uiMax` を公開します |
+| `dependsOn` | `{ key: string; relation: 'lt' \| 'le' \| 'ge' \| 'gt'; factor: number }[]` | このキーの値域を、現在の値で縛る兄弟キー。`this <relation> factor * sibling` と読みます。`factor` は単純な大小関係（たとえば `cutoff0Hz` は `cutoff1Hz` 未満）なら 1 |
 | `choices` | `{ name: string; value: number }[]` \| `null` | 名前付き数値の閉じた集合。間隔のある離散値も含み、閉じた集合を公開しない場合は `null` |
 | `slot` | `string` \| `null` | キーが属するプロセッサのスロット群。どの群にも属さないキーは `null` |
 
@@ -67,6 +67,7 @@ const band = (rate?: number) =>
   masteringInsertParamInfo('eq.parametric', rate).find((p) => p.name === 'band0.frequencyHz')!;
 band().max;       // 24000（排他）
 band(44100).max;  // 22050（排他）
+band(96000).max;  // 48000（排他）
 ```
 
 ## カタログからインサートの操作面へ
@@ -76,7 +77,7 @@ band(44100).max;  // 22050（排他）
 手順は、プロセッサごとに API を呼ぶのではなく、1 つのドキュメントを 3 回参照するだけです。
 
 1. **インサート集合を選ぶ。** `processors` を `realtimeInsertable` で絞ります。95 エントリ中 84 で、`masteringInsertNames()` が返す集合と同一です。残る 11 はオフラインプロセッサ 7 とペアプロセッサ 4 です。ペアプロセッサ、`final.*`、`maximizer.loudnessOptimize` は空の `params` 配列を持ち、`repair.declick`、`repair.declip`、`repair.trimSilence` は構築時専用の行として自分の `params` を公開します。`repair.decrackle`、`repair.dehum`、`repair.denoiseClassical`、`repair.dereverbClassical` はリアルタイムインサートですが、設定はやはり構築時専用です。`category` はピッカーと同じ切り方で集合を分けます（`effects` がこのページの 19 個のクリエイティブ FX id、`voice` が `voice.changer` インサート、その他のカテゴリがマスタリングの各ファミリー）。どのエントリも `causal` を持ち、`repair.declick`、`repair.declip`、`repair.trimSilence` では `false`、すべてのインサートでは `true` です。`channelPolicy` は、ステレオより広いバスでミキサーがそのインサートをどう包むかを示します。リバーブ、モジュレーション、ディレイのインサートは `effects.modulation.ringModulator` を除いて `stereoPairOnly` で、ringModulator は `multichannel` です。
-2. **記述子を読む。** インサートの `params` は、その id に対して `masteringInsertParamInfo(id)` が返すリストと同一で、順序も同じです。カタログを持っているホストは、プロセッサごとの呼び出しを必要としません（オフライン専用の 3 つのリペアプロセッサは、行をカタログでのみ公開します）。`id: null` は構築時専用キーを示し、整数の id は Node／WASM の `Mixer.scheduleInsertAutomation(strip, insertIndex, paramId, samplePos, value)`、Python の `Mixer.schedule_insert_automation(...)`、C ABI の `sonare_strip_schedule_insert_automation` に渡すオートメーション id です。リアルタイムエンジンのセッターは代わりに `name` を取ります（`setTrackStripInsertParamByName` とそのマスター版、バス版）。
+2. **記述子を読む。** インサートの `params` は、その id に対して `masteringInsertParamInfo(id)` が返すリストと同一で、順序も同じです。カタログを持っているホストは、プロセッサごとの呼び出しを必要としません（オフライン専用のリペアプロセッサも同じ呼び出しで答えます）。`id: null` は構築時専用キーを示し、整数の id は Node／WASM の `Mixer.scheduleInsertAutomation(strip, insertIndex, paramId, samplePos, value)`、Python の `Mixer.schedule_insert_automation(...)`、C ABI の `sonare_strip_schedule_insert_automation` に渡すオートメーション id です。リアルタイムエンジンのセッターは代わりに `name` を取ります（`setTrackStripInsertParamByName` とそのマスター版、バス版）。
 3. **各コントロールを配置する。** `type`、`default`、`min`、`max`、`unit`、`choices` から組みます。構築時専用キーにも記述子があるため、フェイザーの `stages`、オートワウの `attackMs` / `releaseMs`、ロータリーの `stereoSpread`、ルームのジオメトリを構築時フィールドとして表現できます。`slot` で所属するスロット群を特定し、プロセッサの `slots` エントリにある `activation`（`anyKey` または `always`）、内側を包む `parent`、`minCrossoverCutoffs` を組み合わせて、その群の存在を表示・検証します。
 
 カタログには `saturation.overdrive` と `saturation.distortion` も `saturation` カテゴリで含まれます。どちらもマルチチャンネルのリアルタイムインサートで、ソロプロセッサでもあります。そのため、ミキサーのチェーン、リアルタイムエンジン、単発のマスタリング適用で同じ ID を使えます。
@@ -101,8 +102,8 @@ for (const param of chorus.params) {
 
 - **`rtSafe: false` はオートメーションを止める。** ヒントではありません。そのパラメータにオートメーションをスケジュールすると `NotSupported`（コード 6）が返ります。構築時専用の行は `id: null` かつ `rtSafe: false` です。GS EFX の raw バイトはすべて id 付きでも `rtSafe: false` で、`modDepthSamples` も同じです。記述子ごとにオートメーションレーンを描く UI は、id の有無にかかわらず `rtSafe` が false の行をすべて無効化する必要があります。
 - **カタログには数値以外の型もあります。** エフェクト系の記述子には `number`、`boolean`、`enum`、`string`、`array` があります。`choices` には enum 値や、間隔のある離散的な数値集合が載ります。名前からトグルを推測せず、`type` を使い、離散値の操作には `choices` を使ってください。
-- **レイテンシとテールはインサートごとで、リバーブでは 0 ではない。** `effects.reverb.convolution`、`effects.reverb.room`、`effects.acoustic.roomMorph` は 256 サンプルのレイテンシを報告します。リバーブのテールは 51,217 サンプル（`room`、`roomMorph`）、72,000（`convolution`）を経て 446,957（`fdn`）まで、ステレオディレイは 120,029 で、いずれも既定パラメータ・48 kHz での値です。報告されるテールは出力が満尺の 1e-5 に下がるまでを覆うので、バウンス長を決める上限として使えます。`realtimeCost` はリバーブでは `moderate`、`velvet` だけが `high`、モジュレーションとディレイはすべて `low` で、`null` になるのは非インサートの 11 個だけです。
-- **エフェクト系はパラメータ数が少ない。** 19 プロセッサ合わせて 235 記述子です。全カタログの 5,577 記述子の大半はバンド単位の EQ プロセッサが占めます（`multiband.dynamicEq` だけで 1,019）。記述子の数で自身の大きさを決めるインサート UI は、2 つのファミリーが 1 桁違うことを前提にしてください。
+- **レイテンシとテールはインサートごとで、リバーブでは 0 ではない。** `effects.reverb.convolution`、`effects.reverb.room`、`effects.acoustic.roomMorph` は 256 サンプルのレイテンシを報告します。リバーブのテールは 51,217 サンプル（`room`、`roomMorph`）、72,000（`convolution`）を経て 358,682（`fdn`）まで、ステレオディレイは 120,029 で、いずれも既定パラメータ・48 kHz での値です。報告されるテールは出力が満尺の 1e-5 に下がるまでを覆うので、バウンス長を決める上限として使えます。`realtimeCost` はリバーブでは `moderate`、`velvet` だけが `high`、モジュレーションとディレイはすべて `low` で、`null` になるのは非インサートの 11 個だけです。
+- **エフェクト系はパラメータ数が少ない。** 19 プロセッサ合わせて 237 記述子です。全カタログの 5,579 記述子の大半はバンド単位の EQ プロセッサが占めます（`multiband.dynamicEq` だけで 1,019）。記述子の数で自身の大きさを決めるインサート UI は、2 つのファミリーが 1 桁違うことを前提にしてください。
 
 ### null と既定値が教えてくれないこと
 
@@ -214,6 +215,8 @@ const processed = masteringProcess('effects.gsEfx', samples, sampleRate, {
 
 クランプの方が一見親切ですが、ここでは適切ではありません。百分率や別スケールの反射係数、あるいは dB 値を正規化済みのフィールドへ渡した場合、意図しない部屋がそのまま構築され、テイルが短すぎる／長すぎるという形でしか誤りが表に出ません。同じ係数を渡す他の経路 — これらのインサートのバンド別 absorption 配列と、オフラインのルームインパルス合成のファサード — はすでにパラメータエラーを返すため、スカラー経路も同じ挙動にしています。
 :::
+
+幾何ベースのルーム系インサートは、ステレオペアの受音点のどちらかが部屋の外に出る配置を InvalidParameter で拒否します。したがって、側壁までの距離が受音点間隔の半分より小さいリスナーは、モノラルのストリップでも拒否されます。カタログの実測した範囲もこれに従い、`listenerX` と `listenerY` は壁の内側に収まる最小値・最大値を公開し、`lengthM` と `widthM` の最小値はそれに合わせて引き上げられます。ステレオのストリップでは、各チャンネルが間隔をあけた 2 つの受音点（`receiverSpacingM`。省略または 0 で 0.5 m、最大 2.5 m）のうち自分の側で聞こえるターゲットルームと畳み込まれるため、付加されるルームは中央に寄らず、左右で同一にもなりません。後部のテールは、それだけ離れた 2 点の拡散音場コヒーレンスに従います。モノラルのストリップは単一リスナーの応答のままです。オフラインのモノラル `roomMorph` は受音点のペアを置かないので、そのような配置も受け付けます。
 
 幾何ベースのルーム系インサートは、空気吸収のコントロールも受け取ります。`airAbsorptionEnabled`（既定は OFF）、`airTemperatureC`、`airHumidityPercent` の 3 つです。オフラインのファサードとまったく同じオプション解決を通るため、インサートとして構築した部屋と `synthesizeRir(...)` で構築した同じ部屋は一致します。気象条件の `0` がリテラルのゼロではなく ISO の基準気象条件を選ぶ、という規則も共通です。[ルーム音響解析](./acoustic-analysis.md#後期残響モデルとテールのコントロール) を参照してください。
 

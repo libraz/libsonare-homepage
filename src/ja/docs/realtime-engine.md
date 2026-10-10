@@ -231,6 +231,10 @@ engine.setSoloMute(0, true, false);
 
 ::: info レーンの順序は `setTrackLanes(...)` に従います
 `setTrackLanes(...)` が成功すると、トラックの並べ替え、削除、追加が反映されます。キュー済みコマンド、センド、インサートオートメーション、レーン状態はトラックの識別子に追従し、レーンインデックスは呼び出し後の現在位置になります。生の `RealtimeEngine` では、呼び出しのたびに各レーンのセンドを、そのレーンのエントリーが渡した `sends` 配列から作り直します。`sends` を省略すると（id だけの指定を含む）、既存のセンドは維持されず消去されます。省略時にセンドを維持するのは `SonareEngine` ワークレットファサードのほうで、JS 側にセンドのキャッシュを持ち、呼び出しのたびに完全なリストを裏で再送信しています。トポロジー変更後は、数値のレーン指定やトラックインサート指定を読み直してください。
+
+レーン一覧を書き直さずに 1 レーンのセンドや出力バスだけを変えるには、`setTrackSends(trackId, sends)` と `setTrackOutputBus(trackId, busId)` を使います（C は `sonare_engine_set_track_sends` / `sonare_engine_set_track_output_bus`、Python は `set_track_sends` / `set_track_output_bus`）。どちらもそのレーンのほかのフィールドと、ほかのレーンには触れません。センドのリストが変わらなければ、進行中のレベルランプも維持されます。未知のトラック id、宣言されていないバス、重複したセンド先バス、センドの範囲外のレベルは例外になります。生の `RealtimeEngine` では、レーンが `setTrackLanes` で宣言済みである必要があります。ワークレットファサードの `setTrackSends` は、トラックにレーンがなければ作成します。
+
+センドやインサートのためにエンジンが作ったストリップ、またはシーン仕様から構築したストリップを持つレーンを含め、中央のモノラルレーンはどのパンロウでもユニティで再生されます。パンを振れば、そのぶん動きます。
 :::
 
 ::: warning 構造を変えるストリップ呼び出しはコントロールスレッドで
@@ -294,7 +298,8 @@ WASM と Node は `{ output, monitor }` を返します。Python は `set_track_
 
 | 目的 | 生の `RealtimeEngine` | `SonareEngine` ワークレット API |
 |------|----------------------|--------------------------------------|
-| レーンをグループバスへ折り込む（`busId 0` でマスターミックスへ戻す） | `setTrackLanes(...)` のレーン `outputBusId`（`0` または未指定でマスターミックス） | `setTrackOutputBus(target, busId)`（`busId 0` でマスターミックスへ戻す） |
+| レーンをグループバスへ折り込む（`busId 0` でマスターミックスへ戻す） | `setTrackLanes(...)` のレーン `outputBusId`（`0` または未指定でマスターミックス）、または 1 レーンだけなら `setTrackOutputBus(trackId, busId)` | `setTrackOutputBus(target, busId)`（`busId 0` でマスターミックスへ戻す） |
+| 1 レーンの補助センドを置き換える（空配列で消去） | `setTrackSends(trackId, sends)` | `setTrackSends(target, sends)` |
 | バスを別バスへ折り込む、またはコピーをセンドする | `setTrackBuses(...)` のバス `outputBusId` と `sends`（出力が `0`／未指定ならマスターミックス） | `setTrackBuses(...)` の同じフィールド |
 | サイドチェインのバインディングを適用せずに検査 | `canSetLaneSidechain(trackId, insertIndex, sourceTrackId)`、`canSetBusSidechain(...)`、`canSetMasterSidechain(...)`（引数はセッターと同じ） | 同名 |
 | あるレーンのインサートを別レーンでキーイング（ダッキング） | `setLaneSidechain(trackId, insertIndex, sourceTrackId)`（`0` で解除） | `setLaneSidechain(target, insertIndex, sourceTarget)`（`null` で解除） |
@@ -324,7 +329,7 @@ engine.setBusSidechain(1, 0, 'bus', 2);   // バス 1 のインサート 0 を�
 engine.setMasterSidechain(0, 'track', 1); // マスターのインサート 0 を、トラック 1 でキーイング
 ```
 
-各 `canSet*Sidechain` はセッターと同じ引数を取り、何も変更せずに `SidechainCheck`（`{ ok, reason }`）を返します。`reason` は `ok` が true のときだけ `null` で、そうでなければセッターが最初に失敗するチェックを `'invalidTarget'`、`'insertOutOfRange'`、`'undeclaredSource'`、`'invalidSourceKind'`、`'selfKey'`、`'cycle'`、`'tableFull'`、`'planRefused'` のいずれかで示します。UI では、不可能なキー元を提示する前にグレーアウトするのに使えます。Python にも同じ 3 つのメソッド（`can_set_lane_sidechain` など）があり、`SidechainCheck` を返します。いずれもコントロールスレッド専用です。
+各 `canSet*Sidechain` はセッターと同じ引数を取り、何も変更せずに `SidechainCheck`（`{ ok, reason }`）を返します。`reason` は `ok` が true のときだけ `null` で、そうでなければセッターが最初に失敗するチェックを `'invalidTarget'`、`'insertOutOfRange'`、`'undeclaredSource'`、`'invalidSourceKind'`、`'selfKey'`、`'cycle'`、`'tableFull'`、`'planRefused'` のいずれかで示します。UI では、不可能なキー元を提示する前にグレーアウトするのに使えます。レーンの `insertOutOfRange` はそのレーンのストリップに該当するインサートがないこと（ストリップのないレーンはインサートを持ちません）、`undeclaredSource` はソースのトラックにレーンが宣言されていないことを表し、バスとマスターの形式でも同じ理由が返ります。`planRefused` は、ディレイ上限を超えるアラインメントかオーバーフローだけを意味します。Python にも同じ 3 つのメソッド（`can_set_lane_sidechain` など）があり、`SidechainCheck` を返します。いずれもコントロールスレッド専用です。
 
 ```typescript
 engine.canSetLaneSidechain(1, 0, 1);  // { ok: false, reason: 'selfKey' }
@@ -367,7 +372,7 @@ if (faderId < 0 || busId < 0) throw new Error('declare the lane and bus first');
 engine.setAutomationLane(faderId, [{ ppq: 0, value: 0 }, { ppq: 8, value: -12 }]);
 ```
 
-トラックにレーンがない、またはバスが設定されていないときは、どちらも `-1` を返します（Python は `SonareError` を送出します。`resolve_track_lane_automation_id`、`resolve_bus_automation_id`。C は `sonare_engine_resolve_track_lane_automation_id`、`sonare_engine_resolve_bus_automation_id`）。id は位置ではなくトラックまたはバスそのものを指すため、`setTrackLanes` や `setTrackBuses` の並べ替え、他のストリップの削除をまたいでも同じストリップを駆動し続けます。そのトラックまたはバス自身が削除されると、何も適用しなくなります。マスターのフェーダー、パン、幅の id は固定で、解決は不要です。`SonareEngine` ワークレット API の `automationParamId(target, 'faderDb' | 'pan')` と `busAutomationParamId(busId)` も同種の id を返し、初回利用時にミキサーのレーン／バスを宣言します。
+トラックにレーンがない、またはバスが設定されていないときは、どちらも `-1` を返します（Python は `SonareError` を送出します。`resolve_track_lane_automation_id`、`resolve_bus_automation_id`。C は `sonare_engine_resolve_track_lane_automation_id`、`sonare_engine_resolve_bus_automation_id`）。id は位置ではなくトラックまたはバスそのものを指すため、`setTrackLanes` や `setTrackBuses` の並べ替え、他のストリップの削除をまたいでも同じストリップを駆動し続けます。そのトラックまたはバス自身が削除されると、何も適用しなくなります。マスターのフェーダー、パン、幅の id は固定で、解決は不要です。予約済みのミキサー id 名前空間（`0x4D58xxxx`）で受け付けるのはマスターの id だけです。`setParameter`、`setParameterSmoothed`、`setAutomationLane` は、それ以外の id を `InvalidParameter` で拒否します。トラックとバスの id は、計算で組み立てず、必ずリゾルバーか `automationParamId` から受け取ってください。`SonareEngine` ワークレット API の `automationParamId(target, 'faderDb' | 'pan')` と `busAutomationParamId(busId)` も同種の id を返し、初回利用時にミキサーのレーン／バスを宣言します。
 
 インサートパラメータも同じオートメーションレーンで動かせますが、先に予約 id を取得します。`resolveTrackInsertAutomationId(trackId, insertIndex, paramName)`、`resolveMasterInsertAutomationId(...)`、`resolveBusInsertAutomationId(...)` のいずれかを呼び、その戻り値を `setAutomationLane`、`setParameter`、`setParameterSmoothed` に渡してください。`insertIndex` はストリップの pre インサート、続いて post インサートを連結した列を指し、`paramName` は `masteringInsertParamInfo` が返す JSON キーです。未知のストリップ／インサート／キーでは WASM/Node は `-1`、Python は `SonareError` を返します。
 

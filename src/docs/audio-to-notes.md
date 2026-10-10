@@ -72,12 +72,19 @@ The tuning reference defaults to 440 Hz. For a take recorded away from A440, pas
 | `polyphonic` | `false` uses the monophonic pYIN segmentation; `true` uses multi-F0 tracking |
 | `referenceHz` | Positive tuning reference in Hz for MIDI note numbers, or `'auto'` to measure it from the audio; default `440` |
 | `fmin`, `fmax` | F0 search range in Hz for either path; omit an endpoint for the selected path's default, or supply a positive value, with resolved `fmax > fmin` |
-| `minNoteMs` | Shortest monophonic note span; default `30` ms |
+| `minNoteMs` | Shortest note span in milliseconds. Default `30` monophonic; polyphonic, a thirty-second note at the transcription tempo held within `30..60` ms |
+| `minNoteDivision` | Shortest note as a note value (Python `min_note_division`, CLI `--min-note-division`): `n` is a `1/n` note at the transcription tempo, an integer in `1..128`, so `32` keeps notes from a thirty-second note up. Applies to both paths and is refused together with `minNoteMs`. The tempo is the given or detected one, or the project's tempo at its start for `transcribeToClip` |
 | `segmentationThresholdCents` | Pitch movement that starts a new monophonic note; default `50` cents |
+| `maxPolyphony` | Polyphonic only. Voices one frame may hold, `1..64`; default `10` |
+| `minFramePeakRatio` | Polyphonic only. A frame's search stops below this share of its first peak, `0..1`; default `0.20` |
+| `minRidgePeakRatio` | Polyphonic only. A ridge ends below this share of its own running peak, `0..1`; default `0.10` |
+| `reattackRatio` | Polyphonic only. Splits a ridge into two notes where its salience climbs past this multiple of the level just before (the same pitch struck again while it sounds); above `1`, default `2.0`, `0` turns the split off |
 | `velocityFloorDb` / `fixedVelocity` | Map RMS level from the negative dBFS floor, or assign one velocity in `1..127` |
 | `group` / `channel` | UMP group and MIDI channel, each in `0..15` |
 
-`velocityFloorDb` and `fixedVelocity` are alternatives: omit both to measure level, set a negative floor to map it, or set `fixedVelocity` to bypass level measurement. Invalid zero values on options that require a positive value are rejected rather than silently replaced.
+`velocityFloorDb` and `fixedVelocity` are alternatives: omit both to measure level, set a negative floor to map it, or set `fixedVelocity` to bypass level measurement. Invalid zero values on options that require a positive value are rejected rather than silently replaced; for the two peak ratios `0` is a real zero (no cut). The four polyphonic limits are snake_case in Python (`max_polyphony`, `min_frame_peak_ratio`, `min_ridge_peak_ratio`, `reattack_ratio`), flags of the same names on both CLIs, and refused on the monophonic path with an error naming the field.
+
+The polyphonic path keeps dense material by default (up to ten voices per frame, notes down to a thirty-second note, a same-pitch re-strike as a new note) and runs in time proportional to the input length. Its known limits: the upper note of an octave doubling is usually lost, a re-strike much softer than the note it interrupts is not split, and broadband noise yields short notes, so raise `minNoteMs` or `minNoteDivision` for noisy input.
 
 ## Add post-processing
 

@@ -366,7 +366,8 @@ import { alignTakeToReference, Project } from '@libraz/libsonare';
 const { anchors, alignment } = alignTakeToReference({
   reference,     // Float32Array: ガイドテイク、またはテイクを歌ったときの伴奏
   take,          // Float32Array: その下へ収めるテイク
-  sampleRate,    // 両バッファ共通のレート — ここでは何もリサンプルしない
+  sampleRate,    // リファレンスのレート
+  // takeSampleRate: 44100,  // テイクのレートが異なるときに指定。既定は sampleRate
   // hopLength: 512,      // クロマのホップ。小さいほど多くのフレームを測定し、アンカーが増える
   // binsPerOctave: 12,   // 正の 12 の倍数。レートに対して確認済みでなければ触らない
 });
@@ -390,12 +391,12 @@ try {
 ::: warning 何がどう拒否されるか
 位置合わせできないテイクはエラーとして報告され、使えないマップが返されることはありません。拒否する層は 2 つあり、どちらの層で拒否されたかによって、エラーから分かることが変わります。
 
-- **測定の前に、フィールド名つきで。** 空のバッファ（`reference must not be empty`、`take must not be empty`）、非有限のサンプル（`reference contains NaN or Inf`、`take contains NaN or Inf`）、`[8000, 384000]` の整数でない `sampleRate`、形の合わない `hopLength` や `binsPerOctave`（文字列、小数）は、いずれも問題のフィールドを名指しする `RangeError` を投げます。
+- **測定の前に、フィールド名つきで。** 空のバッファ（`reference must not be empty`、`take must not be empty`）、非有限のサンプル（`reference contains NaN or Inf`、`take contains NaN or Inf`）、`[8000, 384000]` の整数でない `sampleRate` や `takeSampleRate`、形の合わない `hopLength` や `binsPerOctave`（文字列、小数）は、いずれも問題のフィールドを名指しする `RangeError` を投げます。
 - **測定から、`SonareError` の `InvalidParameter` として。** 負の `hopLength`、負か 12 の倍数でない `binsPerOctave`（各音高クラスは整数個の CQT ビンの平均なので、13 や 18 には畳み込み先がありません）、相異なるアンカーが 2 個得られない組み合わせ — どちらかの録音がクロマ 1 フレームに満たないとそうなります。コアは引数を名指しせずに条件を報告します。
 
 12 の倍数であることは必要条件であって十分条件ではありません。使える最も細かい `binsPerOctave` はサンプルレートに依存し、レートが上がっても細かくはならないので、実行するレートでより細かいグリッドを確認済みでなければ既定のままにしてください。どちらのフィールドも、省略するか `0` を書くとライブラリの値が選ばれます。
 
-**サンプルレートは変換されません。** この呼び出しは両バッファに 1 つの `sampleRate` を取ります。レートが異なるなら先にリサンプルしてください。さもないとクロマグラムが 2 つの異なるグリッドで測定され、何も報告されないままアンカーが間違います。CLI 版の `sonare project align-takes` はリファレンスと各テイクをファイルから読み、不一致をコアの呼び出し前に名指しで拒否します — `align-takes reads both at one rate and does not resample` — どちらの側もリサンプルしません。
+**サンプルレート。** `sampleRate` はリファレンスのレート、`takeSampleRate`（Python は `take_sample_rate`、C は `sonare_align_take_to_reference_ex`）はテイクのレートです。両者が異なるときは、測定の前にテイクをリファレンスのグリッドへリサンプルします。2 本のアンカー軸はどちらも**リファレンスのレート**のサンプルで返り、`hopLength` もそのレートです。プロジェクトはワープアンカーをプロジェクトのレートのサンプルとして読むので、`setWarpMap` の前に `warpSample` と `sourceSample` の両方へ「プロジェクトのレート ÷ リファレンスのレート」を掛けてください（上の例では両者が等しい）。CLI 版の `sonare project align-takes` はリファレンスと各テイクをファイルから読み、レートの異なるテイクも整列し、アンカーをプロジェクトのレートで書き出します。
 :::
 
 ::: tip どちらの経路かはレポートが決める

@@ -235,11 +235,12 @@ sonare mastering-pair-analyze track.wav \
   --json > mastering-report.json
 ```
 
-For pair analysis, the reference must already be at the source's sample rate: a
-mismatch is an error rather than a quiet resample, so a comparison never runs
-against silently rewritten audio. Resample the reference first (`sonare resample
-reference.wav --target-sr <sr> -o reference-matched.wav`), or use the Python API
-when you need finer control over resampling or trimming before comparison.
+`mastering-pair-analyze` and `mastering-pair-processor` read the reference at
+its own sample rate and resample it onto the source's; equal rates are processed
+exactly as they would be without the step. `mastering-stereo-analyze` is the
+exception: both files must already be at the input's rate, and a mismatch is an
+error. Use the Python API when you need finer control over resampling or
+trimming before comparison.
 
 The `/mastering` browser demo uses the same mastering processor families. Use the exported report from the demo as a starting point for CLI automation.
 
@@ -284,6 +285,8 @@ The preset, chain, and repair commands take an audio file and write a WAV with `
 | `sonare mastering-chain track.wav -o out.wav` | `--config '{...}'`, `--config-file f.json`, `--params k=v,...`, `--report FILE` | Runs a configurable mastering chain from JSON config |
 | `sonare mastering-presets` | honors the global `--json` flag | Lists the available mastering preset names |
 | `sonare declip clipped.wav -o out.wav` | `--clip-threshold` (0.98), `--lpc-order` (36), `--iterations` (2), `--lpc-blend` (0.65) | Repairs clipped audio via LPC reconstruction |
+
+On every CLI, a `--chain-config` (or `--config`) document and `--params` form one parameter list. Two spellings of one field across the document and `--params` are refused with both keys named, and a document's `<stage>.enabled: false` keeps the stage off when `--params` sets one of its fields. A multiband stage with one band is refused (`multiband stage needs at least two bands; one band is the compressor stage`); the band count is 2 to 64. Enum-valued parameters (`repair.denoise.mode`, `repair.denoise.noiseEstimator`, `repair.decrackle.mode`, `repair.dehum.mode`) accept their choice name beside the number, and `repair.decrackle.mode` refuses any value other than 0 (median) or 1 (wavelet shrinkage).
 
 #### repair
 
@@ -338,9 +341,10 @@ The commands that would deliver a worse result for it keep the pair instead:
 | Command | Stereo input |
 |---------|--------------|
 | `mastering` | Mastered as a pair; the stereo image is preserved end to end |
+| `eq`, `room-morph` | A two-channel input is processed as a pair and written as a stereo file; `--placement` and `--output-pan` on `eq` act on the file's own channels. `room-morph` hears the target room at two receivers spaced `--receiver-spacing` metres apart (default 0.5, range above 0 up to 4). The JSON report carries `stereo` |
 | `mastering-processor` | A two-channel input is processed as a pair, and the result is written as a stereo file. A processor with no mono form (`stereo.imager`, `eq.midSide`, the `multiband.*` family) takes the stereo path from any input: a mono file is fed to both channels, and the output is stereo |
 | `mix` (Python), `mix-strip` | Processed as a pair. A mono file is carried on both sides; a stereo one keeps its own two channels |
-| `suggest-mix` | Each `--input` keeps a stereo file as a pair instead of folding it, since the image analysis is the one part of the assistant that measures both channels |
+| `suggest-mix` | Each `--input` keeps a stereo file as a pair instead of folding it, since the image analysis is the one part of the assistant that measures both channels. Each file is read at its own sample rate |
 | `normalize` | Kept as a pair. One gain is measured across both channels and applied to both: in `--mode peak` the louder channel lands on `--target-db` and the other keeps its level relative to it, and `--mode rms` measures the pair the same way. Normalizing each channel on its own would lift the quieter side until the two matched, which is a balance change, not a level change |
 | `master`, `mastering-chain`, `declip` (Python CLI) | Kept as a pair; one gain is measured across both channels so the image does not collapse toward the centre |
 | Everything else | Downmixed to mono, with a warning |

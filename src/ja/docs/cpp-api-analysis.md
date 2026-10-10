@@ -169,6 +169,7 @@ auto nnls_result = nnls_chroma(audio, nnls_config);
 |------|------|
 | `sonare_detect_key_with_tuning(...)` | 録音の `tuning`（半音の端数、`[-0.5, 0.5)`）を指定するか、`tuning_auto` で測定させるキー検出。`out_tuning` に使われた値が入ります |
 | `sonare_chord_functions(chords, count, key_root, key_mode, &roman, &functions)` | 既に手元にあるコードのローマ数字と和声機能を、`count` 個ずつの `SonareStringArray` 2 つで返します。解放は `sonare_free_string_array`。音声は解析しません |
+| `sonare_chord_symbol_from_analysis(...)`、`sonare_key_mode_from_analysis(mode, &out_mode)` | 検出したコードやキーを、ライブラリ自身の変換表を通してアレンジ注釈（`SonareProjectChordSymbol`、`SonareProjectKeySegment`）のフィールドへ変換します。宣言は `sonare_c_project_annotate.h` |
 | `sonare_tuning_to_reference_hz`, `sonare_reference_hz_to_tuning` | 解析のチューニング単位と Hz の基準音の間の変換 |
 | `sonare_scale_mask_for_mode(root, mode, &mask)` | `SonareMode` の 12 ビットのスケールマスク。`sonare_scale_quantize_midi` と `SonarePitchCorrectionConfig` が読むレイアウト |
 | `sonare_mfcc_to_mel_checked_ex(mfcc, input_length, n_mfcc, n_frames, n_mels, lifter, &out)` | 長さを検査し、リフターを考慮する MFCC から Mel への逆変換。`lifter` は順変換で使った値（`0` は未適用） |
@@ -192,7 +193,7 @@ for (const Boundary& b : detector.boundaries()) {
 }
 ```
 
-`threshold` は、ピークから `reference_window` 秒以内で最大の生ノヴェルティイベントに対して測られ、孤立した支配的イベントは除かれます。そのため、窓より遠くにある支配的な変化が、より弱い変化を締め出すことはありません。`0` は各フレームを自分自身の基準にして `threshold` を無効にし、曲の長さ以上の値は基準を曲全体にします（孤立した支配的イベントを除く点は同じです）。基準が局所的なため、`Boundary::strength`（曲全体の最大値で正規化した曲内の順位）は `threshold` を下回ることがあります。
+`threshold` は、ピークから `reference_window` 秒以内で最大の生ノヴェルティイベントに対して測られ、孤立した支配的イベント（`reference_window` 内の他のどのイベントも 30% 以内に達しないもの）は除かれます。そのため、窓より遠くにある支配的な変化が、より弱い変化を締め出すことはありません。`0` は各フレームを自分自身の基準にして `threshold` を無効にし、曲の長さ以上の値は基準を曲全体にします（孤立した支配的イベントを除く点は同じです）。基準が局所的なため、`Boundary::strength`（曲全体の最大値で正規化した曲内の順位）は `threshold` を下回ることがあります。
 
 C ABI は `sonare_detect_boundaries(samples, length, sample_rate, &options, &out)` で、`SonareBoundaryOptions` は必ず `sonare_boundary_options_default()` から始めます。ゼロ埋めにすると `absolute_threshold` が 0 になり、定常な入力でも区間が切られてしまいます。結果は `sonare_free_boundary_result` で解放します。
 
@@ -243,7 +244,7 @@ struct Section {
   SectionType type;    // Intro, Verse, Chorus 等
   float start;
   float end;
-  float energy_level;
+  float energy_level;  // フレーム RMS の中央値を、最も大きいセクションで正規化
   float confidence;
 
   std::string type_string() const;

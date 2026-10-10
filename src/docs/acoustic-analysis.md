@@ -158,7 +158,7 @@ print(blind.confidence, blind.is_blind)
 
 estimate = sonare.estimate_room(audio.data, audio.sample_rate, n_octave_bands=6)
 print(estimate.volume, estimate.length_m, estimate.width_m, estimate.height_m)
-print(estimate.drr_db, estimate.confidence, estimate.absorption_bands, estimate.rt60_bands)
+print(estimate.drr_db, estimate.confidence, estimate.band_absorption, estimate.rt60_bands)
 
 rir = sonare.synthesize_rir(7.0, 5.0, 3.0, absorption=0.2, sample_rate=audio.sample_rate)
 print(rir.sample_rate, len(rir.rir), rir.diagnostics)
@@ -235,6 +235,22 @@ Neither `RoomMorphResult` nor `RirResult` has an error flag: a morph that cannot
 
 The shape is the same on every surface. Node and the browser return the `RoomMorphResult` described on [JavaScript API Types](./js-api-types.md#roommorphresult). Python returns a `RoomMorphResult` dataclass whose `diagnostics` is a list of `RirDiagnostic`. The C ABI leaves the entries in `sonare_last_diagnostic_count()` / `sonare_last_diagnostic_code(i)` after a successful `sonare_room_morph`, as shown on [C++ API](./cpp-api-effects.md#room-morph-through-the-c-abi). The `sonare room-morph` command prints each warning to stderr as `warning: <code>: <message>`, while the output file and any `--json` summary stay on stdout.
 
+### Stereo room morph
+
+`roomMorphStereo({ left, right, sampleRate, ...options })` (Python `room_morph_stereo(left, right, sample_rate, length_m, width_m, height_m, ...)`, C `sonare_room_morph_stereo`, and `sonare room-morph` on a two-channel file) morphs a stereo recording instead of a mono one. It takes every `roomMorph` option plus `receiverSpacingM` (Python `receiver_spacing_m`, CLI `--receiver-spacing`): the target room is heard at two omnidirectional receivers that distance apart across the listener, `0.5` m by default. A spacing outside (0, 4] m, or channels of different length, is refused with a `RangeError` (`SonareValueError` in Python).
+
+Each channel is convolved with its own receiver's response. The early reflections differ per receiver, and the late tails follow the diffuse-field coherence of two points that far apart, so the bass stays correlated between the channels and the highs do not. The result is `{ left, right, sampleRate, diagnostics }`: both channels are the input length plus the target room's reverb tail, and `diagnostics` carries the codes of the table above. The source-tail suppressor applies one gain, taken from the louder channel, to both channels, so suppression does not shift the stereo image.
+
+```typescript
+const { left: wetL, right: wetR } = roomMorphStereo({
+  left, right, sampleRate,
+  lengthM: 12, widthM: 9, heightM: 4, wet: 0.6,
+  receiverSpacingM: 0.5,
+});
+```
+
+Summed to mono, the added room is about 3 dB lower above roughly 300 Hz than a response shared by both channels would be, because the two tails do not add coherently. The offline mono `roomMorph(...)` is the single-listener response and does not place a receiver pair. The `effects.reverb.room` and `effects.acoustic.roomMorph` inserts use the pair on a stereo strip, and refuse (`InvalidParameter`) a placement that puts either receiver outside the room, so a listener closer to a side wall than half the spacing (0.25 m by default) is refused even on a mono strip. The capability catalog publishes the matching bounds: `listenerX` and `listenerY` carry a minimum and maximum inside the walls, and the minimum `lengthM` and `widthM` are raised accordingly.
+
 ### From an estimate to a synthesized RIR
 
 An `estimateRoom(...)` result already uses the names `synthesizeRir(...)` takes (`lengthM`, `widthM`, `heightM`, `bandAbsorption`), so `roomGeometryFromEstimate(...)` only merges the placement in and returns geometry you can pass straight on. An estimate carries no source or listener position; give them as `{ x, y, z }` in meters, or the synthesizer's defaults apply, which can fall outside a small estimated room. Absorption bands that did not converge are left out, so the scalar `absorption` applies. An estimate with no measurable dimensions (`NaN`, `confidence` `0`) throws a `RangeError` (`SonareValueError` in Python).
@@ -267,8 +283,8 @@ Both `synthesizeRir(...)` and `roomMorph(...)` accept the shared shoebox geometr
 | Field | Type | Meaning |
 |-------|------|---------|
 | `absorption` | number | Uniform wall absorption for every band. Must be within `[0, 1]`; an accepted value is then clamped to `[0, 0.999]`. The simplest control. |
-| `bandAbsorption` | `Float32Array` / `number[]` | Per-octave-band wall absorption (125 / 250 / 500 / 1k / 2k / 4k… Hz). When provided it overrides `absorption`, unless `materialPreset` is set. Python: `absorption_bands`. |
-| `bandScattering` | `Float32Array` / `number[]` | Per-band wall scattering. Missing bands default to `0`. Applied to whichever wall material the absorption fields selected. Python: `scattering_bands`. |
+| `bandAbsorption` | `Float32Array` / `number[]` | Per-octave-band wall absorption (125 / 250 / 500 / 1k / 2k / 4k… Hz). When provided it overrides `absorption`, unless `materialPreset` is set. Python: `band_absorption`. |
+| `bandScattering` | `Float32Array` / `number[]` | Per-band wall scattering. Missing bands default to `0`. Applied to whichever wall material the absorption fields selected. Python: `band_scattering`. |
 | `materialPreset` | name | A named wall-material preset: `'concrete'`, `'wood'`, `'curtain'`, `'carpet'` or `'glass'` (`'none'` selects no preset). Python: `material_preset`. One material covers every surface, so the rooms it makes are extreme: an all-carpet room absorbs almost nothing at 125 Hz. Any preset but `'none'` wins over both `bandAbsorption` and `absorption`. It does not compete with `bandScattering`. |
 
 Precedence decides the **absorption** only, highest first: a `materialPreset` other than `'none'` wins over everything; otherwise `bandAbsorption` (per band) wins over `absorption` (uniform). So to use your own per-band absorption, leave `materialPreset` at `'none'` (the default).

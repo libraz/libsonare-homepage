@@ -84,7 +84,7 @@ C ABI はプロジェクト系のシンボルを常に *エクスポート* し�
 
 ### C ABI のバージョン
 
-フラットな POD 構造体を宣言する C ABI ヘッダーは、それぞれ構造体の正確なサイズとメンバーオフセットを保証するバージョンマクロを持ちます。`SONARE_FEATURE_ABI_VERSION` は `sonare_c_types.h` の 7 で、特徴量 POD のレイアウトに加えて、`voiced` 引数を含むノート API など、公開する一般 C 関数のシグネチャも保証します。`SONARE_PROJECT_ABI_VERSION` は `sonare_c_project.h` の 2、`SONARE_VOICE_CHANGER_ABI_VERSION` は `sonare_c_voice_changer.h` の 3、`SONARE_ACOUSTIC_ABI_VERSION` は `sonare_c_acoustic.h` の 4 です。`sonare_c.h` はこれらを `SONARE_ABI_VERSION` に詰め込み（ビット 0〜7 が Feature、8〜15 が Project、16〜23 が Voice changer、24〜31 が Acoustic）、`sonare_abi_version()` は読み込まれたライブラリがコンパイル時に持っていた値を返します。リアルタイムのコマンドキューは POD ではなく SharedArrayBuffer のレコードレイアウトを表すため、これとは別に `sonare_engine_abi_version()`（現在は 3）でバージョン管理されます。POD を境界越しに渡す利用側は、最初の呼び出しの前に一度だけ `sonare_abi_version()` を自分のコンパイル時の `SONARE_ABI_VERSION` と比較し、一致しなければ先へ進みません。値が違えば両者の構造体レイアウトまたは保証対象の関数契約は一致しておらず、POD 経路は失敗するのではなくメモリを壊します。JSON の入口はレイアウトのずれを許容するので、この関門は不要です。バージョンは、保証対象の構造体レイアウトまたは Feature の関数シグネチャが変わるたびに進みます（Project のバージョンはレイアウトが変わったリリースごとに 1 回）。したがって値が等しければレイアウトと契約は同一であり、保証対象の構造体へのフィールド追加は「追加的な変更」ではなくバージョンの更新です。各バインディングが読み込み時にどの値を照合するかは [ネイティブバインディング](./native-bindings.md#abi-バージョン) にまとめています。
+フラットな POD 構造体を宣言する C ABI ヘッダーは、それぞれ構造体の正確なサイズとメンバーオフセットを保証するバージョンマクロを持ちます。`SONARE_FEATURE_ABI_VERSION` は `sonare_c_types.h` の 7 で、特徴量 POD のレイアウトに加えて、`voiced` 引数を含むノート API など、公開する一般 C 関数のシグネチャも保証します。`SONARE_PROJECT_ABI_VERSION` は `sonare_c_project.h` の 2、`SONARE_VOICE_CHANGER_ABI_VERSION` は `sonare_c_voice_changer.h` の 3、`SONARE_ACOUSTIC_ABI_VERSION` は `sonare_c_acoustic.h` の 5 です。`sonare_c.h` はこれらを `SONARE_ABI_VERSION` に詰め込み（ビット 0〜7 が Feature、8〜15 が Project、16〜23 が Voice changer、24〜31 が Acoustic。よって集約値は `0x05030207`）、`sonare_abi_version()` は読み込まれたライブラリがコンパイル時に持っていた値を返します。リアルタイムのコマンドキューは POD ではなく SharedArrayBuffer のレコードレイアウトを表すため、これとは別に `sonare_engine_abi_version()`（現在は 3）でバージョン管理されます。POD を境界越しに渡す利用側は、最初の呼び出しの前に一度だけ `sonare_abi_version()` を自分のコンパイル時の `SONARE_ABI_VERSION` と比較し、一致しなければ先へ進みません。値が違えば両者の構造体レイアウトまたは保証対象の関数契約は一致しておらず、POD 経路は失敗するのではなくメモリを壊します。JSON の入口はレイアウトのずれを許容するので、この関門は不要です。バージョンは、保証対象の構造体レイアウトまたは Feature の関数シグネチャが変わるたびに進みます（Project のバージョンはレイアウトが変わったリリースごとに 1 回）。したがって値が等しければレイアウトと契約は同一であり、保証対象の構造体へのフィールド追加は「追加的な変更」ではなくバージョンの更新です。各バインディングが読み込み時にどの値を照合するかは [ネイティブバインディング](./native-bindings.md#abi-バージョン) にまとめています。
 
 #### バージョン付き構造体と既定値
 
@@ -95,7 +95,10 @@ C ABI はプロジェクト系のシンボルを常に *エクスポート* し�
 | `SonareMusicAnalyzeOptions` | 先頭の `struct_version`。`SONARE_MUSIC_ANALYZE_OPTIONS_VERSION`（2）でなければならず、`sonare_analyze_json_ex` は他の値を拒否します | `sonare_music_analyze_options_default()` |
 | `SonareChordDetectionOptions` | 先頭の `struct_version`。0 または `SONARE_CHORD_DETECTION_OPTIONS_VERSION`（2） | ゼロ埋めしてバージョンを設定するか、設定せず 0 のまま |
 | `SonareBoundaryOptions` | なし。44 バイトで、`use_chroma` の後に `reference_window` を持ちます（相対しきい値を測る片側の秒数。既定 60、`0` で相対しきい値を無効化） | `sonare_boundary_options_default()` |
-| `SonareTranscribeConfig` | `struct_version` は 1 または 2。バージョン 2 は `reference_auto`（`reference_hz` を読まずチューニング基準を測定する）を末尾に追加します。バージョン 1 も引き続き読まれます | `sonare_transcribe_config_default()` |
+| `SonareTranscribeConfig` | `struct_version` は 1、2、3 のいずれか。バージョン 2 は `reference_auto`（`reference_hz` を読まずチューニング基準を測定する）を、バージョン 3 はポリフォニックの上限 `max_polyphony`（最大 64、既定 10）、`min_frame_peak_ratio`（0.20）、`min_ridge_peak_ratio`（0.10）、`reattack_ratio`（2.0）と `min_note_division` を末尾に追加します。バージョン 1 と 2 も引き続き読まれます。上限の 4 つは `polyphonic` が 0 のとき、フィールド名を挙げた InvalidParameter で拒否されます | `sonare_transcribe_config_default()` |
+| `SonarePolyphonicConfig` | `struct_version` は 0、1、2 のいずれか。バージョン 2 は `reattack_ratio`（0 なら再打鍵の分割はオフ）を末尾に追加し、バージョン 0 と 1 も引き続き読まれます | ゼロ初期化（NULL の設定も同じ読まれ方） |
+| `SonareSynthPatch` | `struct_version` は `SONARE_SYNTH_PATCH_STRUCT_VERSION`（9）まで。バージョン 8 以前も引き続き読まれ、レイアウトは [C++ エフェクト API](./cpp-api-effects.md) に書かれています | `sonare_synth_preset_patch(name, &patch)`、またはゼロ初期化 |
+| `SonareRoomMorphConfig` | 末尾に `receiver_spacing_m`（ネイティブで 128 バイト、wasm32 で 108 バイト）。0 なら既定の 0.5 m で、`sonare_room_morph` はこのフィールドを読みません | ゼロ初期化 |
 | `SonareRealtimeVoiceChangerConfig` | 先頭の `struct_version`（0 または 1）に続いて `formant_mode`。レイアウトは `SONARE_VOICE_CHANGER_ABI_VERSION` が保証します | `sonare_realtime_voice_changer_config_default()`（ゼロ埋めは ISP リミッターを無効にします） |
 
 結果構造体の `SonareChordAnalysisResult`、`SonareMelResult`、`SonareMfccResult`、`SonareTranscribeResult` も先頭に `struct_version` を持ちます。これはライブラリが書き込むので、呼び出し側は読むだけです。結果は使用したチューニングを報告し（`SonareChordAnalysisResult.tuning`、`SonareTranscribeResult.tuning`）、Mel と MFCC の結果は逆変換に必要な順変換のパラメータを持ちます。`SonareProjectLoopRecordingDesc` では Project ABI バージョンは動きません。以前の `reserved` ワードが `flags` になり、`0` または `SONARE_PROJECT_LOOP_RECORDING_DROP_PARTIAL_TAIL` を受け付け、他のビットは拒否されるので、呼び出し側は 0 にしてください。
@@ -405,7 +408,7 @@ float hz_to_midi(float hz);      // A4 = 440Hz = 69
 float midi_to_hz(float midi);
 
 // Hz <-> ノート名。変換できない入力には SonareException（InvalidParameter）を送出する:
-// 解析できないノート名やオクターブが範囲外のもの、有限の正数でない hz
+// 解析できないノート名やオクターブが -1〜9 の外にあるもの、有限の正数でない hz
 std::string hz_to_note(float hz);    // "A4", "C#5"
 float note_to_hz(const std::string& note);
 

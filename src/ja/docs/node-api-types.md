@@ -11,8 +11,8 @@ description: '@libraz/libsonare-native パッケージの TypeScript 型定義�
 
 ```typescript
 interface Key {
-  root: string;        // ピッチクラス名。例: "C"、"C#"、"A"
-  mode: string;        // モード名。例: "major"、"minor"
+  root: number;        // ピッチクラス番号 0..11（C = 0）。WASM、Python と同じ
+  mode: KeyMode;       // 'major' | 'minor' | 'dorian' | 'phrygian' | 'lydian' | 'mixolydian' | 'locrian'
   confidence: number;  // 採点した全候補にわたるソフトマックス。[0, 1)
   name: string;        // "C major"、"A minor" など
   shortName: string;   // "C"、"Am" など
@@ -230,6 +230,8 @@ interface MeteringStereoRequest {
 }
 ```
 
+`Key.root` は数値で、`detectChords` や `chordFunctions` がそのまま受け取れる形です。`detectChords`、`chordFunctionalAnalysis`、`Audio.chordFunctionalAnalysis` の `keyRoot` / `keyMode` と `chordFunctions` の `key` は、ピッチクラス名（`'C#'`）または数値と、モード名または `Mode` 序数を受け付けるので、検出したキーをそのまま渡せます。未知の名前は、フィールド名を挙げた `RangeError` になります。`Chord.root` と `Chord.bass` は引き続き文字列ラベルです。
+
 ### `Key.confidence` が表すもの
 
 `Key.confidence` は、採点したすべての候補のプロファイル相関に対するソフトマックス
@@ -272,10 +274,12 @@ interface MeteringStereoRequest {
 | 特徴抽出 | `DecomposeStemsRequest`, `DecomposeStemsResult`, `DecomposeStemsLinkedRequest`, `DecomposeStemsLinkedResult`, `NoteSegment`, `NoteSegmentsRequest` |
 | ストリーミング解析 | `StreamAnalyzerConfig`, `StreamAnalyzerStats`, `StreamFramesSoa`, `StreamProgressiveEstimate`, `StreamChordChange`, `StreamBarChord`, `StreamPatternScore` |
 | マスタリングとメータリング | `MasteringPreset`, `MasteringInsertParamInfo`, `MasteringInsertTiming`, `MasteringProcessorCatalogEntry`, `MasteringInsertSlot`, `SoloProcessor`, `StreamingPlatform`, `DynamicsProcessorResult`, `CompressorDetector`, `DecrackleMode`, `DenoiseClassicalMode`, `DenoiseClassicalNoiseEstimator`, `EqBandInput`, `EqPhaseMode`, `EqSpectrumSnapshot`, `NormalizeMode`, `MasteringRepairStage`, `MasteringRepairStageName`, `MasteringRepairAnalysis`, `MasteringRepairAnalyzeRequest`, `MasteringRepairApplyRequest`, `MasteringRepairApplyResult`, `MasteringRepairStageReports`, `StreamingLoudnessGainRequest`, `StreamingLoudnessGainStereoRequest`, `StreamingLoudnessGainResult` |
-| 機能カタログ | `Capabilities`, `CapabilityCatalog`, `CapabilityCatalogParameter`, `CapabilityCatalogProcessor`, `CapabilityCatalogPresets`, `CapabilityCatalogMasteringPreset`, `MasteringInsertParamChoice`, `MasteringInsertParamUnit`, `MasteringInsertParamScale`, `MasteringInsertParamRelation`, `MasteringInsertParamDependency` |
+| 機能カタログ | `Capabilities`, `CapabilityCatalog`, `CapabilityCatalogParameter`, `CapabilityCatalogProcessor`, `CapabilityCatalogPresets`, `CapabilityCatalogMasteringPreset`, `CapabilityCatalogChain`, `CapabilityCatalogChainStage`, `CapabilityCatalogChainList`, `CapabilityCatalogChainAlias`, `MasteringInsertParamChoice`, `MasteringInsertParamUnit`, `MasteringInsertParamScale`, `MasteringInsertParamRelation`, `MasteringInsertParamDependency` |
 | ステレオのマスタリング／メータリングのリクエスト | `MasteringAssistantSuggestStereoRequest`, `MasteringAudioProfileStereoRequest`, `MasteringStreamingPreviewStereoRequest`, `MeteringStereoRequest`, `NormalizeStereoRequest`, `NormalizeStereoResult` |
 | ピッチ補正 | `PitchCorrectOptions`, `VoicedFlags`, `AutoTuneKey`, `AutoTuneOptions`, `AutoTuneResult` |
-| ルーム音響 | `AcousticModeName`, `MaterialPresetName`, `RoomGeometryFromEstimateOptions`, `RoomPlacement` |
+| ルーム音響 | `AcousticModeName`, `MaterialPresetName`, `RoomGeometryFromEstimateOptions`, `RoomMorphOptions`, `RoomMorphResult`, `RoomMorphStereoResult`, `RoomPlacement` |
+| マスタリングチェーン設定 | `MasteringChainConfig`, `MasteringChainConfigDocument`, `MultibandCompressorBand` |
+| シンセ記述子 | `SynthParamInfo`, `SynthPatch`, `SynthEngineMode` |
 | ミキシング | `AutomationCurve`, `GoniometerPoint`, `MeterTap`, `MixMeterSnapshot`, `MixResult`, `MixerProcessResult`, `PanLaw`, `PanLawName`, `PanLawInput`, `PanMode`, `SendTiming`, `SidechainCheck`, `SidechainRefusal` |
 | リアルタイム音声 | `VoicePresetId`, `VoicePresetCategory`, `RealtimeVoiceChangerPresetMetadata`, `RealtimeVoiceChangerPreset`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerConfig`, `RealtimeVoiceChangerOptions` |
 | リアルタイムエンジングラフ | `EngineGraphSpec`, `EngineGraphNode`, `EngineGraphNodeType`, `EngineGraphConnection`, `EngineGraphMix`, `EngineGraphParameterBinding`, `EngineParameterInfo` |
@@ -283,4 +287,4 @@ interface MeteringStereoRequest {
 | プロジェクトのメタデータ／オートメーション | `ExternalInstrument`, `ExternalInstrumentEvent`, `ProjectAssistSidecar`, `ProjectAssistSidecarInput`, `ProjectAutomationTargetKind`, `ProjectAutomationLaneDesc` |
 | リアルタイムエンジンのジョブ／テレメトリ | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `EngineMeterTelemetry` |
 
-`CapabilityCatalog.masteringPresets` は `name`、`kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持つ要素を返し、修復プリセットでは 3 つの数値フィールドが `null` になります。`CapabilityCatalogProcessor.slots` は条件付きパラメータ群を表し、`MasteringInsertParamInfo` の各記述子には対応する `slot` があります。記述子の `unit` は `MasteringInsertParamUnit`（閉じた集合で、数値でないキーは `null`）、`scale` は `MasteringInsertParamScale`（`'linear'` または `'log'`）、`dependsOn` は `MasteringInsertParamDependency` の配列で、その `relation` は `MasteringInsertParamRelation` です。`uiMin` と `uiMax` は表示範囲を表します。どのプロセッサ項目も `causal` を持ちます。`masteringInsertTiming(name, params, sampleRate)` は `latencySamples` と `tailSamples` を持つ `MasteringInsertTiming` を返し、`masteringPresetParams(preset)` は `masterAudio({ samples, overrides })` に渡せるフラットな `Record<string, number | boolean>` を返します。
+`CapabilityCatalog.masteringPresets` は `name`、`kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持つ要素を返し、修復プリセットでは 3 つの数値フィールドが `null` になります。`CapabilityCatalogProcessor.slots` は条件付きパラメータ群を表し、`MasteringInsertParamInfo` の各記述子には対応する `slot` があります。カタログの `chain` セクション（`CapabilityCatalogChain`）は、フラットなマスタリングチェーンキーすべてを記述します。ステージ（`CapabilityCatalogChainStage`）、項目数付きのインデックス付きリスト（`CapabilityCatalogChainList`）、どのプロセッサにも属さないキー、別名表記すべて（`CapabilityCatalogChainAlias`）です。`presets.playbackRoom` は常に存在します。記述子の `unit` は `MasteringInsertParamUnit`（閉じた集合で、数値でないキーは `null`）、`scale` は `MasteringInsertParamScale`（`'linear'` または `'log'`）、`dependsOn` は `MasteringInsertParamDependency`（`key`、`relation`、`factor`。`this <relation> factor * sibling` と読む）の配列で、その `relation` は `MasteringInsertParamRelation` です。`uiMin` と `uiMax` は表示範囲を表します。どのプロセッサ項目も `causal` を持ちます。`masteringInsertTiming(name, params, sampleRate)` は `latencySamples` と `tailSamples` を持つ `MasteringInsertTiming` を返し、`masteringPresetParams(preset)` は `masterAudio({ samples, overrides })` に渡せるフラットな `Record<string, number | boolean>` を返します。

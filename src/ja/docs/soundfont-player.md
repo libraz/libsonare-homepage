@@ -298,11 +298,14 @@ try {
   engine.pushMidiNoteOn(7, 0, 0, 60, 100);       // destinationId, group, channel, note, velocity
   const [left, right] = engine.process([new Float32Array(128), new Float32Array(128)]);
 
+  engine.pushMidiProgram(7, 0, 0, 40);           // destinationId, group, channel, program（続けてバンクと renderFrame を省略可）
   engine.clearMidiInstrument(7);                 // バインド解除
 } finally {
   engine.destroy();
 }
 ```
+
+`pushMidiProgram` は、ライブのプログラムチェンジを（任意でバンクつきで）ノートや CC と同じタイミング指定でキューに入れます。MIDI 2.0 のプログラムチェンジ 1 つにまとめて送られるため、受け手側の条件がそのまま適用されます。RX PROGRAM CHANGE をオフにしたパートは、受け付けたうえで無視します。
 
 ::: tip 読み込み前のバインドも可能
 SoundFont を読み込む前に `setSf2Instrument(...)` を呼べます。その場合、ライブ MIDI は NativeSynth GM フォールバックで鳴ります。後から SoundFont を読み込むと、バインド済みのデスティネーションがそのサンプルを使い始めます。ライブ鍵盤や Web MIDI の配線は [MIDI 入力](./midi-input.md) を参照してください。

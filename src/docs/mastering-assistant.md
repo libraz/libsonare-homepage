@@ -319,7 +319,7 @@ sonare mastering source.wav --chain-config suggestion-chain.json \
 
 :::
 
-The result keeps the convenient top-level loudness fields and adds a `report` for before/after UI. Each side includes integrated, maximum momentary, and maximum short-term LUFS, true peak, and loudness range. The report also carries applied gain, maximum gain reduction, whether the peak ceiling limited the loudness target, and 32 after-minus-before band-energy deltas. The CLI writes the same report shape with snake_case keys when `--report` is supplied.
+The result keeps the convenient top-level loudness fields and adds a `report` for before/after UI. Each side includes integrated, maximum momentary, and maximum short-term LUFS, true peak, and loudness range. The report also carries applied gain, maximum gain reduction, whether the peak ceiling limited the loudness target, and 32 after-minus-before band-energy deltas. The CLI writes the same report shape with snake_case keys when `--report` is supplied. On both CLIs `--chain-config` and `--params` are read as one parameter list: two spellings of one field across the document and `--params` are refused naming both keys, and a document's `<stage>.enabled: false` keeps the stage off when `--params` sets one of its fields.
 
 ::: tip Let the user edit between suggest and render
 The intended pattern is to render `chainConfig.params` into editable UI controls, let the user nudge values, then pass the *edited* map to `masterAudio`. The `explanation[]` strings make good inline captions for why each stage is on.

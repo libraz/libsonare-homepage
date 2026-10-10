@@ -335,7 +335,7 @@ function dbToPower(values: Float32Array, ref?: number): Float32Array
 function dbToAmplitude(values: Float32Array, ref?: number): Float32Array
 ```
 
-`noteToHz` は解釈できない名前に、`hzToNote` は有限でも正でもない周波数に対して、`0` や `"?"` を返す代わりに `SonareError` を投げます。
+`noteToHz` は解釈できない名前やオクターブが -1〜9（MIDI ノート範囲のオクターブ）の範囲外の名前に、`hzToNote` は有限でも正でもない周波数に対して、`0` や `"?"` を返す代わりに `SonareError` を投げます。
 
 解析オプションはチューニングをセミトーンの端数で表しますが、文字起こしの `referenceHz` やストリーム解析器の `tuningRefHz` は Hz です。`tuningToReferenceHz(tuning)` は `440 * 2 ** (tuning / 12)`、`referenceHzToTuning(hz)` はその逆で、440 以外のコンサートピッチを使うときは `a4` を渡します。
 

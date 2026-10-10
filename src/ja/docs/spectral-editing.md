@@ -122,7 +122,7 @@ const muted = spectralEdit(samples, sampleRate, [
 | `startSec` / `endSec` | 同じ境界を秒で指定します（Python は `start_sec` / `end_sec`）。呼び出しのサンプルレートで最も近いサンプルに丸められます。境界ごとにどちらか一方の表記だけを指定してください。`startSample` と `startSec`（または終了側の両表記）を併用すると拒否されます。 |
 | `lowHz` / `highHz` | Hz で指定する周波数矩形。値は `[0, Nyquist]` に丸められ、`highHz <= 0` は Nyquist 扱い。 |
 | `gainDb` | dB 単位のゲイン量。`gain` と `attenuate` のどちらも `magnitude *= 10^(gainDb/20)` という同じ式で適用され、弱めるには負値を渡します。`mute`/`heal` では無視されます。 |
-| `nFft` | 2 のべき乗の FFT サイズ。既定値は `2048`。 |
+| `nFft` | `[4, 262144]` の範囲の 2 のべき乗の FFT サイズ。既定値は `2048`。それ以外の値は、`nFft` と規則を示すエラーで拒否されます。 |
 | `hopLength` | STFT の hop。既定値は `512`。`0 < hopLength <= nFft / 2` を満たす必要があります。 |
 | `window` | `hann`、`hamming`、`blackman`、`rectangular`。 |
 | `healRadiusFrames` | `heal` が参照する左右の近傍フレーム数。既定値は `2`。`1` 以上を指定する必要があります。 |

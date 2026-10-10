@@ -49,13 +49,27 @@ The numeric fields are small fixed encodings:
 
 - **Pitch class** (`tonicPc`, `rootPc`): `0..11` with C = 0, C#/Db = 1, … B = 11; `255` means unknown.
 - **Key mode** (`mode`): `1` = major, `2` = minor.
-- **Chord quality** (`quality`): `1` = major, `2` = minor, `3` = diminished, `4` = augmented, `5` = dominant, `6` = half-diminished, `7` = suspended. `extensions` distinguishes variants within a family (see [Chord Recognition](./glossary/analysis/chord-recognition.md) for detector qualities).
+- **Chord quality** (`quality`): `1` = major, `2` = minor, `3` = diminished, `4` = augmented, `5` = dominant, `6` = half-diminished, `7` = suspended. `extensions` lists scale degrees (`7`, `9`, `13`, or `2` / `4` for a suspension; at most 32) that distinguish variants within a family (see [Chord Recognition](./glossary/analysis/chord-recognition.md) for detector qualities).
 
 So `{ tonicPc: 0, mode: 1 }` is C major and `{ rootPc: 7, quality: 1 }` is a G major chord.
 
 ::: warning These are arrangement ordinals, not the analysis enums
-The `mode` and `quality` numbers here are **arrangement ordinals**, distinct from the **0-based** `Mode` and `ChordQuality` enums returned by `detectKey` / `detectChords`. Key modes and the four basic triads are offset by one (major = 0 in analysis, 1 here), so passing analysis `ChordQuality.Minor` (= 1) directly to `annotateChords` would label the chord **major**. The `+1` conversion applies only to those four triads. Extended detector qualities need an explicit family and `extensions` mapping: for example, Dominant7 → `{ quality: 5, extensions: [7] }`, HalfDim7 → `{ quality: 6, extensions: [7] }`, and Sus4 → `{ quality: 7, extensions: [4] }`.
+The `mode` and `quality` numbers here are **arrangement ordinals**, distinct from the **0-based** `Mode` and `ChordQuality` enums returned by `detectKey` / `detectChords`. Key modes and the four basic triads are offset by one (major = 0 in analysis, 1 here), so passing analysis `ChordQuality.Minor` (= 1) directly to `annotateChords` would label the chord **major**. The `+1` offset holds only for those four triads; extended detector qualities fold into a family plus scale degrees, for example Dominant7 → `{ quality: 5, extensions: [7] }`, HalfDim7 → `{ quality: 6, extensions: [7] }`, and Sus4 → `{ quality: 7, extensions: [4] }`. Do not map them by hand: the next section applies the library's own table.
 :::
+
+### Convert a detected chord or key
+
+`chordSymbolFromAnalysis(chord)` (Python `chord_symbol_from_analysis`, C `sonare_chord_symbol_from_analysis`) turns an analysis chord into `{ rootPc, quality, extensions, slashBassPc }` (Python snake_case keys), the same conversion the library applies when it builds a harmonic timeline. The root is kept as given, and `slashBassPc` is `255` when the bass is the root. `keyModeFromAnalysis(mode)` (`key_mode_from_analysis`, `sonare_key_mode_from_analysis`) returns the annotation `mode` (1..7) for an analysis mode name or ordinal. Times are not converted; place the result with `startPpq` / `endPpq`. An unrecognised value is a `RangeError` (Python `SonareValueError`) naming the field, and a non-object chord is a `TypeError`.
+
+```typescript
+const { chords } = detectChords(samples, sampleRate);
+project.annotateChords(
+  chords.map((c) => ({ startPpq: 0, endPpq: 4, ...chordSymbolFromAnalysis(c) })),
+);
+project.annotateKeys([
+  { startPpq: 0, endPpq: 16, tonicPc: key.root, mode: keyModeFromAnalysis(key.mode) },
+]);
+```
 
 ## Assist sidecars
 

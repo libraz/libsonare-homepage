@@ -247,7 +247,7 @@ input.addEventListener('change', async (e) => {
 
 ### 全チャンネルを保持する
 
-`Audio.fromMemory(...)` はマルチチャンネルのファイルをデコードしながらモノラルに畳み込みます。チャンネルそのものが必要なときは、`decodeChannels(bytes)` がバイト列を一度だけデコードして `{ sampleRate, channels }` を返します。`channels` は元のチャンネル順（5.1 は L R C LFE Ls Rs）の `Float32Array` の配列です。`downmix(channels, targetLayout)` は ITU-R BS.775 の規則（センターとサラウンドを -3 dB、LFE は除外）で、より狭いレイアウト（`0` モノラル、`1` ステレオ、`2` 5.1、`3` 7.1）へ折りたたみます。アップミックスはできません。`Audio.fromMemoryWithBrowserFallback(...)` はマルチチャンネルの `AudioBuffer` に同じ規則を適用するので、どちらのデコーダーが動いても同じサンプルになります。
+`Audio.fromMemory(...)` はマルチチャンネルのファイルをデコードしながらモノラルに畳み込みます。チャンネルそのものが必要なときは、`decodeChannels(bytes)` がバイト列を一度だけデコードして `{ sampleRate, channels }` を返します。`channels` は元のチャンネル順（5.1 は L R C LFE Ls Rs）の `Float32Array` の配列です。`downmix(channels, targetLayout)` は ITU-R BS.775 の規則（センターとサラウンドを -3 dB、LFE は除外）で、より狭いレイアウト（`0` モノラル、`1` ステレオ、`2` 5.1、`3` 7.1）へ折りたたみます。アップミックスはできません。`Audio.fromMemoryWithBrowserFallback(...)` はマルチチャンネルの `AudioBuffer` に同じ規則を適用するので、どちらのデコーダーが動いても同じサンプルになります。そのチャンネル保持版が `decodeChannelsWithBrowserFallback(bytes, options?)` で、同じ `{ sampleRate, channels }` の Promise を返します。ネイティブデコーダーが扱わない形式（AAC、OGG、FLAC）は `decodeAudioData` を通し、ブラウザーが返したチャンネルをすべて保持します。`downmix` は、32 ビット整数の範囲の整数でない `targetLayout` に `RangeError` を、数値でないものに `TypeError` をスローします。
 
 ```typescript
 import { decodeChannels, downmix, init } from '@libraz/libsonare';
@@ -431,7 +431,7 @@ for (let start = 0; start < totalDuration; start += CHUNK_DURATION) {
 
 C++ コアが入力を拒否したとき、またはオブジェクトが不正な状態にあるとき、WASM バインディングは数値の `code` と `codeName` を持つ構造化された `SonareError` をスローします。生の Emscripten ポインタ番号や不透明な `[object Object]` が漏れることはありません。エクスポートされた `isSonareError(...)` ガードで捕捉し、`ErrorCode` で分岐してください。詳細は[エラーハンドリング](./js-api.md#エラーハンドリング)を参照。
 
-JavaScript バインディング自身が拒否する引数は `SonareError` ではありません。型が違う、または値がない場合はネイティブの `TypeError`、値が定義域の外（未知の名前、整数を読む箇所の小数、対応範囲外のサンプルレート、長さが揃うべき 2 つのバッファの不一致、NUL を含む文字列）なら `RangeError` です。3 つとも扱ってください。
+JavaScript バインディング自身が拒否する引数は `SonareError` ではありません。型が違う、または値がない場合はネイティブの `TypeError`、値が定義域の外（未知の名前、整数を読む箇所の小数、対応範囲外のサンプルレート、長さが揃うべき 2 つのバッファの不一致、NUL を含む文字列、空または有限でない音声）なら `RangeError` です。`null`・数値・配列のリクエストオブジェクトや、型の違う型付き配列の音声バッファは、関数名と引数を挙げた `TypeError` になります（`detectBpm: samples must be a Float32Array`）。3 つとも扱ってください。
 
 ```typescript
 import { ErrorCode, init, isSonareError, Mixer } from '@libraz/libsonare';
@@ -453,7 +453,7 @@ try {
 
 ミキシングとプロジェクトのエントリポイントは、下位の C++ 例外ではなく、対応する C エントリポイントが定めているエラーコードを報告します。`Mixer.fromSceneJson` に壊れたシーン JSON を渡すと `InvalidFormat`、未知のインサートを指すシーンを渡すとコアのメッセージを伴う `InvalidParameter` がスローされます。
 
-状態に起因する失敗は次の 3 つで、いずれも `InvalidState` です。`init()` が解決する前のモジュール呼び出し、`destroy()`・`delete()`・`using` で解放したハンドルのメソッド呼び出し、最初と異なるオプションでの 2 回目の `init()`（異なるオプション名を挙げます）。JavaScript とは別のツリーからビルドされた `.wasm` は、`init()` が `AbiMismatch`（コード 10）をスローします。
+状態に起因する失敗は次の 3 つで、いずれも `InvalidState` です。`init()` が解決する前のモジュール呼び出し、`destroy()`・`delete()`・`using` で解放したハンドルのメソッド呼び出し、最初と異なるオプションでの 2 回目の `init()`（異なるオプション名を挙げます）。JavaScript とは別のツリーからビルドされた `.wasm` は、`init()` が `AbiMismatch`（コード 10）をスローします。`init()` は読み込んだモジュールの ABI バージョンを `EXPECTED_ABI_VERSION`（パッケージルートと `@libraz/libsonare/worklet` からエクスポート）と比較します。`moduleFactory` に渡すテスト用ダブルは、この値を報告します。
 
 ## 各節の移動先
 

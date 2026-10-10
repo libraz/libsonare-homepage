@@ -27,14 +27,14 @@ For a first browser integration, keep the path narrow:
 | **Mastering** | `masterAudio`, `masteringChain`, `StreamingMasteringChain` | LUFS (Loudness Units relative to Full Scale) targets, true-peak limiting, presets, streaming chains |
 | **Mixing** | `mixStereo`, `Mixer`, `mixingScenePresetNames` | Stem mixing, routing, automation, meters |
 | **Editing DSP** | `pitchCorrectToMidi`, `noteStretch`, `spectralEdit`, `voiceChange`, `StreamingRetune`, `RealtimeVoiceChanger` | Vocal tuning, note edits, pitch/formant changes |
-| **Audio Class** | `Audio.fromBuffer`, `Audio.fromMemory`, `Audio.fromMemoryWithBrowserFallback` | File-loading helper and method-style access for common functions |
+| **Audio Class** | `Audio.fromBuffer`, `Audio.fromMemory`, `Audio.fromMemoryWithBrowserFallback`, `decodeChannelsWithBrowserFallback` | File-loading helpers and method-style access for common functions |
 
 ::: tip Terminology
 New to audio analysis? See the [Glossary](/docs/glossary) for explanations of terms like BPM, STFT, Chroma, and more.
 :::
 
 ::: info Most functions take decoded PCM, not a file path
-Most browser functions do not take an MP3 or WAV path; they take decoded PCM samples plus `sampleRate`. To go from encoded bytes to samples, either decode with the Web Audio API (`AudioContext.decodeAudioData`) yourself, or use the `Audio.fromMemory` / `Audio.fromMemoryWithBrowserFallback` factories below. They decode encoded bytes in memory: WAV/MP3 with the bundled WASM decoder, and AAC/OGG/FLAC through browser decoding when needed.
+Most browser functions do not take an MP3 or WAV path; they take decoded PCM samples plus `sampleRate`. To go from encoded bytes to samples, either decode with the Web Audio API (`AudioContext.decodeAudioData`) yourself, or use the `Audio.fromMemory` / `Audio.fromMemoryWithBrowserFallback` factories below. They decode encoded bytes in memory: WAV/MP3 with the bundled WASM decoder, and AAC/OGG/FLAC through browser decoding when needed. `decodeChannelsWithBrowserFallback(bytes, options?)` takes the same path but keeps every channel instead of folding to mono.
 :::
 
 For a cross-binding feature map, see [Feature Map](./api-surface.md). For the mastering processor registry and mixing scene format, see [Mastering Processors](./mastering-processors.md) and [Mixing Scene JSON](./mixing-scene-json.md).
@@ -112,17 +112,12 @@ Which error class you get depends on who refused the value:
 
 | Refused by | Class | Examples |
 |------------|-------|----------|
-| The JavaScript binding, wrong type or missing | `TypeError` | a string where samples are expected, a missing required field |
-| The JavaScript binding, outside the domain | `RangeError` | an unknown name, a fractional integer, two buffers whose lengths must match, a string carrying an embedded NUL, a `sampleRate` outside the supported range |
-| The library or an object's state | `SonareError` with a code | non-finite audio in a mastering call, a rejected stream configuration, a malformed project or scene document (`InvalidFormat`), an unknown insert in a scene (`InvalidParameter`) |
+| The JavaScript binding, wrong type or missing | `TypeError` | a string where samples are expected, a `samples` that is not a `Float32Array`, a `sampleRate` that is not a number, a request object that is `null`, a number or an array, a missing required field |
+| The JavaScript binding, outside the domain | `RangeError` | an unknown name, a fractional integer, two buffers whose lengths must match, a string carrying an embedded NUL, empty or non-finite audio, a `sampleRate` outside the supported range or not an integer |
+| The library or an object's state | `SonareError` with a code | a rejected stream configuration, a malformed project or scene document (`InvalidFormat`), an unknown insert in a scene (`InvalidParameter`) |
 | A released, destroyed, or uninitialised handle | `SonareError` with `InvalidState` | calling an analysis function before `init()`, any method after `destroy()` |
 
-`isSonareError` matches only the third and fourth rows, so validate user input
-with a catch that handles all three classes. The split between binding checks and
-library checks can differ per function: `detectBpm` refuses empty samples in
-JavaScript with a `RangeError`, while `masterAudio` hands them to the library and
-throws `InvalidParameter`. See [Error Handling](./js-api.md#error-handling)
-for the code table.
+`isSonareError` matches only the third and fourth rows, so validate user input with a catch that handles all three classes. Every one-shot that takes samples and a sample rate checks them before the core is reached: empty or non-finite audio and an out-of-range or non-integer `sampleRate` are a `RangeError`, a wrong-typed argument a `TypeError` naming it, and no raw embind `BindingError` reaches a caller. The argument checks the core makes itself on its own objects (a rejected STFT or stream configuration) stay a coded `SonareError`. See [Error Handling](./js-api.md#error-handling) for the code table.
 
 ## Pick The Smallest API That Solves The Job
 
@@ -209,8 +204,7 @@ second call whose options differ throws `SonareError` with `InvalidState` naming
 the option. `init()` also compares the loaded module's ABI version with the one
 the package was built against and throws `AbiMismatch` (code 10) when the `.wasm`
 and the JavaScript come from different builds, which a stale cache or a custom
-`wasmBinary` / `locateFile` can produce. Every function called before `init()`
-resolves and needs the module throws `InvalidState`.
+`wasmBinary` / `locateFile` can produce. The expected version is exported as `EXPECTED_ABI_VERSION` from the package root and from `@libraz/libsonare/worklet`, so a test double passed as `moduleFactory` can report the version `init()` checks for. Every function called before `init()` resolves and needs the module throws `InvalidState`.
 
 ### `isInitialized()`
 
@@ -274,7 +268,7 @@ and Python exposes as `capability_catalog`, validated against
 `schemas/capability-catalog.schema.json`.
 
 The catalog carries real values: the current build publishes 95 processors (84
-of them realtime-insertable) and 5,577 parameter descriptors. Defaults can be `null` when a construction key has
+of them realtime-insertable) and 5,579 parameter descriptors. Defaults can be `null` when a construction key has
 no fallback. Bounds are measured with the processor's other parameters at their
 defaults; a `null` bound means the catalog knows of no limit on that side, not
 that bounds are unavailable in general.
@@ -290,8 +284,9 @@ slider straight to one:
   `maxReleaseMs >= 20` for exactly that reason; move one and the other's real
   limit moves with it.
 - **A bound derived from the sample rate reflects the un-prepared processor.**
-  Every EQ `band*.frequencyHz` ceiling reads as `24000` in the catalog and rises
-  once the insert is prepared at a higher rate.
+  Every EQ `band*.frequencyHz` ceiling reads as `24000` in the catalog; an
+  equalizer built at a known rate accepts band frequencies up to that rate's
+  Nyquist frequency (30000 Hz at 96 kHz).
 - **An exclusive bound is reported as the limit it excludes.**
   `dynamics.compressor.sidechainHpfHz` reports `min` `0` and still rejects `0`.
 :::
@@ -332,8 +327,8 @@ function capabilityCatalog(): {
       scale: 'linear' | 'log';
       choices: Array<{ name: string; value: number }> | null;
       slot: string | null;
-      /** Siblings whose live value bounds this key, read as `this <relation> sibling`. */
-      dependsOn: Array<{ key: string; relation: 'lt' | 'le' | 'gt' | 'ge' }>;
+      /** Siblings whose live value bounds this key, read as `this <relation> factor * sibling`. */
+      dependsOn: Array<{ key: string; relation: 'lt' | 'le' | 'gt' | 'ge'; factor: number }>;
     }>;
     slots: Array<{
       name: string;
@@ -342,11 +337,14 @@ function capabilityCatalog(): {
       minCrossoverCutoffs: number;
     }>;
   }>;
+  /** How every flat mastering chain key is described. */
+  chain: CapabilityCatalogChain;
   presets: {
     mastering: string[];
     synth: string[];
     mixingScene: string[];
     voiceChanger: string[];
+    playbackRoom: string[];
   };
   masteringPresets: Array<{
     name: string;
@@ -365,9 +363,11 @@ documents each descriptor field. A
 bound the core does not know is reported as an explicit `null` — treat that as
 "unbounded/unknown", not as zero.
 
+`chain` describes the flat keys of a mastering chain config: each stage's key prefix, the processor whose parameters its keys are and its `enabled` key (`CapabilityCatalogChainStage`); the indexed lists such as the multiband stage's `cutoffsHz` and `bands`, with their item counts (`CapabilityCatalogChainList`); descriptors for the keys no processor carries (`params`); and every alias spelling of a key (`CapabilityCatalogChainAlias`). `presets.playbackRoom` is always present, and empty when playback is compiled out.
+
 The per-band EQ surfaces publish a descriptor for every indexed band field, so a
 generic UI can lay out the bands without a hand-written table. These descriptors
-now include construction keys as well as automation targets; use `id !== null`
+include construction keys as well as automation targets; use `id !== null`
 to select automation targets, and use `slot` plus the processor's `slots` array
 for conditional band groups. Publishing descriptors does not change which keys
 count as *read*, though — a band you supply incompletely still reports its stray
@@ -375,7 +375,7 @@ keys as ignored, exactly as before.
 
 ### `abiVersion()`
 
-Returns the aggregate native ABI version across the C POD surfaces. Persist or compare it when loading a prebuilt binary so an incompatible JS/native artifact pair fails early.
+Returns the aggregate native ABI version across the C POD surfaces (`0x05030207` for this build, the value `EXPECTED_ABI_VERSION` holds). Persist or compare it when loading a prebuilt binary so an incompatible JS/native artifact pair fails early.
 
 ```typescript
 function abiVersion(): number
@@ -546,7 +546,7 @@ Native (C++) failures throw a structured **`SonareError`**: an `Error` subclass 
 
 The facades consistently reject non-finite numbers, invalid enum/index values, and oversized resources before they reach DSP or serialization. Treat these failures as invalid input; do not rely on a binding silently clamping or accepting malformed values.
 
-An argument the binding refuses itself is a plain `TypeError` (wrong type or missing) or `RangeError` (out of domain, unknown name, empty or non-finite samples), which `isSonareError` does not match. Failures made by the engine carry a code, such as `InvalidParameter` from `synthesizeRir(...)` for a source outside the room. Released or destroyed handles throw `SonareError` `InvalidState`.
+An argument the binding refuses itself is a plain `TypeError` (wrong type or missing) or `RangeError` (out of domain, unknown name, empty or non-finite samples, a `sampleRate` that is not a positive integer in range), which `isSonareError` does not match. The offline and vocal-edit worker clients rebuild `TypeError` and `RangeError` across the worker boundary, and accept a `node:worker_threads` Worker or a `workerFactory` returning one. Failures made by the engine carry a code, such as `InvalidParameter` from `synthesizeRir(...)` for a source outside the room. Released or destroyed handles throw `SonareError` `InvalidState`.
 
 ```typescript
 import { ErrorCode, isSonareError, Mixer } from '@libraz/libsonare';
@@ -581,7 +581,8 @@ its own code; branch on `InvalidState` and show the message to locate the field.
 | `InvalidState` | `7` |
 | `Cancelled` | `8` |
 | `EncodeFailed` | `9` |
+| `AbiMismatch` | `10` |
 | `Unknown` | `99` |
 
-The codes match Python's `SonareError.code` and the C ABI `SonareError` enum, and the Python CLI maps them onto its [exit codes](./cli.md#exit-codes).
+`AbiMismatch` is made by the bindings, never by the core: it reports a native module whose ABI version differs from the one the package expects (WASM in `init()`, Node when the addon is required, Python on first library use). The other codes match Python's `SonareError.code` and the C ABI `SonareError` enum, and the Python CLI maps them onto its [exit codes](./cli.md#exit-codes).
 

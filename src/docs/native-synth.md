@@ -85,10 +85,10 @@ The [Synth Playground](/synth) runs this synthesizer in the browser — a keyboa
 
 ## The seventeen synthesis engines
 
-Every preset selects one `engineMode`. The shared sections (filter, envelopes, LFOs, mod matrix, body resonance, polyphony) apply on top of whichever engine is active. Mode-specific deep parameters — FM operator stacks, modal mode tables, drawbar registrations, kit pieces, piano strings, pipe ranks, bowed-string friction, reed/brass bores, and flute jet geometry — live **inside the named presets**, not in the patch.
+Every preset selects one `engineMode`. The shared sections (filter, envelopes, LFOs, mod matrix, body resonance, polyphony) apply on top of whichever engine is active. Mode-specific deep parameters — FM operator stacks, modal mode tables, drawbar registrations, kit pieces, piano strings, pipe ranks, bowed-string friction, reed/brass bores, and flute jet geometry — come with the named presets, and a patch overrides them one by one through [`engineParams`](#engine-parameters).
 
-::: warning Four engines sound only through a preset
-`fm`, `modal`, `percussion`, and `sample` render **silence** from a bare `engineMode`. Their sound is a table the patch does not carry — the FM operator levels, the modal mode list, the kit and its membrane modes, the sample bank — and a patch that only names the mode has none of it. Start from the preset instead: `{ preset: 'e-piano' }`, `'marimba'`, `'drum-kit'`, or a `'sample'` patch with a bound `SampleBank`. Other engines also render from a bare mode, but raw engine levels are not matched. Named presets carry their own `gain`; an API patch uses only the `gain` you provide. Set an explicit gain and audition the result when comparing bare modes or building your own patch.
+::: info A bare `engineMode` voices that engine's base preset
+A patch that sets only `engineMode` takes the engine section from the named `preset` when that preset uses the selected engine, and otherwise from the engine's base preset: `fm` the e-piano, `modal` the bell, `percussion` the GM drum kit, and so on. Every engine except `sample` sounds from a bare mode; `sample` has nothing to voice until a `SampleBank` is bound and stays silent without one. Raw engine levels are not matched, and named presets carry their own `gain` while an API patch uses only the `gain` you provide, so set an explicit gain and audition the result when comparing bare modes or building your own patch.
 :::
 
 ### `subtractive` — virtual-analog
@@ -281,18 +281,21 @@ The patch exposes the shared controls every engine uses:
 
 | Group | Fields |
 |-------|--------|
-| Oscillator | `engineMode`, `waveform`, `unison` (1-7), `detuneCents`, `driftCents`, `drive` (0-1) |
+| Oscillator | `engineMode`, `waveform`, `unison` (1-7), `detuneCents`, `driftCents`, `driftRateHz` (0.01-20), `drive` (0-1) |
 | Filter | `filterModel`, `filterOutput` (SVF only), `cutoffHz`, `resonanceQ`, `keyTrack` (0-1), `envToCutoffCents`, `velToCutoffCents` |
-| Amp envelope | `ampAttackMs`, `ampDecayMs`, `ampSustain`, `ampReleaseMs` |
-| Filter envelope | `filterAttackMs`, `filterDecayMs`, `filterSustain`, `filterReleaseMs` |
+| Amp envelope | `ampDelayMs` (0-5000), `ampAttackMs`, `ampHoldMs` (0-5000), `ampDecayMs`, `ampSustain`, `ampReleaseMs`, `oneShot` |
+| Filter envelope | `filterDelayMs` (0-5000), `filterAttackMs`, `filterHoldMs` (0-5000), `filterDecayMs`, `filterSustain`, `filterReleaseMs` |
 | LFOs & glide | `lfoRateHz`, `lfoToPitchCents`, `lfo2RateHz`, `glideMs` |
 | Body resonance | `body` (`none` / `guitar` / `violin` / `wood-tube` / `brass-bell` / `vocal`), `bodyMix` (0-1) |
 | Stereo & output | `stereoSpread` (0-1), `gain` (linear), `polyphony` (1-64), `busDrive` (0-1) |
 | Voice start state | `retrigger` (`'default'` / `'free'` / `'note'`) |
+| Engine section | `engineParams` (a key-to-number record) |
 | Mod matrix | `modRoutings` (up to 8) |
 | Binding (JS only) | `destinationId` (default `0`) |
 
 (*Polyphony* is how many notes can sound at once; a *voice* is one sounding note, and *voice stealing* cuts the oldest note when you run out.)
+
+The delay stage holds an envelope at zero before its attack starts and the hold stage keeps it at the peak before the decay; both are in milliseconds. `oneShot` ignores note-off, so the voice ends with its envelope's decay or its engine's own end, as a drum hit does. `driftRateHz` sets how fast the per-voice pitch drift wanders, and `driftCents` its depth. The five times (`ampDelayMs`, `ampHoldMs`, `filterDelayMs`, `filterHoldMs`, `driftRateHz`) are automatable on a live instrument like their sibling fields; a delay or hold change applies the next time its stage starts.
 
 `retrigger` chooses the seed used when each voice starts. `'default'` keeps the base patch's choice; every catalog preset uses `'free'`. `'free'` varies oscillator start phases, unison jitter, drift, and each engine's noise stream from the voice pool slot and running note count, so repeated notes generally differ. `'note'` derives those values from the MIDI note number alone, so playing the same note again after its tail ends renders the same samples. The setting applies to each voice's start state. It does not reset controllers, the bus DC blocker, a piano's shared soundboard, a plucked string's sympathetic halo, an organ's wind chest, or effect tails. The `drum-kit` preset keeps its own mode for each drum piece.
 
@@ -315,6 +318,29 @@ NativeSynth keeps ordinary controller state per channel and note-addressed expre
 
 Piano-style pedal controls are decoded as ordinary MIDI CCs. Sustain pedal **CC64** supports half-pedal damping only on the `piano` engine — there, intermediate values 64-126 damp ringing key-up notes proportionally; on every other engine CC64 is a plain on/off sustain switching at the 64 threshold, so 64 and 126 sound the same as 127. **CC66** acts as sostenuto, and **CC67** applies una-corda / soft-pedal voicing where the active preset uses it.
 :::
+
+### Engine parameters
+
+`engineParams` sets fields of the selected engine's own model section by key: bow force, breath pressure, lip tension, strike position, FM operator levels, mode ratios. Keys are the section's field names in lowerCamelCase (`bowForce`, `ops0.level`, `ranks2.level`), and absent keys keep the base section's value.
+
+```typescript
+const audio = project.bounceWithSynthInstrument(
+  { engineMode: 'bowed-string', engineParams: { bowForce: 0.9, bowPosition: 0.08 } },
+  { totalFrames: 48000, numChannels: 2 },
+);
+```
+
+Unlike the wrapper fields, nothing here is clamped. An unknown key, a key of another engine's section, a non-finite value, a fractional value for a whole-number field or a value outside the field's range is refused with an error that names the key (`engine param 'bowForce': out of range [0, 1]`). In Python the field is `engine_params`.
+
+`synthEngineParamInfo(engineMode)` lists the keys an engine accepts, and `synthPatchParamInfo()` lists every numeric wrapper field. Both return `SynthParamInfo[]` in the shape of the [insert parameter descriptor](./effects-inserts.md#the-parameter-descriptor): `name`, `type` (`'number'` or `'boolean'`, a switch given as 0 or 1), `integer`, `min`, `max`, `default` and `unit`. For an engine field `default` is the base preset's value; for a wrapper field it is the init patch's. `synthEngineParamInfo` returns `[]` for `default`, `subtractive` and `sample`. Python spells them `synth_engine_param_info` and `synth_patch_param_info`.
+
+```typescript
+synthEngineParamInfo('fm').slice(0, 2);
+// [{ name: 'algorithm', type: 'number', integer: true, min: 0, max: 5, default: 3, unit: 'none' },
+//  { name: 'ops0.ratio', type: 'number', min: 0, max: 64, default: 1, unit: 'ratio' }]
+```
+
+The FM operator algorithm is the `algorithm` key of the `fm` section. Build a control panel from these descriptors rather than copying the ranges.
 
 ### Enum name tables
 
@@ -423,7 +449,7 @@ try {
 }
 ```
 
-In a real app you would drive `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` from a live keyboard, or enable the engine-owned MIDI input source and push events as they arrive — see [MIDI Input](./midi-input.md). `setSynthInstrument` resolves a preset name or `SynthPatch` exactly like `bounceWithSynthInstrument`, so a sound you dialed in offline plays identically live.
+In a real app you would drive `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` from a live keyboard (`pushMidiProgram` queues a program change with an optional bank in the same way, and a receiver that selects no programs, the built-in synth included, accepts it and ignores it), or enable the engine-owned MIDI input source and push events as they arrive — see [MIDI Input](./midi-input.md). `setSynthInstrument` resolves a preset name or `SynthPatch` exactly like `bounceWithSynthInstrument`, so a sound you dialed in offline plays identically live.
 
 ## Current status and limitations
 
@@ -431,7 +457,7 @@ In a real app you would drive `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc
 
 **The tuned piano voice includes** an explicit output-level treatment, bass-register excitation, and longitudinal string modes.
 
-**Deeper mode-specific fields stay inside named presets.** Public live control uses the excitation axes that each engine declares; the patch does not expose additional per-model switches. The physical voices will continue to be adjusted in future patch releases.
+**Deeper mode-specific fields are set per patch, not live.** `engineParams` fixes them when the patch is bound; live control during a note uses the excitation axes that each engine declares. The physical voices will continue to be adjusted in future patch releases.
 
 **A couple of self-oscillating models have a small residual intonation error.** The air-jet flute and flue pipe-organ lock slightly off the naive tuning and are corrected by a calibrated factor; a small, note-dependent residual remains.
 

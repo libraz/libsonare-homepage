@@ -366,7 +366,8 @@ import { alignTakeToReference, Project } from '@libraz/libsonare';
 const { anchors, alignment } = alignTakeToReference({
   reference,     // Float32Array: the guide take, or the backing track the takes were sung against
   take,          // Float32Array: the take to place under it
-  sampleRate,    // the rate of BOTH buffers — nothing here resamples
+  sampleRate,    // the reference's rate
+  // takeSampleRate: 44100,  // the take's rate when it differs; defaults to sampleRate
   // hopLength: 512,      // chroma hop: a smaller hop measures more frames and yields more anchors
   // binsPerOctave: 12,   // must be a positive multiple of 12; leave it unless checked against the rate
 });
@@ -390,12 +391,12 @@ A warp map belongs to a clip, so each aligned take gets its own clip and its own
 ::: warning What is refused, and how
 A take that cannot be aligned is reported, never answered with a map you cannot use. Two layers refuse, and which one answers decides what you are told:
 
-- **Named by field, before the measurement.** An empty buffer (`reference must not be empty`, `take must not be empty`), a non-finite sample (`reference contains NaN or Inf`, `take contains NaN or Inf`), a `sampleRate` that is not an integer in `[8000, 384000]`, and a `hopLength` or `binsPerOctave` of the wrong shape (a string, a fraction) all throw a `RangeError` that names the offending field.
+- **Named by field, before the measurement.** An empty buffer (`reference must not be empty`, `take must not be empty`), a non-finite sample (`reference contains NaN or Inf`, `take contains NaN or Inf`), a `sampleRate` or `takeSampleRate` that is not an integer in `[8000, 384000]`, and a `hopLength` or `binsPerOctave` of the wrong shape (a string, a fraction) all throw a `RangeError` that names the offending field.
 - **`SonareError` `InvalidParameter`, from the measurement.** A negative `hopLength`; a `binsPerOctave` that is negative or not a multiple of 12 (each pitch class is the mean of a whole number of CQT bins, so 13 and 18 have no fold); and a pair that yields no two distinct anchors — either recording shorter than one chroma frame is what that looks like. The core reports the condition without naming an argument.
 
 A multiple of 12 is necessary, not sufficient: the finest usable `binsPerOctave` depends on the sample rate and does not rise with it, so leave the field at its default unless a finer grid has been checked at the rate it will run at. Omitting either field, or writing `0`, selects the library value.
 
-**Sample rates are not converted.** The call takes one `sampleRate` for both buffers; resample first if they differ, or the chromagrams are measured on two different grids and the anchors are wrong without anything reporting it. The CLI counterpart, `sonare project align-takes`, reads the reference and each take from their files and refuses a mismatch by name before calling the core — `align-takes reads both at one rate and does not resample` — rather than resampling either side.
+**Sample rates.** `sampleRate` is the reference's rate and `takeSampleRate` (Python `take_sample_rate`, C `sonare_align_take_to_reference_ex`) the take's; when they differ the take is resampled onto the reference's grid before measuring. Both anchor axes come back in samples at the **reference** rate, and `hopLength` is at that rate too. A project reads warp anchors in samples at the project rate, so multiply `warpSample` and `sourceSample` by the project rate over the reference rate before `setWarpMap` (the example above has them equal). The CLI counterpart, `sonare project align-takes`, reads the reference and each take from their files, aligns a take at another rate, and writes the anchors at the project rate.
 :::
 
 ::: tip Which path, decided by the report

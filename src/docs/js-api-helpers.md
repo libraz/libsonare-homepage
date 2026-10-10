@@ -342,7 +342,7 @@ function dbToPower(values: Float32Array, ref?: number): Float32Array
 function dbToAmplitude(values: Float32Array, ref?: number): Float32Array
 ```
 
-`noteToHz` throws `SonareError` for a name that does not parse, and `hzToNote` for a frequency that is not finite and positive, instead of returning `0` or `"?"`.
+`noteToHz` throws `SonareError` for a name that does not parse or whose octave is outside -1 to 9 (the octaves of the MIDI note range), and `hzToNote` for a frequency that is not finite and positive, instead of returning `0` or `"?"`.
 
 The analysis options state tuning as a fraction of a semitone, while transcription's `referenceHz` and the stream analyzer's `tuningRefHz` are in Hz. `tuningToReferenceHz(tuning)` is `440 * 2 ** (tuning / 12)`, and `referenceHzToTuning(hz)` is its inverse; pass `a4` for a concert pitch other than 440.
 

@@ -18,7 +18,7 @@ const sampleRate = audio.getSampleRate();
 
 // 個別の解析
 const bpm = detectBpm(samples, sampleRate);
-const key = detectKey(samples, sampleRate);
+const key = detectKey(samples, sampleRate);   // key.root はピッチクラス 0..11（C = 0）、key.mode は 'major'、'minor' など
 const beats = detectBeats(samples, sampleRate);
 
 // フル解析
@@ -148,7 +148,7 @@ try {
 `isSonareError` では捕捉できません。型が違う、または値がない引数は `TypeError`、
 値が定義域の外（長さの食い違う 2 本の配列、許可されていない文字列の `mode`、整数を
 読む箇所の小数、NUL を含む文字列やオブジェクトプロパティ）の場合はフィールド名を挙げた
-`RangeError` です。ライブラリやオブジェクトの状態が報告する失敗はコード付きの
+`RangeError` です。リクエストオブジェクト、またはバッファとリクエストの両方を取るエントリポイントのオーディオバッファが、`null`・数値・配列・誤った型付き配列の場合は `TypeError` です（`<function>: request must be an object`、または `<function>: samples must be a Float32Array`）。サンプルとサンプルレートを取るワンショット関数に渡した空または非有限のオーディオ、範囲外または整数ではない `sampleRate` は、コアに届く前に `RangeError` になります。ライブラリやオブジェクトの状態が報告する失敗はコード付きの
 `SonareError` のままです。解放済みまたは破棄済みのハンドルは `InvalidState`、パッケージと
 別のツリーからビルドされたアドオンは、パッケージの require 時に `AbiMismatch`（コード 10）を投げます。
 
@@ -223,6 +223,8 @@ function render() {
 
 メルスペクトログラムや MFCC 行列から、スペクトルや音声を再構成します。位相は Griffin-Lim で推定するため往復はロスを伴います。詳細は [逆変換特徴量](./inverse-features.md) を参照してください。
 
+最初の 4 つはリクエストオブジェクトも受け付けます。順方向の `result` も、生の `power` / `coefficients` も持たないリクエストは、欠けているフィールドを挙げた `TypeError` になります（`melToStft: power is required (or pass result)`）。
+
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
 | `melToStft(mel, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `InverseStftResult` | メルスペクトログラムから線形 STFT パワーへ |
@@ -277,8 +279,8 @@ function render() {
 | `melToHz(mel)` | Mel スケール → ヘルツ |
 | `hzToMidi(hz)` | ヘルツ → MIDI ノート番号 |
 | `midiToHz(midi)` | MIDI ノート番号 → ヘルツ |
-| `hzToNote(hz)` | ヘルツ → 音名（例: "A4"） |
-| `noteToHz(note)` | 音名 → ヘルツ |
+| `hzToNote(hz)` | ヘルツ → 音名（例: "A4"）。有限でも正でもない周波数は `SonareError`（`InvalidParameter`）を投げる |
+| `noteToHz(note)` | 音名 → ヘルツ。解釈できない名前や -1〜9 の外のオクターブは `SonareError`（`InvalidParameter`）を投げる |
 | `framesToTime(frames, sr?, hopLength?)` | フレームインデックス → 秒（`sr` 既定 `22050`、`hopLength` 既定 `512`） |
 | `timeToFrames(time, sr?, hopLength?)` | 秒 → フレームインデックス（`sr` 既定 `22050`、`hopLength` 既定 `512`） |
 | `framesToSamples(frames, hopLength?, nFft?)` | フレームインデックス → サンプルインデックス（`librosa.frames_to_samples`） |
@@ -316,7 +318,7 @@ function render() {
 
 ### マスタリング解析関数
 
-説明可能なマスタリングのヘルパーは JSON 文字列を返します。正確な形は [マスタリングアシスタント](./mastering-assistant.md) を参照してください。下のステレオ版はいずれもリクエスト専用で、リクエストオブジェクト 1 つだけを受け取ります。位置引数のオーバーロードはなく、位置引数で呼ぶと例外になります。
+説明可能なマスタリングのヘルパーは JSON 文字列を返します。正確な形は [マスタリングアシスタント](./mastering-assistant.md) を参照してください。下のステレオ版はいずれもリクエスト専用で、リクエストオブジェクト 1 つだけを受け取ります。位置引数のオーバーロードはなく、位置引数で呼ぶと、リクエストオブジェクトを名指しした `TypeError` になります。
 
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|

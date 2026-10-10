@@ -220,6 +220,7 @@ interface MasteringAbMatchLoudnessRequest {
   source: Float32Array;      // ゲインが適用される側
   reference: Float32Array;   // そのまま返る
   sampleRate?: number;       // 既定 22050
+  referenceSampleRate?: number; // 既定は sampleRate。計測の前に sampleRate へリサンプルされる
 }
 
 interface LoudnessMatchResult {
@@ -232,7 +233,7 @@ interface LoudnessMatchResult {
 }
 ```
 
-受け取るのはリクエストオブジェクトのみです。2 つのバッファは長さが異なっていても構いません。それぞれ自身のプログラムとして計測されます。
+受け取るのはリクエストオブジェクトのみです。2 つのバッファは長さが異なっていても構いません。それぞれ自身のプログラムとして計測され、リファレンスは `referenceSampleRate` で独自のレートのまま渡せます。
 
 ::: warning ゲインに上限はなく、結果が 0 dBTP を超えることがある
 `appliedGainDb` は、再計測したソースを `referenceLufs` に合わせるゲインです。ゲインによってブロックが絶対ゲートをまたぐ場合を除けば `referenceLufs - sourceLufs` に等しく、またぐ場合はターゲットに合うように解いた値になります。上限がなく、ヘッドルームのクランプも行われないため、`matchedTruePeakDbtp` が **`0` を超える**ことがあります。これは意図的です。ヘッドルームのためにクランプすると、すでにフルスケール近くにある音源ではマッチングが暗黙に無効化されてしまい、それこそ A/B でもっとも調べたいケースだからです。レンダリングする場合は、試聴とは別に `matchedTruePeakDbtp` を自分で確認し、ペアごとまとめて減衰させてください。
@@ -246,7 +247,7 @@ interface LoudnessMatchResult {
 
 ```typescript
 function masteringAbMatchLoudnessStereo(request: MasteringAbMatchLoudnessStereoRequest): LoudnessMatchStereoResult
-// request: { sourceLeft, sourceRight, referenceLeft, referenceRight: Float32Array; sampleRate?: number } -> { left, right, sampleRate, referenceLufs, sourceLufs, appliedGainDb, matchedTruePeakDbtp }
+// request: { sourceLeft, sourceRight, referenceLeft, referenceRight: Float32Array; sampleRate?: number; referenceSampleRate?: number } -> { left, right, sampleRate, referenceLufs, sourceLufs, appliedGainDb, matchedTruePeakDbtp }
 ```
 
 `masteringAbMatchLoudness` のステレオ版です。ステレオプログラムで計測した 1 つのゲインを両方のソースチャンネルに適用するため、左右のバランスは変わりません。受け取るのはリクエストオブジェクトのみです。同じペアの 2 チャンネルは同じ長さでなければ `RangeError` になり、ソースのペアとリファレンスのペアは互いに長さが異なっていても構いません。相関のないピンクノイズでの実測では、-12.43 LUFS を -1.99 LUFS に合わせると 10.44 dB が適用され、両チャンネルとも入力の RMS の 3.3256 倍で返りました。`matchedTruePeakDbtp` は両チャンネルの最大値です。ゲインに上限がないことと、無音のテイクで LUFS が非有限値になることはモノラル版と同じで、無音のソースでは `sourceLufs` が `-Infinity`、`appliedGainDb` が `0` になり、サンプルは変わりません。
@@ -255,10 +256,14 @@ function masteringAbMatchLoudnessStereo(request: MasteringAbMatchLoudnessStereoR
 
 ```typescript
 function masteringPairProcessStereo(request: MasteringPairProcessStereoRequest): MasteringStereoResult
-// request: { processorName: 'match.abCrossfade', sourceLeft, sourceRight, referenceLeft, referenceRight, sampleRate?, params? }; 同じ順の位置引数も可
+// request: { processorName: 'match.abCrossfade', sourceLeft, sourceRight, referenceLeft, referenceRight, sampleRate?, referenceSampleRate?, params? }; 位置引数は同じ順で、リファレンスのレートは持たない
 ```
 
 `StereoPairProcessor` は `match.abCrossfade` のみで、ほかの名前は `SonareError`（`unsupported stereo pair processor`）で例外になります。結果は静的なリニアブレンド `(1 - mix) * source + mix * reference` で、長さは短いほうのペアに揃います。`mix` の既定値は `0.5` で、範囲は `[0, 1]` です（範囲外は `SonareError`）。`0` なら source、`1` なら reference が返ります。同位相のトーンでの実測（source の RMS 0.0707、reference の RMS 0.2828）では、既定値で 0.1768、`mix: 0.25` で 0.1237、4 秒の source と 2 秒の reference では 2 秒分が返り、`latencySamples` は 0 でした。
+
+#### 独自のサンプルレートのリファレンス
+
+`masteringPairProcess`、`masteringPairProcessStereo`、`masteringPairAnalyze`、`masteringAbMatchLoudness`、`masteringAbMatchLoudnessStereo` のリクエスト形式と、`StreamingEqualizer.match` のオプション（`EqMatchOptions`）は `referenceSampleRate` を受け取ります。省略時のリファレンスは `sampleRate` のレートです。別のレートのリファレンスは、処理や計測の前にソースのレートへリサンプルされ、レートが同じなら手を加えずに処理されます。遅延推定（`match.estimateReferenceDelaySamples`）はソースのレートのサンプル数で返ります。`StreamingEqualizer.match` は同じ長さのバッファを必要としません。位置引数の形式はリファレンスのレートを持たず、両方のバッファを `sampleRate` のものとして扱います。
 
 #### `lufsSeriesInterleaved(...)`
 
@@ -340,19 +345,19 @@ interface LufsSeriesResult {
 function masteringPresetParams(preset: MasteringPreset): Record<string, number | boolean>
 ```
 
-`masteringPresetParams` は、アシスタントのチェーンが使い、`masterAudio` と `masterAudioStereo` の `overrides` 引数が受け取る、数値／真偽値のフラットなマップを返します。存在しないプリセット名は例外になります。
+`masteringPresetParams` は、アシスタントのチェーンが使い、`masterAudio` と `masterAudioStereo` の `overrides` 引数が受け取る、数値／真偽値のフラットなマップを返します。存在しないプリセット名は例外になり、プリセット名・プロセッサ名・解析名・プラットフォーム名に NUL 文字が含まれる場合は、該当フィールド名を示した `RangeError` で拒否されます。
 
 カタログの `latencySamples` と `tailSamples` は代表的な既定構成の値です。ルーティングやスケジューリングで構成後の値が必要なら、prepare する構成を問い合わせてください。
 
 ```typescript
 function masteringInsertTiming(
   name: string,
-  params: Record<string, number | boolean>,
+  params: Record<string, number | boolean | string | number[]>,
   sampleRate: number,
 ): { latencySamples: number; tailSamples: number }
 ```
 
-`masteringInsertTiming` は指定した構築用パラメータを適用し、そのサンプルレートでの正確なレイテンシとテールを返します。ラッパーが受け付けるのは有限の数値と真偽値だけなので、カタログで `string` や `array` 型のキーはこの問い合わせに渡せません。未知のキー、有限でない値や真偽値以外の値、不正なサンプルレートを `SonareError` で拒否し、プロセッサを prepare できなければ例外にします。48 kHz で `{}` を渡すとプロセッサカタログの既定構成に相当します。トポロジーやスロットでタイミングが変わる場合は、実際のインサートパラメータを渡してください。
+`masteringInsertTiming` は指定した構築用パラメータを適用し、そのサンプルレートでの正確なレイテンシとテールを返します。インサートのパラメータ記述子が宣言するあらゆる値の型を受け付けます。数値、真偽値、列挙名のほか、アンプシミュレータの `preset` / `cabIrF32Base64`、コンボリューションの `irF32Base64`、ルームモーフの `bandAbsorption` / `bandScattering` といった文字列・配列キーも対象で、記述子の `type` に照らして検査されるため、シーンやストリップが組み立てるインサートをそのまま再現できます。型の違う値は `TypeError`、有限でない数値は `RangeError` です。未知のキーと不正なサンプルレートは `SonareError` で拒否され、プロセッサを prepare できない場合も例外になります。48 kHz で `{}` を渡すとプロセッサカタログの既定構成に相当します。トポロジーやスロットでタイミングが変わる場合は、実際のインサートパラメータを渡してください。
 
 関連するマスタリングガイド: [処理チェーン](./glossary/mastering.md)、[トーンと Air](./glossary/mastering/tone-air.md)、[ダイナミクス](./glossary/mastering/dynamics.md)、[ステレオ、リミッター、ラウドネス](./glossary/mastering/stereo-limiter-loudness.md)、[リファレンスマッチ](./glossary/mastering/reference-match.md)。
 
@@ -376,7 +381,7 @@ function masteringRepairDereverbClassical(samples: Float32Array, sampleRate: num
 function masteringRepairTrimSilence(samples: Float32Array, sampleRate: number, options?: TrimSilenceOptions): Float32Array
 ```
 
-単発のリペアヘルパーとチェーン設定のリペア段はオフライン処理です。`StreamingMasteringChain` は `repair.declick`、`repair.declip`、`repair.decrackle`、`repair.dehum`、`repair.dereverb` を拒否し、`repair.denoise` はストリーミング向けのノイズ推定器（`mcra`、`imcra`、`spp`。既定のクォンタイル推定器は不可）のときだけ受け付けます。`repair.decrackle`、`repair.dehum`、`repair.denoiseClassical`、`repair.dereverbClassical` の 4 つは、同じ id の因果的なリアルタイムインサートとしても使えます（[リアルタイムインサート](./audio-repair.md#リアルタイムインサート)を参照）。[ダイナミクス](./glossary/mastering/dynamics.md)と[リペア](./glossary/mastering/repair.md)を参照してください。
+単発のリペアヘルパーとチェーン設定のリペア段はオフライン処理です。`StreamingMasteringChain` は `repair.declick`、`repair.declip`、`repair.decrackle`、`repair.dehum`、`repair.dereverb` を拒否し、`repair.denoise` は因果的なノイズ推定器（`mcra`、`imcra`、既定の `spp`）で受け付けます。`quantile` は名前を示して拒否されます。`repair.decrackle`、`repair.dehum`、`repair.denoiseClassical`、`repair.dereverbClassical` の 4 つは、同じ id の因果的なリアルタイムインサートとしても使えます（[リアルタイムインサート](./audio-repair.md#リアルタイムインサート)を参照）。[ダイナミクス](./glossary/mastering/dynamics.md)と[リペア](./glossary/mastering/repair.md)を参照してください。
 
 #### ステレオ／リンクされたリペア
 

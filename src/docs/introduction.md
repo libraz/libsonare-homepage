@@ -204,6 +204,7 @@ An **equivalent room** is a practical model inferred from audio. A **shoebox geo
 | `estimateRoom` / `estimate_room` | Ordinary audio or an impulse response | Equivalent-room volume, dimensions, absorption, DRR, and confidence. |
 | `synthesizeRir` / `synthesize_rir` | Shoebox geometry | A deterministic mono room impulse response. |
 | `roomMorph` / `room_morph` | Audio plus target-room geometry | Creative room-character morphing, not dereverberation. |
+| `roomMorphStereo` / `room_morph_stereo` | Left and right channels plus target-room geometry | The same morph for a stereo pair, heard at two spaced receivers so the image is kept. |
 
 ::: info Room-acoustic abbreviations
 **RT60** is the time for reverberation to fall by 60 dB. **EDT** is early decay time, often closer to perceived reverberance. **C50 / C80** are speech/music clarity metrics, and **D50** is the fraction of energy arriving in the first 50 ms. For now, read them as numbers that describe how a room rings; [Room Acoustics](./acoustic-analysis.md) explains how to interpret them.

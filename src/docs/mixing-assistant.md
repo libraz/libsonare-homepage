@@ -147,7 +147,7 @@ The assistant works from measured signal characteristics, and everything a mixin
 | Python (`libsonare`) | `suggest_mix_scene(tracks, *, sample_rate, ...)` | Tracks positional, every option a snake_case keyword. Returns a `dict`. |
 | C ABI | `sonare_mixing_assistant_suggest_scene_json(...)` | Flat C arrays plus a `SonareMasteringParam` list; writes JSON to `char** json_out`. |
 
-`sampleRate` is required on every surface — there is no default.
+`sampleRate` is required on every surface — there is no default. It is the rate the analysis runs at, and a track recorded at another rate says so itself: `sampleRate` on a Node or WASM `MixAssistantTrack`, `sample_rate` on a Python `MixTrackInput` (omitted or `None`: the call's rate). Each such track is resampled onto the call's rate before analysis. The C entries take `const int* track_sample_rates` after `track_lengths` (`NULL`: every track at `sample_rate`), and a rate of 0 or below is refused with `InvalidParameter`. `suggest-mix` on both command-line front-ends reads each file at its own rate.
 
 ### The scene-only call
 
@@ -353,7 +353,7 @@ The filter is proposed only when the share of the track's energy below its corne
 | `track is silent` | |
 | `track has no energy in the analysis bands` | |
 
-**A missing or empty track id, and a duplicate track id, are rejected inputs.** Binding validation rejects a missing or empty id before analysis (WASM throws a plain `Error` naming `tracks[i].id`, Node reports `TypeError`, Python reports `SonareValueError`), while a duplicate id raises `InvalidParameter` (a coded `SonareError` on WASM, `RangeError` on Node, `SonareValueError` on Python). A scene with two strips of the same id is a scene the mixer refuses to load — accepting it here would only move the failure somewhere harder to read.
+**A missing or empty track id, and a duplicate track id, are rejected inputs.** Binding validation rejects a missing or empty id before analysis (WASM and Node throw a `TypeError` naming `tracks[i].id`, Python reports `SonareValueError`), while a duplicate id raises `InvalidParameter` (a coded `SonareError` on WASM, `RangeError` on Node, `SonareValueError` on Python). A scene with two strips of the same id is a scene the mixer refuses to load — accepting it here would only move the failure somewhere harder to read.
 
 ## Availability
 

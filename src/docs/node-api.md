@@ -18,7 +18,7 @@ const sampleRate = audio.getSampleRate();
 
 // Individual analysis
 const bpm = detectBpm(samples, sampleRate);
-const key = detectKey(samples, sampleRate);
+const key = detectKey(samples, sampleRate);   // key.root: pitch class 0..11 (C = 0); key.mode: 'major', 'minor', ...
 const beats = detectBeats(samples, sampleRate);
 
 // All-in-one analysis
@@ -150,8 +150,13 @@ native errors, which `isSonareError` does not match: a wrong-typed or missing
 argument is a `TypeError`, and a value outside its domain — two arrays of unequal
 length, a `mode` that is not one of the accepted strings, a fractional number
 where an integer is read, a string or object property carrying an embedded NUL —
-is a `RangeError` naming the field. Everything the library or an object's state
-reports stays a coded `SonareError`: a released or destroyed handle throws
+is a `RangeError` naming the field. A request object, or the audio buffer of a
+buffer-or-request entry point, that is `null`, a number, an array or the wrong
+typed array is a `TypeError` (`<function>: request must be an object`, or
+`<function>: samples must be a Float32Array`). Empty or non-finite audio and an
+out-of-range or non-integer `sampleRate` passed to an audio-taking one-shot are a
+`RangeError`, checked before the core is reached. Everything the library or an
+object's state reports stays a coded `SonareError`: a released or destroyed handle throws
 `InvalidState`, and an addon built from a different tree than the package throws
 `AbiMismatch` (code 10) when the package is required.
 
@@ -230,6 +235,8 @@ cleanup that long-lived processes should prefer.
 
 Reconstruct a spectrum or audio from a mel spectrogram or MFCC matrix. Phase is estimated with Griffin-Lim, so the round-trip is lossy — see [Inverse Features](./inverse-features.md).
 
+The first four also take a request object, and a request carrying neither the forward `result` nor the raw `power` / `coefficients` throws a `TypeError` naming the missing field (`melToStft: power is required (or pass result)`).
+
 | Function | Return Type | Description |
 |----------|-------------|-------------|
 | `melToStft(mel, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `InverseStftResult` | Linear STFT power from a mel spectrogram |
@@ -283,8 +290,8 @@ see [librosa Compatibility](./librosa-compatibility.md) for the full mapping.
 | `melToHz(mel)` | Mel scale → Hertz |
 | `hzToMidi(hz)` | Hertz → MIDI note number |
 | `midiToHz(midi)` | MIDI note number → Hertz |
-| `hzToNote(hz)` | Hertz → note name (e.g., "A4") |
-| `noteToHz(note)` | Note name → Hertz |
+| `hzToNote(hz)` | Hertz → note name (e.g., "A4"); a frequency that is not finite and positive throws `SonareError` `InvalidParameter` |
+| `noteToHz(note)` | Note name → Hertz; a name that does not parse, or an octave outside -1 to 9, throws `SonareError` `InvalidParameter` |
 | `framesToTime(frames, sr?, hopLength?)` | Frame index → seconds (`sr` default `22050`, `hopLength` default `512`) |
 | `timeToFrames(time, sr?, hopLength?)` | Seconds → frame index (`sr` default `22050`, `hopLength` default `512`) |
 | `framesToSamples(frames, hopLength?, nFft?)` | Frame index → sample index (`librosa.frames_to_samples`) |
@@ -322,7 +329,7 @@ Reach for `meteringCrestFactorDbStereo(...)` whenever the two channels may be ou
 
 ### Mastering Analysis Functions
 
-The explainable-mastering helpers return JSON strings; see [Mastering Assistant](./mastering-assistant.md) for their exact shapes. Each stereo entry point below is request-only — it takes a single request object and has no positional overload, so a positional call throws.
+The explainable-mastering helpers return JSON strings; see [Mastering Assistant](./mastering-assistant.md) for their exact shapes. Each stereo entry point below is request-only — it takes a single request object and has no positional overload, so a positional call throws a `TypeError` naming the request object.
 
 | Function | Return Type | Description |
 |----------|-------------|-------------|

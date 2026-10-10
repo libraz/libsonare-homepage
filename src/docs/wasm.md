@@ -256,7 +256,7 @@ input.addEventListener('change', async (e) => {
 
 ### Keeping Every Channel
 
-`Audio.fromMemory(...)` folds a multichannel file to mono as it decodes. When you need the channels themselves, `decodeChannels(bytes)` decodes the bytes once and returns `{ sampleRate, channels }`, one `Float32Array` per source channel in the source's own order (5.1 is L R C LFE Ls Rs). `downmix(channels, targetLayout)` folds them to a narrower layout (`0` mono, `1` stereo, `2` 5.1, `3` 7.1) with the ITU-R BS.775 rule: centre and surround at -3 dB, LFE dropped. It cannot upmix. `Audio.fromMemoryWithBrowserFallback(...)` applies the same rule to a multichannel `AudioBuffer`, so a file folds to the same samples whichever decoder ran.
+`Audio.fromMemory(...)` folds a multichannel file to mono as it decodes. When you need the channels themselves, `decodeChannels(bytes)` decodes the bytes once and returns `{ sampleRate, channels }`, one `Float32Array` per source channel in the source's own order (5.1 is L R C LFE Ls Rs). `downmix(channels, targetLayout)` folds them to a narrower layout (`0` mono, `1` stereo, `2` 5.1, `3` 7.1) with the ITU-R BS.775 rule: centre and surround at -3 dB, LFE dropped. It cannot upmix. `Audio.fromMemoryWithBrowserFallback(...)` applies the same rule to a multichannel `AudioBuffer`, so a file folds to the same samples whichever decoder ran. `decodeChannelsWithBrowserFallback(bytes, options?)` is the channel-keeping counterpart of that: it returns a promise of the same `{ sampleRate, channels }`, sending formats the native decoder does not carry (AAC, OGG, FLAC) through `decodeAudioData` and keeping every channel the browser returns. `downmix` throws a `RangeError` for a `targetLayout` that is not an integer in the 32-bit range, and a `TypeError` for a non-number.
 
 ```typescript
 import { decodeChannels, downmix, init } from '@libraz/libsonare';
@@ -442,7 +442,7 @@ for (let start = 0; start < totalDuration; start += CHUNK_DURATION) {
 
 When the C++ core rejects an input or an object is in the wrong state, the WASM binding throws a structured `SonareError` carrying a numeric `code` and `codeName` — never a raw Emscripten pointer number or an opaque `[object Object]`. Catch it with the exported `isSonareError(...)` guard and branch on `ErrorCode`; see [Error Handling](./js-api.md#error-handling).
 
-An argument the JavaScript binding refuses itself is not a `SonareError`: a wrong type or a missing value is a native `TypeError`, and a value outside its domain (an unknown name, a fractional number where an integer is read, a sample rate outside the supported range, two buffers whose lengths must match, a string with an embedded NUL) is a `RangeError`. Handle all three:
+An argument the JavaScript binding refuses itself is not a `SonareError`: a wrong type or a missing value is a native `TypeError`, and a value outside its domain (an unknown name, a fractional number where an integer is read, a sample rate outside the supported range, two buffers whose lengths must match, a string with an embedded NUL, empty or non-finite audio) is a `RangeError`. A request object that is `null`, a number or an array, or an audio buffer of the wrong typed array, is a `TypeError` naming the function and the argument (`detectBpm: samples must be a Float32Array`). Handle all three:
 
 ```typescript
 import { ErrorCode, init, isSonareError, Mixer } from '@libraz/libsonare';
@@ -464,7 +464,7 @@ try {
 
 The mixing and project entry points report the error code their own C entry point documents rather than the underlying C++ exception. `Mixer.fromSceneJson` on malformed scene JSON throws `InvalidFormat`, and on a scene that names an unknown insert throws `InvalidParameter` with the core's message.
 
-Three state failures are always `InvalidState`: a call to the module before `init()` resolves, any method on a handle that was released with `destroy()`, `delete()`, or `using`, and a second `init()` whose options differ from the first (it names the differing option). A `.wasm` built from a different tree than the JavaScript throws `AbiMismatch` (code 10) from `init()`.
+Three state failures are always `InvalidState`: a call to the module before `init()` resolves, any method on a handle that was released with `destroy()`, `delete()`, or `using`, and a second `init()` whose options differ from the first (it names the differing option). A `.wasm` built from a different tree than the JavaScript throws `AbiMismatch` (code 10) from `init()`, which compares the loaded module's ABI version with `EXPECTED_ABI_VERSION`, exported from the package root and from `@libraz/libsonare/worklet`; a test double passed as `moduleFactory` reports that value.
 
 ## Where the sections went
 

@@ -104,7 +104,7 @@ description: libsonare の物理モデル音源の仕組み — 共通の導波�
 
 上の多くのモデルは、図が示した意味での導波管です。`vocal` はループを持たないソースフィルターモデル、`free-reed` は連成する気柱を持たない駆動舌です。`harpsichord` は弦列ごとに独立した遅延線を使い、駒の後ろに短い区間を持ちます。いずれも録音を再生するのではなく機構から解くため、このページで扱います。
 
-以下の識別子はエンジン側のフィールド名です。各モデルはこれらで音づくりされており、名前付きプリセットが設定しているのもこれらですが、呼び出し側が個別に触れるものではありません。実際に設定できるものは [コードから触る](#コードから触る) を参照してください。
+以下の識別子はエンジン側のフィールド名です。各モデルはこれらで音づくりされており、名前付きプリセットが設定しているのもこれらですが、パッチからは `engineParams` で、lowerCamelCase のキーを使って 1 つずつ上書きできます。詳しくは [コードから触る](#コードから触る) を参照してください。
 
 ### `piano` — ハンマー、ユニゾン弦、響板
 
@@ -273,9 +273,9 @@ description: libsonare の物理モデル音源の仕組み — 共通の導波�
 
 ## コードから触る
 
-**上に挙げた深い階層のフィールドは、どのバインディングからも個別には設定できません。** これらはエンジン内部のパッチに存在し、名前付きプリセットを構成している中身そのものです。一方 C ABI を越えるパッチ構造体は — したがってブラウザ・Node・Python の呼び出し側が見る `SynthPatch` も — エンジンを包むラッパー層だけを意図的に含みます。オシレーター、フィルター、エンベロープ、LFO、モッドマトリクス、ボディ、ゲイン。C ABI 側のパッチ入口は `sonare_synth_preset_patch(name, out)` ひとつだけで、埋めるのはこのラッパーのみの構造体です。
+**上に挙げた深い階層のフィールドは、どのバインディングからも `engineParams` で設定できます。** 表ではエンジン内部の名前で書いています。パッチが受け取るキーはセクションのフィールド名を lowerCamelCase にしたもの（`bowForce`、`ranks2.level`。`harpsichord.pluck_8a` は `pluck8a`）で、正確なキーと範囲・単位・既定値は `synthEngineParamInfo(engineMode)` で取得できます。
 
-したがって、実際にできることは 3 つです。
+したがって、実際にできることは 4 つです。
 
 **プリセットを選び、その物理的な音づくりをまるごと受け取る。** 物理モデル系のプリセットは深いフィールドが設定済みで出荷されており、それを使うには名前でプリセットを選びます。カタログはハードコードせず、ランタイムから取得してください。
 
@@ -289,7 +289,7 @@ const names = synthPresetNames();
 
 const patch = synthPresetPatch('cello');
 // 返るのはラッパー層だけ。patch.engineMode は 'bowed-string' になり、
-// 弓そのものの音づくりはフィールドではなくプリセットの中を旅します。
+// 弓そのものの音づくりは返らないので、上書きするには engineParams を使います。
 
 const audio = project.bounceWithSynthInstrument(
   { preset: 'cello', cutoffHz: 3600, ampAttackMs: 40 },
@@ -310,9 +310,19 @@ audio = project.bounce_with_synth_instrument(
 
 :::
 
+**エンジン固有のフィールドを上書きする。** パッチの `engineParams`（Python では `engine_params`）に入れます。指定しなかったキーはプリセットの値を保ちます。未知のキー、別のエンジンのキー、有限でない値、整数フィールドへの小数、範囲外の値は、クランプされずキー名つきで拒否されます。値はプリセットごとに較正されているので、1〜2 個ずつ変えて聴いてください。
+
+```typescript
+const audio = project.bounceWithSynthInstrument(
+  { preset: 'cello', engineParams: { bowForce: 0.7, bowPosition: 0.1 } },
+  { totalFrames: 48000, numChannels: 2 },
+);
+const keys = synthEngineParamInfo('bowed-string'); // name, min, max, default, unit
+```
+
 **その上から共通層を上書きする。** ラッパーにあるもの — フィルターのカットオフとレゾナンス、両方のエンベロープ、LFO、グライド、ボディミックス、ステレオスプレッド、ゲイン — はプリセットが選んだエンジンの上に乗ります（percussion エンジンだけは例外で、このうち効くのはゲインだけです）。同じフィールドは `resolveInstrumentAutomationId` で連続オートメーションの対象としても解決できます。そこで動かせないのは構造にあたるもので、プリセット、エンジンモード、波形、フィルターモデル、同時発音数、モッドルーティングは平滑化されるのではなく拒否されます。
 
-**励振軸を通じて、励振部を演奏する。** 物理モデルそのものを動かせる経路はこれだけです。`bow_force` や `breath_pressure` を名前で公開する代わりに、エンジンは force・position・brightness・morph という 4 つの抽象的な軸を定義しており、コントローラーの操作やモッドマトリクスのルートが発音中にこれらを動かせます。どの軸を読むかは各エンジンが宣言します。
+**励振軸を通じて、励振部を演奏する。** 発音中に物理モデルを動かせる経路はこれです。静的な `engineParams` のフィールドに加えて、エンジンは force・position・brightness・morph という 4 つの抽象的な軸を定義しており、コントローラーの操作やモッドマトリクスのルートが発音中にこれらを動かせます。どの軸を読むかは各エンジンが宣言します。
 
 | エンジンモード | 読む軸 |
 |---|---|
@@ -326,6 +336,6 @@ audio = project.bounce_with_synth_instrument(
 
 軸を動かす方法は 2 つあります。ひとつは、**コントローラープロファイル**。デバイスの操作を軸へ割り当てるもので、既定の `gm` プロファイルは CC2（ブレス）を force へ、CC74 をそのエンジンが読むほうの brightness または position へ送ります。選択と拡張はリアルタイムエンジンの `setControllerProfile` と `bindController` で行います。もうひとつは、**モッドマトリクスのルーティング**。パッチの内側から同じことをします。`breath`、`aftertouch`、`expressionCc`、`pitchBend` のいずれかを `excitationForce`、`excitationPosition`、`excitationBrightness`、`spectrumMorph` へ結べば、パッチと一緒に持ち運ばれ、バインドし直す必要もありません。
 
-聴き比べる前にもうひとつ。**素のパッチで鳴るエンジンモードばかりではありません。** 17 のうち 4 つ — `fm`、`modal`、`percussion`、`sample` — は既定のパッチが供給しない内容を必要とし、プリセット経由で（`sample` ならバンクを結んで）設定するまでは無音をレンダリングします。詳しくは [内蔵シンセサイザー](./native-synth.md) を参照してください。
+聴き比べる前にもうひとつ。**モードだけを指定したパッチは、そのエンジンの基本プリセットで鳴ります**（`fm` は e-piano、`modal` はベル、`percussion` は GM ドラムキット）。バンクをバインドするまで無音なのは `sample` だけです。詳しくは [内蔵シンセサイザー](./native-synth.md) を参照してください。
 
 関連: [内蔵シンセサイザー](./native-synth.md) · [音源方式](./sound-sources.md) · [GM / GS フォールバックバンク](./gm-gs.md)

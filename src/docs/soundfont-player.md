@@ -299,11 +299,14 @@ try {
   engine.pushMidiNoteOn(7, 0, 0, 60, 100);       // destinationId, group, channel, note, velocity
   const [left, right] = engine.process([new Float32Array(128), new Float32Array(128)]);
 
+  engine.pushMidiProgram(7, 0, 0, 40);           // destinationId, group, channel, program (optional bank and renderFrame follow)
   engine.clearMidiInstrument(7);                 // unbind
 } finally {
   engine.destroy();
 }
 ```
+
+`pushMidiProgram` queues a live program change, with an optional bank, timed like a note or CC. It is packed as one MIDI 2.0 Program Change, so the receiver's own gates apply: a part with RX PROGRAM CHANGE off accepts it and ignores it.
 
 ::: tip Binding before loading is allowed
 You can call `setSf2Instrument(...)` before any SoundFont is loaded — live MIDI then plays through the NativeSynth GM fallback. Load a SoundFont later and bound destinations begin using its samples. See [MIDI Input](./midi-input.md) for wiring live keyboards and Web MIDI.

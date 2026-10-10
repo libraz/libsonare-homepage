@@ -234,14 +234,14 @@ console.log(detected.mode, detected.tuning);   // e.g. "major", a semitone fract
 ### Chords
 
 ```typescript
-import { Mode, detectChords, chordFunctions } from '@libraz/libsonare';
+import { detectChords, chordFunctions } from '@libraz/libsonare';
 
 const chordOptions = {
   useTriadsOnly: false,   // include the extended qualities
   useHmm: true,           // smooth the sequence instead of deciding per frame
   useKeyContext: true,
   keyRoot: key.root,
-  keyMode: key.mode === 'minor' ? Mode.Minor : Mode.Major,   // Mode ordinal
+  keyMode: key.mode,   // a name or a Mode ordinal
   chromaMethod: 'nnls',
 } as const;
 
@@ -294,7 +294,7 @@ Two behaviours to plan for. A pre-chorus label has no detection branch, so filte
 
 `noveltyCurve` is scaled by its own maximum, so a peak of 1 means "the most novel frame in this track", not "a large change". Multiply by `noveltyPeak` to recover the raw response the absolute threshold is compared against.
 
-Each peak must reach `threshold` times the largest novelty within `referenceWindow` seconds (60 by default) on either side, so a dominant change does not hide weaker section changes far from it on a long track. Pass `referenceWindow: 0` to turn the relative threshold off, or a value at least the track length for a whole-track reference.
+Each peak must reach `threshold` times the largest novelty within `referenceWindow` seconds (60 by default) on either side, so a dominant change does not hide weaker section changes far from it on a long track. Pass `referenceWindow: 0` to turn the relative threshold off, or a value at least the track length for a whole-track reference. A lone loud burst, one no other event in the window comes within 30% of, is set aside from that reference so it does not hide the section changes around it. Each section's `energyLevel` is its median frame RMS, normalised by the loudest section, so a short burst does not make its own section the loudest.
 
 ### Melody and pitch
 

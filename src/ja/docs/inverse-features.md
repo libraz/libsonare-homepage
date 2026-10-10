@@ -105,7 +105,7 @@ const reMel = mfccToMel({ result: coeffs });
 const fromMfcc = mfccToAudio({ result: coeffs, nIter: 32 });
 ```
 
-`result` と並べて指定したフィールドは結果の値と一致していなければならず、食い違うと両方の値を示す `RangeError` を投げます。つまり上書きできるのは順変換で使った値の再確認だけです（`nIter` は自由）。dB の状態のメル結果（`isDb`）は、`dbToPower` を案内するメッセージで拒否されるので、先に変換してください。行列で渡すリクエスト形式では、行列のフィールド名はメルが `power`、MFCC が `coefficients` です（`melToStft({ power, nMels, nFrames, ... })`、`mfccToMel({ coefficients, nMfcc, nFrames, ... })`）。それ以外のフィールド名では例外になります。
+`result` と並べて指定したフィールドは結果の値と一致していなければならず、食い違うと両方の値を示す `RangeError` を投げます。つまり上書きできるのは順変換で使った値の再確認だけです（`nIter` は自由）。dB の状態のメル結果（`isDb`）は、`dbToPower` を案内するメッセージで拒否されるので、先に変換してください。行列で渡すリクエスト形式では、行列のフィールド名はメルが `power`、MFCC が `coefficients` です（`melToStft({ power, nMels, nFrames, ... })`、`mfccToMel({ coefficients, nMfcc, nFrames, ... })`）。それ以外のフィールド名では例外になります。`result` も行列フィールドもないリクエスト、またはオブジェクトでない引数は、欠けているフィールド名を示す `TypeError` になります（`melToStft: power is required (or pass result)`）。
 
 Python では `mel_result_to_stft(mel)`、`mel_result_to_audio(mel, n_iter=32)`、`mfcc_result_to_mel(coeffs)`、`mfcc_result_to_audio(coeffs, n_iter=32)` が同じ役割を担います。以降の位置引数形式の librosa 風関数は変わりません。
 

@@ -64,7 +64,7 @@ The JavaScript and Python project bindings expose the same builder families:
 | Notes | `midi2NoteOn`, `midi2NoteOff` | `midi2_note_on`, `midi2_note_off` | 16-bit attack/release velocity; note-on velocity `0` still means note-on |
 | Channel expression | `midi2Cc`, `midi2ChannelPressure`, `midi2PitchBend` | snake_case equivalents | 32-bit controller, pressure, and bend; bend center `0x80000000` |
 | Poly pressure | `midi2PolyPressure` | `midi2_poly_pressure` | 32-bit pressure for one note |
-| Program | `midi2Program` | `midi2_program` | Program plus optional bank MSB/LSB in the same message |
+| Program | `midi2Program` | `midi2_program` | Program plus optional bank MSB/LSB in the same message; a non-zero bank MSB or LSB with bank-valid false is refused |
 | RPN / NRPN | registered/assignable and relative controller builders | snake_case equivalents | 32-bit values or signed deltas |
 | Per-note | registered/assignable controller, per-note bend | snake_case equivalents | Per-note index `0..255`, or 32-bit bend |
 | Management | `midi2PerNoteManagement` | `midi2_per_note_management` | Detach and reset flags for one note |
@@ -144,6 +144,8 @@ finally:
 :::
 
 The AudioWorklet `SonareEngine` facade accepts the same complete packet through `pushMidiUmp(trackId, words, renderFrame?)`: `words` can be the legacy one-word number or a one-to-four-word array / `Uint32Array`. `pushMidiInputUmp(words, portTimeSamples = 0)` accepts the same complete packet on its engine-owned input source. Raw MT 0x3 / MT 0x5 data messages are rejected by both raw UMP calls; send a complete SysEx frame through `pushMidiSysex` instead. Queue-full and malformed-word errors are reported by the binding.
+
+A live Program Change goes out as one MIDI 2.0 message with `pushMidiProgram(destinationId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)` on a destination or `pushMidiInputProgram(group, channel, program, bankValid?, bankMsb?, bankLsb?, portTimeSamples?)` on the input source; the bank is applied only when `bankValid` is true, and the receiver's own program gates apply. See [MIDI Input](./midi-input.md) for the argument ranges and refusals.
 
 ## What the built-in receivers apply
 

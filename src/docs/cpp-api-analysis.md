@@ -171,6 +171,7 @@ These are declared in `sonare_c_features.h`, `sonare_c_types_functions.h` and `s
 |----------|---------|
 | `sonare_detect_key_with_tuning(...)` | Key detection with a recording `tuning` (a fraction of a semitone in `[-0.5, 0.5)`) or `tuning_auto` to measure it; `out_tuning` receives the value used |
 | `sonare_chord_functions(chords, count, key_root, key_mode, &roman, &functions)` | Roman numeral and harmonic function of chords already in hand, as two `SonareStringArray`s of `count` entries released with `sonare_free_string_array`; no audio is analysed |
+| `sonare_chord_symbol_from_analysis(...)`, `sonare_key_mode_from_analysis(mode, &out_mode)` | Convert a detected chord or key into the fields of an arrangement annotation (`SonareProjectChordSymbol`, `SonareProjectKeySegment`) through the library's own reduction table; declared in `sonare_c_project_annotate.h` |
 | `sonare_tuning_to_reference_hz`, `sonare_reference_hz_to_tuning` | Convert between the analysis tuning unit and a reference in Hz |
 | `sonare_scale_mask_for_mode(root, mode, &mask)` | The 12-bit scale mask of a `SonareMode`, in the layout `sonare_scale_quantize_midi` and `SonarePitchCorrectionConfig` read |
 | `sonare_mfcc_to_mel_checked_ex(mfcc, input_length, n_mfcc, n_frames, n_mels, lifter, &out)` | Length-checked, lifter-aware MFCC-to-Mel inversion; `lifter` is the one the forward transform used (`0` = none) |
@@ -194,7 +195,7 @@ for (const Boundary& b : detector.boundaries()) {
 }
 ```
 
-`threshold` is measured against the largest raw novelty event within `reference_window` seconds of the peak, with a lone dominant event set aside, so a dominant change further away than the window cannot gate a weaker one out. `0` makes each frame its own reference and disables `threshold`; a value at least the track length makes the reference whole-track. Because the reference is local, `Boundary::strength` (scaled by the whole-track maximum, a rank within the track) can be below `threshold`.
+`threshold` is measured against the largest raw novelty event within `reference_window` seconds of the peak, with a lone dominant event set aside (one no other event within `reference_window` comes within 30% of), so a dominant change further away than the window cannot gate a weaker one out. `0` makes each frame its own reference and disables `threshold`; a value at least the track length makes the reference whole-track. Because the reference is local, `Boundary::strength` (scaled by the whole-track maximum, a rank within the track) can be below `threshold`.
 
 The C ABI is `sonare_detect_boundaries(samples, length, sample_rate, &options, &out)` with a `SonareBoundaryOptions` that must start from `sonare_boundary_options_default()`: zeroing it sets `absolute_threshold` to 0, which segments a stationary input anyway. Release the result with `sonare_free_boundary_result`.
 
@@ -245,7 +246,7 @@ struct Section {
   SectionType type;    // Intro, Verse, Chorus, etc.
   float start;
   float end;
-  float energy_level;
+  float energy_level;  // median frame RMS, normalised by the loudest section
   float confidence;
 
   std::string type_string() const;

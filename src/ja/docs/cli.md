@@ -228,11 +228,7 @@ sonare mastering-pair-analyze track.wav \
   --json > mastering-report.json
 ```
 
-ペア解析では、リファレンスがあらかじめソースと同じサンプルレートである必要があります。
-食い違いは黙ってリサンプリングされるのではなくエラーになるため、書き換えられた音声どうしを
-比較してしまうことがありません。先にリファレンスをリサンプリングするか（`sonare resample
-reference.wav --target-sr <sr> -o reference-matched.wav`）、比較前のリサンプリングやトリムを
-細かく制御したい場合は Python API を使ってください。
+`mastering-pair-analyze` と `mastering-pair-processor` は、リファレンスを本来のサンプルレートのまま読み込み、ソースのレートへリサンプリングします。レートが等しい場合は、この処理がない場合とまったく同じ結果になります。`mastering-stereo-analyze` だけは例外で、2 つのファイルとも入力と同じレートである必要があり、食い違いはエラーになります。比較前のリサンプリングやトリムを細かく制御したい場合は Python API を使ってください。
 
 `/ja/mastering` ブラウザデモも同じマスタリングプロセッサ群を呼び出しています。デモから書き出したレポートを CLI 自動化の起点として活用できます。
 
@@ -278,6 +274,8 @@ reference.wav --target-sr <sr> -o reference-matched.wav`）、比較前のリサ
 | `sonare mastering-presets` | グローバルの `--json` フラグに対応 | 利用可能なマスタリングプリセット名を一覧表示する |
 | `sonare declip clipped.wav -o out.wav` | `--clip-threshold`（0.98）, `--lpc-order`（36）, `--iterations`（2）, `--lpc-blend`（0.65） | LPC 再構成でクリップしたオーディオを修復する |
 
+どちらの CLI でも、`--chain-config`（または `--config`）の文書と `--params` は 1 つのパラメータ一覧として読まれます。同じフィールドが文書と `--params` の両方に別の綴りで書かれていると、両方のキー名を挙げて拒否されます。文書の `<stage>.enabled: false` は、`--params` がそのステージのフィールドを指定しても無効のままです。バンドが 1 つのマルチバンドステージは拒否され（`multiband stage needs at least two bands; one band is the compressor stage`）、バンド数は 2〜64 です。列挙値のパラメータ（`repair.denoise.mode`、`repair.denoise.noiseEstimator`、`repair.decrackle.mode`、`repair.dehum.mode`）は数値のほかに選択肢の名前でも指定でき、`repair.decrackle.mode` は 0（メディアン）と 1（ウェーブレット縮小）以外を拒否します。
+
 #### repair
 
 `declip` が直すのは 1 種類の欠陥だけです。`repair` はテイクを測定し、必要な修復ステージ（declip、declick、decrackle、dehum、denoise、dereverb をこの順で）を実行します。録音の何が悪いのかまだ分かっていないときは、このコマンドから始めます。
@@ -318,9 +316,10 @@ CLI のコマンドの多くは、性質上モノラルです。実行する解�
 | コマンド | ステレオ入力の扱い |
 |----------|--------------------|
 | `mastering` | ステレオのままマスタリングし、音像を最後まで保つ |
+| `eq`, `room-morph` | 2 チャンネル入力はステレオのまま処理し、ステレオファイルとして書き出す。`eq` の `--placement` と `--output-pan` はファイル自身のチャンネルに作用する。`room-morph` は目標ルームを `--receiver-spacing` メートル（既定 0.5、0 より大きく 4 まで）離した 2 つのレシーバーで聴いたものとして扱う。JSON レポートには `stereo` が含まれる |
 | `mastering-processor` | 2 チャンネル入力はステレオのまま処理し、結果もステレオファイルとして書き出す。モノラル形式を持たないプロセッサ（`stereo.imager`、`eq.midSide`、`multiband.*` 系）は入力にかかわらずステレオ経路をたどり、モノラルファイルは左右両方に流し込んだうえでステレオとして書き出す |
 | `mix`（Python）, `mix-strip` | ステレオのまま処理する。モノラルファイルは左右両方へ、ステレオファイルは自身の 2 チャンネルをそのまま使う |
-| `suggest-mix` | 各 `--input` は、ステレオファイルをダウンミックスせずペアのまま保持する。アシスタントの中で両チャンネルを測定するのは音像解析だけだから |
+| `suggest-mix` | 各 `--input` は、ステレオファイルをダウンミックスせずペアのまま保持する。アシスタントの中で両チャンネルを測定するのは音像解析だけだから。各ファイルは本来のサンプルレートのまま読み込まれる |
 | `normalize` | ステレオのまま扱う。ゲインは両チャンネルをまたいで 1 つだけ求め、両方に同じ値を掛ける。`--mode peak` では大きい方のチャンネルが `--target-db` に届き、もう一方はそれとの差を保つ。`--mode rms` も同じくペア全体で測る。チャンネルごとに別々にノーマライズすると、小さい方が持ち上がって左右の差が消える。それはレベル調整ではなくバランス変更になってしまう |
 | `master`, `mastering-chain`, `declip`（Python CLI） | ステレオのまま扱い、ゲインは両チャンネルをまたいで 1 つだけ求める。音像が中央へ寄らない |
 | 上記以外 | モノラルへダウンミックスし、警告を表示する |

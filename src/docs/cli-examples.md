@@ -105,7 +105,7 @@ sonare suggest-mix \
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--input [ID=]WAV` | — | One per track, repeatable. A stereo file keeps both channels, so the assistant can read its image; more than two are downmixed. Resampled to `--sample-rate`; `ID` defaults to the file's base name |
+| `--input [ID=]WAV` | — | One per track, repeatable. A stereo file keeps both channels, so the assistant can read its image; more than two are downmixed. Each file is read at its own rate and resampled onto `--sample-rate`; `ID` defaults to the file's base name |
 | `--sample-rate` | 48000 | Shared analysis sample rate |
 | `--tempo-bpm BPM\|auto` | — | Tempo the suggested delay times are voiced against. `auto` detects it from the first `--input`; omitted, the transport's fallback tempo is used |
 | `--params k=v,...` | — | Assistant parameter overrides |
@@ -267,6 +267,11 @@ sonare transcribe chords.wav -o chords.mid --polyphonic --tempo-bpm 120
 | `--polyphonic` | Use the multi-F0 chain, which finds overlapping notes |
 | `--reference-hz` | Tuning reference the MIDI note numbers are measured against (default 440) |
 | `--fmin`, `--fmax` | F0 range in Hz for either chain; omitted endpoints use 65/2093 for monophonic and 55/1760 for polyphonic, while explicit endpoints override the selected chain's defaults |
+| `--max-polyphony` | Polyphonic only: voices kept per frame, 1 to 64 (default 10) |
+| `--min-frame-peak-ratio` | Polyphonic only: the per-frame search stops below this share of the frame's first peak (default 0.20); finite and at least 0, and `0` is a real zero |
+| `--min-ridge-peak-ratio` | Polyphonic only: a fade below this share of a ridge's own peak breaks the ridge (default 0.10); same domain |
+| `--reattack-ratio` | Polyphonic only: a pitch struck again while it still sounds becomes a new note when its salience climbs past this multiple of the level before (default 2.0); `0` turns the split off, otherwise it must be greater than 1 |
+| `--min-note-division N` | Shortest note as a note value, 1 to 128: `32` keeps notes from a thirty-second note up at the transcription tempo. Applies to both chains; refused together with `--min-note-ms` |
 | `--min-note-ms` | Monophonic only: shortest span kept as a note, in ms (default 30); the polyphonic path does not use it |
 | `--segmentation-threshold-cents` | Monophonic split threshold in cents (default 50); the polyphonic path uses it only for reported F0 stability and never to split a ridge |
 | `--velocity-floor-db` | Level mapped to velocity 1; must be negative (default -48) |

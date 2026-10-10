@@ -27,14 +27,14 @@ libsonare は Web アプリケーション向けのオーディオ解析、マ�
 | **マスタリング** | `masterAudio`, `masteringChain`, `StreamingMasteringChain` | LUFS（Loudness Units relative to Full Scale）ターゲット、True Peak リミッター、プリセット、ストリーミングチェーン |
 | **ミキシング** | `mixStereo`, `Mixer`, `mixingScenePresetNames` | ステムミックス、ルーティング、オートメーション、メーター |
 | **編集 DSP** | `pitchCorrectToMidi`, `noteStretch`, `spectralEdit`, `voiceChange`, `StreamingRetune`, `RealtimeVoiceChanger` | ボーカル補正、ノート編集、ピッチ／フォルマント変更 |
-| **Audio クラス** | `Audio.fromBuffer`, `Audio.fromMemory`, `Audio.fromMemoryWithBrowserFallback` | ファイル読み込みと、よく使う関数をメソッド形式で呼ぶための補助 |
+| **Audio クラス** | `Audio.fromBuffer`, `Audio.fromMemory`, `Audio.fromMemoryWithBrowserFallback`, `decodeChannelsWithBrowserFallback` | ファイル読み込みと、よく使う関数をメソッド形式で呼ぶための補助 |
 
 ::: tip 用語について
 オーディオ解析が初めてですか？[用語集](/ja/docs/glossary) で BPM、STFT、Chroma などの用語の説明をご覧ください。
 :::
 
 ::: info 多くの関数はファイルパスではなくデコード済み PCM を受け取ります
-ブラウザ版の多くの関数は、MP3 や WAV のパスではなく、デコード済みの PCM サンプルと `sampleRate` を受け取ります。エンコード済みバイト列からサンプルへ変換するには、Web Audio API（`AudioContext.decodeAudioData`）で自分でデコードするか、後述の `Audio.fromMemory` / `Audio.fromMemoryWithBrowserFallback` ファクトリを使います。これらはエンコード済みバイト列をメモリ内でデコードします。WAV／MP3 は同梱 WASM デコーダを使い、AAC／OGG／FLAC は必要に応じてブラウザ側デコードを使います。
+ブラウザ版の多くの関数は、MP3 や WAV のパスではなく、デコード済みの PCM サンプルと `sampleRate` を受け取ります。エンコード済みバイト列からサンプルへ変換するには、Web Audio API（`AudioContext.decodeAudioData`）で自分でデコードするか、後述の `Audio.fromMemory` / `Audio.fromMemoryWithBrowserFallback` ファクトリを使います。これらはエンコード済みバイト列をメモリ内でデコードします。WAV／MP3 は同梱 WASM デコーダを使い、AAC／OGG／FLAC は必要に応じてブラウザ側デコードを使います。`decodeChannelsWithBrowserFallback(bytes, options?)` も同じ経路でデコードしますが、モノラルへ折りたたまず全チャンネルを保持します。
 :::
 
 バインディングごとの機能対応は [機能マップ](./api-surface.md) を参照してください。マスタリングプロセッサの登録一覧とミキシングシーン形式は、[マスタリングプロセッサ](./mastering-processors.md) と [ミキシングシーン JSON](./mixing-scene-json.md) にまとめています。
@@ -110,12 +110,12 @@ Node と WASM は、値を黙って解釈し直さずに拒否します。型の
 
 | 拒否した主体 | クラス | 例 |
 |--------------|--------|----|
-| JavaScript バインディング（型違い・欠落） | `TypeError` | サンプルを期待する箇所に文字列を渡した、必須フィールドがない |
-| JavaScript バインディング（定義域の外） | `RangeError` | 未知の名前、小数の整数引数、長さが揃うべき 2 つのバッファの不一致、NUL を含む文字列、対応範囲外の `sampleRate` |
-| ライブラリ、またはオブジェクトの状態 | コード付きの `SonareError` | マスタリング呼び出しの非有限なオーディオ、拒否されたストリーム設定、壊れたプロジェクトやシーンのドキュメント（`InvalidFormat`）、シーン内の未知の insert（`InvalidParameter`） |
+| JavaScript バインディング（型違い・欠落） | `TypeError` | サンプルを期待する箇所に文字列を渡した、`Float32Array` ではない `samples`、数値ではない `sampleRate`、`null`・数値・配列のリクエストオブジェクト、必須フィールドがない |
+| JavaScript バインディング（定義域の外） | `RangeError` | 未知の名前、小数の整数引数、長さが揃うべき 2 つのバッファの不一致、NUL を含む文字列、空または非有限のオーディオ、対応範囲外または整数ではない `sampleRate` |
+| ライブラリ、またはオブジェクトの状態 | コード付きの `SonareError` | 拒否されたストリーム設定、壊れたプロジェクトやシーンのドキュメント（`InvalidFormat`）、シーン内の未知の insert（`InvalidParameter`） |
 | 解放済み・破棄済み・未初期化のハンドル | `InvalidState` の `SonareError` | `init()` 前の解析関数の呼び出し、`destroy()` 後のメソッド呼び出し |
 
-`isSonareError` が一致するのは 3 行目と 4 行目だけなので、ユーザー入力の検証では 3 つのクラスすべてを扱う catch にしてください。バインディングの検査とライブラリの検査の境界は関数ごとに異なりえます。たとえば `detectBpm` は空のサンプルを JavaScript 側で `RangeError` として拒否しますが、`masterAudio` はライブラリへ渡して `InvalidParameter` を投げます。コード一覧は[エラー処理](./js-api.md#エラーハンドリング)を参照してください。
+`isSonareError` が一致するのは 3 行目と 4 行目だけなので、ユーザー入力の検証では 3 つのクラスすべてを扱う catch にしてください。サンプルとサンプルレートを受け取るワンショット関数はどれも、コアに渡す前にこれらを検査します。空または非有限のオーディオと、範囲外または整数ではない `sampleRate` は `RangeError`、型の誤った引数はその引数名を挙げた `TypeError` で、埋め込みの `BindingError` が呼び出し側へ届くことはありません。コアが自分のオブジェクトに対して行う引数検査（拒否された STFT やストリームの設定）は、コード付きの `SonareError` のままです。コード一覧は[エラー処理](./js-api.md#エラーハンドリング)を参照してください。
 
 ## 目的から API を選ぶ
 
@@ -196,7 +196,7 @@ await init({
 });
 ```
 
-オプションが効くのは最初の呼び出しだけです。オプションなし、または同じオプション（関数は参照で比較）で `init()` を再度呼ぶとすぐに解決します。オプションが異なる 2 回目の呼び出しは、そのオプション名を挙げた `InvalidState` の `SonareError` を投げます。`init()` は読み込んだモジュールの ABI バージョンをパッケージのビルド時のものとも比較し、`.wasm` と JavaScript が別のビルドのもの（古いキャッシュや独自の `wasmBinary` / `locateFile` で起こりえます）なら `AbiMismatch`（コード 10）を投げます。`init()` が解決する前に、モジュールを必要とする関数を呼ぶと `InvalidState` を投げます。
+オプションが効くのは最初の呼び出しだけです。オプションなし、または同じオプション（関数は参照で比較）で `init()` を再度呼ぶとすぐに解決します。オプションが異なる 2 回目の呼び出しは、そのオプション名を挙げた `InvalidState` の `SonareError` を投げます。`init()` は読み込んだモジュールの ABI バージョンをパッケージのビルド時のものとも比較し、`.wasm` と JavaScript が別のビルドのもの（古いキャッシュや独自の `wasmBinary` / `locateFile` で起こりえます）なら `AbiMismatch`（コード 10）を投げます。期待するバージョンは `EXPECTED_ABI_VERSION` としてパッケージルートと `@libraz/libsonare/worklet` からエクスポートされるので、`moduleFactory` に渡すテスト用の代替実装は、`init()` が検査するバージョンをこれで報告できます。`init()` が解決する前に、モジュールを必要とする関数を呼ぶと `InvalidState` を投げます。
 
 ### `isInitialized()`
 
@@ -257,7 +257,7 @@ function capabilities(): {
 返します。C ABI が公開し Python が `capability_catalog` として公開しているのと同じ正規
 JSON で、`schemas/capability-catalog.schema.json` で検証されます。
 
-カタログは実際の値を持っています。現行ビルドは 95 個のプロセッサ（うち 84 個がリアルタイムインサート可能）と 5,577 個のパラメータ記述子を公開します。構築用キーにフォールバックがなければ `default` は `null` になります。値域はプロセッサの他のパラメータを既定値に置いて実測されます。`null` は「その側の制限をカタログが把握していない」という意味であって、範囲情報が一般に得られないという意味ではありません。
+カタログは実際の値を持っています。現行ビルドは 95 個のプロセッサ（うち 84 個がリアルタイムインサート可能）と 5,579 個のパラメータ記述子を公開します。構築用キーにフォールバックがなければ `default` は `null` になります。値域はプロセッサの他のパラメータを既定値に置いて実測されます。`null` は「その側の制限をカタログが把握していない」という意味であって、範囲情報が一般に得られないという意味ではありません。
 
 ::: warning 範囲は実測値であり、実測ゆえの注意点がある
 公開される範囲は**送ってよい値の厳密な制約であって、UI の推奨レンジではありません**。しかも、
@@ -268,8 +268,9 @@ JSON で、`schemas/capability-catalog.schema.json` で検証されます。
   `maximizer.adaptiveRelease` が `minReleaseMs <= 250`、`maxReleaseMs >= 20` と返すのはまさに
   これが理由で、一方を動かせばもう一方の実際の限界も動きます。
 - **サンプルレートから導かれる範囲は、prepare 前のプロセッサを反映します。**
-  EQ の `band*.frequencyHz` の上限はカタログ上どれも `24000` と読め、インサートをより高い
-  レートで prepare した時点で上がります。
+  EQ の `band*.frequencyHz` の上限はカタログ上どれも `24000` と読めます。既知のレートで
+  構築したイコライザーは、そのレートのナイキスト周波数（96 kHz なら 30000 Hz）までの
+  バンド周波数を受け付けます。
 - **開区間の境界は、除外される側の値そのものとして報告されます。**
   `dynamics.compressor.sidechainHpfHz` は `min` に `0` を返しますが、`0` は拒否されます。
 :::
@@ -311,7 +312,7 @@ function capabilityCatalog(): {
       choices: Array<{ name: string; value: number }> | null;
       slot: string | null;
       /** このキーの値を制約する兄弟キー。`this <relation> sibling` として読む */
-      dependsOn: Array<{ key: string; relation: 'lt' | 'le' | 'gt' | 'ge' }>;
+      dependsOn: Array<{ key: string; relation: 'lt' | 'le' | 'gt' | 'ge'; factor: number }>;
     }>;
     slots: Array<{
       name: string;
@@ -320,11 +321,14 @@ function capabilityCatalog(): {
       minCrossoverCutoffs: number;
     }>;
   }>;
+  /** フラットなマスタリングチェーンキーすべての記述。 */
+  chain: CapabilityCatalogChain;
   presets: {
     mastering: string[];
     synth: string[];
     mixingScene: string[];
     voiceChanger: string[];
+    playbackRoom: string[];
   };
   masteringPresets: Array<{
     name: string;
@@ -341,11 +345,13 @@ function capabilityCatalog(): {
 [インサートエフェクト](./effects-inserts.md#パラメータ記述子)にまとまっています。コアが把握していない範囲は明示的な `null` で報告されるので、
 0 ではなく「上限・下限なし／不明」として扱ってください。
 
-バンドごとの EQ パラメータは、インデックス付きの各バンドフィールドについて記述子を公開するため、汎用 UI が手書きの表なしにバンドを並べられます。記述子には構築用キーとオートメーション対象の両方が含まれるので、オートメーション対象は `id !== null` で選び、条件付きのバンド群は `slot` とプロセッサの `slots` 配列で扱ってください。記述子を公開しても、どのキーが**読まれた**とみなされるかは変わりません。不完全に渡したバンドは、従来どおり余分なキーを「無視した」と報告します。
+`chain` はマスタリングチェーン設定のフラットなキーを記述します。各ステージのキー接頭辞、そのキーがパラメータとなるプロセッサ、`enabled` キー（`CapabilityCatalogChainStage`）、マルチバンドステージの `cutoffsHz` や `bands` などのインデックス付きリストとその項目数（`CapabilityCatalogChainList`）、どのプロセッサにも属さないキーの記述子（`params`）、キーの別名表記すべて（`CapabilityCatalogChainAlias`）です。`presets.playbackRoom` は常に存在し、再生機能がビルドから除かれている場合は空になります。
+
+バンドごとの EQ パラメータは、インデックス付きの各バンドフィールドについて記述子を公開するため、汎用 UI が手書きの表なしにバンドを並べられます。記述子には構築用キーとオートメーション対象の両方が含まれるので、オートメーション対象は `id !== null` で選び、条件付きのバンド群は `slot` とプロセッサの `slots` 配列で扱ってください。記述子を公開しても、どのキーが**読まれた**とみなされるかは変わりません。不完全に渡したバンドは、余分なキーを「無視した」と報告します。
 
 ### `abiVersion()`
 
-C POD 公開 API 全体を集約したネイティブ ABI バージョンを返します。ビルド済みバイナリを読み込む際に保存・比較しておくと、互換性のない JS／ネイティブ成果物の組み合わせを早期に検出できます。
+C POD 公開 API 全体を集約したネイティブ ABI バージョンを返します。（このビルドでは `0x05030207`、`EXPECTED_ABI_VERSION` と同じ値）。ビルド済みバイナリを読み込む際に保存・比較しておくと、互換性のない JS／ネイティブ成果物の組み合わせを早期に検出できます。
 
 ```typescript
 function abiVersion(): number
@@ -508,7 +514,7 @@ const audio = project.bounceWithSynthInstrument(synthPresetNames()[0]);
 
 各 facade は非有限数、不正な enum／インデックス値、過大なリソースを DSP やシリアライズへ渡す前に一貫して拒否します。これらは入力不正として扱い、バインディングが暗黙にクランプしたり不正値を受理したりすることへ依存しないでください。
 
-バインディング自身が拒否する引数は、素の `TypeError`（型の誤りや欠落）か `RangeError`（範囲外、未知の名前、空または非有限のサンプル）になり、`isSonareError` には一致しません。エンジン側で起きる失敗にはコードが付きます。たとえば `synthesizeRir(...)` で音源が部屋の外にある場合は `InvalidParameter` です。解放済み・破棄済みのハンドルは `SonareError` の `InvalidState` をスローします。
+バインディング自身が拒否する引数は、素の `TypeError`（型の誤りや欠落）か `RangeError`（範囲外、未知の名前、空または非有限のサンプル、正の整数で範囲内ではない `sampleRate`）になり、`isSonareError` には一致しません。オフラインおよびボーカル編集のワーカークライアントは `TypeError` と `RangeError` をワーカー境界越しに復元し、`node:worker_threads` の Worker か、それを返す `workerFactory` を受け付けます。エンジン側で起きる失敗にはコードが付きます。たとえば `synthesizeRir(...)` で音源が部屋の外にある場合は `InvalidParameter` です。解放済み・破棄済みのハンドルは `SonareError` の `InvalidState` をスローします。
 
 ```typescript
 import { ErrorCode, isSonareError, Mixer } from '@libraz/libsonare';
@@ -543,7 +549,8 @@ try {
 | `InvalidState` | `7` |
 | `Cancelled` | `8` |
 | `EncodeFailed` | `9` |
+| `AbiMismatch` | `10` |
 | `Unknown` | `99` |
 
-このコードは Python の `SonareError.code` および C ABI の `SonareError` enum と一致し、Python CLI は同じコードを[終了コード](./cli.md#終了コード)へ対応付けます。
+`AbiMismatch` はバインディングが作るコードで、コアが報告することはありません。ネイティブモジュールの ABI バージョンがパッケージの期待値と異なることを示します（WASM は `init()`、Node はアドオンの読み込み時、Python はライブラリの初回使用時）。ほかのコードは Python の `SonareError.code` および C ABI の `SonareError` enum と一致し、Python CLI は同じコードを[終了コード](./cli.md#終了コード)へ対応付けます。
 

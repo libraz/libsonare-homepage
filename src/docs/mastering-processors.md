@@ -280,6 +280,8 @@ Pair processors consume a source **and** a reference. Pair/stereo *analyses* ret
 | Pair analyses | `match.referenceLoudness`, `match.tonalBalance`, `match.tonalBalanceLogBands`, `match.matchEqCurve`, `match.estimateReferenceDelaySamples` |
 | Stereo analyses | `stereo.monoCompatCheck`, `stereo.monoCompatCheckLogBands` |
 
+A pair processor or analysis takes the reference at its own rate through `referenceSampleRate` (Python `reference_sample_rate`): the reference is resampled onto the source's rate, and a delay estimate comes back in source-rate samples. `mastering-pair-analyze` and `mastering-pair-processor` on both CLIs read a reference file at any rate.
+
 The stereo pair entry point `masteringPairProcessStereo()` accepts only `match.abCrossfade`. Each source pair and each reference pair must have equal left/right lengths, while the source pair and reference pair may have different durations. `masteringAbMatchLoudnessStereo()` takes a request object, measures one shared gain for the stereo program, and returns matched `left` and `right` results without a ceiling clamp.
 
 These are registry names you pass to `masteringPairAnalyze(...)` / `masteringStereoAnalyze(...)`. Separately from the registry, the assistant helpers have their own stereo entry points that take a left/right pair directly — `masteringAudioProfileStereo`, `masteringAssistantSuggestStereo`, and `masteringStreamingPreviewStereo`. Use them instead of profiling a downmix, which under-reports integrated loudness by about 6 dB on decorrelated material; see [Stereo sources](./mastering-assistant.md#stereo-sources).
@@ -330,7 +332,7 @@ The creative-FX insert catalog — reverb, modulation, delay, and GS insert IDs,
 
 ## How to call them
 
-Use `capabilityCatalog()` / `capability_catalog()` when a host needs one build-aware picker across solo, pair, and creative-insert processors. It lists each processor's parameter descriptors — name, nullable id, type, `unit`, realtime-safety, `min` / `max` / nullable `default`, `scale`, display range, sibling `dependsOn` bounds, `choices`, and slot membership — plus the processor `slots` metadata, built-in preset lists, and mastering-preset metadata. `masteringProcessorCatalog()` is the narrower mastering registry classification used for mastering-specific pickers.
+Use `capabilityCatalog()` / `capability_catalog()` when a host needs one build-aware picker across solo, pair, and creative-insert processors. It lists each processor's parameter descriptors — name, nullable id, type, `unit`, realtime-safety, `min` / `max` / nullable `default`, `scale`, display range, sibling `dependsOn` bounds, `choices`, and slot membership — plus the processor `slots` metadata, a `chain` section describing the flat chain keys (see [Describing the chain keys](#describing-the-chain-keys)), built-in preset lists (`presets.playbackRoom` is always present, empty when playback is compiled out), and mastering-preset metadata. `masteringProcessorCatalog()` is the narrower mastering registry classification used for mastering-specific pickers.
 
 ### Reading a catalog bound
 
@@ -339,7 +341,7 @@ Every descriptor carries the same seventeen fields (`name`, `id`, `rtSafe`, `typ
 The two kinds of value come from different places, and that decides how far a host can trust them:
 
 - The **default** is the processor config struct's own field initializer, recorded as each builder falls back to it. A field whose initializer changes therefore cannot leave a stale number behind in the catalog.
-- The **range is measured**, not declared. Candidate values go through the same construction path a caller uses, and the catalog reports the interval validation accepted, rounded inward. The `unit`, `scale`, display range (`uiMin` / `uiMax`) and `dependsOn` relations are declared by the library instead. Every `repair.*` entry publishes its settings the same way, measured through the stage's own validation; those rows carry no automation `id` and are never `rtSafe`, even on the four realtime repair inserts.
+- The **range is measured**, not declared. Candidate values go through the same construction path a caller uses, and the catalog reports the interval validation accepted, rounded inward. The `unit`, `scale`, display range (`uiMin` / `uiMax`) and `dependsOn` relations are declared by the library instead; a `dependsOn` entry reads `this <relation> factor * sibling`. A parameter drawn on a logarithmic axis publishes a positive `uiMin` and a finite `uiMax`, and a bound that only restates a `dependsOn` entry at the sibling's default is left `null` for the dependency to carry. Every `repair.*` entry publishes its settings the same way, measured through the stage's own validation; those rows carry no automation `id` and are never `rtSafe`, even on the four realtime repair inserts. `denoiseClassical` and `dereverbClassical` publish `nFft` as `choices` (the powers of two from 4 to 524288) and `hopLength` as any whole number from 1 with a `dependsOn` of at most half of `nFft`. `masteringInsertParamInfo` answers for every catalog id, offline repair stages included.
 
 ::: warning A bound is a hard constraint, not a recommended range
 `min` and `max` describe what the processor will *accept*. They are not a musically sensible range to sweep a control over: a value inside the interval can still be a bad setting, and a value outside it is rejected rather than clamped.
@@ -348,7 +350,7 @@ The two kinds of value come from different places, and that decides how far a ho
 Because the range is measured rather than declared, three properties follow that a host has to allow for:
 
 - **Each bound is measured with the other parameters at their defaults.** Two controls that constrain each other therefore each report the *other's default* as their limit. `maximizer.adaptiveRelease` publishes `minReleaseMs` with a ceiling of 250 and `maxReleaseMs` with a floor of 20 for exactly that reason — those are the sibling's default values, not a limit on the pair as a whole.
-- **A sample-rate-derived bound is marked, not resolved, until you give a rate.** Every EQ `band*.frequencyHz` ceiling reads as 24000 with `maxRelativeTo: 'nyquist'`; the effective ceiling is the lower of `max` and the Nyquist. `masteringInsertParamInfo(name, sampleRate)` resolves it for a rate: `eq.parametric` reports 11025 at 22050 Hz and 22050 at 44100 Hz, and stays at 24000 for rates above 48 kHz, which the insert refuses above as well.
+- **A sample-rate-derived bound is marked, not resolved, until you give a rate.** Without a rate, every EQ `band*.frequencyHz` ceiling reads as 24000 with `maxRelativeTo: 'nyquist'`. `masteringInsertParamInfo(name, sampleRate)` resolves it to that rate's Nyquist frequency: `eq.parametric` reports 11025 at 22050 Hz, 22050 at 44100 Hz and 96000 at 192 kHz. An equalizer built at a known rate (one-shot processing, an engine or mixer strip) accepts band frequencies up to the same ceiling and names it in the refusal (`EQ band frequency must be below 48000 Hz (Nyquist at 96000 Hz)`); a build with no rate keeps 24000 Hz.
 - **An exclusive bound is reported as the limit it excludes, and flagged.** `dynamics.compressor` publishes a `sidechainHpfHz` `min` of 0 and still rejects 0; `minExclusive` / `maxExclusive` say so.
 
 The per-band EQ surface is the bulk of the flat parameter set: `eq.parametric`, `eq.midSide`, and `multiband.dynamicEq` publish descriptors for every indexed `band*` field, including construction keys. Publishing them does not widen which keys count as *read* — a band supplied incompletely still has its remaining keys reported as ignored.
@@ -444,7 +446,7 @@ sonare mastering-processors
 # flat-preset-parameter queries.
 sonare mastering-presets
 
-# apply one solo processor (--params are floats: k=v,k=v)
+# apply one solo processor (--params are k=v,k=v: numbers, or the choices name of an enum key)
 sonare mastering-processor song.wav --processor dynamics.compressor \
   --params "thresholdDb=-24,ratio=1.5" -o out.wav
 
@@ -470,13 +472,15 @@ When you assemble a *chain* rather than a single processor, the config style dep
 |-------------|--------------|
 | WASM `masteringChain(...)` | Nested config objects; dot-notation leaf keys are also accepted in the same object |
 | `masterAudio(...)` and Python/Node equivalents | Flat dot-notation overrides such as `'loudness.targetLufs'` |
-| [Mastering Assistant](./mastering-assistant.md) `chainConfig.params` | Flat form, ready for `masterAudio`. `params["dynamics.multibandComp"]` can also carry the nested, arbitrary-band v2 object described below — see [The chain-config JSON schema](#the-chain-config-json-schema) |
+| [Mastering Assistant](./mastering-assistant.md) `chainConfig.params` | Flat form, ready for `masterAudio`. `params["dynamics.multibandComp"]` can also carry the nested, arbitrary-band v2 object — see [The chain-config JSON schema](#the-chain-config-json-schema) |
 
 `MasteringChainConfig` accepts both spellings. A dot-notation leaf such as `'loudness.targetLufs': -20` can sit beside — or replace — the nested `loudness: { targetLufs: -20 }`, and the core validates the key and rejects an unknown one. Dot notation is the form the C ABI carries parameters in, which is what makes it the convenient shape when you are assembling overrides dynamically rather than writing them out.
 
 The nested spelling is the canonical one, so prefer it in hand-written code: TypeScript checks a nested config field by field, while a dotted key is only checked at run time.
 
 Repair chain keys follow the chain slots, not the one-shot registry names: use `repair.denoise.*` / `repair.dereverb.*` in flat overrides or the nested `repair: { denoise: ..., dereverb: ... }` shape in `masteringChain(...)`.
+
+An enum-valued chain key takes its `choices` name beside the number: `repair.denoise.mode`, `repair.denoise.noiseEstimator`, `repair.decrackle.mode`, `repair.dehum.mode`, `dynamics.compressor.detector`, and the multiband slope, mode and per-band detector keys. The same holds for the params of `masteringProcess`, `masteringProcessStereo` and `masteringInsertTiming`, and for `--params` and `--chain-config` on both CLIs. An unknown name is refused with the key and the valid names, and `repair.decrackle.mode` accepts only 0 (median) or 1 (wavelet shrinkage).
 ::::
 
 ## The chain-config JSON schema
@@ -492,9 +496,33 @@ The flat `chainConfig.params` map (the shape `chainConfig.params` uses in the ta
   Field validation is strict: unknown keys anywhere in the version-2 `dynamics.multibandComp` object are rejected, and the band count must equal the cutoff count plus one.
 :::
 
-::: warning Reachability: JSON-document feature, not a binding chain-object feature
-The version-2 structured form is reachable through the chain-config JSON document — for example, the CLI's `sonare mastering --config <file>` reads it. Python `mastering_chain()` config, Node `masteringChain()` config, and the WASM `masteringChain()` TypeScript `MasteringChainConfig` all flatten nested settings into scalar dot-notation parameters. Their public `dynamics.multibandComp` shapes expose only the fixed low/mid/high shorthand, so an arbitrary-band v2 object cannot be passed directly through any of those three binding APIs. Use the JSON-document entry point for v2; the typed chain methods do not provide an object-form adapter for it.
-:::
+The structured form is reachable from every chain call, not only the JSON document. On the Node and WASM `MasteringChainConfig` and in Python config dicts, `dynamics.multibandComp` accepts `crossover` (`cutoffsHz`, `slope`, `mode`, `firKernelSize`) and `bands` (`MultibandCompressorBand`), and flat keys `dynamics.multibandComp.crossover.cutoffsHz.<i>` and `dynamics.multibandComp.bands.<i>.<field>` beside the in-place `cutoff<i>Hz` / `band<i>.<field>` and the low/mid/high shorthand. `cutoffsHz` replaces the cutoff list and sets the band count to its length plus one, and key order does not matter. Two spellings of one field in one call are refused, so do not combine `cutoffsHz` with `lowCutoffHz` / `highCutoffHz`.
+
+```typescript
+masteringChain(samples, sampleRate, {
+  dynamics: {
+    multibandComp: {
+      crossover: { cutoffsHz: [200, 2000, 8000], slope: 'lr4', mode: 'linkwitzRiley' },
+      bands: [{ thresholdDb: -24 }, { ratio: 3 }, {}, { detector: 'peak' }],
+    },
+  },
+})
+```
+
+The band count is checked as 2 to 64 on every surface and both CLIs: a stage with one band is refused (`multiband stage needs at least two bands; one band is the compressor stage`), and a structurally invalid multiband stage is refused even when the stage is disabled. Preset and assistant chain params return a version 2 multiband stage as flat keys.
+
+### Describing the chain keys
+
+`capabilityCatalog().chain` (`CapabilityCatalogChain`) describes the flat chain keys the way `processors` describes processor parameters:
+
+| Field | Content |
+|-------|---------|
+| `stages` | Each stage's key `prefix`, the catalog `processor` whose parameters its `<prefix>.<leaf>` keys are (`null` when every key is chain-only), and its `enabledKey` |
+| `lists` | The indexed lists `dynamics.multibandComp.crossover.cutoffsHz` (1 to 63 items) and `dynamics.multibandComp.bands` (2 to 64 items, each item the `dynamics.compressor` fields), with `minItems` / `maxItems` |
+| `params` | Descriptors for keys no processor carries: the `enabled` switches, `loudness.*`, `repair.denoise.gainFloor`, the crossover FIR kernel size and cutoff list, with bounds measured through the chain's own validator |
+| `aliases` | Every other spelling of a canonical key; `<i>` stands for a list index |
+
+Chain enum names resolve on every stage's keys.
 
 ## Related
 

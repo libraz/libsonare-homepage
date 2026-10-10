@@ -115,10 +115,10 @@ NativeSynth パッチは**インストゥルメント**です。MIDI デステ�
 
 ## 17 個の音作りエンジン
 
-各プリセットは 1 つの `engineMode` を選びます。共通部分（フィルター、エンベロープ、LFO、モッドマトリクス、ボディ共鳴、ポリフォニー）は、選択中のどのエンジンの上にも適用されます。エンジン固有の深いパラメータ（FM オペレータスタック、モーダルのモードテーブル、ドローバー設定、キットの各パーツ、ピアノの弦、パイプランク、ボウイング摩擦、リード／金管の管体、フルートのジェット形状）は、パッチではなく**名前付きプリセットの中**に収まっています。
+各プリセットは 1 つの `engineMode` を選びます。共通部分（フィルター、エンベロープ、LFO、モッドマトリクス、ボディ共鳴、ポリフォニー）は、選択中のどのエンジンの上にも適用されます。エンジン固有の深いパラメータ（FM オペレータスタック、モーダルのモードテーブル、ドローバー設定、キットの各パーツ、ピアノの弦、パイプランク、ボウイング摩擦、リード／金管の管体、フルートのジェット形状）は名前付きプリセットに付属しており、パッチからは [`engineParams`](#エンジンパラメータ) で 1 つずつ上書きできます。
 
-::: warning プリセット経由でしか鳴らないエンジンが 4 つある
-`fm`、`modal`、`percussion`、`sample` は、`engineMode` を指定しただけのパッチからは**無音**をレンダリングします。音を決めるのはパッチが持たないテーブル — FM オペレータのレベル、モーダルのモード一覧、キットと膜のモード、サンプルバンク — で、モードだけを指定したパッチにはそれがありません。代わりにプリセットから始めてください。`{ preset: 'e-piano' }`、`'marimba'`、`'drum-kit'`、あるいは `SampleBank` をバインドした `'sample'` パッチです。ほかのエンジンもモード指定だけで鳴りますが、生のエンジン出力のレベルはそろっていません。名前付きプリセットには固有の `gain` があり、API で組み立てたパッチには指定した `gain` だけが適用されます。モードだけの比較や自作パッチでは、明示的にゲインを設定して試聴してください。
+::: info モードだけを指定すると、そのエンジンの基本プリセットが鳴る
+`engineMode` だけを指定したパッチは、選んだエンジンを使う名前付き `preset` があればそのエンジンセクションを、なければエンジンの基本プリセットのセクションを使います。`fm` は e-piano、`modal` はベル、`percussion` は GM ドラムキット、というように決まります。`sample` 以外のエンジンはどれもモード指定だけで鳴ります。`sample` は `SampleBank` をバインドするまで鳴らす対象がなく、バンクなしでは無音のままです。生のエンジン出力のレベルはそろっていません。名前付きプリセットには固有の `gain` があり、API で組み立てたパッチには指定した `gain` だけが適用されます。モードだけの比較や自作パッチでは、明示的にゲインを設定して試聴してください。
 :::
 
 ### `subtractive` — バーチャルアナログ
@@ -311,18 +311,21 @@ pad = sonare.synth_preset_patch("warm-pad")
 
 | グループ | フィールド |
 |----------|------------|
-| オシレーター | `engineMode`、`waveform`、`unison`（1-7）、`detuneCents`、`driftCents`、`drive`（0-1） |
+| オシレーター | `engineMode`、`waveform`、`unison`（1-7）、`detuneCents`、`driftCents`、`driftRateHz`（0.01-20）、`drive`（0-1） |
 | フィルター | `filterModel`、`filterOutput`（SVF のみ）、`cutoffHz`、`resonanceQ`、`keyTrack`（0-1）、`envToCutoffCents`、`velToCutoffCents` |
-| アンプエンベロープ | `ampAttackMs`、`ampDecayMs`、`ampSustain`、`ampReleaseMs` |
-| フィルターエンベロープ | `filterAttackMs`、`filterDecayMs`、`filterSustain`、`filterReleaseMs` |
+| アンプエンベロープ | `ampDelayMs`（0-5000）、`ampAttackMs`、`ampHoldMs`（0-5000）、`ampDecayMs`、`ampSustain`、`ampReleaseMs`、`oneShot` |
+| フィルターエンベロープ | `filterDelayMs`（0-5000）、`filterAttackMs`、`filterHoldMs`（0-5000）、`filterDecayMs`、`filterSustain`、`filterReleaseMs` |
 | LFO とグライド | `lfoRateHz`、`lfoToPitchCents`、`lfo2RateHz`、`glideMs` |
 | ボディ共鳴 | `body`（`none` / `guitar` / `violin` / `wood-tube` / `brass-bell` / `vocal`）、`bodyMix`（0-1） |
 | ステレオと出力 | `stereoSpread`（0-1）、`gain`（リニア）、`polyphony`（1-64）、`busDrive`（0-1） |
 | ボイスの開始状態 | `retrigger`（`'default'` / `'free'` / `'note'`） |
+| エンジンセクション | `engineParams`（キーと数値のレコード） |
 | モッドマトリクス | `modRoutings`（最大 8 本） |
 | バインディング（JS のみ） | `destinationId`（既定 `0`） |
 
 （**ポリフォニー**は同時に鳴らせるノート数、**ボイス**は鳴っている 1 つのノートで、**ボイススティール**は足りなくなったとき最も古いノートを止めることです。）
+
+ディレイ段はアタックが始まるまでエンベロープをゼロに保ち、ホールド段はディケイの前にピークを保ちます。どちらもミリ秒単位です。`oneShot` はノートオフを無視し、ドラムのヒットのように、エンベロープのディケイかエンジン自身の終わりでボイスが終わります。`driftRateHz` はボイスごとのピッチドリフトが揺れる速さ、`driftCents` はその深さです。5 つの時間（`ampDelayMs`、`ampHoldMs`、`filterDelayMs`、`filterHoldMs`、`driftRateHz`）は、ほかの同系フィールドと同様にライブのインストゥルメントでオートメーションできます。ディレイやホールドの変更は、そのステージが次に始まるときに反映されます。
 
 `retrigger` は、各ボイスの開始時に使うシードを選びます。`'default'` はベースパッチの設定を保ちます。カタログのプリセットはすべて `'free'` です。`'free'` はボイスプールのスロットとノートごとに増えるカウントから、オシレーターの開始位相、ユニゾンの揺らぎ、ドリフト、各エンジンのノイズストリームを変化させるため、同じノートを繰り返しても通常は異なる音になります。`'note'` はこれらを MIDI ノート番号だけから導くため、テイルが終わったあとに同じノートを鳴らすと同じサンプル列をレンダリングします。この設定が制御するのは各ボイスの開始状態です。コントローラー、バスの DC ブロッカー、ピアノの共有サウンドボード、撥弦の共鳴ハロー、オルガンのウィンドチェスト、エフェクトのテイルはリセットしません。`drum-kit` プリセットの各ドラム音は独自のモードを保ちます。
 
@@ -345,6 +348,29 @@ NativeSynth は通常のコントローラー状態をチャンネルごとに�
 
 ピアノ系のペダル操作も通常の MIDI CC としてデコードされます。ただし、サスティンペダル **CC64** のハーフペダルダンピングが効くのは `piano` エンジンだけです。そこでは 64〜126 の中間値が、鍵を離して鳴り続けているノートを値に応じて減衰させます。他のエンジンでは CC64 は 64 を境にした単純なオン／オフのサスティンで、64 でも 126 でも 127 と同じ鳴り方になります。**CC66** はソステヌート、**CC67** は対応プリセットで una corda／ソフトペダルの音色として働きます。
 :::
+
+### エンジンパラメータ
+
+`engineParams` は、選択中のエンジン固有のモデルセクションのフィールドをキーで設定します。弓の力、ブレス圧、リップの張り、打撃位置、FM オペレータのレベル、モード比などです。キーはセクションのフィールド名を lowerCamelCase にしたもの（`bowForce`、`ops0.level`、`ranks2.level`）で、指定しなかったキーはベースのセクションの値を保ちます。
+
+```typescript
+const audio = project.bounceWithSynthInstrument(
+  { engineMode: 'bowed-string', engineParams: { bowForce: 0.9, bowPosition: 0.08 } },
+  { totalFrames: 48000, numChannels: 2 },
+);
+```
+
+ラッパーのフィールドと違い、ここでは何もクランプされません。未知のキー、別のエンジンのセクションのキー、有限でない値、整数フィールドへの小数、フィールドの範囲外の値は、キー名を示すエラーで拒否されます（`engine param 'bowForce': out of range [0, 1]`）。Python のフィールド名は `engine_params` です。
+
+`synthEngineParamInfo(engineMode)` はそのエンジンが受け付けるキーを、`synthPatchParamInfo()` は数値のラッパーフィールドすべてを返します。どちらも [インサートのパラメータ記述子](./effects-inserts.md#パラメータ記述子)と同じ形の `SynthParamInfo[]` で、`name`、`type`（`'number'` か、0 または 1 で与えるスイッチの `'boolean'`）、`integer`、`min`、`max`、`default`、`unit` を持ちます。エンジンのフィールドでは `default` が基本プリセットの値、ラッパーのフィールドでは初期パッチの値です。`synthEngineParamInfo` は `default`、`subtractive`、`sample` に対して `[]` を返します。Python では `synth_engine_param_info` と `synth_patch_param_info` です。
+
+```typescript
+synthEngineParamInfo('fm').slice(0, 2);
+// [{ name: 'algorithm', type: 'number', integer: true, min: 0, max: 5, default: 3, unit: 'none' },
+//  { name: 'ops0.ratio', type: 'number', min: 0, max: 64, default: 1, unit: 'ratio' }]
+```
+
+FM のオペレータアルゴリズムは `fm` セクションの `algorithm` キーです。コントロールパネルは、範囲を書き写さずにこれらの記述子から組み立ててください。
 
 ### enum 名テーブル
 
@@ -453,7 +479,7 @@ try {
 }
 ```
 
-実際のアプリではライブキーボードから `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` を呼ぶか、エンジン側の MIDI 入力ソースを有効にしてイベントを到着順に送ります。詳しくは [MIDI 入力](./midi-input.md) を参照してください。`setSynthInstrument` はプリセット名や `SynthPatch` を `bounceWithSynthInstrument` とまったく同じように解決するため、オフラインで作り込んだ音色がライブでも同一に鳴ります。
+実際のアプリではライブキーボードから `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` を呼ぶか（`pushMidiProgram` はバンク指定つきのプログラムチェンジを同じ要領でキューに入れます。内蔵シンセのようにプログラムを選ばない受け手は、受け付けたうえで無視します）、エンジン側の MIDI 入力ソースを有効にしてイベントを到着順に送ります。詳しくは [MIDI 入力](./midi-input.md) を参照してください。`setSynthInstrument` はプリセット名や `SynthPatch` を `bounceWithSynthInstrument` とまったく同じように解決するため、オフラインで作り込んだ音色がライブでも同一に鳴ります。
 
 ## 現状と制限
 
@@ -461,7 +487,7 @@ try {
 
 **調整済みのピアノボイスには**、明示的な出力レベル処理、低音域の励振、縦振動モードが含まれます。
 
-**方式固有の深いフィールドは名前付きプリセットの中にあります。** 公開ライブ操作は各エンジンが宣言する励振軸を使い、パッチから追加のモデル別スイッチを直接操作することはできません。物理モデルは今後のパッチリリースで調整を続けます。
+**方式固有の深いフィールドはパッチ単位で設定し、ライブでは動かせません。** `engineParams` はパッチをバインドするときに値を固定します。発音中のライブ操作には、各エンジンが宣言する励振軸を使います。物理モデルは今後のパッチリリースで調整を続けます。
 
 **自己発振する一部のモデルにはわずかな残留音程誤差があります。** エアジェット・フルートとフルー式パイプオルガンは素朴なチューニングからわずかにずれてロックするため、較正係数で補正していますが、音域に依存する小さな残差が残ります。
 

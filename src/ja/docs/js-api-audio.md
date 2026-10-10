@@ -41,9 +41,13 @@ const audio = await Audio.fromMemoryWithBrowserFallback(
 
 `Audio.fromMemory` はマルチチャンネルのファイルをデコード時にモノラルへ折りたたみます。`decodeChannels` は同じ形式をデコードしつつ全チャンネルを保持し、元のチャンネル順で 1 チャンネル 1 本の `Float32Array` プレーンを並べた `{ sampleRate, channels }` を返します（5.1 のファイルは `L R C LFE Ls Rs` の順で届きます）。
 
+### `decodeChannelsWithBrowserFallback(bytes, options?)`
+
+`async` で、`decodeChannels` と同じ `{ sampleRate, channels }` である `Promise<DecodedChannels>` を返します。同梱デコーダーが扱わない形式（AAC、OGG、FLAC）は `Audio.fromMemoryWithBrowserFallback` と同様にブラウザーのコーデックスタックを経由し、同じ `BrowserAudioDecodeOptions` を取ります。ブラウザーが返したチャンネルはすべて保持されます。
+
 ### `downmix(channels, targetLayout)`
 
-プレーンを、より狭いレイアウトへ ITU-R BS.775 の規則で変換します。センターとサラウンドは -3 dB でフロントペアに入り、LFE プレーンは捨てられます。`targetLayout` は `0` がモノラル、`1` がステレオ、`2` が 5.1、`3` が 7.1 です。元のレイアウトはチャンネル数（1、2、6、8）で決まり、それ以外の数は重みなしの平均でモノラルに折りたたまれます。アップミックスや未知のレイアウトは `SonareError`（`InvalidParameter`）、チャンネルなしや長さの異なるプレーンは `RangeError` を投げます。
+プレーンを、より狭いレイアウトへ ITU-R BS.775 の規則で変換します。センターとサラウンドは -3 dB でフロントペアに入り、LFE プレーンは捨てられます。`targetLayout` は `0` がモノラル、`1` がステレオ、`2` が 5.1、`3` が 7.1 です。元のレイアウトはチャンネル数（1、2、6、8）で決まり、それ以外の数は重みなしの平均でモノラルに折りたたまれます。アップミックスや未知のレイアウトは `SonareError`（`InvalidParameter`）、チャンネルなし、長さの異なるプレーン、32 ビット範囲の整数ではない `targetLayout` は `RangeError`、数値ではない `targetLayout` は `TypeError` を投げます。
 
 ```typescript
 import { init, decodeChannels, downmix } from '@libraz/libsonare';

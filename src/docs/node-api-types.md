@@ -11,8 +11,8 @@ This page lists the TypeScript interfaces, unions, and exported type names of th
 
 ```typescript
 interface Key {
-  root: string;        // Pitch-class name, e.g. "C", "C#", "A"
-  mode: string;        // Mode name, e.g. "major", "minor"
+  root: number;        // Pitch-class number, 0..11 (C = 0), as on WASM and Python
+  mode: KeyMode;       // 'major' | 'minor' | 'dorian' | 'phrygian' | 'lydian' | 'mixolydian' | 'locrian'
   confidence: number;  // Softmax over every scored candidate, in [0, 1)
   name: string;        // "C major", "A minor"
   shortName: string;   // "C", "Am"
@@ -231,6 +231,8 @@ interface MeteringStereoRequest {
 }
 ```
 
+`Key.root` is a number, the form `detectChords` and `chordFunctions` take back: the `keyRoot` / `keyMode` inputs of `detectChords`, `chordFunctionalAnalysis` and `Audio.chordFunctionalAnalysis` and the `key` of `chordFunctions` accept a pitch-class name (`'C#'`) or number and a mode name or `Mode` ordinal, so a detected key passes straight back. An unknown name is a `RangeError` naming the field. `Chord.root` and `Chord.bass` remain string labels.
+
 ### What `Key.confidence` measures
 
 `Key.confidence` is a softmax over the profile correlation of every scored
@@ -276,10 +278,12 @@ The native package also exports TypeScript helper types for option objects, call
 | Feature extraction | `DecomposeStemsRequest`, `DecomposeStemsResult`, `DecomposeStemsLinkedRequest`, `DecomposeStemsLinkedResult`, `NoteSegment`, `NoteSegmentsRequest` |
 | Streaming analysis | `StreamAnalyzerConfig`, `StreamAnalyzerStats`, `StreamFramesSoa`, `StreamProgressiveEstimate`, `StreamChordChange`, `StreamBarChord`, `StreamPatternScore` |
 | Mastering and metering | `MasteringPreset`, `MasteringInsertParamInfo`, `MasteringInsertTiming`, `MasteringProcessorCatalogEntry`, `MasteringInsertSlot`, `SoloProcessor`, `StreamingPlatform`, `DynamicsProcessorResult`, `CompressorDetector`, `DecrackleMode`, `DenoiseClassicalMode`, `DenoiseClassicalNoiseEstimator`, `EqBandInput`, `EqPhaseMode`, `EqSpectrumSnapshot`, `NormalizeMode`, `MasteringRepairStage`, `MasteringRepairStageName`, `MasteringRepairAnalysis`, `MasteringRepairAnalyzeRequest`, `MasteringRepairApplyRequest`, `MasteringRepairApplyResult`, `MasteringRepairStageReports`, `StreamingLoudnessGainRequest`, `StreamingLoudnessGainStereoRequest`, `StreamingLoudnessGainResult` |
-| Capability catalog | `Capabilities`, `CapabilityCatalog`, `CapabilityCatalogParameter`, `CapabilityCatalogProcessor`, `CapabilityCatalogPresets`, `CapabilityCatalogMasteringPreset`, `MasteringInsertParamChoice`, `MasteringInsertParamUnit`, `MasteringInsertParamScale`, `MasteringInsertParamRelation`, `MasteringInsertParamDependency` |
+| Capability catalog | `Capabilities`, `CapabilityCatalog`, `CapabilityCatalogParameter`, `CapabilityCatalogProcessor`, `CapabilityCatalogPresets`, `CapabilityCatalogMasteringPreset`, `CapabilityCatalogChain`, `CapabilityCatalogChainStage`, `CapabilityCatalogChainList`, `CapabilityCatalogChainAlias`, `MasteringInsertParamChoice`, `MasteringInsertParamUnit`, `MasteringInsertParamScale`, `MasteringInsertParamRelation`, `MasteringInsertParamDependency` |
 | Stereo mastering and metering requests | `MasteringAssistantSuggestStereoRequest`, `MasteringAudioProfileStereoRequest`, `MasteringStreamingPreviewStereoRequest`, `MeteringStereoRequest`, `NormalizeStereoRequest`, `NormalizeStereoResult` |
 | Pitch correction | `PitchCorrectOptions`, `VoicedFlags`, `AutoTuneKey`, `AutoTuneOptions`, `AutoTuneResult` |
-| Room acoustics | `AcousticModeName`, `MaterialPresetName`, `RoomGeometryFromEstimateOptions`, `RoomPlacement` |
+| Room acoustics | `AcousticModeName`, `MaterialPresetName`, `RoomGeometryFromEstimateOptions`, `RoomMorphOptions`, `RoomMorphResult`, `RoomMorphStereoResult`, `RoomPlacement` |
+| Mastering chain config | `MasteringChainConfig`, `MasteringChainConfigDocument`, `MultibandCompressorBand` |
+| Synth descriptors | `SynthParamInfo`, `SynthPatch`, `SynthEngineMode` |
 | Mixing | `AutomationCurve`, `GoniometerPoint`, `MeterTap`, `MixMeterSnapshot`, `MixResult`, `MixerProcessResult`, `PanLaw`, `PanLawName`, `PanLawInput`, `PanMode`, `SendTiming`, `SidechainCheck`, `SidechainRefusal` |
 | Realtime voice | `VoicePresetId`, `VoicePresetCategory`, `RealtimeVoiceChangerPresetMetadata`, `RealtimeVoiceChangerPreset`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerConfig`, `RealtimeVoiceChangerOptions` |
 | Realtime engine graph | `EngineGraphSpec`, `EngineGraphNode`, `EngineGraphNodeType`, `EngineGraphConnection`, `EngineGraphMix`, `EngineGraphParameterBinding`, `EngineParameterInfo` |
@@ -287,4 +291,4 @@ The native package also exports TypeScript helper types for option objects, call
 | Project metadata and automation | `ExternalInstrument`, `ExternalInstrumentEvent`, `ProjectAssistSidecar`, `ProjectAssistSidecarInput`, `ProjectAutomationTargetKind`, `ProjectAutomationLaneDesc` |
 | Realtime engine jobs/telemetry | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `EngineMeterTelemetry` |
 
-`CapabilityCatalog.masteringPresets` contains entries with `name`, `kind`, `targetLufs`, `truePeakCeilingDb`, and `maxLimiterGainReductionDb`; restoration entries set the three numeric fields to `null`. `CapabilityCatalogProcessor.slots` describes conditional parameter groups, and `MasteringInsertParamInfo` adds the corresponding `slot` to each descriptor. A descriptor's `unit` is a `MasteringInsertParamUnit` (a closed set, `null` for non-numeric keys), `scale` a `MasteringInsertParamScale` (`'linear'` or `'log'`), and `dependsOn` a list of `MasteringInsertParamDependency` whose `relation` is a `MasteringInsertParamRelation`; `uiMin` and `uiMax` give the display range. Every processor entry also carries `causal`. `masteringInsertTiming(name, params, sampleRate)` returns `MasteringInsertTiming` with `latencySamples` and `tailSamples`, while `masteringPresetParams(preset)` returns a flat `Record<string, number | boolean>` suitable for `masterAudio({ samples, overrides })`.
+`CapabilityCatalog.masteringPresets` contains entries with `name`, `kind`, `targetLufs`, `truePeakCeilingDb`, and `maxLimiterGainReductionDb`; restoration entries set the three numeric fields to `null`. `CapabilityCatalogProcessor.slots` describes conditional parameter groups, and `MasteringInsertParamInfo` adds the corresponding `slot` to each descriptor. The catalog's `chain` section (`CapabilityCatalogChain`) describes every flat mastering chain key: the stages (`CapabilityCatalogChainStage`), the indexed lists with their item counts (`CapabilityCatalogChainList`), the keys no processor carries, and every alias spelling (`CapabilityCatalogChainAlias`); `presets.playbackRoom` is always present. A descriptor's `unit` is a `MasteringInsertParamUnit` (a closed set, `null` for non-numeric keys), `scale` a `MasteringInsertParamScale` (`'linear'` or `'log'`), and `dependsOn` a list of `MasteringInsertParamDependency` (`key`, `relation`, `factor`, read as `this <relation> factor * sibling`) whose `relation` is a `MasteringInsertParamRelation`; `uiMin` and `uiMax` give the display range. Every processor entry also carries `causal`. `masteringInsertTiming(name, params, sampleRate)` returns `MasteringInsertTiming` with `latencySamples` and `tailSamples`, while `masteringPresetParams(preset)` returns a flat `Record<string, number | boolean>` suitable for `masterAudio({ samples, overrides })`.

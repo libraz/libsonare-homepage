@@ -243,6 +243,10 @@ interface RirDiagnostic {
 
 生成できないモーフは例外になり、使えない `synthesizeRir(...)` の呼び出しも同様に例外になるため、どちらの結果にもエラーフラグはなく、`diagnostics` に入るのはすべて「結果は得られたが注意が要る」警告です。分岐は `code` で行ってください。`acoustic.ism_order_clamped`（鏡像音源の次数が安全上限まで下げられた）、`acoustic.rir_length_clamped`（テイルが `maxSeconds` か資源上限で切られた）、`acoustic.rir_length_floored`（`maxSeconds` が直接音の到達時間より短い）、`acoustic.rir_tail_truncated`（`maxSeconds` が最も長いバンドを 60 dB 減衰する前に切った）、`acoustic.no_late_tail`（拡散テイルが生成されなかった）はいずれも「指定したのとは別の部屋を通った」ことを意味しますが、音声そのものからは分かりません。`synthesizeRir(...)` も同じ形を `RirResult.diagnostics` で報告します。C ABI も同じ項目を構造化して公開しており — `sonare_last_diagnostic_count()`、`sonare_last_diagnostic_code(i)`、`sonare_last_diagnostic_message(i)`、`sonare_last_diagnostic_severity(i)` — そちらでも、連結済みの `sonare_last_warning_message()` 文字列を解析するのではなくコードで分岐できます。
 
+### RoomMorphStereoResult
+
+`roomMorphStereo({ left, right, sampleRate?, receiverSpacingM?, ... })` は `roomMorph(...)` と同じルームオプションを取り、入力チャンネルごとにモーフ済みのチャンネルを 1 本返します。目的の部屋は、リスナーを挟んで `receiverSpacingM`（メートル、(0, 4] の範囲、既定 0.5）だけ離れた 2 本の無指向性レシーバーで聴かれ、各チャンネルは自分のレシーバーの応答と畳み込まれます。`RoomMorphStereoResult` は `{ left, right, sampleRate, diagnostics }` で、2 つの `Float32Array` はどちらも入力長にリバーブテイルを足した長さ、`diagnostics` は `RoomMorphResult.diagnostics` と同じコードを持ちます。長さの異なるチャンネルや、有限でない、または (0, 4] の外にある `receiverSpacingM` は `RangeError` になります。`sampleRate` の既定は 48000 です。
+
 ### ルーム推定と RIR の型
 
 ```typescript
@@ -357,7 +361,13 @@ interface MasteringChainConfig {
                       midThresholdDb?: number;  midRatio?: number;
                       midAttackMs?: number;     midReleaseMs?: number;
                       highThresholdDb?: number; highRatio?: number;
-                      highAttackMs?: number;    highReleaseMs?: number; };
+                      highAttackMs?: number;    highReleaseMs?: number;
+                      /** 任意のバンド数（2〜64）。`cutoffsHz` で length + 1 になる。 */
+                      crossover?: { cutoffsHz?: number[]; slope?: 'lr2' | 'lr4' | 'lr8' | number;
+                                    mode?: 'linkwitzRiley' | 'butterworth' | 'bessel' | 'firLinearPhase' | number;
+                                    firKernelSize?: number; };
+                      /** バンドのインデックスごとのコンプレッサー設定。 */
+                      bands?: MultibandCompressorBand[]; };
   };
   saturation?: {
     tape?: { driveDb?: number; saturation?: number; hysteresis?: number; outputGainDb?: number;
@@ -443,6 +453,8 @@ interface MasteringChainStereoResult {
 
 :::
 
+マルチバンドコンプレッサーは、バージョン 2 のチェーンドキュメントだけでなく、どのチェーン呼び出しからでも設定できます。`crossover.cutoffsHz` はカットオフのリストを置き換えてバンド数（最大 64）を決め、`bands` は `MultibandCompressorBand` でバンドをインデックスごとに指定します。フィールドは `thresholdDb`、`ratio`、`attackMs`、`releaseMs`、`kneeDb`、`makeupGainDb`、`autoMakeup`、`detector`（`'peak'`、`'rms'`、`'logRms'`、または序数）、`sidechainHpfEnabled`、`sidechainHpfHz`、`pdrTimeMs`、`pdrReleaseScale` で、すべて省略可能です（省略したフィールドはベースの値のままです）。フラットキーでは `dynamics.multibandComp.crossover.cutoffsHz.<i>` と `dynamics.multibandComp.bands.<i>.<field>` で、インプレース形式の `cutoff<i>Hz` / `band<i>.<field>` や low/mid/high の短縮形と併用できます。キーの順序は問いません。同じフィールドを 1 回の呼び出しで 2 通りの綴りで渡すと拒否され、バンドが 1 つだけのステージも拒否されます（`multiband stage needs at least two bands; one band is the compressor stage`）。`dynamics.compressor.detector` とマルチバンドのスロープ、モード、バンドごとのディテクタのキーでは、enum の名前が解決されます。
+
 各ステージの使いどころは用語集の各ページに対応しています:
 [リペア](./glossary/mastering/repair.md)、
 [トーンと Air](./glossary/mastering/tone-air.md)、
@@ -462,7 +474,9 @@ const PitchClass = {
 
 ### Mode
 
-`Mode` は入力用の enum です。`detectChords` と `chordFunctionalAnalysis` の `keyMode` オプションはこの表の序数を取り、モード名を渡すと `TypeError` になります。`autoTune` の `key.mode` はどちらでも受け付けます。結果ではモードが名前で報告されるので、`detectKey`、`detectKeyCandidates`、`analyze`、`autoTune` は `mode: 'major'`、`'minor'`、`'dorian'` のように返します。`Mode.Major` との比較には使わないでください。
+`Mode` は序数の enum です。結果ではモードが名前（`KeyMode`）で報告されるので、`detectKey`、`detectKeyCandidates`、`analyze`、`autoTune` は `mode: 'major'`、`'minor'`、`'dorian'` のように返します。`Mode.Major` との比較には使わないでください。入力はどちらでも受け付けます。`detectChords`、`chordFunctionalAnalysis`、`Audio.chordFunctionalAnalysis`（リクエスト形式と位置引数形式）の `keyRoot` / `keyMode`、`chordFunctions` の `key`、`autoTune` の `key` は、ピッチクラス名（`'C#'`、`PitchClassName`）または数値と、モード名または `Mode` 序数を取るので、検出したキーをそのまま渡せます。未知の名前は、フィールド名を挙げた `RangeError` になります。
+
+`KeyMode` は `'major' | 'minor' | 'dorian' | 'phrygian' | 'lydian' | 'mixolydian' | 'locrian'`、`PitchClassName` は `'C' | 'C#' | ... | 'B'`（シャープ表記のみ）です。
 
 ```typescript
 const Mode = {
@@ -519,12 +533,12 @@ WASM パッケージは、関数やクラスに加えて TypeScript の補助型
 
 | 分野 | エクスポートされる型／定数 |
 |------|----------------------|
-| 環境とエンジン | `EXPECTED_ENGINE_ABI_VERSION`, `EXPECTED_PROJECT_ABI_VERSION`, `EngineCapabilities`, `ProgressCallback` |
+| 環境とエンジン | `EXPECTED_ABI_VERSION`, `EXPECTED_ENGINE_ABI_VERSION`, `EXPECTED_PROJECT_ABI_VERSION`, `EngineCapabilities`, `ProgressCallback` |
 | エンジンのレーンミキサー、マーカー、MIDI クリップ | `EngineTrackLane`, `EngineTrackSend`, `EngineBus`, `EngineMarker`, `EngineMidiClipSchedule`, `EngineMidiEvent`, `ExternalMidiEvent`, `MarkerKind`, `ProjectMarker` |
-| キー／コード／リズム／音色解析 | `ChordDetectionOptions`, `KeyProfileName`, `RhythmAnalysisResult`, `TimbreAnalysisResult`, `TimbreFrame`, `DynamicsAnalysisResult` |
+| キー／コード／リズム／音色解析 | `ChordDetectionOptions`, `KeyMode`, `PitchClassName`, `KeyProfileName`, `RhythmAnalysisResult`, `TimbreAnalysisResult`, `TimbreFrame`, `DynamicsAnalysisResult` |
 | スペクトル／ピッチ／特徴量変換 | `MelPowerResult`, `StftPowerResult`, `PitchCorrectOptions`, `VoicedFlags`, `SpectralRegionOp`, `SpectralEditOptions`, `TempogramMode` |
 | ページ式クリップストリーミング | `ClipPageStreamerEngine`, `ClipPageStreamerOptions`, `ClipPageStreamSource`, `OpfsClipStream`, `OpfsClipStreamOptions`, `OpfsClipPageProviderOptions` |
-| マスタリングと機能カタログ | `MasteringProcessorParams`、`MasteringProcessorCatalogEntry`、`MasteringInsertParamInfo`、`MasteringInsertParamChoice`、`MasteringInsertSlot`、`MasteringInsertTiming`、`CapabilityCatalog`、`CapabilityCatalogParameter`、`CapabilityCatalogProcessor`、`CapabilityCatalogPresets`、`CapabilityCatalogMasteringPreset`、`MasteringChannelPolicy`、`MasteringChainStereoResult`、`MasteringStereoParamsRequest`、`MasteringStreamingPreviewStereoRequest` |
+| マスタリングと機能カタログ | `MasteringProcessorParams`、`MasteringProcessorCatalogEntry`、`MasteringInsertParamInfo`、`MasteringInsertParamChoice`、`MasteringInsertSlot`、`MasteringInsertTiming`、`CapabilityCatalog`、`CapabilityCatalogParameter`、`CapabilityCatalogProcessor`、`CapabilityCatalogPresets`、`CapabilityCatalogMasteringPreset`、`CapabilityCatalogChain`、`CapabilityCatalogChainStage`、`CapabilityCatalogChainList`、`CapabilityCatalogChainAlias`、`MultibandCompressorBand`、`MasteringInsertParamDependency`、`MasteringChannelPolicy`、`MasteringChainStereoResult`、`MasteringStereoParamsRequest`、`MasteringStreamingPreviewStereoRequest` |
 | メータリングのリクエスト | `MeteringStereoRequest`, `MeteringStereoDecimatedRequest` |
 | ストリーミングリチューン | `StreamingRetuneConfig` |
 | ストリーミング EQ | `StreamingEqualizerConfig`, `EqBandType`, `EqBandPhase`, `EqCoeffMode`, `EqMatchOptions`, `EqStereoPlacement` |
@@ -541,7 +555,7 @@ WASM パッケージは、関数やクラスに加えて TypeScript の補助型
 
 | 型 | 値 | 現れる場所 |
 |----|----|-----------|
-| `SynthEngineMode` | `'default'`, `'subtractive'`, `'fm'`, `'karplus-strong'`, `'modal'`, `'additive'`, `'percussion'`, `'piano'`, `'pipe-organ'`, `'bowed-string'`, `'reed'`, `'brass'`, `'flute'`, `'plucked-string'`, `'vocal'`, `'free-reed'`, `'harpsichord'`, `'sample'` | `SynthPatch.engineMode`。`'fm'`・`'modal'`・`'percussion'`・`'sample'` は対応するセクションを渡すまで無音 |
+| `SynthEngineMode` | `'default'`, `'subtractive'`, `'fm'`, `'karplus-strong'`, `'modal'`, `'additive'`, `'percussion'`, `'piano'`, `'pipe-organ'`, `'bowed-string'`, `'reed'`, `'brass'`, `'flute'`, `'plucked-string'`, `'vocal'`, `'free-reed'`, `'harpsichord'`, `'sample'` | `SynthPatch.engineMode`。エンジンモードだけを設定したパッチは、そのエンジンのベースプリセットで発音する。`'sample'` はバンクを渡すまで無音 |
 | `SynthOscWaveform` | `'default'`, `'sine'`, `'saw'`, `'square'`, `'triangle'`, `'noise'` | `SynthPatch.waveform` |
 | `SynthFilterModel` | `'default'`, `'svf'`, `'moog-ladder'`, `'diode-ladder'`, `'sallen-key'` | `SynthPatch.filterModel` |
 | `SynthFilterOutput` | `'default'`, `'lowpass'`, `'bandpass'`, `'highpass'` | `SynthPatch.filterOutput`（SVF のみ） |
@@ -570,4 +584,4 @@ WASM パッケージは、関数やクラスに加えて TypeScript の補助型
 | `SpectralEditMode` / `SpectralEditWindow` | `'gain'`, `'attenuate'`, `'mute'`, `'heal'` / `'hann'`, `'hamming'`, `'blackman'`, `'rectangular'`, `'rect'` | `spectralEdit` に渡す `SpectralRegionOp.mode` / `SpectralEditOptions.window` |
 | `NoteTargetUnmatchedPolicy` | `'leave'`（既定）, `'mute'`, `'nearest'` | `assignNoteTargets` の `unmatchedPolicy` |
 
-`MasteringInsertParamInfo` と `CapabilityCatalogParameter` の `id` は `number | null`、`choices` は `MasteringInsertParamChoice[] | null`、`slot` は `string | null` です。`CapabilityCatalogProcessor.slots` は `MasteringInsertSlot` で表す条件付きキー群を列挙します。`CapabilityCatalog.masteringPresets` は `name`、`kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持つ要素を返し、修復プリセットでは後ろ 3 つが `null` です。`SynthPatch.retrigger` のボイス開始時の挙動は[内蔵シンセサイザー](./native-synth.md#synthpatch-オブジェクト)を参照してください。
+`MasteringInsertParamInfo` と `CapabilityCatalogParameter` の `id` は `number | null`、`choices` は `MasteringInsertParamChoice[] | null`、`slot` は `string | null` です。`CapabilityCatalogProcessor.slots` は `MasteringInsertSlot` で表す条件付きキー群を列挙します。`CapabilityCatalog.masteringPresets` は `name`、`kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持つ要素を返し、修復プリセットでは後ろ 3 つが `null` です。`SynthParamInfo`（`synthEngineParamInfo(engineMode)` と `synthPatchParamInfo()` が返す）は `name`、`type`（`'number'` または `'boolean'`）、省略可能な `integer`、`min`、`max`、`default`、`unit` を持ち、`synthEngineParamInfo` はセクションを持たないモードでは `[]` を返します。`SynthPatch.retrigger` のボイス開始時の挙動は[内蔵シンセサイザー](./native-synth.md#synthpatch-オブジェクト)を参照してください。

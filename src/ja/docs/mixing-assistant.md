@@ -147,7 +147,7 @@ sonare suggest-mix \
 | Python（`libsonare`） | `suggest_mix_scene(tracks, *, sample_rate, ...)` | トラックは位置引数、オプションはすべて snake_case のキーワード。`dict` を返します。 |
 | C ABI | `sonare_mixing_assistant_suggest_scene_json(...)` | フラットな C 配列と `SonareMasteringParam` のリスト。JSON を `char** json_out` へ書き出します。 |
 
-`sampleRate` はどのバインディングでも必須で、既定値はありません。
+`sampleRate` はどのバインディングでも必須で、既定値はありません。これは解析を行うレートです。別のレートで録音されたトラックは自分でそれを示します（Node／WASM の `MixAssistantTrack` では `sampleRate`、Python の `MixTrackInput` では `sample_rate`。省略または `None` なら呼び出しのレート）。該当するトラックは解析の前に呼び出しのレートへリサンプリングされます。C のエントリは `track_lengths` の後ろに `const int* track_sample_rates` を取ります（`NULL` なら全トラックが `sample_rate`）。0 以下のレートは `InvalidParameter` で拒否されます。両方のコマンドラインフロントエンドの `suggest-mix` は、各ファイルを本来のレートのまま読み込みます。
 
 ### シーンだけを返す呼び出し
 
@@ -353,7 +353,7 @@ sonare mix --scene scene.json --input kick=kick.wav --input vocal=vocal.wav -o m
 | `track is silent` | |
 | `track has no energy in the analysis bands` | |
 
-**トラック ID の欠落・空文字列と、ID の重複は拒否されます。** 欠落・空文字列は解析前のバインディング検証で拒否されます（WASM は `tracks[i].id` を名指しする素の `Error`、Node は `TypeError`、Python は `SonareValueError`）。重複した ID は `InvalidParameter` になります（WASM はコードつきの `SonareError`、Node は `RangeError`、Python は `SonareValueError`）。同じ ID のストリップを 2 つ持つシーンはミキサーが読み込みを拒否するため、ここで受け入れると原因が分かりにくい後段で失敗します。
+**トラック ID の欠落・空文字列と、ID の重複は拒否されます。** 欠落・空文字列は解析前のバインディング検証で拒否されます（WASM と Node は `tracks[i].id` を名指しする `TypeError`、Python は `SonareValueError`）。重複した ID は `InvalidParameter` になります（WASM はコードつきの `SonareError`、Node は `RangeError`、Python は `SonareValueError`）。同じ ID のストリップを 2 つ持つシーンはミキサーが読み込みを拒否するため、ここで受け入れると原因が分かりにくい後段で失敗します。
 
 ## 利用可否
 

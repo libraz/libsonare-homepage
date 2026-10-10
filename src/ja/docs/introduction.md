@@ -226,6 +226,7 @@ DAW（Digital Audio Workstation）は音声の録音・編集・制作を行う�
 | `estimateRoom` / `estimate_room` | 通常音声またはインパルス応答 | 体積、寸法、吸音率、DRR、信頼度を含む等価ルームを返します。 |
 | `synthesizeRir` / `synthesize_rir` | シューボックス形状 | 決定論的なモノラルのルームインパルス応答を返します。 |
 | `roomMorph` / `room_morph` | 音声と目標ルーム形状 | 残響除去ではなく、音作り向けのルームモーフィングを行います。 |
+| `roomMorphStereo` / `room_morph_stereo` | 左右のチャンネルと目標ルーム形状 | ステレオペア向けの同じモーフィング。間隔を空けた 2 つのレシーバーで聴くので音像が保たれます。 |
 
 ::: info ルーム音響の略語を先に押さえる
 **RT60** は残響が 60 dB 小さくなるまでの時間、**EDT** は聴感に近い初期減衰時間です。

@@ -224,6 +224,7 @@ interface MasteringAbMatchLoudnessRequest {
   source: Float32Array;      // the take that gets the gain
   reference: Float32Array;   // returned untouched
   sampleRate?: number;       // default 22050
+  referenceSampleRate?: number; // default: sampleRate; resampled onto sampleRate before it is measured
 }
 
 interface LoudnessMatchResult {
@@ -236,7 +237,7 @@ interface LoudnessMatchResult {
 }
 ```
 
-Request-object only. The two buffers may differ in length — each is measured on its own program.
+Request-object only. The two buffers may differ in length — each is measured on its own program — and the reference may be recorded at its own rate through `referenceSampleRate`.
 
 ::: warning The gain is uncapped, and the result can exceed 0 dBTP
 `appliedGainDb` is the gain that lands the *remeasured* source on `referenceLufs`: it equals `referenceLufs - sourceLufs` unless the gain moves blocks across the absolute gate, in which case it is solved for the target. It has no upper bound and no headroom clamp is applied, so `matchedTruePeakDbtp` can come back **above `0`**. That is deliberate: clamping for headroom would silently no-op the match for any source already near full scale, which is exactly the case an A/B is most often set up to examine. Check `matchedTruePeakDbtp` yourself and attenuate the pair together if you are about to render rather than audition.
@@ -250,7 +251,7 @@ When either take is silent or sits below the measurement gate, its LUFS field is
 
 ```typescript
 function masteringAbMatchLoudnessStereo(request: MasteringAbMatchLoudnessStereoRequest): LoudnessMatchStereoResult
-// request: { sourceLeft, sourceRight, referenceLeft, referenceRight: Float32Array; sampleRate?: number } -> { left, right, sampleRate, referenceLufs, sourceLufs, appliedGainDb, matchedTruePeakDbtp }
+// request: { sourceLeft, sourceRight, referenceLeft, referenceRight: Float32Array; sampleRate?: number; referenceSampleRate?: number } -> { left, right, sampleRate, referenceLufs, sourceLufs, appliedGainDb, matchedTruePeakDbtp }
 ```
 
 The stereo form of `masteringAbMatchLoudness`: one gain, measured on the stereo program, goes to both source channels, so the left/right balance is unchanged. Request-object only; each pair's two channels must be equal in length or the call throws a `RangeError`, and the source and reference pairs may differ. Measured on decorrelated pink noise: -12.43 LUFS matched to -1.99 LUFS applied 10.44 dB, and both channels came back at 3.3256 times their input RMS. `matchedTruePeakDbtp` is the maximum over both channels. The uncapped gain and the non-finite LUFS of a silent take behave as in the mono call: a silent source gave `sourceLufs` of `-Infinity`, `appliedGainDb` of `0`, and unchanged samples.
@@ -259,10 +260,14 @@ The stereo form of `masteringAbMatchLoudness`: one gain, measured on the stereo 
 
 ```typescript
 function masteringPairProcessStereo(request: MasteringPairProcessStereoRequest): MasteringStereoResult
-// request: { processorName: 'match.abCrossfade', sourceLeft, sourceRight, referenceLeft, referenceRight, sampleRate?, params? }; also positional in that order
+// request: { processorName: 'match.abCrossfade', sourceLeft, sourceRight, referenceLeft, referenceRight, sampleRate?, referenceSampleRate?, params? }; the positional form is in that order and has no reference rate
 ```
 
 `match.abCrossfade` is the only `StereoPairProcessor`; any other name throws a `SonareError` (`unsupported stereo pair processor`). The result is a static linear blend, `(1 - mix) * source + mix * reference`, as long as the shorter pair. `mix` defaults to `0.5` and must lie in `[0, 1]` (outside it the call throws a `SonareError`); `0` returns the source and `1` the reference. Measured on in-phase tones (source RMS 0.0707, reference RMS 0.2828): the default gave 0.1768, `mix: 0.25` gave 0.1237, a 4 s source against a 2 s reference returned 2 s, and `latencySamples` was 0.
+
+#### A reference at its own sample rate
+
+`masteringPairProcess`, `masteringPairProcessStereo`, `masteringPairAnalyze`, `masteringAbMatchLoudness`, `masteringAbMatchLoudnessStereo` and the options of `StreamingEqualizer.match` (`EqMatchOptions`) take `referenceSampleRate` in the request form. Omitted, the reference is at `sampleRate`. A reference at another rate is resampled onto the source's rate before it is processed or measured; equal rates are processed untouched. A delay estimate (`match.estimateReferenceDelaySamples`) is reported in source-rate samples. `StreamingEqualizer.match` needs no equal-length buffers. The positional forms carry no reference rate and treat both buffers as being at `sampleRate`.
 
 #### `lufsSeriesInterleaved(...)`
 
@@ -344,19 +349,19 @@ The named mastering API families are:
 function masteringPresetParams(preset: MasteringPreset): Record<string, number | boolean>
 ```
 
-`masteringPresetParams` returns the flat numeric/boolean map used by the assistant chain and accepted as the `overrides` argument of `masterAudio` and `masterAudioStereo`. Unknown preset names throw.
+`masteringPresetParams` returns the flat numeric/boolean map used by the assistant chain and accepted as the `overrides` argument of `masterAudio` and `masterAudioStereo`. Unknown preset names throw, and a preset, processor, analysis or platform name with an embedded NUL is refused with a `RangeError` naming the field.
 
 The catalog's `latencySamples` and `tailSamples` values are representative defaults. Query a prepared configuration when those values matter for routing or scheduling:
 
 ```typescript
 function masteringInsertTiming(
   name: string,
-  params: Record<string, number | boolean>,
+  params: Record<string, number | boolean | string | number[]>,
   sampleRate: number,
 ): { latencySamples: number; tailSamples: number }
 ```
 
-`masteringInsertTiming` applies the supplied construction parameters and returns the exact latency and tail for that sample rate. The wrapper accepts finite numbers and booleans only, so catalog keys typed `string` or `array` cannot be supplied through this query. It rejects unknown keys, non-finite or non-boolean values, and invalid sample rates with a `SonareError`, and throws when the processor cannot be prepared. Passing `{}` at 48 kHz gives the default configuration represented by the processor catalog; use the actual insert parameters when a topology or slot changes the timing.
+`masteringInsertTiming` applies the supplied construction parameters and returns the exact latency and tail for that sample rate. It accepts every value type the insert's parameter descriptor declares — numbers, booleans, enum names, and the string and array keys such as the amp-sim `preset` and `cabIrF32Base64`, the convolution `irF32Base64` and the room-morph `bandAbsorption` / `bandScattering` — checked against the descriptor's `type`, so the query reproduces the insert a scene or strip builds. A value of the wrong type is a `TypeError`, a non-finite number a `RangeError`. Unknown keys and invalid sample rates throw a `SonareError`, as does a processor that cannot be prepared. Passing `{}` at 48 kHz gives the default configuration represented by the processor catalog; use the actual insert parameters when a topology or slot changes the timing.
 
 Related mastering guides: [Processing chain](./glossary/mastering.md), [Tone and air](./glossary/mastering/tone-air.md), [Dynamics](./glossary/mastering/dynamics.md), [Stereo, limiter, and loudness](./glossary/mastering/stereo-limiter-loudness.md), [Reference match](./glossary/mastering/reference-match.md).
 
@@ -380,7 +385,7 @@ function masteringRepairDereverbClassical(samples: Float32Array, sampleRate: num
 function masteringRepairTrimSilence(samples: Float32Array, sampleRate: number, options?: TrimSilenceOptions): Float32Array
 ```
 
-The one-shot repair helpers and the chain-config repair stages are offline. `StreamingMasteringChain` rejects `repair.declick`, `repair.declip`, `repair.decrackle`, `repair.dehum`, and `repair.dereverb`, and accepts `repair.denoise` only with a streaming noise estimator (`mcra`, `imcra`, or `spp`, not the default quantile estimator). Four of the repair processors — `repair.decrackle`, `repair.dehum`, `repair.denoiseClassical`, and `repair.dereverbClassical` — are also causal realtime inserts under those ids; see [Audio Repair Workflow](./audio-repair.md#realtime-inserts). See [Dynamics](./glossary/mastering/dynamics.md) and [Repair](./glossary/mastering/repair.md).
+The one-shot repair helpers and the chain-config repair stages are offline. `StreamingMasteringChain` rejects `repair.declick`, `repair.declip`, `repair.decrackle`, `repair.dehum`, and `repair.dereverb`, and accepts `repair.denoise` with a causal noise estimator (`mcra`, `imcra`, or the default `spp`); `quantile` is refused by name. Four of the repair processors — `repair.decrackle`, `repair.dehum`, `repair.denoiseClassical`, and `repair.dereverbClassical` — are also causal realtime inserts under those ids; see [Audio Repair Workflow](./audio-repair.md#realtime-inserts). See [Dynamics](./glossary/mastering/dynamics.md) and [Repair](./glossary/mastering/repair.md).
 
 #### Stereo and linked repair
 

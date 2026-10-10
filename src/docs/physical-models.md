@@ -65,7 +65,7 @@ The struck and plucked voices — `piano`, `plucked-string`, `karplus-strong`, `
 
 Most entries above use waveguides in the sense the figure describes. `vocal` is a source-filter model with no loop, and `free-reed` is a driven tongue with no coupled air column. `harpsichord` uses separate delay lines for its string choirs and a short segment behind the bridge. These voices belong together because they are solved from a mechanism rather than played from a recording.
 
-The identifiers below are the engine's own field names. They are how each model is voiced, and they are what the named presets set — but a caller cannot address them one by one; see [Reaching them from code](#reaching-them-from-code) for what is actually settable.
+The identifiers below are the engine's own field names. They are how each model is voiced, and they are what the named presets set — and a patch overrides them one by one through `engineParams`, spelled in lowerCamelCase; see [Reaching them from code](#reaching-them-from-code).
 
 ### `piano` — hammer, unison strings, soundboard
 
@@ -234,9 +234,9 @@ The percussion engine does carry one pair of fields worth stating here, because 
 
 ## Reaching them from code
 
-**The deep fields above are not individually settable from any binding.** They exist in the engine's internal patch, and they are what the named presets are made of; the patch struct that crosses the C ABI, and therefore the `SynthPatch` a browser, Node or Python caller sees, deliberately carries only the wrapper sections around the engines — oscillator, filter, envelopes, LFOs, mod matrix, body, gain. `sonare_synth_preset_patch(name, out)` is the one patch entry point in the C ABI, and it fills that wrapper-only struct.
+**The deep fields above are settable from every binding through `engineParams`.** The tables spell them with the engine's internal names; the key a patch takes is the section's field in lowerCamelCase (`bowForce`, `ranks2.level`; `harpsichord.pluck_8a` is `pluck8a`), and `synthEngineParamInfo(engineMode)` lists the exact keys with their range, unit and default.
 
-So there are three things you can actually do.
+So there are four things you can actually do.
 
 **Pick a preset, and get its physical voicing whole.** Every physical-model preset ships with its deep fields already set, and selecting it by name is how you reach them. Read the catalog from the runtime rather than hardcoding it.
 
@@ -250,7 +250,7 @@ const names = synthPresetNames();
 
 const patch = synthPresetPatch('cello');
 // The wrapper sections only — patch.engineMode is 'bowed-string', and the
-// bow's own voicing travels inside the preset rather than as fields here.
+// the bow's own voicing is not returned; override it with engineParams.
 
 const audio = project.bounceWithSynthInstrument(
   { preset: 'cello', cutoffHz: 3600, ampAttackMs: 40 },
@@ -271,9 +271,19 @@ audio = project.bounce_with_synth_instrument(
 
 :::
 
+**Override the engine's own fields.** Put them in `engineParams` on a patch (`engine_params` in Python). Absent keys keep the preset's value. An unknown key, a key of another engine, a non-finite or fractional-for-integer value, or a value outside the field's range is refused by name rather than clamped. The values are calibrated per preset, so change one or two at a time and listen.
+
+```typescript
+const audio = project.bounceWithSynthInstrument(
+  { preset: 'cello', engineParams: { bowForce: 0.7, bowPosition: 0.1 } },
+  { totalFrames: 48000, numChannels: 2 },
+);
+const keys = synthEngineParamInfo('bowed-string'); // name, min, max, default, unit
+```
+
 **Override the shared layer on top of it.** Anything in the wrapper — filter cutoff and resonance, both envelopes, the LFOs, glide, body mix, stereo spread, gain — applies over whichever engine the preset selected. The percussion engine is the exception: of these it honours only gain. The same fields are resolvable as continuous automation targets through `resolveInstrumentAutomationId`. What you cannot automate that way is structure: preset, engine mode, waveform, filter model, polyphony and the mod routings are refused rather than smoothed.
 
-**Play the exciter live, through the excitation axes.** This is the one route that reaches the physics. Rather than exposing `bow_force` or `breath_pressure` by name, the engine defines four abstract axes — force, position, brightness and morph — that a controller gesture or a mod-matrix route can move mid-note, and each engine declares which of them it reads.
+**Play the exciter live, through the excitation axes.** This is the route that moves the physics during a note. Besides the static `engineParams` fields, the engine defines four abstract axes — force, position, brightness and morph — that a controller gesture or a mod-matrix route can move mid-note, and each engine declares which of them it reads.
 
 | Engine mode | Axes it reads |
 |---|---|
@@ -287,6 +297,6 @@ The struck and plucked voices declare no mid-note excitation axes: their exciter
 
 Two ways to drive the axes. A **controller profile** maps a device gesture to an axis — the default `gm` profile sends CC2 (breath) to force and CC74 to brightness or position, whichever the engine reads — and you select or extend it with `setControllerProfile` and `bindController` on the realtime engine. A **mod-matrix routing** does the same thing from inside the patch: route the `breath`, `aftertouch`, `expressionCc` or `pitchBend` source to the `excitationForce`, `excitationPosition`, `excitationBrightness` or `spectrumMorph` destination, and it travels with the patch and needs no rebinding.
 
-One more thing to know before you audition: **not every engine mode plays from a bare patch.** Four of the seventeen — `fm`, `modal`, `percussion` and `sample` — need content a default patch does not supply, and render silence until you reach them through a preset or, for `sample`, bind a bank. See [Built-in Synthesizer](./native-synth.md) for the details.
+One more thing to know before you audition: **a bare engine mode voices that engine's base preset** (`fm` the e-piano, `modal` the bell, `percussion` the GM drum kit). Only `sample` stays silent until you bind a bank. See [Built-in Synthesizer](./native-synth.md) for the details.
 
 Related: [Built-in Synthesizer](./native-synth.md) · [Sound Sources](./sound-sources.md) · [GM and GS Fallback Bank](./gm-gs.md)

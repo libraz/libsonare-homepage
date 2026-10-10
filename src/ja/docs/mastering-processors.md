@@ -296,6 +296,8 @@ DNN 音源分離やニューラルなスペクトル修復**ではありませ�
 | ペア解析 | `match.referenceLoudness`, `match.tonalBalance`, `match.tonalBalanceLogBands`, `match.matchEqCurve`, `match.estimateReferenceDelaySamples` |
 | ステレオ解析 | `stereo.monoCompatCheck`, `stereo.monoCompatCheckLogBands` |
 
+ペアプロセッサとペア解析は、リファレンスを独自のレートのまま `referenceSampleRate`（Python は `reference_sample_rate`）で受け取れます。リファレンスはソースのレートへリサンプルされ、遅延推定はソースのレートのサンプル数で返ります。両 CLI の `mastering-pair-analyze` と `mastering-pair-processor` は、任意のレートのリファレンスファイルを読み込みます。
+
 ステレオペアの入口 `masteringPairProcessStereo()` が受け付けるプロセッサ名は `match.abCrossfade` だけです。各ソースペアの左右、各リファレンスペアの左右は同じ長さでなければなりませんが、ソースペアとリファレンスペアの長さは異なっていても構いません。`masteringAbMatchLoudnessStereo()` はリクエストオブジェクトを受け取り、ステレオプログラムに対して 1 つのゲインを計測して左右へ共有し、シーリングによるクランプなしで `left` と `right` の結果を返します。
 
 これらは `masteringPairAnalyze(...)` / `masteringStereoAnalyze(...)` に渡すレジストリ名です。レジストリとは別に、アシスタント系ヘルパーにも左右のペアを直接受け取るステレオ版があります — `masteringAudioProfileStereo`、`masteringAssistantSuggestStereo`、`masteringStreamingPreviewStereo` の 3 つです。ダウンミックスをプロファイルすると無相関素材では積分ラウドネスを約 6 dB 過小に読むため、これらを使ってください。詳細は[ステレオ素材](./mastering-assistant.md#ステレオ素材)を参照してください。
@@ -348,7 +350,7 @@ DNN 音源分離やニューラルなスペクトル修復**ではありませ�
 
 ## 呼び出し方
 
-単体・ペア・クリエイティブインサートのプロセッサを、現在のビルドに合わせた 1 つのピッカーへまとめる場合は `capabilityCatalog()` / `capability_catalog()` を使います。各プロセッサのパラメータ記述子（名前・nullable な id・型・`unit`・リアルタイム安全性、`min` / `max` / nullable な `default`、`scale`、表示範囲、兄弟キーとの `dependsOn`、`choices`、スロット所属）と、プロセッサの `slots` メタデータ、組み込みプリセット一覧、マスタリングプリセットのメタデータも取得できます。`masteringProcessorCatalog()` は、マスタリング専用ピッカー向けの、より狭いレジストリ分類です。
+単体・ペア・クリエイティブインサートのプロセッサを、現在のビルドに合わせた 1 つのピッカーへまとめる場合は `capabilityCatalog()` / `capability_catalog()` を使います。各プロセッサのパラメータ記述子（名前・nullable な id・型・`unit`・リアルタイム安全性、`min` / `max` / nullable な `default`、`scale`、表示範囲、兄弟キーとの `dependsOn`、`choices`、スロット所属）と、プロセッサの `slots` メタデータ、フラットなチェーンキーを記述する `chain` セクション（[チェーンキーの記述](#チェーンキーの記述)を参照）、組み込みプリセット一覧（`presets.playbackRoom` は常に存在し、再生機能がビルドされていなければ空）、マスタリングプリセットのメタデータも取得できます。`masteringProcessorCatalog()` は、マスタリング専用ピッカー向けの、より狭いレジストリ分類です。
 
 ### カタログの値域の読み方
 
@@ -357,7 +359,7 @@ DNN 音源分離やニューラルなスペクトル修復**ではありませ�
 2 種類の値は出どころが異なり、ホストがどこまで信頼できるかもそれで決まります。
 
 - **default** はプロセッサの設定構造体そのもののフィールド初期化子で、各ビルダーがそこへフォールバックする際に記録されます。そのため初期化子を変更したフィールドが、カタログに古い値を残したままになることはありません。
-- **値域は宣言ではなく実測**です。候補値は呼び出し側と同じ構築経路を通り、カタログにはバリデーションが受理した区間が内側へ丸められて載ります。一方、`unit`、`scale`、表示範囲（`uiMin` / `uiMax`）、`dependsOn` はライブラリが宣言します。すべての `repair.*` エントリも同じ方法で設定を公開します（そのステージ自身の検証を通して測定）。これらの行は、4 つのリアルタイムリペアインサートでも、オートメーション `id` を持たず、`rtSafe` にもなりません。
+- **値域は宣言ではなく実測**です。候補値は呼び出し側と同じ構築経路を通り、カタログにはバリデーションが受理した区間が内側へ丸められて載ります。一方、`unit`、`scale`、表示範囲（`uiMin` / `uiMax`）、`dependsOn` はライブラリが宣言し、`dependsOn` の各項目は `this <relation> factor * sibling` と読みます。対数軸のパラメータは正の `uiMin` と有限の `uiMax` を公開し、`dependsOn` の項目を兄弟の既定値で言い直しただけの値域は `null` のままにして、依存関係側に任せます。すべての `repair.*` エントリも同じ方法で設定を公開します（そのステージ自身の検証を通して測定）。これらの行は、4 つのリアルタイムリペアインサートでも、オートメーション `id` を持たず、`rtSafe` にもなりません。`denoiseClassical` と `dereverbClassical` は `nFft` を `choices`（4 から 524288 までの 2 のべき乗）、`hopLength` を 1 以上の任意の整数として公開し、`dependsOn` で `nFft` の半分以下と宣言します。`masteringInsertParamInfo` は、オフラインのリペアステージを含むすべてのカタログ id に答えます。
 
 ::: warning 値域は推奨レンジではなく受理条件
 `min` と `max` はプロセッサが**受け付ける**範囲を表します。コントロールを動かすうえで音楽的に妥当なレンジではありません。区間内の値でも不適切な設定はあり得ますし、区間外の値はクランプされずに拒否されます。
@@ -366,7 +368,7 @@ DNN 音源分離やニューラルなスペクトル修復**ではありませ�
 値域が宣言ではなく実測であることから、ホスト側で考慮すべき性質が 3 つあります。
 
 - **各値域は他のパラメータを既定値に置いたまま測定されます**。そのため互いを制約し合う 2 つのコントロールは、それぞれ**相手の既定値**を自分の限界として報告します。`maximizer.adaptiveRelease` が `minReleaseMs` の上限を 250、`maxReleaseMs` の下限を 20 として公開するのはこのためで、これらは相手側の既定値であり、ペア全体としての限界ではありません。
-- **サンプルレート由来の値域は、レートを渡すまで印が付くだけで解決されません**。EQ の `band*.frequencyHz` の上限はいずれも `maxRelativeTo: 'nyquist'` 付きで 24000 と読め、実効上限は `max` とナイキストの低いほうです。`masteringInsertParamInfo(name, sampleRate)` を使うとそのレートで解決されます。`eq.parametric` は 22050 Hz で 11025、44100 Hz で 22050 を返し、48 kHz を超えるレートでは 24000 のままです（インサート自体もそれを超える値を拒否します）。
+- **サンプルレート由来の値域は、レートを渡すまで印が付くだけで解決されません**。レートがなければ、EQ の `band*.frequencyHz` の上限はいずれも `maxRelativeTo: 'nyquist'` 付きで 24000 と読めます。`masteringInsertParamInfo(name, sampleRate)` を使うと、上限はそのレートのナイキスト周波数に解決されます。`eq.parametric` は 22050 Hz で 11025、44100 Hz で 22050、192 kHz で 96000 を返します。レートが分かっている状態で構築した EQ（単発処理、エンジンやミキサーのストリップ）は、同じ上限までのバンド周波数を受け付け、拒否時のメッセージに上限が示されます（`EQ band frequency must be below 48000 Hz (Nyquist at 96000 Hz)`）。レートなしで構築した場合は 24000 Hz のままです。
 - **開区間の境界は、除外される値そのものとして報告されます**。`dynamics.compressor` は `sidechainHpfHz` の `min` を 0 として公開しますが、0 は拒否し、`minExclusive` / `maxExclusive` がそれを示します。
 
 フラットなパラメータ集合の大半を占めるのがバンド単位の EQ です。`eq.parametric`、`eq.midSide`、`multiband.dynamicEq` は、構築用キーも含め、インデックス付きの `band*` フィールドすべてについて記述子を公開します。公開されたからといって**読み取られる**キーが増えるわけではなく、不完全に指定したバンドの残りのキーは、これまでどおり無視されたものとして報告されます。
@@ -462,7 +464,7 @@ sonare mastering-processors
 # プリセットパラメータの問い合わせは API 専用です。
 sonare mastering-presets
 
-# ソロプロセッサを 1 つ適用（--params は浮動小数の k=v,k=v）
+# ソロプロセッサを 1 つ適用（--params は k=v,k=v。数値、または列挙キーの choices 名）
 sonare mastering-processor song.wav --processor dynamics.compressor \
   --params "thresholdDb=-24,ratio=1.5" -o out.wav
 
@@ -488,13 +490,15 @@ sonare mastering-pair-analyze song.wav --reference ref.wav --analysis match.refe
 |------|--------------|
 | WASM `masteringChain(...)` | ネストした設定オブジェクト。同じオブジェクト内でドット記法のリーフキーも受け付けます |
 | `masterAudio(...)` と Python/Node 相当 | `'loudness.targetLufs'` のようなフラットなドット記法 |
-| [マスタリングアシスタント](./mastering-assistant.md) の `chainConfig.params` | `masterAudio` にそのまま渡せるフラット形式。`params["dynamics.multibandComp"]` には、後述する任意バンド数のネストされた v2 オブジェクトが入ることもあります — [チェーン設定 JSON スキーマ](#チェーン設定-json-スキーマ) を参照してください |
+| [マスタリングアシスタント](./mastering-assistant.md) の `chainConfig.params` | `masterAudio` にそのまま渡せるフラット形式。`params["dynamics.multibandComp"]` には、任意バンド数のネストされた v2 オブジェクトが入ることもあります — [チェーン設定 JSON スキーマ](#チェーン設定-json-スキーマ) を参照してください |
 
 `MasteringChainConfig` は両方の書き方を受け付けます。`'loudness.targetLufs': -20` のようなドット記法のリーフキーは、ネストした `loudness: { targetLufs: -20 }` と並べても置き換えても構いません。コアがキーを検証し、未知のキーは拒否します。ドット記法は C ABI がパラメータを運ぶ形式でもあるため、上書き値を手で書き下すのではなく動的に組み立てる場面では、こちらが扱いやすい形になります。
 
 正準（canonical）な書き方はネスト形式です。手で書くコードではネスト形式を選んでください。TypeScript はネストした設定をフィールド単位で型検査できますが、ドット記法のキーは実行時にしか検査されません。
 
 repair のチェーンキーは、単発プロセッサのレジストリ名ではなくチェーン内のスロットに合わせます。フラットな上書きでは `repair.denoise.*` / `repair.dereverb.*`、`masteringChain(...)` のネスト形式では `repair: { denoise: ..., dereverb: ... }` を使ってください。
+
+列挙型のチェーンキーは、数値と並んで `choices` の名前でも指定できます。`repair.denoise.mode`、`repair.denoise.noiseEstimator`、`repair.decrackle.mode`、`repair.dehum.mode`、`dynamics.compressor.detector`、マルチバンドのスロープ・モード・バンドごとのディテクターのキーが対象です。`masteringProcess`、`masteringProcessStereo`、`masteringInsertTiming` の params と、両 CLI の `--params`・`--chain-config` も同様です。未知の名前は、キーと有効な名前を示して拒否されます。`repair.decrackle.mode` が受け付けるのは 0（メディアン）または 1（ウェーブレット縮小）だけです。
 ::::
 
 ## チェーン設定 JSON スキーマ
@@ -510,9 +514,33 @@ repair のチェーンキーは、単発プロセッサのレジストリ名で�
   フィールド検証は厳格です。バージョン 2 の `dynamics.multibandComp` オブジェクト内で未知のキーがあれば拒否され、バンド数はカットオフ数 + 1 と一致していなければなりません。
 :::
 
-::: warning 使える経路: JSON ドキュメントの機能であり、各バインディングのチェーン設定オブジェクトには未対応
-バージョン 2 の構造化形式は、チェーン設定 JSON ドキュメント経由で利用できます。たとえば CLI の `sonare mastering --config <file>` が読み込みます。Python の `mastering_chain()`、Node の `masteringChain()`、WASM の `masteringChain()` に渡す TypeScript 型 `MasteringChainConfig` は、ネストした設定をスカラー値のドット記法へ展開します。3 つのバインディングで公開される `dynamics.multibandComp` の形は固定の low/mid/high 省略形だけなので、任意バンド数の v2 オブジェクトを直接渡すことはできません。v2 を使うときは JSON ドキュメントの経路を使ってください。型付きチェーンメソッドには、この形式へ変換するオブジェクトアダプターはありません。
-:::
+この構造化形式は JSON ドキュメントに限らず、すべてのチェーン呼び出しから使えます。Node と WASM の `MasteringChainConfig`、および Python の設定 dict では、`dynamics.multibandComp` が `crossover`（`cutoffsHz`、`slope`、`mode`、`firKernelSize`）と `bands`（`MultibandCompressorBand`）を受け付けます。フラットキーの `dynamics.multibandComp.crossover.cutoffsHz.<i>` と `dynamics.multibandComp.bands.<i>.<field>` も、その場で指定する `cutoff<i>Hz` / `band<i>.<field>` や low/mid/high の省略形と並べて使えます。`cutoffsHz` はカットオフ一覧を置き換え、バンド数を要素数 + 1 に決めます。キーの順序は問いません。同じフィールドを 1 回の呼び出しで 2 通りの綴りで指定すると拒否されるため、`cutoffsHz` を `lowCutoffHz` / `highCutoffHz` と併用しないでください。
+
+```typescript
+masteringChain(samples, sampleRate, {
+  dynamics: {
+    multibandComp: {
+      crossover: { cutoffsHz: [200, 2000, 8000], slope: 'lr4', mode: 'linkwitzRiley' },
+      bands: [{ thresholdDb: -24 }, { ratio: 3 }, {}, { detector: 'peak' }],
+    },
+  },
+})
+```
+
+バンド数はどの入口でも、また両 CLI でも 2 から 64 として検査されます。1 バンドのステージは拒否され（`multiband stage needs at least two bands; one band is the compressor stage`）、構造が不正なマルチバンドのステージは、無効にしてあっても拒否されます。プリセットとアシスタントのチェーンパラメータは、バージョン 2 のマルチバンドのステージをフラットキーで返します。
+
+### チェーンキーの記述
+
+`capabilityCatalog().chain`（`CapabilityCatalogChain`）は、`processors` がプロセッサのパラメータを記述するのと同じ形で、フラットなチェーンキーを記述します。
+
+| フィールド | 内容 |
+|-----------|------|
+| `stages` | 各ステージのキー `prefix`、`<prefix>.<leaf>` キーがそのパラメータにあたるカタログの `processor`（全キーがチェーン専用なら `null`）、`enabledKey` |
+| `lists` | インデックス付きの一覧 `dynamics.multibandComp.crossover.cutoffsHz`（1〜63 項目）と `dynamics.multibandComp.bands`（2〜64 項目、各項目は `dynamics.compressor` のフィールド）。`minItems` / `maxItems` を持つ |
+| `params` | どのプロセッサも持たないキーの記述子。`enabled` スイッチ、`loudness.*`、`repair.denoise.gainFloor`、クロスオーバーの FIR カーネルサイズとカットオフ一覧が対象で、値域はチェーン自身のバリデーターを通して実測 |
+| `aliases` | 正準キーの別の綴り。`<i>` は一覧のインデックスを表す |
+
+チェーンの列挙名は、すべてのステージのキーで解決されます。
 
 ## 関連
 

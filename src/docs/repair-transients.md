@@ -100,6 +100,8 @@ console.log(decrackled.leftReport, decrackled.rightReport);
 
 The detector and repair use signal-level thresholds, not a promise that every damaged sample can be restored. Clipping discards information; reconstruction estimates the missing shape from nearby samples. Keep the original and compare the result at a controlled playback gain.
 
+In a chain config or override, `repair.decrackle.mode` takes `median` (0) or `waveletShrinkage` (1); any other value is refused with `unknown decrackle mode`.
+
 ## Settings and accepted ranges
 
 Each option has an upper bound. A value above it throws `InvalidParameter` on every surface, including the named-processor path.

@@ -158,7 +158,7 @@ chain.reset();   // prepare し直さずに状態だけクリア
 chain.delete();  // WASM ハンドルを解放（使い終わったら呼ぶ）
 ```
 
-準備済みのチェーンでは `setParameter(key, value)` でリアルタイム安全なパラメータを 1 つ更新できます。書き込みはブロック境界で直列化され、チェーンはプロセッサのインスタンス、音声履歴、レイテンシを保持します。キーは `eq.tilt.tiltDb` のような完全なドット区切り形式を使います。利用できるのは有効なステージに属するリアルタイム安全なキーだけです。構造を変えるキー、無効なステージのキー、未知のキーは拒否されます。`setParameter()` は `process*()`、`flush*()`、`reset()`、`prepare()` と直列化して呼び出してください。パラメータの変更は境界で反映され、自動的にはスムージングされません。
+準備済みのチェーンでは `setParameter(key, value)` でリアルタイム安全なパラメータを 1 つ更新できます。書き込みはブロック境界で直列化され、チェーンはプロセッサのインスタンス、音声履歴、レイテンシを保持します。キーは `eq.tilt.tiltDb` のような完全なドット区切り形式を使います。利用できるのは有効なステージに属するリアルタイム安全なキーだけです。構造を変えるキー、無効なステージのキー、未知のキーは拒否されます。マルチバンドのステージは、低・中・高のしきい値、レシオ、アタック、リリースだけでなく、`dynamics.multibandComp.band<i>.<field>`（`thresholdDb`、`ratio`、`attackMs`、`releaseMs`、`makeupGainDb`）で全バンドをライブに更新できます。`setParameter()` は `process*()`、`flush*()`、`reset()`、`prepare()` と直列化して呼び出してください。パラメータの変更は境界で反映され、自動的にはスムージングされません。
 
 `flushMono()` / `flushStereo()` は、入力がもうない状態で遅延分の音声と有限のプロセッサ
 テールを吐き出します。空の結果が返るまで呼び続けてください。フラッシュしないと、
@@ -166,7 +166,7 @@ chain.delete();  // WASM ハンドルを解放（使い終わったら呼ぶ）
 リバーブやリミッターのテールを失います。連結したストリームの先頭 `latencySamples()`
 サンプルはチェーンの遅延なので、時間を揃えるには捨ててください。
 
-`numChannels === 1` のときはステレオ専用ステージはスキップされます。チェーン設定のリペアステージのうち、ストリーミングチェーンで動くのは `repair.denoise` だけで、それも因果的なノイズ推定器（`noiseEstimator` が 1 = MCRA、2 = IMCRA、3 = 音声存在確率）を選んだときに限ります。分位点推定器（0）は信号全体のフレームを順位付けするため、コンストラクタが拒否します。`repair.declick`／`repair.dereverb`／`repair.declip`／`repair.decrackle`／`repair.dehum` はここで有効にすると例外を投げます。`masteringChain*` / `masterAudio*`、単発の `masteringRepair*` ヘルパー、またはそのステージにあれば[リアルタイムインサート](./audio-repair.md#リアルタイムインサート)で実行してください。`loudness` ステージも、ストリーミングチェーンが信号全体の積分 LUFS を計測できないため、`loudnessStaticGainDb`（任意で `loudnessStaticGainPeakDb` も）を指定しない限り例外を投げます。同じチェーンで複数曲を順に処理する場合は `reset()`、使い終わったら `delete()` を呼んでハンドルを解放してください。
+`numChannels === 1` のときはステレオ専用ステージはスキップされます。チェーン設定のリペアステージのうち、ストリーミングチェーンで動くのは `repair.denoise` だけで、それも因果的なノイズ推定器（`noiseEstimator` が 1 = MCRA、2 = IMCRA、3 = 音声存在確率。`mcra` / `imcra` / `spp` の名前でも指定可）を選んだときに限ります。既定は `spp` なので、`repair.denoise.enabled` だけで prepare できます。分位点推定器（0、`quantile`）は信号全体のフレームを順位付けするため、コンストラクタが名前を示して拒否します。`repair.declick`／`repair.dereverb`／`repair.declip`／`repair.decrackle`／`repair.dehum` はここで有効にすると例外を投げます。`masteringChain*` / `masterAudio*`、単発の `masteringRepair*` ヘルパー、またはそのステージにあれば[リアルタイムインサート](./audio-repair.md#リアルタイムインサート)で実行してください。`loudness` ステージも、ストリーミングチェーンが信号全体の積分 LUFS を計測できないため、`loudnessStaticGainDb`（任意で `loudnessStaticGainPeakDb` も）を指定しない限り例外を投げます。同じチェーンで複数曲を順に処理する場合は `reset()`、使い終わったら `delete()` を呼んでハンドルを解放してください。
 
 ## ストリーミング API
 

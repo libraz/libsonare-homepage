@@ -166,6 +166,8 @@ print(result.note_count, result.tempo_bpm)
 project.set_midi_events(clip_id, result.events)
 ```
 
+ポリフォニックの追跡には `max_polyphony`（既定 10）、`min_frame_peak_ratio`（0.20）、`min_ridge_peak_ratio`（0.10）、`reattack_ratio`（2.0）を指定できます。最短ノートは `min_note_ms`、または音価で指定する `min_note_division` のどちらか一方です。モノフォニック経路は 4 つのポリフォニック上限をフィールド名を挙げて拒否します。詳細は[音を MIDI ノートに変換する](./audio-to-notes.md#オプションと制限)を参照してください。
+
 プロジェクトのテンポマップに合わせる場合は `Project.transcribeToClip(...)`／`project.transcribe_to_clip(...)` を使います。
 
 コア解析、エフェクト、特徴量、ラウドネス、マスタリングの多くは
@@ -427,7 +429,7 @@ print(linked["w"].shape, linked["h"].shape)
 | `hz_to_midi(hz)` | ヘルツ → MIDIノート番号 |
 | `midi_to_hz(midi)` | MIDIノート番号 → ヘルツ |
 | `hz_to_note(hz)` | ヘルツ → 音名（例: "A4"）。`hz` が有限でも正でもなければ `SonareValueError` |
-| `note_to_hz(note)` | 音名 → ヘルツ。名前が解釈できない、またはオクターブが範囲外なら `SonareValueError` |
+| `note_to_hz(note)` | 音名 → ヘルツ。名前が解釈できない、またはオクターブが -1〜9 の範囲外なら `SonareValueError` |
 | `frames_to_time(frames, sr, hop_length)` | フレームインデックス → 秒 |
 | `time_to_frames(time, sr, hop_length)` | 秒 → フレームインデックス |
 | `frames_to_samples(frames, hop_length?, n_fft?)` | フレームインデックス → サンプルインデックス（librosa.frames_to_samples）|

@@ -225,9 +225,11 @@ WASM パッケージは、ブラウザデモと同じ camelCase のマスタリ�
 | オフラインのリペア — チャンネルリンク（任意のチャンネル数） | `masteringRepairDenoiseClassicalLinked()`、`masteringRepairDereverbClassicalLinked()` |
 | リペアの計測（音声を返さない） | `masteringRepairDetectClicks()`、`masteringRepairDetectClipping()`、`masteringRepairDetectCrackle()`、`masteringRepairDetectHum()`、`masteringRepairDetectNoiseFloor()`、`masteringRepairDetectReverb()`、`masteringRepairDetectTrimRange()`、`masteringRepairDetectTrimRangeStereo()`、`masteringRepairNoiseBandBins()`、`masteringRepairDereverbConfigForRoom()` |
 | アシスタントとプロファイル | `masteringAudioProfile()`、`masteringAssistantSuggest()`、`masteringAssistantSuggestChain()`、`masteringStreamingPreview()`、`masteringAudioProfileStereo()`、`masteringAssistantSuggestStereo()`、`masteringAssistantSuggestChainStereo()`、`masteringStreamingPreviewStereo()`、`masteringAbMatchLoudness()`、`masteringAbMatchLoudnessStereo()` |
-| 名前付きプロセッサ | `masteringProcessorNames()`、`masteringProcessorCatalog()`、`masteringAmpPresetCatalog()`、`masteringInsertNames()`、`masteringInsertParamNames(name)`、`masteringInsertParamInfo(name)`、`masteringInsertTiming(name, params, sampleRate)`、`masteringProcess()`、`masteringProcessStereo()` |
+| 名前付きプロセッサ | `masteringProcessorNames()`、`masteringProcessorCatalog()`、`masteringAmpPresetCatalog()`、`masteringInsertNames()`、`masteringInsertParamNames(name)`、`masteringInsertParamInfo(name, sampleRate?)`、`masteringInsertTiming(name, params, sampleRate)`、`masteringProcess()`、`masteringProcessStereo()` |
 | ペア処理とステレオ解析 | `masteringPairProcessorNames()`、`masteringPairProcess()`、`masteringPairProcessStereo()`、`masteringPairAnalysisNames()`、`masteringPairAnalyze()`、`masteringStereoAnalysisNames()`、`masteringStereoAnalyze()` |
 | ストリーミングレンダー | `StreamingMasteringChain` |
+
+ペアプロセッサ、ペア解析、2 種類の A/B ラウドネスマッチは、WASM と同じくリクエストオブジェクトで `referenceSampleRate` を受け取ります。リファレンスはソースのレートへリサンプルされます。`StreamingEqualizer.match` はオプションで `referenceSampleRate` を受け取り、長さの異なるバッファも受け付けます。
 
 Node ネイティブは同じ基本名を使いますが、進捗は個別の `*WithProgress` ヘルパー関数ではなく、最後のオプション引数に渡すコールバックとして受け取ります。
 
@@ -283,7 +285,7 @@ Node ネイティブアドオンは、WASM や Python と同じヘッドレス D
 
 ## エラーハンドリング
 
-WASM パッケージと同じく、ネイティブアドオンもライブラリやオブジェクトの状態が報告する失敗を構造化された `SonareError` としてスローします。`Error` のサブクラスで、C ABI のエラー enum を映した数値の `code` と正準名 `codeName` を持ちます。両パッケージとも `ErrorCode`・`SonareError`・型ガード `isSonareError(value)` をエクスポートし、同じ失敗はどのバインディングでも同じ数値コードを報告します。呼び出しがライブラリに届く前にバインディングが拒否する引数は、どちらのパッケージでもネイティブの `TypeError`（型違い・欠落）または `RangeError`（定義域外。NUL を含む文字列も含む）で、`isSonareError` は一致しません。解放済みまたは破棄済みのハンドルは `InvalidState` を投げます。コード表と使用例は[エラーハンドリング](./js-api.md#エラーハンドリング)を参照してください。
+WASM パッケージと同じく、ネイティブアドオンもライブラリやオブジェクトの状態が報告する失敗を構造化された `SonareError` としてスローします。`Error` のサブクラスで、C ABI のエラー enum を映した数値の `code` と正準名 `codeName` を持ちます。両パッケージとも `ErrorCode`・`SonareError`・型ガード `isSonareError(value)` をエクスポートし、同じ失敗はどのバインディングでも同じ数値コードを報告します。呼び出しがライブラリに届く前にバインディングが拒否する引数は、どちらのパッケージでもネイティブの `TypeError`（型違い・欠落）または `RangeError`（定義域外。NUL を含む文字列、空または有限でないオーディオ、オーディオを受け取る単発関数に渡した範囲外または整数でないサンプルレートも含む）で、`isSonareError` は一致しません。`Float32Array` でない `samples`、数値でない `sampleRate`、文字列でない名前は、引数名を示した `TypeError` です。解放済みまたは破棄済みのハンドルは `InvalidState` を投げます。コード表と使用例は[エラーハンドリング](./js-api.md#エラーハンドリング)を参照してください。
 
 `SonareError` は両パッケージとも実行時のクラスです。値としてインポートすればコンストラクタが得られ、共有の TypeScript モジュールがどちらのパッケージからインポートしても同じ種類のものが手に入ります。`instanceof` はプロトタイプ判定ではなくブランド判定で、`SonareError` という名前を持ち数値の `code` を持つ `Error` であれば絞り込めます。
 
@@ -358,7 +360,7 @@ chain.reset();   // 状態だけクリア（prepare し直さない）
 
 `StreamingEqualizer` は Node ネイティブ、Python、WASM で使えます。
 
-`processMono` / `processStereo` の呼び出しをまたいで EQ の状態を保持し、スペクトラムスナップショットを出せます。リファレンスマッチからバンドを設定することもできます。
+`processMono` / `processStereo` の呼び出しをまたいで EQ の状態を保持し、スペクトラムスナップショットを出せます。リファレンスマッチからバンドを設定することもできます。`match(source, reference, { sampleRate?, referenceSampleRate?, maxBands? })` はどんな長さのバッファも受け付け、リファレンスは独自のレートでも構いません。
 
 Node ネイティブと WASM は同じフェーズモード値を受け取ります。Python はさらにコンテキストマネージャ構文もサポートします。
 

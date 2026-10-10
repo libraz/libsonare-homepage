@@ -285,7 +285,7 @@ import schema from '@libraz/libsonare/schemas/realtime-voice-changer-preset.sche
 | レイテンシ | `latencySamples()` の報告値 | 解析 1 フレーム分増える（48 kHz で 1024 サンプル、実測） |
 | 届く範囲 | `formantFactor` のパラメータ範囲内 | `formantFactor / 2^(retuneSemitones / 12)` が [0.55, 1.65] 内 |
 
-モードはチェンジャーの作成・prepare 時に固定されます。別のモードを持つ設定は拒否され（`SonareError`、"formant mode is fixed at prepare()"）、届かない範囲の絶対指定も拒否されます。後者のエラーには、そのピッチシフトで届く `formantFactor` の範囲が示されます。オートメーションは拒否せず範囲に丸めます。
+モードはチェンジャーの作成・prepare 時に固定されます。別のモードを持つ設定は拒否され（`SonareError`、"formant mode is fixed at prepare()"）、届かない範囲の絶対指定も拒否されます。後者のエラーには、そのピッチシフトで届く `formantFactor` の範囲と、その範囲を絞り込んでいる `formantFactor` 自体の境界が示されます（+12 半音では、届く範囲は `[1.1, 1.65]`、ワープ自体は `[1.1, 3.3]` に届きますが、`formantFactor` の `[0.55, 1.65]` で制限されます）。オートメーションは拒否せず範囲に丸めます。
 
 ```typescript
 const cfg = realtimeVoiceChangerPresetConfig('neutral-monitor');

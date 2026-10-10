@@ -103,7 +103,7 @@ console.log(`信頼度: ${(key.confidence * 100).toFixed(1)}%`);
 console.log(key.mode);                  // 'major'
 ```
 
-`detectKey`、`detectKeyCandidates`、`analyze` は、Node パッケージと同じく `mode` を名前で返します。`Mode` enum（`Mode.Major` は `0`）は、コード関数の `keyMode` オプションが受け取る値です。`modes` はどちらの表記も受け付け、`chordFunctions` と `scaleMaskForMode` は名前も序数も受け付けます。
+`detectKey`、`detectKeyCandidates`、`analyze` は、Node パッケージと同じく `mode` を名前で返します。`detectChords` と `chordFunctionalAnalysis` の `keyRoot` / `keyMode`、`chordFunctions` の `key` は、ピッチクラスの名前（`'C#'`）または数値と、モード名または `Mode` の序数（`Mode.Major` は `0`）を受け付けるため、検出したキーをそのまま渡せます。未知の名前は、そのフィールド名を挙げた `RangeError` になります。`modes` と `scaleMaskForMode` もどちらの表記も受け付けます。
 
 クロマは `tuning` を指定しない限りコンサートピッチ A440 で読まれます。`tuning` は `[-0.5, 0.5)` の範囲のセミトーン単位の端数で、`'auto'` を渡すと音声から測定します。実際に使われた値（指定値または測定値）は `KeyDetection.tuning` として返ります。`analyze()` と `detectChords()` も同様に `AnalysisResult.tuning`、`ChordAnalysisResult.tuning` で報告します。Hz で扱いたい場合は [`tuningToReferenceHz` と `referenceHzToTuning`](./js-api-helpers.md#単位変換) を参照してください。
 
@@ -353,14 +353,11 @@ const keys = detectKeyCandidates(samples, sampleRate, {
   genreHint: 'pop',
 });
 
-// keyMode は Mode の序数。候補の mode は名前。
-const modeOrdinal = (name: KeyMode) => Mode[(name[0].toUpperCase() + name.slice(1)) as keyof typeof Mode];
-
 const { chords } = detectChords(samples, sampleRate, {
   useHmm: true,
   useKeyContext: true,
   keyRoot: keys[0].key.root,
-  keyMode: modeOrdinal(keys[0].key.mode),
+  keyMode: keys[0].key.mode,       // 検出したキーをそのまま渡せる
   chromaMethod: 'nnls',
 });
 
@@ -401,7 +398,7 @@ for (const { time, strength } of boundaries) {
 `threshold` は「周囲と比べてどれだけ突出したピークか」を問います。各ピークは曲全体の最大値
 ではなく、前後 `referenceWindow` 秒の範囲で最大のノヴェルティと比較されるので、支配的な
 変化が遠く離れた弱いセクション変化を隠すことはありません。範囲内のどのイベントも
-`threshold` の割合に届かない孤立した支配的イベントは、この基準から除外されます。
+30% 以内に迫らない孤立した支配的イベントは、この基準から除外されます。
 特徴量が実際にどれだけ変化したかについては何も示しません。
 `absoluteThreshold` のほうが「そもそも変化があったのか」を問う下限です。これを `0` にしても
 検出が有意に敏感になるわけではありません。正規化によって残留する揺らぎが 1.0 のピークに
@@ -513,8 +510,8 @@ interface MeterEstimate {
 ```typescript
 function chordFunctionalAnalysis(
   samples: Float32Array,
-  keyRoot: PitchClass,
-  keyMode?: Mode,                  // Mode の序数。既定は Mode.Major
+  keyRoot: PitchClass | PitchClassName,
+  keyMode?: Mode | KeyMode,        // 既定は Mode.Major
   sampleRate?: number,
   options?: ChordDetectionOptions,
 ): FunctionalChord[]
@@ -529,8 +526,7 @@ type FunctionalChord = Chord & {
 
 ```typescript
 const key = detectKey(samples, sampleRate);
-const modeOrdinal = key.mode === 'minor' ? Mode.Minor : Mode.Major;
-const functional = chordFunctionalAnalysis(samples, key.root, modeOrdinal, sampleRate);
+const functional = chordFunctionalAnalysis(samples, key.root, key.mode, sampleRate);
 
 for (const { start, name, roman, function: role } of functional) {
   console.log(`${start.toFixed(1)}s  ${name}  ${roman}  ${role}`);  // 例: "0.0s  C  I  tonic"

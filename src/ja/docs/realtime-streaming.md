@@ -347,8 +347,8 @@ engine.node.connect(cueDestination, 1);
 |--------------|----------------|
 | トラックルーティング、フェーダー、パン、ソロ／ミュート | `setTrackLanes`、`setStripGain`、`setStripPan`、`setTrackStripPan`、`setTrackStripPanLaw`、`setTrackStripPanMode`、`setTrackStripDualPan`、`setTrackStripChannelDelaySamples`、`setSoloMute` |
 | トラック／マスターのインサートと EQ | `setTrackStripJson`、`setMasterStripJson`、`setTrackStripEqBand`、`setMasterStripEqBand`、`setTrackStripInsertParamByName`、`setMasterStripInsertParamByName`、インサートバイパス系メソッド |
-| センドとバス | `setSends`、`setBusGain`、`setBusStripJson` |
-| MIDI クリップとライブ MIDI | `setMidiClips`、`pushMidiNoteOn`、`pushMidiNoteOff`、`pushMidiCc`、`pushMidiPanic` |
+| センドとバス | `setTrackSends`、`setTrackOutputBus`、`setBusGain`、`setBusStripJson` |
+| MIDI クリップとライブ MIDI | `setMidiClips`、`pushMidiNoteOn`、`pushMidiNoteOff`、`pushMidiCc`、`pushMidiProgram`、`pushMidiPanic` |
 | パラメータオートメーション | `setAutomationLane`、`addAutomationPoint`、`automationParamId(target, kind)`、`busAutomationParamId(busId)`、`listParameters`、`automationLaneCount` |
 | 楽器 | `setBuiltinInstrument`、`setSynthInstrument`、`loadSoundFont`、`setSf2Instrument` |
 | 録音とモニタリング | `configureCapture`（`inputMonitor` を含む）、`armRecord`、`punch`、`capturedAudio`、`captureStatus` |

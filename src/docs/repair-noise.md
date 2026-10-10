@@ -65,7 +65,7 @@ The example follows the fixed repair order: dehum precedes denoise. In an applic
 | Option | Values or default | Use |
 |---|---|---|
 | `mode` | `logMmse` (default), `mmseStsa`, `spectralSubtraction` | Select the gain function. Spectral subtraction also reads `overSubtraction` and `spectralFloor`. |
-| `noiseEstimator` | `quantile` (default), `mcra`, `imcra`, `spp` | Select how the noise spectrum is tracked. |
+| `noiseEstimator` | `quantile` (default), `mcra`, `imcra`, `spp` | Select how the noise spectrum is tracked. A chain override takes the same names (`repair.denoise.noiseEstimator`, `repair.denoise.mode`, `repair.dehum.mode`). The streaming mastering chain defaults to `spp` and refuses `quantile` by name. |
 | `nFft` / `hopLength` | `1024` / `256` by default | Set the STFT geometry. `nFft` must be a power of two from `4` through `524288`; `hopLength` must be positive, no greater than `nFft / 2`, and reconstructible with the Hann overlap. |
 | `reductionDb` | `26` by default, finite and in `[0, 120]` | Set the deepest attenuation of any gain-mask bin. It is a residual-noise floor, not a target loudness. |
 | `noiseEstimationQuantile` | `0.1` by default | Fraction of the quietest frames used by the quantile estimator. |

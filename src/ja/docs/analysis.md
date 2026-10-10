@@ -267,14 +267,14 @@ console.log(detected.mode, detected.tuning);   // 例: "major"、[-0.5, 0.5) の
 ### コード
 
 ```typescript
-import { Mode, detectChords, chordFunctions } from '@libraz/libsonare';
+import { detectChords, chordFunctions } from '@libraz/libsonare';
 
 const chordOptions = {
   useTriadsOnly: false,   // 拡張クオリティを含める
   useHmm: true,           // フレームごとではなく系列として平滑化する
   useKeyContext: true,
   keyRoot: key.root,
-  keyMode: key.mode === 'minor' ? Mode.Minor : Mode.Major,   // Mode の序数
+  keyMode: key.mode,   // 名前でも Mode の序数でもよい
   chromaMethod: 'nnls',
 } as const;
 
@@ -327,7 +327,7 @@ const { boundaries, noveltyCurve, noveltyPeak } = detectBoundaries({ samples, sa
 
 `noveltyCurve` は自身の最大値でスケールされています。ピークの 1 は「この曲の中で最も変化の大きいフレーム」という意味であって「大きな変化」という意味ではありません。絶対しきい値と比較される生の応答に戻すには `noveltyPeak` を掛けます。
 
-各ピークは、前後 `referenceWindow` 秒（既定 60）の範囲で最大のノベルティの `threshold` 倍に達する必要があります。そのため長い曲でも、支配的な変化が遠く離れた弱いセクション変化を隠しません。`referenceWindow: 0` で相対しきい値を無効にでき、曲の長さ以上の値を渡すと基準が曲全体になります。
+各ピークは、前後 `referenceWindow` 秒（既定 60）の範囲で最大のノベルティの `threshold` 倍に達する必要があります。そのため長い曲でも、支配的な変化が遠く離れた弱いセクション変化を隠しません。`referenceWindow: 0` で相対しきい値を無効にでき、曲の長さ以上の値を渡すと基準が曲全体になります。範囲内のどのイベントも 30% 以内に迫らない孤立した大きなバースト（短い大音量）は、その基準から除外されるので、周囲のセクション変化を隠しません。各セクションの `energyLevel` はフレーム RMS の中央値を最も大きいセクションで正規化した値なので、短いバーストが自分のセクションを最大にすることはありません。
 
 ### メロディとピッチ
 

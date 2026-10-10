@@ -218,7 +218,8 @@ with sonare.StreamingEqualizer(sample_rate=48000, max_block_size=512) as eq:
     eq.set_band(0, {"type": "bell", "frequencyHz": 2500, "gainDb": 2.5, "q": 1.0})
     eq.set_phase_mode("natural")
     eq.set_auto_gain(True)
-    eq.match(source_samples, reference_samples, max_bands=8)
+    # buffers may differ in length; the reference may be at its own rate
+    eq.match(source_samples, reference_samples, max_bands=8, reference_sample_rate=44100)
     out = eq.process_mono(input_block)
     snapshot = eq.spectrum()
 ```

@@ -230,7 +230,7 @@ try {
 
 ## 専用 Worker でセッションを実行する
 
-ブラウザ／WASM パッケージは `VocalEditWorkerClient` を公開します。コンストラクターのオプションを省略すると、`./vocal_edit_worker.js` のモジュール Worker を作成します。バンドラーが別の URL にアセットを出力する場合は `workerUrl` を渡してください。
+ブラウザ／WASM パッケージは `VocalEditWorkerClient` を公開します。コンストラクターのオプションを省略すると、`./vocal_edit_worker.js` のモジュール Worker を作成します。バンドラーが別の URL にアセットを出力する場合は `workerUrl` を、Worker を自分で用意する場合は `workerFactory` を渡してください。ブラウザの Worker のほか、`node:worker_threads` の Worker も使えます。
 
 ```typescript
 import { VocalEditWorkerClient } from '@libraz/libsonare';
@@ -340,7 +340,7 @@ try {
 - ソースのサンプルレートは 8,000 Hz 以上 384,000 Hz 以下です。v1 アダプターでは Project のレンダーレートをソースレートと一致させます。
 - リビジョン、ドラフト世代、リクエスト ID、バイト数の上限は 10 進の `VocalUint64` 文字列です。アンドゥの深さとレンダージョブ数の上限は数値です。制御スレッドの操作が競合し得る書き込みには `expectedRevision` と `expectedGeneration` を渡します。
 - 状態の永続化にはソース PCM とアンドゥ履歴が含まれません。元ソースまたはコンテンツアドレスで同一性を確認できるデータをプロジェクト JSON と一緒に保存します。
-- Worker はブラウザ／WASM の実行経路です。直接のセッションは呼び出し元スレッドで同期実行されるため、長いレンダーとキャンセルには `renderAsync()` または Worker を使います。
+- Worker クライアントはブラウザ、または `node:worker_threads` の Worker 上で動きます。直接のセッションは呼び出し元スレッドで同期実行されるため、長いレンダーとキャンセルには `renderAsync()` または Worker を使います。
 
 ## 関連
 

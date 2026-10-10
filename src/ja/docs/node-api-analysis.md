@@ -12,11 +12,11 @@ description: '@libraz/libsonare-native パッケージの解析関数・エフ�
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
 | `detectBpm(samples, sampleRate?)` | `number` | テンポ（BPM） |
-| `detectKey(request)` / `detectKey(samples, sampleRate?, options?)` | `KeyDetection` | ルート、モード（`'major'` や `'dorian'` のような名前）、確信度、そしてクロマの構築に使った `tuning`。`options` は `detectKeyCandidates` のオプションに `tuning`（`[-0.5, 0.5)` の数値または `'auto'`）を加えたものです |
+| `detectKey(request)` / `detectKey(samples, sampleRate?, options?)` | `KeyDetection` | ルート（ピッチクラスの数値、C = 0）、モード（`'major'` や `'dorian'` のような名前）、確信度、そしてクロマの構築に使った `tuning`。`options` は `detectKeyCandidates` のオプションに `tuning`（`[-0.5, 0.5)` の数値または `'auto'`）を加えたものです |
 | `detectBeats(samples, sampleRate?)` | `Float32Array` | ビート位置 |
 | `detectOnsets(samples, sampleRate?)` | `Float32Array` | オンセット位置 |
 | `detectChords(request)` / `detectChords(samples, sampleRate?, options?)` | `ChordAnalysisResult` | コード進行（開始／終了時刻付き）と、使われた `tuning`。`threshold` 未満のフレームは明示的な `N.C.` 区間として返ります。オプション形式では HMM 平滑化・キーコンテキスト・転回形・クロマ手法（既定 `'stft'`）・`tuning`（数値または `'auto'`）を指定できます（従来の位置引数形式も利用可能） |
-| `chordFunctionalAnalysis(request)` / `chordFunctionalAnalysis(samples, keyRoot, keyMode?, sampleRate?, options?)` | `FunctionalChord[]` | コードを検出したうえで、`roman`（`'I'`、`'V7'`、`'vi'`）と `function`（`'tonic'`、`'subdominant'`、`'dominant'`、`'chromatic'`、`'none'`）を加えた時刻付きエントリを返します。ここでは `keyRoot` と `keyMode` は序数です |
+| `chordFunctionalAnalysis(request)` / `chordFunctionalAnalysis(samples, keyRoot, keyMode?, sampleRate?, options?)` | `FunctionalChord[]` | コードを検出したうえで、`roman`（`'I'`、`'V7'`、`'vi'`）と `function`（`'tonic'`、`'subdominant'`、`'dominant'`、`'chromatic'`、`'none'`）を加えた時刻付きエントリを返します。`keyRoot` と `keyMode` はピッチクラスの数値または名前、モード名または序数を受け付けるため、`detectKey` の結果をそのまま渡せます |
 | `chordFunctions(request)` | `FunctionalChord[]` | すでに手元にあるコードに、再検出せず `request.key` の中での `roman` と `function` を付けます。`request.chords` は `detectChords` の結果かその `chords`、`request.key` は `{ root, mode }` なので、`detectKey` の結果をそのまま渡せます（`root` はピッチクラス名か序数、`mode` は名前か序数） |
 | `detectDownbeats(samples, sampleRate?)` | `Float32Array` | 小節頭（ダウンビート）の位置 |
 | `detectKeyCandidates(samples, sampleRate?, options?)` | `KeyCandidate[]` | 相関スコア付きのキー候補ランキング。`options`: `nFft`、`hopLength`、`useHpss`、`loudnessWeighted`、`highPassHz`、`modes`（`'major-minor'`、`'modal'`、`'all'`、または名前のリスト）、`profile`、`genreHint` |

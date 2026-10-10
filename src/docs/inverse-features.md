@@ -101,7 +101,7 @@ const reMel = mfccToMel({ result: coeffs });
 const fromMfcc = mfccToAudio({ result: coeffs, nIter: 32 });
 ```
 
-A field set beside `result` must agree with it, or the call throws `RangeError` naming both values, so an override can only restate what the forward transform used (`nIter` is free). A mel result already in dB (`isDb`) is refused with a message pointing to `dbToPower`; convert it first. The matrix-based request forms name the matrix `power` for mel and `coefficients` for MFCC (`melToStft({ power, nMels, nFrames, ... })`, `mfccToMel({ coefficients, nMfcc, nFrames, ... })`); any other field name for the matrix throws.
+A field set beside `result` must agree with it, or the call throws `RangeError` naming both values, so an override can only restate what the forward transform used (`nIter` is free). A mel result already in dB (`isDb`) is refused with a message pointing to `dbToPower`; convert it first. The matrix-based request forms name the matrix `power` for mel and `coefficients` for MFCC (`melToStft({ power, nMels, nFrames, ... })`, `mfccToMel({ coefficients, nMfcc, nFrames, ... })`); any other field name for the matrix throws. A request with neither `result` nor the matrix field, or an argument that is not an object, throws a `TypeError` naming the missing field (`melToStft: power is required (or pass result)`).
 
 In Python the same thing is `mel_result_to_stft(mel)`, `mel_result_to_audio(mel, n_iter=32)`, `mfcc_result_to_mel(coeffs)` and `mfcc_result_to_audio(coeffs, n_iter=32)`. The positional librosa-style functions below are unchanged.
 

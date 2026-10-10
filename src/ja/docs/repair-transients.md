@@ -100,6 +100,8 @@ console.log(decrackled.leftReport, decrackled.rightReport);
 
 検出器とリペアは信号レベルのしきい値を使い、損傷したすべてのサンプルを復元できるとは約束しません。クリップは情報を捨てているため、再構成は近傍サンプルから形を推定します。未処理素材を保存し、一定の再生ゲインで比較してください。
 
+チェーン設定や上書きでは、`repair.decrackle.mode` に指定できるのは `median`（0）または `waveletShrinkage`（1）で、それ以外の値は `unknown decrackle mode` で拒否されます。
+
 ## 設定と受け付ける範囲
 
 すべてのオプションに上限があります。上限を超える値は、名前付きプロセッサー経由を含むすべての環境で `InvalidParameter` を投げます。

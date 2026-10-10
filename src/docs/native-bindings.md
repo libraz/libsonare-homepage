@@ -225,9 +225,11 @@ The WASM package exposes the same camelCase mastering API names as the browser d
 | Offline repair — channel-linked (any channel count) | `masteringRepairDenoiseClassicalLinked()`, `masteringRepairDereverbClassicalLinked()` |
 | Repair measurement (no audio returned) | `masteringRepairDetectClicks()`, `masteringRepairDetectClipping()`, `masteringRepairDetectCrackle()`, `masteringRepairDetectHum()`, `masteringRepairDetectNoiseFloor()`, `masteringRepairDetectReverb()`, `masteringRepairDetectTrimRange()`, `masteringRepairDetectTrimRangeStereo()`, `masteringRepairNoiseBandBins()`, `masteringRepairDereverbConfigForRoom()` |
 | Assistant and profiling | `masteringAudioProfile()`, `masteringAssistantSuggest()`, `masteringAssistantSuggestChain()`, `masteringStreamingPreview()`, `masteringAudioProfileStereo()`, `masteringAssistantSuggestStereo()`, `masteringAssistantSuggestChainStereo()`, `masteringStreamingPreviewStereo()`, `masteringAbMatchLoudness()`, `masteringAbMatchLoudnessStereo()` |
-| Named processors | `masteringProcessorNames()`, `masteringProcessorCatalog()`, `masteringAmpPresetCatalog()`, `masteringInsertNames()`, `masteringInsertParamNames(name)`, `masteringInsertParamInfo(name)`, `masteringInsertTiming(name, params, sampleRate)`, `masteringProcess()`, `masteringProcessStereo()` |
+| Named processors | `masteringProcessorNames()`, `masteringProcessorCatalog()`, `masteringAmpPresetCatalog()`, `masteringInsertNames()`, `masteringInsertParamNames(name)`, `masteringInsertParamInfo(name, sampleRate?)`, `masteringInsertTiming(name, params, sampleRate)`, `masteringProcess()`, `masteringProcessStereo()` |
 | Pair and stereo analysis | `masteringPairProcessorNames()`, `masteringPairProcess()`, `masteringPairProcessStereo()`, `masteringPairAnalysisNames()`, `masteringPairAnalyze()`, `masteringStereoAnalysisNames()`, `masteringStereoAnalyze()` |
 | Streaming render | `StreamingMasteringChain` |
+
+The pair processors, pair analyses and both A/B loudness matches take `referenceSampleRate` in their request objects, as on WASM: the reference is resampled onto the source's rate. `StreamingEqualizer.match` takes it in its options and accepts buffers of different lengths.
 
 Node native uses the same base names but folds progress into an optional final callback argument instead of exporting separate `*WithProgress` helper functions.
 
@@ -281,7 +283,7 @@ The guides carry the depth: [Project Editing](./project-editing.md), [Bouncing P
 
 ## Error Handling
 
-Like the WASM package, the native addon throws a structured `SonareError` on every failure the library or an object's state reports: an `Error` subclass with a numeric `code` and its canonical `codeName`, mirroring the C ABI error enum. Both packages export `ErrorCode`, `SonareError`, and the `isSonareError(value)` type guard, and the same failure reports the same numeric code on every binding. An argument the binding refuses before the call reaches the library is a native `TypeError` (wrong type or missing) or `RangeError` (out of domain, including a string with an embedded NUL) on both packages, and `isSonareError` does not match it. A released or destroyed handle throws `InvalidState`. See [Error Handling](./js-api.md#error-handling) for the code table and a usage example.
+Like the WASM package, the native addon throws a structured `SonareError` on every failure the library or an object's state reports: an `Error` subclass with a numeric `code` and its canonical `codeName`, mirroring the C ABI error enum. Both packages export `ErrorCode`, `SonareError`, and the `isSonareError(value)` type guard, and the same failure reports the same numeric code on every binding. An argument the binding refuses before the call reaches the library is a native `TypeError` (wrong type or missing) or `RangeError` (out of domain, including a string with an embedded NUL, empty or non-finite audio, and an out-of-range or non-integer sample rate passed to an audio-taking one-shot) on both packages, and `isSonareError` does not match it. A `samples` that is not a `Float32Array`, a `sampleRate` that is not a number, or a non-string name is a `TypeError` naming the argument. A released or destroyed handle throws `InvalidState`. See [Error Handling](./js-api.md#error-handling) for the code table and a usage example.
 
 `SonareError` is a runtime class on both packages, so importing the name by value gets you a constructor rather than `undefined`, and a shared TypeScript module can import it from either package and find the same *kind* of thing. Its `instanceof` is brand-based rather than prototype-based — it narrows any `Error` named `SonareError` that carries a numeric `code`:
 
@@ -366,7 +368,7 @@ Related mastering guides: [Browser local processing](./glossary/concepts/browser
 
 `StreamingEqualizer` is available in Node native, Python, and WASM.
 
-It is useful when you need an EQ that keeps state across `processMono` / `processStereo` calls. It can also publish a spectrum snapshot and configure bands from a reference match.
+It is useful when you need an EQ that keeps state across `processMono` / `processStereo` calls. It can also publish a spectrum snapshot and configure bands from a reference match: `match(source, reference, { sampleRate?, referenceSampleRate?, maxBands? })` takes buffers of any lengths, and the reference may be at its own rate.
 
 Node native and WASM accept the same phase mode values; Python additionally supports context-manager usage:
 

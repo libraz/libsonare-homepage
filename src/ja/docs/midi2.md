@@ -64,7 +64,7 @@ JavaScript と Python の Project バインディングは同じパッカー群�
 | ノート | `midi2NoteOn`、`midi2NoteOff` | `midi2_note_on`、`midi2_note_off` | 16 ビットの発音／リリースベロシティ。ノートオンのベロシティ `0` もノートオンです |
 | チャンネル表現 | `midi2Cc`、`midi2ChannelPressure`、`midi2PitchBend` | 対応する snake_case | 32 ビットの CC、プレッシャー、ベンド。ベンド中心は `0x80000000` です |
 | ポリプレッシャー | `midi2PolyPressure` | `midi2_poly_pressure` | 1 ノートに対する 32 ビットプレッシャー |
-| プログラム | `midi2Program` | `midi2_program` | 同じメッセージ内のプログラムと任意のバンク MSB/LSB |
+| プログラム | `midi2Program` | `midi2_program` | 同じメッセージ内のプログラムと任意のバンク MSB/LSB。バンク有効が false のまま MSB／LSB に 0 以外を渡すと拒否される |
 | RPN / NRPN | registered / assignable と relative のパッカー | 対応する snake_case | 32 ビット値または符号付き差分 |
 | パーノート | registered / assignable コントローラ、パーノートベンド | 対応する snake_case | パーノートのインデックス `0..255` または 32 ビットベンド |
 | 管理 | `midi2PerNoteManagement` | `midi2_per_note_management` | 1 ノートの detach / reset フラグ |
@@ -144,6 +144,8 @@ finally:
 :::
 
 AudioWorklet の `SonareEngine` ファサードは `pushMidiUmp(trackId, words, renderFrame?)` で完全なパケットを受け取ります。`words` は従来の 1 ワードの数値、または 1～4 ワードの配列／`Uint32Array` にできます。エンジン所有の入力ソースに入れる `pushMidiInputUmp(words, portTimeSamples = 0)` も同じ完全なパケットを受け取ります。生の MT `0x3`／`0x5` データメッセージはどちらの生 UMP 呼び出しでも拒否されるため、完全な SysEx フレームを `pushMidiSysex` で送ります。キュー満杯や不正なワードはバインディングからエラーとして返ります。
+
+ライブのプログラムチェンジは、デスティネーションには `pushMidiProgram(destinationId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)`、入力ソースには `pushMidiInputProgram(group, channel, program, bankValid?, bankMsb?, bankLsb?, portTimeSamples?)` で、MIDI 2.0 メッセージ 1 件として送れます。バンクは `bankValid` が true のときだけ適用され、受信側自身のプログラム受信条件が適用されます。引数の範囲と拒否条件は [MIDI 入力](./midi-input.md) を参照してください。
 
 ## 組み込み受信側が適用するもの
 

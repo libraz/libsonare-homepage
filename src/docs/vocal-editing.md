@@ -230,7 +230,7 @@ Runtime limits can be supplied on creation or restore. The defaults are 64 MiB f
 
 ## Run the session in a dedicated Worker
 
-The browser/WASM package exports `VocalEditWorkerClient`. With no constructor options it creates a module Worker for `./vocal_edit_worker.js`. Pass `workerUrl` when the bundler emits that asset at another URL.
+The browser/WASM package exports `VocalEditWorkerClient`. With no constructor options it creates a module Worker for `./vocal_edit_worker.js`. Pass `workerUrl` when the bundler emits that asset at another URL, or `workerFactory` to supply the Worker yourself: a `node:worker_threads` Worker works as well as a browser Worker.
 
 ```typescript
 import { VocalEditWorkerClient } from '@libraz/libsonare';
@@ -340,7 +340,7 @@ The cancellation callback is checked between dependency entries; return a truthy
 - A source sample rate must be between 8,000 and 384,000 Hz. The Project render rate must match the source rate for the v1 adapter.
 - Revisions, draft generations, request IDs, and byte limits use decimal `VocalUint64` strings; undo-depth and render-job limits are numbers. Pass `expectedRevision` and `expectedGeneration` on writes that can race with another control-thread action.
 - State persistence does not include source PCM or undo history. Store the original source or a content-addressed equivalent alongside the project JSON.
-- The Worker is a browser/WASM execution path. Direct sessions are synchronous on the calling thread; use `renderAsync()` or the Worker for long renders and cancellation.
+- The Worker client runs in a browser or on a `node:worker_threads` Worker. Direct sessions are synchronous on the calling thread; use `renderAsync()` or the Worker for long renders and cancellation.
 
 ## Related
 

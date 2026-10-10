@@ -166,6 +166,8 @@ print(result.note_count, result.tempo_bpm)
 project.set_midi_events(clip_id, result.events)
 ```
 
+The polyphonic tracker takes `max_polyphony` (default 10), `min_frame_peak_ratio` (0.20), `min_ridge_peak_ratio` (0.10) and `reattack_ratio` (2.0); the shortest note is `min_note_ms` or, as a note value, `min_note_division` (not both). The monophonic path refuses the four polyphonic limits by name. See [Audio to MIDI](./audio-to-notes.md#options-and-limits).
+
 Use `Project.transcribeToClip(...)` / `project.transcribe_to_clip(...)` when the events should follow a project's tempo map.
 
 Most core analysis, effects, feature, loudness, and mastering helpers are also
@@ -426,7 +428,7 @@ Prefer `metering_crest_factor_db_stereo(...)` over feeding a downmix to `meterin
 | `hz_to_midi(hz)` | Hertz → MIDI note number |
 | `midi_to_hz(midi)` | MIDI note number → Hertz |
 | `hz_to_note(hz)` | Hertz → note name (e.g., "A4"); `SonareValueError` if `hz` is not finite and positive |
-| `note_to_hz(note)` | Note name → Hertz; `SonareValueError` if the name does not parse or its octave is out of range |
+| `note_to_hz(note)` | Note name → Hertz; `SonareValueError` if the name does not parse or its octave is outside -1 to 9 |
 | `frames_to_time(frames, sr, hop_length)` | Frame index → seconds |
 | `time_to_frames(time, sr, hop_length)` | Seconds → frame index |
 | `frames_to_samples(frames, hop_length?, n_fft?)` | Frame index → sample index (librosa.frames_to_samples) |

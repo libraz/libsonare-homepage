@@ -229,6 +229,10 @@ engine.setSoloMute(0, true, false);
 
 ::: info Lane order follows `setTrackLanes(...)`
 A successful `setTrackLanes(...)` call may reorder, remove, or add tracks. Queued commands, sends, insert automation, and lane state follow the track identity; lane indices are the current positions after the call. On the raw `RealtimeEngine`, every call rebuilds each lane's sends from scratch from whatever `sends` array that lane's entry passed — omitting `sends` (including a bare id) clears that lane's sends rather than leaving them untouched. The `SonareEngine` worklet facade preserves sends on omission by keeping its own JS-side send cache and resending the full list underneath on every call. Re-read any numeric lane or track-insert selector after a topology change.
+
+To change one lane's sends or output bus without restating the lane list, use `setTrackSends(trackId, sends)` and `setTrackOutputBus(trackId, busId)` (C `sonare_engine_set_track_sends` / `sonare_engine_set_track_output_bus`, Python `set_track_sends` / `set_track_output_bus`). Each leaves the lane's other fields and every other lane unchanged, and an unchanged send list keeps its in-flight level ramps. They throw for an unknown track id, an undeclared bus, a duplicate send bus, or a send level outside the send range. On the raw `RealtimeEngine` the lane must already be declared through `setTrackLanes`; the worklet facade's `setTrackSends` creates the lane when the track has none.
+
+A centred mono lane plays at unity for every pan law, including a lane whose strip the engine created for a send or insert or built from a scene spec; panning it still moves it.
 :::
 
 ::: warning Structural strip calls belong on the control thread
@@ -307,7 +311,8 @@ Beyond the lane/send graph, a few realtime-safe controls reshape routing and pan
 
 | Goal | Raw `RealtimeEngine` | `SonareEngine` worklet API |
 |------|----------------------|-------------------------------|
-| Fold a lane into a group bus (or pass `busId 0` to restore it to the master mix) | lane `outputBusId` in `setTrackLanes(...)` (`0` or absent = master mix) | `setTrackOutputBus(target, busId)` (`busId 0` restores the master mix) |
+| Fold a lane into a group bus (or pass `busId 0` to restore it to the master mix) | lane `outputBusId` in `setTrackLanes(...)` (`0` or absent = master mix), or `setTrackOutputBus(trackId, busId)` for one lane | `setTrackOutputBus(target, busId)` (`busId 0` restores the master mix) |
+| Replace one lane's aux sends (an empty array clears them) | `setTrackSends(trackId, sends)` | `setTrackSends(target, sends)` |
 | Fold a bus into another bus, or send it a copy | bus `outputBusId` and `sends` in `setTrackBuses(...)` (`0`/absent output = master mix) | same fields on `setTrackBuses(...)` |
 | Check a sidechain binding without applying it | `canSetLaneSidechain(trackId, insertIndex, sourceTrackId)`, `canSetBusSidechain(...)`, `canSetMasterSidechain(...)` (same arguments as the setters) | same names |
 | Key one lane's insert off another lane (ducking) | `setLaneSidechain(trackId, insertIndex, sourceTrackId)` (pass `0` to clear) | `setLaneSidechain(target, insertIndex, sourceTarget)` (pass `null` to clear) |
@@ -337,7 +342,7 @@ engine.setBusSidechain(1, 0, 'bus', 2);   // insert 0 on bus 1, keyed from bus 2
 engine.setMasterSidechain(0, 'track', 1); // insert 0 on the master, keyed from track 1
 ```
 
-Each `canSet*Sidechain` call takes the arguments of its setter and returns a `SidechainCheck`, `{ ok, reason }`, without changing anything; `reason` is `null` exactly when `ok` is true, and otherwise names the first check the setter would fail: `'invalidTarget'`, `'insertOutOfRange'`, `'undeclaredSource'`, `'invalidSourceKind'`, `'selfKey'`, `'cycle'`, `'tableFull'`, or `'planRefused'`. A UI can use it to grey out an impossible key source before offering it. Python has the same three methods (`can_set_lane_sidechain`, ...) returning a `SidechainCheck`; they are control-thread only.
+Each `canSet*Sidechain` call takes the arguments of its setter and returns a `SidechainCheck`, `{ ok, reason }`, without changing anything; `reason` is `null` exactly when `ok` is true, and otherwise names the first check the setter would fail: `'invalidTarget'`, `'insertOutOfRange'`, `'undeclaredSource'`, `'invalidSourceKind'`, `'selfKey'`, `'cycle'`, `'tableFull'`, or `'planRefused'`. A UI can use it to grey out an impossible key source before offering it. `insertOutOfRange` on a lane means its strip has no such insert (a lane with no strip has none), and `undeclaredSource` that the source track has no declared lane; the bus and master forms report the same. `planRefused` means only an alignment past the delay ceiling or an overflow. Python has the same three methods (`can_set_lane_sidechain`, ...) returning a `SidechainCheck`; they are control-thread only.
 
 ```typescript
 engine.canSetLaneSidechain(1, 0, 1);  // { ok: false, reason: 'selfKey' }
@@ -380,7 +385,7 @@ if (faderId < 0 || busId < 0) throw new Error('declare the lane and bus first');
 engine.setAutomationLane(faderId, [{ ppq: 0, value: 0 }, { ppq: 8, value: -12 }]);
 ```
 
-Both return `-1` when the track has no lane or the bus is not configured (Python raises `SonareError`: `resolve_track_lane_automation_id`, `resolve_bus_automation_id`; C: `sonare_engine_resolve_track_lane_automation_id`, `sonare_engine_resolve_bus_automation_id`). The id names the track or bus, not its position, so it keeps driving that strip across `setTrackLanes` and `setTrackBuses` reorders and the removal of other strips; once its own track or bus is removed it applies nothing. The master fader, pan, and width ids are fixed and need no resolution. On the `SonareEngine` worklet API, `automationParamId(target, 'faderDb' | 'pan')` and `busAutomationParamId(busId)` return the same kind of id, declaring the mixer lane or bus on first use.
+Both return `-1` when the track has no lane or the bus is not configured (Python raises `SonareError`: `resolve_track_lane_automation_id`, `resolve_bus_automation_id`; C: `sonare_engine_resolve_track_lane_automation_id`, `sonare_engine_resolve_bus_automation_id`). The id names the track or bus, not its position, so it keeps driving that strip across `setTrackLanes` and `setTrackBuses` reorders and the removal of other strips; once its own track or bus is removed it applies nothing. The master fader, pan, and width ids are fixed and need no resolution. The reserved mixer id namespace (`0x4D58xxxx`) accepts only master ids: `setParameter`, `setParameterSmoothed`, and `setAutomationLane` refuse any other id in it with `InvalidParameter`, so take track and bus ids only from the resolvers or `automationParamId`, never by computing them. On the `SonareEngine` worklet API, `automationParamId(target, 'faderDb' | 'pan')` and `busAutomationParamId(busId)` return the same kind of id, declaring the mixer lane or bus on first use.
 
 Insert parameters use the same automation-lane mechanism, but first need a reserved id. Call `resolveTrackInsertAutomationId(trackId, insertIndex, paramName)`, `resolveMasterInsertAutomationId(...)`, or `resolveBusInsertAutomationId(...)`, then pass the returned id to `setAutomationLane`, `setParameter`, or `setParameterSmoothed`. `insertIndex` addresses the strip's combined pre-then-post insert sequence, and `paramName` is the JSON key reported by `masteringInsertParamInfo`. WASM/Node return `-1` for an unknown strip, insert, or key; Python raises `SonareError`.
 
