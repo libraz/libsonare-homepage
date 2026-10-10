@@ -583,6 +583,10 @@ export interface TranscribeOptions {
      * `true` reads the multi-F0 chain, which finds overlapping notes at the cost
      * of a full STFT and a mask per tracked ridge. `false` (the default) reads
      * pYIN cut into notes, which follows one line at a time.
+     *
+     * Working memory on the polyphonic path grows with the input: about 0.75 MB
+     * per second of audio at any rate, plus about 3 MB, plus about 32 bytes per
+     * sample of the longest note while it is measured. The input itself is extra.
      */
     polyphonic?: boolean;
     /**
@@ -604,9 +608,9 @@ export interface TranscribeOptions {
     /** Upper end of the F0 tracker range in Hz; omitted defaults to `2093` mono or `1760` poly. */
     fmax?: number;
     /**
-     * Shortest span kept as a note, in milliseconds. Default `30` monophonic;
-     * polyphonic, where it is the shortest ridge the tracker keeps, a
-     * thirty-second note at the transcription tempo held within `[30, 60]` ms.
+     * Shortest span kept as a note, in milliseconds. Default `30` monophonic and
+     * `60` polyphonic, where it is the shortest ridge the tracker keeps; neither
+     * default depends on the tempo.
      * Must be positive, and cannot be written together with `minNoteDivision`.
      */
     minNoteMs?: number;

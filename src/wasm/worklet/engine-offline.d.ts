@@ -28,7 +28,7 @@ export declare function buildCaptureConfig(options: CaptureOptions, defaultChann
 /**
  * Collaborator surface the transport facade needs from the owning engine: the
  * realtime node (sample-accurate command transport), the offline engine it
- * mirrors, and the tempo/loop setters plus playing-state bookkeeping.
+ * mirrors, and the tempo/loop setters.
  */
 export interface EngineTransportContext extends EngineCommitContext {
     readonly sampleRate: number;
@@ -37,8 +37,6 @@ export interface EngineTransportContext extends EngineCommitContext {
         stop(sampleTime?: number): boolean;
     };
     offlineEngine: RealtimeEngine;
-    setTransportPlaying(playing: boolean): void;
-    flushPendingInstrumentSync(): void;
     setTempo(bpm: number): void;
     setTempoSegments(segments: readonly {
         startPpq: number;

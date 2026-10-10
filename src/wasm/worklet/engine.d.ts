@@ -43,8 +43,6 @@ export declare class SonareEngine {
     private latestTransportState;
     private nextClipId;
     private nextMarkerId;
-    private transportPlaying;
-    private readonly pendingInstrumentSync;
     private readonly workletClipPageRequests;
     private readonly workletPageProviderClipIds;
     private nextClipStreamKey;
@@ -329,11 +327,21 @@ export declare class SonareEngine {
     addClip(trackId: string | number, buffer: Float32Array[] | ClipPageProvider, startPpq: number, opts?: Partial<Omit<EngineClip, 'channels' | 'pageProvider' | 'startPpq'>>): number;
     removeClip(clipId: number): void;
     setMidiClips(schedules: readonly EngineMidiClipSchedule[]): void;
+    /**
+     * Binds an instrument to a track's MIDI destination on both engines. A change
+     * made while the transport is rolling reaches the worklet at once and takes
+     * effect at its next render block; the outgoing instrument's sounding notes
+     * fade out over 10 ms. The incoming instrument starts from its default
+     * channel state (program, bank, controllers), so a host that needs the
+     * current position's state resends it with {@link pushMidiUmp} afterwards.
+     */
     setBuiltinInstrument(trackId: string | number, config?: {
         destinationId?: number;
     } & Record<string, unknown>): void;
+    /** Binds a NativeSynth patch; see {@link setBuiltinInstrument} for swap timing. */
     setSynthInstrument(trackId: string | number, patch?: Record<string, unknown> | string): void;
     loadSoundFont(data: Uint8Array): void;
+    /** Binds a SoundFont player; see {@link setBuiltinInstrument} for swap timing. */
     setSf2Instrument(trackId: string | number, config?: {
         destinationId?: number;
         gain?: number;
@@ -495,8 +503,6 @@ export declare class SonareEngine {
     private insertAutomationTargetKey;
     private rememberInsertAutomationId;
     private clearInsertAutomationLanes;
-    private postInstrumentSync;
-    private flushPendingInstrumentSync;
     private postSync;
     private flushOfflineMirror;
     private sendMirroredCommand;

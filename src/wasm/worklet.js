@@ -1530,6 +1530,12 @@ var RealtimeEngine = class _RealtimeEngine {
    * An `engineMode: 'sample'` patch also carries the {@link SampleBank} its
    * keymap names. The synth takes a share of the bank, so it may be released
    * right after this call; a sample patch bound without one renders silence.
+   *
+   * Replacing a bound instrument takes effect at the next render block,
+   * whether or not the transport is rolling. The outgoing instrument's
+   * sounding notes fade out over 10 ms. The incoming instrument starts from its
+   * default channel state (program, bank, controllers); a host that needs the
+   * current position's state resends it with {@link pushMidiUmp} after this call.
    */
   setSynthInstrument(patch = {}, destinationId = (typeof patch === "object" ? patch.destinationId : void 0) ?? 0) {
     this.native.setSynthInstrument(destinationId, normalizeSynthInstrument(patch));
@@ -1551,6 +1557,12 @@ var RealtimeEngine = class _RealtimeEngine {
    * edits, GS/GM SysEx resets). Without a loaded SoundFont — or for programs
    * the SoundFont does not cover — notes play through the built-in
    * synthesizer GM fallback bank (the data-free floor).
+   *
+   * Replacing a bound instrument takes effect at the next render block,
+   * whether or not the transport is rolling. The outgoing instrument's
+   * sounding notes fade out over 10 ms. The incoming instrument starts from its
+   * default channel state (program, bank, controllers); a host that needs the
+   * current position's state resends it with {@link pushMidiUmp} after this call.
    */
   setSf2Instrument(config = {}, destinationId = config.destinationId ?? 0) {
     this.native.setSf2Instrument(destinationId, config);
@@ -5485,19 +5497,10 @@ function buildCaptureConfig(options, defaultChannels) {
 function buildTransportFacade(ctx) {
   return {
     play: (sampleTime) => {
-      const ok = ctx.realtimeNode.play(sampleTime);
-      if (ok) {
-        ctx.setTransportPlaying(true);
-      }
-      return ok;
+      return ctx.realtimeNode.play(sampleTime);
     },
     stop: (sampleTime) => {
-      const ok = ctx.realtimeNode.stop(sampleTime);
-      if (ok) {
-        ctx.setTransportPlaying(false);
-        ctx.flushPendingInstrumentSync();
-      }
-      return ok;
+      return ctx.realtimeNode.stop(sampleTime);
     },
     seekPpq: (ppq, sampleTime) => commitCommand(
       ctx,
@@ -7795,7 +7798,7 @@ function setBuiltinInstrument(ctx, trackId, config) {
     ctx,
     (offline) => offline.setBuiltinInstrument(config, destinationId),
     () => {
-      ctx.postInstrumentSync({ type: "syncBuiltinInstrument", destinationId, config });
+      ctx.postSync({ type: "syncBuiltinInstrument", destinationId, config });
     }
   );
 }
@@ -7812,13 +7815,13 @@ function setSynthInstrument(ctx, trackId, patch) {
     ctx,
     (offline) => offline.setSynthInstrument(patch, destinationId),
     () => {
-      ctx.postInstrumentSync({ type: "syncSynthInstrument", destinationId, patch });
+      ctx.postSync({ type: "syncSynthInstrument", destinationId, patch });
     }
   );
 }
 function loadSoundFont(ctx, data) {
   ctx.offlineEngine.loadSoundFont(data);
-  ctx.postInstrumentSync({ type: "syncLoadSoundFont", data });
+  ctx.postSync({ type: "syncLoadSoundFont", data });
 }
 function setSf2Instrument(ctx, trackId, config) {
   const destinationId = ctx.resolveTargetId(trackId);
@@ -7826,7 +7829,7 @@ function setSf2Instrument(ctx, trackId, config) {
     ctx,
     (offline) => offline.setSf2Instrument(config, destinationId),
     () => {
-      ctx.postInstrumentSync({ type: "syncSf2Instrument", destinationId, config });
+      ctx.postSync({ type: "syncSf2Instrument", destinationId, config });
     }
   );
 }
@@ -7855,7 +7858,7 @@ function setMidiFx(ctx, trackId, configJson) {
     ctx,
     (offline) => offline.setMidiFx(destinationId, configJson),
     () => {
-      ctx.postInstrumentSync({ type: "syncMidiFx", destinationId, configJson });
+      ctx.postSync({ type: "syncMidiFx", destinationId, configJson });
     }
   );
 }
@@ -7865,7 +7868,7 @@ function clearMidiFx(ctx, trackId) {
     ctx,
     (offline) => offline.clearMidiFx(destinationId),
     () => {
-      ctx.postInstrumentSync({ type: "syncClearMidiFx", destinationId });
+      ctx.postSync({ type: "syncClearMidiFx", destinationId });
     }
   );
 }
@@ -8005,8 +8008,6 @@ var SonareEngine = class _SonareEngine {
     ];
     this.nextClipId = 1;
     this.nextMarkerId = 1;
-    this.transportPlaying = false;
-    this.pendingInstrumentSync = [];
     // One latest frontier per clip is sufficient: ClipPageStreamer expands it to
     // the bounded read window. A Map both coalesces repeated page misses and
     // places a hard cap on work queued while OPFS I/O is stalled.
@@ -8036,10 +8037,6 @@ var SonareEngine = class _SonareEngine {
       offlineEngine: this.offlineEngine,
       hasCommandRoom: () => this.realtimeNode.hasCommandRoom(),
       sendCommand: (command) => this.sendMirroredCommand(command),
-      setTransportPlaying: (playing) => {
-        this.transportPlaying = playing;
-      },
-      flushPendingInstrumentSync: () => this.flushPendingInstrumentSync(),
       setTempo: (bpm) => this.setTempo(bpm),
       setTempoSegments: (segments) => this.setTempoSegments(segments),
       setLoop: (startPpq, endPpq, enabled) => this.setLoop(startPpq, endPpq, enabled)
@@ -8686,15 +8683,25 @@ var SonareEngine = class _SonareEngine {
   setMidiClips(schedules) {
     setMidiClips(this.clipContext, schedules);
   }
+  /**
+   * Binds an instrument to a track's MIDI destination on both engines. A change
+   * made while the transport is rolling reaches the worklet at once and takes
+   * effect at its next render block; the outgoing instrument's sounding notes
+   * fade out over 10 ms. The incoming instrument starts from its default
+   * channel state (program, bank, controllers), so a host that needs the
+   * current position's state resends it with {@link pushMidiUmp} afterwards.
+   */
   setBuiltinInstrument(trackId, config = {}) {
     setBuiltinInstrument(this.stripContext, trackId, config);
   }
+  /** Binds a NativeSynth patch; see {@link setBuiltinInstrument} for swap timing. */
   setSynthInstrument(trackId, patch = {}) {
     setSynthInstrument(this.stripContext, trackId, patch);
   }
   loadSoundFont(data) {
     loadSoundFont(this.stripContext, data);
   }
+  /** Binds a SoundFont player; see {@link setBuiltinInstrument} for swap timing. */
   setSf2Instrument(trackId, config = {}) {
     setSf2Instrument(this.stripContext, trackId, config);
   }
@@ -9146,25 +9153,6 @@ var SonareEngine = class _SonareEngine {
       this.insertAutomationIdsByTarget.delete(key);
     }
   }
-  postInstrumentSync(message) {
-    if (this.epoch.closed) {
-      return;
-    }
-    if (this.transportPlaying) {
-      this.pendingInstrumentSync.push(structuredClone(message));
-      return;
-    }
-    this.postSync(message);
-  }
-  flushPendingInstrumentSync() {
-    if (this.epoch.closed || this.pendingInstrumentSync.length === 0) {
-      return;
-    }
-    const pending = this.pendingInstrumentSync.splice(0);
-    for (const message of pending) {
-      this.postSync(message);
-    }
-  }
   // Posts an out-of-band control-sync message to the worklet engine processor.
   // Sync messages use a string `type` so the worklet's message handler routes
   // them to receiveSync() (numeric `type` is reserved for SonareEngineCommandRecord).
@@ -9228,7 +9216,6 @@ var SonareEngine = class _SonareEngine {
       offlineEngine: this.offlineEngine,
       trackLaneIds: this.trackLaneIds,
       postSync: (message) => this.postSync(message),
-      postInstrumentSync: (message) => this.postInstrumentSync(message),
       ensureTrackLane: (target) => this.ensureTrackLane(target),
       resolveTargetId: (target) => this.resolveTargetId(target),
       readStripJson: (target) => cachedStripJson(this.mixerContext, target),

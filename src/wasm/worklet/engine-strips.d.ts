@@ -2,7 +2,7 @@ import type { EqBand, PanLawInput, PanMode, RealtimeEngine, UmpWords } from '../
 import type { SurroundPan } from '../public_types.js';
 import type { InsertParamOverrideMap } from './engine-mixer-facade.js';
 import { type InsertParamOverride, type StripJsonTarget } from './engine-mixer-facade.js';
-import type { SonareEngineInstrumentSyncMessage, SonareEngineSyncMessage } from './messages.js';
+import type { SonareEngineSyncMessage } from './messages.js';
 /**
  * Collaborator surface the strip/pan/EQ/insert/instrument/MIDI setters need from
  * the owning {@link SonareEngine}: the offline engine they mirror writes into,
@@ -12,7 +12,6 @@ export interface EngineStripContext {
     readonly offlineEngine: RealtimeEngine;
     readonly trackLaneIds: number[];
     postSync(message: SonareEngineSyncMessage): void;
-    postInstrumentSync(message: SonareEngineInstrumentSyncMessage): void;
     ensureTrackLane(target: string | number): number;
     resolveTargetId(target: string | number): number;
     readStripJson(target: StripJsonTarget): string | undefined;
