@@ -272,7 +272,7 @@ sonare transcribe chords.wav -o chords.mid --polyphonic --tempo-bpm 120
 | `--min-ridge-peak-ratio` | Polyphonic only: a fade below this share of a ridge's own peak breaks the ridge (default 0.10); same domain |
 | `--reattack-ratio` | Polyphonic only: a pitch struck again while it still sounds becomes a new note when its salience climbs past this multiple of the level before (default 2.0); `0` turns the split off, otherwise it must be greater than 1 |
 | `--min-note-division N` | Shortest note as a note value, 1 to 128: `32` keeps notes from a thirty-second note up at the transcription tempo. Applies to both chains; refused together with `--min-note-ms` |
-| `--min-note-ms` | Monophonic only: shortest span kept as a note, in ms (default 30); the polyphonic path does not use it |
+| `--min-note-ms` | Shortest span kept as a note, in ms (default 30 monophonic, 60 polyphonic); refused together with `--min-note-division` |
 | `--segmentation-threshold-cents` | Monophonic split threshold in cents (default 50); the polyphonic path uses it only for reported F0 stability and never to split a ridge |
 | `--velocity-floor-db` | Level mapped to velocity 1; must be negative (default -48) |
 | `--fixed-velocity N` | Give every note velocity N (1-127) and skip the level measurement |
