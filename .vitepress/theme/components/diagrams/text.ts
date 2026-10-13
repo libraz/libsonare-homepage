@@ -32,7 +32,9 @@ function breakRank(a: string, b: string): number {
   const cjkA = (a.codePointAt(0) ?? 0) > 0x2e7f;
   const cjkB = (b.codePointAt(0) ?? 0) > 0x2e7f;
   if (cjkA !== cjkB) return 1;
-  return cjkA ? 2 : -1;
+  if (cjkA) return 2;
+  // A camelCase identifier such as an API name has no space; break at its word seams.
+  return /[a-z0-9]/.test(a) && /[A-Z]/.test(b) ? 2 : -1;
 }
 
 /**
