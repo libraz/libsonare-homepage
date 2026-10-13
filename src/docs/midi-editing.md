@@ -114,7 +114,7 @@ The event-level `Project.midiProgram(...)` packer places a program-change word i
 
 ### `validateMidiNotes`
 
-Before bouncing, check a MIDI clip for hanging notes: a note-on with no matching note-off (or vice versa) plays a stuck note. `validateMidiNotes` pairs note-ons and note-offs FIFO per channel + note within the clip's playback window and reports the result. A note-off at or after the clip's end falls outside that window, so end notes before `lengthPpq`; the first example above ends its last note at `3.75` in a 4-quarter-note clip for that reason.
+Before bouncing, check a MIDI clip for hanging notes: a note-on with no matching note-off (or vice versa) plays a stuck note. `validateMidiNotes` pairs note-ons and note-offs FIFO per channel + note within the clip's playback window and reports the result. A note cut by the clip end or a loop boundary is closed with a note-off there, so a note that runs past the clip still validates as a matched pair. A note-on that never had a note-off is still reported.
 
 ::: code-group
 
@@ -222,7 +222,7 @@ The config is a JSON object whose **stages are keyed by their parameters**: incl
 | Chord | `chord_intervals` (array of semitone offsets, 1-8 entries) |
 | Arpeggiator | `arpeggiator_intervals` (array of semitone offsets, 1-16 entries), `arpeggiator_step_ppq` (>0), `arpeggiator_gate_ppq` (defaults to the step length, capped to it) |
 
-Quantize moves events toward a grid of `quantize_ppq` quarter notes (`0.25` is a sixteenth-note grid), counted from the clip's own start. Each note-on moves toward its nearest grid line by `quantize_strength` times the distance (`1` lands on the line, `0.5` goes halfway), and its note-off moves by the same amount, so note lengths are kept. Other events, such as controllers, snap to the grid on their own. With a sixteenth grid at full strength, a note from `0.3` to `0.9` becomes `0.25` to `0.85`.
+Quantize moves events toward a grid of `quantize_ppq` quarter notes (`0.25` is a sixteenth-note grid), counted from the clip's own start. Each note-on moves toward its nearest grid line by `quantize_strength` times the distance (`1` lands on the line, `0.5` goes halfway), and its note-off moves by the same amount, so note lengths are kept. Controllers and other events keep their position. With a sixteenth grid at full strength, a note from `0.3` to `0.9` becomes `0.25` to `0.85`.
 
 `chord_intervals` is capped at 8 entries and `arpeggiator_intervals` at 16; an empty array, or one past either limit, makes `bakeMidiFx` throw an `InvalidParameter` error (`SonareError` in JS) rather than silently truncating.
 

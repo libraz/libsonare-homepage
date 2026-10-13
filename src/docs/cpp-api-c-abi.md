@@ -211,7 +211,7 @@ For room acoustics in the C ABI:
 
 - `SonareRirSynthConfig` covers geometry, absorption, `material_preset`, `absorption_bands` / `scattering_bands`, `ism_order`, `seed`, `max_seconds`, `mixing_time_ms`, `crossfade_ms`, `late_model`, and the air-absorption group (see [Air absorption in large rooms](./cpp-api-effects.md#air-absorption-in-large-rooms)).
 - Wall material is resolved in order: a non-zero `material_preset` (`SONARE_MATERIAL_PRESET_*`) wins, then a non-NULL `absorption_bands`, then scalar `absorption`.
-- `SonareRoomEstimateConfig` covers aspect/absorption priors, `reference_absorption`, `min_decay_db`, `noise_floor_margin_db`, `prefer_eyring`, `n_octave_bands`, and analyzer `mode`. `reference_absorption` is clamped into [0.01, 0.99] rather than refused, and the estimated volume scales with its cube.
+- `SonareRoomEstimateConfig` covers aspect/absorption priors, `reference_absorption`, `min_decay_db`, `noise_floor_margin_db`, `prefer_eyring`, `n_octave_bands`, and analyzer `mode`. `reference_absorption` of 0 selects the library default (0.15); any other value is clamped into [0.01, 0.99] rather than refused, and the estimated volume scales with its cube.
 - Analyzer mode is one of `SONARE_ACOUSTIC_MODE_AUTO`, `SONARE_ACOUSTIC_MODE_BLIND`, or `SONARE_ACOUSTIC_MODE_IMPULSE_RESPONSE`.
 
 For surround/multichannel engine buses in the C ABI:
@@ -224,7 +224,7 @@ For realtime insert automation and external MIDI in the C ABI:
 
 - Track, master, and bus strips each have insert-bypass and realtime-safe parameter setters. Parameter names are the JSON keys reported by `sonare_mastering_insert_param_info`; an unsupported or non-realtime-safe name returns `SONARE_ERROR_INVALID_PARAMETER`.
 - `sonare_engine_resolve_{track,master,bus}_insert_automation_id` converts an insert parameter name into the numeric id accepted by `sonare_engine_set_automation_lane`, `sonare_engine_set_parameter`, and `sonare_engine_set_parameter_smoothed`. `sonare_engine_set_param_smoothing_ms` changes the shared ramp time (20 ms by default; `0` makes changes immediate).
-- `sonare_engine_push_midi_program(engine, destination_id, group, channel, program, bank_valid, bank_msb, bank_lsb, render_frame)` and `sonare_engine_push_midi_input_program(engine, group, channel, program, bank_valid, bank_msb, bank_lsb, port_time_samples)` push a live program change with an optional bank, packed as one MIDI 2.0 Program Change so the receiver's own gates apply. A non-zero bank with `bank_valid` zero is `SONARE_ERROR_INVALID_PARAMETER`. What the receiver does with it:
+- `sonare_engine_push_midi_program(engine, destination_id, group, channel, program, bank_valid, bank_msb, bank_lsb, render_frame)` and `sonare_engine_push_midi_input_program(engine, group, channel, program, bank_valid, bank_msb, bank_lsb, offset_in_block_samples)` push a live program change with an optional bank, packed as one MIDI 2.0 Program Change so the receiver's own gates apply. A non-zero bank with `bank_valid` zero is `SONARE_ERROR_INVALID_PARAMETER`. What the receiver does with it:
 
   | Receiver | Follows the program change? |
   |----------|-----------------------------|
@@ -327,6 +327,7 @@ Realtime engine (`sonare_c_engine.h`; `render_frame` here stays an `int64_t` whe
 | `sonare_engine_graph_latency_samples_q8(engine, &latency_q8)` | Processing latency in 1/256 samples, the value telemetry records carry |
 | `sonare_engine_can_set_lane_sidechain`, `sonare_engine_can_set_bus_sidechain`, `sonare_engine_can_set_master_sidechain` | Report, without changing anything, whether the matching `set_*_sidechain` would accept a binding. `out_refusal` receives a `SonareSidechainRefusal`: `NONE` (0), `INVALID_TARGET`, `INSERT_OUT_OF_RANGE`, `UNDECLARED_SOURCE`, `INVALID_SOURCE_KIND`, `SELF_KEY`, `CYCLE`, `TABLE_FULL`, `PLAN_REFUSED` (1 through 8) |
 | `sonare_engine_resolve_track_lane_automation_id(engine, track_id, "faderDb" or "pan", &id)`, `sonare_engine_resolve_bus_automation_id(engine, bus_id, "faderDb", &id)` | Reserved automation ids that name the track or bus rather than its position, so they keep driving it across `sonare_engine_set_track_lanes` and `sonare_engine_set_track_buses` reorders and fail as an unknown target once it is removed |
+| `sonare_engine_resolve_master_automation_id(engine, "faderDb", "pan" or "width", &id)` | The same for the master strip, which always exists, so the id never goes stale. Any other name is `SONARE_ERROR_INVALID_PARAMETER` and sets `id` to 0 |
 
 An offline render, bounce, freeze or pre-roll with a block size larger than the one the engine was prepared with is refused with `SONARE_ERROR_INVALID_PARAMETER`. `sonare_engine_set_track_strip_json`, `sonare_engine_set_bus_strip_json` and `sonare_engine_set_master_strip_json` refuse a key the scene reader does not consume, naming it (`unknown strip key 'strips[0].faderDB'`); keys starting with `$` or `x-` and the snake_case aliases are still accepted.
 

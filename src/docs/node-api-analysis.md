@@ -23,7 +23,7 @@ This page covers the analysis, effects, and feature-extraction functions of the 
 | `analyze(samples, sampleRate?, options?)` | `AnalysisResult` | All-in-one analysis in one call: BPM and ranked BPM hypotheses, key, time signature and ranked time-signature candidates, beats, chords (including `romanNumeral` relative to the detected key), sections, timbre, dynamics, rhythm, melody, and form. The dedicated `detect*`/`analyze*` functions below remain available for targeted or parameterized analysis |
 | `analyzeWithProgress(request)` / `analyzeWithProgress(samples, sampleRate, onProgress, options?)` | `AnalysisResult` | Same as `analyze` with a `(progress, stage)` callback; the request form accepts `options` and `cancel`, while the positional form takes analysis options fourth |
 | `estimateMeter(request)` | `MeterEstimate` | Score a meter over a caller-supplied beat series, without audio and without re-running analysis. Request-only — takes `EstimateMeterRequest` |
-| `analyzeBpm(samples, sampleRate?, options?)` | `BpmAnalysisResult` | Tempo with confidence and alternate candidates. `options`: `bpmMin`, `bpmMax`, `startBpm`, `nFft`, `hopLength`, `maxCandidates` |
+| `analyzeBpm(samples, sampleRate?, options?)` | `BpmAnalysisResult` | Tempo with confidence and alternate candidates (`candidates[0]` is the chosen tempo, the rest follow by vote share). `options`: `bpmMin`, `bpmMax`, `startBpm`, `nFft`, `hopLength`, `maxCandidates` |
 | `analyzeRhythm(samples, sampleRate?, options?)` | `RhythmResult` | Time signature, groove, syncopation. `options`: `bpmMin`, `bpmMax`, `startBpm`, `nFft`, `hopLength` |
 | `analyzeDynamics(samples, sampleRate?, options?)` | `DynamicsResult` | Dynamic range, loudness range, crest factor. `options`: `windowSec`, `hopLength`, `compressionThreshold` |
 | `analyzeTimbre(samples, sampleRate?, options?)` | `TimbreResult` | Brightness, warmth, density, roughness, complexity, plus per-window `timbreOverTime`. `options`: `nFft`, `hopLength`, `nMels`, `nMfcc`, `windowSec` |
@@ -95,7 +95,7 @@ the beat grid it was decoded from, and beat tracking holds a fixed tempo prior
 unless `adaptiveTempo` is set as well — measuring a tempo that actually moves
 needs both options.
 
-`analyzeWithProgress(...)` accepts the same `MusicAnalyzeOptions` as `analyze(...)`.
+`analyzeWithProgress(...)` accepts the same `MusicAnalyzeOptions` as `analyze(...)`. The request form takes them beside `samples` or under `options` (a field given both ways takes the `options` value).
 In the request form, put them under `options`; `cancel` is a separate callback
 that returns `true` to request cancellation. The positional overload puts the
 options object after `onProgress`.

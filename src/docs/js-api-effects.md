@@ -421,6 +421,8 @@ const morphed = roomMorph(samples, sampleRate, { lengthM: 12, widthM: 9, heightM
 `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)`
 uses `minDecayDb` to set the decay-fit threshold (default `30`).
 
+`estimateRoom`'s `referenceAbsorption` is the mean-absorption prior that anchors the volume scale. `0` means the library default (`0.15`), and a value outside `[0.01, 0.99]` is clamped, not refused. The reported volume scales with the cube of the prior.
+
 `materialPreset` (`'none' | 'concrete' | 'wood' | 'curtain' | 'carpet' | 'glass'`, type `MaterialPresetName`) and the `estimateRoom` `mode` option (`'auto' | 'blind' | 'impulse_response'`, type `AcousticModeName`) take names only: a number is a `TypeError`, an unknown name a `RangeError`. `roomGeometryFromEstimate(estimate, { source?, listener? })` takes `RoomPlacement` (`{ x, y, z }` in meters) positions and returns `RoomGeometryOptions`, with the default placement scaled into the estimated room (each position given replaces it) and `absorption` as the mean of the finite bands; it throws a `RangeError` for an estimate with no measurable dimensions.
 
 See [Room Acoustics](./acoustic-analysis.md) for how to interpret RT60, EDT, C50, C80, D50, band arrays, room estimates, generated RIRs, and confidence.

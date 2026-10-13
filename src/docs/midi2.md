@@ -108,7 +108,7 @@ MIDI 1.0 packers remain useful for a target that expects 7-bit values: `midiNote
 
 ## Queue raw UMP in realtime
 
-`RealtimeEngine.pushMidiUmp(destinationId, words, renderFrame?)` accepts one to four most-significant-first 32-bit words. The array length must match the message type in its first word. An MT 0x4 MIDI 2.0 channel-voice message is delivered at full width. `pushMidiInputUmp(words, portTimeSamples = 0)` applies the same message rules to the engine-owned input source after `setMidiInputSource(...)`.
+`RealtimeEngine.pushMidiUmp(destinationId, words, renderFrame?)` accepts one to four most-significant-first 32-bit words. The array length must match the message type in its first word. An MT 0x4 MIDI 2.0 channel-voice message is delivered at full width. `pushMidiInputUmp(words, offsetInBlockSamples = 0)` applies the same message rules to the engine-owned input source after `setMidiInputSource(...)`.
 
 ::: code-group
 
@@ -143,7 +143,7 @@ finally:
 
 :::
 
-The AudioWorklet `SonareEngine` facade accepts the same complete packet through `pushMidiUmp(trackId, words, renderFrame?)`: `words` can be the legacy one-word number or a one-to-four-word array / `Uint32Array`. `pushMidiInputUmp(words, portTimeSamples = 0)` accepts the same complete packet on its engine-owned input source. Raw MT 0x3 / MT 0x5 data messages are rejected by both raw UMP calls; send a complete SysEx frame through `pushMidiSysex` instead. Queue-full and malformed-word errors are reported by the binding.
+The AudioWorklet `SonareEngine` facade accepts the same complete packet through `pushMidiUmp(trackId, words, renderFrame?)`: `words` can be the legacy one-word number or a one-to-four-word array / `Uint32Array`. `pushMidiInputUmp(words, offsetInBlockSamples = 0)` accepts the same complete packet on its engine-owned input source. Raw MT 0x3 / MT 0x5 data messages are rejected by both raw UMP calls; send a complete SysEx frame through `pushMidiSysex` instead. Queue-full and malformed-word errors are reported by the binding.
 
 A live Program Change goes out as one MIDI 2.0 message: `pushMidiProgram(...)` on a destination, `pushMidiInputProgram(...)` on the input source. Only some receivers follow it; [MIDI Input](./midi-input.md#program-change-and-the-receivers-that-follow-it) has the signatures, the argument ranges and the receiver table.
 

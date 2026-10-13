@@ -264,8 +264,8 @@ interface AnalyzeWithProgressRequest {
 
 `sampleRate` is positional (before the callback) but accepts `undefined`, which uses the same 22050 Hz default as `analyze`. Pass the buffer's real rate.
 
-::: warning In the request form, options go under `options`
-`analyzeWithProgress({ samples, sampleRate, options: { bpmMin: 90, bpmMax: 140 } })` applies the range. The same keys written beside `samples` (`{ samples, sampleRate, bpmMin: 90 }`) are silently ignored. The call is synchronous, so it blocks the thread it runs on; in a page, run it through the [worker client](./wasm-advanced.md) to keep the UI painting.
+::: tip In the request form, options go beside `samples` or under `options`
+`analyzeWithProgress({ samples, sampleRate, bpmMin: 90, bpmMax: 140 })` and `analyzeWithProgress({ samples, sampleRate, options: { bpmMin: 90, bpmMax: 140 } })` apply the same range, as in `analyze`. A field given both ways takes the `options` value, and a key that is not an analysis option throws a `TypeError` naming it. The call is synchronous, so it blocks the thread it runs on; in a page, run it through the [worker client](./wasm-advanced.md) to keep the UI painting.
 :::
 
 **Progress Stages:**
@@ -359,7 +359,7 @@ The helpers take the same mono `Float32Array` as the rest of the page. Each also
 |------|----------|---------|
 | Bar starts | `detectDownbeats(samples, sampleRate)` | Seconds of likely bar starts. Pair with `detectBeats` for grid displays. See [Beats and downbeats](./glossary/analysis/beats-downbeats.md) |
 | Ranked key candidates | `detectKeyCandidates(samples, sampleRate, options?)` | Every key with its confidence, best first. Use it when the top key is ambiguous or you want profile or mode filtering |
-| Tempo candidates | `analyzeBpm(...)` | `bpm`, `confidence`, `candidates`, `autocorrelation`, `tempogram` |
+| Tempo candidates | `analyzeBpm(...)` | `bpm`, `confidence`, `candidates` (the chosen tempo first, then the rest by vote share), `autocorrelation`, `tempogram` |
 | Rhythm character | `analyzeRhythm(...)` | `timeSignature`, `syncopation`, `grooveType`, `patternRegularity`, `tempoStability`, `bpm`, `beatIntervals` |
 | Dynamics | `analyzeDynamics(...)` | The `Dynamics` fields plus `loudnessTimes` and `loudnessRmsDb` |
 | Timbre | `analyzeTimbre(...)` | The `Timbre` fields plus `spectralCentroid`, `spectralFlatness`, `spectralRolloff` and `timbreOverTime` |

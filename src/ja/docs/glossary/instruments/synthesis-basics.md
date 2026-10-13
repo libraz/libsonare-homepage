@@ -125,7 +125,7 @@ FM には独自の小さな語彙があり、`fm` エンジンのパラメータ
 フィルター自体のキャラクターも変えられます。NativeSynth は 4 つのフィルターモデルを備え、それぞれレゾナンスとサチュレーションの性格が異なります。
 
 - `svf`：クリーンで柔軟なステートバリアブルフィルター（中庸な既定値）。
-- `moog-ladder`：4 ポールのトランジスタラダー。太く温かい音で、レゾナンスを上げると自己発振します。
+- `transistor-ladder`：4 ポールのトランジスタラダー。太く温かい音で、レゾナンスを上げると自己発振します。
 - `diode-ladder`：ダイオードで組んだラダー。よりざらついた、攻撃的な音です。
 - `sallen-key`：2 ポールの Sallen-Key 回路。なめらかで音楽的な、傾きの緩いフィルターです。
 
@@ -142,7 +142,7 @@ NativeSynth の音は**パッチ**で記述します。パッチには、設定�
 どちらの層も**ベース**から始まり、指定したものだけが変わります。省略したパッチフィールドは名前付きプリセットの値を保ちます。省略したエンジンパラメータは、そのプリセットのエンジンセクションを保ちます。名前付きプリセットが別のエンジンを使っている場合は、そのエンジン自身のベースプリセットの値になります。`engineMode` を選ぶとほかのエンジンのセクションはすべて空になるので、エンジンパラメータが効くのは鳴っているエンジンだけです。
 
 ::: details libsonare での実装
-NativeSynth は `SynthPatch` で設定します。`engineMode` フィールドが 17 種類のエンジンのいずれか（`'subtractive'`・`'fm'`・`'karplus-strong'`・`'modal'`・`'additive'`・`'percussion'`・`'piano'`・`'pipe-organ'`・`'bowed-string'`・`'reed'`・`'brass'`・`'flute'`・`'plucked-string'`・`'vocal'`・`'free-reed'`・`'harpsichord'`・`'sample'`）を選び、`waveform` がオシレーター波形（`'sine'`・`'saw'`・`'square'`・`'triangle'`・`'noise'`）を、`filterModel` がフィルターのキャラクター（`'svf'`・`'moog-ladder'`・`'diode-ladder'`・`'sallen-key'`）を `cutoffHz`・`resonanceQ` とともに選びます。パッチを手で組む代わりに、`synthPresetNames()` で用意済みのカタログを一覧し、`synthPresetPatch(name)` で 1 つ読み込めます。内蔵プリセットはすべてこの 17 エンジンに基づいており、各プリセットは実体としては上記いずれかの方式にパラメータを埋めたものです。データを利用者側から渡す必要があるのは `'sample'` エンジンだけで、PCM は自分で構築してバインドする `SampleBank` から読み出されます。バンクを持たない `'sample'` パッチは無音をレンダリングします。各方式固有の深いデータ（FM のオペレーター構成、モーダルのモード表、ドローバーのレジストレーション、キットの各ピース、ピアノの弦、パイプランク、ボウイング摩擦、リード／金管の管体、フルートのジェット形状）は、名前付きプリセットそれぞれが持つエンジンセクションで、`engineParams` でキーごとに上書きできます。`synthPatchParamInfo()` は数値のパッチフィールドすべてを範囲、単位、初期パッチの既定値とともに返し、`synthEngineParamInfo(engineMode)` はエンジンのパラメータをそのエンジンのベースプリセットの値とともに返します。数は `'fm'` が 49、`'bowed-string'` が 17、`'piano'` が 14、`'percussion'` が 93 で、セクションを持たない `'default'`・`'subtractive'`・`'sample'` は 0 です。`synthPresetPatch(name)` はプリセットのパッチフィールドを返しますが、エンジンセクションは返しません。
+NativeSynth は `SynthPatch` で設定します。`engineMode` フィールドが 17 種類のエンジンのいずれか（`'subtractive'`・`'fm'`・`'karplus-strong'`・`'modal'`・`'additive'`・`'percussion'`・`'piano'`・`'pipe-organ'`・`'bowed-string'`・`'reed'`・`'brass'`・`'flute'`・`'plucked-string'`・`'vocal'`・`'free-reed'`・`'harpsichord'`・`'sample'`）を選び、`waveform` がオシレーター波形（`'sine'`・`'saw'`・`'square'`・`'triangle'`・`'noise'`）を、`filterModel` がフィルターのキャラクター（`'svf'`・`'transistor-ladder'`・`'diode-ladder'`・`'sallen-key'`）を `cutoffHz`・`resonanceQ` とともに選びます。パッチを手で組む代わりに、`synthPresetNames()` で用意済みのカタログを一覧し、`synthPresetPatch(name)` で 1 つ読み込めます。内蔵プリセットはすべてこの 17 エンジンに基づいており、各プリセットは実体としては上記いずれかの方式にパラメータを埋めたものです。データを利用者側から渡す必要があるのは `'sample'` エンジンだけで、PCM は自分で構築してバインドする `SampleBank` から読み出されます。バンクを持たない `'sample'` パッチは無音をレンダリングします。各方式固有の深いデータ（FM のオペレーター構成、モーダルのモード表、ドローバーのレジストレーション、キットの各ピース、ピアノの弦、パイプランク、ボウイング摩擦、リード／金管の管体、フルートのジェット形状）は、名前付きプリセットそれぞれが持つエンジンセクションで、`engineParams` でキーごとに上書きできます。`synthPatchParamInfo()` は数値のパッチフィールドすべてを範囲、単位、初期パッチの既定値とともに返し、`synthEngineParamInfo(engineMode)` はエンジンのパラメータをそのエンジンのベースプリセットの値とともに返します。数は `'fm'` が 49、`'bowed-string'` が 17、`'piano'` が 14、`'percussion'` が 93 で、セクションを持たない `'default'`・`'subtractive'`・`'sample'` は 0 です。`synthPresetPatch(name)` はプリセットのパッチフィールドを返しますが、エンジンセクションは返しません。
 :::
 
 関連: [内蔵シンセサイザー（NativeSynth）](../../native-synth.md)、[エンベロープとモジュレーション](./envelopes-modulation.md)、[オーディオの基礎](../concepts/audio-basics.md)、[SoundFont とサンプル音源](./soundfont.md)

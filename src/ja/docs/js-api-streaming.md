@@ -48,6 +48,8 @@ sonare eq track.wav --type 2 --frequency-hz 8000 --gain-db 4 --q 0.7 -o eq.wav
 sonare filter track.wav --type hp --cutoff 80 -o filtered.wav
 ```
 
+`eq --type` はバンド種別の序数を `EqBandType` の順で受け取るので、`9` がオールパスバンドです（両方の CLI で使えます）。線形位相モードはオールパスバンドを名前を挙げて拒否します。
+
 `nonFiniteDiscardCount()` は、非有限のサンプルが EQ に届いて再帰フィルターの状態を捨てた処理ブロックの数を返します。詳しくは [非有限値の入力](#非有限値の入力) を参照してください。
 
 ## StreamingRetune

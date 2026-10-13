@@ -49,7 +49,7 @@ The EQ runs pre-fader, so it shapes the tone that the inserts and fader then act
 
 Sometimes you need to hear one track in isolation without disturbing the mix everyone else is hearing — checking a vocal for breath noise before a show, or auditioning a track while the room keeps listening to the main output. That is **cue monitoring**: a separate tap that feeds a headphone or monitor bus alongside the regular mix, not instead of it.
 
-The cue stays separate only when you ask for it. The realtime engine's plain `process(...)` adds the monitor bus into the main output, so a cued lane is heard twice there (and a muted lane under PFL is heard at all). Use `processWithMonitor(...)`, or create the worklet node with `cueOutput: true`, to get the program and the cue as two outputs; see [Track monitor taps](../../realtime-engine.md#track-monitor-taps-off-pfl-and-afl).
+The cue stays separate only when you ask for it. The realtime engine's plain `process(...)` adds the monitor bus into the main output, so a cued lane is heard twice there (and a muted lane under PFL is heard at all). Use `processWithMonitor(...)`, or create the worklet node with `cueOutput: true`, to get the program and the cue as two outputs. Offline renders, bounces and freezes never include the cue. See [Track monitor taps](../../realtime-engine.md#track-monitor-taps-off-pfl-and-afl).
 
 In the realtime engine a track lane has two gain layers. First comes the lane's own strip, the full chain on this page with its own trim, fader, and pan. After it, the lane mixer applies a lane fader, the mute/solo gate, and a lane pan. The cue taps sit between and after those layers.
 

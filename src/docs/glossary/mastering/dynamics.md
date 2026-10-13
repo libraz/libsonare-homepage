@@ -19,7 +19,7 @@ A compressor watches the level of the signal and turns it down while that level 
 
 - **Threshold** is the level (in dBFS) where compression starts. Below it the compressor does nothing.
 - **Ratio** sets how much a level above the threshold is allowed to rise. At 4:1, every 4 dB the input goes over the threshold comes out as only 1 dB over.
-- **Attack** is how quickly the gain comes down once the level crosses the threshold; **release** is how quickly it recovers once the level falls back.
+- **Attack** is how quickly the gain comes down once the level crosses the threshold; **release** is how quickly it recovers once the level falls back. Each time is one time constant: the gain covers about 63% of its move toward the target in the set time, not all of it.
 - **Knee** decides whether compression begins abruptly at the threshold (hard knee) or eases in over a few dB around it (soft knee).
 
 The amount the compressor is turning the signal down at any moment is the **gain reduction** (GR), in dB. Because compression only ever lowers the level, a compressor usually adds a fixed **makeup gain** afterwards to bring the average back up.

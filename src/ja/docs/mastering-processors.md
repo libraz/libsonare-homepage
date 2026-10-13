@@ -118,7 +118,7 @@ description: libsonare の名前付きマスタリング API、プリセット�
 ::: info ラウドネス・オーバーサンプリング・メーターの詳細
 マキシマイザー／final と解析の API の下には、いくつかの機能があります。
 
-- インテグレーテッド LUFS 測定は最大 8 チャンネルのサラウンド構成に対応し、[BS.1770](./algorithm-references.md) のチャンネル重み付けを適用します。フロントのチャンネルは等倍、サラウンドは +1.5 dB（パワーの重み 1.41）で、LFE チャンネルは除外します。5.1 を超える構成について、BS.1770-4 はスピーカーの位置で重みを決めます。仰角が低く方位角 60°〜120° のチャンネルは +1.5 dB、それ以外は等倍です。そのため 7.1 では ±90° のサイドのペアが +1.5 dB、±135°〜±150° のバックのペアが等倍になります。libsonare の 8 チャンネル構成は、サイドとバックの 4 つのサラウンドチャンネルすべてを +1.5 dB にするので、バックのペアに集まった素材は位置による規則より最大 1.5 dB 大きく測られます。クアッド（4 チャンネル）も、2 つのサラウンドを +1.5 dB にします。
+- インテグレーテッド LUFS 測定は最大 8 チャンネルのサラウンド構成に対応し、[BS.1770](./algorithm-references.md) のチャンネル重み付けをスピーカーの位置で適用します。耳の高さで方位角 60°〜120° のチャンネルは +1.5 dB（パワーの重み 1.41）、それ以外は等倍で、LFE チャンネルは除外します。5.1 の ±110° のサラウンドは +1.5 dB、7.1 では ±90° のサイドのペア（`Lss`/`Rss`）が +1.5 dB、±135° のバックのペア（`Ls`/`Rs`）が等倍です。クアッドの ±135° のサラウンドも等倍です。同じ重みはライブのミキサーメーター、再生ラウドネスメーター、ナイトモードのダイナミックレンジ制御にも適用されます。
 - 内部のオーバーサンプラーと True Peak 段はオーバーサンプリング係数として 1〜16 の 2 のべき乗（1, 2, 4, 8, 16）を受け付けます（ライブメーターも同じ係数）。CPU と引き換えにサンプル間ピーク（ISP）の精度を上げます。
 - ラウドネス段は「ゲイントリムの後ろに別のリミッターを置いたもの」ではありません。静的ゲインを 1 回かけ、そのゲインでシーリングを超えた分を、段が自前で持つポストゲインの True Peak リミッターに引き戻させます。このゲインは、候補ゲインで信号を測り直して、ゲート後のターゲットに合うように解かれます。ゲインによって絶対ゲートをまたぐブロックがなければ `target - current` に等しく、またぐ場合は、測り直した信号をターゲットに合わせる解が使われます。同じ解法は A/B のラウドネスマッチ、リファレンスマッチ、LUFS ノーマライズ、`maximizer.loudnessOptimize` にも使われ、これらすべての経路が下記の既定値を共有します。そのため、チェーン・単体ヘルパー・名前付きプロセッサのいずれでも同じようにノーマライズされます。
 - `loudness.maxLimiterGainReductionDb`（`maximizer.loudnessOptimize` は同じキーを `maxLimiterGainReductionDb` として読みます。有限かつ 0 以上）は、そのリミッターをどこまで駆動してよいかの上限です。静的ゲインがシーリングまでのピークヘッドルームを超えられるのは、最大でこの量までです。決めているのはマスターの最大音量ではなく、どれだけピークの立った入力までノーマライズを試みるかです。許容量が、解かれたターゲットゲイン以上のゲインを与えることはなく、シーリング自体を超えることもありません。
@@ -206,7 +206,7 @@ description: libsonare の名前付きマスタリング API、プリセット�
 |-----------|-------------|
 | Dynamics | `dynamics.brickwallLimiter`, `dynamics.compressor`, `dynamics.deesser`, `dynamics.expander`, `dynamics.gate`, `dynamics.limiter`, `dynamics.parallelComp`, `dynamics.sidechainRouter`, `dynamics.duckingProcessor`, `dynamics.transientShaper`, `dynamics.upwardCompressor`, `dynamics.upwardExpander`, `dynamics.vocalRider` |
 | Effects | `effects.acoustic.roomMorph`, `effects.delay.stereo`, `effects.filter.vowel`, `effects.gsEfx`, `effects.modulation.autoWah`, `effects.modulation.chorus`, `effects.modulation.ensemble`, `effects.modulation.flanger`, `effects.modulation.phaser`, `effects.modulation.pitchShifter`, `effects.modulation.ringModulator`, `effects.modulation.rotary`, `effects.modulation.wah`, `effects.reverb.convolution`, `effects.reverb.dattorro`, `effects.reverb.fdn`, `effects.reverb.plate`, `effects.reverb.room`, `effects.reverb.velvet`（FX ビルドのみ。[エフェクトインサート](./effects-inserts.md)を参照） |
-| EQ | `eq.apiStyle`, `eq.bandPass`, `eq.cutFilter`, `eq.dynamic`, `eq.equalizer`, `eq.graphic`, `eq.linearPhase`, `eq.midSide`, `eq.minimumPhase`, `eq.parametric`, `eq.pultec`, `eq.shelving`, `eq.tilt` |
+| EQ | `eq.bandPass`, `eq.cutFilter`, `eq.dynamic`, `eq.equalizer`, `eq.graphic`, `eq.linearPhase`, `eq.midSide`, `eq.minimumPhase`, `eq.parametric`, `eq.passiveTube`, `eq.shelving`, `eq.steppedProportionalQ`, `eq.tilt` |
 | Final | `final.bitDepth`, `final.dither`, `final.outputChain` |
 | Maximizer | `maximizer.adaptiveRelease`, `maximizer.loudnessOptimize`, `maximizer.maximizer`, `maximizer.softKneeMax`, `maximizer.truePeakLimiter` |
 | Multiband | `multiband.compressor`, `multiband.dynamicEq`, `multiband.expander`, `multiband.imager`, `multiband.limiter`, `multiband.saturation` |

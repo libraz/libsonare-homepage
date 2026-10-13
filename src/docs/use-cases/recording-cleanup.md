@@ -15,7 +15,7 @@ This page uses the Python CLI (`pip install libsonare`, command `sonare`). `decl
 - **Install:** `pip install libsonare` (Python 3.11 or later). The Node tab needs `npm install @libraz/libsonare` (Node.js 22.12 or later).
 - **Mono takes in `raw/`:** WAV files, any common sample rate. The CLI repairs **mono**: a stereo take is folded to mono and written back as a mono file (see [Step 8](#step-8-—-stereo-takes) for stereo).
 - **For Step 4:** two or three takes of the same part, `take1.wav` to `take3.wav`, at one sample rate.
-- **Test material:** the takes on this page are synthetic. The script below writes equivalent ones, so you can run every step first. Its numbers differ a little from the ones printed here.
+- **Test material:** the takes on this page are synthetic. The script below writes them, and every number printed here comes from running the steps on its output. `take-raw.wav` in Steps 1 to 7 is `raw/take-01.wav` (copy it under that name).
 :::
 
 ::: details A script that writes damaged test takes
@@ -102,15 +102,17 @@ for raw in raw/*.wav; do
   # 1. Measure the damage. Writes nothing -- safe to run on every take.
   sonare repair "$raw" --detect --json > "reports/${name}.before.json"
 
-  # 2. Let the assistant choose only the stages step 1's evidence calls for.
-  sonare repair "$raw" -o "clean/${name}.wav" --explain --json > "reports/${name}.repair.json"
-
-  # 3. Trim the dead air every take was padded with.
-  sonare trim-silence "clean/${name}.wav" -o "clean/${name}.trimmed.wav" --json \
+  # 2. Trim the dead air every take was padded with. This comes first: dehum's
+  #    notch rings into the padding and a later trim would find nothing to cut.
+  sonare trim-silence "$raw" -o "clean/${name}.trimmed.wav" --json \
     > "reports/${name}.trim.json"
 
+  # 3. Let the assistant choose only the stages step 1's evidence calls for.
+  sonare repair "clean/${name}.trimmed.wav" -o "clean/${name}.wav" --explain --json \
+    > "reports/${name}.repair.json"
+
   # 4. Measure again. This is the verification step, not a separate audit.
-  sonare repair "clean/${name}.trimmed.wav" --detect --json > "reports/${name}.after.json"
+  sonare repair "clean/${name}.wav" --detect --json > "reports/${name}.after.json"
 
   # 5. Fold the four records into one per-file report.
   python3 - "$name" <<'PY'
@@ -156,23 +158,21 @@ reports/take-02.json  ->  repair.declick, repair.decrackle, repair.dehum
   :nodes="[
     { id: 'raw', label: 'Raw takes (WAV)', col: 0, row: 0, variant: 'muted' },
     { id: 'detect1', label: 'repair --detect', col: 1, row: 0, variant: 'accent' },
-    { id: 'choose', label: 'Assistant picks stages', col: 2, row: 0, variant: 'decision' },
-    { id: 'repair', label: 'repair --explain', col: 3, row: 0, variant: 'accent' },
-    { id: 'clean', label: 'Repaired take', col: 4, row: 0 },
-    { id: 'trim', label: 'trim-silence', col: 5, row: 0, variant: 'accent' },
-    { id: 'trimmed', label: 'Clean take', col: 6, row: 0, variant: 'success' },
-    { id: 'detect2', label: 'repair --detect (verify)', col: 6, row: 1, variant: 'warning' },
+    { id: 'trim', label: 'trim-silence', col: 2, row: 0, variant: 'accent' },
+    { id: 'choose', label: 'Assistant picks stages', col: 3, row: 0, variant: 'decision' },
+    { id: 'repair', label: 'repair --explain', col: 4, row: 0, variant: 'accent' },
+    { id: 'clean', label: 'Clean take', col: 5, row: 0, variant: 'success' },
+    { id: 'detect2', label: 'repair --detect (verify)', col: 5, row: 1, variant: 'warning' },
     { id: 'record', label: 'Per-file record.json', col: 7, row: 1, variant: 'muted' }
   ]"
   :edges="[
     { from: 'raw', to: 'detect1' },
-    { from: 'detect1', to: 'choose' },
-    { from: 'raw', to: 'repair', label: 'audio', style: 'dashed' },
+    { from: 'detect1', to: 'trim' },
+    { from: 'trim', to: 'choose' },
+    { from: 'raw', to: 'trim', label: 'audio', style: 'dashed' },
     { from: 'choose', to: 'repair' },
     { from: 'repair', to: 'clean' },
-    { from: 'clean', to: 'trim' },
-    { from: 'trim', to: 'trimmed' },
-    { from: 'trimmed', to: 'detect2', style: 'dashed' },
+    { from: 'clean', to: 'detect2', style: 'dashed' },
     { from: 'detect1', to: 'record', style: 'dashed' },
     { from: 'detect2', to: 'record', style: 'dashed' }
   ]"
@@ -225,24 +225,24 @@ The library call covers the measuring of Step 1 and the choosing of Step 2: `rec
 {
   "mode": "detect",
   "defects": {
-    "click_count": 1,
-    "click_rejected": 4989,
-    "crackle_per_second": 0.759,
-    "clip_sample_fraction": 0.1139,
-    "clip_run_count": 3137,
-    "clip_longest_run_samples": 45,
+    "click_count": 6,
+    "click_rejected": 307,
+    "crackle_per_second": 2.368,
+    "clip_sample_fraction": 0.01259,
+    "clip_run_count": 164,
+    "clip_longest_run_samples": 51,
     "clip_flat_level": 0.99997,
-    "noise_floor_dbfs": -120.0,
+    "noise_floor_dbfs": -31.43,
     "hum_peak_found": true,
     "hum_fundamental_hz": 50.0,
-    "hum_fundamental_prominence": 18.62,
+    "hum_fundamental_prominence": 23.98,
     "hum_harmonics": 2,
-    "late_decay_ratio_db": -4.86
+    "late_decay_ratio_db": -5.85
   }
 }
 ```
 
-Four numbers already tell most of the story on this take: `clip_sample_fraction` says 11.4% of the samples are clipped, `clip_flat_level` near 1.0 says they are pinned flat rather than merely loud, a mains harmonic sits at exactly 50 Hz with a prominence of 18.6, and a nonzero `crackle_per_second` says short impulsive crackle is present. `hum_fundamental_prominence` is a plain ratio, not decibels: the energy of the winning hum candidate divided by the median of all the candidates the search tried. `1.0` means no peak stood out at all; 18.6 means one frequency carries more than eighteen times the energy of a typical candidate. `click_count` is only 1 — `click_rejected` (4989) is how many impulsive-looking events the detector looked at and decided were not clicks, which is worth knowing before you conclude the detector missed something.
+Four numbers already tell most of the story on this take: `clip_sample_fraction` says 1.26% of the samples are clipped, `clip_flat_level` near 1.0 says they are pinned flat rather than merely loud, a mains harmonic sits at exactly 50 Hz with a prominence of 24.0, and a nonzero `crackle_per_second` (2.37) says short impulsive crackle is present. `hum_fundamental_prominence` is a plain ratio, not decibels: the energy of the winning hum candidate divided by the median of all the candidates the search tried. `1.0` means no peak stood out at all; 24.0 means one frequency carries about twenty-four times the energy of a typical candidate. `click_count` is 6, the six clicks the script wrote; `click_rejected` (307) is how many impulsive-looking events the detector looked at and decided were not clicks, which is worth knowing before you conclude the detector missed something.
 
 ## Step 2 — Let the assistant choose
 
@@ -261,7 +261,7 @@ sonare repair take-raw.wav -o take-clean.wav --explain --json
     "dehum: a prominent harmonic series sits on a mains frequency"
   ],
   "output": "take-clean.wav",
-  "output_gain_db": -1.87
+  "output_gain_db": -2.70
 }
 ```
 
@@ -296,14 +296,14 @@ Because the gain is fitted per file, two takes from the same session come out of
 ## Step 3 — Trim the dead air
 
 ```bash
-sonare trim-silence take-clean.wav -o take-trimmed.wav --json
+sonare trim-silence take-raw.wav -o take-trimmed.wav --json
 ```
 
 ```json
-{"length": 350528, "duration": 7.303, "threshold_db": -60.0, "n_fft": 2048, "hop_length": 512}
+{"length": 339200, "sample_rate": 48000, "duration": 7.0667, "threshold_db": -60.0, "n_fft": 2048, "hop_length": 512, "output": "take-trimmed.wav"}
 ```
 
-The take was 7.9 seconds with padding on both ends; the trimmed file is 7.303 seconds, so roughly 0.6 seconds of dead air came off. `--threshold-db` (default −60 dB) is the level below which a frame counts as silence; `--top-db` is also accepted if you would rather express the same cut relative to the file's own peak. Trimming has nothing to do with repair and runs whether or not the take needed one — it is listed here in pipeline order, after repair, so it trims quiet padding rather than a padding-shaped clipped edge. The library has its own trimmers (`trimSilence`, `masteringRepairTrimSilence`) with their own options; their output length is not guaranteed to equal this command's, so this step is a CLI step.
+The take was 7.6 seconds with 0.3 seconds of padding at each end; the trimmed file is 7.0667 seconds, so 0.533 seconds of dead air came off (cuts land on the 512-sample hop grid). `--threshold-db` (default −60 dB) is the level below which a frame counts as silence; `--top-db` is also accepted if you would rather express the same cut relative to the file's own peak. Trimming has nothing to do with repair and runs whether or not the take needed one. Run it on the raw take, before repair: the repaired take is not silent in its padding any more, because dehum's notch rings into it (the padding peaks at 0.07 and 0.10 after dehum alone, and stays at 0 after declip, declick or decrackle), so the same command on `take-clean.wav` keeps all 7.6 seconds. The library has its own trimmers (`trimSilence`, `masteringRepairTrimSilence`) with their own options; their output length is not guaranteed to equal this command's, so this step is a CLI step.
 
 ## Step 4 — Cut several takes at the silence they share
 
@@ -316,7 +316,7 @@ sonare split-silence take1.wav --json
 ```
 
 ```json
-[{"start_sample": 28160, "end_sample": 116224}, {"start_sample": 153088, "end_sample": 241152}, {"start_sample": 287232, "end_sample": 394752}]
+[{"start_sample": 28160, "end_sample": 116224}, {"start_sample": 153088, "end_sample": 241152}, {"start_sample": 287232, "end_sample": 375808}]
 ```
 
 One take alone reports three non-silent stretches, one per phrase — the same shape `trim-silence` finds, expressed as sample ranges rather than a single trimmed length. Add the other two takes of the same part:
@@ -326,10 +326,10 @@ sonare split-silence take1.wav --input take2.wav --input take3.wav --json
 ```
 
 ```json
-[{"start_sample": 23040, "end_sample": 121344}, {"start_sample": 147968, "end_sample": 246272}, {"start_sample": 282624, "end_sample": 399872}]
+[{"start_sample": 23040, "end_sample": 120320}, {"start_sample": 147968, "end_sample": 245248}, {"start_sample": 282624, "end_sample": 379392}]
 ```
 
-The first interval widens from 28160–116224 to 23040–121344. That widening is the point of the feature: the reported intervals are the **union** of each take's own non-silent stretches, merged where they touch, so a cut lands only where *every* take is quiet — and mid-phrase in none of them. Cut each take to its own intervals and one take's early entrance becomes a clipped attack in another take's slice; cut all three to the union instead and every take loses exactly the silence they all share, nothing more.
+The first interval widens from 28160–116224 to 23040–120320. That widening is the point of the feature: the reported intervals are the **union** of each take's own non-silent stretches, merged where they touch, so a cut lands only where *every* take is quiet — and mid-phrase in none of them. Cut each take to its own intervals and one take's early entrance becomes a clipped attack in another take's slice; cut all three to the union instead and every take loses exactly the silence they all share, nothing more.
 
 `split-silence` never accepts `-o`; it only reports intervals, and passing `--output` exits with a usage error (exit code 2). `--write-takes PREFIX` is how the shared intervals become audio, one file per take per interval, named `PREFIX{take:02d}_{interval:03d}.wav` with both counters 1-based:
 
@@ -337,7 +337,7 @@ The first interval widens from 28160–116224 to 23040–121344. That widening i
 sonare split-silence take1.wav --input take2.wav --input take3.wav --write-takes comp --json
 ```
 
-Three takes and three shared intervals write nine files, `comp01_001.wav` through `comp03_003.wav`. Within one interval the files come out the same length across takes — 98304 samples for interval 1, on every take — even though the takes themselves do not line up sample-for-sample. A take that ends before the union's boundary is padded with silence for the rest of that stretch rather than sliced shorter, which is exactly what lets `comp01_001.wav`, `comp02_001.wav`, and `comp03_001.wav` sit side by side: same start, same length, three different performances of the same phrase.
+Three takes and three shared intervals write nine files, `comp01_001.wav` through `comp03_003.wav`. Within one interval the files come out the same length across takes — 97280 samples for interval 1, on every take — even though the takes themselves do not line up sample-for-sample. A take that ends before the union's boundary is padded with silence for the rest of that stretch rather than sliced shorter, which is exactly what lets `comp01_001.wav`, `comp02_001.wav`, and `comp03_001.wav` sit side by side: same start, same length, three different performances of the same phrase.
 
 What this does **not** do: it does not choose the best take, it does not crossfade between them, and it does not correct timing drift inside a phrase — a take that rushes or drags in the middle still rushes or drags after slicing. It hands you aligned slices to judge, not a finished comp.
 
@@ -356,7 +356,7 @@ sonare split-silence take1.wav --input take2.wav --input t3_44.wav --json
 The mismatch is rejected as an invalid parameter (exit code 3), the same class as an unrecognized `--params` key elsewhere on this page.
 
 ::: warning `--top-db` is measured from each take's own peak, not an absolute level
-A noisier take finds less silence than a clean one at the same `--top-db`, because the threshold sits relative to that take's own peak rather than a fixed dBFS floor. On `take1.wav`, a clean noise floor of about −99.9 dBFS (from `repair --detect`) leaves the three phrases with clear gaps between them. Raising that floor to about −69.1 dBFS — the file otherwise unchanged — collapsed the same take's result to a single interval spanning nearly the whole file: the threshold no longer found anywhere quiet enough to call silence. There is no fixed dB of headroom that guarantees a clean split; check `noise_floor_dbfs` first, and send a hot take through [Step 2](#step-2-—-let-the-assistant-choose)'s repair assistant before comping rather than lowering `--top-db` to compensate.
+A noisier take finds less silence than a clean one at the same `--top-db`, because the threshold sits relative to that take's own peak rather than a fixed dBFS floor. On `take1.wav` with Gaussian noise of standard deviation 0.0001 added (seed 1), `repair --detect` reads a noise floor of −81.5 dBFS and the three phrases keep clear gaps between them. With a standard deviation of 0.0003 the floor reads −71.2 dBFS, and the same take collapses to a single interval, `0` to `408000`, the whole file: the threshold no longer finds anywhere quiet enough to call silence. There is no fixed dB of headroom that guarantees a clean split; check `noise_floor_dbfs` first, and send a hot take through [Step 2](#step-2-—-let-the-assistant-choose)'s repair assistant before comping rather than lowering `--top-db` to compensate.
 :::
 
 ## Step 5 — Verify: run `--detect` again
@@ -369,16 +369,16 @@ sonare repair take-clean.wav --detect --json
 
 | Field | Before | After |
 |---|---|---|
-| `clip_sample_fraction` | 0.1139 | 0.000227 |
-| `click_count` | 1 | 0 |
-| `crackle_per_second` | 0.759 | 0 |
-| `hum_fundamental_prominence` | 18.62 | 7.94 |
-| `hum_harmonics` | 2 | 1 |
-| `noise_floor_dbfs` | −120.0 | −101.5 |
+| `clip_sample_fraction` | 0.01259 | 0.0000274 |
+| `click_count` | 6 | 0 |
+| `crackle_per_second` | 2.368 | 0 |
+| `hum_fundamental_prominence` | 23.98 | 2.15 |
+| `hum_harmonics` | 2 | 0 |
+| `noise_floor_dbfs` | −31.43 | −44.07 |
 
-Clipping, clicks, and crackle all clear to (near) zero. Hum prominence drops by more than half but does not reach zero, and `noise_floor_dbfs` actually rises — declip's LPC reconstruction and the two impulsive-repair stages leave a small broadband footprint of their own on samples they touched. Neither number is a bug in the run; they are what an honest repair looks like.
+Clipping falls to ten samples in one run, and clicks and crackle clear to zero. Hum prominence drops to 2.15, and the peak the detector still reports is at 61.5 Hz, not on a mains frequency, so it is the strongest of a flat set of candidates rather than a hum. `noise_floor_dbfs` falls as well, because the 50 Hz hum and its harmonics were what the low band was measuring. Neither number is zero, which is what an honest repair looks like.
 
-The residual prominence of 7.94 is below the assistant's own trigger of 10, so a second `repair` pass would not run dehum again. It is above the 6.0 that [Gate a Delivery in CI](./delivery-check.md) rejects a finished master at, so this take would still fail that gate if it shipped as is. Listen to the low end at the level the take will be played. If the hum is audible, the fix is at the source (a re-recording with the ground fixed) or a stronger notch with the cost the next section measures; if it is not, the gate threshold is yours to set for this delivery.
+The residual prominence of 2.15 is below the assistant's own trigger of 10, so a second `repair` pass would not run dehum again, and well below the 6.0 that [Gate a Delivery in CI](./delivery-check.md) rejects a finished master at. Listen to the low end at the level the take will be played; if a stage removed something you wanted, the field overrides below trade that against the residual.
 
 ::: info The detector is the point
 There is no separate "did it work" command. The same `--detect` that decided what to fix is what proves whether fixing it worked, on the same numbers, in the same units.
@@ -410,7 +410,7 @@ sonare repair take-raw.wav --preset voiceMemo -o take-voicememo.wav --json
 {"mode": "preset", "preset": "voiceMemo", "stages": ["repair.declip", "repair.denoise", "repair.dereverb"]}
 ```
 
-`voiceMemo` runs declip, denoise, and dereverb on this take — never dehum, because that is simply not a stage the preset carries, regardless of what the file measures. Re-detecting the result confirms it: `hum_fundamental_prominence` comes back at 20.5, essentially unchanged from the original 18.6. A preset is the right tool when you already know the source (a phone voice memo, a field recording) and want the same fixed treatment every time; it is the wrong tool when you want the file's own evidence to decide, which is what `--explain` on the measure-and-choose path is for.
+`voiceMemo` runs declip, denoise, and dereverb on this take — never dehum, because that is simply not a stage the preset carries, regardless of what the file measures. Re-detecting the result confirms it: `hum_fundamental_prominence` comes back at 24.45, essentially unchanged from the original 23.98. A preset is the right tool when you already know the source (a phone voice memo, a field recording) and want the same fixed treatment every time; it is the wrong tool when you want the file's own evidence to decide, which is what `--explain` on the measure-and-choose path is for.
 
 What a record-style restoration removes — and what it leaves for other stages — is audible below. The clip is a piano turnaround carrying the damage the restoration presets are routed at: mains hum, surface noise and hiss, sparse clicks and crackle. The stage applied here is the classical dereverberator alone, so what drops out is the noise bed and the smeared tails; the clicks and the hum stay, because they belong to declick and dehum.
 
@@ -422,7 +422,7 @@ What a record-style restoration removes — and what it leaves for other stages 
 sonare repair take-raw.wav -o take-clean-harm.wav --params repair.dehum.harmonics=6 --json
 ```
 
-Raising the harmonic count the notch chases from the assistant's own 2 to 6 barely moves the residual: `hum_fundamental_prominence` comes back at 7.88 against 7.94 for the default run. The detector is deterministic, so that 0.06 is a real difference, just too small to hear. `output_gain_db` changes too, to −3.4 dB against −1.87 dB, but that only says the repaired file peaks higher before the full-scale fit. A notch shifts the phase of everything near its frequency, which can move a waveform's peaks up or down; the number is not a measure of how much was changed. The cost of the extra notches is what they remove: every notch also takes out any real musical content at 100, 150, 200 Hz and so on, which on bass and kick drums is a great deal. This is the shape every "chase it to zero" instinct takes with `dehum`: a residual that barely moves, for content you can hear go missing. The [Repair and Input Controls](../glossary/mastering/repair.md) glossary page makes the same point about denoise — a little noise left in beats smeared drums and watery artifacts, and the same restraint applies to a notch filter eating into the fundamental it shares with real musical content.
+Raising the harmonic count the notch chases from the assistant's own 2 to 6 barely moves the residual: `hum_fundamental_prominence` comes back at 2.14 against 2.15 for the default run. The detector is deterministic, so that 0.01 is a real difference, just too small to hear. `output_gain_db` changes too, to −3.23 dB against −2.70 dB, but that only says the repaired file peaks higher before the full-scale fit. A notch shifts the phase of everything near its frequency, which can move a waveform's peaks up or down; the number is not a measure of how much was changed. The cost of the extra notches is what they remove: every notch also takes out any real musical content at 100, 150, 200 Hz and so on, which on bass and kick drums is a great deal. This is the shape every "chase it to zero" instinct takes with `dehum`: a residual that barely moves, for content you can hear go missing. The [Repair and Input Controls](../glossary/mastering/repair.md) glossary page makes the same point about denoise — a little noise left in beats smeared drums and watery artifacts, and the same restraint applies to a notch filter eating into the fundamental it shares with real musical content.
 
 The demo below shows that trade on a clean chord with a 50 Hz hum and three harmonics: change how the hum is removed and read the HUM score for each choice.
 
@@ -438,7 +438,7 @@ sonare declip take-raw.wav -o take-declip-only.wav --clip-threshold 0.95 --json
 ```
 
 ```json
-{"clip_threshold": 0.95, "lpc_order": 36, "iterations": 2, "lpc_blend": 0.65, "output": "take-declip-only.wav"}
+{"sample_rate": 48000, "samples": 364800, "clip_threshold": 0.95, "lpc_order": 36, "iterations": 2, "lpc_blend": 0.65, "output": "take-declip-only.wav"}
 ```
 
 `--clip-threshold` is how close to full scale a sample must sit before it counts as clipped (the repair assistant reaches for a more conservative default); `--lpc-order`, `--iterations`, and `--lpc-blend` control how aggressively the linear-predictive reconstruction rebuilds the missing waveform versus how much of the raw (clipped) signal it blends back in. Reach for this only after `--detect` shows declip is the one stage worth hand-tuning — it repairs nothing else.

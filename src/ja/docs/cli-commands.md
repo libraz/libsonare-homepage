@@ -283,6 +283,8 @@ sonare hpss music.mp3 -o separated --json
   Wrote: separated_harmonic.wav, separated_percussive.wav
 ```
 
+`--json` では、各成分のレベルは `harmonic_mean_abs` と `percussive_mean_abs`（`--with-residual` のときは `residual_mean_abs` も）で、いずれもその成分のサンプル絶対値の平均です。
+
 ### decompose-stems
 
 ミックスを非負値行列因子分解（NMF）の成分に分けます（[音源分離](./source-separation.md) を参照）。`hpss` のように倍音／打撃という固定の分け方をするのではなく、繰り返し現れるスペクトルパターンをデータから見つけて分離します。

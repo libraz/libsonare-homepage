@@ -66,9 +66,11 @@ Every module that renders a surround bus to something narrower (file loading, th
 | Any other channel count | Mono | Unweighted mean of the channels |
 | Any other channel count | Any other target | Refused: `InvalidParameter` |
 
-::: warning The fold is not normalized
-The fold is not scaled to stay inside full scale. A full-scale, in-phase 5.1 source reaches 2.41 in stereo and in mono, and a 7.1 source reaches 3.12 in stereo. `Audio.fromMemory` of a 5.1 file uses the same fold, so it can also exceed full scale. Normalize or limit the result before writing it.
+::: warning The fold is not normalized by default
+The fold is not scaled to stay inside full scale. A full-scale, in-phase 5.1 source reaches 2.41 in stereo and in mono, and a 7.1 source reaches 3.12 in stereo. `Audio.fromMemory` of a 5.1 file uses the same fold, so it can also exceed full scale. Pass `normalize` (below) or limit the result before writing it.
 :::
+
+Two options change the fold. `normalize` divides the output by the worst-case sum, so a source with every plane at full scale and in phase lands at exactly 1.0; the divisor is fixed by the layouts, not measured from the signal, so typical material comes out a few dB quieter. `includeLfe` folds the LFE plane into the front pair at -3 dB instead of dropping it, which raises the same worst case to 3.12 (5.1) or 3.83 (7.1). The options apply to a narrowing into stereo or mono; a 7.1 to 5.1 fold keeps the LFE plane either way. They are `{ normalize, includeLfe }` in JavaScript and `normalize=`, `include_lfe=` in Python; the C form is `sonare_downmix_ex`.
 
 <SonareDemo id="channel-downmix" />
 

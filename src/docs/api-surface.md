@@ -44,7 +44,7 @@ Feature families group APIs by the job they do, ordered by task. If you do not k
 - **PLP**: a feature that estimates the main rhythmic pulse.
 - **LUFS / LRA**: loudness and loudness-range metrics. See [LUFS](./glossary/lufs.md).
 - **VCA**: a group control that moves several strip levels together. See [Buses and Sends](./glossary/mixing/buses-sends.md).
-- **PFL / AFL**: pre-fader listen and after-fader listen, the two cue taps for auditioning a single track without changing the main output.
+- **PFL / AFL**: pre-fader listen and after-fader listen, the two cue taps for auditioning a single track. The live `process()` output folds an armed cue in; offline renders, bounces and freezes never include it.
 - **RIR**: room impulse response. See [Room Geometry and Volume](./glossary/acoustics/room-geometry.md).
 - **Equivalent-room estimation**: fitting a practical room model from audio. See [Inverse Room Estimation](./glossary/acoustics/inverse-estimation.md).
 - **Room morphing**: applying a target-room character as an effect.
@@ -142,7 +142,7 @@ The same call is spelled differently in each runtime. The rows below are the cal
 | Area | JavaScript | Python | C | CLI |
 |------|------------|--------|---|-----|
 | Edit one lane's sends or output bus | `setTrackSends`, `setTrackOutputBus` | `set_track_sends`, `set_track_output_bus` | `sonare_engine_set_track_sends`, `sonare_engine_set_track_output_bus` | no |
-| Automation ids for hosted instruments, lanes and buses | `resolveInstrumentAutomationId`, `resolveTrackLaneAutomationId`, `resolveBusAutomationId` | `resolve_instrument_automation_id`, `resolve_track_lane_automation_id`, `resolve_bus_automation_id` | `sonare_engine_resolve_instrument_automation_id`, `sonare_engine_resolve_track_lane_automation_id`, `sonare_engine_resolve_bus_automation_id` | no |
+| Automation ids for hosted instruments, lanes, buses and the master | `resolveInstrumentAutomationId`, `resolveTrackLaneAutomationId`, `resolveBusAutomationId`, `resolveMasterAutomationId` | `resolve_instrument_automation_id`, `resolve_track_lane_automation_id`, `resolve_bus_automation_id`, `resolve_master_automation_id` | `sonare_engine_resolve_instrument_automation_id`, `sonare_engine_resolve_track_lane_automation_id`, `sonare_engine_resolve_bus_automation_id`, `sonare_engine_resolve_master_automation_id` | no |
 | Check a sidechain binding without applying it | `canSetLaneSidechain`, `canSetBusSidechain`, `canSetMasterSidechain` | `can_set_lane_sidechain`, `can_set_bus_sidechain`, `can_set_master_sidechain` | `sonare_engine_can_set_lane_sidechain` and siblings | no |
 | Offline render and tail | `renderOffline`, `finishOfflineRender`, `bounceOffline`, `freezeOffline`, `tailSamples`, `graphLatencySamplesQ8` | `finish_offline_render`, `tail_samples`, `graph_latency_samples_q8` | `sonare_engine_tail_samples` | no |
 | Clip edits on a running engine | `upsertClip`, `removeClip` | `upsert_clip`, `remove_clip` | `sonare_engine_upsert_clip`, `sonare_engine_remove_clip` | no |

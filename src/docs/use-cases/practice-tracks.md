@@ -128,11 +128,11 @@ harmonic, percussive = split.harmonic, split.percussive
 
 ```json
 {"length": 553053, "sample_rate": 48000,
- "harmonic_energy": 0.026357, "percussive_energy": 0.006618,
+ "harmonic_mean_abs": 0.026357, "percussive_mean_abs": 0.006618,
  "harmonic": "kit_harmonic.wav", "percussive": "kit_percussive.wav"}
 ```
 
-Despite the name, `harmonic_energy` and `percussive_energy` are each layer's mean absolute sample value, a level averaged over the whole file. They tell you how the mix divided between the two layers, not how good the split sounds.
+`harmonic_mean_abs` and `percussive_mean_abs` are each layer's mean absolute sample value, a level averaged over the whole file. They tell you how the mix divided between the two layers, not how good the split sounds.
 
 ::: tip `-o` is a prefix, not a filename
 `-o kit` writes two files, `kit_harmonic.wav` and `kit_percussive.wav` — the value is a prefix that both output names are built from, not the name of either file. Passing `-o kit.wav` gives you `kit.wav_harmonic.wav`, which is legal but not what most people want.
@@ -142,7 +142,7 @@ The demo below runs the same split on a band phrase: the harmonic layer keeps th
 
 <SonareDemo id="hpss-separation" />
 
-The defaults (`--n-fft 2048`, `--hop-length 512`, a soft mask blended between the two components) are a reasonable starting point. Two options are worth turning by ear if the split has too much bleed for what you're practising against: `--hard-mask` assigns each time-frequency cell fully to whichever component dominates it, instead of blending — on this file it moved level from `harmonic_energy: 0.026357, percussive_energy: 0.006618` to `harmonic_energy: 0.028465, percussive_energy: 0.005901`. Listen to both: the hard mask leaves less bleed between the layers but makes the percussive layer sound more artificial. `--kernel-harmonic` and `--kernel-percussive` widen the median-filter kernels the split is built on, which can sharpen the separation on material with longer sustained notes.
+The defaults (`--n-fft 2048`, `--hop-length 512`, a soft mask blended between the two components) are a reasonable starting point. Two options are worth turning by ear if the split has too much bleed for what you're practising against: `--hard-mask` assigns each time-frequency cell fully to whichever component dominates it, instead of blending — on this file it moved level from `harmonic_mean_abs: 0.026357, percussive_mean_abs: 0.006618` to `harmonic_mean_abs: 0.028465, percussive_mean_abs: 0.005901`. Listen to both: the hard mask leaves less bleed between the layers but makes the percussive layer sound more artificial. `--kernel-harmonic` and `--kernel-percussive` widen the median-filter kernels the split is built on, which can sharpen the separation on material with longer sustained notes.
 
 Now the order. Running `hpss` on `song.wav` — the recording exactly as it was recorded, before any stretching or shifting — is not a stylistic choice. Time-stretching works by re-spacing short overlapping analysis frames, which smears transients across the frames next to them. `hpss`'s percussive detector looks for exactly the kind of short, sharp energy that smearing destroys. A hit that has already been spread across neighboring frames looks partly like a sustained sound, so part of it lands in the harmonic layer. Compare the two orders by ear:
 
@@ -155,7 +155,7 @@ sonare hpss order_b_slow.wav -o order_b --json
 Play `order_a_percussive.wav` (stretched afterwards, if you like) against `order_b_percussive.wav`. Listen to the drum attacks, and listen for drum snap left behind in `order_b_harmonic.wav`. That is where a smeared attack goes when the split no longer recognizes it as a hit. The harmonic layer survives either order, because sustained pitched material is what a [phase vocoder](../glossary/editing/phase-vocoder-stretch.md) is designed to preserve.
 
 ::: tip Why the JSON levels cannot settle this
-Stretching first gives `percussive_energy: 0.005323` against `0.006618`. That drop is not evidence of smearing. A 0.75 stretch spreads the same hits over a third more time, so a mean taken over the whole file falls even when every transient survives intact. Judge the order by listening to the attacks.
+Stretching first gives `percussive_mean_abs: 0.005323` against `0.006618`. That drop is not evidence of smearing. A 0.75 stretch spreads the same hits over a third more time, so a mean taken over the whole file falls even when every transient survives intact. Judge the order by listening to the attacks.
 :::
 
 ::: warning Split first, always

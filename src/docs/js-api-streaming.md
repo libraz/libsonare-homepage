@@ -44,6 +44,8 @@ sonare eq track.wav --type 2 --frequency-hz 8000 --gain-db 4 --q 0.7 -o eq.wav
 sonare filter track.wav --type hp --cutoff 80 -o filtered.wav
 ```
 
+`eq --type` takes the band type ordinal in the order of `EqBandType`, so `9` is the all-pass band on both CLIs. Linear-phase mode refuses an all-pass band by name.
+
 `nonFiniteDiscardCount()` counts the processed blocks in which a non-finite sample reached the EQ and its recursive filter state was discarded; see [Non-finite input](#non-finite-input).
 
 ## StreamingRetune

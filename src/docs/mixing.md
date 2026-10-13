@@ -345,7 +345,7 @@ mixer.compile();                             // a new strip is a topology change
 mixer.settle(roomMic);                       // see the next section
 ```
 
-`processStereo` takes one stereo pair per strip in strip order, so the new strip is one more input on the end — strips after the last pair you pass receive silence, and passing more pairs than `stripCount()` is rejected.
+`processStereo` takes one stereo pair per strip in strip order, so the new strip is one more input on the end — strips after the last pair you pass receive silence, and passing more pairs than `stripCount()` is rejected with an argument error naming both counts (`RangeError` in WASM and Node, `SonareValueError` in Python).
 
 ### Settle before an offline render: `settle`
 
@@ -502,7 +502,7 @@ Call `mixer.latencySamples()` to read the compiled graph's reported latency when
 
 In the WASM package, `processStereo` allocates a fresh result array on every call. That is fine offline but forbidden inside a realtime audio callback. For those tight loops, use one of these allocation-free paths instead:
 
-- **`processStereoInto(inL, inR, outL, outR)`** — writes into caller-owned arrays.
+- **`processStereoInto(inL, inR, outL, outR)`** — writes into caller-owned arrays. It accepts fewer input channels than strips and leaves the remaining strips silent, as `processStereo` does; more channels than strips is a `RangeError`.
 - **`createRealtimeBuffer()`** — returns reusable WASM-heap input/output views; fill the inputs, call `process()`, read `outLeft`/`outRight`, repeat. The views are owned by the mixer and become invalid after `delete()`.
 
 When the host stops sending strip inputs, lookahead, reverb, and delay processors still hold audio in flight. Call `mixer.tailSamples()` to read the maximum processor-tail length (samples) in the compiled graph, then call `mixer.drainTailStereo(numSamples)` to render a zero-input block that flushes that tail into the master. `drainTailStereo` renders one block — it does not loop — and `numSamples` is bounded by the block size the mixer was built with, so drain in block-sized chunks until you have pulled `tailSamples()` frames:

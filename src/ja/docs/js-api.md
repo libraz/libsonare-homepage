@@ -54,7 +54,7 @@ pnpm add @libraz/libsonare
 |----------|----------------|--------------|----------|
 | メイン | `@libraz/libsonare` | 解析、エフェクト、マスタリング、ミキシング、プロジェクト、リアルタイムエンジンの全 API | ほとんどの場合 |
 | 解析 | `@libraz/libsonare/analysis` | 解析と特徴量のみ。マスタリング、ミキシング、リアルタイム、プロジェクトの API は含まれません | 解析だけで足りるときに、ダウンロードを最小にしたい |
-| Worklet | `@libraz/libsonare/worklet` | AudioWorklet 側のランタイム（`EXPECTED_ABI_VERSION` を含む） | `AudioWorkletGlobalScope` 内で動くコード |
+| Worklet | `@libraz/libsonare/worklet` | AudioWorklet 側のランタイム（`EXPECTED_ABI_VERSION`、`engineMixerMasterTarget`、`ENGINE_MIXER_PARAM_FADER_DB`、`ENGINE_MIXER_PARAM_PAN`、`SONARE_METER_RING_PROTOCOL_VERSION` を含む） | `AudioWorkletGlobalScope` 内で動くコード |
 | Worker | `@libraz/libsonare/worker` | `OfflineWorkerClient` の背後にあるオフライン Worker スクリプト | 解析をメインスレッド外で実行する（[Worker](./wasm-advanced.md#web-worker-の使用)を参照） |
 | ボーカル編集 Worker | `@libraz/libsonare/vocal-edit-worker` | `VocalEditWorkerClient` の背後にある Worker スクリプト | ボーカル編集のドラフトとレンダリングジョブをメインスレッド外で実行する |
 
@@ -156,6 +156,8 @@ const mastered = masterAudio({
 const legacyBpm = detectBpm(samples, sampleRate);
 ```
 
+リクエストオブジェクトは、そのエントリポイントが宣言していないキーを拒否します。`detectBpm({ samples, sampleRate, bpmMin: 90 })` は `TypeError: detectBpm: unknown request key 'bpmMin'` を投げ、入れ子のオブジェクトの中に置くべきキーなら置き場所も示します（`'loudness' belongs under 'config'`）。入れ子のオプションオブジェクトや位置引数形式のオプション袋も、未知のオプションを同じように拒否します。テンポの範囲指定は `detectBpm` ではなく `analyzeBpm` と `analyze` のものです。
+
 リクエストのフィールド名は Node と WASM で同じ camelCase です。Python は JavaScript 形式の options object ではなく、従来どおりキーワード引数（`detect_bpm(samples, sample_rate=...)`）を使います。
 
 ### 長い処理をキャンセルする
@@ -239,7 +241,7 @@ try {
 | キャンセルされた呼び出し | `SonareError` `Cancelled`（8） |
 | `null` や型の違う引数（`Float32Array` ではない `samples` など） | `TypeError` |
 | 空または非有限のオーディオ、`[8000, 384000]` の整数ではない `sampleRate`、小数の整数引数、長さが揃うべき 2 つのバッファの不一致、バインディングが解決する名前の未知の値（`keyRoot` など） | `RangeError` |
-| NUL を含む文字列を、それを検査するエントリポイントへ渡した | `RangeError` |
+| NUL を含む文字列を、それを検査するエントリポイント（`mixingScenePresetJson`、`realtimeVoiceChangerPresetJson`、`validateRealtimeVoiceChangerPresetJson`、`realtimeVoiceChangerPresetConfig`、`noteToHz`、`Project.fromJson`）へ渡した | フィールド名を挙げた `RangeError` |
 
 `Mixer.fromSceneJson` は、JSON として壊れているシーンには `InvalidFormat`、ミキサーが拒否したフィールドには `InvalidParameter` を報告します。どのフィールドが問題かは、`failed to build mixer from scene JSON: <内側のメッセージ>` の末尾で分かります。
 
@@ -451,7 +453,7 @@ await init();
 | 内蔵シンセサイザー（NativeSynth）のボイスを選ぶ | `synthPresetNames()`、`synthPresetPatch(name)`、`engine.setSynthInstrument(...)` | [内蔵シンセサイザー](./native-synth.md) |
 | SoundFont で再生 | `project.loadSoundFont(bytes)` / `engine.loadSoundFont(bytes)` | [SoundFont プレイヤー](./soundfont-player.md) |
 | ライブエンジンへ MIDI クリップをサンプル精度でスケジュールする | `engine.setMidiClips(...)`、`engine.sampleAtPpq(ppq)` | [リアルタイムエンジン](./realtime-engine.md#midi-クリップスケジューリングと-sampleatppq) |
-| トラック単位のキューモニタリングを設定する | `engine.setTrackMonitorMode(laneIndex, 'off' | 'pfl' | 'afl')` | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
+| トラック単位のキューモニタリングを設定する（ライブの `process()` 出力では聞こえ、オフラインレンダー、バウンス、フリーズには含まれない） | `engine.setTrackMonitorMode(laneIndex, 'off' | 'pfl' | 'afl')` | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
 | エンジンのトラックをレーン・バス・センド・ストリップでライブミックスする | `engine.setTrackLanes(...)`、`engine.setTrackBuses(...)`、ストリップ JSON セッター | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
 | トラックを外部 MIDI ハードウェアへ送り、必要ならクロック／トランスポートも転送する | `engine.setMidiDestinationExternal(...)`、`engine.setExternalMidiClockEnabled(...)`、`engine.drainExternalMidi(...)`。Worklet ファサードでは `onMidiOut(...)` | [リアルタイムエンジン](./project-editing-midi.md#トラックを外部-midi-機器へ送る) |
 | ハードウェア／Web MIDI デバイスからエンジンへ演奏イベントを送る | `bindWebMidi(engine, ...)` <Badge type="info" text="ブラウザ専用" /> | [MIDI 入力](./midi-input.md) |

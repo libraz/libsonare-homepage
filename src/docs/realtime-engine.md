@@ -279,7 +279,7 @@ PFL behaves like a pre-fader send and AFL like a post-fader send. The demo below
   caption="PFL listens before the fader, gate, and pan, so it stays audible on a muted lane; AFL listens after them."
 />
 
-The monitor bus sums every lane with a PFL/AFL tap. The ordinary `process(...)` path folds that bus into the main output for compatibility, so a cued lane is heard there twice (at unity, a PFL lane comes out 6 dB louder) and a muted lane under PFL still reaches the main output. Use `processWithMonitor(...)` when the program output and cue output must stay separate:
+The monitor bus sums every lane with a PFL/AFL tap. The ordinary `process(...)` path folds that bus into the main output for compatibility, so a cued lane is heard there twice (at unity, a PFL lane comes out 6 dB louder) and a muted lane under PFL still reaches the main output. Use `processWithMonitor(...)` when the program output and cue output must stay separate. Offline renders, bounces, stem bounces and freezes contain the program output only, whatever the PFL/AFL or solo monitor state:
 
 ```typescript
 engine.setTrackMonitorMode(0, 'pfl');
@@ -391,7 +391,7 @@ engine.setAutomationLane(1, [
 engine.setParameter(1, 0.5);
 ```
 
-A track, bus, or master fader and a track pan can be automated without registering a parameter. On the raw `RealtimeEngine`, declare the lane and bus first (`setTrackLanes`, `setTrackBuses`), then resolve the id:
+A track, bus, or master fader, a track or master pan, and the master width can be automated without registering a parameter. On the raw `RealtimeEngine`, declare the lane and bus first (`setTrackLanes`, `setTrackBuses`), then resolve the id:
 
 ```typescript
 const faderId = engine.resolveTrackLaneAutomationId(1, 'faderDb'); // or 'pan'
@@ -400,7 +400,7 @@ if (faderId < 0 || busId < 0) throw new Error('declare the lane and bus first');
 engine.setAutomationLane(faderId, [{ ppq: 0, value: 0 }, { ppq: 8, value: -12 }]);
 ```
 
-Both return `-1` when the track has no lane or the bus is not configured (Python raises `SonareError`: `resolve_track_lane_automation_id`, `resolve_bus_automation_id`; C: `sonare_engine_resolve_track_lane_automation_id`, `sonare_engine_resolve_bus_automation_id`). The id names the track or bus, not its position, so it keeps driving that strip across `setTrackLanes` and `setTrackBuses` reorders and the removal of other strips; once its own track or bus is removed it applies nothing. The master fader, pan, and width ids are fixed and need no resolution; on the `SonareEngine` facade `automationParamId('master', 'faderDb' | 'pan')` returns them. The reserved mixer id namespace (`0x4D58xxxx`) accepts only master ids: `setParameter`, `setParameterSmoothed`, and `setAutomationLane` refuse any other id in it with `InvalidParameter`, so take track and bus ids only from the resolvers or `automationParamId`, never by computing them. On the `SonareEngine` worklet API, `automationParamId(target, 'faderDb' | 'pan')` and `busAutomationParamId(busId)` return the same kind of id, declaring the mixer lane or bus on first use.
+Both return `-1` when the track has no lane or the bus is not configured (Python raises `SonareError`: `resolve_track_lane_automation_id`, `resolve_bus_automation_id`; C: `sonare_engine_resolve_track_lane_automation_id`, `sonare_engine_resolve_bus_automation_id`). The id names the track or bus, not its position, so it keeps driving that strip across `setTrackLanes` and `setTrackBuses` reorders and the removal of other strips; once its own track or bus is removed it applies nothing. The master strip always exists, so `resolveMasterAutomationId(paramName)` takes `'faderDb'`, `'pan'` or `'width'` and its id never goes stale (WASM/Node return `-1` for any other name; Python raises `SonareError`: `resolve_master_automation_id`; C: `sonare_engine_resolve_master_automation_id`). On the `SonareEngine` facade `automationParamId('master', 'faderDb' | 'pan')` returns the fader and pan ids. The reserved mixer id namespace (`0x4D58xxxx`) accepts only master ids: `setParameter`, `setParameterSmoothed`, and `setAutomationLane` refuse any other id in it with `InvalidParameter`, so take track and bus ids only from the resolvers or `automationParamId`, never by computing them. On the `SonareEngine` worklet API, `automationParamId(target, 'faderDb' | 'pan')` and `busAutomationParamId(busId)` return the same kind of id, declaring the mixer lane or bus on first use.
 
 Insert parameters use the same automation-lane mechanism, but first need a reserved id. Call `resolveTrackInsertAutomationId(trackId, insertIndex, paramName)`, `resolveMasterInsertAutomationId(...)`, or `resolveBusInsertAutomationId(...)`, then pass the returned id to `setAutomationLane`, `setParameter`, or `setParameterSmoothed`. `insertIndex` addresses the strip's combined pre-then-post insert sequence, and `paramName` is the JSON key reported by `masteringInsertParamInfo`. WASM/Node return `-1` for an unknown strip, insert, or key; Python raises `SonareError`.
 

@@ -415,7 +415,7 @@ engine.destroy();
 
 ### Offline render, bounce, and freeze
 
-`renderOffline`, `bounceOffline`, and `freezeOffline` run on the facade's main-thread engine and block the calling thread for the whole render, so run long jobs where blocking is acceptable. OPFS-streamed clips are paged in for the span first. A completed render restores the mirror's transport position; with `finalize: false`, the position advances across chunks and is restored only by the final chunk or `finishOfflineRender()`. `bounceOffline` and `freezeOffline` take the options of the raw engine's methods of the same name and return its results; see [Realtime Engine](./realtime-engine.md).
+`renderOffline`, `bounceOffline`, and `freezeOffline` run on the facade's main-thread engine and block the calling thread for the whole render, so run long jobs where blocking is acceptable. OPFS-streamed clips are paged in for the span first. The renders contain the program output only; an armed PFL/AFL cue is never mixed in. A completed render restores the mirror's transport position; with `finalize: false`, the position advances across chunks and is restored only by the final chunk or `finishOfflineRender()`. `bounceOffline` and `freezeOffline` take the options of the raw engine's methods of the same name and return its results; see [Realtime Engine](./realtime-engine.md).
 
 | Call | Behavior |
 |------|-----------|

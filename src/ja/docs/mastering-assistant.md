@@ -241,7 +241,7 @@ if (samples.length === 0) {
 
 プロファイルを土台に、そのままレンダリングできるマスタリングチェーンと、人が読める根拠を提案します。第 3 引数に出発点のプリセットと意図（`preset`、`targetLufs`、`ceilingDb` など）を渡します。
 
-受け付けるキーは `preset`、`targetPlatform`/`target_platform`、`targetLufs`/`target_lufs`、`ceilingDb`/`ceiling_db`、`enableRepair`/`enable_repair`、`preferStreamingSafe`/`prefer_streaming_safe`、`speechMonoAmount`/`speech_mono_amount` です。`preset` と `targetPlatform` は名前を渡し、それ以外は数値または真偽値を渡します。
+受け付けるキーは `preset`、`targetPlatform`/`target_platform`、`targetLufs`/`target_lufs`、`ceilingDb`/`ceiling_db`、`enableRepair`/`enable_repair`、`preferStreamingSafe`/`prefer_streaming_safe`、`speechMonoAmount`/`speech_mono_amount` です。`preset` と `targetPlatform` は名前を渡し、それ以外は数値または真偽値を渡します。これ以外のキーは名前を挙げて拒否され（`unknown mastering assistant param: bogus`）、サンプルを載せるリクエストオブジェクトの未知のキーは `TypeError` になります。`enableRepair` を指定しても、きれいなパーカッションでハム、クラックル、クリックが報告されることはありません。繰り返すキックはハムの候補にならず、クラックルとクリックは局所的な過渡のレベルを上回る位置でだけ数えられます。
 
 ::: details 任意の意図キーの働き
 `preset` は出発点にするチェーンを選び、省略時は `streaming` になります。アシスタントは音源からプリセットを推測しません。ジャンル用のプリセットでなければならず、5 つのレストレーション用プリセットは拒否されます。`targetPlatform` は、固有の規則があるプラットフォームについて、対応する値を明示していない場合だけラウドネスを適用します。受け付ける名前の一覧は `masteringPlatformNames()` で取得できます。

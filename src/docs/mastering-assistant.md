@@ -241,7 +241,7 @@ A `crestFactorDb` of 5.8 is not "bad" — it just describes the signal. Use the 
 
 Builds on the profile to propose a ready-to-render mastering chain, plus a human-readable rationale. The third argument carries your intent and the base preset (`preset`, `targetLufs`, `ceilingDb`, …).
 
-Accepted keys are `preset`, `targetPlatform`/`target_platform`, `targetLufs`/`target_lufs`, `ceilingDb`/`ceiling_db`, `enableRepair`/`enable_repair`, `preferStreamingSafe`/`prefer_streaming_safe`, and `speechMonoAmount`/`speech_mono_amount`. `preset` and `targetPlatform` take names; the other keys are numeric or boolean.
+Accepted keys are `preset`, `targetPlatform`/`target_platform`, `targetLufs`/`target_lufs`, `ceilingDb`/`ceiling_db`, `enableRepair`/`enable_repair`, `preferStreamingSafe`/`prefer_streaming_safe`, and `speechMonoAmount`/`speech_mono_amount`. `preset` and `targetPlatform` take names; the other keys are numeric or boolean. Any other key is refused by name (`unknown mastering assistant param: bogus`), and an unknown key on the request object that carries the samples is a `TypeError`. With `enableRepair`, the assistant stops reporting hum, crackle and clicks on clean percussion: a repeating kick is not a hum candidate, and crackle and clicks are counted only above the local transient level.
 
 ::: details What the optional intent keys do
 `preset` chooses the chain to start from and defaults to `streaming`; the assistant never infers it from the audio. It must be a genre preset: the five restoration presets are refused. `targetPlatform` applies its loudness only to values you have not supplied, and only for platforms with an explicit rule; `masteringPlatformNames()` lists every accepted name.

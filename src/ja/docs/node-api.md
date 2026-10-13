@@ -167,7 +167,7 @@ try {
 
 ### 全チャンネルのデコード
 
-`Audio.fromMemory(data)` と `Audio.fromFile(path)` はマルチチャンネルのソースをモノラルに畳み込みます。`decodeChannels(data)` はバイト列を一度デコードして全チャンネルを保持し、`{ sampleRate, channels }` を返します。`channels` は元のチャンネル順（5.1 は L R C LFE Ls Rs）の `Float32Array` の配列です。`downmix(channels, targetLayout)` は、デコーダーと同じ ITU-R BS.775 の規則（センターとサラウンドを -3 dB、LFE は除外）で、より狭いレイアウト（`0` モノラル、`1` ステレオ、`2` 5.1、`3` 7.1）へ折りたたみます。アップミックスはできません。
+`Audio.fromMemory(data)` と `Audio.fromFile(path)` はマルチチャンネルのソースをモノラルに畳み込みます。`decodeChannels(data)` はバイト列を一度デコードして全チャンネルを保持し、`{ sampleRate, channels }` を返します。`channels` は元のチャンネル順（5.1 は L R C LFE Ls Rs）の `Float32Array` の配列です。`downmix(channels, targetLayout)` は、デコーダーと同じ ITU-R BS.775 の規則（センターとサラウンドを -3 dB、LFE は除外）で、より狭いレイアウト（`0` モノラル、`1` ステレオ、`2` 5.1、`3` 7.1）へ折りたたみます。アップミックスはできません。省略可能な第 3 引数 `{ normalize, includeLfe }` は、最悪ケースでもフルスケール以下に収まるよう折りたたみをスケールし（`normalize`、既定 `false`）、LFE を捨てずに -3 dB でフロントペアへ加えます（`includeLfe`、既定 `false`）。`normalize` なしの折りたたみはフルスケールを超えることがあります。
 
 ```typescript
 import { decodeChannels, downmix } from '@libraz/libsonare-native';
@@ -204,7 +204,7 @@ function render() {
 
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
-| `melToStft(power, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `InverseStftResult` | メルスペクトログラムから線形 STFT パワーへ |
+| `melToStft(power, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `InverseStftResult` | メルスペクトログラムから線形 STFT 振幅（`magnitude`）へ |
 | `melToAudio(power, nMels, nFrames, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | メルスペクトログラムから音声へ（Griffin-Lim） |
 | `mfccToMel(coefficients, nMfcc, nFrames, nMels?, lifter?)` | `InverseMelResult` | MFCC 係数からメルスペクトログラムへ |
 | `mfccToAudio(coefficients, nMfcc, nFrames, nMels?, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?, lifter?)` | `Float32Array` | MFCC 係数から音声へ。`lifter` の既定値は 0 |
@@ -420,7 +420,7 @@ changer.destroy();
 | WASM | `engineCapabilities()` を追加し、構築前に ABI 互換性を確認します。キャプチャバッファは正規形の `setCaptureBuffer(numChannels, capacityFrames)` で設定します。 |
 | Node ネイティブ | パッケージの読み込み時にパックされた ABI を、構築時にエンジンの ABI を確認し（`AbiMismatch`）、`engineAbiVersion()` を公開します。ブラウザ向けの `engineCapabilities()` ヘルパーはありません。キャプチャバッファは WASM と同じ正規形 `setCaptureBuffer(numChannels, capacityFrames)` に加えて、後方互換のために非推奨の `setCaptureBuffer(channels: Float32Array[])` も残しています。 |
 
-`Project.create()` は空のプロジェクトを作成します。`setAssistSidecar(...)` と `assistSidecars()` でモジュール固有の不透明なメタデータを保持でき、`ProjectAutomationTargetKind` と `targetKind` でオートメーションレーンの対象種別を付けられます。`RealtimeEngine.setTrackMonitorMode(laneIndex, mode, renderFrame?)` は `'off'`、`'pfl'`（pre-fader listen＝フェーダー前で試聴）、`'afl'`（after-fader listen＝フェーダー後で試聴）、および対応する数値序数を受け取ります。`renderFrame` を省略すると即時に適用されます。トラック／ミキサーのパン則セッターは、下記の `PanLawInput` エイリアスを受け取ります。
+`Project.create()` は空のプロジェクトを作成します。`setAssistSidecar(...)` と `assistSidecars()` でモジュール固有の不透明なメタデータを保持でき、`ProjectAutomationTargetKind` と `targetKind` でオートメーションレーンの対象種別を付けられます。`RealtimeEngine.setTrackMonitorMode(laneIndex, mode, renderFrame?)` は `'off'`、`'pfl'`（pre-fader listen＝フェーダー前で試聴）、`'afl'`（after-fader listen＝フェーダー後で試聴）、および対応する数値序数を受け取ります。`renderFrame` を省略すると即時に適用されます。有効なキューは `process()` と `processPrepared()` が単一の出力へ畳み込むため、そこではタップしたレーンが二重に聞こえます。オフラインレンダー、バウンス、ステムバウンス、フリーズはモニターやソロの状態にかかわらずプログラム出力だけを含みます。トラック／ミキサーのパン則セッターは、下記の `PanLawInput` エイリアスを受け取ります。
 
 ### 状態を持つオブジェクトの追加メソッド
 
@@ -433,7 +433,7 @@ changer.destroy();
 | `RealtimeEngine` のキャプチャとページ供給 | `countInEndSample(startSample, bars)` はテンポマップからカウントインの終了サンプルを求めます。`createFileClipPageProvider(path, options)` はファイルからページを供給するプロバイダーを作成します。使用後にプロバイダーを破棄してください。 |
 | `RealtimeEngine` のルーティング | `setTrackSends(trackId, sends)` と `setTrackOutputBus(trackId, busId)` は、1 本のレーンのセンドまたは出力バスを置き換えます（`busId` が 0 ならマスターミックス）。トラックは `setTrackLanes` で設定したレーン一覧にあらかじめ含まれている必要があります。`canSetLaneSidechain(trackId, insertIndex, sourceTrackId)`、`canSetBusSidechain(...)`、`canSetMasterSidechain(...)` は、何も変更せずに `SidechainCheck` を返します。 |
 | `RealtimeEngine` のオフラインとクリップ | `primeOfflineParameters(numChannels, blockSize)`、`resetProcessorState(renderFrame?)`、`tailSamples()`、`graphLatencySamplesQ8()`（1/256 サンプル単位のレイテンシ）はオフラインレンダリングを支えます。`upsertClip(clip)` と `removeClip(clipId)` はクリップをその場で編集します。 |
-| `RealtimeEngine` のオートメーション ID | `resolveTrackLaneAutomationId(trackId, 'faderDb' \| 'pan')` と `resolveBusAutomationId(busId, 'faderDb')` は、オートメーションの対象にする ID を返します。 |
+| `RealtimeEngine` のオートメーション ID | `resolveTrackLaneAutomationId(trackId, 'faderDb' \| 'pan')` と `resolveBusAutomationId(busId, 'faderDb')` は、オートメーションの対象にする ID を返します。`resolveMasterAutomationId('faderDb' \| 'pan' \| 'width')` はマスターストリップについて同じことを行い、それ以外の名前では `-1` を返します。 |
 | `RealtimeEngine` の MIDI | `pushMidiProgram(destinationId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)` はプログラムチェンジをキューに積みます。 |
 | `Mixer` のルーティング | `setOutputBus(sourceId, busId)` はソースをバスへルーティングします。`flushMeters()` は保留中の True Peak 区間をメータースナップショットへ反映します。オフラインレンダリングの最後のブロックのあとに呼びます。 |
 | `Project` のバウンスとソース | `bounceWithInstruments(instruments, options?)` と `bounceWithInstrument(instrument, options?)` は外部楽器を使ってバウンスします。`unresolvedAudioSources()` は、まだデコード済み PCM が必要な音声ソースの記述子を、`unresolvedAudioSourceIds()` と同じ順序で返します。 |

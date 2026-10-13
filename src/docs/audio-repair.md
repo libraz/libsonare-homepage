@@ -34,6 +34,8 @@ Unwanted silence at the start or end is a separate utility, `masteringRepairTrim
 
 The detectors report what their corresponding algorithm measures. They are not a universal damage score, and a non-zero result still needs an audition. In particular, a full-scale sine or a square wave can look clipped to a time-domain detector even when it was intentional.
 
+Drum hits are not read as defects. A hum candidate has to be a stationary line through most of each analysis frame, so a repeating kick reports `fundamentalProminence` 1.0 (a linear ratio, where 1.0 means no peak); crackle samples and click runs are counted only where they stand above the local transient level. A 6 s loop of twelve synthetic kicks at 44.1 kHz measured prominence 1.0, a click `count` of 0 and a crackle `sampleCount` of 0. The repair stages themselves still act inside transients, so `replacedSamples` and `repairedRuns` can exceed the detected counts.
+
 ## Measure before repair
 
 These detectors are exported by the WebAssembly package. `samples` below is a decoded mono `Float32Array`; keep the original sample rate instead of resampling only for the detector.

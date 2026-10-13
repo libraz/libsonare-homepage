@@ -203,7 +203,7 @@ C ABI のルーム音響では、次の設定を公開します。
 
 - `SonareRirSynthConfig`: 形状、吸音率、`material_preset`、`absorption_bands`／`scattering_bands`、`ism_order`、`seed`、`max_seconds`、`mixing_time_ms`、`crossfade_ms`、`late_model`、空気吸収のフィールド群（[大空間での空気吸収](./cpp-api-effects.md#大空間での空気吸収)を参照）。
 - 壁材の優先順位: 0 でない `material_preset`（`SONARE_MATERIAL_PRESET_*`）が最優先で、次が NULL でない `absorption_bands`、最後がスカラーの `absorption` です。
-- `SonareRoomEstimateConfig`: アスペクト比と吸音率の事前条件、`reference_absorption`、`min_decay_db`、`noise_floor_margin_db`、`prefer_eyring`、`n_octave_bands`、解析 `mode`。`reference_absorption` は拒否されずに [0.01, 0.99] へクランプされ、推定される体積はその 3 乗に比例します。
+- `SonareRoomEstimateConfig`: アスペクト比と吸音率の事前条件、`reference_absorption`、`min_decay_db`、`noise_floor_margin_db`、`prefer_eyring`、`n_octave_bands`、解析 `mode`。`reference_absorption` が 0 ならライブラリの既定値（0.15）が使われ、それ以外の値は拒否されずに [0.01, 0.99] へクランプされ、推定される体積はその 3 乗に比例します。
 - 解析 `mode`: `SONARE_ACOUSTIC_MODE_AUTO`、`SONARE_ACOUSTIC_MODE_BLIND`、`SONARE_ACOUSTIC_MODE_IMPULSE_RESPONSE`。
 
 C ABI でのサラウンド／マルチチャンネルのエンジンバスでは、次を扱えます。
@@ -216,7 +216,7 @@ C ABI のリアルタイム・インサートオートメーションと外部 M
 
 - トラック、マスター、バスの各ストリップには、インサートのバイパスとリアルタイム安全なパラメータを変更する関数があります。パラメータ名には `sonare_mastering_insert_param_info` が返す JSON キーを使います。未対応またはリアルタイム安全でない名前には `SONARE_ERROR_INVALID_PARAMETER` が返ります。
 - `sonare_engine_resolve_{track,master,bus}_insert_automation_id` は、インサートのパラメータ名を `sonare_engine_set_automation_lane`、`sonare_engine_set_parameter`、`sonare_engine_set_parameter_smoothed` が受け取る数値 id に変換します。共通のランプ時間は `sonare_engine_set_param_smoothing_ms` で変更でき、既定は 20 ms、`0` は即時変更です。
-- `sonare_engine_push_midi_program(engine, destination_id, group, channel, program, bank_valid, bank_msb, bank_lsb, render_frame)` と `sonare_engine_push_midi_input_program(engine, group, channel, program, bank_valid, bank_msb, bank_lsb, port_time_samples)` は、任意のバンク付きのライブプログラムチェンジを 1 つの MIDI 2.0 Program Change として詰めて送ります。受け側自身の条件がそのまま適用されます。`bank_valid` が 0 のまま非ゼロのバンクを渡すと `SONARE_ERROR_INVALID_PARAMETER` です。受け側ごとの扱いは次のとおりです。
+- `sonare_engine_push_midi_program(engine, destination_id, group, channel, program, bank_valid, bank_msb, bank_lsb, render_frame)` と `sonare_engine_push_midi_input_program(engine, group, channel, program, bank_valid, bank_msb, bank_lsb, offset_in_block_samples)` は、任意のバンク付きのライブプログラムチェンジを 1 つの MIDI 2.0 Program Change として詰めて送ります。受け側自身の条件がそのまま適用されます。`bank_valid` が 0 のまま非ゼロのバンクを渡すと `SONARE_ERROR_INVALID_PARAMETER` です。受け側ごとの扱いは次のとおりです。
 
   | 受け側 | プログラムチェンジに従うか |
   |--------|---------------------------|
@@ -319,6 +319,7 @@ SonareError sonare_mastering_preset_params_json(const char* preset, char** json_
 | `sonare_engine_graph_latency_samples_q8(engine, &latency_q8)` | 処理レイテンシ（1/256 サンプル単位）。テレメトリレコードが持つ値と同じです |
 | `sonare_engine_can_set_lane_sidechain`, `sonare_engine_can_set_bus_sidechain`, `sonare_engine_can_set_master_sidechain` | 対応する `set_*_sidechain` が接続を受理するかを、何も変更せずに報告します。`out_refusal` に `SonareSidechainRefusal` が入ります。`NONE`（0）、`INVALID_TARGET`、`INSERT_OUT_OF_RANGE`、`UNDECLARED_SOURCE`、`INVALID_SOURCE_KIND`、`SELF_KEY`、`CYCLE`、`TABLE_FULL`、`PLAN_REFUSED`（1〜8）です |
 | `sonare_engine_resolve_track_lane_automation_id(engine, track_id, "faderDb" または "pan", &id)`, `sonare_engine_resolve_bus_automation_id(engine, bus_id, "faderDb", &id)` | 位置ではなくトラックまたはバスを指す、予約済みのオートメーション ID。`sonare_engine_set_track_lanes` や `sonare_engine_set_track_buses` で並べ替えても対象を追い続け、対象が削除されると未知のターゲットとして失敗します |
+| `sonare_engine_resolve_master_automation_id(engine, "faderDb"・"pan"・"width", &id)` | マスターストリップに対する同じ ID。マスターは常に存在するため、ID が古くなることはありません。それ以外の名前は `SONARE_ERROR_INVALID_PARAMETER` で、`id` は 0 になります |
 
 準備時より大きなブロックサイズでのオフラインレンダリング、バウンス、フリーズ、プリロールは `SONARE_ERROR_INVALID_PARAMETER` で拒否されます。`sonare_engine_set_track_strip_json`、`sonare_engine_set_bus_strip_json`、`sonare_engine_set_master_strip_json` は、シーンリーダーが読まないキーを名指しして拒否します（`unknown strip key 'strips[0].faderDB'`）。`$` または `x-` で始まるキーと snake_case の別名は、引き続き受け付けられます。
 

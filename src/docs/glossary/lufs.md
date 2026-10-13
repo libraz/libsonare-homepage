@@ -30,7 +30,7 @@ LUFS is defined by ITU-R BS.1770. It is a mean-square (power) measurement, so it
 |------|--------------|
 | K-weighting | Each channel passes through a high-shelf filter that lifts the upper frequencies by about 4 dB (the effect of the head on incoming sound) and a high-pass that discounts deep bass, where hearing is less sensitive. |
 | Mean square per block | The weighted signal is squared and averaged over 400 ms blocks that start every 100 ms (75% overlap). |
-| Channel sum | The channels' block powers are added. Left, right, and center count once each, surround channels count about 1.41 times (+1.5 dB), and the LFE channel is left out. |
+| Channel sum | The channels' block powers are added. Left, right, and center count once each, and the LFE channel is left out. A surround channel counts about 1.41 times (+1.5 dB) when its loudspeaker sits to the side (the 5.1 surrounds and the 7.1 side pair), and once when it sits behind (the 7.1 back pair and the quad surrounds). |
 | Decibels | `loudness = -0.691 + 10 · log10(sum)`. The -0.691 cancels the K-weighting's gain at 1 kHz. |
 | Gating and averaging | For the integrated reading, the gates below decide which blocks count, and the survivors are averaged as power. |
 

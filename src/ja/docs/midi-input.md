@@ -122,13 +122,13 @@ engine.setSf2Instrument({ gain: 1 }, 1);
 | `pushMidiSysex` | 1 つのデスティネーション | `renderFrame?` | `0xF0` から `0xF7` までの完全なフレーム（1〜512 バイト） |
 | `pushMidiUmp` | 1 つのデスティネーション | `renderFrame?` | 1〜4 ワード。MT `0x4` は値の幅を保ち、MT `0x3` / `0x5` は拒否します |
 | `pushMidiPanic` | すべてのデスティネーション | `renderFrame?` | 発音中のノートをすべて解放します |
-| `pushMidiInput*`（`NoteOn`、`NoteOff`、`Cc`、`PitchBend`、`ChannelPressure`、`PolyPressure`、`Program`、`Ump`） | 入力ソース | `portTimeSamples` | `setMidiInputSource(destinationId)` が必要。Web MIDI ブリッジが使うレーンです |
+| `pushMidiInput*`（`NoteOn`、`NoteOff`、`Cc`、`PitchBend`、`ChannelPressure`、`PolyPressure`、`Program`、`Ump`） | 入力ソース | `offsetInBlockSamples` | `setMidiInputSource(destinationId)` が必要。Web MIDI ブリッジが使うレーンです |
 
 - **即時エンジンコマンド** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` はそれぞれ `destinationId` と省略可能な `renderFrame` を取り、省略すると「できるだけ早く」発音します。`pushMidiPanic(renderFrame?)` は省略可能な `renderFrame` のみを取り、すべてのデスティネーションの発音中ノートを一括で解放します。
 - **拒否される値** — ライブ push はすべて、MIDI の範囲外の値を、引数名と範囲を示すエラーで拒否します（`channel must be in [0, 15]`、`bend14 must be in [0, 16383]` など）。デスティネーション向けの push も入力ソース向けの push も同じで、Node と WASM のパッケージのクラスは `RangeError`（生の embind エンジンは `CppException`）、Python は `SonareValueError`、C は `InvalidParameter` です。いずれも呼び出した関数名が先頭に付きます。負の `renderFrame` も同様に拒否されます。「指定なし」は引数の省略で表し、`-1` では表しません。
-- **エンジン側のライブ入力ソース** — `setMidiInputSource(destinationId)` で専用の入力レーンを開き、`pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` で `portTimeSamples` タイムスタンプ付きのイベントを送ります。`pushMidiInputPitchBend`、`pushMidiInputChannelPressure`、`pushMidiInputPolyPressure`、`pushMidiInputProgram`、`pushMidiInputUmp` で表現情報、プログラムチェンジ、完全な UMP パケットも送れます。入力ソースが無効のときの push は `InvalidState`、入力キューが満杯のときは `OutOfMemory` で失敗します。入力ソースを含まない WASM ビルドでは `NotSupported` が投げられます。
+- **エンジン側のライブ入力ソース** — `setMidiInputSource(destinationId)` で専用の入力レーンを開き、`pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` で `offsetInBlockSamples` タイムスタンプ付きのイベントを送ります。`pushMidiInputPitchBend`、`pushMidiInputChannelPressure`、`pushMidiInputPolyPressure`、`pushMidiInputProgram`、`pushMidiInputUmp` で表現情報、プログラムチェンジ、完全な UMP パケットも送れます。入力ソースが無効のときの push は `InvalidState`、入力キューが満杯のときは `OutOfMemory` で失敗します。入力ソースを含まない WASM ビルドでは `NotSupported` が投げられます。
 - **ライブ SysEx** — `pushMidiSysex(destinationId, data, renderFrame?)` は、デスティネーションへ完全な SysEx（System Exclusive。メーカー独自の自由形式メッセージ）フレームをキューイングします。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なメッセージ（1〜512 バイト）で、`renderFrame` はほかの `pushMidi*` 呼び出しと同じく、省略すると即時になります。主な用途は、再生を止めずに、ライブの SF2 バインド済みデスティネーションへ GS/GM リセットや GS インサーションエフェクト（EFX）の選択を届けることです。そのバイト列が何を選ぶかは [SoundFont プレイヤー](./soundfont-player.md) を参照してください。
-- **UMP メッセージ** — `pushMidiUmp(destinationId, words, renderFrame?)` は、1〜4 個の 32 ビットワードからなる配列または `Uint32Array` を最上位ワードから順に受け取ります。個数は先頭ワードのメッセージ種別と一致させます。MIDI 2.0 チャンネルボイス（MT `0x4`）は値の幅を保ったまま処理し、SysEx7／データメッセージ（MT `0x3`／`0x5`）は拒否するため `pushMidiSysex` を使います。`SonareEngine` の worklet ファサードも `pushMidiUmp(trackId, words, renderFrame?)` で同じ完全なパケットを受け付けます（従来の 1 ワードの数値指定も使えます）。`pushMidiInputUmp(words, portTimeSamples = 0)` はエンジン側のライブ入力ソースへ送ります。
+- **UMP メッセージ** — `pushMidiUmp(destinationId, words, renderFrame?)` は、1〜4 個の 32 ビットワードからなる配列または `Uint32Array` を最上位ワードから順に受け取ります。個数は先頭ワードのメッセージ種別と一致させます。MIDI 2.0 チャンネルボイス（MT `0x4`）は値の幅を保ったまま処理し、SysEx7／データメッセージ（MT `0x3`／`0x5`）は拒否するため `pushMidiSysex` を使います。`SonareEngine` の worklet ファサードも `pushMidiUmp(trackId, words, renderFrame?)` で同じ完全なパケットを受け付けます（従来の 1 ワードの数値指定も使えます）。`pushMidiInputUmp(words, offsetInBlockSamples = 0)` はエンジン側のライブ入力ソースへ送ります。
 
 同じ SysEx 呼び出しはどのバインディングにもあり、名前の付け方だけが変わります。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なフレーム（1〜512 バイト）で、最後の引数はほかの `pushMidi*` 呼び出しと同じ省略可能なレンダーフレームです（省略、Python では `None` で即時）。「即時」を `-1` で表すのは C ABI だけです。
 
@@ -169,7 +169,7 @@ engine.pushMidiNoteOn(0, 0, 0, 64, 100, /* renderFrame */ 64);
 
 // 入力ソース経路（bindWebMidi が内部で使う経路）
 engine.setMidiInputSource(0);
-engine.pushMidiInputNoteOn(/* group */ 0, /* channel */ 0, 60, 100, /* portTimeSamples */ 0);
+engine.pushMidiInputNoteOn(/* group */ 0, /* channel */ 0, 60, 100, /* offsetInBlockSamples */ 0);
 engine.pushMidiInputCc(0, 0, 1, 64, 0);
 engine.pushMidiInputNoteOff(0, 0, 60, 0, 0);
 // engine.midiInputPendingCount()  -> 次の process() ブロックを待つイベント数
@@ -179,7 +179,7 @@ engine.pushMidiInputNoteOff(0, 0, 60, 0, 0);
 
 ### プログラムチェンジに従う受信側
 
-`pushMidiProgram(destinationId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)` と `pushMidiInputProgram(group, channel, program, bankValid?, bankMsb?, bankLsb?, portTimeSamples?)`（Python は `push_midi_program`、`push_midi_input_program`、C は `sonare_engine_push_midi_program`、`sonare_engine_push_midi_input_program`）は、ノートや CC と同じタイミングで MIDI 2.0 のプログラムチェンジを 1 件キューに入れます。バンクは省略可能で、`bankValid` が true のときだけ適用されます。`bankValid` が false のまま `bankMsb` / `bankLsb` に 0 以外を渡すと拒否されます。`SonareEngine` の worklet ファサードは `pushMidiProgram(trackId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)` です。
+`pushMidiProgram(destinationId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)` と `pushMidiInputProgram(group, channel, program, bankValid?, bankMsb?, bankLsb?, offsetInBlockSamples?)`（Python は `push_midi_program`、`push_midi_input_program`、C は `sonare_engine_push_midi_program`、`sonare_engine_push_midi_input_program`）は、ノートや CC と同じタイミングで MIDI 2.0 のプログラムチェンジを 1 件キューに入れます。バンクは省略可能で、`bankValid` が true のときだけ適用されます。`bankValid` が false のまま `bankMsb` / `bankLsb` に 0 以外を渡すと拒否されます。`SonareEngine` の worklet ファサードは `pushMidiProgram(trackId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)` です。
 
 メッセージは受信側自身のプログラム受信条件に従うため、実際に反映するのは一部の受信側だけです。
 
@@ -334,7 +334,7 @@ const binding = await bindWebMidi(engine, {
     { channel: 0, controller: 1, paramId: 42, options: { minValue: 0, maxValue: 1 } },
   ],
   // イベントを拾うブロック内のオフセット。blockStartMs = そのブロックが始まったページクロックの時刻
-  timestampToSamples: (eventTimeMs) => Math.max(0, Math.round(((eventTimeMs - blockStartMs) / 1000) * 48000)),
+  timestampToOffsetInBlockSamples: (eventTimeMs) => Math.max(0, Math.round(((eventTimeMs - blockStartMs) / 1000) * 48000)),
   onInputsChanged: (inputs) => {
     // ホットプラグ時、ヘルパーが一致ポートを再バインドした後に呼ばれる
     console.log('MIDI inputs:', inputs.map((i) => `${i.name} (${i.state})`));
@@ -355,7 +355,7 @@ const binding = await bindWebMidi(engine, {
 
 ### タイムスタンプからサンプルへの変換が重要な理由
 
-ここには別々の 2 つのクロックがあります。Web MIDI は各メッセージをミリ秒の時刻（ページクロックの `DOMHighResTimeStamp`）付きで届けますが、エンジンはイベントを**サンプルフレーム**でスケジュールします。`timestampToSamples(eventTimeMs)` はその両者を橋渡しし、メッセージ時刻をエンジンがキューイングする `portTimeSamples` の値へ変換します。この値は絶対的な時計の上の位置ではなく、イベントを拾うレンダリングブロックの先頭からの**オフセット**（サンプル数）です。ブロックの終わりを超えるオフセットは、そのブロックの最後のフレームに切り詰められます。128 フレームのブロックで測ると、オフセット `40` ではノートがフレーム 41 から鳴り始めます。一方、ページクロックの時刻をそのままサンプル数に換算した値（10 秒後なら `480000`）では、ブロックの最後のフレームまで何も鳴りません。速いパッセージのイベントがすべて同じフレームに重なってしまいます。
+ここには別々の 2 つのクロックがあります。Web MIDI は各メッセージをミリ秒の時刻（ページクロックの `DOMHighResTimeStamp`）付きで届けますが、エンジンはイベントを**サンプルフレーム**でスケジュールします。`timestampToOffsetInBlockSamples(eventTimeMs)` はその両者を橋渡しし、メッセージ時刻をエンジンがキューイングする `offsetInBlockSamples` の値へ変換します。この値は絶対的な時計の上の位置ではなく、イベントを拾うレンダリングブロックの先頭からの**オフセット**（サンプル数）です。ブロックの終わりを超えるオフセットは、そのブロックの最後のフレームに切り詰められます。128 フレームのブロックで測ると、オフセット `40` ではノートがフレーム 41 から鳴り始めます。一方、ページクロックの時刻をそのままサンプル数に換算した値（10 秒後なら `480000`）では、ブロックの最後のフレームまで何も鳴りません。速いパッセージのイベントがすべて同じフレームに重なってしまいます。
 
 変換が正しければ、タイミングが詰まった箇所（和音や速いパッセージ）が、演奏したとおりの正確なフレームに配置されます。省略すると、すべてのイベントが次のブロックのサンプル `0` にキューイングされます。気軽な演奏には十分ですが、リズミカルな素材ではタイミングのずれが聴き取れるほどになります。
 
@@ -551,7 +551,7 @@ async function startKeyboardSynth() {
 }
 ```
 
-`timestampToSamples` を省略すると、すべてのイベントは次のレンダーブロックの先頭で発火します。ライブ演奏にはこれで十分なタイトさです。ブロック内精度が必要なら、前述の「タイムスタンプからサンプルへの変換が重要な理由」のとおりタイムスタンプを変換し、フォワーダーの最後の引数を `0` の代わりにその値にして渡してください。
+`timestampToOffsetInBlockSamples` を省略すると、すべてのイベントは次のレンダーブロックの先頭で発火します。ライブ演奏にはこれで十分なタイトさです。ブロック内精度が必要なら、前述の「タイムスタンプからサンプルへの変換が重要な理由」のとおりタイムスタンプを変換し、フォワーダーの最後の引数を `0` の代わりにその値にして渡してください。
 
 ::: warning ブラウザのジェスチャーと後始末
 `AudioContext` はユーザージェスチャー（クリック）から生成／再開する必要があり、多くのブラウザはセキュアコンテキストからのみ MIDI アクセスを促します。`bindWebMidi` には必ず `binding.close()` を組み合わせ、ページ破棄時には `AudioContext` を close してください。このレシピでは、それが worklet とエンジンのネイティブメモリを解放する手段です。
@@ -568,7 +568,7 @@ engine = sonare.RealtimeEngine(sample_rate=48000.0, max_block_size=128)
 try:
     engine.set_synth_instrument("saw-lead", destination_id=0)
     engine.set_midi_input_source(0)
-    engine.push_midi_input_note_on(0, 0, 60, 100, 0)   # group, channel, note, velocity, port_time_samples
+    engine.push_midi_input_note_on(0, 0, 60, 100, 0)   # group, channel, note, velocity, offset_in_block_samples
     engine.push_midi_input_cc(0, 0, 1, 64, 0)
     engine.push_midi_input_note_off(0, 0, 60, 0, 0)
     out = engine.process([[0.0] * 128, [0.0] * 128])   # ノートが鳴れば非ゼロ
@@ -576,7 +576,7 @@ finally:
     engine.close()
 ```
 
-これらのエンジンを実機から鳴らすには、プラットフォームのライブラリ（たとえば CoreMIDI や ALSA のバインディング）で MIDI を読み、同じ `push_midi_input_*` メソッドを呼びます。タイムスタンプからサンプルへの変換は、ブラウザの `timestampToSamples` と同様に自分で用意します。
+これらのエンジンを実機から鳴らすには、プラットフォームのライブラリ（たとえば CoreMIDI や ALSA のバインディング）で MIDI を読み、同じ `push_midi_input_*` メソッドを呼びます。タイムスタンプからサンプルへの変換は、ブラウザの `timestampToOffsetInBlockSamples` と同様に自分で用意します。
 
 ::: info 実験的なネイティブ macOS バックエンド
 C++ ソースビルドでは、既定で無効の CMake オプション `BUILD_COREAUDIO`・`BUILD_COREMIDI`・`BUILD_AU_HOST` でネイティブ macOS ホストバックエンド（CoreAudio 出力、CoreMIDI 入出力、Audio Unit 楽器ホスト）を有効化できます。これらは C-ABI を追加せず、公開パッケージ（npm／PyPI／WASM）にも含まれません。macOS 専用かつソースビルドでのオプトインで、今後変更される可能性があります。

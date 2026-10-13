@@ -272,8 +272,8 @@ It solves a *scale* only under the supplied shape and absorption priors; it does
 The prior is clamped rather than refused, so an out-of-range value still returns a successful estimate, computed from the clamped number. At the low end that is worth three orders of magnitude in the reported volume.
 :::
 
-::: warning An explicit `referenceAbsorption: 0` is not "default" everywhere
-Python and C read an explicit `0` as "use the default" (`0.15`); Node and WASM clamp it to `0.01`, which reports a normal room as a fraction of a cubic meter, with full confidence. Omit the option for the default, and write `0.01` when you want the floor.
+::: info `referenceAbsorption: 0` means the default
+Node, WASM, Python and C all read an explicit `0` as "use the default" (`0.15`). On a 2 s synthetic decay with a 0.5 s RT60, omitting the option and passing `0` both report 28.1 m³, while `0.01` reports 0.0067 m³. Write `0.01` only when you want the floor.
 :::
 
 ## Reading the result

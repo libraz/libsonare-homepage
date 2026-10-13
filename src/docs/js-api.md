@@ -54,7 +54,7 @@ The package has five entries. The main entry carries everything; the others are 
 |-------|-------------|----------|-------------|
 | Main | `@libraz/libsonare` | The full API: analysis, effects, mastering, mixing, projects, realtime engine | Almost always |
 | Analysis | `@libraz/libsonare/analysis` | Analysis and features only: no mastering, mixing, realtime, or project APIs | You want the smallest download for analysis alone |
-| Worklet | `@libraz/libsonare/worklet` | The AudioWorklet-side runtime, including `EXPECTED_ABI_VERSION` | Code running inside an `AudioWorkletGlobalScope` |
+| Worklet | `@libraz/libsonare/worklet` | The AudioWorklet-side runtime, including `EXPECTED_ABI_VERSION`, `engineMixerMasterTarget`, `ENGINE_MIXER_PARAM_FADER_DB`, `ENGINE_MIXER_PARAM_PAN` and `SONARE_METER_RING_PROTOCOL_VERSION` | Code running inside an `AudioWorkletGlobalScope` |
 | Worker | `@libraz/libsonare/worker` | The offline worker script behind `OfflineWorkerClient` | Running analysis off the main thread; see [Workers](./wasm-advanced.md#web-worker-usage) |
 | Vocal-edit worker | `@libraz/libsonare/vocal-edit-worker` | The worker script behind `VocalEditWorkerClient` | Vocal-edit drafts and render jobs off the main thread |
 
@@ -156,6 +156,8 @@ const mastered = masterAudio({
 const legacyBpm = detectBpm(samples, sampleRate);
 ```
 
+A request object refuses a key its entry point does not declare: `detectBpm({ samples, sampleRate, bpmMin: 90 })` throws `TypeError: detectBpm: unknown request key 'bpmMin'`, and a key that belongs in a nested object says where (`'loudness' belongs under 'config'`). Nested options objects and the options bag of a positional form refuse unknown options the same way. Tempo range limits belong to `analyzeBpm` and `analyze`, not `detectBpm`.
+
 The request fields use the same camelCase names on the Node and WASM packages. Python remains keyword-oriented (`detect_bpm(samples, sample_rate=...)`), rather than adopting a JavaScript-style options object.
 
 ### Canceling a long call
@@ -239,7 +241,7 @@ try {
 | A canceled call | `SonareError` `Cancelled` (8) |
 | A `null` or wrongly typed argument, such as a `samples` that is not a `Float32Array` | `TypeError` |
 | Empty or non-finite audio; a `sampleRate` that is not an integer in `[8000, 384000]`; a fractional integer argument; two buffers whose lengths must match; a binding-resolved name that is unknown (such as a `keyRoot`) | `RangeError` |
-| A string with an embedded NUL passed to an entry point that checks for it | `RangeError` |
+| A string with an embedded NUL passed to an entry point that checks for it (`mixingScenePresetJson`, `realtimeVoiceChangerPresetJson`, `validateRealtimeVoiceChangerPresetJson`, `realtimeVoiceChangerPresetConfig`, `noteToHz`, `Project.fromJson`) | `RangeError` naming the field |
 
 `Mixer.fromSceneJson` reports `InvalidFormat` for a document that is not valid JSON and `InvalidParameter` for a field the mixer rejects; the field is named at the tail of the message, `failed to build mixer from scene JSON: <inner>`.
 
@@ -455,7 +457,7 @@ a dedicated guide.
 | Pick a built-in synth voice | `synthPresetNames()`, `synthPresetPatch(name)`, `engine.setSynthInstrument(...)` | [Native Synth](./native-synth.md) |
 | Play through a SoundFont | `project.loadSoundFont(bytes)` / `engine.loadSoundFont(bytes)` | [SoundFont Player](./soundfont-player.md) |
 | Schedule MIDI clips into the live engine, sample-accurately | `engine.setMidiClips(...)`, `engine.sampleAtPpq(ppq)` | [Realtime Engine](./realtime-engine.md#midi-clip-scheduling-and-sampleatppq) |
-| Set per-track cue monitoring | `engine.setTrackMonitorMode(laneIndex, 'off' | 'pfl' | 'afl')` | [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
+| Set per-track cue monitoring (heard in live `process()` output; offline renders, bounces and freezes exclude it) | `engine.setTrackMonitorMode(laneIndex, 'off' | 'pfl' | 'afl')` | [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
 | Mix the engine's tracks live with lanes, buses, sends, and strips | `engine.setTrackLanes(...)`, `engine.setTrackBuses(...)`, strip JSON setters | [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
 | Send a track to external MIDI hardware and optionally forward clock/transport | `engine.setMidiDestinationExternal(...)`, `engine.setExternalMidiClockEnabled(...)`, `engine.drainExternalMidi(...)`; Worklet facade: `onMidiOut(...)` | [Realtime Engine](./project-editing-midi.md#sending-a-track-to-external-midi-gear) |
 | Drive the engine from a hardware/Web MIDI device | `bindWebMidi(engine, ...)` <Badge type="info" text="Browser only" /> | [MIDI Input](./midi-input.md) |

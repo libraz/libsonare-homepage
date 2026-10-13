@@ -69,7 +69,7 @@ The two forward transforms (dashed) produce the features you already know; the f
 
 | Intent | JavaScript | Python |
 |--------|------------|--------|
-| Mel power → STFT magnitude | `melToStft(...)` returns `{ nBins, nFrames, power }` | `mel_to_stft(...)` returns `InverseResult(rows, n_frames, data)` |
+| Mel power → STFT magnitude | `melToStft(...)` returns `{ nBins, nFrames, magnitude }` | `mel_to_stft(...)` returns `InverseResult(rows, n_frames, data)` |
 | Mel power → audio | `melToAudio(...)` returns `Float32Array` | `mel_to_audio(...)` returns `list[float]` |
 | MFCCs → mel power | `mfccToMel(...)` returns `{ nMels, nFrames, power }` | `mfcc_to_mel(...)` returns `InverseResult(rows, n_frames, data)` |
 | MFCCs → audio | `mfccToAudio(...)` returns `Float32Array` | `mfcc_to_audio(...)` returns `list[float]` |
@@ -83,8 +83,8 @@ The two `*ToStft` / `*ToMel` helpers stay in the **spectral** domain and return 
 
 `melToStft` maps a mel **power** spectrogram back to a linear-frequency STFT **magnitude** spectrogram. `mfccToMel` maps MFCCs back to a smoothed mel **power** spectrogram.
 
-::: warning `melToStft` returns magnitude, even though the field is called `power`
-The helper solves the non-negative least-squares problem in the power domain and then takes the square root, matching `librosa.feature.inverse.mel_to_stft` with its default `power=2.0`. The values you get back are magnitudes; only the JavaScript field name (`power`, or `data` in Python) suggests otherwise. Convert them to dB with `20·log₁₀(x)`, not `10·log₁₀(x)`, and square them before handing them to anything that expects a power spectrum.
+::: warning `melToStft` returns magnitude, not power
+The helper solves the non-negative least-squares problem in the power domain and then takes the square root, matching `librosa.feature.inverse.mel_to_stft` with its default `power=2.0`. The values you get back are magnitudes, which is why the JavaScript field is `magnitude` (Python's `InverseResult` carries them as `data`). Convert them to dB with `20·log₁₀(x)`, not `10·log₁₀(x)`, and square them before handing them to anything that expects a power spectrum.
 :::
 
 If forward MFCC used a nonzero `lifter`, pass the same value to `mfccToMel` or `mfccToAudio`. The inverse then removes it.
@@ -123,7 +123,7 @@ await init();
 // Mel power -> STFT magnitude
 const mel = melSpectrogram(samples, sampleRate, 2048, 512, 128);
 const stft = melToStft(mel.power, mel.nMels, mel.nFrames, sampleRate, 2048);
-// stft: { nBins, nFrames, power }   nBins = nFft/2 + 1 = 1025
+// stft: { nBins, nFrames, magnitude }   nBins = nFft/2 + 1 = 1025
 
 // MFCCs -> mel power
 const coeffs = mfcc(samples, sampleRate, 2048, 512, 128, 20);

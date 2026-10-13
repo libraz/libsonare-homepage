@@ -44,7 +44,7 @@
 - **PLP**: リズムの主な脈動を推定する特徴量。
 - **LUFS / LRA**: ラウドネスとラウドネスレンジの指標。詳細は[LUFS](./glossary/lufs.md)。
 - **VCA**: 複数ストリップの音量をまとめて動かすグループ制御。詳細は[バスとセンド](./glossary/mixing/buses-sends.md)。
-- **PFL / AFL**: pre-fader listen（フェーダー前）と after-fader listen（フェーダー後）。本線の出力を変えずに 1 トラックだけを試聴するためのキュータップです。
+- **PFL / AFL**: pre-fader listen（フェーダー前）と after-fader listen（フェーダー後）。1 トラックだけを試聴するためのキュータップです。ライブの `process()` 出力は有効なキューを畳み込み、オフラインレンダー、バウンス、フリーズには含まれません。
 - **RIR**: room impulse response（部屋のインパルス応答）。詳細は[部屋の形状と容積](./glossary/acoustics/room-geometry.md)。
 - **等価ルーム推定**: 音声から実用上の部屋モデルを推定する処理。詳細は[逆問題による部屋推定](./glossary/acoustics/inverse-estimation.md)。
 - **ルームモーフィング**: 目標ルームの響きを音作り効果として適用する処理。
@@ -142,7 +142,7 @@
 | 分野 | JavaScript | Python | C | CLI |
 |------|------------|--------|---|-----|
 | 1 本のレーンのセンドや出力バスの編集 | `setTrackSends`、`setTrackOutputBus` | `set_track_sends`、`set_track_output_bus` | `sonare_engine_set_track_sends`、`sonare_engine_set_track_output_bus` | なし |
-| ホスト側インストゥルメント、レーン、バスのオートメーション id | `resolveInstrumentAutomationId`、`resolveTrackLaneAutomationId`、`resolveBusAutomationId` | `resolve_instrument_automation_id`、`resolve_track_lane_automation_id`、`resolve_bus_automation_id` | `sonare_engine_resolve_instrument_automation_id`、`sonare_engine_resolve_track_lane_automation_id`、`sonare_engine_resolve_bus_automation_id` | なし |
+| ホスト側インストゥルメント、レーン、バス、マスターのオートメーション id | `resolveInstrumentAutomationId`、`resolveTrackLaneAutomationId`、`resolveBusAutomationId`、`resolveMasterAutomationId` | `resolve_instrument_automation_id`、`resolve_track_lane_automation_id`、`resolve_bus_automation_id`、`resolve_master_automation_id` | `sonare_engine_resolve_instrument_automation_id`、`sonare_engine_resolve_track_lane_automation_id`、`sonare_engine_resolve_bus_automation_id`、`sonare_engine_resolve_master_automation_id` | なし |
 | サイドチェイン接続を適用せずに確認 | `canSetLaneSidechain`、`canSetBusSidechain`、`canSetMasterSidechain` | `can_set_lane_sidechain`、`can_set_bus_sidechain`、`can_set_master_sidechain` | `sonare_engine_can_set_lane_sidechain` ほか | なし |
 | オフラインレンダリングとテール | `renderOffline`、`finishOfflineRender`、`bounceOffline`、`freezeOffline`、`tailSamples`、`graphLatencySamplesQ8` | `finish_offline_render`、`tail_samples`、`graph_latency_samples_q8` | `sonare_engine_tail_samples` | なし |
 | 動作中のエンジンでのクリップ編集 | `upsertClip`、`removeClip` | `upsert_clip`、`remove_clip` | `sonare_engine_upsert_clip`、`sonare_engine_remove_clip` | なし |

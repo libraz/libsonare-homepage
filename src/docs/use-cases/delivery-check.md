@@ -147,13 +147,12 @@ Run it against the mastered take from the mixing walkthrough:
 ```text
 DELIVERY GATE: FAIL
   - clicks: 2.43/s
-  - crackle: 1.56/s
 ```
 
-Loudness and true peak are not on that list; the damage check is. It is about the test material, not the master's level: the test drums are a kick and noise bursts with instant onsets, which the click detector counts (the drums stem alone measures 2.17 clicks per second, and so does the mixdown), and the crackle detector reads 1.56 per second on the master where it read 0.00 on the mixdown. The defaults of `0.2` and `1.0` are for program material (see below), so override them for this one run instead of editing the script:
+Loudness, true peak and crackle are not on that list; the click check is. It is about the test material, not the master's level. The test bass is a plain square wave, built with `np.sign`, so each of its edges is a true one-sample jump. On the bass stem alone the detector sets those edges aside as part of a regular waveform, and it reads 0 clicks. With the vocal summed on top, some edges no longer look regular and pass the click test: 24 clicks (2.08 per second) in the mixdown, 28 (2.43 per second) in the master. Summing only the bass and vocal stems reproduces it: 25 clicks, and each one the declicker repairs sits on a bass edge. On a real recording a click reading deserves a listen; here it is the stems script's shortcut showing through. The default of `0.2` is for program material (see below), so override it for this one run instead of editing the script:
 
 ```bash
-GATE_MAX_CLICKS_PER_S=3 GATE_MAX_CRACKLE_PER_S=2 ./gate.sh master.wav report.json
+GATE_MAX_CLICKS_PER_S=3 ./gate.sh master.wav report.json
 ```
 
 ```text
@@ -164,7 +163,7 @@ DELIVERY GATE: PASS
 The `-1.00` is not luck. The mastering report measures true peak on the limiter's own 4x (BS.1770) detector, and the limiter holds the master at the ceiling on that measure: this report reads `-1.0000004`, so the master sits on the `-1.0` ceiling rather than under it. A miss therefore never shows in the report itself; it shows when the number is compared with a ceiling below the one the master was made for, or when another meter reads the file. Run the same master against a ceiling of `-1.2`:
 
 ```bash
-GATE_MAX_CLICKS_PER_S=3 GATE_MAX_CRACKLE_PER_S=2 GATE_CEILING_DBTP=-1.2 ./gate.sh master.wav report.json
+GATE_MAX_CLICKS_PER_S=3 GATE_CEILING_DBTP=-1.2 ./gate.sh master.wav report.json
 ```
 
 ```text
@@ -292,15 +291,15 @@ print(defects["clipSampleFraction"], defects["clickPerSecond"], defects["crackle
   "measured": true,
   "clip_sample_fraction": 0.0, "clip_run_count": 0,
   "click_count": 28, "click_per_second": 2.43,
-  "crackle_per_second": 1.56, "noise_floor_dbfs": -120.0,
-  "hum_peak_found": true, "hum_fundamental_hz": 51.75,
-  "hum_fundamental_prominence": 3.45
+  "crackle_per_second": 0.0, "noise_floor_dbfs": -120.0,
+  "hum_peak_found": false, "hum_fundamental_hz": 51.75,
+  "hum_fundamental_prominence": 1.0
 }}
 ```
 
-`--detect` only measures. It writes nothing, so it costs nothing to run on every commit. A file too short for the detectors returns `{"measured": false}` and no other field; the gate treats that as a failure, not as a clean result. The library calls return the same measurements under camelCase names (`clipSampleFraction`, `clickPerSecond`); `hum_peak_found` exists only in the CLI output and means a prominence above 1.0. Set `clip_sample_fraction`'s threshold to `0.0`: a finished master should never clip, because the limiter's whole job was to prevent it. `click_per_second` and `crackle_per_second` need real headroom instead, because the detectors report a nonzero baseline on material with sharp onsets. The defaults of `0.2` and `1.0` are starting points for ordinary program material, not measurements of a clean master: this page's synthetic drums measured `2.43` and `1.56` per second on a master with no damage in it, which is why the walkthrough above raises both for that one run. Calibrate them on a few known-good masters of your own genre, and keep them in the contract block so a change is visible in review.
+`--detect` only measures. It writes nothing, so it costs nothing to run on every commit. A file too short for the detectors returns `{"measured": false}` and no other field; the gate treats that as a failure, not as a clean result. The library calls return the same measurements under camelCase names (`clipSampleFraction`, `clickPerSecond`); `hum_peak_found` exists only in the CLI output and means a prominence above 1.0. Set `clip_sample_fraction`'s threshold to `0.0`: a finished master should never clip, because the limiter's whole job was to prevent it. `click_per_second` and `crackle_per_second` need headroom instead, because the detectors can report a nonzero baseline on dense material. The defaults of `0.2` and `1.0` are starting points for ordinary program material, not measurements of a clean master: the four synthetic stems summed measure `2.43` clicks per second on a master with no damage in it, though none of them clicks alone, which is why the walkthrough above raises the click limit for that one run. Crackle reads `0.00` and needs no override. Calibrate both on a few known-good masters of your own genre, and keep them in the contract block so a change is visible in review.
 
-`hum_peak_found` is a boolean by itself, and mains hum below the noise floor is common and inaudible — the gate should not fail on its mere presence. `hum_fundamental_prominence` is what turns it into a real check. It is a plain ratio, not decibels: the energy of the strongest hum candidate over the median of all the candidates tried, so `1.0` means no peak at all. This master's incidental peak, at 51.75 Hz, is the fundamental of the test kick rather than hum, and has a prominence of `3.45`, while the damaged take in [Clean Up a Batch of Recordings](./recording-cleanup.md) measured `18.6` at 50 Hz. `6.0` sits between the two, high enough to ignore an inaudible peak and low enough to catch an audible one. It is stricter than the repair assistant, which only runs dehum above `10` (see [Clean Up a Batch of Recordings](./recording-cleanup.md#step-2-—-let-the-assistant-choose)): a take cleaned to a prominence of 7.9 still fails this gate.
+`hum_peak_found` is a boolean by itself, and mains hum below the noise floor is common and inaudible — the gate should not fail on its mere presence. `hum_fundamental_prominence` is what turns it into a real check. It is a plain ratio, not decibels: the energy of the strongest hum candidate over the median of all the candidates tried, so `1.0` means no peak at all. This master reads `hum_peak_found: false` with a prominence of `1.0`: the kick's low-frequency energy is not stationary, so it is not offered as a hum candidate, while the damaged take in [Clean Up a Batch of Recordings](./recording-cleanup.md) measured `24.0` at 50 Hz. A bare stem can still report a candidate with no hum in it (the test bass reads `2.18`, the test guitar `2.15`). `6.0` sits between those and a real hum, high enough to ignore a weak candidate and low enough to catch an audible one. It is stricter than the repair assistant, which only runs dehum above `10` (see [Clean Up a Batch of Recordings](./recording-cleanup.md#step-2-—-let-the-assistant-choose)): a take with a prominence between `6` and `10` fails this gate and would not be touched by the assistant.
 
 ::: warning `repair --detect` measures the mono fold of a stereo master
 The CLI folds `master.wav` to mono before the damage check, and says so on stderr. A click or clip in one channel only can shrink or cancel in that fold, so a clean CLI report does not prove clean channels. To check each channel, run the library call from the Node or Python tab above on both channels; `masteringRepairAnalyze` and `mastering_repair_analyze` measure every channel they are given.
@@ -347,13 +346,13 @@ sonare mastering-streaming master.wav --json
 ]}
 ```
 
-The sample numbers above are one program, not a correction factor. Applying that gain to the fold's own peak reading projects to `+2.29` dBTP (-1.07 + 3.36) — 3.29 dB past the `-1.0` dBTP ceiling, which reads as an alarming failure. Redo the same arithmetic with the report's real stereo numbers (`-14.05` LUFS, `-1.00` dBTP) and the required gain drops to about `+0.05` dB, putting the projected peak at `-0.95` dBTP — still over the ceiling, but by `0.05` dB instead of `3.29`. The fold does not invent the risk here; it exaggerates a small, real overage into one that looks about seventy times worse than it is. On a mono deliverable there is no fold to correct for, and `lufs` / `mastering-streaming` read the file directly — see `take-clean.wav` below.
+The sample numbers above are one program, not a correction factor. Applying that gain to the fold's own peak reading projects to `+2.29` dBTP (-1.07 + 3.36) — 3.29 dB past the `-1.0` dBTP ceiling, which reads as an alarming failure. Redo the same arithmetic with the report's real stereo numbers (`-14.05` LUFS, `-1.00` dBTP) and the required gain drops to about `+0.05` dB, putting the projected peak at `-0.95` dBTP — still over the ceiling, but by `0.05` dB instead of `3.29`. The fold does not invent the risk here; it exaggerates a small, real overage into one that looks about seventy times worse than it is. On a mono deliverable there is no fold to correct for, and `lufs` / `mastering-streaming` read the file directly — see `take-clean.wav` below, the mono repaired take from [Clean Up a Batch of Recordings](./recording-cleanup.md).
 
 ```bash
 sonare lufs take-clean.wav --json
-# {"integrated_lufs": -6.0630, ...}
+# {"integrated_lufs": -13.6113, ...}
 sonare mastering-profile take-clean.wav --json
-# {"loudness": {"integrated_lufs": -6.0630, ...}, ...}
+# {"loudness": {"integrated_lufs": -13.6113, ...}, ...}
 ```
 
 Reach for `mastering-streaming` directly when the deliverable is mono, or as a cross-check. For stereo-accurate metering outside the mastering report, use the stereo entry points in the [Python API](../python-api.md) — `mastering_streaming_preview_stereo` and its siblings measure both channels instead of a downmix.

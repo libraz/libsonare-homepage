@@ -23,7 +23,7 @@ description: '@libraz/libsonare-native パッケージの解析関数・エフ�
 | `analyze(samples, sampleRate?, options?)` | `AnalysisResult` | 1 回の呼び出しで、BPM と順位付き BPM 仮説、キー、拍子と順位付き拍子候補、ビート、コード（検出キーを基準にした `romanNumeral` 付き）、セクション、音色、ダイナミクス、リズム、メロディ、フォームを解析。以下の専用 `detect*`／`analyze*` 関数は、個別解析やパラメータ指定の解析向けに引き続き利用できます |
 | `analyzeWithProgress(request)` / `analyzeWithProgress(samples, sampleRate, onProgress, options?)` | `AnalysisResult` | `analyze` と同じ結果を `(progress, stage)` で通知します。リクエスト形式では `options` と `cancel`、位置引数形式では `onProgress` の後ろの解析オプションを指定できます |
 | `estimateMeter(request)` | `MeterEstimate` | 呼び出し側が渡したビート列に対して拍子を採点します。音声も再解析も不要。リクエスト専用で `EstimateMeterRequest` を受け取ります |
-| `analyzeBpm(samples, sampleRate?, options?)` | `BpmAnalysisResult` | 信頼度と候補付きテンポ。`options`: `bpmMin`、`bpmMax`、`startBpm`、`nFft`、`hopLength`、`maxCandidates` |
+| `analyzeBpm(samples, sampleRate?, options?)` | `BpmAnalysisResult` | 信頼度と候補付きテンポ（`candidates[0]` が選ばれたテンポで、残りは得票率順）。`options`: `bpmMin`、`bpmMax`、`startBpm`、`nFft`、`hopLength`、`maxCandidates` |
 | `analyzeRhythm(samples, sampleRate?, options?)` | `RhythmResult` | 拍子・グルーブ・シンコペーション。`options`: `bpmMin`、`bpmMax`、`startBpm`、`nFft`、`hopLength` |
 | `analyzeDynamics(samples, sampleRate?, options?)` | `DynamicsResult` | ダイナミックレンジ・ラウドネスレンジ・クレストファクター。`options`: `windowSec`、`hopLength`、`compressionThreshold` |
 | `analyzeTimbre(samples, sampleRate?, options?)` | `TimbreResult` | 明るさ・暖かさ・密度・粗さ・複雑さと、窓ごとの `timbreOverTime`。`options`: `nFft`、`hopLength`、`nMels`、`nMfcc`、`windowSec` |
@@ -86,7 +86,7 @@ description: '@libraz/libsonare-native パッケージの解析関数・エフ�
 
 `computeTempoCurve` が既定で無効なのは、この曲線が解析の精度を上げるものではなく追加の出力だからです。ほかのフィールドは何も変わらないため、曲線を読まない呼び出し側はビートグリッド全体のデコードコストを無駄に負うことになります。また曲線はデコード元のビートグリッドを記述したものであり、ビートトラッキングは `adaptiveTempo` を併用しない限り固定のテンポ事前分布を保持します。実際に動くテンポを測るには両方のオプションが必要です。
 
-`analyzeWithProgress(...)` は `analyze(...)` と同じ `MusicAnalyzeOptions` を受け取ります。リクエスト形式では `options` の下に入れ、`cancel` は `true` を返してキャンセルを要求する別のコールバックです。位置引数形式では `onProgress` の後ろにオプションオブジェクトを置きます。
+`analyzeWithProgress(...)` は `analyze(...)` と同じ `MusicAnalyzeOptions` を受け取ります。リクエスト形式では `samples` と並べても `options` の下に入れても構わず（両方に書いたフィールドは `options` の値が採用されます）、`cancel` は `true` を返してキャンセルを要求する別のコールバックです。位置引数形式では `onProgress` の後ろにオプションオブジェクトを置きます。
 
 ### `estimateMeter(...)`
 

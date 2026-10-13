@@ -128,7 +128,7 @@ with Audio.from_file("music.mp3") as audio:
 | `analyze(samples, sample_rate)` | `AnalysisResult` | 総合解析: BPM とその候補・キー・拍子とその候補・ビート・検出キーを基準にした `roman_numeral` 付きコード・セクション・音色・ダイナミクス・リズム・メロディ・フォーム |
 | `analyze_with_progress(samples, sample_rate, on_progress?)` | `AnalysisResult` | `analyze` と同じ結果・解析キーワードオプションに、任意の `(progress, stage)` コールバックとキーワード専用の `cancel` コールバックを加えたもの |
 | `transcribe(samples, sample_rate, ...)` | `TranscribeResult` | モノラル音声を一定テンポの PPQ グリッド上の MIDI イベントへ変換。`events`、`note_count`、`tempo_bpm`、使用した `tuning` を返します |
-| `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | 上位候補付きの BPM 解析 |
+| `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | 上位候補付きの BPM 解析。`candidates[0]` が選ばれたテンポで、残りは得票率の順に続きます |
 | `estimate_meter(beat_times, beat_strengths, ...)` | `MeterEstimate` | 手元にあるビート系列だけから拍子とアクセントのグルーピングをスコアリング。音声も再解析も不要 |
 | `chord_functional_analysis(samples, key_root, key_mode=Mode.MAJOR, sample_rate=22050, ...)` | `list[FunctionalChord]` | `sample_rate` はキーの後ろにあるのでキーワードで渡してください。コードを検出したうえで、時刻付きエントリ（`Chord` の全フィールド）に `roman`（`"I"`、`"V7"`、`"vi"` など）と `function`（`"tonic"`、`"subdominant"`、`"dominant"`、`"chromatic"`、`"none"`）を加えて返します |
 | `chord_functions(chords, key)` | `list[FunctionalChord]` | すでに手元にあるコードに、再検出せず `key` の中での機能を付けます。`chords` は `detect_chords` の結果かその `chords` リスト、`key` は `Key`、`{"root": ..., "mode": ...}` のマッピング、または `(root, mode)` のペアです |
@@ -364,7 +364,7 @@ print(linked["w"].shape, linked["h"].shape)
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
 | `griffin_lim(magnitude, n_bins, n_frames, sample_rate?, n_fft?, hop_length?, n_iter?, momentum?)` | `list[float]` | 行優先の STFT 振幅行列から音声を再構成。`n_iter` の既定は `32`、`momentum` の既定は `0.99` |
-| `mel_to_stft(mel, n_mels, n_frames, sample_rate?, n_fft?, fmin?, fmax?, htk?)` | `InverseResult` | メルスペクトログラムからリニア STFT パワー |
+| `mel_to_stft(mel, n_mels, n_frames, sample_rate?, n_fft?, fmin?, fmax?, htk?)` | `InverseResult` | メルスペクトログラムからリニア STFT 振幅 |
 | `mel_to_audio(mel, n_mels, n_frames, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?)` | `list[float]` | メルスペクトログラムから音声（Griffin-Lim） |
 | `mfcc_to_mel(mfcc_coeffs, n_mfcc, n_frames, n_mels?, lifter?)` | `InverseResult` | MFCC 係数からメルスペクトログラム（dB）。`lifter` は順方向の `mfcc(...)` と揃えます |
 | `mfcc_to_audio(mfcc_coeffs, n_mfcc, n_frames, n_mels?, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?, lifter?)` | `list[float]` | MFCC 係数から音声 |

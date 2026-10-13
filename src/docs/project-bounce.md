@@ -160,7 +160,7 @@ Some instruments and effects need a few samples of "lookahead" and so report the
 :::
 
 ::: tip Determinism is independent of live state
-An offline bounce **settles** every smoothed gain and effect parameter to its target before rendering, so the result does not depend on where a fader or filter sweep happened to be when you started the render. Bouncing right after a live tweak produces the same samples as bouncing from a freshly loaded project.
+An offline bounce **settles** every smoothed gain and effect parameter to its target before rendering, so the result does not depend on where a fader or filter sweep happened to be when you started the render. Bouncing right after a live tweak produces the same samples as bouncing from a freshly loaded project. A bounce, like every offline render, stem bounce and freeze, carries the program output only: an armed PFL/AFL cue or a solo monitor state never reaches it.
 :::
 
 ### Omitting the length
@@ -219,7 +219,7 @@ with sonare.Project() as project:
 
 :::
 
-A `BuiltinSynthBinding` accepts `waveform` (`'sine'`, `'saw'`, `'square'`, `'triangle'`), `gain`, ADSR (`attackMs`, `decayMs`, `sustain`, `releaseMs`), `polyphony`, and a `destinationId` to target one MIDI destination. Every numeric field uses "0 / omit keeps the default", so `{}` is a usable default patch. Pass an **array** of bindings to render several MIDI destinations. Omitting the argument or passing `undefined` creates one default binding; pass an explicitly empty array `[]` (or runtime `null`) to bind nothing and render silently.
+A `BuiltinSynthBinding` accepts `waveform` (`'sine'`, `'saw'`, `'square'`, `'triangle'`), `gain`, ADSR (`attackMs`, `decayMs`, `sustain`, `releaseMs`), `polyphony`, and a `destinationId` to target one MIDI destination. Every numeric field uses "0 / omit keeps the default", so `{}` is a usable default patch. The `attackMs`, `decayMs` and `releaseMs` times are linear ramps over the set time. Pass an **array** of bindings to render several MIDI destinations. Omitting the argument or passing `undefined` creates one default binding; pass an explicitly empty array `[]` (or runtime `null`) to bind nothing and render silently.
 
 ## Bounce MIDI through the NativeSynth
 
@@ -263,7 +263,7 @@ c = project.bounce_with_synth_instrument(
 
 :::
 
-Use [`synthPresetNames()`](./native-synth.md) to discover valid names instead of hardcoding magic strings; unknown names throw. A patch object starts from its `preset` base (or the default subtractive patch when `preset` is omitted) and overrides the shared controls — see [NativeSynth](./native-synth.md) for the field list. Pass an array to bind several destinations; an empty array binds nothing.
+Use [`synthPresetNames()`](./native-synth.md) to discover valid names instead of hardcoding magic strings; unknown names throw. A patch object starts from its `preset` base (or the default subtractive patch when `preset` is omitted) and overrides the shared controls — see [NativeSynth](./native-synth.md) for the field list. A patch `gain` must be in [0, 4]; a value outside it, or a non-finite one, is refused by name. Amp and filter decay and release times such as `ampReleaseMs` are three time constants, about −26 dB at the set time. Pass an array to bind several destinations; an empty array binds nothing.
 
 ::: tip Following GM programs instead of pinning one patch
 Each entry passed to `bounceWithSynthInstrument` (as a `SynthPatch` object, not a bare preset string) may also carry `destinationId` (default `0`) and `useGmPrograms` (default `false`). With `useGmPrograms` on, MIDI program changes select the matching General MIDI voice per destination while the bound patch stays as the fallback for anything the map does not cover. The sibling spellings are `use_gm_programs` on the C ABI and `auto_select_gm` in Python. See [Following GM programs instead of pinning one patch](./gm-gs.md#following-gm-programs-instead-of-pinning-one-patch) for the full explanation and examples.

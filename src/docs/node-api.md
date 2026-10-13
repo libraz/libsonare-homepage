@@ -186,7 +186,7 @@ the array yourself if you read it in a loop. The same applies on WASM.
 
 ### Decoding Every Channel
 
-`Audio.fromMemory(data)` and `Audio.fromFile(path)` fold a multichannel source to mono. `decodeChannels(data)` decodes bytes once and keeps every channel: it returns `{ sampleRate, channels }`, one `Float32Array` per channel in the source's own order (5.1 is L R C LFE Ls Rs). `downmix(channels, targetLayout)` folds channels to a narrower layout (`0` mono, `1` stereo, `2` 5.1, `3` 7.1) with the ITU-R BS.775 rule the decoders use: centre and surround at -3 dB, LFE dropped. It cannot upmix.
+`Audio.fromMemory(data)` and `Audio.fromFile(path)` fold a multichannel source to mono. `decodeChannels(data)` decodes bytes once and keeps every channel: it returns `{ sampleRate, channels }`, one `Float32Array` per channel in the source's own order (5.1 is L R C LFE Ls Rs). `downmix(channels, targetLayout)` folds channels to a narrower layout (`0` mono, `1` stereo, `2` 5.1, `3` 7.1) with the ITU-R BS.775 rule the decoders use: centre and surround at -3 dB, LFE dropped. It cannot upmix. The optional third argument `{ normalize, includeLfe }` scales the fold so the worst case stays at or below full scale (`normalize`, default `false`) and folds the LFE plane into the front pair at -3 dB instead of dropping it (`includeLfe`, default `false`); without `normalize` the fold can pass full scale.
 
 ```typescript
 import { decodeChannels, downmix } from '@libraz/libsonare-native';
@@ -234,7 +234,7 @@ All six also take a request object. The mel and MFCC requests name the matrix `p
 
 | Function | Return Type | Description |
 |----------|-------------|-------------|
-| `melToStft(power, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `InverseStftResult` | Linear STFT power from a mel spectrogram |
+| `melToStft(power, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `InverseStftResult` | Linear STFT magnitude (`magnitude`) from a mel spectrogram |
 | `melToAudio(power, nMels, nFrames, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | Audio from a mel spectrogram (Griffin-Lim) |
 | `mfccToMel(coefficients, nMfcc, nFrames, nMels?, lifter?)` | `InverseMelResult` | Mel spectrogram from MFCC coefficients |
 | `mfccToAudio(coefficients, nMfcc, nFrames, nMels?, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?, lifter?)` | `Float32Array` | Audio from MFCC coefficients; `lifter` defaults to 0 |
@@ -448,7 +448,7 @@ and `assistSidecars()` methods preserve opaque module metadata, while
 `ProjectAutomationTargetKind` and `targetKind` classify automation lanes.
 `RealtimeEngine.setTrackMonitorMode(laneIndex, mode, renderFrame?)` accepts
 `'off'`, `'pfl'` (pre-fader listen), or `'afl'` (after-fader listen), and their
-numeric ordinals; omit `renderFrame` to apply immediately. Track and mixer pan
+numeric ordinals; omit `renderFrame` to apply immediately. `process()` and `processPrepared()` fold an armed cue into their single output, so the tapped lane is counted twice there; offline renders, bounces, stem bounces and freezes carry the program output only, whatever the monitor or solo state. Track and mixer pan
 law setters accept the `PanLawInput` aliases described below.
 
 ### Additional stateful methods
@@ -462,7 +462,7 @@ law setters accept the `PanLawInput` aliases described below.
 | `RealtimeEngine` capture and paging | `countInEndSample(startSample, bars)` resolves the count-in end on the tempo map. `createFileClipPageProvider(path, options)` creates a file-backed provider; destroy the provider when done. |
 | `RealtimeEngine` routing | `setTrackSends(trackId, sends)` and `setTrackOutputBus(trackId, busId)` replace one lane's sends or output bus (`busId` 0 is the master mix); the track must already be in the lane list set by `setTrackLanes`. `canSetLaneSidechain(trackId, insertIndex, sourceTrackId)`, `canSetBusSidechain(...)` and `canSetMasterSidechain(...)` return a `SidechainCheck` without changing anything. |
 | `RealtimeEngine` offline and clips | `primeOfflineParameters(numChannels, blockSize)`, `resetProcessorState(renderFrame?)`, `tailSamples()` and `graphLatencySamplesQ8()` (latency in 1/256 samples) support offline renders. `upsertClip(clip)` and `removeClip(clipId)` edit clips in place. |
-| `RealtimeEngine` automation ids | `resolveTrackLaneAutomationId(trackId, 'faderDb' \| 'pan')` and `resolveBusAutomationId(busId, 'faderDb')` return the id to automate. |
+| `RealtimeEngine` automation ids | `resolveTrackLaneAutomationId(trackId, 'faderDb' \| 'pan')` and `resolveBusAutomationId(busId, 'faderDb')` return the id to automate; `resolveMasterAutomationId('faderDb' \| 'pan' \| 'width')` does the same for the master strip and returns `-1` for any other name. |
 | `RealtimeEngine` MIDI | `pushMidiProgram(destinationId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)` queues a program change. |
 | `Mixer` routing | `setOutputBus(sourceId, busId)` routes a source to a bus; `flushMeters()` folds the pending true-peak stretch into the meter snapshots; call it after the last block of an offline render. |
 | `Project` bounces and sources | `bounceWithInstruments(instruments, options?)` and `bounceWithInstrument(instrument, options?)` bounce with external instruments. `unresolvedAudioSources()` returns the descriptors of audio sources that still need decoded PCM, in the order of `unresolvedAudioSourceIds()`. |

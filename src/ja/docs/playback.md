@@ -159,7 +159,7 @@ const hrtf = HrtfSet.fromBytes(bytes);
 
 ## ラウドネス整合とメーター
 
-`loudness.program_lufs` と `loudness.target_lufs` は `clamp(target_lufs - program_lufs, -40, +12)` dB の静的ゲインを 1 つ適用します。上限と下限があるため目標へ届かない場合もありますが、その代わり、ライブの圧縮のようにシーンの切り替わりでポンピングを起こすことはありません。`PlaybackLoudnessMeter`（1・2・6・8 チャンネル、BS.1770 のチャンネル重み）は、再生前に番組全体の統合ラウドネスを測定します。`pushInterleaved`/`push_interleaved` でインターリーブ済みのチャンクを流し込み、番組を最後まで流し終えたら `integratedLufs()`/`integrated_lufs()` を読み、その値を `loudness.program_lufs` として渡してください。
+`loudness.program_lufs` と `loudness.target_lufs` は `clamp(target_lufs - program_lufs, -40, +12)` dB の静的ゲインを 1 つ適用します。上限と下限があるため目標へ届かない場合もありますが、その代わり、ライブの圧縮のようにシーンの切り替わりでポンピングを起こすことはありません。`PlaybackLoudnessMeter`（1・2・6・8 チャンネル。BS.1770 の重みはスピーカー位置で決まり、5.1 のサラウンドと 7.1 のサイド対は 1.41、7.1 のバック対とそれ以外は 1.0、LFE は除外）は、再生前に番組全体の統合ラウドネスを測定します。`pushInterleaved`/`push_interleaved` でインターリーブ済みのチャンクを流し込み、番組を最後まで流し終えたら `integratedLufs()`/`integrated_lufs()` を読み、その値を `loudness.program_lufs` として渡してください。
 
 ## どの言語でも同じ流れ
 
@@ -238,12 +238,12 @@ const rendered = renderPlayback({ samples, channels: 6, sampleRate: 48000, confi
 // 確認が済むまで worklet の入力は mono/stereo/5.1 に留めてください。
 
 // playback-worklet.ts（worklet モジュール）。プロセッサは worklet 自身の realm で
-// レンダラーを作るため、先にそこで WASM モジュールを初期化しておく必要があります。
-import { init, registerSonarePlaybackWorkletProcessor } from '@libraz/libsonare/worklet';
+// レンダラーを作りますが、そこにはまだ WASM モジュールがありません。Emscripten
+// ファクトリを公開しておけば、プロセッサが渡されたバイト列でモジュールを初期化します。
+import { registerSonarePlaybackWorkletProcessor } from '@libraz/libsonare/worklet';
 import createModule from './sonare.js'; // パッケージの WASM グルーに含まれる Emscripten ファクトリ
 
-// wasmBinary: sonare.wasm のバイト列。バンドラーでこのモジュールに埋め込みます。
-await init({ moduleFactory: createModule, wasmBinary, locateFile: (path) => path });
+globalThis.SonareEmbindModuleFactory = createModule;
 registerSonarePlaybackWorkletProcessor(); // 'sonare-playback-processor'
 
 // main.ts
@@ -251,10 +251,13 @@ import { createSonarePlaybackNode } from '@libraz/libsonare/worklet';
 
 await context.audioWorklet.addModule('/playback-worklet.js');
 const hrtf = await (await fetch(hrtfUrl)).arrayBuffer(); // @libraz/libsonare/hrtf/default.shrf
+const wasmBinary = await (await fetch(wasmUrl)).arrayBuffer(); // sonare.wasm
 const node = createSonarePlaybackNode(context, {
   config: { input: { layout: 'auto' }, target: { kind: 'headphones' } },
   hrtf,
+  wasmBinary,
 });
+// モジュールが立ち上がるまでプロセッサは無音を返し、立ち上がると { type: 'ready' } を送ります。
 context.createMediaElementSource(video).connect(node).connect(context.destination);
 video.addEventListener('seeking', () => node.port.postMessage({ type: 'reset' }));
 ```
@@ -269,7 +272,7 @@ sonare playback movie-5.1.wav -o room.wav --target headphones --room home_theate
 
 :::
 
-`createSonarePlaybackNode` の `sampleRate` は省略してください。AudioContext のレートが既定で、異なる値は `RangeError` になります。worklet では、入力のないブロックや未対応のチャンネル数のブロックは無音になり、未対応のものは診断の返信で `unsupported_input_blocks` として数えられます。worklet 内では WASM モジュールの初期化が必要で、プロセッサのオプションに `wasmBinary` はないため、バイト列は worklet モジュールに埋め込んでください。既定の HRTF アセットは `@libraz/libsonare/hrtf/default.shrf` です。
+`createSonarePlaybackNode` の `sampleRate` は省略してください。AudioContext のレートが既定で、異なる値は `RangeError` になります。worklet では、入力のないブロックや未対応のチャンネル数のブロックは無音になり、未対応のものは診断の返信で `unsupported_input_blocks` として数えられます。worklet 内では WASM モジュールの初期化が必要です。`sonare.wasm` のバイト列を `wasmBinary` として渡し、worklet モジュールで `globalThis.SonareEmbindModuleFactory` を設定すれば、プロセッサが自分でモジュールを初期化します。worklet モジュールがすでに `init()` を呼んでいる場合、`wasmBinary` は不要です。既定の HRTF アセットは `@libraz/libsonare/hrtf/default.shrf` です。
 
 ワンショット形式（`renderPlayback`、`render_playback`、`sonare_playback_render_interleaved`、`sonare playback`）は内部でレンダラーを生成して信号全体を流し、レンダラー自身のレイテンシを結果の先頭から取り除くので、出力は入力とサンプル単位で揃います。
 

@@ -237,8 +237,8 @@ interface AnalyzeWithProgressRequest {
 
 `sampleRate` はコールバックより前の位置引数ですが `undefined` を受け付け、その場合は `analyze` と同じ 22050 Hz の既定値を使います。実際のレートを渡してください。
 
-::: warning リクエスト形式では、オプションを `options` の下に置く
-`analyzeWithProgress({ samples, sampleRate, options: { bpmMin: 90, bpmMax: 140 } })` なら範囲が反映されます。同じキーを `samples` と並べて書いた場合（`{ samples, sampleRate, bpmMin: 90 }`）は、エラーにならずに無視されます。この呼び出しは同期的で、実行したスレッドをブロックします。ページ上で UI の描画を保つには、[ワーカークライアント](./wasm-advanced.md)経由で実行してください。
+::: tip リクエスト形式では、オプションを `samples` と並べても `options` の下に置いても構わない
+`analyzeWithProgress({ samples, sampleRate, bpmMin: 90, bpmMax: 140 })` と `analyzeWithProgress({ samples, sampleRate, options: { bpmMin: 90, bpmMax: 140 } })` は、`analyze` と同じく同じ範囲を反映します。両方に書いたフィールドは `options` の値が採用され、解析オプションにないキーはそのキーを挙げた `TypeError` になります。この呼び出しは同期的で、実行したスレッドをブロックします。ページ上で UI の描画を保つには、[ワーカークライアント](./wasm-advanced.md)経由で実行してください。
 :::
 
 **進捗ステージ:**
@@ -332,7 +332,7 @@ PPQ グリッドをプロジェクトのテンポマップに合わせる場合�
 |------|------|------|
 | 小節頭 | `detectDownbeats(samples, sampleRate)` | 小節頭と思われる位置の秒数。`detectBeats` と組み合わせるとグリッド表示に向きます。[ビートとダウンビート](./glossary/analysis/beats-downbeats.md) を参照 |
 | キー候補の順位付き一覧 | `detectKeyCandidates(samples, sampleRate, options?)` | 全キーと confidence を高い順に返します。トップ候補が曖昧な曲や、モード・プロファイルを絞りたい場合に使います |
-| テンポ候補 | `analyzeBpm(...)` | `bpm`、`confidence`、`candidates`、`autocorrelation`、`tempogram` |
+| テンポ候補 | `analyzeBpm(...)` | `bpm`、`confidence`、`candidates`（選ばれたテンポが先頭、残りは得票率順）、`autocorrelation`、`tempogram` |
 | リズム傾向 | `analyzeRhythm(...)` | `timeSignature`、`syncopation`、`grooveType`、`patternRegularity`、`tempoStability`、`bpm`、`beatIntervals` |
 | ダイナミクス | `analyzeDynamics(...)` | `Dynamics` のフィールドに `loudnessTimes` と `loudnessRmsDb` を加えたもの |
 | 音色 | `analyzeTimbre(...)` | `Timbre` のフィールドに `spectralCentroid`、`spectralFlatness`、`spectralRolloff`、`timbreOverTime` を加えたもの |

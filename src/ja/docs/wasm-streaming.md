@@ -347,7 +347,7 @@ sonare mfcc-to-audio music.wav -o mfcc-reconstructed.wav
 
 | 関数 | 戻り値 | 備考 |
 |------|--------|------|
-| `melToStft(power, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `StftPowerResult` `{ nBins, nFrames, power }` | メルフィルターバンクの擬似逆変換 |
+| `melToStft(power, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `StftMagnitudeResult` `{ nBins, nFrames, magnitude }` | メルフィルターバンクの擬似逆変換 |
 | `melToAudio(power, nMels, nFrames, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | Griffin-Lim による音声合成 |
 | `mfccToMel(coefficients, nMfcc, nFrames, nMels?, lifter?)` | `MelPowerResult` `{ nMels, nFrames, power }` | 逆 DCT でメルスペクトログラムへ。順変換で使った lifter を渡す |
 | `mfccToAudio(coefficients, nMfcc, nFrames, nMels, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?, lifter?)` | `Float32Array` | MFCC → メル → 音声を一度に。順変換で使った lifter を渡す |

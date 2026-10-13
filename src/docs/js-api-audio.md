@@ -45,9 +45,9 @@ const audio = await Audio.fromMemoryWithBrowserFallback(
 
 `async`; returns `Promise<DecodedChannels>`, the same `{ sampleRate, channels }` as `decodeChannels`. Formats the bundled decoder does not carry (AAC, OGG, FLAC) go through the browser codec stack as in `Audio.fromMemoryWithBrowserFallback`, taking the same `BrowserAudioDecodeOptions`, and every channel the browser returns is kept.
 
-### `downmix(channels, targetLayout)`
+### `downmix(channels, targetLayout, options?)`
 
-Narrows planes to a smaller layout with the ITU-R BS.775 rule: center and surround enter the front pair at -3 dB and the LFE plane is dropped. `targetLayout` is `0` mono, `1` stereo, `2` 5.1, `3` 7.1; the source layout is named by the channel count (1, 2, 6 or 8), and any other count folds to mono as the unweighted mean. An upmix or unknown layout throws `SonareError` (`InvalidParameter`); no channels, planes of differing length, or a `targetLayout` that is not an integer in the 32-bit range throw `RangeError`, and a non-number `targetLayout` throws `TypeError`.
+Narrows planes to a smaller layout with the ITU-R BS.775 rule: center and surround enter the front pair at -3 dB and the LFE plane is dropped. `targetLayout` is `0` mono, `1` stereo, `2` 5.1, `3` 7.1; the source layout is named by the channel count (1, 2, 6 or 8), and any other count folds to mono as the unweighted mean. The fold is not normalized, so a source with several full-scale planes can pass full scale (six planes of 1.0 fold to 2.414 on a stereo target). The optional third argument `{ normalize, includeLfe }` changes that: `normalize: true` scales the fold so the worst case (every input at full scale, in phase) stays at or below unity, a peak divisor rather than a loudness match, and `includeLfe: true` folds the LFE plane into the front pair at -3 dB instead of dropping it. Both default to `false`. An upmix or unknown layout throws `SonareError` (`InvalidParameter`); no channels, planes of differing length, or a `targetLayout` that is not an integer in the 32-bit range throw `RangeError`, and a non-number `targetLayout` throws `TypeError`.
 
 ```typescript
 import { init, decodeChannels, downmix } from '@libraz/libsonare';
@@ -414,7 +414,7 @@ const offline = mixStereo([vocalL, musicL], [vocalR, musicR], sampleRate, {
 });
 
 const mixer = Mixer.fromSceneJson(mixingScenePresetJson('vocalReverbSend'), sampleRate, 512);
-mixer.sceneWarnings(); // non-fatal scene-load warnings: insert params no processor reads (typos)
+mixer.sceneWarnings(); // non-fatal scene-load warnings: insert params no processor reads (typos), sends to an undeclared bus
 const latency = mixer.latencySamples(); // compiled graph latency for dry/wet alignment
 const block = mixer.processStereo([vocalBlockL, musicBlockL], [vocalBlockR, musicBlockR]);
 const meter = mixer.stripMeter(0, 'postFader');
@@ -428,5 +428,7 @@ const sceneJson = mixer.toSceneJson();
 mixer.delete();
 ```
 
-`Mixer.createRealtimeBuffer()` and `processStereoInto(...)` are intended for AudioWorklet-style render loops where avoiding per-block allocation matters. See [Mixing Engine](./mixing.md) for scene and routing details.
+A send to a bus the scene never declares still loads, with the implicit aux bus created, and adds a scene warning naming the strip and the bus (`send 'vocal' targets undeclared bus 'nowhere'; created as implicit aux`).
+
+`Mixer.createRealtimeBuffer()` and `processStereoInto(...)` are intended for AudioWorklet-style render loops where avoiding per-block allocation matters. `processStereo` and `processStereoInto` both accept fewer input channels than the mixer has strips, leaving the remaining strips silent, and throw a `RangeError` naming both counts when given more (`got 3 input channels for a 2-strip mixer`). See [Mixing Engine](./mixing.md) for scene and routing details.
 

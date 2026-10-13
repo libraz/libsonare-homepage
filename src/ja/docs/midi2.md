@@ -108,7 +108,7 @@ MIDI 1.0 の対象には、MIDI 1.0 パッカーも使えます。`midiNoteOn`�
 
 ## リアルタイムで生 UMP をキューへ入れる
 
-`RealtimeEngine.pushMidiUmp(destinationId, words, renderFrame?)` は、最上位ワードから並べた 1〜4 個の 32 ビットワードを受け取ります。配列の長さは先頭ワードのメッセージタイプと一致する必要があります。MT `0x4` の MIDI 2.0 チャンネルボイスはフル解像度で渡されます。`setMidiInputSource(...)` の後で使う `pushMidiInputUmp(words, portTimeSamples = 0)` も同じ規則でエンジン所有の入力ソースへ入れます。
+`RealtimeEngine.pushMidiUmp(destinationId, words, renderFrame?)` は、最上位ワードから並べた 1〜4 個の 32 ビットワードを受け取ります。配列の長さは先頭ワードのメッセージタイプと一致する必要があります。MT `0x4` の MIDI 2.0 チャンネルボイスはフル解像度で渡されます。`setMidiInputSource(...)` の後で使う `pushMidiInputUmp(words, offsetInBlockSamples = 0)` も同じ規則でエンジン所有の入力ソースへ入れます。
 
 ::: code-group
 
@@ -143,7 +143,7 @@ finally:
 
 :::
 
-AudioWorklet の `SonareEngine` ファサードは `pushMidiUmp(trackId, words, renderFrame?)` で完全なパケットを受け取ります。`words` は従来の 1 ワードの数値、または 1〜4 ワードの配列／`Uint32Array` にできます。エンジン所有の入力ソースに入れる `pushMidiInputUmp(words, portTimeSamples = 0)` も同じ完全なパケットを受け取ります。生の MT `0x3`／`0x5` データメッセージはどちらの生 UMP 呼び出しでも拒否されるため、完全な SysEx フレームを `pushMidiSysex` で送ります。キュー満杯や不正なワードはバインディングからエラーとして返ります。
+AudioWorklet の `SonareEngine` ファサードは `pushMidiUmp(trackId, words, renderFrame?)` で完全なパケットを受け取ります。`words` は従来の 1 ワードの数値、または 1〜4 ワードの配列／`Uint32Array` にできます。エンジン所有の入力ソースに入れる `pushMidiInputUmp(words, offsetInBlockSamples = 0)` も同じ完全なパケットを受け取ります。生の MT `0x3`／`0x5` データメッセージはどちらの生 UMP 呼び出しでも拒否されるため、完全な SysEx フレームを `pushMidiSysex` で送ります。キュー満杯や不正なワードはバインディングからエラーとして返ります。
 
 ライブのプログラムチェンジは、MIDI 2.0 メッセージ 1 件として送ります。デスティネーションには `pushMidiProgram(...)`、入力ソースには `pushMidiInputProgram(...)` を使います。従う受信側は一部だけです。シグネチャ、引数の範囲、受信側の表は [MIDI 入力](./midi-input.md#プログラムチェンジに従う受信側) を参照してください。
 

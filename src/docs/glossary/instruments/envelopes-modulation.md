@@ -51,7 +51,7 @@ Three of the four ADSR controls are durations (in milliseconds). Sustain is the 
 The stages are curves, not straight lines, because a straight-line fade sounds mechanical: real instruments die away by a fixed fraction per unit of time.
 
 - **Attack** rises along a curve that is steep at first and flattens near the top, and it reaches full level at exactly the attack time. Measured in NativeSynth with a 200 ms attack, the level is −7.4 dB at 50 ms, −3.2 dB at 100 ms and full at 200 ms.
-- **Decay and release** fall exponentially, which is a straight line when the level is drawn in decibels. The time you set is where the fall has covered about 26 dB (three time constants, about 95% of the way), not where it reaches silence. A 600 ms release measures −8.5 dB after 200 ms, −17.2 dB after 400 ms, −25.9 dB after 600 ms, and is still at −51.9 dB after 1.2 s.
+- **Decay and release** fall exponentially, which is a straight line when the level is drawn in decibels. The time you set is where the fall has covered about 26 dB (three time constants, about 95% of the way), not where it reaches silence. A 600 ms release measures −8.5 dB after 200 ms, −17.2 dB after 400 ms, −25.9 dB after 600 ms, and is still at −51.9 dB after 1.2 s. This is the `SynthPatch` amplitude and filter envelope; the minimal built-in oscillator instrument's ADSR moves in linear ramps instead, and its set time is a full 0-to-1 sweep.
 
 <EnvelopeCurveFigure
   title="An amplitude envelope in decibels"

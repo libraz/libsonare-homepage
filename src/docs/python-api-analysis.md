@@ -129,7 +129,7 @@ with Audio.from_file("music.mp3") as audio:
 | `analyze(samples, sample_rate)` | `AnalysisResult` | All-in-one analysis: BPM and its candidates, key, time signature and its candidates, beats, chords (each with `roman_numeral` relative to the detected key), sections, timbre, dynamics, rhythm, melody, form |
 | `analyze_with_progress(samples, sample_rate, on_progress?)` | `AnalysisResult` | Same result and analysis keyword options as `analyze`, with an optional `(progress, stage)` callback and keyword-only `cancel` callback |
 | `transcribe(samples, sample_rate, ...)` | `TranscribeResult` | Mono audio to MIDI events on a constant-tempo PPQ grid; returns `events`, `note_count`, `tempo_bpm`, and the `tuning` it used |
-| `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | BPM with top candidates |
+| `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | BPM with top candidates; `candidates[0]` is the chosen tempo and the rest follow by vote share |
 | `estimate_meter(beat_times, beat_strengths, ...)` | `MeterEstimate` | Meter and accent grouping scored over a beat series you already have — no audio, no re-analysis |
 | `chord_functional_analysis(samples, key_root, key_mode=Mode.MAJOR, sample_rate=22050, ...)` | `list[FunctionalChord]` | `sample_rate` comes after the key, so pass it by keyword. Detects chords, then returns the timed entries (every `Chord` field) with `roman` (`"I"`, `"V7"`, `"vi"`, ...) and `function` (`"tonic"`, `"subdominant"`, `"dominant"`, `"chromatic"`, `"none"`) added |
 | `chord_functions(chords, key)` | `list[FunctionalChord]` | Labels chords you already have in `key`, without re-detecting. `chords` is a `detect_chords` result or its `chords` list; `key` is a `Key`, a `{"root": ..., "mode": ...}` mapping, or a `(root, mode)` pair |
@@ -376,7 +376,7 @@ Reconstruct a spectrum or audio from a mel spectrogram or MFCC matrix. Phase is 
 | Function | Return Type | Description |
 |----------|-------------|-------------|
 | `griffin_lim(magnitude, n_bins, n_frames, sample_rate?, n_fft?, hop_length?, n_iter?, momentum?)` | `list[float]` | Audio from a row-major STFT magnitude matrix; `n_iter` defaults to `32`, `momentum` to `0.99` |
-| `mel_to_stft(mel, n_mels, n_frames, sample_rate?, n_fft?, fmin?, fmax?, htk?)` | `InverseResult` | Linear STFT power from a mel spectrogram |
+| `mel_to_stft(mel, n_mels, n_frames, sample_rate?, n_fft?, fmin?, fmax?, htk?)` | `InverseResult` | Linear STFT magnitude from a mel spectrogram |
 | `mel_to_audio(mel, n_mels, n_frames, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?)` | `list[float]` | Audio from a mel spectrogram (Griffin-Lim) |
 | `mfcc_to_mel(mfcc_coeffs, n_mfcc, n_frames, n_mels?, lifter?)` | `InverseResult` | Mel spectrogram (dB) from MFCC coefficients (`lifter` must match the forward `mfcc(...)` call) |
 | `mfcc_to_audio(mfcc_coeffs, n_mfcc, n_frames, n_mels?, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?, lifter?)` | `list[float]` | Audio from MFCC coefficients |

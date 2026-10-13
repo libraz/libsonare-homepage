@@ -88,7 +88,7 @@ The filter model is the heart of the "character". Four classic models are availa
 | Model | Circuit topology | Poles (lowpass slope) | Notes |
 |-------|------------------|-----------------------|-------|
 | `svf` | TPT state-variable | 2 (12 dB/octave) | Clean, the only model with a selectable `filterOutput` (lowpass / bandpass / highpass) |
-| `moog-ladder` | Four-pole transistor ladder | 4 (24 dB/octave) | Zero-delay-feedback, saturating loop, self-oscillates |
+| `transistor-ladder` | Four-pole transistor ladder | 4 (24 dB/octave) | Zero-delay-feedback, saturating loop, self-oscillates |
 | `diode-ladder` | Diode ladder | 4 coupled stages (24 dB/octave far above cutoff) | Coupled-stage ZDF, self-oscillates |
 | `sallen-key` | Sallen-Key | 2 (12 dB/octave) | Self-oscillates |
 
@@ -265,17 +265,17 @@ The patch exposes the shared controls every engine uses:
 - **Key tracking** — making a parameter (like filter cutoff) follow the note's pitch up the keyboard.
 :::
 
-Ranges are what `synthPatchParamInfo()` reports; a value outside one is clamped, and the same call returns each field's init value.
+Ranges are what `synthPatchParamInfo()` reports; a value outside one is clamped (`gain` is the exception: outside [0, 4], or non-finite, it is refused by name), and the same call returns each field's init value.
 
 | Group | Fields |
 |-------|--------|
 | Oscillator | `unison` (1-7) and `detuneCents` (0-200), both subtractive only; `driftCents` (0-100), `driftRateHz` (0.01-20), `drive` (0-1), `pitchOffsetCents` (-4800 to 4800) |
 | Filter | `cutoffHz` (10-22000), `resonanceQ` (0.5-30), `keyTrack` (0-1), `envToCutoffCents` and `velToCutoffCents` (-9600 to 9600), `hpCutoffHz` (0-22000, 0 is off) |
 | Output stage | `sampleHoldHz` (0-192000, 0 is off), `bitDepth` (0-24, 0 is off) |
-| Amp and filter envelopes | `ampDelayMs` / `ampHoldMs` and the `filter*` pair (0-5000); attack, decay and release times (up to 20000 ms); `ampSustain` / `filterSustain` (0-1); `oneShot` (amp only, boolean) |
+| Amp and filter envelopes | `ampDelayMs` / `ampHoldMs` and the `filter*` pair (0-5000); attack, decay and release times (up to 20000 ms; decay and release are three time constants, so the set time lands about 26 dB down); `ampSustain` / `filterSustain` (0-1); `oneShot` (amp only, boolean) |
 | LFOs and glide | `lfoRateHz`, `lfo2RateHz` (0-40), `lfoToPitchCents` (0-1200), `glideMs` (0-5000) |
 | Body | `body` (`none` / `guitar` / `violin` / `wood-tube` / `brass-bell` / `vocal`), `bodyMix` (0-1) |
-| Stereo and output | `stereoSpread` (0-1), `gain` (linear), `polyphony` (1-64), `busDrive` (0-1) |
+| Stereo and output | `stereoSpread` (0-1), `gain` (linear, 0-4), `polyphony` (1-64), `busDrive` (0-1) |
 | Enums | `engineMode`, `waveform` (subtractive only), `filterModel`, `filterOutput` (SVF only): names from `synthEnumTables()`, or `'default'` to keep the base |
 | Voice start state | `retrigger` (`'default'` / `'free'` / `'note'`) |
 | Engine section | `engineParams` (a key-to-number record) |
@@ -382,7 +382,7 @@ synthEnumTables();
 //   engineModes:      ['default', 'subtractive', 'fm', ..., 'harpsichord', 'sample'],
 //   waveforms:        ['default', 'sine', 'saw', 'square', 'triangle', 'noise'],
 //   builtinWaveforms: ['sine', 'saw', 'sawtooth', 'square', 'triangle'],
-//   filterModels:     ['default', 'svf', 'moog-ladder', 'diode-ladder', 'sallen-key'],
+//   filterModels:     ['default', 'svf', 'transistor-ladder', 'diode-ladder', 'sallen-key'],
 //   filterOutputs:    ['default', 'lowpass', 'bandpass', 'highpass'],
 //   bodyTypes:        ['default', 'none', 'guitar', 'violin', 'wood-tube',
 //                      'brass-bell', 'vocal'],
@@ -404,7 +404,7 @@ The same arrays are also exported as named constants (`SYNTH_ENGINE_MODES`, `SYN
 
 Node and WASM expose this field as `SynthPatch.retrigger`, and Python uses the same `SynthPatch.retrigger` attribute. Its TypeScript union is `SynthRetrigger`, and `SYNTH_RETRIGGERS` is the exported name table `['default', 'free', 'note']`. This table is separate from the object returned by `synthEnumTables()`. The C API names the matching enum `SonareSynthRetrigger` and its values `SONARE_SYNTH_RETRIGGER_BASE`, `SONARE_SYNTH_RETRIGGER_FREE`, and `SONARE_SYNTH_RETRIGGER_NOTE`.
 
-`builtinWaveforms` / `BUILTIN_SYNTH_WAVEFORMS` is a separate list: it belongs to the minimal built-in oscillator synth (`setBuiltinInstrument`), not to NativeSynth's `waveform` field. It has no `'default'` entry, accepts `'sawtooth'` as well as `'saw'`, and does **not** accept `'noise'`.
+`builtinWaveforms` / `BUILTIN_SYNTH_WAVEFORMS` is a separate list: it belongs to the minimal built-in oscillator synth (`setBuiltinInstrument`), not to NativeSynth's `waveform` field. It has no `'default'` entry, accepts `'sawtooth'` as well as `'saw'`, and does **not** accept `'noise'`. Its ADSR times are linear ramps over the set time, unlike the three-time-constant decay and release of a `SynthPatch`.
 
 ### Host PCM: the `sample` engine
 

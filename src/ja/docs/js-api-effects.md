@@ -379,6 +379,8 @@ const morphed = roomMorph(samples, sampleRate, { lengthM: 12, widthM: 9, heightM
 
 `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)` の `minDecayDb` は減衰フィットのしきい値で、既定値は `30` です。
 
+`estimateRoom` の `referenceAbsorption` は、体積のスケールを決める平均吸音率の事前値です。`0` はライブラリの既定値（`0.15`）を意味し、`[0.01, 0.99]` の外の値は拒否されずにクランプされます。報告される体積は事前値の 3 乗に比例します。
+
 `materialPreset`（`'none' | 'concrete' | 'wood' | 'curtain' | 'carpet' | 'glass'`、型は `MaterialPresetName`）と `estimateRoom` の `mode` オプション（`'auto' | 'blind' | 'impulse_response'`、型は `AcousticModeName`）は名前だけを受け付けます。数値は `TypeError`、未知の名前は `RangeError` です。`roomGeometryFromEstimate(estimate, { source?, listener? })` は `RoomPlacement`（メートル単位の `{ x, y, z }`）の位置を受け取り、`RoomGeometryOptions` を返します。既定の配置を推定した部屋へ縮尺した位置が入り（渡した位置はそれを置き換えます）、`absorption` は有限なバンドの平均です。計測できる寸法がない推定結果には `RangeError` を投げます。
 
 RT60、EDT、C50、C80、D50、バンド別配列、ルーム推定、生成 RIR、信頼度の読み方は [ルーム音響解析](./acoustic-analysis.md) を参照してください。

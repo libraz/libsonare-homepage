@@ -45,9 +45,9 @@ const audio = await Audio.fromMemoryWithBrowserFallback(
 
 `async` で、`decodeChannels` と同じ `{ sampleRate, channels }` である `Promise<DecodedChannels>` を返します。同梱デコーダーが扱わない形式（AAC、OGG、FLAC）は `Audio.fromMemoryWithBrowserFallback` と同様にブラウザのコーデックスタックを経由し、同じ `BrowserAudioDecodeOptions` を取ります。ブラウザが返したチャンネルはすべて保持されます。
 
-### `downmix(channels, targetLayout)`
+### `downmix(channels, targetLayout, options?)`
 
-プレーンを、より狭いレイアウトへ ITU-R BS.775 の規則で変換します。センターとサラウンドは -3 dB でフロントペアに入り、LFE プレーンは捨てられます。`targetLayout` は `0` がモノラル、`1` がステレオ、`2` が 5.1、`3` が 7.1 です。元のレイアウトはチャンネル数（1、2、6、8）で決まり、それ以外の数は重みなしの平均でモノラルに折りたたまれます。アップミックスや未知のレイアウトは `SonareError`（`InvalidParameter`）、チャンネルなし、長さの異なるプレーン、32 ビット範囲の整数ではない `targetLayout` は `RangeError`、数値ではない `targetLayout` は `TypeError` を投げます。
+プレーンを、より狭いレイアウトへ ITU-R BS.775 の規則で変換します。センターとサラウンドは -3 dB でフロントペアに入り、LFE プレーンは捨てられます。`targetLayout` は `0` がモノラル、`1` がステレオ、`2` が 5.1、`3` が 7.1 です。元のレイアウトはチャンネル数（1、2、6、8）で決まり、それ以外の数は重みなしの平均でモノラルに折りたたまれます。折りたたみは正規化されないため、フルスケールに近いプレーンが複数あるソースはフルスケールを超えることがあります（1.0 の 6 プレーンはステレオ目標で 2.414 になります）。省略可能な第 3 引数 `{ normalize, includeLfe }` で挙動を変えられます。`normalize: true` は最悪ケース（全入力がフルスケールで同相）でも 1 以下に収まるよう折りたたみをスケールします（ラウドネスを合わせるのではなくピークで割る方式です）。`includeLfe: true` は LFE プレーンを捨てずに -3 dB でフロントペアへ加えます。どちらも既定は `false` です。アップミックスや未知のレイアウトは `SonareError`（`InvalidParameter`）、チャンネルなし、長さの異なるプレーン、32 ビット範囲の整数ではない `targetLayout` は `RangeError`、数値ではない `targetLayout` は `TypeError` を投げます。
 
 ```typescript
 import { init, decodeChannels, downmix } from '@libraz/libsonare';
@@ -425,7 +425,7 @@ const offline = mixStereo([vocalL, musicL], [vocalR, musicR], sampleRate, {
 });
 
 const mixer = Mixer.fromSceneJson(mixingScenePresetJson('vocalReverbSend'), sampleRate, 512);
-mixer.sceneWarnings(); // シーン読み込み時の非致命的な警告（どのプロセッサも読まない insert パラメータ＝タイプミス）
+mixer.sceneWarnings(); // シーン読み込み時の非致命的な警告（どのプロセッサも読まない insert パラメータ＝タイプミス、宣言されていないバスへのセンド）
 const latency = mixer.latencySamples(); // ドライ／ウェット整列用のコンパイル済みグラフ遅延
 const block = mixer.processStereo([vocalBlockL, musicBlockL], [vocalBlockR, musicBlockR]);
 const meter = mixer.stripMeter(0, 'postFader');
@@ -439,5 +439,7 @@ const sceneJson = mixer.toSceneJson();
 mixer.delete();
 ```
 
-AudioWorklet のようにレンダーブロックごとのアロケーションを避けたいループでは、`Mixer.createRealtimeBuffer()` と `processStereoInto(...)` を使います。シーンやルーティングの詳細は [ミキシングエンジン](./mixing.md) を参照してください。
+シーンが宣言していないバスへのセンドも読み込めます。暗黙のエイクスバスが作られ、ストリップとバスを名指しするシーン警告が加わります（`send 'vocal' targets undeclared bus 'nowhere'; created as implicit aux`）。
+
+AudioWorklet のようにレンダーブロックごとのアロケーションを避けたいループでは、`Mixer.createRealtimeBuffer()` と `processStereoInto(...)` を使います。`processStereo` と `processStereoInto` はどちらも、ストリップ数より少ない入力チャンネルを受け付け（残りのストリップは無音）、多い場合は両方の数を挙げた `RangeError` を投げます（`got 3 input channels for a 2-strip mixer`）。シーンやルーティングの詳細は [ミキシングエンジン](./mixing.md) を参照してください。
 

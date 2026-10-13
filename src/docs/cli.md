@@ -272,7 +272,7 @@ The `/mastering` browser demo uses the same mastering processor families. Use th
 
 ### eq
 
-`eq` applies the unified equalizer. One call sets one band from `--type`, `--frequency-hz`, `--gain-db` and `--q`; pass `--params` for several bands. `--placement` and `--output-pan` act on the file's own channels, and a two-channel file is processed as a pair. `sonare eq --help` lists the dynamic, sidechain and phase options.
+`eq` applies the unified equalizer. One call sets one band from `--type`, `--frequency-hz`, `--gain-db` and `--q`; pass `--params` for several bands. `--placement` and `--output-pan` act on the file's own channels, and a two-channel file is processed as a pair. `sonare eq --help` lists the dynamic, sidechain and phase options. The all-pass band (`--type 9`) changes phase only; linear-phase mode refuses it by name.
 
 | `--type` | Band | `--type` | Band |
 |----------|------|----------|------|
@@ -280,7 +280,7 @@ The `/mastering` browser demo uses the same mastering processor families. Use th
 | 1 | low shelf | 6 | notch |
 | 2 | high shelf | 7 | tilt shelf |
 | 3 | low-pass | 8 | flat tilt |
-| 4 | high-pass | | |
+| 4 | high-pass | 9 | all-pass |
 
 ### Assistant commands
 
@@ -338,13 +338,13 @@ sonare repair noisy.wav --preset broadcast -o clean.wav
 
 | Option | Description |
 |--------|-------------|
-| `--detect` | Measure and report only. No processing runs and no file is written. The Python CLI refuses `-o`, `--preset`, `--params` and `--bits` with it |
+| `--detect` | Measure and report only. No processing runs and no file is written. Both CLIs refuse `-o`; the Python CLI also refuses `--preset`, `--params` and `--bits` with it |
 | `--preset NAME` | Take the repair stages from a named preset (`sonare mastering-presets` lists them) instead of the measure-and-choose path |
 | `--params` | Stage overrides as `repair.<stage>.<field>=value,...` |
 | `--explain` | Report why each stage was chosen |
 | `--bits` | Output bit depth, 16 or 24 |
 
-`-o` is required unless `--detect` is given. `--explain` only describes a
+`-o` is required unless `--detect` is given, and `--detect` with `-o` is refused. `--explain` only describes a
 decision that actually ran, so combining it with `--preset` or `--detect` is
 rejected as an invalid parameter (exit 3). A file too short for the detectors
 reports `"defects": {"measured": false}` and nothing else.

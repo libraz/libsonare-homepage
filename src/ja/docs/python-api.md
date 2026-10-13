@@ -512,7 +512,7 @@ with sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512)
     mixer.schedule_fader_automation(0, 48000 * 8, -6, curve="s-curve")
 ```
 
-`mixer.process_stereo(...)` は `MixerStereoResult` 名前付きタプルを返します。`.left` と `.right`（`list[float]`）、`.sample_rate`（`int`）を持ち、Node/WASM の `{left, right, sampleRate}` と同じ形です。
+`mixer.process_stereo(...)` は `MixerStereoResult` 名前付きタプルを返します。`.left` と `.right`（`list[float]`）、`.sample_rate`（`int`）を持ち、Node/WASM の `{left, right, sampleRate}` と同じ形です。入力チャンネルがストリップより少ない場合、残りのストリップは無音になります。入力チャンネルがストリップより多い場合は、両方の数を示す `SonareValueError` が送出されます。
 
 `Mixer.set_pan_law(...)` と `RealtimeEngine.set_track_strip_pan_law(...)` は、`PanLaw` enum、整数の序数、または大文字小文字を区別しない文字列エイリアスを受け取ります。`const3db`、`const-3db`、`-3db`、`const4.5db`、`const-4.5db`、`-4.5db`、`const6db`、`const-6db`、`-6db`、`linear0db`、`linear-0db`、`linear`、`0db` が使え、アンダースコアはハイフンとして扱われます。
 
@@ -528,9 +528,9 @@ with sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512)
 | 内蔵シンセサイザー（NativeSynth）で MIDI をレンダリングする | `Project.bounce_with_synth_instrument(...)`、`synth_preset_names()`、`synth_preset_patch(name)`、`SynthPatch` | [内蔵シンセサイザー](./native-synth.md)、[プロジェクトのバウンス](./project-bounce.md) |
 | SoundFont で MIDI をレンダリングする | `Project.load_soundfont(data)`、`Project.bounce_with_sf2_instrument(...)` | [SoundFont プレイヤー](./soundfont-player.md) |
 | バウンス中に自前のインストゥルメントをホストする | `ExternalInstrument` プロトコルを使う `Project.bounce_with_instruments(...)`。`render(channels, num_frames)` コールバックに加え、任意の `prepare`/`on_event` フックと `latency_samples` を持ちます。Node と WASM には、コールバック形式が `bounceWithInstruments` / `bounceWithInstrument` としてあります。 | [プロジェクトのバウンス](./project-bounce.md#自前の楽器を組み込む) |
-| MIDI イベントからインストゥルメントをライブ演奏し、送出先（デスティネーション）の MIDI FX を差し替える | `RealtimeEngine.set_synth_instrument(...)`、`RealtimeEngine.load_soundfont(...)`、`RealtimeEngine.set_midi_fx(...)`、エンジンの MIDI 入力キュー、`push_midi_program(...)` / `push_midi_input_program(...)`（バンク指定を含められるプログラムチェンジを 1 回の呼び出しで送る。SoundFont プレイヤーと GM プログラムを割り当てたシンセはバンクに従う） | [MIDI 入力](./midi-input.md) |
+| MIDI イベントからインストゥルメントをライブ演奏し、送出先（デスティネーション）の MIDI FX を差し替える | `RealtimeEngine.set_synth_instrument(...)`、`RealtimeEngine.load_soundfont(...)`、`RealtimeEngine.set_midi_fx(...)`、エンジンの MIDI 入力キュー（各 push は `offset_in_block_samples` を取り、絶対的なクロック位置ではなく、次に処理されるブロック内のオフセットを表します）、`push_midi_program(...)` / `push_midi_input_program(...)`（バンク指定を含められるプログラムチェンジを 1 回の呼び出しで送る。SoundFont プレイヤーと GM プログラムを割り当てたシンセはバンクに従う） | [MIDI 入力](./midi-input.md) |
 | ライブエンジンへ MIDI クリップをサンプル精度でスケジュールする | `EngineMidiClipSchedule` / `EngineMidiEvent` を渡す `RealtimeEngine.set_midi_clips([...])`、`RealtimeEngine.sample_at_ppq(ppq)`。ppq は音楽的時間の単位で、四分音符あたりのパルス数です | [リアルタイムエンジン](./realtime-engine.md#midi-クリップスケジューリングと-sampleatppq) |
-| トラック単位のキューモニタリングを設定する | `RealtimeEngine.set_track_monitor_mode(lane_index, mode, render_frame=None)`。`EngineTrackMonitorMode`（`off`／`pfl`／`afl`）を使います。PFL はフェーダー前、AFL はフェーダー後を試聴します | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
+| トラック単位のキューモニタリングを設定する | `RealtimeEngine.set_track_monitor_mode(lane_index, mode, render_frame=None)`。`EngineTrackMonitorMode`（`off`／`pfl`／`afl`）を使います。PFL はフェーダー前、AFL はフェーダー後を試聴します。`process()` は有効なキューをプログラム出力に折り込みますが、オフラインのレンダリング、バウンス、フリーズには含まれません | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
 | デスティネーションを外部 MIDI ハードウェアへ送る | `set_midi_destination_external(...)`、`set_external_midi_clock_enabled(...)`、`drain_external_midi(...)`、`external_midi_dropped_count()` | [プロジェクト編集：MIDI](./project-editing-midi.md#トラックを外部-midi-機器へ送る) |
 | エンジンのトラックをライブミックス／自動化する | レーン／ストリップ操作に加え、`set_track_sends(track_id, sends)`、`set_track_output_bus(track_id, bus_id)`、`set_bus_strip_insert_param_by_name(...)`、`set_bus_strip_insert_bypassed(...)`、`resolve_track_insert_automation_id(...)`、`resolve_master_insert_automation_id(...)`、`resolve_bus_insert_automation_id(...)`、`set_param_smoothing_ms(...)` | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
 | ワイドメーターとスコープを読む | `drain_meter_telemetry_wide(...)`、`configure_scope_telemetry(...)`、`drain_scope_telemetry(...)` | [リアルタイムエンジン](./realtime-engine.md#サラウンドグループバスとワイドメーター) |
@@ -571,7 +571,7 @@ with sonare.Project() as project:
 | サイドチェイン接続が受理されるか、されないならなぜかを尋ねる | `RealtimeEngine.can_set_lane_sidechain`、`can_set_bus_sidechain`、`can_set_master_sidechain`（`SidechainCheck` を返す） | [リアルタイムエンジン](./realtime-engine.md) |
 | エンジンのクリップ集合を 1 クリップずつ編集する | `RealtimeEngine.upsert_clip`、`remove_clip` | [リアルタイムエンジン](./realtime-engine.md) |
 | プロセッサのリセット、繰り返しレンダリングの準備、テールとレイテンシの読み取り | `reset_processor_state`、`prime_offline_parameters`、`tail_samples`、`graph_latency_samples_q8` | [リアルタイムエンジン](./realtime-engine.md) |
-| フェーダーとパンのオートメーションをトラックやバスで指定する | `resolve_track_lane_automation_id`、`resolve_bus_automation_id` | [リアルタイムエンジン](./realtime-engine.md) |
+| フェーダー・パン・ウィズのオートメーションをトラック、バス、マスターで指定する | `resolve_track_lane_automation_id`、`resolve_bus_automation_id`、`resolve_master_automation_id`（`"faderDb"`・`"pan"`・`"width"`） | [リアルタイムエンジン](./realtime-engine.md) |
 | 信号の終わりで True Peak メーターの保留ウィンドウを反映する | `Mixer.flush_meters()` | [ミキシングエンジン](./mixing.md) |
 | プロジェクトで解決できなかったオーディオソースを列挙する | `Project.unresolved_audio_sources()` | [プロジェクト編集](./project-editing.md) |
 | ミキサーシーンの認識されないキーを読む | `Mixer.scene_warnings()` | [ミキシングシーン JSON](./mixing-scene-json.md) |

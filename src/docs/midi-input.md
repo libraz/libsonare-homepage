@@ -124,13 +124,13 @@ There are two queueing paths, and you should pick one per destination. Rule of t
 | `pushMidiSysex` | One destination | `renderFrame?` | Complete frame, `0xF0` to `0xF7`, 1..512 bytes |
 | `pushMidiUmp` | One destination | `renderFrame?` | 1 to 4 words; MT `0x4` keeps full width, MT `0x3` / `0x5` are rejected |
 | `pushMidiPanic` | Every destination | `renderFrame?` | Releases every sounding note |
-| `pushMidiInput*` (`NoteOn`, `NoteOff`, `Cc`, `PitchBend`, `ChannelPressure`, `PolyPressure`, `Program`, `Ump`) | The input source | `portTimeSamples` | Needs `setMidiInputSource(destinationId)`; the lane the Web MIDI bridge feeds |
+| `pushMidiInput*` (`NoteOn`, `NoteOff`, `Cc`, `PitchBend`, `ChannelPressure`, `PolyPressure`, `Program`, `Ump`) | The input source | `offsetInBlockSamples` | Needs `setMidiInputSource(destinationId)`; the lane the Web MIDI bridge feeds |
 
 - **Immediate engine commands** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` each take a `destinationId` and an optional `renderFrame`; omit it to fire as soon as possible. `pushMidiPanic(renderFrame?)` takes only the optional `renderFrame` and releases every sounding note on *all* destinations at once.
 - **Refusals** — every live push refuses a value outside its MIDI range with an error naming the argument and the range, such as `channel must be in [0, 15]` or `bend14 must be in [0, 16383]`, on destination pushes and input-source pushes alike: `RangeError` from the package classes on Node and WASM (the raw embind engine refuses with a `CppException`), `SonareValueError` in Python, `InvalidParameter` in C, each prefixed with the calling function's name. A negative `renderFrame` is refused the same way; "not given" is absence, never `-1`.
-- **The engine-owned live input source** — `setMidiInputSource(destinationId)` opens a dedicated input lane, then `pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` send events with a `portTimeSamples` timestamp. `pushMidiInputPitchBend`, `pushMidiInputChannelPressure`, `pushMidiInputPolyPressure`, `pushMidiInputProgram`, and `pushMidiInputUmp` add the expression, program-change and raw-packet paths. Pushing while the input source is disabled fails with `InvalidState`, and a full input queue with `OutOfMemory`; a WASM build without the input source throws `NotSupported`.
+- **The engine-owned live input source** — `setMidiInputSource(destinationId)` opens a dedicated input lane, then `pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` send events with a `offsetInBlockSamples` timestamp. `pushMidiInputPitchBend`, `pushMidiInputChannelPressure`, `pushMidiInputPolyPressure`, `pushMidiInputProgram`, and `pushMidiInputUmp` add the expression, program-change and raw-packet paths. Pushing while the input source is disabled fails with `InvalidState`, and a full input queue with `OutOfMemory`; a WASM build without the input source throws `NotSupported`.
 - **Live SysEx** — `pushMidiSysex(destinationId, data, renderFrame?)` queues a full SysEx (System Exclusive, a free-form manufacturer-specific message) frame to a destination; `data` is the complete message including the leading `0xF0` and trailing `0xF7` (1..512 bytes), and `renderFrame` follows the same omit-for-immediate convention as the other `pushMidi*` calls. Its primary use is delivering a GS/GM reset or a GS insertion-effect (EFX) selection to a live SF2-bound destination without stopping playback — see [SoundFont Player](./soundfont-player.md) for what that SysEx selects.
-- **Raw UMP messages** — `pushMidiUmp(destinationId, words, renderFrame?)` accepts an array or `Uint32Array` of 1–4 32-bit words, most significant first. The length must match the message type in the first word. MIDI 2.0 channel-voice messages (MT `0x4`) keep their full value width; SysEx7/data messages (MT `0x3`/`0x5`) are rejected, so use `pushMidiSysex` for those. The `SonareEngine` worklet facade accepts the same complete packet through `pushMidiUmp(trackId, words, renderFrame?)` (a legacy one-word number is also accepted), and its `pushMidiInputUmp(words, portTimeSamples = 0)` covers the engine-owned input source.
+- **Raw UMP messages** — `pushMidiUmp(destinationId, words, renderFrame?)` accepts an array or `Uint32Array` of 1–4 32-bit words, most significant first. The length must match the message type in the first word. MIDI 2.0 channel-voice messages (MT `0x4`) keep their full value width; SysEx7/data messages (MT `0x3`/`0x5`) are rejected, so use `pushMidiSysex` for those. The `SonareEngine` worklet facade accepts the same complete packet through `pushMidiUmp(trackId, words, renderFrame?)` (a legacy one-word number is also accepted), and its `pushMidiInputUmp(words, offsetInBlockSamples = 0)` covers the engine-owned input source.
 
 Every binding exposes the same SysEx call; only the naming convention changes. `data` is the complete frame (leading `0xF0`, trailing `0xF7`, 1..512 bytes) and the last argument is the same optional render frame as the other `pushMidi*` calls (omitted, or `None` in Python, for immediate). Only the C ABI spells "immediate" as `-1`.
 
@@ -171,7 +171,7 @@ engine.pushMidiNoteOn(0, 0, 0, 64, 100, /* renderFrame */ 64);
 
 // Input-source path (what bindWebMidi uses under the hood):
 engine.setMidiInputSource(0);
-engine.pushMidiInputNoteOn(/* group */ 0, /* channel */ 0, 60, 100, /* portTimeSamples */ 0);
+engine.pushMidiInputNoteOn(/* group */ 0, /* channel */ 0, 60, 100, /* offsetInBlockSamples */ 0);
 engine.pushMidiInputCc(0, 0, 1, 64, 0);
 engine.pushMidiInputNoteOff(0, 0, 60, 0, 0);
 // engine.midiInputPendingCount()  -> events waiting for the next process() block
@@ -181,7 +181,7 @@ engine.pushMidiInputNoteOff(0, 0, 60, 0, 0);
 
 ### Program change and the receivers that follow it
 
-`pushMidiProgram(destinationId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)` and `pushMidiInputProgram(group, channel, program, bankValid?, bankMsb?, bankLsb?, portTimeSamples?)` (Python `push_midi_program`, `push_midi_input_program`; C `sonare_engine_push_midi_program`, `sonare_engine_push_midi_input_program`) queue one MIDI 2.0 Program Change, timed like a note or CC. The bank is optional: it is applied only when `bankValid` is true, and a non-zero `bankMsb` / `bankLsb` with `bankValid` false is refused. The `SonareEngine` worklet facade takes `pushMidiProgram(trackId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)`.
+`pushMidiProgram(destinationId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)` and `pushMidiInputProgram(group, channel, program, bankValid?, bankMsb?, bankLsb?, offsetInBlockSamples?)` (Python `push_midi_program`, `push_midi_input_program`; C `sonare_engine_push_midi_program`, `sonare_engine_push_midi_input_program`) queue one MIDI 2.0 Program Change, timed like a note or CC. The bank is optional: it is applied only when `bankValid` is true, and a non-zero `bankMsb` / `bankLsb` with `bankValid` false is refused. The `SonareEngine` worklet facade takes `pushMidiProgram(trackId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)`.
 
 The message goes through the receiver's own program gates, so only some receivers act on it:
 
@@ -336,7 +336,7 @@ const binding = await bindWebMidi(engine, {
     { channel: 0, controller: 1, paramId: 42, options: { minValue: 0, maxValue: 1 } },
   ],
   // Offset into the block that picks the event up; blockStartMs = page-clock time the block began.
-  timestampToSamples: (eventTimeMs) => Math.max(0, Math.round(((eventTimeMs - blockStartMs) / 1000) * 48000)),
+  timestampToOffsetInBlockSamples: (eventTimeMs) => Math.max(0, Math.round(((eventTimeMs - blockStartMs) / 1000) * 48000)),
   onInputsChanged: (inputs) => {
     // Called on hot-plug after the helper rebinds matching ports.
     console.log('MIDI inputs:', inputs.map((i) => `${i.name} (${i.state})`));
@@ -357,7 +357,7 @@ What each option does:
 
 ### Why timestamp → sample mapping matters
 
-The two clocks don't match. Web MIDI tags each message with a time in milliseconds (the page clock, `DOMHighResTimeStamp`), but the engine schedules events by **sample frame**. `timestampToSamples(eventTimeMs)` is the bridge between them: it converts a message time into the `portTimeSamples` value the engine queues. That value is an **offset**, in samples, from the start of the render block that picks the event up, not a position on an absolute clock. An offset past the end of the block is clamped to the block's last frame. Measured with a 128-frame block, an offset of `40` starts the note at frame 41, while a page-clock time converted straight to samples (`480000` after ten seconds) produces nothing until the block's final frame, so every event of a fast run lands on the same frame.
+The two clocks don't match. Web MIDI tags each message with a time in milliseconds (the page clock, `DOMHighResTimeStamp`), but the engine schedules events by **sample frame**. `timestampToOffsetInBlockSamples(eventTimeMs)` is the bridge between them: it converts a message time into the `offsetInBlockSamples` value the engine queues. That value is an **offset**, in samples, from the start of the render block that picks the event up, not a position on an absolute clock. An offset past the end of the block is clamped to the block's last frame. Measured with a 128-frame block, an offset of `40` starts the note at frame 41, while a page-clock time converted straight to samples (`480000` after ten seconds) produces nothing until the block's final frame, so every event of a fast run lands on the same frame.
 
 Why bother? Get the conversion right and tightly-timed passages — chords, fast runs — land on the exact frame you played them. Omit it, and every event is queued at sample `0` of the next block: fine for casual noodling, audibly loose for anything rhythmic.
 
@@ -553,7 +553,7 @@ async function startKeyboardSynth() {
 }
 ```
 
-Without `timestampToSamples`, every event fires at the start of the next render block — tight enough for live playing. For sub-block accuracy, convert timestamps as described in "Why timestamp → sample mapping matters" above and pass the result through the forwarder's last argument instead of `0`.
+Without `timestampToOffsetInBlockSamples`, every event fires at the start of the next render block — tight enough for live playing. For sub-block accuracy, convert timestamps as described in "Why timestamp → sample mapping matters" above and pass the result through the forwarder's last argument instead of `0`.
 
 ::: warning Browser gestures and cleanup
 An `AudioContext` must be created/resumed from a user gesture (a click), and most browsers only prompt for MIDI access from a secure context. Pair `bindWebMidi` with `binding.close()`, and close the `AudioContext` when the page tears down — in this recipe that is what releases the worklet and the engine's native memory.
@@ -570,7 +570,7 @@ engine = sonare.RealtimeEngine(sample_rate=48000.0, max_block_size=128)
 try:
     engine.set_synth_instrument("saw-lead", destination_id=0)
     engine.set_midi_input_source(0)
-    engine.push_midi_input_note_on(0, 0, 60, 100, 0)   # group, channel, note, velocity, port_time_samples
+    engine.push_midi_input_note_on(0, 0, 60, 100, 0)   # group, channel, note, velocity, offset_in_block_samples
     engine.push_midi_input_cc(0, 0, 1, 64, 0)
     engine.push_midi_input_note_off(0, 0, 60, 0, 0)
     out = engine.process([[0.0] * 128, [0.0] * 128])   # non-zero once the note sounds
@@ -578,7 +578,7 @@ finally:
     engine.close()
 ```
 
-To feed those engines from real hardware, read MIDI with a platform library (for example CoreMIDI or ALSA bindings) and call the same `push_midi_input_*` methods — the timestamp-to-sample mapping is yours to supply, just as `timestampToSamples` is in the browser.
+To feed those engines from real hardware, read MIDI with a platform library (for example CoreMIDI or ALSA bindings) and call the same `push_midi_input_*` methods — the timestamp-to-sample mapping is yours to supply, just as `timestampToOffsetInBlockSamples` is in the browser.
 
 ::: info Experimental native macOS backends
 A C++ source build can opt into native macOS host backends behind the off-by-default `BUILD_COREAUDIO`, `BUILD_COREMIDI`, and `BUILD_AU_HOST` CMake options — a CoreAudio output, a CoreMIDI input/output, and an Audio Unit instrument host. They add no C-ABI API and ship in no published package (npm / PyPI / WASM), so they are a macOS-only, source-build opt-in that may still change.

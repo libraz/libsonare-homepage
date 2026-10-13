@@ -138,7 +138,7 @@ The two interchange formats have different jobs. SMF is the compatible, 480-tick
 
 ### Standard MIDI File (SMF)
 
-`exportSmf` always writes a format-1 (multi-track) file: track 0 carries the tempo + time-signature map, then one MTrk per clip, quantized to 480 ticks per quarter note. At the lower-level SMF exporter, a nonzero PPQN must fit the positive 15-bit range `0x0001`–`0x7fff`; zero selects the default 480. The importer accepts formats 0 and 1, but a format-0 header must declare exactly one track; format 2, SMPTE timing, and zero PPQN in an input header are rejected.
+`exportSmf` always writes a format-1 (multi-track) file: track 0 carries the tempo + time-signature map, then one MTrk per clip, quantized to 480 ticks per quarter note. At the lower-level SMF exporter, a nonzero PPQN must fit the positive 15-bit range `0x0001`–`0x7fff`; zero selects the default 480. A note cut by its clip's end or a loop boundary is closed with a note-off there, so the file never holds a note that runs past its clip. The importer accepts formats 0 and 1, but a format-0 header must declare exactly one track; format 2, SMPTE timing, and zero PPQN in an input header are rejected.
 
 ::: code-group
 

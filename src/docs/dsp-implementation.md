@@ -65,7 +65,7 @@ Most processors are not built from unique magic. They combine a small set of par
 | Building block | Implementation role | Used by |
 |----------------|---------------------|---------|
 | Biquad and filter design | Low-latency IIR EQ, shelves, cuts, presence/air shaping, detector filtering | EQ, dynamics sidechains, spectral enhancers, stereo filters |
-| Envelope follower | Attack/release smoothing for level detectors and gain changes | Compressors, expanders, gates, de-esser, vocal rider, limiters |
+| Envelope follower | Attack/release smoothing for level detectors and gain changes; each time is one time constant, about 63% of the way at the set time | Compressors, expanders, gates, de-esser, vocal rider, limiters |
 | Parameter smoother | Click-free parameter transitions in block processing; a glide settles exactly on its target at every sample rate, and an interrupted glide continues from the value already applied | Mastering processors, mixer strip controls, automation |
 | Lookahead and sliding maximum | Future-aware peak control without overshoot | Brickwall limiter, true-peak limiter, maximizers |
 | Oversampling and true-peak filter | Inter-sample peak estimation and anti-aliasing headroom | Limiters, clippers, saturation, final output |
@@ -151,7 +151,6 @@ Every insert reports a latency and a tail. The tail is the number of samples the
 
 | Processor | Implementation | Main use | Real-time notes |
 |-----------|----------------|----------|-----------------|
-| `eq.apiStyle` | Four-band stepped proportional-Q biquad EQ | Tonal shaping with stepped frequency/gain controls | In-place coefficient changes; gain snaps in 2 dB steps; Q narrows with larger gain magnitude |
 | `eq.bandPass` | Biquad band-pass filter | Isolate a frequency region | Low latency |
 | `eq.cutFilter` | High-pass/low-pass cut filters with slope control | Remove rumble, hiss, or band-limit a signal | Low latency IIR path |
 | `eq.dynamic` | EQ band controlled by an envelope detector | Frequency-selective compression/expansion | Detector timing must be smoothed |
@@ -161,8 +160,9 @@ Every insert reports a latency and a tail. The tail is the number of samples the
 | `eq.midSide` | Converts L/R to M/S, applies EQ independently, converts back | Shape center and width bands separately | Needs stereo input and careful mono compatibility checks |
 | `eq.minimumPhase` | Minimum-phase EQ topology | Mastering EQ where low latency matters | Preferred for live paths |
 | `eq.parametric` | Parametric peak/shelf/cut bands | Precise corrective EQ | Low latency |
-| `eq.pultec` | Passive-style program equalizer with low boost, low attenuation, high boost, high attenuation, component model, and output drive controls | Low/high program EQ shaping | Most controls are marked automatable; component model is not automatable |
+| `eq.passiveTube` | Passive-style program equalizer with low boost, low attenuation, high boost, high attenuation, component model, and output drive controls | Low/high program EQ shaping | Most controls are marked automatable; component model is not automatable |
 | `eq.shelving` | Low/high shelf filters | Tilt lows or highs around a corner frequency | Low latency |
+| `eq.steppedProportionalQ` | Four-band stepped proportional-Q biquad EQ | Tonal shaping with stepped frequency/gain controls | In-place coefficient changes; gain snaps in 2 dB steps; Q narrows with larger gain magnitude |
 | `eq.tilt` | Complementary low/high shelving around a pivot | Quick bright/dark tonal balance | Useful in presets and assistant suggestions |
 
 ## Final Stage and Maximizers

@@ -71,7 +71,7 @@ MFCC はさらにもう 1 段の損失を加えます。先頭 `nMfcc` 個（多
 
 | 目的 | JavaScript | Python |
 |------|------------|--------|
-| メルパワー → STFT 振幅 | `melToStft(...)` は `{ nBins, nFrames, power }` を返す | `mel_to_stft(...)` は `InverseResult(rows, n_frames, data)` を返す |
+| メルパワー → STFT 振幅 | `melToStft(...)` は `{ nBins, nFrames, magnitude }` を返す | `mel_to_stft(...)` は `InverseResult(rows, n_frames, data)` を返す |
 | メルパワー → 音声 | `melToAudio(...)` は `Float32Array` を返す | `mel_to_audio(...)` は `list[float]` を返す |
 | MFCC → メルパワー | `mfccToMel(...)` は `{ nMels, nFrames, power }` を返す | `mfcc_to_mel(...)` は `InverseResult(rows, n_frames, data)` を返す |
 | MFCC → 音声 | `mfccToAudio(...)` は `Float32Array` を返す | `mfcc_to_audio(...)` は `list[float]` を返す |
@@ -85,8 +85,8 @@ MFCC はさらにもう 1 段の損失を加えます。先頭 `nMfcc` 個（多
 
 `melToStft` は、メル**パワー**スペクトログラムを線形周波数の STFT **振幅**スペクトログラムへ戻します。`mfccToMel` は、MFCC を平滑化されたメル**パワー**スペクトログラムへ戻します。
 
-::: warning `melToStft` が返すのはフィールド名に反して振幅です
-このヘルパーは非負最小二乗をパワー領域で解いたあと平方根を取ります。既定が `power=2.0` の `librosa.feature.inverse.mel_to_stft` に合わせた挙動です。したがって返ってくる値は振幅であり、パワーだと思わせるのは JavaScript のフィールド名 `power`（Python では `data`）だけです。dB へ変換するときは `10·log₁₀(x)` ではなく `20·log₁₀(x)` を使い、パワースペクトルを前提とする処理へ渡す前には値を 2 乗してください。
+::: warning `melToStft` が返すのはパワーではなく振幅です
+このヘルパーは非負最小二乗をパワー領域で解いたあと平方根を取ります。既定が `power=2.0` の `librosa.feature.inverse.mel_to_stft` に合わせた挙動です。したがって返ってくる値は振幅で、JavaScript のフィールド名が `magnitude` なのはそのためです（Python の `InverseResult` では `data`）。dB へ変換するときは `10·log₁₀(x)` ではなく `20·log₁₀(x)` を使い、パワースペクトルを前提とする処理へ渡す前には値を 2 乗してください。
 :::
 
 順変換で 0 以外の `lifter` を使った場合は、`mfccToMel` または `mfccToAudio` に同じ値を渡してください。逆変換で取り除かれます。
@@ -125,7 +125,7 @@ await init();
 // メルパワー -> STFT 振幅
 const mel = melSpectrogram(samples, sampleRate, 2048, 512, 128);
 const stft = melToStft(mel.power, mel.nMels, mel.nFrames, sampleRate, 2048);
-// stft: { nBins, nFrames, power }   nBins = nFft/2 + 1 = 1025
+// stft: { nBins, nFrames, magnitude }   nBins = nFft/2 + 1 = 1025
 
 // MFCC -> メルパワー
 const coeffs = mfcc(samples, sampleRate, 2048, 512, 128, 20);

@@ -18,9 +18,9 @@ The engine runs the repair stages in one order, and only the enabled ones run:
 | # | Stage | Removes | What it looks for |
 |---|-------|---------|-------------------|
 | 1 | `declip` | Flat-topped runs where a clipper cut the peaks off | Runs of samples pinned at one level |
-| 2 | `declick` | Isolated clicks and pops | Short impulsive runs that stand out from their neighbors |
-| 3 | `decrackle` | Dense surface crackle | Samples that depart from the local median |
-| 4 | `dehum` | A mains-frequency harmonic series | A prominent fundamental and its harmonics |
+| 2 | `declick` | Isolated clicks and pops | Short impulsive runs that stand out from their neighbors and from the local transient level |
+| 3 | `decrackle` | Dense surface crackle | Samples that depart from the local median by more than the local transient level |
+| 4 | `dehum` | A mains-frequency harmonic series | A prominent fundamental and its harmonics that stays put through most of each analysis frame |
 | 5 | `denoise` | Steady broadband noise | A per-bin noise spectrum, from the quietest frames or tracked frame by frame |
 | 6 | `dereverb` | The late reverberant tail | A stationary tail behind the direct sound |
 
@@ -35,7 +35,7 @@ There is no reordering option because there is no order in which a later stage w
 
 ## Analyze, then Apply
 
-`masteringRepairAnalyze({ channels, sampleRate })` runs the six detectors on every channel of any channel count and returns each channel's defects, whether a declip at the measured flat level is safe, and the stages the assistant would pick, each with its settings. Dereverb is never recommended. `masteringRepairApply({ channels, sampleRate, stages })` takes that list as it stands (or a list you edit) and runs the stages in the fixed order above whatever order the array has; a stage named twice or a setting it does not know is refused. Declip, declick and dehum decide over the whole channel set and report per channel, denoise and dereverb apply one linked mask and report once, and `onProgress` reports after each stage while `cancel` aborts between stages. Python has `mastering_repair_analyze` / `mastering_repair_apply`. See [Audio Repair](../../audio-repair.md#measure-and-repair-in-one-call) for examples in each binding.
+`masteringRepairAnalyze({ channels, sampleRate })` runs the six detectors on every channel of any channel count and returns each channel's defects, whether a declip at the measured flat level is safe, and the stages the assistant would pick, each with its settings. Clean percussion is not read as a defect: a repeating kick is not a stationary line, and a drum hit is not a click. Dereverb is never recommended. `masteringRepairApply({ channels, sampleRate, stages })` takes that list as it stands (or a list you edit) and runs the stages in the fixed order above whatever order the array has; a stage named twice or a setting it does not know is refused. Declip, declick and dehum decide over the whole channel set and report per channel, denoise and dereverb apply one linked mask and report once, and `onProgress` reports after each stage while `cancel` aborts between stages. Python has `mastering_repair_analyze` / `mastering_repair_apply`. See [Audio Repair](../../audio-repair.md#measure-and-repair-in-one-call) for examples in each binding.
 
 `repair.decrackle`, `repair.dehum`, `repair.denoiseClassical` and `repair.dereverbClassical` are also available as realtime inserts that equal their offline function for the same settings, delayed by the latency the insert reports; declick and declip stay offline-only.
 

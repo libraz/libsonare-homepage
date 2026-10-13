@@ -22,7 +22,7 @@ Broadband noise and mains hum are different defects. A denoiser estimates a time
 | Steady hiss, mic floor, or tape noise | `masteringRepairDetectNoiseFloor` | `masteringRepairDenoiseClassical` | Quiet musical material can be pulled down with the estimated floor. |
 | A 50/60 Hz tone and harmonics | `masteringRepairDetectHum` | `masteringRepairDehum` | A notch can remove intentional content at the same frequencies. |
 
-Neither stage is a loudness processor. Neither separates a source from a finished mix, and neither repairs clicks, clipping, or room reverb.
+The hum detector only reports a stationary line: a repeating kick reads `fundamentalProminence` 1.0, a linear ratio where 1.0 means no peak (it is not a lock flag). Neither stage is a loudness processor. Neither separates a source from a finished mix, and neither repairs clicks, clipping, or room reverb.
 
 ## Detect first, then apply
 

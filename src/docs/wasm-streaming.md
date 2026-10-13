@@ -347,7 +347,7 @@ sonare mfcc-to-audio music.wav -o mfcc-reconstructed.wav
 
 | Function | Returns | Notes |
 |----------|---------|-------|
-| `melToStft(power, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `StftPowerResult` `{ nBins, nFrames, power }` | Pseudo-inverse of the mel filterbank |
+| `melToStft(power, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `StftMagnitudeResult` `{ nBins, nFrames, magnitude }` | Pseudo-inverse of the mel filterbank |
 | `melToAudio(power, nMels, nFrames, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | Griffin-Lim audio synthesis |
 | `mfccToMel(coefficients, nMfcc, nFrames, nMels?, lifter?)` | `MelPowerResult` `{ nMels, nFrames, power }` | Inverse DCT back to a mel spectrogram; pass the forward MFCC lifter |
 | `mfccToAudio(coefficients, nMfcc, nFrames, nMels, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?, lifter?)` | `Float32Array` | MFCC → mel → audio in one call; pass the forward MFCC lifter |

@@ -89,7 +89,7 @@ const presetResult = masterAudioStereo(left, right, sampleRate, 'pop', {
 ```
 
 ::: warning リクエストオブジェクト形式では、ステージ設定を `config` の下に置く
-`masteringChain({ samples, sampleRate, config: { loudness: { targetLufs: -14 } } })` なら目標が反映されます。`samples` と並べて `loudness` キーを書いた場合（`masteringChain({ samples, sampleRate, loudness: { targetLufs: -14 } })`）は、エラーにならずに無視され、チェーンは既定のレベルで動きます。`masteringChainStereo` と `*WithProgress` 変種も同様です。位置引数形式では設定を最後の引数に渡し、`masterAudio` は上書きを `overrides` として受け取ります。
+`masteringChain({ samples, sampleRate, config: { loudness: { targetLufs: -14 } } })` なら目標が反映されます。`samples` と並べて `loudness` キーを書いた場合（`masteringChain({ samples, sampleRate, loudness: { targetLufs: -14 } })`）は、そのキーを挙げて `config` の下に置くよう案内する `TypeError` になります。`masteringChainStereo` と `*WithProgress` 変種も同様です。位置引数形式では設定を最後の引数に渡し、`masterAudio` は上書きを `overrides` として受け取ります。
 :::
 
 これらにはそれぞれ `(progress, stage) => void` のコールバックを取る `*WithProgress` 変種があります。`masteringProcess(...)` / `masteringProcessStereo(...)` は名前付きプロセッサを 1 つ実行し、`masteringStereoAnalyze(...)` は JSON レポートを返します。
@@ -440,10 +440,10 @@ interface TrimRange {
 
 | 関数 | 測るもの | 注意点 |
 |---|---|---|
-| `masteringRepairDetectClicks` | リペアと同じ LPC 解析。数えられた区間はリペアが実際に手を入れる区間です | 数はリペア用オプションに左右されます。`rejected` が大きい場合、素材がきれいなのではなく `maxClickSamples` や `neighborRatio` が厳しすぎます |
+| `masteringRepairDetectClicks` | リペアと同じ LPC 解析。ただし区間は局所的なトランジェントのレベルを上回る場所でだけ数えるので、ドラムのヒットはクリックになりません | 数はリペア用オプションに左右されます。リペア自体はトランジェントの内側でも処理するため、置き換えられるサンプル数は検出数を超えることがあります。`rejected` が大きい場合、素材がきれいなのではなく `maxClickSamples` や `neighborRatio` が厳しすぎます |
 | `masteringRepairDetectClipping` | オプションから読むのは `clipThreshold` だけ。`lpcOrder`・`iterations`・`lpcBlend` は検証されたあと読まれず、`sampleRate` は検証されるだけで一度も読まれません | 補間へのフォールバックを予測するには `longestRunSamples` を 512 サンプルの上限と比べます。4 つのフラットトップ系フィールドは、ピークから 1 dB 以内でビット単位に一致するサンプルが 3 個以上、という基準で、クリップ後に減衰された素材を捕まえます |
-| `masteringRepairDetectCrackle` | `mode` の指定にかかわらず常にメディアン基準。ウェーブレット収縮はサンプルがクラックルで*ある*という判定を一切下さないからです | この数値は、ウェーブレットモードのリペアが何を除去するかを説明しません。その代わり、モードを決める前でも同じ答えが得られます |
-| `masteringRepairDetectHum` | `adaptive` の指定にかかわらず常に推定パス。固定パスはハムを探さないためです | `fundamentalProminence` は最も強い候補の射影エネルギーを候補の中央値で割った値なので、**`1.0` はピークがまったく見つからなかったことを意味します**。ロック状態のフラグではありません。`harmonicDbfs` はノッチをかけた帯域だけでなく、そのサンプルレートが表現できる `k*f0` すべてを含み、ナイキスト以上の倍音は dB のフロア値を返します |
+| `masteringRepairDetectCrackle` | `mode` の指定にかかわらず常にメディアン基準。ウェーブレット収縮はサンプルがクラックルで*ある*という判定を一切下さないからです。サンプルは局所的なトランジェントのレベルを上回る場所でだけ数えるので、パーカッションはクリーンと読まれます | この数値は、ウェーブレットモードのリペアが何を除去するかを説明しません。その代わり、モードを決める前でも同じ答えが得られます |
+| `masteringRepairDetectHum` | `adaptive` の指定にかかわらず常に推定パス。固定パスはハムを探さないためです。ハムの候補は各解析フレームの大部分を貫く定常的な線でなければならず、繰り返すキックは候補になりません | `fundamentalProminence` は最も強い候補の射影エネルギーを候補の中央値で割った線形の比なので、**`1.0` はピークがまったく見つからなかったことを意味します**（繰り返すキックはちょうど `1.0` と読まれます）。ロック状態のフラグではありません。`harmonicDbfs` はノッチをかけた帯域だけでなく、そのサンプルレートが表現できる `k*f0` すべてを含み、ナイキスト以上の倍音は dB のフロア値を返します |
 | `masteringRepairDetectNoiseFloor` | ゲインマスクの手前で止まるため、減衰量の値はありません | `floorDbfs` は絶対値なので、同じチャンネル数で取った値とだけ比較してください |
 | `masteringRepairDetectReverb` | どれだけ減算するかを決める過程でデリバーブ自身が計測している値。**ISO 3382 の RT60 ではありません**（それには `estimateRoom(...)` を使います） | `lateDecayRatioDb` は直感と逆向きで、*負の度合いが小さい*ほど残響が*多い*ことを表します。既定の設定では WPE 段が `wpeEnabled` を指定したときにしか動かないため、`latePredictability` はちょうど `0` になります |
 | `masteringRepairDetectTrimRange` | リペアが「そこまでカットする」範囲。`paddingSamples` はすでにその内側に含まれており、検出された信号の範囲そのものではありません | しきい値を超えるものが何もなければ `(長さ, 長さ)` が返ります |

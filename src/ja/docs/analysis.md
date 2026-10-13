@@ -83,7 +83,7 @@ sonare analyze track.mp3 --meter-candidates 3,4,5,6
 
 `getChannelData(0)` が渡すのはステレオファイルの最初のチャンネルだけです。ざっと確かめるには足りますが、右に定位した音は抜け落ちます。ミックス全体を解析するには、先にチャンネルをサンプルごとに平均してください（`(left[i] + right[i]) / 2`）。
 
-この呼び出しは同期で、WASM ビルドはシングルスレッドです。短いクリップでなければ Web Worker で実行してください。`analyzeWithProgress(...)` は同じリクエストを受け取り、`(progress, stage)` を通知し、長い処理をキャンセルできます。解析オプションは `options` の下に渡します。最上位に書いた `tuning` はエラーにならずに無視されます。
+この呼び出しは同期で、WASM ビルドはシングルスレッドです。短いクリップでなければ Web Worker で実行してください。`analyzeWithProgress(...)` は同じリクエストを受け取り、`(progress, stage)` を通知し、長い処理をキャンセルできます。解析オプションは `analyze` と同じく `samples` と並べても `options` の下に渡しても構いません。解析オプションにないキーは、そのキーを挙げた `TypeError` になります。
 
 ```typescript
 const result = analyzeWithProgress({
@@ -207,7 +207,7 @@ for (const [index, beat] of beats.entries()) {
 |------|----------|------------|
 | `analyze(...)` の `result.bpm` | 数値 1 つと `bpmConfidence`、さらに `primary` / `half` / `double` / `other` のラベル付き `bpmCandidates` | すでに一括解析を回している場合。候補の関係ラベルは倍取り・半分取りを検知する手がかりになる。`bpmConfidence` は、勝ったテンポ系列が集めた周期性の票の割合（[テンポと BPM](./glossary/analysis/tempo-bpm.md#信頼度と安定性)）。 |
 | `detectBpm(...)` | 数値 1 つ | テンポだけが欲しい場合。 |
-| `analyzeBpm(...)` | `bpm`、`confidence`、順位付き `candidates`、その根拠である `autocorrelation` と `tempogram` | 根拠を見せたい、または範囲を絞って探索したい場合。既定値は `bpmMin` 30、`bpmMax` 300、`startBpm` 120、`maxCandidates` 5。 |
+| `analyzeBpm(...)` | `bpm`、`confidence`、`candidates`（選ばれたテンポが先頭、残りは得票率順）、その根拠である `autocorrelation` と `tempogram` | 根拠を見せたい、または範囲を絞って探索したい場合。既定値は `bpmMin` 30、`bpmMax` 300、`startBpm` 120、`maxCandidates` 5。 |
 | `analyzeRhythm(...)` | 局所的な拍周期から精緻化した独自の `bpm` と、グルーヴ、シンコペーション、規則性、`beatIntervals` | 数値よりもリズムの性格が欲しい場合。既定範囲は狭く `bpmMin` 60、`bpmMax` 200。 |
 
 `analyzeRhythm(...)` の `bpm` は意図的に第 3 の数値です。ビート追跡が落ち着いたグリッドから測っており、合成クリック列に対する計測では、どちらのテンポ入口よりも既知テンポに近い値になります。3 つが小数点まで一致することは期待しないでください。

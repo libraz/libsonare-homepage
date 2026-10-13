@@ -159,7 +159,7 @@ A headphones target can add a synthesized room around the direct, HRTF-convolved
 
 ## Loudness Alignment and Metering
 
-`loudness.program_lufs` and `loudness.target_lufs` apply a single static gain of `clamp(target_lufs - program_lufs, -40, +12)` dB, so the bounded gain can leave the program short of its target without live compression pumping under scene changes. `PlaybackLoudnessMeter` (1, 2, 6 or 8 channels, BS.1770 channel weights) measures a whole program's integrated loudness ahead of playback: feed it interleaved chunks with `pushInterleaved`/`push_interleaved` and read `integratedLufs()`/`integrated_lufs()` once the program has played through, then pass that value as `loudness.program_lufs`.
+`loudness.program_lufs` and `loudness.target_lufs` apply a single static gain of `clamp(target_lufs - program_lufs, -40, +12)` dB, so the bounded gain can leave the program short of its target without live compression pumping under scene changes. `PlaybackLoudnessMeter` (1, 2, 6 or 8 channels; BS.1770 weights by loudspeaker position: the 5.1 surrounds and the 7.1 side pair weigh 1.41, the 7.1 back pair and everything else 1.0, the LFE excluded) measures a whole program's integrated loudness ahead of playback: feed it interleaved chunks with `pushInterleaved`/`push_interleaved` and read `integratedLufs()`/`integrated_lufs()` once the program has played through, then pass that value as `loudness.program_lufs`.
 
 ## One Flow, Every Binding
 
@@ -238,12 +238,12 @@ const rendered = renderPlayback({ samples, channels: 6, sampleRate: 48000, confi
 // worklet input at mono/stereo/5.1 until that is checked.
 
 // playback-worklet.ts (the worklet module). The processor builds its renderer
-// in the worklet's own realm, so the WASM module must be initialized there first.
-import { init, registerSonarePlaybackWorkletProcessor } from '@libraz/libsonare/worklet';
+// in the worklet's own realm, which has no WASM module yet. Expose the Emscripten
+// factory; the processor initializes the module from the bytes it is handed.
+import { registerSonarePlaybackWorkletProcessor } from '@libraz/libsonare/worklet';
 import createModule from './sonare.js'; // the Emscripten factory beside the package's WASM glue
 
-// wasmBinary: the sonare.wasm bytes, inlined into this module by your bundler.
-await init({ moduleFactory: createModule, wasmBinary, locateFile: (path) => path });
+globalThis.SonareEmbindModuleFactory = createModule;
 registerSonarePlaybackWorkletProcessor(); // 'sonare-playback-processor'
 
 // main.ts
@@ -251,10 +251,13 @@ import { createSonarePlaybackNode } from '@libraz/libsonare/worklet';
 
 await context.audioWorklet.addModule('/playback-worklet.js');
 const hrtf = await (await fetch(hrtfUrl)).arrayBuffer(); // @libraz/libsonare/hrtf/default.shrf
+const wasmBinary = await (await fetch(wasmUrl)).arrayBuffer(); // sonare.wasm
 const node = createSonarePlaybackNode(context, {
   config: { input: { layout: 'auto' }, target: { kind: 'headphones' } },
   hrtf,
+  wasmBinary,
 });
+// The processor renders silence and posts { type: 'ready' } once the module is up.
 context.createMediaElementSource(video).connect(node).connect(context.destination);
 video.addEventListener('seeking', () => node.port.postMessage({ type: 'reset' }));
 ```
@@ -269,7 +272,7 @@ sonare playback movie-5.1.wav -o room.wav --target headphones --room home_theate
 
 :::
 
-Omit `sampleRate` in `createSonarePlaybackNode`. It defaults to the `AudioContext` rate, and any other value throws a `RangeError`. In the worklet, a block with no input or an unsupported channel count renders silence, and the unsupported ones are counted as `unsupported_input_blocks` in the diagnostics reply. The worklet needs the WASM module initialized in its own realm, and the processor options carry no `wasmBinary`, so the bytes have to be bundled into the worklet module. The default HRTF asset is `@libraz/libsonare/hrtf/default.shrf`.
+Omit `sampleRate` in `createSonarePlaybackNode`. It defaults to the `AudioContext` rate, and any other value throws a `RangeError`. In the worklet, a block with no input or an unsupported channel count renders silence, and the unsupported ones are counted as `unsupported_input_blocks` in the diagnostics reply. The worklet needs the WASM module initialized in its own realm: pass the `sonare.wasm` bytes as `wasmBinary` and set `globalThis.SonareEmbindModuleFactory` in the worklet module, and the processor initializes the module itself. If the worklet module has already called `init()`, `wasmBinary` is not needed. The default HRTF asset is `@libraz/libsonare/hrtf/default.shrf`.
 
 The one-shot form (`renderPlayback`, `render_playback`, `sonare_playback_render_interleaved`, `sonare playback`) builds a renderer internally, feeds a whole signal through it, and trims the renderer's own latency off the front of the result so the output lines up sample-for-sample with the input.
 

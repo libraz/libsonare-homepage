@@ -165,7 +165,7 @@ A send routes a *copy* of the strip's signal to a destination bus. The `timing` 
 | Field | Type | Meaning |
 |-------|------|---------|
 | `id` | string | Send identifier, unique within the strip |
-| `destinationBusId` | string | *Required.* The `id` of the target bus. An id that no bus declares creates an implicit `aux` bus that routes to the master, so a misspelled destination is not rejected: it makes sound. Declare the bus you mean |
+| `destinationBusId` | string | *Required.* The `id` of the target bus. An id that no bus declares creates an implicit `aux` bus that routes to the master, so a misspelled destination is not rejected: it makes sound, and it raises a scene warning naming the strip and the bus (`send 'a' targets undeclared bus 'nope'; created as implicit aux`). Declare the bus you mean |
 | `sendDb` | number | Send level in dB, default `0` |
 | `timing` | `"pre"` \| `"post"` | Tapped before or after the fader (again, short tokens); defaults to `"post"` |
 

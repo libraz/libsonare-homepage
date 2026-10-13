@@ -83,7 +83,7 @@ sonare analyze track.mp3 --meter-candidates 3,4,5,6
 
 `getChannelData(0)` hands over the first channel of a stereo file, which is enough for a quick look but misses anything panned to the right. To analyze the whole mix, average the channels sample by sample first (`(left[i] + right[i]) / 2`).
 
-The call is synchronous and the WASM build is single-threaded, so drive it from a Web Worker for anything longer than a short clip. `analyzeWithProgress(...)` takes the same request, reports `(progress, stage)`, and can cancel a long run. Its analysis options go under `options`; a `tuning` written at the top level is ignored without an error.
+The call is synchronous and the WASM build is single-threaded, so drive it from a Web Worker for anything longer than a short clip. `analyzeWithProgress(...)` takes the same request, reports `(progress, stage)`, and can cancel a long run. Its analysis options go beside `samples` or under `options`, as in `analyze`; a key that is not an analysis option throws a `TypeError` naming it.
 
 ```typescript
 const result = analyzeWithProgress({
@@ -174,7 +174,7 @@ for (const [index, beat] of beats.entries()) {
 |-------|---------|-------------|
 | `result.bpm` from `analyze(...)` | One number plus `bpmConfidence` and `bpmCandidates`, each candidate labeled `primary`, `half`, `double` or `other` | You already ran the full analysis. The candidate relations are how you catch a half-time or double-time read. `bpmConfidence` is the share of the periodicity votes behind the winning tempo family ([Tempo and BPM](./glossary/analysis/tempo-bpm.md#confidence-and-stability)). |
 | `detectBpm(...)` | One number | Tempo is all you want from the file. |
-| `analyzeBpm(...)` | `bpm`, `confidence`, ranked `candidates`, plus the `autocorrelation` and `tempogram` behind them | You want to show the evidence, or to search a restricted range: `bpmMin` 30, `bpmMax` 300, `startBpm` 120 and `maxCandidates` 5 by default. |
+| `analyzeBpm(...)` | `bpm`, `confidence`, `candidates` (the chosen tempo first, then the rest by vote share), plus the `autocorrelation` and `tempogram` behind them | You want to show the evidence, or to search a restricted range: `bpmMin` 30, `bpmMax` 300, `startBpm` 120 and `maxCandidates` 5 by default. |
 | `analyzeRhythm(...)` | Its own `bpm`, refined from the local beat period, alongside groove, syncopation, regularity and `beatIntervals` | You want rhythmic character rather than just a number. Its default range is narrower — `bpmMin` 60, `bpmMax` 200. |
 
 `analyzeRhythm(...)`'s `bpm` is deliberately a third figure rather than either of the others: it is measured from the beat grid the tracker settled on, and against synthesized click trains it lands closer to the known tempo than either tempo entry point. Do not expect the three to agree to the decimal.

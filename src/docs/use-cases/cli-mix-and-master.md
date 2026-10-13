@@ -219,7 +219,7 @@ The library calls do not detect a tempo: pass `tempoBpm` (`tempo_bpm`) yourself,
 
 Three parts of the output matter, and they answer different questions.
 
-**`explanation` — why each number is what it is.** One line per decision, emitted by the rule that made it. These are the `vox` lines of the 26 the run prints:
+**`explanation` — why each number is what it is.** One line per decision, emitted by the rule that made it. These are the `vox` lines of the 24 the run prints:
 
 ```text
 staged vox with -6.6 dB of input trim towards the -18.0 LUFS target

@@ -14,7 +14,7 @@ This page uses the Python CLI (`pip install libsonare`, command `sonare`). `mix`
 ::: info What you need
 - **Install:** `pip install libsonare` (Python 3.11 or later). The Node tab needs `npm install @libraz/libsonare` (Node.js 22.12 or later).
 - **Three WAV files of the same length and sample rate:** `host.wav`, `guest.wav` and `music-bed.wav`, mono or stereo. 48 kHz is the rate used here.
-- **Test material:** the numbers below come from 8-second synthetic tracks. The script below writes similar ones (vowel-like syllables for the voices, a sustained chord for the bed); your numbers will differ.
+- **Test material:** the numbers below come from the 8-second synthetic tracks the script below writes (vowel-like syllables for the voices, a sustained chord for the bed). With tracks of your own the commands are the same and the numbers will be yours.
 :::
 
 ::: details A script that writes test voices and a music bed
@@ -197,15 +197,15 @@ sonare mix --scene scene.json \
 cmp show.wav show-r30.wav   # identical — no output
 ```
 
-Raising `rangeDb` from the preset's default 18 to 30 changes nothing: `cmp` reports the two renders as byte-identical. On this material the host's level never calls for more than about 7 dB of reduction, so any ceiling at or above roughly 8 dB behaves the same as no ceiling at all. Lower it below that point and the edit is real. `sonare dynamics` on the whole-file mixdown shows that something changed, but averaged over 8 seconds that include the voices and long stretches where the host isn't talking, the change looks tiny:
+Raising `rangeDb` from the preset's default 18 to 30 changes nothing: `cmp` reports the two renders as byte-identical. On this material the host's level never calls for more than about 5.7 dB of reduction (a ceiling of 5.5 still changes the render, 5.8 does not), so any ceiling at or above roughly 6 dB behaves the same as no ceiling at all. Lower it below that point and the edit is real. `sonare dynamics` on the whole-file mixdown shows that something changed, but averaged over 8 seconds that include the voices and long stretches where the host isn't talking, the change looks tiny:
 
 | `rangeDb` | `rms_db` (whole file) | `peak_db` | Render vs `18` |
 |-----------|-----------------------|-----------|-----------------|
-| — (insert removed entirely) | -22.80 | -10.79 | differs |
-| `1` | -22.85 | -10.84 | differs |
-| `5` | -22.95 | -10.92 | differs |
-| `18` (preset default) | -22.96 | -10.92 | — |
-| `30` | -22.96 | -10.92 | identical bytes |
+| — (insert removed entirely) | -24.39 | -10.63 | differs |
+| `1` | -24.42 | -10.63 | differs |
+| `5` | -24.47 | -10.63 | differs |
+| `18` (preset default) | -24.47 | -10.63 | — |
+| `30` | -24.47 | -10.63 | identical bytes |
 
 `rangeDb: 5` is the value the script at the top of this page ships with — a slightly shallower duck than the preset default, verified against the table above rather than guessed.
 
@@ -300,7 +300,7 @@ print(f"bed while the host talks: {before:.1f} dB unducked, {after:.1f} dB ducke
       f"duck depth {before - after:.1f} dB")
 ```
 
-On the test material from the script at the top of this page, the unedited preset ducks the bed by about 3 dB while the host talks, and the `update` line above (with `rangeDb` left at the preset's 18) by about 9 dB. Measure the scene you will actually render: the script at the top of this page also sets `rangeDb: 5`, which caps the duck at 5 dB.
+On the test material from the script at the top of this page, the unedited preset ducks the bed by 3.2 dB while the host talks, and the `update` line above (with `rangeDb` left at the preset's 18) by 8.6 dB. Measure the scene you will actually render: the script at the top of this page also sets `rangeDb: 5`, and on this material it ducks by 3.1 dB, because the host never asks for more than the cap allows.
 :::
 
 The sidechain router is a compressor whose detector listens to the host instead of the bed, so the reduction it asks for is the shaded gain-reduction gap below: how far the key rises above the threshold, scaled by the ratio, and nothing more. Raise the threshold until the program no longer crosses it and the gap disappears — that is the state the warning above describes, and no `rangeDb` brings it back.
@@ -318,7 +318,7 @@ sonare mix --scene scene.json \
 ```
 
 ```json
-{"strip_count": 3, "sample_rate": 48000, "block_size": 512, "rendered_samples": 384000, "output": "show.wav"}
+{"strip_count": 3, "sample_rate": 48000, "block_size": 512, "rendered_samples": 384124, "output": "show.wav"}
 ```
 
 `strip_count` is 3 because this scene has no aux returns — every `--input` names a real strip, so there is no silent return to account for the way there is in the four-stem song scene. Each `--input` id must match a strip `id` in the scene; a strip nothing names is fed silence, which is the right behavior for a bed you deliberately withhold on some episodes but a silent surprise if you typo `music-bed` as `musicbed`.
@@ -330,7 +330,7 @@ sonare mastering show.wav --preset speech -o show-master.wav --json
 ```
 
 ```json
-{"mode": "preset", "input_lufs": -21.13, "output_lufs": -16.01, "applied_gain_db": 6.95, "output": "show-master.wav", "preset": "speech", "stages": ["repair.denoise", "eq.tilt", "dynamics.deesser", "dynamics.compressor", "loudness.optimize"]}
+{"mode": "preset", "input_lufs": -22.33, "output_lufs": -16.00, "applied_gain_db": 7.15, "output": "show-master.wav", "preset": "speech", "stages": ["repair.denoise", "eq.tilt", "dynamics.deesser", "dynamics.compressor", "loudness.optimize"]}
 ```
 
 The assistant can start from the same named preset and add its explanation to the report:
@@ -340,7 +340,7 @@ sonare mastering show.wav --assistant --preset speech --explain --target-platfor
 ```
 
 ```json
-{"mode": "assistant", "input_lufs": -21.13, "output_lufs": -16.01, "applied_gain_db": 6.29, "stages": ["repair.denoise", "eq.tilt", "dynamics.deesser", "dynamics.compressor", "stereo.monoMaker", "loudness.optimize"], "explanation": ["base preset: speech", "target loudness and ceiling applied from AssistantConfig", "speech preset enables de-esser and mono compatibility"]}
+{"mode": "assistant", "input_lufs": -22.33, "output_lufs": -16.00, "applied_gain_db": 7.15, "stages": ["repair.denoise", "eq.tilt", "dynamics.deesser", "dynamics.compressor", "stereo.monoMaker", "loudness.optimize"], "explanation": ["base preset: speech", "target loudness and ceiling applied from AssistantConfig", "speech preset enables de-esser and mono compatibility"]}
 ```
 
 The standalone `speech` preset targets its built-in -16 LUFS. The assistant run starts from the same chain and gets -16 LUFS from `--target-platform podcast`; it also adds the speech preset's low-frequency mono-maker stage and includes the reasons in `explanation`. The assistant never infers a genre from the audio, so the `--preset speech` choice stays visible and reproducible.
@@ -412,10 +412,10 @@ Run with `--explain` and check for `speech preset enables de-esser and mono comp
 
 ```json
 {
-  "before": { "integrated_lufs": -21.13, "true_peak_dbtp": -10.92 },
-  "after":  { "integrated_lufs": -16.01, "true_peak_dbtp": -4.63 },
-  "applied_gain_db": 6.29,
-  "max_gain_reduction_db": -1.15,
+  "before": { "integrated_lufs": -22.33, "true_peak_dbtp": -10.58 },
+  "after":  { "integrated_lufs": -16.00, "true_peak_dbtp": -4.19 },
+  "applied_gain_db": 7.15,
+  "max_gain_reduction_db": -0.47,
   "loudness_target_limited": false
 }
 ```

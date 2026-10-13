@@ -14,7 +14,7 @@ description: ホスト・ゲスト・音楽ベッドをダッキング済みで�
 ::: info 用意するもの
 - **インストール:** `pip install libsonare`（Python 3.11 以降）。Node のタブには `npm install @libraz/libsonare`（Node.js 22.12 以降）が必要です。
 - **長さとサンプルレートのそろった WAV ファイル 3 つ:** `host.wav`、`guest.wav`、`music-bed.wav`。モノラルでもステレオでもかまいません。ここでは 48 kHz を使っています。
-- **テスト素材:** 下の数値は 8 秒の合成音で測ったものです。下のスクリプトで似た素材（声は母音のような音節、ベッドは持続する和音）を書き出せます。出る数値は手元の素材で変わります。
+- **テスト素材:** 下の数値は、下のスクリプトが書き出す 8 秒の合成音（声は母音のような音節、ベッドは持続する和音）で測ったものです。手元の素材でもコマンドは同じで、数値は手元の素材のものになります。
 :::
 
 ::: details テスト用の声と音楽ベッドを書き出すスクリプト
@@ -197,15 +197,15 @@ sonare mix --scene scene.json \
 cmp show.wav show-r30.wav   # 出力なし: 同一
 ```
 
-`rangeDb` をプリセットの既定値 18 から 30 へ上げても何も変わりません。`cmp` は 2 つのレンダリングをバイト単位で完全一致と報告します。この素材では、ホストの音量が求める削減量はどれだけ多くてもおよそ 7 dB までしかなく、8 dB 前後以上の上限であれば上限がないのと同じ挙動になるからです。その値より下げれば、編集が結果に現れます。`sonare dynamics` でファイル全体を測ると何かが変わったことはわかりますが、声そのものと、ホストが話していない長い区間も含めた 8 秒の平均なので、変化はごく小さく見えます。
+`rangeDb` をプリセットの既定値 18 から 30 へ上げても何も変わりません。`cmp` は 2 つのレンダリングをバイト単位で完全一致と報告します。この素材では、ホストの音量が求める削減量はどれだけ多くてもおよそ 5.7 dB までしかなく（上限 5.5 ではレンダリングが変わり、5.8 では変わりません）、6 dB 前後以上の上限であれば上限がないのと同じ挙動になるからです。その値より下げれば、編集が結果に現れます。`sonare dynamics` でファイル全体を測ると何かが変わったことはわかりますが、声そのものと、ホストが話していない長い区間も含めた 8 秒の平均なので、変化はごく小さく見えます。
 
 | `rangeDb` | `rms_db`（ファイル全体） | `peak_db` | `18` との比較 |
 |-----------|--------------------------|-----------|---------------|
-| —（インサートを丸ごと削除） | -22.80 | -10.79 | 異なる |
-| `1` | -22.85 | -10.84 | 異なる |
-| `5` | -22.95 | -10.92 | 異なる |
-| `18`（プリセットの既定値） | -22.96 | -10.92 | — |
-| `30` | -22.96 | -10.92 | バイト単位で同一 |
+| —（インサートを丸ごと削除） | -24.39 | -10.63 | 異なる |
+| `1` | -24.42 | -10.63 | 異なる |
+| `5` | -24.47 | -10.63 | 異なる |
+| `18`（プリセットの既定値） | -24.47 | -10.63 | — |
+| `30` | -24.47 | -10.63 | バイト単位で同一 |
 
 `rangeDb: 5` は、このページ冒頭のスクリプトが最終的に採用している値です。当てずっぽうではなく、上の表で確かめたうえでプリセットの既定値よりわずかに浅いダッキングを選んでいます。
 
@@ -300,7 +300,7 @@ print(f"bed while the host talks: {before:.1f} dB unducked, {after:.1f} dB ducke
       f"duck depth {before - after:.1f} dB")
 ```
 
-このページ冒頭のスクリプトで作ったテスト素材では、編集していないプリセットはホストが話している間ベッドを約 3 dB 下げ、上の `update` 行（`rangeDb` はプリセットの 18 のまま）では約 9 dB 下げます。測るのは実際にレンダリングするシーンにしてください。冒頭のスクリプトは `rangeDb: 5` も設定しているので、ダッキングは 5 dB までに制限されます。
+このページ冒頭のスクリプトで作ったテスト素材では、編集していないプリセットはホストが話している間ベッドを 3.2 dB 下げ、上の `update` 行（`rangeDb` はプリセットの 18 のまま）では 8.6 dB 下げます。測るのは実際にレンダリングするシーンにしてください。冒頭のスクリプトは `rangeDb: 5` も設定しており、この素材では 3.1 dB です。ホストが上限の許す量を超えて求めることがないためです。
 :::
 
 サイドチェインルーターは、検出器がベッドではなくホストを聴いているコンプレッサーです。要求される削減量は下の網かけのゲインリダクションそのもので、キーがスレッショルドをどれだけ超えたかにレシオを掛けた分しかありません。プログラムが超えなくなるまでスレッショルドを上げると網かけは消えます。それが上の警告が述べている状態で、`rangeDb` をいくつにしても戻ってきません。
@@ -318,7 +318,7 @@ sonare mix --scene scene.json \
 ```
 
 ```json
-{"strip_count": 3, "sample_rate": 48000, "block_size": 512, "rendered_samples": 384000, "output": "show.wav"}
+{"strip_count": 3, "sample_rate": 48000, "block_size": 512, "rendered_samples": 384124, "output": "show.wav"}
 ```
 
 `strip_count` が 3 なのは、このシーンに aux リターンが 1 本もないからです。すべての `--input` が実在するストリップを指しており、4 ステムの楽曲シーンにあったような無音のリターンを気にする必要がありません。各 `--input` の ID はシーン内のストリップ `id` と一致していなければならず、どの `--input` も名指ししなかったストリップには無音が入ります。これはベッドをある回だけ意図的に外すなら正しい挙動ですが、`music-bed` を `musicbed` と打ち間違えたときも同じことが黙って起こります。
@@ -330,7 +330,7 @@ sonare mastering show.wav --preset speech -o show-master.wav --json
 ```
 
 ```json
-{"mode": "preset", "input_lufs": -21.13, "output_lufs": -16.01, "applied_gain_db": 6.95, "output": "show-master.wav", "preset": "speech", "stages": ["repair.denoise", "eq.tilt", "dynamics.deesser", "dynamics.compressor", "loudness.optimize"]}
+{"mode": "preset", "input_lufs": -22.33, "output_lufs": -16.00, "applied_gain_db": 7.15, "output": "show-master.wav", "preset": "speech", "stages": ["repair.denoise", "eq.tilt", "dynamics.deesser", "dynamics.compressor", "loudness.optimize"]}
 ```
 
 同じ名前付きプリセットをアシスタントの出発点にすると、レポートへ説明も追加できます。
@@ -340,7 +340,7 @@ sonare mastering show.wav --assistant --preset speech --explain --target-platfor
 ```
 
 ```json
-{"mode": "assistant", "input_lufs": -21.13, "output_lufs": -16.01, "applied_gain_db": 6.29, "stages": ["repair.denoise", "eq.tilt", "dynamics.deesser", "dynamics.compressor", "stereo.monoMaker", "loudness.optimize"], "explanation": ["base preset: speech", "target loudness and ceiling applied from AssistantConfig", "speech preset enables de-esser and mono compatibility"]}
+{"mode": "assistant", "input_lufs": -22.33, "output_lufs": -16.00, "applied_gain_db": 7.15, "stages": ["repair.denoise", "eq.tilt", "dynamics.deesser", "dynamics.compressor", "stereo.monoMaker", "loudness.optimize"], "explanation": ["base preset: speech", "target loudness and ceiling applied from AssistantConfig", "speech preset enables de-esser and mono compatibility"]}
 ```
 
 単独の `speech` プリセット実行は、組み込みの -16 LUFS を目標にします。アシスタント実行は同じチェーンを出発点にし、`--target-platform podcast` から -16 LUFS を取得します。さらに speech プリセットの低域モノメーカー段と説明を加えます。アシスタントは音声からジャンルを推測しないため、`--preset speech` という選択がそのまま表示され、再現できます。
@@ -412,10 +412,10 @@ podcast をターゲットにしたアシスタント実行の `--report show-re
 
 ```json
 {
-  "before": { "integrated_lufs": -21.13, "true_peak_dbtp": -10.92 },
-  "after":  { "integrated_lufs": -16.01, "true_peak_dbtp": -4.63 },
-  "applied_gain_db": 6.29,
-  "max_gain_reduction_db": -1.15,
+  "before": { "integrated_lufs": -22.33, "true_peak_dbtp": -10.58 },
+  "after":  { "integrated_lufs": -16.00, "true_peak_dbtp": -4.19 },
+  "applied_gain_db": 7.15,
+  "max_gain_reduction_db": -0.47,
   "loudness_target_limited": false
 }
 ```

@@ -264,7 +264,7 @@ input.addEventListener('change', async (e) => {
 | `Audio.fromMemoryWithBrowserFallback` | No, folds to mono | WASM, then `decodeAudioData` | `Promise<Audio>` |
 | `decodeChannels` | Yes | WAV/MP3 in WASM | `{ sampleRate, channels }` |
 | `decodeChannelsWithBrowserFallback(bytes, options?)` | Yes | WASM, then `decodeAudioData` (AAC, OGG, FLAC) | `Promise<{ sampleRate, channels }>` |
-| `downmix(channels, targetLayout)` | Narrows | None | `Float32Array[]` |
+| `downmix(channels, targetLayout, options?)` | Narrows | None | `Float32Array[]` |
 
 `channels` holds one `Float32Array` per source channel in the source's own order (5.1 is L R C LFE Ls Rs). `downmix` folds them to a narrower layout, named by `targetLayout`:
 
@@ -275,7 +275,7 @@ input.addEventListener('change', async (e) => {
 | `2` | 5.1 |
 | `3` | 7.1 |
 
-It uses the ITU-R BS.775 rule (center and surround at -3 dB, LFE dropped) and cannot upmix. The source layout is read from the channel count (1, 2, 6, or 8); any other count folds only to mono, as the unweighted mean. The `...WithBrowserFallback` functions apply the same rule to a multichannel `AudioBuffer`, so a file folds to the same samples whichever decoder ran. `downmix` throws a `RangeError` for a `targetLayout` that is not an integer in the 32-bit range, and a `TypeError` for a non-number.
+It uses the ITU-R BS.775 rule (center and surround at -3 dB, LFE dropped) and cannot upmix. The source layout is read from the channel count (1, 2, 6, or 8); any other count folds only to mono, as the unweighted mean. The fold is not normalized, so a source with several full-scale planes can pass full scale (six planes of 1.0 fold to 2.414 on a stereo target). The optional third argument `{ normalize, includeLfe }` changes that: `normalize: true` scales the fold so the worst case (every input at full scale, in phase) stays at or below unity, a peak divisor rather than a loudness match, and `includeLfe: true` folds the LFE plane into the front pair at -3 dB instead of dropping it. Both default to `false`. The `...WithBrowserFallback` functions apply the same rule to a multichannel `AudioBuffer`, so a file folds to the same samples whichever decoder ran. `downmix` throws a `RangeError` for a `targetLayout` that is not an integer in the 32-bit range, and a `TypeError` for a non-number.
 
 ```typescript
 import { decodeChannels, downmix, init } from '@libraz/libsonare';
@@ -350,7 +350,7 @@ The published package ships a few coordinated pieces:
 
 - **Main module**: `sonare.js` plus `sonare.wasm`, the Emscripten build behind every analysis, mastering, mixing, and editing API.
 - **Main API entry**: the package `index` (`index.js` / `index.d.ts`) is the tsup bundle behind `import ... from '@libraz/libsonare'`; it exposes the all-in-one analysis, mastering, mixing, and editing API.
-- **AudioWorklet entry**: `worklet.js` / `worklet.d.ts`, a separate, self-contained tsup bundle (no code-splitting, so it is fully portable into an `AudioWorkletGlobalScope`); it carries the `SonareEngine` API, the worklet processor classes and their registration helpers, `SonareStreamAnalyzerNode` (live analysis of an audio-graph branch), and the ring-buffer protocol, and re-exports only `init` / `isInitialized` from the main entry so the worklet realm can initialize its own WASM instance.
+- **AudioWorklet entry**: `worklet.js` / `worklet.d.ts`, a separate, self-contained tsup bundle (no code-splitting, so it is fully portable into an `AudioWorkletGlobalScope`); it carries the `SonareEngine` API, the worklet processor classes and their registration helpers, `SonareStreamAnalyzerNode` (live analysis of an audio-graph branch), and the ring-buffer protocol (with `engineMixerMasterTarget`, `ENGINE_MIXER_PARAM_FADER_DB`, `ENGINE_MIXER_PARAM_PAN` and `SONARE_METER_RING_PROTOCOL_VERSION`), and re-exports only `init`, `isInitialized` and `EXPECTED_ABI_VERSION` from the main entry so the worklet realm can initialize its own WASM instance. The playback and mixer processors take the compiled module as `wasmBinary` in their processor options and initialize it themselves when the worklet realm has none, posting `ready` once it is up.
 - **Analysis-only module**: `sonare-analysis.js` / `sonare-analysis.wasm` behind the `@libraz/libsonare/analysis` entry (the raw asset is `@libraz/libsonare/wasm/analysis`), compiled without the mastering, mixing, realtime, and project bindings. CI records its size in a report, but size growth alone does not fail the build.
 - **Offline Worker entry**: `worker.js` behind `@libraz/libsonare/worker`, the Worker side of `OfflineWorkerClient`.
 - **Vocal-edit Worker entry**: `vocal_edit_worker.js` behind `@libraz/libsonare/vocal-edit-worker`, the Worker side of `VocalEditWorkerClient`.

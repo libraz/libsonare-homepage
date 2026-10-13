@@ -15,7 +15,7 @@ description: クリップし、ハムが乗り、クリックが混じり、頭�
 - **インストール:** `pip install libsonare`（Python 3.11 以降）。Node のタブには `npm install @libraz/libsonare`（Node.js 22.12 以降）が必要です。
 - **`raw/` に置いたモノラルのテイク:** WAV ファイルで、サンプルレートは一般的なものなら何でもかまいません。CLI のリペアはモノラルで動きます。ステレオのテイクはモノラルにまとめられ、モノラルのファイルとして書き出されます（ステレオの扱いは[ステップ 8](#ステップ-8-—-ステレオのテイク)）。
 - **ステップ 4 用:** 同じパートを 2〜3 回録ったテイク `take1.wav`〜`take3.wav`。サンプルレートはそろえてください。
-- **テスト素材:** このページのテイクは合成音です。下のスクリプトで同等のものを書き出せるので、まずすべての手順を試せます。出る数値はここに載せたものと少し違います。
+- **テスト素材:** このページのテイクは合成音です。下のスクリプトがそれを書き出し、ここに載せた数値はすべてその出力に各手順を実行して得たものです。ステップ 1〜7 の `take-raw.wav` は `raw/take-01.wav` です（その名前でコピーしてください）。
 :::
 
 ::: details 傷のあるテスト用テイクを書き出すスクリプト
@@ -102,15 +102,17 @@ for raw in raw/*.wav; do
   # 1. Measure the damage. Writes nothing -- safe to run on every take.
   sonare repair "$raw" --detect --json > "reports/${name}.before.json"
 
-  # 2. Let the assistant choose only the stages step 1's evidence calls for.
-  sonare repair "$raw" -o "clean/${name}.wav" --explain --json > "reports/${name}.repair.json"
-
-  # 3. Trim the dead air every take was padded with.
-  sonare trim-silence "clean/${name}.wav" -o "clean/${name}.trimmed.wav" --json \
+  # 2. Trim the dead air every take was padded with. This comes first: dehum's
+  #    notch rings into the padding and a later trim would find nothing to cut.
+  sonare trim-silence "$raw" -o "clean/${name}.trimmed.wav" --json \
     > "reports/${name}.trim.json"
 
+  # 3. Let the assistant choose only the stages step 1's evidence calls for.
+  sonare repair "clean/${name}.trimmed.wav" -o "clean/${name}.wav" --explain --json \
+    > "reports/${name}.repair.json"
+
   # 4. Measure again. This is the verification step, not a separate audit.
-  sonare repair "clean/${name}.trimmed.wav" --detect --json > "reports/${name}.after.json"
+  sonare repair "clean/${name}.wav" --detect --json > "reports/${name}.after.json"
 
   # 5. Fold the four records into one per-file report.
   python3 - "$name" <<'PY'
@@ -156,23 +158,21 @@ reports/take-02.json  ->  repair.declick, repair.decrackle, repair.dehum
   :nodes="[
     { id: 'raw', label: 'テイク一式 (WAV)', col: 0, row: 0, variant: 'muted' },
     { id: 'detect1', label: 'repair --detect', col: 1, row: 0, variant: 'accent' },
-    { id: 'choose', label: 'アシスタントが選択', col: 2, row: 0, variant: 'decision' },
-    { id: 'repair', label: 'repair --explain', col: 3, row: 0, variant: 'accent' },
-    { id: 'clean', label: '修復済みテイク', col: 4, row: 0 },
-    { id: 'trim', label: 'trim-silence', col: 5, row: 0, variant: 'accent' },
-    { id: 'trimmed', label: 'クリーンなテイク', col: 6, row: 0, variant: 'success' },
-    { id: 'detect2', label: 'repair --detect (検証)', col: 6, row: 1, variant: 'warning' },
+    { id: 'trim', label: 'trim-silence', col: 2, row: 0, variant: 'accent' },
+    { id: 'choose', label: 'アシスタントが選択', col: 3, row: 0, variant: 'decision' },
+    { id: 'repair', label: 'repair --explain', col: 4, row: 0, variant: 'accent' },
+    { id: 'clean', label: 'クリーンなテイク', col: 5, row: 0, variant: 'success' },
+    { id: 'detect2', label: 'repair --detect (検証)', col: 5, row: 1, variant: 'warning' },
     { id: 'record', label: 'ファイルごとの record.json', col: 7, row: 1, variant: 'muted' }
   ]"
   :edges="[
     { from: 'raw', to: 'detect1' },
-    { from: 'detect1', to: 'choose' },
-    { from: 'raw', to: 'repair', label: '音声', style: 'dashed' },
+    { from: 'detect1', to: 'trim' },
+    { from: 'trim', to: 'choose' },
+    { from: 'raw', to: 'trim', label: '音声', style: 'dashed' },
     { from: 'choose', to: 'repair' },
     { from: 'repair', to: 'clean' },
-    { from: 'clean', to: 'trim' },
-    { from: 'trim', to: 'trimmed' },
-    { from: 'trimmed', to: 'detect2', style: 'dashed' },
+    { from: 'clean', to: 'detect2', style: 'dashed' },
     { from: 'detect1', to: 'record', style: 'dashed' },
     { from: 'detect2', to: 'record', style: 'dashed' }
   ]"
@@ -225,24 +225,24 @@ print([s["stage"] for s in analysis["recommended"]], analysis["explanation"])
 {
   "mode": "detect",
   "defects": {
-    "click_count": 1,
-    "click_rejected": 4989,
-    "crackle_per_second": 0.759,
-    "clip_sample_fraction": 0.1139,
-    "clip_run_count": 3137,
-    "clip_longest_run_samples": 45,
+    "click_count": 6,
+    "click_rejected": 307,
+    "crackle_per_second": 2.368,
+    "clip_sample_fraction": 0.01259,
+    "clip_run_count": 164,
+    "clip_longest_run_samples": 51,
     "clip_flat_level": 0.99997,
-    "noise_floor_dbfs": -120.0,
+    "noise_floor_dbfs": -31.43,
     "hum_peak_found": true,
     "hum_fundamental_hz": 50.0,
-    "hum_fundamental_prominence": 18.62,
+    "hum_fundamental_prominence": 23.98,
     "hum_harmonics": 2,
-    "late_decay_ratio_db": -4.86
+    "late_decay_ratio_db": -5.85
   }
 }
 ```
 
-このテイクでは 4 つの数値だけでほぼ全体像が分かります。`clip_sample_fraction` はサンプルの 11.4% がクリップしていることを示し、1.0 に近い `clip_flat_level` はそれが単に大きいのではなく平らに張り付いていることを示します。ちょうど 50 Hz に商用電源の倍音が突出度 18.6 で乗っており、`crackle_per_second` がゼロでないことから短いインパルス状のクラックルがあるとわかります。`hum_fundamental_prominence` は dB ではなく単純な比です。ハムの候補のうち勝ち残ったもののエネルギーを、探索で試したすべての候補のエネルギーの中央値で割った値で、`1.0` はどのピークも目立たなかったことを表します。18.6 は、ある 1 つの周波数に典型的な候補の 18 倍を超えるエネルギーが乗っているということです。`click_count` はわずか 1 ですが、`click_rejected`（4989）は検出器が「クリックらしく見えて実はそうではない」と判断したイベントの数です。検出器が何かを見逃したと結論する前に、この数字を知っておく価値があります。
+このテイクでは 4 つの数値だけでほぼ全体像が分かります。`clip_sample_fraction` はサンプルの 1.26% がクリップしていることを示し、1.0 に近い `clip_flat_level` はそれが単に大きいのではなく平らに張り付いていることを示します。ちょうど 50 Hz に商用電源の倍音が突出度 24.0 で乗っており、`crackle_per_second` がゼロでない（2.37）ことから短いインパルス状のクラックルがあるとわかります。`hum_fundamental_prominence` は dB ではなく単純な比です。ハムの候補のうち勝ち残ったもののエネルギーを、探索で試したすべての候補のエネルギーの中央値で割った値で、`1.0` はどのピークも目立たなかったことを表します。24.0 は、ある 1 つの周波数に典型的な候補の約 24 倍のエネルギーが乗っているということです。`click_count` は 6 で、スクリプトが書き込んだ 6 つのクリックそのものです。`click_rejected`（307）は検出器が「クリックらしく見えて実はそうではない」と判断したイベントの数です。検出器が何かを見逃したと結論する前に、この数字を知っておく価値があります。
 
 ## ステップ 2 — アシスタントに選ばせる
 
@@ -261,7 +261,7 @@ sonare repair take-raw.wav -o take-clean.wav --explain --json
     "dehum: a prominent harmonic series sits on a mains frequency"
   ],
   "output": "take-clean.wav",
-  "output_gain_db": -1.87
+  "output_gain_db": -2.70
 }
 ```
 
@@ -296,14 +296,14 @@ sonare repair take-raw.wav -o take-clean.wav --explain --json
 ## ステップ 3 — 無音の余白をトリムする
 
 ```bash
-sonare trim-silence take-clean.wav -o take-trimmed.wav --json
+sonare trim-silence take-raw.wav -o take-trimmed.wav --json
 ```
 
 ```json
-{"length": 350528, "duration": 7.303, "threshold_db": -60.0, "n_fft": 2048, "hop_length": 512}
+{"length": 339200, "sample_rate": 48000, "duration": 7.0667, "threshold_db": -60.0, "n_fft": 2048, "hop_length": 512, "output": "take-trimmed.wav"}
 ```
 
-テイクは頭と尻の余白を含めて 7.9 秒でしたが、トリム後は 7.303 秒です。つまりおよそ 0.6 秒の無音が取れました。`--threshold-db`（既定値 −60 dB）は、あるフレームを無音と数えるしきい値です。ファイル自身のピークを基準にした値で同じ切り方をしたい場合は `--top-db` も受け付けます。トリムは修復とは無関係で、テイクにリペアが必要だったかどうかに関係なく実行されます。パイプラインの中でリペアのあとに置いているのは、切り落とすのが無音の余白であって、余白に見えるだけのクリップした端ではないようにするためです。ライブラリにも独自のトリマー（`trimSilence`、`masteringRepairTrimSilence`）がありますが、オプションが別で、出力の長さがこのコマンドと一致するとは限りません。このステップは CLI のステップです。
+テイクは頭と尻に 0.3 秒ずつの余白を含めて 7.6 秒でしたが、トリム後は 7.0667 秒です。つまり 0.533 秒の無音が取れました（切り位置は 512 サンプルのホップ単位に載ります）。`--threshold-db`（既定値 −60 dB）は、あるフレームを無音と数えるしきい値です。ファイル自身のピークを基準にした値で同じ切り方をしたい場合は `--top-db` も受け付けます。トリムは修復とは無関係で、テイクにリペアが必要だったかどうかに関係なく実行されます。トリムは生のテイクに対して、リペアの前に実行してください。リペア後のテイクは余白が無音ではなくなっています。dehum のノッチが余白に響き込むためです（dehum 単独で余白のピークは 0.07 と 0.10 になり、declip・declick・decrackle ではゼロのままです）。そのため `take-clean.wav` に同じコマンドを掛けても 7.6 秒がそのまま残ります。ライブラリにも独自のトリマー（`trimSilence`、`masteringRepairTrimSilence`）がありますが、オプションが別で、出力の長さがこのコマンドと一致するとは限りません。このステップは CLI のステップです。
 
 ## ステップ 4 — 複数テイクを共有する無音で切る
 
@@ -316,7 +316,7 @@ sonare split-silence take1.wav --json
 ```
 
 ```json
-[{"start_sample": 28160, "end_sample": 116224}, {"start_sample": 153088, "end_sample": 241152}, {"start_sample": 287232, "end_sample": 394752}]
+[{"start_sample": 28160, "end_sample": 116224}, {"start_sample": 153088, "end_sample": 241152}, {"start_sample": 287232, "end_sample": 375808}]
 ```
 
 テイク 1 本だけでは、フレーズごとに 1 つずつ、3 つの非無音区間が報告されます。`trim-silence` が見つけるのと同じ形を、1 つのトリム後の長さではなくサンプル範囲として表したものです。同じ部分の残り 2 本のテイクを加えます。
@@ -326,10 +326,10 @@ sonare split-silence take1.wav --input take2.wav --input take3.wav --json
 ```
 
 ```json
-[{"start_sample": 23040, "end_sample": 121344}, {"start_sample": 147968, "end_sample": 246272}, {"start_sample": 282624, "end_sample": 399872}]
+[{"start_sample": 23040, "end_sample": 120320}, {"start_sample": 147968, "end_sample": 245248}, {"start_sample": 282624, "end_sample": 379392}]
 ```
 
-最初の区間は 28160–116224 から 23040–121344 へと広がります。この広がり方こそがこの機能の要点です。報告される区間は各テイク自身の非無音区間の **和集合** で、接するところは統合されます。つまり切り出しが起きるのは全テイクが同時に無音になっている場所だけで、どのテイクのフレーズの途中にもかかりません。各テイクを自分自身の区間で切ってしまうと、あるテイクの早い入りが別のテイクのスライスではアタックを削り取ることになります。3 本まとめて和集合で切れば、どのテイクも全テイクが共有する無音の分だけを失い、それ以上は失いません。
+最初の区間は 28160–116224 から 23040–120320 へと広がります。この広がり方こそがこの機能の要点です。報告される区間は各テイク自身の非無音区間の **和集合** で、接するところは統合されます。つまり切り出しが起きるのは全テイクが同時に無音になっている場所だけで、どのテイクのフレーズの途中にもかかりません。各テイクを自分自身の区間で切ってしまうと、あるテイクの早い入りが別のテイクのスライスではアタックを削り取ることになります。3 本まとめて和集合で切れば、どのテイクも全テイクが共有する無音の分だけを失い、それ以上は失いません。
 
 `split-silence` は `-o` を一切受け付けません。区間を報告するだけのコマンドで、`--output` を渡すと使用方法エラー（終了コード 2）で終了します。共有区間を実際の音声にするのが `--write-takes PREFIX` で、テイクごと・区間ごとに 1 ファイルずつ、`PREFIX{take:02d}_{interval:03d}.wav`（どちらの番号も 1 始まり）という名前で書き出します。
 
@@ -337,7 +337,7 @@ sonare split-silence take1.wav --input take2.wav --input take3.wav --json
 sonare split-silence take1.wav --input take2.wav --input take3.wav --write-takes comp --json
 ```
 
-3 本のテイクと 3 つの共有区間から、9 個のファイル `comp01_001.wav` から `comp03_003.wav` までが書き出されます。1 つの区間の中では、テイクをまたいでもファイルの長さが揃います。区間 1 ならどのテイクでも 98304 サンプルです。テイク自身はサンプル単位で揃っているわけではないのに、です。和集合の境界より前に終わっているテイクは、短く切られるのではなくその分だけ無音でパディングされます。だからこそ `comp01_001.wav`・`comp02_001.wav`・`comp03_001.wav` は横並びで聴き比べられます。開始位置も長さも同じ、同じフレーズの 3 つの異なる演奏です。
+3 本のテイクと 3 つの共有区間から、9 個のファイル `comp01_001.wav` から `comp03_003.wav` までが書き出されます。1 つの区間の中では、テイクをまたいでもファイルの長さが揃います。区間 1 ならどのテイクでも 97280 サンプルです。テイク自身はサンプル単位で揃っているわけではないのに、です。和集合の境界より前に終わっているテイクは、短く切られるのではなくその分だけ無音でパディングされます。だからこそ `comp01_001.wav`・`comp02_001.wav`・`comp03_001.wav` は横並びで聴き比べられます。開始位置も長さも同じ、同じフレーズの 3 つの異なる演奏です。
 
 ここで **やらないこと** も明確にしておきます。最良のテイクを選ぶことはなく、クロスフェードもせず、フレーズ途中のタイミングのずれも直しません。途中で前のめりになったり遅れたりしているテイクは、切り出した後も前のめりのまま、遅れたままです。手元に残るのは判断材料としての揃ったスライスであって、完成したコンピングではありません。
 
@@ -356,7 +356,7 @@ sonare split-silence take1.wav --input take2.wav --input t3_44.wav --json
 この不一致は無効なパラメータとして拒否され（終了コード 3）、このページの他の場所で不明なパラメータキーを渡したときと同じ分類になります。
 
 ::: warning `--top-db` は各テイク自身のピークが基準で、絶対値ではありません
-同じ `--top-db` でも、ノイズの多いテイクほど見つかる無音は少なくなります。しきい値は固定の dBFS ではなく、そのテイク自身のピークを基準にしているからです。`take1.wav` は（`repair --detect` で測ると）ノイズフロアが約 −99.9 dBFS で、3 つのフレーズの間にはっきりした隙間が残ります。ファイルの他の部分は変えずにそのノイズフロアを約 −69.1 dBFS まで持ち上げると、同じテイクの結果はファイルのほぼ全体を覆う 1 つの区間に潰れてしまいます。しきい値が、無音と呼べるほど静かな場所をもう見つけられなくなったということです。「このくらいのヘッドルームがあれば安全」という一律の dB はありません。まず `noise_floor_dbfs` を確認し、ノイズフロアが高いテイクは `--top-db` を下げて帳尻を合わせるのではなく、コンピングの前に[ステップ 2](#ステップ-2-—-アシスタントに選ばせる)のリペアアシスタントに通してください。
+同じ `--top-db` でも、ノイズの多いテイクほど見つかる無音は少なくなります。しきい値は固定の dBFS ではなく、そのテイク自身のピークを基準にしているからです。`take1.wav` に標準偏差 0.0001 のガウスノイズ（シード 1）を加えると、`repair --detect` はノイズフロアを −81.5 dBFS と測り、3 つのフレーズの間にはっきりした隙間が残ります。標準偏差を 0.0003 にするとノイズフロアは −71.2 dBFS となり、同じテイクの結果はファイル全体（`0` から `408000`）を覆う 1 つの区間に潰れてしまいます。しきい値が、無音と呼べるほど静かな場所をもう見つけられなくなったということです。「このくらいのヘッドルームがあれば安全」という一律の dB はありません。まず `noise_floor_dbfs` を確認し、ノイズフロアが高いテイクは `--top-db` を下げて帳尻を合わせるのではなく、コンピングの前に[ステップ 2](#ステップ-2-—-アシスタントに選ばせる)のリペアアシスタントに通してください。
 :::
 
 ## ステップ 5 — 検証: もう一度 `--detect` を実行する
@@ -369,16 +369,16 @@ sonare repair take-clean.wav --detect --json
 
 | フィールド | 処理前 | 処理後 |
 |---|---|---|
-| `clip_sample_fraction` | 0.1139 | 0.000227 |
-| `click_count` | 1 | 0 |
-| `crackle_per_second` | 0.759 | 0 |
-| `hum_fundamental_prominence` | 18.62 | 7.94 |
-| `hum_harmonics` | 2 | 1 |
-| `noise_floor_dbfs` | −120.0 | −101.5 |
+| `clip_sample_fraction` | 0.01259 | 0.0000274 |
+| `click_count` | 6 | 0 |
+| `crackle_per_second` | 2.368 | 0 |
+| `hum_fundamental_prominence` | 23.98 | 2.15 |
+| `hum_harmonics` | 2 | 0 |
+| `noise_floor_dbfs` | −31.43 | −44.07 |
 
-クリップ・クリック・クラックルはいずれもほぼゼロまで下がります。ハムの突出度は半分以下に下がりますがゼロにはならず、`noise_floor_dbfs` はむしろ上がります。declip の LPC 再構築と インパルス系の 2 つのリペアの段が、手を入れたサンプルにごくわずかな広帯域の痕跡を残すためです。どちらも実行の不具合ではなく、ありのままの修復結果です。
+クリップは 1 つの連続区間の 10 サンプルまで減り、クリックとクラックルはゼロになります。ハムの突出度は 2.15 まで下がり、検出器がなお報告するピークは商用電源の周波数ではなく 61.5 Hz にあります。つまりこれはハムではなく、平坦な候補群の中でいちばん大きいものにすぎません。`noise_floor_dbfs` も下がります。低域の測定値を占めていたのが 50 Hz のハムとその倍音だったためです。どちらの数値もゼロにはならず、これがありのままの修復結果です。
 
-残った突出度 7.94 はアシスタント自身のしきい値 10 を下回るので、もう一度 `repair` を通しても dehum は再実行されません。一方で、[納品前チェックを CI で回す](./delivery-check.md) が仕上がったマスターを不合格にする 6.0 は上回っているので、このまま納品すればそのゲートでは不合格になります。実際に再生されるレベルで低域を聴いてください。ハムが聞こえるなら、直すのは発生源（アースを直しての録り直し）か、次の節で測るコストを承知でのより強いノッチです。聞こえないなら、この納品でのゲートのしきい値は自分で決めてかまいません。
+残った突出度 2.15 はアシスタント自身のしきい値 10 を下回るので、もう一度 `repair` を通しても dehum は再実行されません。[納品前チェックを CI で回す](./delivery-check.md) が仕上がったマスターを不合格にする 6.0 も大きく下回ります。実際に再生されるレベルで低域を聴いてください。ある段が欲しかった成分まで削っているなら、次の節のフィールド上書きで、その削りと残留量をトレードオフにできます。
 
 ::: info 検出器そのものが答え
 「うまくいったか」を確かめる別コマンドはありません。何を直すか決めたのと同じ `--detect` が、直せたかどうかを、同じ数値・同じ単位で証明します。
@@ -410,7 +410,7 @@ sonare repair take-raw.wav --preset voiceMemo -o take-voicememo.wav --json
 {"mode": "preset", "preset": "voiceMemo", "stages": ["repair.declip", "repair.denoise", "repair.dereverb"]}
 ```
 
-このテイクに `voiceMemo` を当てると declip・denoise・dereverb が実行されますが、dehum は一度も実行されません。ファイルの測定値に関係なく、そのプリセットがそもそも持っていない段だからです。結果を再度検出すればそれが確認できます。`hum_fundamental_prominence` は 20.5 と、元の 18.6 からほとんど変わっていません。プリセットが正しい選択になるのは、素材の素性が最初から分かっていて（電話のボイスメモ、フィールド録音）毎回同じ固定処理を当てたい場合です。ファイル自身の証拠に判断させたいなら向いておらず、それは計測して選ばせる経路に `--explain` を付ける方法の役目です。
+このテイクに `voiceMemo` を当てると declip・denoise・dereverb が実行されますが、dehum は一度も実行されません。ファイルの測定値に関係なく、そのプリセットがそもそも持っていない段だからです。結果を再度検出すればそれが確認できます。`hum_fundamental_prominence` は 24.45 と、元の 23.98 からほとんど変わっていません。プリセットが正しい選択になるのは、素材の素性が最初から分かっていて（電話のボイスメモ、フィールド録音）毎回同じ固定処理を当てたい場合です。ファイル自身の証拠に判断させたいなら向いておらず、それは計測して選ばせる経路に `--explain` を付ける方法の役目です。
 
 レコード系のレストレーションが何を取り除き、何を別の段に残すかは、下のデモで聴けます。クリップはレストレーション用プリセットが想定する傷みを乗せたピアノのターンアラウンドで、電源ハム、表面ノイズとヒス、まばらなクリックとクラックルが入っています。ここで当てているのは古典的なデリバーブ 1 段だけなので、落ちるのはノイズの土台と滲んだ余韻です。クリックとハムはそのまま残ります。それらは declick と dehum の担当だからです。
 
@@ -422,7 +422,7 @@ sonare repair take-raw.wav --preset voiceMemo -o take-voicememo.wav --json
 sonare repair take-raw.wav -o take-clean-harm.wav --params repair.dehum.harmonics=6 --json
 ```
 
-ノッチが追う倍音の数をアシスタント自身の 2 から 6 に上げても、残留量はほとんど動きません。`hum_fundamental_prominence` は既定値での実行の 7.94 に対して 7.88 です。検出器は決定的に動くので 0.06 は実在する差ですが、耳でわかる差ではありません。`output_gain_db` も既定値の −1.87 dB に対して −3.4 dB に変わりますが、これはフルスケールに合わせる前の修復後ファイルのピークが高くなったことを示すだけです。ノッチはその周波数付近の位相を動かすので、波形のピークは上にも下にも動きえます。この数値は、どれだけ手を入れたかの尺度ではありません。ノッチを増やすコストは、それが取り除くものにあります。ノッチは 100、150、200 Hz といった周波数にある本物の音楽的成分も削るので、ベースやキックではその量がかなりになります。`dehum` を「ゼロまで追い込みたい」という衝動は、いつもこういう結果になります。残留量はほとんど動かず、耳でわかるほど中身が削られます。[整音・入力系コントロール](../glossary/mastering/repair.md) のグロッサリーページも denoise について同じことを言っています。ノイズを少し残すほうが、ドラムがにじんだり水っぽいアーティファクトが出たりするより良い、と。ノッチフィルタが本物の音楽的成分と共有する基音を削ってしまう場面にも、同じ抑制が当てはまります。
+ノッチが追う倍音の数をアシスタント自身の 2 から 6 に上げても、残留量はほとんど動きません。`hum_fundamental_prominence` は既定値での実行の 2.15 に対して 2.14 です。検出器は決定的に動くので 0.01 は実在する差ですが、耳でわかる差ではありません。`output_gain_db` も既定値の −2.70 dB に対して −3.23 dB に変わりますが、これはフルスケールに合わせる前の修復後ファイルのピークが高くなったことを示すだけです。ノッチはその周波数付近の位相を動かすので、波形のピークは上にも下にも動きえます。この数値は、どれだけ手を入れたかの尺度ではありません。ノッチを増やすコストは、それが取り除くものにあります。ノッチは 100、150、200 Hz といった周波数にある本物の音楽的成分も削るので、ベースやキックではその量がかなりになります。`dehum` を「ゼロまで追い込みたい」という衝動は、いつもこういう結果になります。残留量はほとんど動かず、耳でわかるほど中身が削られます。[整音・入力系コントロール](../glossary/mastering/repair.md) のグロッサリーページも denoise について同じことを言っています。ノイズを少し残すほうが、ドラムがにじんだり水っぽいアーティファクトが出たりするより良い、と。ノッチフィルタが本物の音楽的成分と共有する基音を削ってしまう場面にも、同じ抑制が当てはまります。
 
 下のデモは、このトレードオフを 50 Hz のハムとその 3 つの倍音を載せたクリーンな和音で確かめます。ハムの除去方法を切り替えて、それぞれの HUM スコアを読んでください。
 
@@ -438,7 +438,7 @@ sonare declip take-raw.wav -o take-declip-only.wav --clip-threshold 0.95 --json
 ```
 
 ```json
-{"clip_threshold": 0.95, "lpc_order": 36, "iterations": 2, "lpc_blend": 0.65, "output": "take-declip-only.wav"}
+{"sample_rate": 48000, "samples": 364800, "clip_threshold": 0.95, "lpc_order": 36, "iterations": 2, "lpc_blend": 0.65, "output": "take-declip-only.wav"}
 ```
 
 `--clip-threshold` は、フルスケールにどこまで近づいたサンプルをクリップとみなすかです（修復アシスタントはもう少し控えめな既定値を使います）。`--lpc-order`・`--iterations`・`--lpc-blend` は、線形予測による再構築で失われた波形をどれだけ積極的に組み立て直すか、それとも生の（クリップした）信号をどれだけ混ぜ戻すかを決めます。ここに手を伸ばすのは `--detect` で declip こそが手で調整する価値のある段だと分かってからにしてください。それ以外は何も直しません。

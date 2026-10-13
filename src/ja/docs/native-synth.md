@@ -43,7 +43,7 @@ NativeSynth パッチは**インストゥルメント**です。MIDI デステ�
 
 <SynthSignalPathFigure
   title="1 つのボイスと、モッドマトリクスが届く先"
-  :labels="{ osc: 'オシレーター', oscSub1: '波形を 1 つ選ぶ:', oscSub2: 'sine saw square', oscSub3: 'triangle noise', oscSub4: 'unison 1–7 · detune', filter: 'フィルター', filterSub1: '4 モデルから 1 つ:', filterSub2: 'svf · moog-ladder', filterSub3: 'diode-ladder', filterSub4: 'sallen-key', amp: 'アンプ', ampSub1: 'ADSR エンベロープ', body: 'ボディ共鳴', bodySub1: 'guitar violin', bodySub2: 'wood-tube brass-bell', bodySub3: 'vocal · none', bodySub4: 'bodyMix 0–1', out: '出力', matrix: 'モッドマトリクス', matrixSub: '12 のソース × 12 の送り先・同時に有効なルーティングは最大 8 本', sources: 'ソース', noDest: '送り先ではない', loopNote: 'ソースへ戻る', legendChain: 'ボイスチェーン', legendBody: 'アンプ後段のボディ共鳴', legendRoute: 'モッドルーティング（同時に最大 8 本）' }"
+  :labels="{ osc: 'オシレーター', oscSub1: '波形を 1 つ選ぶ:', oscSub2: 'sine saw square', oscSub3: 'triangle noise', oscSub4: 'unison 1–7 · detune', filter: 'フィルター', filterSub1: '4 モデルから 1 つ:', filterSub2: 'svf · sallen-key', filterSub3: 'transistor-ladder', filterSub4: 'diode-ladder', amp: 'アンプ', ampSub1: 'ADSR エンベロープ', body: 'ボディ共鳴', bodySub1: 'guitar violin', bodySub2: 'wood-tube brass-bell', bodySub3: 'vocal · none', bodySub4: 'bodyMix 0–1', out: '出力', matrix: 'モッドマトリクス', matrixSub: '12 のソース × 12 の送り先・同時に有効なルーティングは最大 8 本', sources: 'ソース', noDest: '送り先ではない', loopNote: 'ソースへ戻る', legendChain: 'ボイスチェーン', legendBody: 'アンプ後段のボディ共鳴', legendRoute: 'モッドルーティング（同時に最大 8 本）' }"
 />
 
 ::: tip まず鳴らしてみる
@@ -91,7 +91,7 @@ NativeSynth パッチは**インストゥルメント**です。MIDI デステ�
 | モデル | 回路トポロジー | ポール数（ローパスの傾き） | 備考 |
 |--------|----------------|----------------------------|------|
 | `svf` | TPT ステートバリアブル | 2（12 dB/オクターブ） | クリーン。`filterOutput`（lowpass / bandpass / highpass）を選べる唯一のモデル |
-| `moog-ladder` | 4 ポールトランジスタラダー | 4（24 dB/オクターブ） | ゼロディレイフィードバック、飽和ループ、自己発振する |
+| `transistor-ladder` | 4 ポールトランジスタラダー | 4（24 dB/オクターブ） | ゼロディレイフィードバック、飽和ループ、自己発振する |
 | `diode-ladder` | ダイオードラダー | 結合した 4 段（カットオフより十分上で 24 dB/オクターブ） | 結合段 ZDF、自己発振する |
 | `sallen-key` | ザレンキー | 2（12 dB/オクターブ） | 自己発振する |
 
@@ -268,17 +268,17 @@ pad = sonare.synth_preset_patch("warm-pad")
 - **キートラッキング**：フィルターカットオフなどのパラメータを、鍵盤を上がるほどノートの音高に追従させることです。
 :::
 
-範囲は `synthPatchParamInfo()` が返す値で、範囲外の値はクランプされます。同じ呼び出しで各フィールドの既定値も取得できます。
+範囲は `synthPatchParamInfo()` が返す値で、範囲外の値はクランプされます（`gain` は例外で、[0, 4] の外や有限でない値はフィールド名つきで拒否されます）。同じ呼び出しで各フィールドの既定値も取得できます。
 
 | グループ | フィールド |
 |----------|------------|
 | オシレーター | `unison`（1-7）と `detuneCents`（0-200）は subtractive のみ。`driftCents`（0-100）、`driftRateHz`（0.01-20）、`drive`（0-1）、`pitchOffsetCents`（-4800〜4800） |
 | フィルター | `cutoffHz`（10-22000）、`resonanceQ`（0.5-30）、`keyTrack`（0-1）、`envToCutoffCents` と `velToCutoffCents`（-9600〜9600）、`hpCutoffHz`（0-22000。0 でオフ） |
 | 出力段 | `sampleHoldHz`（0-192000。0 でオフ）、`bitDepth`（0-24。0 でオフ） |
-| アンプ／フィルターエンベロープ | `ampDelayMs`／`ampHoldMs` と `filter*` の対（0-5000）、アタック・ディケイ・リリース時間（最大 20000 ms）、`ampSustain`／`filterSustain`（0-1）、`oneShot`（アンプのみ。真偽値） |
+| アンプ／フィルターエンベロープ | `ampDelayMs`／`ampHoldMs` と `filter*` の対（0-5000）、アタック・ディケイ・リリース時間（最大 20000 ms。ディケイとリリースは時定数 3 つ分なので、設定時間では約 26 dB 下がった位置にあります）、`ampSustain`／`filterSustain`（0-1）、`oneShot`（アンプのみ。真偽値） |
 | LFO とグライド | `lfoRateHz`、`lfo2RateHz`（0-40）、`lfoToPitchCents`（0-1200）、`glideMs`（0-5000） |
 | ボディ共鳴 | `body`（`none` / `guitar` / `violin` / `wood-tube` / `brass-bell` / `vocal`）、`bodyMix`（0-1） |
-| ステレオと出力 | `stereoSpread`（0-1）、`gain`（リニア）、`polyphony`（1-64）、`busDrive`（0-1） |
+| ステレオと出力 | `stereoSpread`（0-1）、`gain`（リニア、0-4）、`polyphony`（1-64）、`busDrive`（0-1） |
 | enum | `engineMode`、`waveform`（subtractive のみ）、`filterModel`、`filterOutput`（SVF のみ）。`synthEnumTables()` の名前、またはベースを保つ `'default'` |
 | ボイスの開始状態 | `retrigger`（`'default'` / `'free'` / `'note'`） |
 | エンジンセクション | `engineParams`（キーと数値のレコード） |
@@ -385,7 +385,7 @@ synthEnumTables();
 //   engineModes:      ['default', 'subtractive', 'fm', ..., 'harpsichord', 'sample'],
 //   waveforms:        ['default', 'sine', 'saw', 'square', 'triangle', 'noise'],
 //   builtinWaveforms: ['sine', 'saw', 'sawtooth', 'square', 'triangle'],
-//   filterModels:     ['default', 'svf', 'moog-ladder', 'diode-ladder', 'sallen-key'],
+//   filterModels:     ['default', 'svf', 'transistor-ladder', 'diode-ladder', 'sallen-key'],
 //   filterOutputs:    ['default', 'lowpass', 'bandpass', 'highpass'],
 //   bodyTypes:        ['default', 'none', 'guitar', 'violin', 'wood-tube',
 //                      'brass-bell', 'vocal'],
@@ -407,7 +407,7 @@ Python では `synth_enum_tables()` で、同じテーブルが snake_case の�
 
 Node と WASM の `SynthPatch` はこのフィールドを `retrigger` として公開し、Python も `SynthPatch.retrigger` という属性名を使います。TypeScript のユニオン型は `SynthRetrigger`、名前の配列は `SYNTH_RETRIGGERS`（`['default', 'free', 'note']`）です。この配列は `synthEnumTables()` の戻り値とは別に公開されています。C API では対応する enum が `SonareSynthRetrigger` で、値は `SONARE_SYNTH_RETRIGGER_BASE`、`SONARE_SYNTH_RETRIGGER_FREE`、`SONARE_SYNTH_RETRIGGER_NOTE` です。
 
-`builtinWaveforms` / `BUILTIN_SYNTH_WAVEFORMS` は別系統のリストです。これは NativeSynth の `waveform` フィールドではなく、最小構成の内蔵オシレーターシンセ（`setBuiltinInstrument`）が受け付ける名前を表します。`'default'` を持たず、`'saw'` に加えて `'sawtooth'` も受け付け、`'noise'` は受け付けません。
+`builtinWaveforms` / `BUILTIN_SYNTH_WAVEFORMS` は別系統のリストです。これは NativeSynth の `waveform` フィールドではなく、最小構成の内蔵オシレーターシンセ（`setBuiltinInstrument`）が受け付ける名前を表します。`'default'` を持たず、`'saw'` に加えて `'sawtooth'` も受け付け、`'noise'` は受け付けません。ADSR の時間は設定時間かけて進むリニアなランプで、`SynthPatch` のディケイとリリース（時定数 3 つ分）とは異なります。
 
 ### ホストの PCM: `sample` エンジン
 

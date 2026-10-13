@@ -290,6 +290,8 @@ sonare hpss music.mp3 -o separated --json
   Wrote: separated_harmonic.wav, separated_percussive.wav
 ```
 
+With `--json` the levels are `harmonic_mean_abs` and `percussive_mean_abs` (plus `residual_mean_abs` with `--with-residual`), each the mean absolute sample value of that component.
+
 ### decompose-stems
 
 Split a mix into non-negative matrix factorization (NMF) components (see [Source Separation](./source-separation.md)) — a

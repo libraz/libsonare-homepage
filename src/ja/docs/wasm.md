@@ -255,7 +255,7 @@ input.addEventListener('change', async (e) => {
 | `Audio.fromMemoryWithBrowserFallback` | しない（モノラルに畳み込み） | WASM、次に `decodeAudioData` | `Promise<Audio>` |
 | `decodeChannels` | する | WASM 内の WAV/MP3 | `{ sampleRate, channels }` |
 | `decodeChannelsWithBrowserFallback(bytes, options?)` | する | WASM、次に `decodeAudioData`（AAC、OGG、FLAC） | `Promise<{ sampleRate, channels }>` |
-| `downmix(channels, targetLayout)` | 狭める | なし | `Float32Array[]` |
+| `downmix(channels, targetLayout, options?)` | 狭める | なし | `Float32Array[]` |
 
 `channels` は、元のチャンネル順（5.1 は L R C LFE Ls Rs）の `Float32Array` の配列です。`downmix` はこれを、`targetLayout` で指定したより狭いレイアウトへ折りたたみます。
 
@@ -266,7 +266,7 @@ input.addEventListener('change', async (e) => {
 | `2` | 5.1 |
 | `3` | 7.1 |
 
-規則は ITU-R BS.775（センターとサラウンドを -3 dB、LFE は除外）で、アップミックスはできません。元のレイアウトはチャンネル数（1、2、6、8）から判断し、それ以外のチャンネル数はモノラルへの折りたたみ（単純平均）だけが可能です。`...WithBrowserFallback` 系の関数はマルチチャンネルの `AudioBuffer` に同じ規則を適用するので、どちらのデコーダーが動いても同じサンプルになります。`downmix` は、32 ビット整数の範囲の整数でない `targetLayout` に `RangeError` を、数値でないものに `TypeError` を投げます。
+規則は ITU-R BS.775（センターとサラウンドを -3 dB、LFE は除外）で、アップミックスはできません。元のレイアウトはチャンネル数（1、2、6、8）から判断し、それ以外のチャンネル数はモノラルへの折りたたみ（単純平均）だけが可能です。折りたたみは正規化されないため、フルスケールに近いプレーンが複数あるソースはフルスケールを超えることがあります（1.0 の 6 プレーンはステレオ目標で 2.414 になります）。省略可能な第 3 引数 `{ normalize, includeLfe }` で挙動を変えられます。`normalize: true` は最悪ケース（全入力がフルスケールで同相）でも 1 以下に収まるよう折りたたみをスケールします（ラウドネスを合わせるのではなくピークで割る方式です）。`includeLfe: true` は LFE プレーンを捨てずに -3 dB でフロントペアへ加えます。どちらも既定は `false` です。`...WithBrowserFallback` 系の関数はマルチチャンネルの `AudioBuffer` に同じ規則を適用するので、どちらのデコーダーが動いても同じサンプルになります。`downmix` は、32 ビット整数の範囲の整数でない `targetLayout` に `RangeError` を、数値でないものに `TypeError` を投げます。
 
 ```typescript
 import { decodeChannels, downmix, init } from '@libraz/libsonare';
@@ -341,7 +341,7 @@ async function getMonoSamples(audioBuffer: AudioBuffer): Promise<Float32Array> {
 
 - **メインモジュール**: `sonare.js` と `sonare.wasm`。解析・マスタリング・ミキシング・編集の各 API を支える Emscripten ビルドです。
 - **メイン API エントリ**: パッケージの `index`（`index.js` / `index.d.ts`）は `import ... from '@libraz/libsonare'` を支える tsup バンドルです。解析・マスタリング・ミキシング・編集の全 API を公開します。
-- **AudioWorklet エントリ**: `worklet.js` / `worklet.d.ts`。独立した自己完結型の tsup バンドル（コード分割なし、`AudioWorkletGlobalScope` への移植を想定）で、`SonareEngine` API、worklet プロセッサクラスとその登録ヘルパー、`SonareStreamAnalyzerNode`（オーディオグラフの枝のライブ解析）、リングバッファプロトコルを収録します。worklet レルムが独自の WASM インスタンスを初期化できるよう、メインエントリから `init` / `isInitialized` のみを再エクスポートします。
+- **AudioWorklet エントリ**: `worklet.js` / `worklet.d.ts`。独立した自己完結型の tsup バンドル（コード分割なし、`AudioWorkletGlobalScope` への移植を想定）で、`SonareEngine` API、worklet プロセッサクラスとその登録ヘルパー、`SonareStreamAnalyzerNode`（オーディオグラフの枝のライブ解析）、リングバッファプロトコル（`engineMixerMasterTarget`、`ENGINE_MIXER_PARAM_FADER_DB`、`ENGINE_MIXER_PARAM_PAN`、`SONARE_METER_RING_PROTOCOL_VERSION` を含む）を収録します。worklet レルムが独自の WASM インスタンスを初期化できるよう、メインエントリから `init`、`isInitialized`、`EXPECTED_ABI_VERSION` のみを再エクスポートします。再生用とミキサー用のプロセッサは、プロセッサオプションの `wasmBinary` でコンパイル済みモジュールを受け取り、worklet レルムにモジュールがなければ自分で初期化して、準備ができた時点で `ready` を送ります。
 - **解析専用モジュール**: `@libraz/libsonare/analysis` エントリの背後にある `sonare-analysis.js` / `sonare-analysis.wasm`（生のアセットは `@libraz/libsonare/wasm/analysis`）。マスタリング・ミキシング・リアルタイム・プロジェクトのバインディングを外してコンパイルしています。CI はサイズをレポートに記録しますが、増加だけでビルドを失敗させません。
 - **オフライン Worker エントリ**: `@libraz/libsonare/worker` の背後にある `worker.js`。`OfflineWorkerClient` の Worker 側です。
 - **ボーカル編集 Worker エントリ**: `@libraz/libsonare/vocal-edit-worker` の背後にある `vocal_edit_worker.js`。`VocalEditWorkerClient` の Worker 側です。

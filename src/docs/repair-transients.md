@@ -23,7 +23,7 @@ Clipping, clicks, and crackle are all short-time defects, but their evidence is 
 | An isolated impulse-like discontinuity | `masteringRepairDetectClicks` | `masteringRepairDeclick` | `count`, `rejected`, `longestRunSamples`, and `perSecond`. |
 | Dense sample-scale surface damage | `masteringRepairDetectCrackle` | `masteringRepairDecrackle` | `sampleCount`, `sampleFraction`, and `perSecond`. |
 
-Detection is source-dependent. A square wave, pulse train, or fully limited signal can look like a flat top, while downmixing, resampling, or lossy coding can erase a real flat top. Inspect each original channel before any downmix.
+Detection is source-dependent. A square wave, pulse train, or fully limited signal can look like a flat top, while downmixing, resampling, or lossy coding can erase a real flat top. Inspect each original channel before any downmix. Percussion is not read as damage: crackle samples and click runs are counted only where they stand above the local transient level, so a clean kick loop reports none. The repair stages still act inside transients, so `replacedSamples` and `repairedRuns` can exceed the detected counts.
 
 ## Detect in repair order
 

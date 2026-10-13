@@ -23,7 +23,7 @@ description: libsonare の declip、declick、decrackle 段で過渡的な欠陥
 | 孤立したインパルス状の不連続 | `masteringRepairDetectClicks` | `masteringRepairDeclick` | `count`、`rejected`、`longestRunSamples`、`perSecond`。 |
 | 密集したサンプル単位の表面損傷 | `masteringRepairDetectCrackle` | `masteringRepairDecrackle` | `sampleCount`、`sampleFraction`、`perSecond`。 |
 
-検出は素材に依存します。矩形波、パルス列、完全にリミットされた信号は平らな頂部に見える一方、ダウンミックス、リサンプリング、非可逆圧縮は本当の平頂を消すことがあります。ダウンミックス前の元チャンネルをそれぞれ検査してください。
+検出は素材に依存します。矩形波、パルス列、完全にリミットされた信号は平らな頂部に見える一方、ダウンミックス、リサンプリング、非可逆圧縮は本当の平頂を消すことがあります。ダウンミックス前の元チャンネルをそれぞれ検査してください。パーカッションは損傷として読み取られません。クラックルのサンプルとクリックの連なりは、局所的な過渡のレベルを上回る位置でだけ数えられるため、きれいなキックのループでは何も報告されません。リペアの各段は過渡の中でも作用するので、`replacedSamples` や `repairedRuns` は検出された数を上回ることがあります。
 
 ## リペア順に検出する
 

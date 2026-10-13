@@ -209,7 +209,7 @@ interface MelodyPoint {
 
 | ヘルパー | 結果の型 | `analyze()` のサブオブジェクトに加わるフィールド |
 |----------|----------|--------------------------------------------------|
-| `analyzeBpm` | `BpmAnalysisResult` | `bpm`、`confidence`、`candidates: BpmCandidate[]`（`{ bpm, confidence }`）、`autocorrelation`、`tempogram` |
+| `analyzeBpm` | `BpmAnalysisResult` | `bpm`、`confidence`、`candidates: BpmCandidate[]`（`{ bpm, confidence }`。`candidates[0]` が選ばれたテンポで、残りは得票率順）、`autocorrelation`、`tempogram` |
 | `analyzeRhythm` | `RhythmAnalysisResult` | `RhythmFeatures` に、`bpm`（ビートトラッカーが補正したテンポ）と `beatIntervals` を加えたもの |
 | `analyzeDynamics` | `DynamicsResult`（別名 `DynamicsAnalysisResult` は非推奨） | `Dynamics` に、`loudnessTimes` と `loudnessRmsDb`（並行する `Float32Array`）を加えたもの |
 | `analyzeTimbre` | `TimbreAnalysisResult` | `Timbre` に、`spectralCentroid`、`spectralFlatness`、`spectralRolloff`、`timbreOverTime` を加えたもの |
@@ -430,7 +430,7 @@ interface MasteringStereoResult {        // masteringProcessStereo
 
 列挙型のリペアキーは、序数と名前のどちらでも受け付けます。序数は列挙順に `0` から振られます: `denoise.mode`（`'logMmse'`、`'mmseStsa'`、`'spectralSubtraction'`）、`denoise.noiseEstimator`（`'quantile'`、`'mcra'`、`'imcra'`、`'spp'`）、`decrackle.mode`（`'median'`、`'waveletShrinkage'`）、`dehum.mode`（`'subtract'`、`'notch'`）。
 
-マルチバンドコンプレッサーは、バージョン 2 のチェーンドキュメントだけでなく、どのチェーン呼び出しからでも設定できます。`crossover.cutoffsHz` はカットオフのリストを置き換えてバンド数（最大 64）を決め、`bands` は `MultibandCompressorBand` でバンドをインデックスごとに指定します。フィールドは `thresholdDb`、`ratio`、`attackMs`、`releaseMs`、`kneeDb`、`makeupGainDb`、`autoMakeup`、`detector`（`'peak'`、`'rms'`、`'logRms'`、または序数）、`sidechainHpfEnabled`、`sidechainHpfHz`、`pdrTimeMs`、`pdrReleaseScale` で、すべて省略可能です（省略したフィールドはベースの値のままです）。フラットキーでは `dynamics.multibandComp.crossover.cutoffsHz.<i>` と `dynamics.multibandComp.bands.<i>.<field>` で、インプレース形式の `cutoff<i>Hz` / `band<i>.<field>` や low/mid/high の短縮形と併用できます。キーの順序は問いません。同じフィールドを 1 回の呼び出しで 2 通りの綴りで渡すと拒否され、バンドが 1 つだけのステージも拒否されます（`multiband stage needs at least two bands; one band is the compressor stage`）。`dynamics.compressor.detector` とマルチバンドのスロープ、モード、バンドごとのディテクタのキーでは、enum の名前が解決されます。
+マルチバンドコンプレッサーは、バージョン 2 のチェーンドキュメントだけでなく、どのチェーン呼び出しからでも設定できます。`crossover.cutoffsHz` はカットオフのリストを置き換えてバンド数（最大 64）を決め、`bands` は `MultibandCompressorBand` でバンドをインデックスごとに指定します。フィールドは `thresholdDb`、`ratio`、`attackMs`、`releaseMs`、`kneeDb`、`makeupGainDb`、`autoMakeup`、`detector`（`'peak'`、`'rms'`、`'logRms'`、または序数）、`sidechainHpfEnabled`、`sidechainHpfHz`、`pdrTimeMs`、`pdrReleaseScale` で、すべて省略可能です（省略したフィールドはベースの値のままです）。フラットキーでは `dynamics.multibandComp.crossover.cutoffsHz.<i>` と `dynamics.multibandComp.bands.<i>.<field>` で、インプレース形式の `cutoff<i>Hz` / `band<i>.<field>` や low/mid/high の短縮形と併用できます。キーの順序は問いません。同じフィールドを 1 回の呼び出しで 2 通りの綴りで渡すと拒否され、バンドが 1 つだけのステージも拒否されます（`multiband stage needs at least two bands; one band is the compressor stage`）。`dynamics.compressor.detector` とマルチバンドのスロープ、モード、バンドごとのディテクタのキーでは、enum の名前が解決されます。比率を 1 にしたとき、Linkwitz-Riley のバンドはカットオフで平坦に足し合わさります（`lr2`・`lr4` とも 0.00 dB）。Butterworth と Bessel はカットオフで打ち消し合わず、むしろ持ち上がります。カットオフ 1 kHz に 1 kHz の音を通すと、Butterworth は `lr2`・`lr4` とも +3.01 dB、Bessel は `lr2` で +2.68 dB、`lr4` で +1.69 dB です。
 
 各ステージの使いどころは用語集の各ページに対応しています: [リペア](./glossary/mastering/repair.md)、[トーンと Air](./glossary/mastering/tone-air.md)、[ダイナミクス](./glossary/mastering/dynamics.md)、[ステレオ・リミッター・ラウドネス](./glossary/mastering/stereo-limiter-loudness.md)。
 
@@ -506,7 +506,7 @@ WASM パッケージは、関数やクラスに加えて TypeScript の補助型
 | エンジンのレーンミキサー、マーカー、MIDI クリップ | `EngineTrackLane`, `EngineTrackSend`, `EngineBus`, `EngineMarker`, `EngineMidiClipSchedule`, `EngineMidiEvent`, `ExternalMidiEvent`, `MarkerKind`, `ProjectMarker` |
 | キー／コード／リズム／音色解析 | `ChordDetectionOptions`, `KeyMode`, `PitchClassName`, `KeyProfileName`, `BpmAnalysisResult`, `BpmCandidate`, `RhythmAnalysisResult`, `TimbreAnalysisResult`, `TimbreFrame`, `DynamicsResult`, `DynamicsAnalysisResult`, `MelodyResult` |
 | Worker | `OfflineWorkerClient`, `OfflineWorkerClientOptions`, `OfflineWorkerCallOptions`, `OfflineWorkerProgress`, `OfflineWorkerTask`, `OfflineWorker`。[Web Worker の使用](./wasm-advanced.md#web-worker-の使用)を参照 |
-| スペクトル／ピッチ／特徴量変換 | `MelPowerResult`, `StftPowerResult`, `PitchCorrectOptions`, `VoicedFlags`, `SpectralRegionOp`, `SpectralEditOptions`, `TempogramMode`, `HarmonicRequest`, `HpssRequest`, `PercussiveRequest`, `AutoTuneRequest`, `PitchShiftRequest`, `TimeStretchRequest` |
+| スペクトル／ピッチ／特徴量変換 | `MelPowerResult`, `StftMagnitudeResult`, `PitchCorrectOptions`, `VoicedFlags`, `SpectralRegionOp`, `SpectralEditOptions`, `TempogramMode`, `HarmonicRequest`, `HpssRequest`, `PercussiveRequest`, `AutoTuneRequest`, `PitchShiftRequest`, `TimeStretchRequest` |
 | ページ式クリップストリーミング | `ClipPageStreamerEngine`, `ClipPageStreamerOptions`, `ClipPageStreamSource`, `OpfsClipStream`, `OpfsClipStreamOptions`, `OpfsClipPageProviderOptions` |
 | マスタリングと機能カタログ | `MasteringProcessorParams`、`MasteringProcessorCatalogEntry`、`MasteringInsertParamInfo`、`MasteringInsertParamChoice`、`MasteringInsertSlot`、`MasteringInsertTiming`、`CapabilityCatalog`、`CapabilityCatalogParameter`、`CapabilityCatalogProcessor`、`CapabilityCatalogPresets`、`CapabilityCatalogMasteringPreset`、`CapabilityCatalogChain`、`CapabilityCatalogChainStage`、`CapabilityCatalogChainList`、`CapabilityCatalogChainAlias`、`MultibandCompressorBand`、`MasteringInsertParamDependency`、`MasteringChannelPolicy`、`MasteringChainStereoResult`、`MasteringStereoParamsRequest`、`MasteringStreamingPreviewStereoRequest`、`MeteringStereoRequest`、`MeteringStereoDecimatedRequest` |
 | ストリーミングリチューンと EQ | `StreamingRetuneConfig`, `StreamingEqualizerConfig`, `EqBandType`, `EqBandPhase`, `EqCoeffMode`, `EqMatchOptions`, `EqStereoPlacement` |
@@ -528,7 +528,7 @@ WASM パッケージは、関数やクラスに加えて TypeScript の補助型
 |----|----|-----------|
 | `SynthEngineMode` | `'default'`, `'subtractive'`, `'fm'`, `'karplus-strong'`, `'modal'`, `'additive'`, `'percussion'`, `'piano'`, `'pipe-organ'`, `'bowed-string'`, `'reed'`, `'brass'`, `'flute'`, `'plucked-string'`, `'vocal'`, `'free-reed'`, `'harpsichord'`, `'sample'` | `SynthPatch.engineMode`。エンジンモードだけを設定したパッチは、そのエンジンのベースプリセットで発音する。`'sample'` はバンクを渡すまで無音 |
 | `SynthOscWaveform` | `'default'`, `'sine'`, `'saw'`, `'square'`, `'triangle'`, `'noise'` | `SynthPatch.waveform` |
-| `SynthFilterModel` | `'default'`, `'svf'`, `'moog-ladder'`, `'diode-ladder'`, `'sallen-key'` | `SynthPatch.filterModel` |
+| `SynthFilterModel` | `'default'`, `'svf'`, `'transistor-ladder'`, `'diode-ladder'`, `'sallen-key'` | `SynthPatch.filterModel` |
 | `SynthFilterOutput` | `'default'`, `'lowpass'`, `'bandpass'`, `'highpass'` | `SynthPatch.filterOutput`（SVF のみ） |
 | `SynthBodyType` | `'default'`, `'none'`, `'guitar'`, `'violin'`, `'wood-tube'`, `'brass-bell'`, `'vocal'` | `SynthPatch.body` |
 | `SynthRetrigger` | `'default'`, `'free'`, `'note'` | `SynthPatch.retrigger`。Node/WASM では `SynthRetrigger` と `SYNTH_RETRIGGERS` としてエクスポート |

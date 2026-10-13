@@ -280,7 +280,7 @@ PFL はプリフェーダーセンド、AFL はポストフェーダーセンド
   caption="PFL はフェーダー・ゲート・パンの前で聴くため、ミュートしたレーンでも聞こえます。AFL はそれらの後で聴きます。"
 />
 
-モニターバスには PFL／AFL を設定した複数レーンが合算されます。通常の `process(...)` は互換性のためこのバスをメイン出力へ折り込みます。そのためキューしたレーンはメイン出力で 2 回重なり（等倍の PFL レーンは 6 dB 大きくなります）、PFL にしたミュート中のレーンもメイン出力に届きます。プログラム出力とキュー出力を分けるには `processWithMonitor(...)` を使います。
+モニターバスには PFL／AFL を設定した複数レーンが合算されます。通常の `process(...)` は互換性のためこのバスをメイン出力へ折り込みます。そのためキューしたレーンはメイン出力で 2 回重なり（等倍の PFL レーンは 6 dB 大きくなります）、PFL にしたミュート中のレーンもメイン出力に届きます。プログラム出力とキュー出力を分けるには `processWithMonitor(...)` を使います。オフラインレンダリング、バウンス、ステムバウンス、フリーズには、PFL／AFL やソロのモニター状態にかかわらず、プログラム出力だけが含まれます。
 
 ```typescript
 engine.setTrackMonitorMode(0, 'pfl');
@@ -392,7 +392,7 @@ engine.setAutomationLane(1, [
 engine.setParameter(1, 0.5);
 ```
 
-トラック、バス、マスターのフェーダーとトラックのパンは、パラメータを登録せずに自動化できます。生の `RealtimeEngine` では、先にレーンとバスを宣言（`setTrackLanes`、`setTrackBuses`）してから id を解決します。
+トラック、バス、マスターのフェーダー、トラックとマスターのパン、マスターの幅は、パラメータを登録せずに自動化できます。生の `RealtimeEngine` では、先にレーンとバスを宣言（`setTrackLanes`、`setTrackBuses`）してから id を解決します。
 
 ```typescript
 const faderId = engine.resolveTrackLaneAutomationId(1, 'faderDb'); // または 'pan'
@@ -401,7 +401,7 @@ if (faderId < 0 || busId < 0) throw new Error('declare the lane and bus first');
 engine.setAutomationLane(faderId, [{ ppq: 0, value: 0 }, { ppq: 8, value: -12 }]);
 ```
 
-トラックにレーンがない、またはバスが設定されていないときは、どちらも `-1` を返します（Python は `SonareError` を送出します。`resolve_track_lane_automation_id`、`resolve_bus_automation_id`。C は `sonare_engine_resolve_track_lane_automation_id`、`sonare_engine_resolve_bus_automation_id`）。id は位置ではなくトラックまたはバスそのものを指すため、`setTrackLanes` や `setTrackBuses` の並べ替え、他のストリップの削除をまたいでも同じストリップを駆動し続けます。そのトラックまたはバス自身が削除されると、何も適用しなくなります。マスターのフェーダー、パン、幅の id は固定で、解決は不要です。`SonareEngine` ファサードでは `automationParamId('master', 'faderDb' | 'pan')` がそれを返します。予約済みのミキサー id 名前空間（`0x4D58xxxx`）で受け付けるのはマスターの id だけです。`setParameter`、`setParameterSmoothed`、`setAutomationLane` は、それ以外の id を `InvalidParameter` で拒否します。トラックとバスの id は、計算で組み立てず、必ずリゾルバーか `automationParamId` から受け取ってください。`SonareEngine` worklet API の `automationParamId(target, 'faderDb' | 'pan')` と `busAutomationParamId(busId)` も同種の id を返し、初回利用時にミキサーのレーン／バスを宣言します。
+トラックにレーンがない、またはバスが設定されていないときは、どちらも `-1` を返します（Python は `SonareError` を送出します。`resolve_track_lane_automation_id`、`resolve_bus_automation_id`。C は `sonare_engine_resolve_track_lane_automation_id`、`sonare_engine_resolve_bus_automation_id`）。id は位置ではなくトラックまたはバスそのものを指すため、`setTrackLanes` や `setTrackBuses` の並べ替え、他のストリップの削除をまたいでも同じストリップを駆動し続けます。そのトラックまたはバス自身が削除されると、何も適用しなくなります。マスターのストリップは常に存在するため、`resolveMasterAutomationId(paramName)` は `'faderDb'`、`'pan'`、`'width'` を受け取り、その id が古くなることはありません（WASM／Node は他の名前に `-1` を返し、Python は `SonareError` を送出します。`resolve_master_automation_id`。C は `sonare_engine_resolve_master_automation_id`）。`SonareEngine` ファサードでは `automationParamId('master', 'faderDb' | 'pan')` がフェーダーとパンの id を返します。予約済みのミキサー id 名前空間（`0x4D58xxxx`）で受け付けるのはマスターの id だけです。`setParameter`、`setParameterSmoothed`、`setAutomationLane` は、それ以外の id を `InvalidParameter` で拒否します。トラックとバスの id は、計算で組み立てず、必ずリゾルバーか `automationParamId` から受け取ってください。`SonareEngine` worklet API の `automationParamId(target, 'faderDb' | 'pan')` と `busAutomationParamId(busId)` も同種の id を返し、初回利用時にミキサーのレーン／バスを宣言します。
 
 インサートパラメータも同じオートメーションレーンで動かせますが、先に予約 id を取得します。`resolveTrackInsertAutomationId(trackId, insertIndex, paramName)`、`resolveMasterInsertAutomationId(...)`、`resolveBusInsertAutomationId(...)` のいずれかを呼び、その戻り値を `setAutomationLane`、`setParameter`、`setParameterSmoothed` に渡してください。`insertIndex` はストリップの pre インサート、続いて post インサートを連結した列を指し、`paramName` は `masteringInsertParamInfo` が返す JSON キーです。未知のストリップ／インサート／キーでは WASM/Node は `-1`、Python は `SonareError` を返します。
 

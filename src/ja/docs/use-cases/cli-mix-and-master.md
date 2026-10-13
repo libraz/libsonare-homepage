@@ -219,7 +219,7 @@ Path("scene.json").write_text(json.dumps(result["scene"], indent=2))
 
 出力のうち重要なのは 3 か所で、それぞれ答えている問いが違います。
 
-`explanation` は、各数値がなぜその値なのかを示します。判断 1 件につき 1 行が、その判断を下したルール自身から出力されます。以下は、実行が出力する 26 行のうち `vox` の行です。
+`explanation` は、各数値がなぜその値なのかを示します。判断 1 件につき 1 行が、その判断を下したルール自身から出力されます。以下は、実行が出力する 24 行のうち `vox` の行です。
 
 ```text
 staged vox with -6.6 dB of input trim towards the -18.0 LUFS target
