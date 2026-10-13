@@ -55,7 +55,7 @@ export const enCopy = {
     filterLabels: {
       default: 'AUTO',
       svf: 'SVF',
-      'moog-ladder': 'LADDER',
+      'transistor-ladder': 'LADDER',
       'diode-ladder': 'DIODE',
       'sallen-key': 'S-KEY',
     } as Record<string, string>,
@@ -273,7 +273,7 @@ export const jaCopy: typeof enCopy = {
     filterLabels: {
       default: '自動',
       svf: 'SVF',
-      'moog-ladder': 'LADDER',
+      'transistor-ladder': 'LADDER',
       'diode-ladder': 'DIODE',
       'sallen-key': 'S-KEY',
     },

@@ -223,7 +223,10 @@ export const instrumentsDemos: SonareDemoDef[] = [
         label: { en: 'Filter model', ja: 'フィルターモデル' },
         options: [
           { value: 'svf', label: { en: 'SVF', ja: 'SVF' } },
-          { value: 'moog-ladder', label: { en: 'Transistor ladder', ja: 'トランジスタラダー' } },
+          {
+            value: 'transistor-ladder',
+            label: { en: 'Transistor ladder', ja: 'トランジスタラダー' },
+          },
           { value: 'diode-ladder', label: { en: 'Diode ladder', ja: 'ダイオードラダー' } },
           { value: 'sallen-key', label: { en: 'Sallen-Key', ja: 'Sallen-Key' } },
         ],

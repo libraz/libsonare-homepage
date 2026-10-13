@@ -129,7 +129,13 @@ const patchInfo = shallowRef<SynthParamInfo[]>([]);
 const modelValues = ref<Record<string, number>>({});
 const modelGroupId = ref('');
 const waveforms = ref<string[]>(['default', 'sine', 'saw', 'square', 'triangle', 'noise']);
-const filterModels = ref<string[]>(['default', 'svf', 'moog-ladder', 'diode-ladder', 'sallen-key']);
+const filterModels = ref<string[]>([
+  'default',
+  'svf',
+  'transistor-ladder',
+  'diode-ladder',
+  'sallen-key',
+]);
 const waveform = ref('default');
 const filterModel = ref('default');
 const cutoffNorm = ref(1);

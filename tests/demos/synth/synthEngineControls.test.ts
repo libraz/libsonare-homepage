@@ -16,7 +16,7 @@ const NO_CHANGE = 1e-7;
 const TWEAK_VALUES: Record<SynthTweakKey, (base: wasm.SynthPatch) => Partial<wasm.SynthPatch>> = {
   waveform: (base) => ({ waveform: String(base.waveform) === 'square' ? 'saw' : 'square' }),
   filterModel: (base) => ({
-    filterModel: String(base.filterModel) === 'moog-ladder' ? 'svf' : 'moog-ladder',
+    filterModel: String(base.filterModel) === 'transistor-ladder' ? 'svf' : 'transistor-ladder',
   }),
   cutoffHz: () => ({ cutoffHz: 300 }),
   resonanceQ: () => ({ cutoffHz: 1200, resonanceQ: 8 }),
