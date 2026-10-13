@@ -45,6 +45,7 @@ export type DemoLocale = string;
  * - `instrument-audition` — pick a variant (GM program, or a GS insertion effect over one phrase) → data-free fallback render → envelope/scope + audition
  * - `pitch-correct` — off-pitch synthetic vocal → pYIN → scale retune → raw/tuned pitch-contour A/B + audition
  * - `chord-track` — clip → `detectChords` → named chord segments laned over the waveform + audition
+ * - `channel-downmix` — synthesized 5.1 bed → `downmix` to stereo/mono → unnormalized peak meters + audition
  */
 export type DemoArchetype =
   | 'transform'
@@ -70,6 +71,7 @@ export type DemoArchetype =
   | 'instrument-audition'
   | 'pitch-correct'
   | 'chord-track'
+  | 'channel-downmix'
   | 'transcribe';
 
 /** Waveform shapes that can be generated in-browser without WASM (cheap test signals). */

@@ -22,7 +22,7 @@ export const realtimeDemos: SonareDemoDef[] = [
     },
     caption: {
       en: 'Three MIDI clips loop through the realtime engine: each track occupies a lane with its own channel strip, and the lanes sum into a master strip carrying the engine’s true-peak limiter. The faders call the strip setters and the mutes call setSoloMute — every band below is the engine’s separate solo previews through the master chain, re-rendered through renderOffline as you move the controls.',
-      ja: '3 つの MIDI クリップがリアルタイムエンジンでループします。各トラックはレーンを 1 つ占有し、専用のチャンネルストリップを持ち、レーンの合計はエンジンのトゥルーピークリミッターを載せたマスターストリップへ送られます。フェーダーはストリップのセッターを、ミュートは setSoloMute を呼びます。下の各バンドは各レーンをソロにしてマスターチェーンを通した個別の試聴結果で、操作のたびに renderOffline で描き直されます。',
+      ja: '3 つの MIDI クリップがリアルタイムエンジンでループします。各トラックはレーンを 1 つ占有し、専用のチャンネルストリップを持ち、レーンの合計はエンジンの True Peak リミッターを載せたマスターストリップへ送られます。フェーダーはストリップのセッターを、ミュートは setSoloMute を呼びます。下の各バンドは各レーンをソロにしてマスターチェーンを通した個別の試聴結果で、操作のたびに renderOffline で描き直されます。',
     },
     // Fader defaults set the balance: the kit renders far hotter than the two
     // sustained voices and the sub-bass far quieter, so they start offset.
@@ -102,6 +102,44 @@ export const realtimeDemos: SonareDemoDef[] = [
         step: 1,
         unit: 'dB',
         label: { en: 'Channel fader', ja: 'チャンネルフェーダー' },
+      },
+    ],
+  },
+  {
+    id: 'channel-downmix',
+    archetype: 'channel-downmix',
+    // Source is unused for `channel-downmix`; the six 5.1 channels are
+    // synthesized in-browser and folded by the engine's `downmix`.
+    source: { kind: 'generate', signal: 'sine', freq: 220.5 },
+    viz: 'meters',
+    title: {
+      en: '5.1 downmix: a fold that can pass full scale',
+      ja: '5.1 のダウンミックス：フルスケールを超える折りたたみ',
+    },
+    caption: {
+      en: 'The six channels play their own sounds in canonical order (L, R, C, LFE, Ls, Rs), then one in-phase sine together. downmix adds the centre and surrounds at −3 dB (×0.707), drops the LFE and does not normalize, so at full scale the in-phase sine reaches 2.414 (+7.66 dBFS) in stereo and in mono. Switch channels off to see which ones push the fold past 0 dBFS.',
+      ja: '6 つのチャンネルが標準順（L、R、C、LFE、Ls、Rs）でそれぞれの音を鳴らし、最後に同相のサイン波を一斉に鳴らします。downmix はセンターとサラウンドを −3 dB（×0.707）で加え、LFE を捨て、正規化はしません。そのためフルスケールでは、同相のサイン波がステレオでもモノラルでも 2.414（+7.66 dBFS）に達します。チャンネルをオフにすると、どのチャンネルが 0 dBFS を超えさせているかがわかります。',
+    },
+    params: [
+      {
+        key: 'target',
+        kind: 'select',
+        default: 'stereo',
+        label: { en: 'Target', ja: '出力先' },
+        options: [
+          { value: 'stereo', label: { en: 'Stereo', ja: 'ステレオ' } },
+          { value: 'mono', label: { en: 'Mono', ja: 'モノラル' } },
+        ],
+      },
+      {
+        key: 'level',
+        kind: 'range',
+        default: 0,
+        min: -24,
+        max: 0,
+        step: 1,
+        unit: 'dBFS',
+        label: { en: 'Peak per channel', ja: 'チャンネルごとのピーク' },
       },
     ],
   },

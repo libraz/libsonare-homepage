@@ -28,6 +28,7 @@ const ARCHETYPES = new Set([
   'instrument-audition',
   'pitch-correct',
   'chord-track',
+  'channel-downmix',
   'transcribe',
 ]);
 
@@ -65,6 +66,7 @@ const ARCHETYPE_SOURCE_KINDS = {
   'instrument-audition': ['generate'],
   'pitch-correct': ['generate'],
   'chord-track': ['clip'],
+  'channel-downmix': ['generate'],
   transcribe: ['clip'],
 } satisfies Record<string, Array<DemoSource['kind']>>;
 const TRANSFORMS = new Set(['stft', 'mel', 'chroma', 'mfcc']);

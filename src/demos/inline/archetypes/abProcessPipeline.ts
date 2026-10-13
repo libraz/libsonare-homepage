@@ -1,4 +1,5 @@
 import type { SonareWasmModule } from '@/composables/useWasmBoot';
+import { mulberry32 } from '@/demos/inline/audio/processors';
 
 export const DEFAULT_AB_PROCESSOR = 'denoise-classical';
 
@@ -55,6 +56,52 @@ export function prepareNmfStems(
   return result.components;
 }
 
+const HUM_FUNDAMENTAL_HZ = 50;
+const HUM_HARMONICS = 4;
+const HUM_AMPLITUDE = 0.04;
+const CRACKLE_PER_SECOND = 80;
+const CRACKLE_AMPLITUDE = 0.5;
+
+/** Add mains hum: a 50 Hz fundamental and three harmonics with falling levels and fixed phases. */
+export function injectHum(samples: Float32Array, sampleRate: number): Float32Array {
+  const out = new Float32Array(samples.length);
+  for (let i = 0; i < out.length; i++) {
+    let hum = 0;
+    for (let k = 1; k <= HUM_HARMONICS; k++) {
+      hum +=
+        (HUM_AMPLITUDE / Math.sqrt(k)) *
+        Math.sin((2 * Math.PI * HUM_FUNDAMENTAL_HZ * k * i) / sampleRate + k);
+    }
+    out[i] = samples[i]! + hum;
+  }
+  return out;
+}
+
+/** Add seeded crackle: random-polarity pops one or two samples long at a fixed density. */
+export function injectCrackle(samples: Float32Array, sampleRate: number): Float32Array {
+  const out = Float32Array.from(samples);
+  const rng = mulberry32(0x5eed);
+  const count = Math.round((CRACKLE_PER_SECOND * samples.length) / sampleRate);
+  for (let n = 0; n < count; n++) {
+    const at = Math.floor(rng() * (samples.length - 4));
+    const pop = CRACKLE_AMPLITUDE * (0.4 + 0.6 * rng()) * (rng() < 0.5 ? -1 : 1);
+    const length = 1 + Math.floor(rng() * 2);
+    for (let j = 0; j < length; j++) out[at + j]! += pop * (1 - j / length);
+  }
+  return out;
+}
+
+/** Contaminate a clean clip with the defect a repair demo is about to remove. */
+export function injectDefect(
+  kind: string,
+  samples: Float32Array,
+  sampleRate: number,
+): Float32Array {
+  if (kind === 'hum') return injectHum(samples, sampleRate);
+  if (kind === 'crackle') return injectCrackle(samples, sampleRate);
+  throw new Error(`ab-process: unknown defect "${kind}"`);
+}
+
 /**
  * Run one of the processors supported by the A/B process archetype.
  *
@@ -79,6 +126,25 @@ export function renderAbProcess(
       });
     case 'repair-clicks':
       return wasm.masteringRepairDeclick(samples, sampleRate);
+    case 'repair-dehum': {
+      if (mode !== 'subtract' && mode !== 'notch' && mode !== 'fundamental') {
+        throw new Error(
+          `ab-process: dehum mode must be subtract, notch or fundamental (got ${mode})`,
+        );
+      }
+      return wasm.masteringRepairDehum(samples, sampleRate, {
+        fundamentalHz: HUM_FUNDAMENTAL_HZ,
+        harmonics: mode === 'fundamental' ? 1 : HUM_HARMONICS,
+        mode: mode === 'notch' ? 'notch' : 'subtract',
+      });
+    }
+    case 'repair-crackle': {
+      const threshold = Number(mode);
+      if (!(threshold > 0)) {
+        throw new Error(`ab-process: decrackle threshold must be positive (got ${mode})`);
+      }
+      return wasm.masteringRepairDecrackle(samples, sampleRate, { mode: 'median', threshold });
+    }
     case 'dereverb-classical':
       return wasm.masteringRepairDereverbClassical(samples, sampleRate);
     case 'hpss-decompose':

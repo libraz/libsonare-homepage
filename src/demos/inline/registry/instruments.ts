@@ -386,8 +386,8 @@ export const instrumentsDemos: SonareDemoDef[] = [
       ja: '代表的なプリセット — 1 音で多彩なエンジンを',
     },
     caption: {
-      en: 'Physical models other than piano have not yet been tuned; their sound will be adjusted in future patch releases. The same A3, auditioned through representative named presets from the current NativeSynth catalog. Each patch comes from `synthPresetPatch(name)` and keeps its actual engine character: subtractive, FM, buzzing-bridge plucked string, modal, drawbar organ, percussion, piano, harpsichord, pipe organ, bowed string, reed, brass, or flute. The drum kit is the exception: it plays the GM percussion map, where a key selects a kit piece instead of a pitch, so that key strikes a crash cymbal. Change the preset, watch the envelope and waveshape, then press play to compare them.',
-      ja: 'ピアノ以外の物理モデルは未調整で、今後のパッチリリースで音を調整する予定です。同じ A3 を、現在の NativeSynth カタログにある代表的なプリセットで試聴します。各パッチは `synthPresetPatch(name)` から読み込み、減算、FM、バズブリッジ式の撥弦、モーダル、ドローバーオルガン、打楽器、ピアノ、チェンバロ、パイプオルガン、擦弦、リード、金管、フルートという実際のエンジン特性を保ちます。例外はドラムキットで、GM のパーカッションマップを鳴らすためキーは音高ではなくキットの打楽器を選び、このキーはクラッシュシンバルになります。プリセットを切り替え、エンベロープと波形を見てから再生して比べてください。',
+      en: 'Only the piano model is calibrated against a reference recording; the other physical models are approximations. The same A3, auditioned through representative named presets from the current NativeSynth catalog. Each patch comes from `synthPresetPatch(name)` and keeps its actual engine character: subtractive, FM, buzzing-bridge plucked string, modal, drawbar organ, percussion, piano, harpsichord, pipe organ, bowed string, reed, brass, or flute. The drum kit is the exception: it plays the GM percussion map, where a key selects a kit piece instead of a pitch, so that key strikes a crash cymbal. Change the preset, watch the envelope and waveshape, then press play to compare them.',
+      ja: '較正済みの物理モデルはピアノだけで、ほかは近似です。同じ A3 を、現在の NativeSynth カタログにある代表的なプリセットで試聴します。各パッチは `synthPresetPatch(name)` から読み込み、減算、FM、バズブリッジ式の撥弦、モーダル、ドローバーオルガン、打楽器、ピアノ、チェンバロ、パイプオルガン、擦弦、リード、金管、フルートという実際のエンジン特性を保ちます。例外はドラムキットで、GM のパーカッションマップを鳴らすためキーは音高ではなくキットの打楽器を選び、このキーはクラッシュシンバルになります。プリセットを切り替え、エンベロープと波形を見てから再生して比べてください。',
     },
     params: [
       {
@@ -449,8 +449,8 @@ export const instrumentsDemos: SonareDemoDef[] = [
       ja: 'GM サウンドエフェクト — データ非依存フォールバック',
     },
     caption: {
-      en: 'Audition the built-in fallback for the General MIDI Sound-Effects family (programs 120–127), rendered with no SoundFont loaded. In the current build these eight programs share one generic noise-based placeholder voice — so they sound alike on purpose; per-effect modeling is future work. Load a SoundFont that supplies real effect samples and those addresses play its sounds instead. Press play to hear the current data-free fallback.',
-      ja: 'General MIDI のサウンドエフェクト・ファミリー（プログラム120〜127）の内蔵フォールバックを、SoundFont を読み込まずに試聴します。現在のビルドでは、これら8つのプログラムは共通の汎用ノイズ系プレースホルダー音色を共有しており、あえて似た音になります（効果音ごとの個別モデル化は今後の対応です）。実際の効果音サンプルを持つ SoundFont を読み込めば、これらのアドレスはそのサンプルを鳴らします。再生で現在のデータ非依存フォールバックを聴けます。',
+      en: 'Audition the built-in fallback for the General MIDI Sound-Effects family (programs 120–127), rendered with no SoundFont loaded. Each of the eight programs has its own noise-based subtractive voice. Load a SoundFont that supplies real effect samples and those addresses play its sounds instead. Press play to hear the current data-free fallback.',
+      ja: 'General MIDI のサウンドエフェクト・ファミリー（プログラム 120〜127）の内蔵フォールバックを、SoundFont を読み込まずに試聴します。8 つのプログラムには、それぞれ専用のノイズ系減算合成ボイスがあります。実際の効果音サンプルを持つ SoundFont を読み込めば、これらのアドレスはそのサンプルを鳴らします。再生で現在のデータ非依存フォールバックを聴けます。',
     },
     params: [
       {
@@ -558,8 +558,8 @@ export const instrumentsDemos: SonareDemoDef[] = [
       ja: 'GS バリエーション音色 — 1 台のオルガン、4 つのレジストレーション',
     },
     caption: {
-      en: "GS files a capital tone's variations behind Bank Select MSB: the same Program Change with a different MSB plays a sibling voice. Here the capital is program 16, Drawbar Organ, and the three variations the fallback voices apart are offered — Detuned Organ 1 (MSB 8) adds the chorus scanner's slow beating, 60's Organ 1 (MSB 16) pulls only the first three drawbars with a hard key click, Organ 4 (MSB 32) draws every bar for the full tutti. An MSB the fallback does not voice falls back to the capital, as GS specifies, so only the ones that actually change are listed. Each render uses one shared peak gain across both channels; loudness differences remain.",
-      ja: `GS ではキャピタル音色のバリエーションをバンクセレクト MSB で選びます。同じプログラムチェンジでも MSB を変えると兄弟音色が鳴ります。ここではキャピタルをプログラム 16 のドローバーオルガンにし、フォールバックが鳴らし分けている 3 つのバリエーションを並べました。Detuned Organ 1（MSB 8）はコーラススキャナーのゆっくりしたうねりを加え、60's Organ 1（MSB 16）は最初の 3 本のドローバーだけを引き出して強いキークリックを乗せ、Organ 4（MSB 32）は全バーを引き出した総奏になります。フォールバックが鳴らし分けていない MSB は GS の仕様どおりキャピタルに戻るため、実際に音が変わるものだけを載せています。各レンダーは左右共通のピークで揃え、音色ごとのラウドネスの違いは残します。`,
+      en: "GS files a capital tone's variations behind Bank Select MSB: the same Program Change with a different MSB plays a sibling voice. Here the capital is program 16, Drawbar Organ, and three of the variations the fallback voices apart are offered — Detuned Organ 1 (MSB 8) adds the chorus scanner's slow beating, 60's Organ 1 (MSB 16) pulls only the first three drawbars with a hard key click, Organ 4 (MSB 32) draws every bar for the full tutti. An MSB the fallback does not voice falls back to the capital, as GS specifies, so every one listed changes the sound. Each render uses one shared peak gain across both channels; loudness differences remain.",
+      ja: `GS ではキャピタル音色のバリエーションをバンクセレクト MSB で選びます。同じプログラムチェンジでも MSB を変えると兄弟音色が鳴ります。ここではキャピタルをプログラム 16 のドローバーオルガンにし、フォールバックが鳴らし分けているバリエーションのうち 3 つを並べました。Detuned Organ 1（MSB 8）はコーラススキャナーのゆっくりしたうねりを加え、60's Organ 1（MSB 16）は最初の 3 本のドローバーだけを引き出して強いキークリックを乗せ、Organ 4（MSB 32）は全バーを引き出した総奏になります。フォールバックが鳴らし分けていない MSB は GS の仕様どおりキャピタルに戻るため、載せているのはいずれも実際に音が変わるものです。各レンダーは左右共通のピークで揃え、音色ごとのラウドネスの違いは残します。`,
     },
     params: [
       {
@@ -589,12 +589,12 @@ export const instrumentsDemos: SonareDemoDef[] = [
     source: { kind: 'generate', signal: 'saw', freq: 220 },
     viz: 'waveform',
     title: {
-      en: 'One note, eight engines — waveform against physical model',
-      ja: '同じ音を 8 つのエンジンで — 波形と物理モデル',
+      en: 'One note, sixteen engines — waveform against physical model',
+      ja: '同じ音を 16 のエンジンで — 波形と物理モデル',
     },
     caption: {
-      en: 'The same A3 through eight of the synth engines. These physical models have not yet been tuned; their sound will be adjusted in future patch releases. Subtractive starts from an oscillator and carves it with a filter; the rest solve a model of a vibrating thing — a plucked string decaying into its own losses, a bow gripping and slipping, a column of air driven by breath. There is no oscillator to choose on a model, so that control disappears when you leave subtractive. Levels differ between engines and have not yet been matched. Press play and listen for how each one begins, which is where the models and the waveform part company most.',
-      ja: 'ピアノ以外の物理モデルは未調整で、今後のパッチリリースで音を調整する予定です。同じ A3 を 8 つのシンセエンジンで鳴らします。減算方式はオシレーターから出発してフィルターで削りますが、残りは振動する物体のモデルを解いています — 自らの損失で減衰する撥弦、食いついては滑る弓、息で駆動される気柱。モデルには選ぶべきオシレーターが無いので、減算方式以外ではオシレーターの選択肢が消えます。エンジンごとに音量が異なり、まだ揃えていません。再生して、それぞれの「鳴りはじめ」を聴いてください。モデルと波形の差が最も出るところです。',
+      en: 'The same A3 through every synth engine that sounds without a sample bank. Subtractive, FM and additive build the tone from oscillators: one carved by a filter, operators modulating each other, a sum of partials. The rest solve a model of a vibrating thing — a plucked or struck string, a bow gripping and slipping, a ringing bar, a column of air driven by breath or a reed. Percussion maps the note to a drum-kit piece rather than a pitch. Only subtractive has an oscillator to choose, so that control disappears in the other modes. Only the piano model is calibrated against a reference recording; the other physical models are approximations, and levels differ between engines. Press play and listen for how each one begins, which is where the models and the waveform part company most.',
+      ja: '同じ A3 を、サンプルバンクなしで鳴るすべてのシンセエンジンで鳴らします。減算・FM・加算はオシレーターから音を作ります。フィルターで削る、オペレーター同士で変調する、倍音を足し合わせる、という違いです。残りは振動する物体のモデルを解いています。弾くか叩く弦、食いついては滑る弓、鳴り続ける棒、息やリードで駆動される気柱です。パーカッションは音高ではなく、ノートをドラムキットの楽器に割り当てます。オシレーターを選べるのは減算方式だけなので、ほかのモードではその選択肢が消えます。較正済みの物理モデルはピアノだけで、ほかは近似です。エンジンごとに音量も異なります。再生して、それぞれの「鳴りはじめ」を聴いてください。モデルと波形の差が最も出るところです。',
     },
     params: [
       {
@@ -604,13 +604,21 @@ export const instrumentsDemos: SonareDemoDef[] = [
         label: { en: 'Engine', ja: 'エンジン' },
         options: [
           { value: 'subtractive', label: { en: 'Subtractive', ja: '減算' } },
+          { value: 'fm', label: { en: 'FM', ja: 'FM' } },
+          { value: 'additive', label: { en: 'Additive', ja: '加算' } },
           {
             value: 'karplus-strong',
             label: { en: 'Karplus-Strong', ja: 'カープラス・ストロング' },
           },
           { value: 'plucked-string', label: { en: 'Plucked string', ja: '撥弦' } },
+          { value: 'harpsichord', label: { en: 'Harpsichord', ja: 'チェンバロ' } },
+          { value: 'piano', label: { en: 'Piano', ja: 'ピアノ' } },
           { value: 'bowed-string', label: { en: 'Bowed string', ja: '擦弦' } },
+          { value: 'modal', label: { en: 'Modal', ja: 'モーダル' } },
+          { value: 'percussion', label: { en: 'Percussion', ja: 'パーカッション' } },
+          { value: 'pipe-organ', label: { en: 'Pipe organ', ja: 'パイプオルガン' } },
           { value: 'reed', label: { en: 'Reed', ja: 'リード' } },
+          { value: 'free-reed', label: { en: 'Free reed', ja: 'フリーリード' } },
           { value: 'brass', label: { en: 'Brass', ja: '金管' } },
           { value: 'flute', label: { en: 'Flute', ja: 'フルート' } },
           { value: 'vocal', label: { en: 'Vocal tract', ja: '声道' } },

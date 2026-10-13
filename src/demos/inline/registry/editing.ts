@@ -132,7 +132,7 @@ export const editingDemos: SonareDemoDef[] = [
     },
     caption: {
       en: 'A narrow whistle is added to the middle of a pad. Edit its time–frequency region with spectralEdit and compare attenuate, mute and heal. The selected STFT bins change; overlapping analysis windows and reconstruction can spread changes near region boundaries. Heal estimates the content from neighbouring frames rather than recovering the original lost signal. NOTCH shows the in-band reduction in dB.',
-      ja: 'パッドの途中に細い笛のような音を加えています。spectralEdit で時間・周波数の領域を選び、attenuate（減衰）・mute（無音化）・heal（補間）を比較してください。選んだ STFT ビンを編集しますが、分析窓の重なりと再構成により、領域の境界付近にも影響が広がります。heal は隣接フレームから内容を推定する処理で、失われた元の音を復元するものではありません。NOTCH は帯域内の低減量（dB）です。',
+      ja: 'パッドの途中に細い笛のような音を加えています。spectralEdit で時間・周波数の領域を選び、attenuate（減衰）・mute（無音化）・heal（補間）を比較してください。選んだ STFT ビンを編集しますが、解析窓の重なりと再構成により、領域の境界付近にも影響が広がります。heal は隣接フレームから内容を推定する処理で、失われた元の音を復元するものではありません。NOTCH は帯域内の低減量（dB）です。',
     },
     params: [
       {
@@ -169,8 +169,8 @@ export const editingDemos: SonareDemoDef[] = [
       ja: 'テンポとグリッド — BPM で小節・拍を秒に換算する仕組み',
     },
     caption: {
-      en: 'The seconds axis on top never moves; the bar-and-beat grid below is computed from the tempo. Drag BPM and the grid slides — a faster tempo packs more bars into the same six seconds, a slower one spreads them out. The readout turns the tempo into the durations the engine actually counts in: one bar, one beat, and one tick at PPQ 480, the resolution libsonare uses for MIDI timing. Change the beats per bar to reshape where the accented downbeats land. Press play for a metronome at the chosen tempo — the grid you see is the click you hear.',
-      ja: '上の秒の目盛りは動きません。下の小節・拍のグリッドはテンポから計算されます。BPM をドラッグするとグリッドが動き、速いテンポは同じ 6 秒により多くの小節を詰め込み、遅いテンポは広げます。数値表示では、テンポをエンジンが実際に数える単位の長さに換算します。1 小節・1 拍、そして PPQ 480（libsonare が MIDI のタイミングに使う分解能）での 1 ティックです。1 小節の拍数を変えると、アクセントの付く強拍の位置が変わります。再生すると選んだテンポのメトロノームが鳴ります — 見えているグリッドが、そのまま聞こえるクリックです。',
+      en: 'The seconds axis on top never moves; the bar-and-beat grid below is computed from the tempo. Drag BPM and the grid slides — a faster tempo packs more bars into the same six seconds, a slower one spreads them out. The readout turns the tempo into the durations the engine actually counts in: one bar, one beat, and one tick at 480 ticks per quarter note, the resolution libsonare writes into a MIDI file by default (project positions themselves are fractional quarter notes). Change the beats per bar to reshape where the accented downbeats land. Press play for a metronome at the chosen tempo — the grid you see is the click you hear.',
+      ja: '上の秒の目盛りは動きません。下の小節・拍のグリッドはテンポから計算されます。BPM をドラッグするとグリッドが動き、速いテンポは同じ 6 秒により多くの小節を詰め込み、遅いテンポは広げます。数値表示では、テンポをエンジンが実際に数える単位の長さに換算します。1 小節・1 拍、そして 4 分音符あたり 480 ティック（libsonare が MIDI ファイルに書き出すときの既定の分解能。プロジェクト内の位置そのものは 4 分音符単位の小数です）での 1 ティックです。1 小節の拍数を変えると、アクセントの付く強拍の位置が変わります。再生すると選んだテンポのメトロノームが鳴ります。見えているグリッドが、そのまま聞こえるクリックです。',
     },
     params: [
       {

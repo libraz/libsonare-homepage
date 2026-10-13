@@ -56,9 +56,8 @@ const filterModel = computed<string>(() => String(values.filterModel ?? 'svf'));
 const lfoRate = computed<number>(() => Number(values.lfoRate ?? 0));
 const lfoDepth = computed<number>(() => Number(values.lfoDepth ?? 0));
 // Optional engine selector. The filter, envelope and LFO stages run after every
-// engine's source, so the other sliders keep acting on any mode. `fm`, `modal`,
-// `percussion` and `sample` render silence from the init patch (their sound lives
-// in preset-only tables) — offer those through `preset` instead.
+// engine's source, so the other sliders keep acting on any mode. `sample` renders
+// silence from the init patch (it needs a bank) — offer it through `preset` instead.
 const engineMode = computed<string>(() => String(values.engineMode ?? 'subtractive'));
 // Optional preset audition: when set, the patch is built from the named preset so
 // each engine's true character comes through, ignoring the engine selector and

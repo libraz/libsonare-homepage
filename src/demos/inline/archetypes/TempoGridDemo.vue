@@ -5,8 +5,8 @@
  * The seconds axis is fixed. The bar/beat grid is computed from the BPM and the
  * beats-per-bar, so dragging the tempo slides the grid: faster tempo packs more bars
  * into the same six seconds, slower tempo spreads them out. The readout shows the
- * derived durations — one bar, one beat, and one tick at a fixed PPQ of 480, the
- * resolution libsonare uses for MIDI timing. Pressing play auditions a metronome at
+ * derived durations — one bar, one beat, and one tick at 480 ticks per quarter, the
+ * default resolution of libsonare's SMF export. Pressing play auditions a metronome at
  * the chosen tempo (accented downbeats), so the grid you see is the click you hear.
  *
  * Pure JS — no WASM. The lesson is the tempo→seconds mapping, not a transform.
@@ -31,7 +31,7 @@ const { locale: loc, title, caption, status, tone } = useDemoChrome(props.def, i
 // ---- reader-adjustable parameters ------------------------------------------
 const { values, updateParams } = useDemoParams(props.def);
 
-const PPQ = 480; // libsonare's pulses-per-quarter resolution for MIDI timing
+const PPQ = 480; // default ticks per quarter in libsonare's SMF export
 const SPAN_SEC = 6; // fixed width of the seconds axis
 
 const bpm = computed<number>(() => Number(values.bpm ?? 120));

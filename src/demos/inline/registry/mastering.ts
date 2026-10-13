@@ -55,11 +55,11 @@ export const masteringDemos: SonareDemoDef[] = [
     viz: 'meters',
     title: {
       en: 'Loudness metering — LUFS, true-peak, and range',
-      ja: 'ラウドネス計測 — LUFS・トゥルーピーク・レンジ',
+      ja: 'ラウドネス計測 — LUFS・True Peak・レンジ',
     },
     caption: {
       en: 'The bar tracks momentary loudness as the clip plays; the panel is the loudness over time. Integrated LUFS is the single overall number, true-peak estimates peaks between samples, and LRA captures how much the loudness moves. Switch the window to compare the fast momentary meter with the smoother short-term one — each reports only once its window has filled, so the short-term contour starts three seconds into the clip.',
-      ja: 'バーは再生中の瞬時ラウドネスを追い、パネルは時間ごとのラウドネスです。インテグレーテッド LUFS は全体を表す一つの数値、トゥルーピークはサンプル間も含むピークの推定値、LRA はラウドネスの動く幅を表します。ウィンドウを切り替えると、速い瞬時メーターと滑らかな短時間メーターを比べられます。どちらもウィンドウが埋まってから値を出すため、短時間の曲線はクリップの 3 秒後から始まります。',
+      ja: 'バーは再生中の瞬時ラウドネスを追い、パネルは時間ごとのラウドネスです。インテグレーテッド LUFS は全体を表す一つの数値、True Peak はサンプル間も含むピークの推定値、LRA はラウドネスの動く幅を表します。ウィンドウを切り替えると、速い瞬時メーターと滑らかな短時間メーターを比べられます。どちらもウィンドウが埋まってから値を出すため、短時間の曲線はクリップの 3 秒後から始まります。',
     },
     params: [
       {
@@ -107,6 +107,107 @@ export const masteringDemos: SonareDemoDef[] = [
         options: [
           { value: 'logMmse', label: { en: 'LogMMSE', ja: 'LogMMSE' } },
           { value: 'spectralSubtraction', label: { en: 'Spectral sub.', ja: 'スペクトル減算' } },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'repair-dehum',
+    archetype: 'ab-process',
+    // A sustained chord has almost nothing at 50-200 Hz, so the hum and its removal read clearly.
+    source: { kind: 'clip', clip: 'pad' },
+    viz: 'spectrogram',
+    title: {
+      en: 'Dehum repair — mains hum before and after',
+      ja: 'デハム修復 — 電源ハムの修復前と修復後',
+    },
+    caption: {
+      en: 'A 50 Hz hum with three harmonics is added to a clean chord, and the spectrum is zoomed to 0 to 1 kHz so the four lines are visible. Compare the damaged and repaired signals, then change how the hum is removed. HUM scores the mean level between 40 and 250 Hz: cancelling or notching all four components lowers it by about 11 dB, while cancelling only the fundamental lowers it by about 2 dB and leaves the 100, 150 and 200 Hz harmonics. No loudness matching is applied.',
+      ja: 'きれいなコードに、50 Hz のハムと 3 つの倍音を加えています。スペクトルは 0〜1 kHz に拡大しているため、4 本の線が見えます。修復前後の音を比較し、ハムの除去方法を切り替えてください。HUM は 40〜250 Hz の平均レベルの変化です。4 成分すべてをキャンセルまたはノッチした場合は約 11 dB 下がり、基本波だけをキャンセルした場合は約 2 dB しか下がらず、100・150・200 Hz の倍音が残ります。音量合わせは行っていません。',
+    },
+    config: {
+      processor: 'repair-dehum',
+      injectDefect: 'hum',
+      specMaxHz: 1000,
+      scoreBandHz: [40, 250],
+      scoreLabel: 'HUM',
+      eyebrow: 'A/B PROCESS · DEHUM',
+      legendBefore: { en: 'Hum', ja: 'ハムあり' },
+      legendAfter: { en: 'Dehummed', ja: 'デハム後' },
+      loadingLabel: { en: 'Removing hum', ja: 'ハム除去中' },
+      stateBefore: 'HUM',
+      stateAfter: 'DEHUMMED',
+    },
+    params: [
+      {
+        key: 'view',
+        kind: 'select',
+        default: 'damaged',
+        label: { en: 'Compare', ja: '比較' },
+        options: [
+          { value: 'damaged', label: { en: 'Before', ja: '処理前' } },
+          { value: 'repaired', label: { en: 'After', ja: '処理後' } },
+        ],
+      },
+      {
+        key: 'mode',
+        kind: 'select',
+        default: 'subtract',
+        label: { en: 'Removal', ja: '除去方法' },
+        options: [
+          { value: 'subtract', label: { en: 'Cancel, 4 harmonics', ja: 'キャンセル・4 成分' } },
+          { value: 'notch', label: { en: 'Notch, 4 harmonics', ja: 'ノッチ・4 成分' } },
+          {
+            value: 'fundamental',
+            label: { en: 'Cancel, fundamental only', ja: 'キャンセル・基本波のみ' },
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'repair-crackle',
+    archetype: 'ab-process',
+    source: { kind: 'clip', clip: 'pad' },
+    viz: 'spectrogram',
+    title: {
+      en: 'Decrackle repair — surface pops before and after',
+      ja: 'デクラックル修復 — 表面ノイズの修復前と修復後',
+    },
+    caption: {
+      en: 'About eighty short pops per second are added to a clean chord. The decrackler replaces samples that deviate from their local median by more than the threshold. At the default 0.4 it leaves most of the pops, and each lower threshold removes more of them. The chord itself is returned unchanged at every setting here. FLOOR shows the high-band reduction in dB.',
+      ja: 'きれいなコードに、1 秒あたり約 80 個の短いポップ音を加えています。デクラックルは、局所的な中央値からしきい値を超えて外れたサンプルを置き換えます。既定の 0.4 では多くのポップ音が残り、しきい値を下げるほど多く取り除かれます。このデモのどの設定でも、コード自体は変化しません。FLOOR は高域の低減量（dB）です。',
+    },
+    config: {
+      processor: 'repair-crackle',
+      injectDefect: 'crackle',
+      eyebrow: 'A/B PROCESS · DECRACKLE',
+      legendBefore: { en: 'Crackle', ja: 'クラックルあり' },
+      legendAfter: { en: 'Decrackled', ja: 'デクラックル後' },
+      loadingLabel: { en: 'Removing crackle', ja: 'クラックル除去中' },
+      stateBefore: 'CRACKLE',
+      stateAfter: 'DECRACKLED',
+    },
+    params: [
+      {
+        key: 'view',
+        kind: 'select',
+        default: 'damaged',
+        label: { en: 'Compare', ja: '比較' },
+        options: [
+          { value: 'damaged', label: { en: 'Before', ja: '処理前' } },
+          { value: 'repaired', label: { en: 'After', ja: '処理後' } },
+        ],
+      },
+      {
+        key: 'mode',
+        kind: 'select',
+        default: '0.4',
+        label: { en: 'Threshold', ja: 'しきい値' },
+        options: [
+          { value: '0.4', label: { en: '0.4 (default)', ja: '0.4（既定）' } },
+          { value: '0.2', label: { en: '0.2', ja: '0.2' } },
+          { value: '0.1', label: { en: '0.1', ja: '0.1' } },
         ],
       },
     ],

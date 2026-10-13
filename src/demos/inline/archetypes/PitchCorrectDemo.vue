@@ -41,7 +41,7 @@ const { values, updateParams } = useDemoParams(props.def);
 
 const retuneAmount = computed<number>(() => Number(values.retuneAmount ?? 1));
 const retuneSpeedMs = computed<number>(() => Number(values.retuneSpeedMs ?? 15));
-const scale = computed<string>(() => String(values.scale ?? 'major'));
+const scale = computed<'major' | 'minor'>(() => (values.scale === 'minor' ? 'minor' : 'major'));
 const view = computed<string>(() => String(values.view ?? 'tuned'));
 const tuned = computed(() => view.value === 'tuned');
 
@@ -62,19 +62,8 @@ const DETUNE = [
 const BEND_CENTER = 8192; // pitch-bend neutral
 const BEND_PER_SEMITONE = 4096; // ±2-semitone range over the 14-bit span
 const SCALE_ROOT = 0; // C
-const SCALE_MASKS: Record<string, number> = {
-  // 12-bit degree masks (bit i = semitone i above the root is in the scale).
-  major: 0xab5, // C D E F G A B
-  minor: 0x5ad, // C D Eb F G Ab Bb (natural minor)
-};
-
-/** Semitones above the root that the current scale allows (for the gridlines). */
-const scaleDegrees = computed<number[]>(() => {
-  const mask = SCALE_MASKS[scale.value] ?? SCALE_MASKS.major;
-  const out: number[] = [];
-  for (let i = 0; i < 12; i++) if (mask & (1 << i)) out.push(i);
-  return out;
-});
+/** The engine's 12-bit mask for the current scale, resolved once the WASM is up. */
+let scaleMask = 0;
 
 // ---- presentation state ----------------------------------------------------
 const rawCents = ref(0); // raw mean distance from the nearest scale tone, cents
@@ -137,6 +126,8 @@ let rawF0: Float32Array | null = null; // measured Hz per hop, reused for correc
 let voicedInt: Int32Array | null = null; // per-hop voiced flags for correction
 let rawContour: Contour | null = null;
 let tunedContour: Contour | null = null;
+/** Held for the paint loop, which asks the engine which grid lines are in the scale. */
+let engine: WasmModule | null = null;
 
 /** Peak-normalize a buffer in place to a fixed headroom. */
 function peakNormalize(pcm: Float32Array, target = 0.85): void {
@@ -213,29 +204,20 @@ function measureContour(wasm: WasmModule, samples: Float32Array): Contour {
     const hz = pr.f0[i];
     f0[i] = hz;
     voiced[i] = pr.voicedFlag[i] && hz > 0 ? 1 : 0;
-    midi[i] = hz > 0 ? 69 + 12 * Math.log2(hz / 440) : Number.NaN;
+    midi[i] = hz > 0 ? wasm.hzToMidi(hz) : Number.NaN;
   }
   return { midi, voiced, f0 };
 }
 
 /** Mean absolute distance from the nearest allowed scale tone, in cents. */
-function meanCentsOffScale(contour: Contour, degrees: number[]): number {
+function meanCentsOffScale(wasm: WasmModule, contour: Contour, mask: number): number {
   let sum = 0;
   let n = 0;
   for (let i = 0; i < contour.midi.length; i++) {
     if (!contour.voiced[i]) continue;
     const m = contour.midi[i];
     if (!Number.isFinite(m)) continue;
-    let best = Number.POSITIVE_INFINITY;
-    // Search a couple of octaves around the note for the nearest scale tone.
-    const base = Math.round((m - SCALE_ROOT) / 12) * 12 + SCALE_ROOT;
-    for (let oct = -1; oct <= 1; oct++) {
-      for (const d of degrees) {
-        const cents = Math.abs((m - (base + oct * 12 + d)) * 100);
-        if (cents < best) best = cents;
-      }
-    }
-    sum += best;
+    sum += Math.abs(wasm.scaleCorrectionSemitones(SCALE_ROOT, mask, m)) * 100;
     n++;
   }
   return n > 0 ? sum / n : 0;
@@ -265,7 +247,9 @@ async function compute(): Promise<void> {
     ensureRaw(wasm);
     if (!rawAudio || !rawF0 || !voicedInt || !rawContour) return;
 
-    const mask = SCALE_MASKS[scale.value] ?? SCALE_MASKS.major;
+    engine = wasm;
+    const mask = wasm.scaleMaskForMode(SCALE_ROOT, scale.value);
+    scaleMask = mask;
     const out = wasm.pitchCorrectTimevarying(rawAudio.samples, rawF0, SR, HOP, {
       mode: 'scale',
       scaleRoot: SCALE_ROOT,
@@ -279,8 +263,8 @@ async function compute(): Promise<void> {
     tunedAudio = { samples: out, sampleRate: SR };
     tunedContour = measureContour(wasm, out);
 
-    rawCents.value = meanCentsOffScale(rawContour, scaleDegrees.value);
-    tunedCents.value = meanCentsOffScale(tunedContour, scaleDegrees.value);
+    rawCents.value = meanCentsOffScale(wasm, rawContour, mask);
+    tunedCents.value = meanCentsOffScale(wasm, tunedContour, mask);
 
     status.value = 'ready';
     startReveal();
@@ -376,12 +360,11 @@ function paint(): void {
   const xOf = (frac: number): number => PAD_X + frac * innerW;
   const yOf = (midi: number): number => PAD_TOP + ((hi - midi) / span) * innerH;
 
-  const degrees = new Set(scaleDegrees.value);
   // Scale-degree gridlines: every semitone whose pitch class is in the scale gets
   // a faint line; the tonic C sits a shade brighter and carries a note label.
   for (let midi = Math.ceil(lo); midi <= Math.floor(hi); midi++) {
     const pc = (((midi - SCALE_ROOT) % 12) + 12) % 12;
-    if (!degrees.has(pc)) continue;
+    if (!engine?.scalePitchClassEnabled(SCALE_ROOT, scaleMask, pc)) continue;
     const isRoot = pc === 0;
     const y = yOf(midi);
     ctx.strokeStyle = isRoot ? 'rgba(186, 230, 224, 0.2)' : 'rgba(148, 163, 184, 0.12)';

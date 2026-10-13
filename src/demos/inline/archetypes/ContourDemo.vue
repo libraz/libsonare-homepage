@@ -70,11 +70,6 @@ const reveal = ref(0); // 0..1 contour draw-in
 
 type WasmModule = Awaited<ReturnType<typeof ensureWasm>>;
 
-/** Convert one Hz reading to a fractional MIDI note (NaN when unvoiced). */
-function hzToMidi(hz: number): number {
-  return hz > 0 ? 69 + 12 * Math.log2(hz / 440) : Number.NaN;
-}
-
 /**
  * Clean the raw pitch track: snap each frame to within a tritone of its predecessor
  * (kills octave jumps at attacks), then apply a 5-wide median filter over voiced frames.
@@ -115,7 +110,7 @@ function track(wasm: WasmModule, samples: Float32Array, sr: number): void {
   for (let i = 0; i < n; i++) {
     times[i] = (i * HOP) / sr;
     const voiced = f0[i] > 0 && (!vp || vp[i] > 0.3);
-    raw[i] = voiced ? hzToMidi(f0[i]) : Number.NaN;
+    raw[i] = voiced ? wasm.hzToMidi(f0[i]) : Number.NaN;
   }
   midi = smooth.value ? cleanTrack(raw) : raw;
 

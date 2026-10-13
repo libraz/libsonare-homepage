@@ -9,10 +9,12 @@
  * `def.config.injectNoise` says otherwise, a deterministic layer of broadband hiss
  * (amount `def.config.noiseAmp`) is added before the configured processor. Repair
  * definitions use that as their damaged side; decomposition and effect definitions
- * set `injectNoise: false` so their dry source stays intact. Both averaged spectra are
+ * set `injectNoise: false` so their dry source stays intact. `def.config.injectDefect`
+ * (`hum` or `crackle`) replaces the hiss with that seeded defect. Both averaged spectra are
  * drawn at once on one reference scale. Flip Compare to audition either side; no
  * independent loudness matching is added, so processing can change both spectrum and
- * level. The FLOOR readout is the high-band reduction in dB. The eyebrow and the
+ * level. The FLOOR readout is the reduction in dB over the scored band (4 kHz to the
+ * spectrum edge unless `def.config.scoreBandHz`, `specMaxHz` and `scoreLabel` say otherwise). The eyebrow and the
  * two legend labels are also definition-supplied (`def.config.eyebrow`,
  * `legendBefore`, `legendAfter`), defaulting to the denoiser's own copy.
  */
@@ -30,7 +32,7 @@ import { prepareCanvas2D } from '@/utils/canvas';
 import { useCanvasRedraw, useDemoChrome, useDemoParams, useDisposed } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
-import { DEFAULT_AB_PROCESSOR, renderAbProcess } from './abProcessPipeline';
+import { DEFAULT_AB_PROCESSOR, injectDefect, renderAbProcess } from './abProcessPipeline';
 import { createNmfWorkerClient } from './nmfWorkerClient';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
@@ -138,8 +140,25 @@ const noiseAmp = computed<number>(() => {
   const v = props.def.config?.noiseAmp;
   return typeof v === 'number' ? v : DEFAULT_NOISE_AMP;
 });
-const FLOOR_HZ = 4000; // band above which we score the noise floor
-const SPEC_MAX_HZ = 8000;
+const DEFAULT_SPEC_MAX_HZ = 8000;
+const DEFAULT_FLOOR_HZ = 4000; // default scored band: DEFAULT_FLOOR_HZ up to the spectrum edge
+const specMaxHz = computed<number>(() => {
+  const v = props.def.config?.specMaxHz;
+  return typeof v === 'number' && v > 0 ? v : DEFAULT_SPEC_MAX_HZ;
+});
+const customBand = computed<[number, number] | null>(() => {
+  const v = props.def.config?.scoreBandHz;
+  return Array.isArray(v) && v.length === 2 && typeof v[0] === 'number' && typeof v[1] === 'number'
+    ? [v[0], v[1]]
+    : null;
+});
+const scoreBand = computed<[number, number]>(
+  () => customBand.value ?? [DEFAULT_FLOOR_HZ, specMaxHz.value],
+);
+const scoreLabel = computed<string>(() => {
+  const v = props.def.config?.scoreLabel;
+  return typeof v === 'string' ? v : 'FLOOR';
+});
 const SPEC_COLS = 320;
 const WAVE_COLS = 360;
 const specDmg = new Float32Array(SPEC_COLS); // damaged averaged spectrum (shared scale)
@@ -153,12 +172,14 @@ const reveal = ref(0);
 const nmfWorkerClient = createNmfWorkerClient();
 let computeGeneration = 0;
 
-/** Mean linear magnitude above FLOOR_HZ — the high-band noise-floor proxy. */
+/** Mean linear magnitude inside the scored band — the noise-floor (or hum) proxy. */
 function highBandMean(spec: Float32Array): number {
-  const c0 = Math.round((FLOOR_HZ / SPEC_MAX_HZ) * (SPEC_COLS - 1));
+  const [lo, hi] = scoreBand.value;
+  const c0 = Math.max(0, Math.round((lo / specMaxHz.value) * (SPEC_COLS - 1)));
+  const c1 = Math.min(SPEC_COLS - 1, Math.round((hi / specMaxHz.value) * (SPEC_COLS - 1)));
   let s = 0;
   let n = 0;
-  for (let c = c0; c < SPEC_COLS; c++) {
+  for (let c = c0; c <= c1; c++) {
     // Undo the display compression per column so this is a true linear-magnitude
     // average: averaging the compressed columns and de-compressing the mean would
     // bias it, since the mean of a power is not the power of the mean.
@@ -183,7 +204,12 @@ async function compute(): Promise<void> {
     // "Before" source: the clip, plus deterministic broadband hiss unless the
     // definition supplies its own already-flawed clip. Cache once.
     if (!damaged) {
-      if (injectNoise.value) {
+      if (typeof props.def.config?.injectDefect === 'string') {
+        damaged = {
+          samples: injectDefect(props.def.config.injectDefect, clip.samples, sr),
+          sampleRate: sr,
+        };
+      } else if (injectNoise.value) {
         const rng = mulberry32(0x4ad9c1f7);
         const noisy = new Float32Array(clip.samples.length);
         for (let i = 0; i < noisy.length; i++) {
@@ -223,9 +249,9 @@ async function compute(): Promise<void> {
     cleaned = { samples: out, sampleRate: sr };
 
     // Both spectra share the damaged scale so the floor drop is read on one axis.
-    const scale = 1 / averagedSpectrum(wasm, damaged.samples, sr, specDmg, SPEC_MAX_HZ, 1);
-    averagedSpectrum(wasm, damaged.samples, sr, specDmg, SPEC_MAX_HZ, scale);
-    averagedSpectrum(wasm, out, sr, specRep, SPEC_MAX_HZ, scale);
+    const scale = 1 / averagedSpectrum(wasm, damaged.samples, sr, specDmg, specMaxHz.value, 1);
+    averagedSpectrum(wasm, damaged.samples, sr, specDmg, specMaxHz.value, scale);
+    averagedSpectrum(wasm, out, sr, specRep, specMaxHz.value, scale);
 
     // High-band reduction in dB, from the linear-magnitude band means.
     const dmgHi = highBandMean(specDmg);
@@ -316,11 +342,13 @@ function paint(): void {
     ctx.stroke();
   }
 
-  // --- noise-floor band shading above FLOOR_HZ (the scored region) ---
-  const floorX = padX + (FLOOR_HZ / SPEC_MAX_HZ) * innerW;
+  // --- shading of the scored band ---
+  const [bandLo, bandHi] = scoreBand.value;
+  const floorX = padX + (bandLo / specMaxHz.value) * innerW;
+  const bandRightX = padX + Math.min(1, bandHi / specMaxHz.value) * innerW;
   if (showFloor.value) {
     ctx.fillStyle = 'rgba(148, 163, 184, 0.06)';
-    ctx.fillRect(floorX, specTop, padX + innerW - floorX, specH);
+    ctx.fillRect(floorX, specTop, bandRightX - floorX, specH);
     ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
     ctx.lineWidth = 1;
     ctx.setLineDash([2, 3]);
@@ -376,7 +404,7 @@ function paint(): void {
     ctx.textAlign = 'right';
     ctx.fillStyle = 'rgba(45, 212, 191, 0.95)';
     ctx.fillText(
-      `FLOOR ${floorDb.value <= 0 ? '' : '+'}${floorDb.value.toFixed(1)} dB`,
+      `${scoreLabel.value}${customBand.value ? ` ${bandLo}-${bandHi} Hz` : ''} ${floorDb.value <= 0 ? '' : '+'}${floorDb.value.toFixed(1)} dB`,
       padX + innerW,
       specTop + 2,
     );
@@ -399,9 +427,11 @@ function paint(): void {
   ctx.fillStyle = 'rgba(186, 230, 224, 0.45)';
   ctx.textBaseline = 'bottom';
   ctx.fillText('0 Hz', padX, specBot + 14);
-  if (showFloor.value) ctx.fillText(`${(FLOOR_HZ / 1000).toFixed(0)}k`, floorX + 3, specBot + 14);
+  if (showFloor.value && !customBand.value) {
+    ctx.fillText(`${(bandLo / 1000).toFixed(0)}k`, floorX + 3, specBot + 14);
+  }
   ctx.textAlign = 'right';
-  ctx.fillText(`${(SPEC_MAX_HZ / 1000).toFixed(0)} kHz`, padX + innerW, specBot + 14);
+  ctx.fillText(`${specMaxHz.value / 1000} kHz`, padX + innerW, specBot + 14);
   ctx.textAlign = 'left';
 
   // The accent colour drives the frame beam through `tone`; keep a faint tracer.
