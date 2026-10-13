@@ -19,7 +19,7 @@ It is an offline transform. The output keeps the same sample rate and length as 
 |------|------|
 | Turn a selected band up or down by an exact amount | `gain` |
 | Reduce a selected band — same formula as `gain`, conventionally passed a negative `gainDb` | `attenuate` |
-| Remove a selected rectangle completely | `mute` |
+| Zero every bin inside the rectangle | `mute` |
 | Fill a small artifact from nearby frames | `heal` |
 
 `gain` and `attenuate` run the identical math; they exist as two names so your code reads by intent. Use `gain` when you mean to boost and `attenuate` (with a negative `gainDb`) when you mean to cut.
@@ -101,6 +101,8 @@ const muted = spectralEdit(samples, sampleRate, [
 
 ## Options
 
+<SonareDemo id="stft-basics" />
+
 You give the region in samples and hertz, but the edit lands on the STFT grid those two options build:
 
 <StftFramingFigure
@@ -118,5 +120,19 @@ You give the region in samples and hertz, but the edit lands on the STFT grid th
 | `hopLength` | STFT hop, default `512`; must satisfy `0 < hopLength <= nFft / 2` (JavaScript reads `0` as the default). |
 | `window` | `hann`, `hamming`, `blackman`, or `rectangular` (Python also accepts `rect`). |
 | `healRadiusFrames` | Neighbor frames on each side used by `heal`, default `2`; `1` or more (`0` keeps the default, negatives are refused). |
+
+## Resolution and edges
+
+The rectangle is applied to whole STFT cells, so its sharpness is set by `nFft`:
+
+| `nFft` at 48 kHz | Bin spacing | Window length | Good for |
+|------------------|-------------|---------------|----------|
+| `1024` | 46.9 Hz | 21 ms | Short clicks and fast events |
+| `2048` (default) | 23.4 Hz | 43 ms | General use |
+| `4096` | 11.7 Hz | 85 ms | A steady narrow tone, such as a whistle or hum |
+
+- **Frequency edges.** The bins between `lowHz` and `highHz` change and the bins outside do not, with no taper between them. A tone sitting right at an edge spreads over neighboring bins (window leakage), so part of it can survive a `mute`. Leave a margin of a few bins around the band you want to remove.
+- **Time edges.** The frames edited are those whose centers fall in the time range, rounded down to the `hopLength` grid, but each frame covers `nFft` samples. After resynthesis the change therefore fades in and out over about half a window on each side (about 21 ms at the defaults) instead of starting on the exact sample.
+- **What `heal` does.** For each bin in the rectangle, `heal` averages the magnitude of up to `healRadiusFrames` unedited frames on each side, ramps between those two levels across the gap, and continues the phase from the last frame before the gap at the rate that bin's phase was already advancing (from the first frame after it when the gap starts the signal). A steady tone runs through the gap; anything that was only inside the gap, such as a click, is gone.
 
 Small regions usually work best. Broad, long, or repeatedly healed regions can sound phasey because the edit happens in an STFT representation rather than a source-separated model.

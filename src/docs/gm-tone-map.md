@@ -5,7 +5,7 @@ description: The data-free NativeSynth fallback voicing for every General MIDI p
 
 # GM Tone Map
 
-This page lists, for every one of the 128 General MIDI programs, the data-free fallback voicing NativeSynth uses when no SoundFont covers that program: instrument name, synthesis engine, and voicing notes. It is the one per-program table; the bank behind it (GS variation tones, drum-kit variants, SoundFont fallback routing) is on [GM and GS Fallback Bank](./gm-gs.md). Canonical instrument names are also available at runtime from `Project.gmInstrumentName(program)`.
+This page lists, for every one of the 128 General MIDI programs, the data-free fallback voicing NativeSynth uses when no SoundFont covers that program: instrument name, synthesis engine, and voicing notes. It is the one per-program table; the bank behind it (GS variation tones, drum-kit variants, SoundFont fallback routing) is on [GM and GS Fallback Bank](./gm-gs.md). Canonical instrument names are also available at runtime from `Project.gmInstrumentName(program)`. Program numbers here are zero-based, as they are on the wire: a manual that counts from 1 lists each program one higher ([Counting from 0 or from 1](./glossary/instruments/midi-basics.md#counting-from-0-or-from-1)).
 
 <MaturityNote
   item="physical-model-maturity"

@@ -14,7 +14,7 @@ A **SoundFont (SF2)** is a single file that bundles those recorded instrument sa
 :::
 
 ::: info Terms to know first
-A **preset** is one selectable sound (a "program") in the SoundFont. A **program change** picks a preset on a MIDI channel. A **bank** groups 128 programs; GS uses extra banks for tonal variations and reserves **bank 128** for drum kits. Channel 10 is the drum channel by GS convention.
+A **preset** is one selectable sound (a "program") in the SoundFont. A **program change** picks a preset on a MIDI channel. A **bank** groups 128 programs; GS uses extra banks for tonal variations, and inside an SF2 file drum kits live in **bank 128**, the SoundFont percussion bank. Channel 10 is the drum channel by General MIDI convention (index `9` in the API, which counts channels from 0; see [Counting from 0 or from 1](./glossary/instruments/midi-basics.md#counting-from-0-or-from-1)). How each standard reaches a drum kit is tabulated in [GM and GS Fallback Bank](./gm-gs.md#how-each-standard-selects-a-drum-kit).
 
 **Multitimbral** means the player can sound several different instruments at once, one per MIDI channel (up to 16). **GS** is Roland's General MIDI extension set — extra banks and per-part controls layered on top of plain General MIDI; a "GS-compatible" player honors those extras so GS-authored songs play as intended.
 :::
@@ -150,7 +150,7 @@ for p in project.soundfont_manifest():
 :::
 
 ::: tip Drum channels report bank 128
-A manifest row for channel 9 (MIDI channel 10, 1-based) reports `bank: 128` — the GS drum-kit bank. A covered kit resolves to `sf2`; otherwise the GM drum map from the fallback plays.
+A manifest row for channel 9 (MIDI channel 10, 1-based) reports `bank: 128`, the SoundFont percussion bank. A covered kit resolves to `sf2`; otherwise the GM drum map from the fallback plays.
 :::
 
 ## Bouncing MIDI through SF2 instruments
@@ -272,7 +272,8 @@ The player is a faithful SF2 synthesis core with a Roland-GS architecture layer 
 - **DAHDSR envelopes** — separate volume and modulation envelopes with Delay/Attack/Hold/Decay/Sustain/Release stages.
 - **LFOs** — a vibrato LFO and a modulation LFO change pitch/filter/amplitude per the SF2 generators.
 - **Low-pass filter with velocity tracking** — initial cutoff and resonance, with velocity influencing brightness.
-- **The SF2 default modulator set** — velocity, **CC7** (channel volume), and **CC11** (expression) apply a square-law gain; **CC1** (modulation wheel) changes vibrato depth; **CC91** (reverb send), **CC93** (chorus send), and **CC94** (delay send) feed the GS system-effects sends (see [the GS architecture layer](./gm-gs.md#the-gs-architecture-layer)). (A **CC** is one of MIDI's continuous "knob" control-change messages — see [MIDI Input](./midi-input.md).)
+- **The SF2 default modulator set** — velocity, **CC7** (channel volume), and **CC11** (expression) apply a square-law gain; **CC1** (modulation wheel) changes vibrato depth; **CC91** (reverb send) and **CC93** (chorus send) feed the system-effects sends. (A **CC** is one of MIDI's continuous "knob" control-change messages — see [MIDI Input](./midi-input.md).)
+- **GS delay send** — **CC94** feeds the GS delay unit. It is a GS addition rather than part of the SF2 default set, and SF2 has no zone generator for it (see [the GS architecture layer](./gm-gs.md#the-gs-architecture-layer)).
 - **Pitch bend** — honored, with the bend range set by **RPN 0** (entered via Data Entry / RPN), so a part can request its own semitone range.
 - **Part rigs and GS EFX** — the bank's default rig, a direct output, or a host-supplied insert chain runs on each part before a routed GS EFX unit. Programs 29 and 30 put their overdrive or distortion pedal before the amplifier stage, so their fallback audio includes the pedal and amplifier in series.
 

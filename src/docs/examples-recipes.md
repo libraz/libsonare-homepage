@@ -22,7 +22,13 @@ async function quickAnalysis(url: string) {
   const arrayBuffer = await response.arrayBuffer();
   const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
 
-  const samples = audioBuffer.getChannelData(0);
+  // Fold to mono by averaging the channels (for stereo, the same fold Audio.fromMemory applies).
+  // getChannelData(0) alone would analyze only the left channel.
+  const samples = new Float32Array(audioBuffer.length);
+  for (let ch = 0; ch < audioBuffer.numberOfChannels; ch++) {
+    const channel = audioBuffer.getChannelData(ch);
+    for (let i = 0; i < channel.length; i++) samples[i] += channel[i] / audioBuffer.numberOfChannels;
+  }
   const sampleRate = audioBuffer.sampleRate;
 
   const bpm = detectBpm(samples, sampleRate);
@@ -225,8 +231,8 @@ await init();
 
 const result = hpss(samples, sampleRate);
 
-// result.harmonic - melodic content
-// result.percussive - drums/percussion
+// result.harmonic - sustained, tonal content (vocals, chords, bass, pads)
+// result.percussive - short, broadband content (drums, note attacks, consonants)
 
 // Drums and transients smear the chroma estimate; running key
 // detection on just the harmonic part gives a cleaner result.
@@ -238,8 +244,8 @@ from libsonare import Audio, detect_key
 
 with Audio.from_file("song.mp3") as audio:
     result = audio.hpss()
-    # result.harmonic - melodic content
-    # result.percussive - drums/percussion
+    # result.harmonic - sustained, tonal content (vocals, chords, bass, pads)
+    # result.percussive - short, broadband content (drums, note attacks, consonants)
 
 # Drums and transients smear the chroma estimate, so running key
 # detection on just the harmonic component gives a cleaner result.
@@ -271,10 +277,11 @@ const slower = timeStretch(samples, sampleRate, 0.8);
 // Transpose up 2 semitones
 const higher = pitchShift(samples, sampleRate, 2);
 
-// Normalize to -3dB
+// Normalize the sample peak to -3 dBFS
 const normalized = normalize(samples, sampleRate, -3);
 
-// Trim silence
+// Trim leading and trailing frames whose RMS is below -60 dBFS
+// (an absolute level, not librosa's top_db below the peak)
 const trimmed = trim(samples, sampleRate, -60);
 ```
 
@@ -284,8 +291,8 @@ from libsonare import Audio
 with Audio.from_file("song.mp3") as audio:
     slower = audio.time_stretch(0.8)        # slow down to 80% speed
     higher = audio.pitch_shift(2)           # transpose up 2 semitones
-    normalized = audio.normalize(-3)        # normalize to -3 dB
-    trimmed = audio.trim(-60)               # trim silence below -60 dB
+    normalized = audio.normalize(-3)        # sample peak to -3 dBFS
+    trimmed = audio.trim(-60)               # trim edges whose RMS is below -60 dBFS (absolute)
 ```
 
 ```bash [CLI]
@@ -347,9 +354,9 @@ sonare chroma song.mp3 --json
 
 ## Pitch Detection
 
-Pitch tracking reports F0 — the fundamental frequency, the lowest frequency of a
-periodic sound and the one you hear as its pitch — frame by frame, which is how
-you get a melody line out of monophonic audio.
+Pitch tracking reports F0 (the fundamental frequency: the rate at which a
+periodic waveform repeats, usually heard as its pitch) frame by frame, which is
+how you get a melody line out of monophonic audio.
 
 ::: code-group
 

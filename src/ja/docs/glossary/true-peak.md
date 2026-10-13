@@ -94,4 +94,4 @@ True Peak 検出は、入力サンプルをそのまま見るサンプルピー�
 
 ::::
 
-関連: [True Peak 安全性](./concepts/true-peak-safety.md)、[マスタリング](./mastering.md)、[LUFS](./lufs.md)
+関連: [True Peak 安全性](./concepts/true-peak-safety.md)、[マスタリングチェーン](./mastering.md)、[LUFS](./lufs.md)

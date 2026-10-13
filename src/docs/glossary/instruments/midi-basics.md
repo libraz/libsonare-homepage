@@ -56,6 +56,18 @@ A **Program Change** message picks *which* instrument a channel plays, by progra
 **General MIDI** is a standard that fixes what each program number means: program 0 is always an acoustic grand piano, 24 a nylon guitar, and so on across a 128-instrument map, plus a standard drum map on channel 10. GM is why a MIDI file made on one device plays the *right kinds* of instruments on another.
 :::
 
+## Counting from 0 or from 1
+
+The bytes on the wire count from 0, but most manuals, instrument lists and DAWs count from 1. The same value therefore has two names, and mixing them up selects the wrong instrument.
+
+| Value | In the message and in libsonare's API | In most manuals and DAWs | Example |
+|---|---|---|---|
+| Channel | 0–15 | 1–16 | the GM drum channel is "channel 10", passed as `9` |
+| Program | 0–127 | 1–128 | Violin is program 40 here and "41" in a one-based list |
+| Note number | 0–127 | 0–127 | the same in both: middle C is 60 |
+
+These docs write programs and API channels zero-based. When prose says "channel 10" it names the channel the way a manual does, and the code beside it passes `9`.
+
 ## Pitch bend, RPN, and NRPN
 
 **Pitch bend** is its own high-resolution message (not a CC) that slides a note's pitch up or down continuously — for guitar bends, vibrato, or a whammy effect. How far a full bend reaches (the *pitch-bend range*) is not part of the pitch-bend message itself; it is set separately with the RPN message described below:
@@ -64,10 +76,28 @@ A **Program Change** message picks *which* instrument a channel plays, by progra
 A **Registered Parameter Number (RPN)** is a standardized setting addressed through CC messages. **RPN 0** is the **pitch-bend range** — how many semitones a full bend covers. A **Non-Registered Parameter Number (NRPN)** uses the same mechanism for *device-specific* parameters that are not part of the standard.
 :::
 
+Setting an RPN takes a short sequence of Control Changes on the channel. CC101 (RPN MSB) and CC100 (RPN LSB) select the parameter, then CC6 (Data Entry MSB) and CC38 (Data Entry LSB) write its value. For a pitch-bend range of ±12 semitones:
+
+| Step | Message | Meaning |
+|---|---|---|
+| 1 | CC101 = 0 | select RPN, MSB 0 |
+| 2 | CC100 = 0 | select RPN, LSB 0: pitch-bend range |
+| 3 | CC6 = 12 | 12 semitones |
+| 4 | CC38 = 0 | plus 0 cents |
+| 5 | CC101 = 127, CC100 = 127 | deselect (the "null" RPN), so a stray data-entry message cannot change the range later |
+
+An NRPN is selected the same way with CC99 (MSB) and CC98 (LSB) instead of CC101 and CC100.
+
 ## MIDI files and MIDI 2.0
 
 ::: info UMP
 **MIDI 2.0** is the modern revision of the protocol. It uses the **Universal MIDI Packet (UMP)** format and adds much higher resolution (16-bit velocity, finer controllers) and two-way communication, while staying compatible with the MIDI 1.0 ideas above.
+:::
+
+A UMP stream also widens the channel space: it carries **16 groups**, each with its own 16 channels, so a single connection can address 256 channels. API calls that take a `group` argument are choosing one of those groups; a plain MIDI 1.0 setup uses group 0.
+
+::: info MPE (MIDI Polyphonic Expression)
+In MIDI 1.0, pitch bend and pressure (aftertouch, how hard a held key is pressed) apply to a whole channel, so bending one note of a chord bends all of them. **MPE** works around that by giving each sounding note its own channel. A **zone** is a block of channels set up for this: one **manager channel** (channel 1 for the lower zone, 16 for the upper) carries messages meant for the whole zone, such as the sustain pedal, and the **member channels** each carry one note and its own bend, pressure and timbre (CC74). MIDI 2.0 can address a note directly with per-note messages, which reaches the same result without spending a channel per note.
 :::
 
 A **Standard MIDI File (SMF, the `.mid` extension)** stores a whole performance — every note-on/off, CC, and Program Change with its timing — so it can be saved, shared, and replayed through any instrument.

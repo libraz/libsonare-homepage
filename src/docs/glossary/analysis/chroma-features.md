@@ -15,7 +15,7 @@ Key detection and chord recognition both read from it. This page expands on the 
 
 A **pitch class** groups every octave of a note together. C2, C3, and C4 are different *pitches* but the same *pitch class*, "C." Western music has 12 pitch classes, one per semitone. Chroma takes the energy spread across all frequencies in an [STFT](./spectrogram-stft.md) frame and sums it into those 12 bins — a C played in any octave lands in the same bin.
 
-The octaves are not weighted equally, though. Following the librosa reference, the filterbank tapers each bin's contribution with a Gaussian octave envelope centered near C5 and about two octaves wide, so mid-register content dominates the chroma vector while a very low bass note or a very high harmonic contributes comparatively little. That is why a bass line can look faint in a chromagram even when it is clearly audible.
+The octaves are not weighted equally, though. Following the librosa reference, the filterbank tapers each bin's contribution with a Gaussian octave envelope centered on A5 (880 Hz) with a standard deviation of two octaves. The envelope is broad, so everything from the low-mid register up to a few kilohertz counts strongly, but it falls off below: a note around C2 (65 Hz), almost four octaves under the center, keeps under a fifth of the weight. That is why a bass line can look faint in a chromagram even when it is clearly audible.
 
 This deliberate forgetting is the point. Harmony is about *which notes*, not *which octave*: a C-major chord is a C-major chord whether it is voiced low or high. Folding octaves together gives a clean, 12-dimensional fingerprint of the harmony at each moment.
 
@@ -28,6 +28,16 @@ Stack a chroma vector for every frame and you get a **chromagram** — a 12-row 
 A frame is one short slice of the audio. Just as a video is a run of still images, a chromagram is the chroma of each short slice laid side by side — time runs left to right, the 12 pitch classes top to bottom.
 
 <SonareDemo id="chromagram" />
+
+## NNLS chroma: fitting notes instead of folding bins
+
+Plain STFT or CQT chroma folds every frequency bin straight into its pitch class, so a note's overtones land in the bins of other pitch classes too. The third harmonic of C is a G, and the fifth is an E, so a lone low C already lights up a little of a C-major chord.
+
+**NNLS chroma** (non-negative least squares) asks a different question per frame: which mix of notes best explains this spectrum? libsonare builds a fixed dictionary with one template per piano key (A0 to C8, 88 notes), each its first six partials at decreasing weights, laid out on a constant-Q spectrum with three bins per semitone. Each frame of the CQT magnitude is fitted as a sum of those templates with every note amount held at zero or above. The amounts are then folded into the 12 pitch classes, so an overtone the fit attributed to the C counts for C rather than for G or E. That makes the profile cleaner for chord work, especially over a strong bass.
+
+It is not a pure NNLS output by default. To stay stable on sparse or pure-tone material, where several low notes can explain one partial equally well, the result is mixed with a direct CQT chroma (60 % fit, 40 % direct) and then with a plain STFT chroma at `stftBlendWeight` 0.55. Pass `enableStftBlend: false` for the fitted CQT-based profile alone.
+
+`nnlsChroma(...)` (Python `nnls_chroma`) returns it as a 12 × frames matrix, each frame scaled so its largest value is 1. `detectChords(...)` uses a lighter version of the same front-end (five octaves, four partials per note) when you pass `chromaMethod: 'nnls'`.
 
 ## Why chroma is right for harmony — and wrong for melody
 

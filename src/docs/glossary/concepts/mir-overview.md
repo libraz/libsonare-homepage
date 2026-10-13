@@ -24,11 +24,11 @@ Most MIR features are derived from a small set of intermediate representations. 
     { id: 'stft', label: 'STFT / spectrogram', col: 1, row: 2, variant: 'accent' },
     { id: 'mel', label: 'Mel spectrogram', col: 2, row: 0 },
     { id: 'chroma', label: 'Chroma', col: 2, row: 1 },
-    { id: 'onset', label: 'Onset strength', col: 2, row: 2 },
+    { id: 'onset', label: 'Onset strength', col: 3, row: 2 },
     { id: 'mfcc', label: 'MFCC (timbre)', col: 3, row: 0, variant: 'success' },
     { id: 'key', label: 'Key', col: 3, row: 1, variant: 'success' },
     { id: 'chords', label: 'Chords', col: 3, row: 1.5, variant: 'success' },
-    { id: 'bpm', label: 'BPM / beats', col: 3, row: 2, variant: 'success' },
+    { id: 'bpm', label: 'BPM / beats', col: 4, row: 2, variant: 'success' },
     { id: 'sections', label: 'Sections', col: 3, row: 2.5, variant: 'success' },
     { id: 'hpss', label: 'HPSS', col: 2, row: 3.5, variant: 'success' }
   ]"
@@ -36,7 +36,7 @@ Most MIR features are derived from a small set of intermediate representations. 
     { from: 'wave', to: 'stft' },
     { from: 'stft', to: 'mel' },
     { from: 'stft', to: 'chroma' },
-    { from: 'stft', to: 'onset' },
+    { from: 'mel', to: 'onset' },
     { from: 'stft', to: 'hpss' },
     { from: 'mel', to: 'mfcc' },
     { from: 'chroma', to: 'key' },
@@ -45,7 +45,7 @@ Most MIR features are derived from a small set of intermediate representations. 
     { from: 'mel', to: 'sections' },
     { from: 'chroma', to: 'sections' }
   ]"
-  caption="One STFT feeds every branch. Section analysis is a timbre-and-harmony task, not a rhythm one: its boundaries come from the mel/MFCC and chroma branches, never from the onset envelope."
+  caption="One STFT feeds every branch; the onset envelope is read from the mel spectrogram. Section analysis is a timbre-and-harmony task, not a rhythm one: its boundaries come from the mel/MFCC and chroma branches, never from the onset envelope."
 />
 
 Sharing these intermediates only pays off inside a single whole-track analysis. `analyze` (`MusicAnalyzer`) computes the STFT and its derivatives once and reuses them across BPM, key, chord, and section results.
@@ -166,7 +166,7 @@ Separating them first often improves downstream tasks because drums and pitched 
 
 <SonareDemo id="hpss-separation" />
 
-**Pitch estimation** tracks F0, the frequency that governs waveform periodicity and, for harmonic sounds, the spacing between partials. F0 need not appear as a spectral component, so it is not necessarily the lowest or strongest observed peak. An upper harmonic can dominate a bright brass note or a bass heard through a small speaker, and the pitch can remain perceptible even when the F0 component is absent. Inharmonic sounds such as bells and cymbals may have no single well-defined F0. Estimators therefore use waveform periodicity rather than the loudest spectral peak. This is useful for melody, vocals, monophonic instruments, tuning checks, and transcription-style workflows.
+**Pitch estimation** tracks F0, the frequency that governs waveform periodicity and, for harmonic sounds, the spacing between partials (the individual frequency components; see [Audio Basics](./audio-basics.md#frequency-pitch-and-harmonics)). F0 need not appear as a spectral component, so it is not necessarily the lowest or strongest observed peak. An upper harmonic can dominate a bright brass note or a bass heard through a small speaker, and the pitch can remain perceptible even when the F0 component is absent. Inharmonic sounds such as bells and cymbals may have no single well-defined F0. Estimators therefore use waveform periodicity rather than the loudest spectral peak. This is useful for melody, vocals, monophonic instruments, tuning checks, and transcription-style workflows.
 
 ## Adjacent: room acoustics
 

@@ -38,9 +38,49 @@ Formants shape the vowel sound and the perceived size or character of a voice, *
 That is why `voiceChange` separates the two controls. Lowering the formant factor makes a voice sound larger and darker. Raising it makes the voice sound smaller and brighter. The note stays where `pitchSemitones` puts it, because the formant stage moves only the spectral envelope.
 :::
 
+<SonareDemo id="formant-shift" />
+
 <SonareDemo id="pitch-shift" />
 
 <SonareDemo id="time-stretch" />
+
+## Units: notes, samples, and seconds
+
+Every call below takes pitch as a MIDI note number or a semitone count, and positions as samples or seconds. These two tables are the conversions the examples rely on.
+
+### MIDI note numbers
+
+A MIDI note number represents pitch as a semitone index. Each whole number is one semitone, and fractional values are allowed.
+
+Two anchors are worth memorizing:
+
+| Note | MIDI note number | Frequency |
+|------|------------------|-----------|
+| C4 (middle C) | `60` | about 261.63 Hz |
+| A4 | `69` | 440 Hz |
+
+Every octave adds 12. For example, C4 is `60`, so C5 is `72`.
+
+For the full mapping table and the `freq ↔ midi` formula, see [Editing Basics](./glossary/concepts/editing-basics.md#midi-note-numbers).
+
+### Samples and seconds
+
+Every edit position can be given in samples or in seconds. Give one spelling per bound; supplying both is refused.
+
+| Call | Samples | Seconds | Python (seconds) |
+|------|---------|---------|------------------|
+| `spectralEdit` region | `startSample` / `endSample` | `startSec` / `endSec` | `start_sec` / `end_sec` |
+| `noteStretch`, `noteMove` | `onsetSample` / `offsetSample`; `noteMove` also `targetOnsetSample` | `onsetSec` / `offsetSec`; `targetOnsetSec` | `onset_sec` / `offset_sec`; `target_onset_sec` |
+| `renderNotes`, `renderPercussiveEvents` | `onsetSample` / `offsetSample`; edit `timeOffsetSamples` | `onsetSec` / `offsetSec`; `timeOffsetSec` | `onset_sec` / `offset_sec`; `time_offset_sec` |
+| Vocal `setSourceSpan` | `sourceStartSample`, `sourceEndSample`, `destinationStartSample`, `destinationLengthSamples` | the same names ending `Sec` | `source_start_sec` and the matching fields |
+| Vocal `split` | `sourceSample` | `sourceSec` | `cut_source_sample` / `cut_source_sec` |
+| Vocal render `range` | `startSample` / `endSample` | `startSec` / `endSec` | `start_sec` / `end_sec` keywords |
+
+- Seconds are rounded to the nearest sample at the call's sample rate (a vocal session's own rate for the vocal rows).
+- A negative position is refused: `RangeError` on WASM and Node, `SonareValueError` in Python.
+- `-1` is not a "to the end" sentinel. Omit an end bound to take the input's edge (Python: `None`).
+
+If a position comes from analysis, keep the sample value; it avoids a second rounding.
 
 ## Functions
 
@@ -205,7 +245,7 @@ await init();
 const hopLength = 256;
 const pitch = pitchPyin({ samples: vocal, sampleRate, hopLength });
 
-// Snap every voiced frame to C major, gently, keeping vibrato.
+// Snap every voiced frame to C major at 80% strength.
 const tuned = pitchCorrectTimevarying({
   samples: vocal,
   f0Hz: pitch.f0,
@@ -259,11 +299,11 @@ Node takes the same calls as the browser. Python passes the options as keyword-o
 | `referenceMidi` | `reference_midi` | `--reference-midi` | finite | `69` | Anchors the scale grid; every degree is measured from this note |
 | `retuneAmount` | `retune_amount` | `--retune-amount` | `[0, 1]` | `1` | `0` bypasses, `1` snaps fully; lower values leave a natural wobble |
 | `retuneSpeedMs` | `retune_speed_ms` | `--retune-speed-ms` | `>= 0` | `50` | Retune time constant; larger glides onto pitch more slowly |
-| `vibratoThresholdCents` | `vibrato_threshold_cents` | `--vibrato-threshold-cents` | `>= 0` | `20` | Corrections smaller than this are skipped to keep vibrato |
+| `vibratoThresholdCents` | `vibrato_threshold_cents` | `--vibrato-threshold-cents` | `>= 0` | `20` | Frames this close to the target count as in tune and are left alone |
 | `maxCorrectionSemitones` | `max_correction_semitones` | `--max-correction-semitones` | `>= 0` | `12` | Hard clamp on one frame's jump |
 | `voiced` / `voicedProb` | `voiced` / `voiced_prob` | (measured by the CLI) | flags / `[0, 1]` | all frames voiced | Which frames to retune; `voiced` wins over `voicedProb` |
 
-A cent is 1/100 of a semitone, so the default `vibratoThresholdCents` of `20` leaves any correction under a fifth of a semitone alone, which is the range natural vibrato lives in. `retuneAmount: 1` with a short `retuneSpeedMs` is the hard, robotic effect; `maxCorrectionSemitones` bounds an octave-off detector glitch on one frame instead of yanking that frame a full octave, so lower it when the detector is noisy.
+A cent is 1/100 of a semitone, so the default `vibratoThresholdCents` of `20` leaves any frame within a fifth of a semitone of its target alone: it is already in tune. Sung vibrato swings much wider than that, typically ±50 to ±100 cents at 5 to 7 Hz, so the threshold does not protect it. What keeps vibrato alive is a slower `retuneSpeedMs` (or a `retuneAmount` below `1`): the smoothed correction then follows the note's average pitch rather than every swing, while a very short time constant chases each swing and flattens it. `retuneAmount: 1` with a short `retuneSpeedMs` is the hard, robotic effect; `maxCorrectionSemitones` bounds an octave-off detector glitch on one frame instead of yanking that frame a full octave, so lower it when the detector is noisy.
 
 C natural minor `{0,2,3,5,7,8,10}` is `0x5ad`. With `mode: 'midi'` the same function behaves like `pitchCorrectToMidiTimevarying(...)`. The [pitch correction glossary page](./glossary/editing/pitch-correction.md) explains the options conceptually.
 
@@ -323,21 +363,6 @@ in_d = sonare.auto_tune(vocal, sample_rate, key=(2, "dorian"))
 
 To snap a contour you measured yourself, build the mask with `scaleMaskForMode(root, mode)` and pass it as `scaleModeMask`. It returns the 12-bit mask of a church mode (`scaleMaskForMode(0, 'major')` is `0b101010110101`), and `pitchCorrectTimevarying(...)` also accepts the mode name directly as `scaleModeMask`.
 
-### MIDI note numbers
-
-A MIDI note number represents pitch as a semitone index. Each whole number is one semitone, and fractional values are allowed.
-
-Two anchors are worth memorizing:
-
-| Note | MIDI note number | Frequency |
-|------|------------------|-----------|
-| C4 (middle C) | `60` | about 261.63 Hz |
-| A4 | `69` | 440 Hz |
-
-Every octave adds 12. For example, C4 is `60`, so C5 is `72`.
-
-For the full mapping table and the `freq ↔ midi` formula, see [Editing Basics](./glossary/concepts/editing-basics.md#midi-note-numbers).
-
 ### Region selection for `noteStretch(...)`
 
 `noteStretch(...)` takes the region in samples (`onsetSample`, `offsetSample`) or in seconds (`onsetSec`, `offsetSec`); see [Samples and seconds](#samples-and-seconds). `onsetSample` defaults to the start of the input and `offsetSample` to its end, so omit a boundary when the region already reaches that edge.
@@ -350,30 +375,13 @@ const heldNote = noteStretch(vocal, sampleRate, { onsetSec: 0.25, offsetSec: 0.5
 
 `stretchRatio` is the nominal length multiplier for the selected region. `noteStretch` blends the source samples at the replacement region's start and end with equal-power crossfades. Those crossfades stay inside the replacement region and do not consume neighboring samples. The output clip length and the shift of audio after the region therefore follow the replacement region's length change. `stretchRatio: 1.0` keeps the whole clip length neutral; for other ratios, the time-stretch backend can round the replacement length by a few samples. A clip edge has no neighboring audio on that side, so it has no crossfade there.
 
+An equal-power crossfade holds the level of two unrelated signals, but here the stretched region and the source it blends with are closely related, so the level inside a seam moves. On a steady 440 Hz tone stretched by `1.25`, the head seam peaks about 2.8 dB above the tone, and the tail seam, where the two have drifted out of phase, dips about 4.3 dB below it. Sustained tones show this most; [Fade curves and crossfades](./glossary/arrangement/clips-and-tracks.md#fade-curves-and-crossfades) explains the correlation rule.
+
 | `stretchRatio` | Result |
 |----------------|--------|
 | `1.25` | Make the replacement region 25% longer; following audio shifts later by that region-length increase, subject to sample rounding |
 | `1.0` | Keep the replacement region and whole clip at the same length |
 | `0.8` | Make the replacement region 20% shorter; following audio shifts earlier by that region-length decrease, subject to sample rounding |
-
-### Samples and seconds
-
-Every edit position can be given in samples or in seconds. Give one spelling per bound; supplying both is refused.
-
-| Call | Samples | Seconds | Python (seconds) |
-|------|---------|---------|------------------|
-| `spectralEdit` region | `startSample` / `endSample` | `startSec` / `endSec` | `start_sec` / `end_sec` |
-| `noteStretch`, `noteMove` | `onsetSample` / `offsetSample`; `noteMove` also `targetOnsetSample` | `onsetSec` / `offsetSec`; `targetOnsetSec` | `onset_sec` / `offset_sec`; `target_onset_sec` |
-| `renderNotes`, `renderPercussiveEvents` | `onsetSample` / `offsetSample`; edit `timeOffsetSamples` | `onsetSec` / `offsetSec`; `timeOffsetSec` | `onset_sec` / `offset_sec`; `time_offset_sec` |
-| Vocal `setSourceSpan` | `sourceStartSample`, `sourceEndSample`, `destinationStartSample`, `destinationLengthSamples` | the same names ending `Sec` | `source_start_sec` and the matching fields |
-| Vocal `split` | `sourceSample` | `sourceSec` | `cut_source_sample` / `cut_source_sec` |
-| Vocal render `range` | `startSample` / `endSample` | `startSec` / `endSec` | `start_sec` / `end_sec` keywords |
-
-- Seconds are rounded to the nearest sample at the call's sample rate (a vocal session's own rate for the vocal rows).
-- A negative position is refused: `RangeError` on WASM and Node, `SonareValueError` in Python.
-- `-1` is not a "to the end" sentinel. Omit an end bound to take the input's edge (Python: `None`).
-
-If a position comes from analysis, keep the sample value; it avoids a second rounding.
 
 ### Offline `voiceChange(...)` vs `RealtimeVoiceChanger`
 
@@ -471,4 +479,6 @@ These APIs are intentionally lightweight editing tools, not a full non-destructi
 
 ::: info Why big moves sound worse
 These transforms work by analyzing the sound into short overlapping frames and re-spacing or re-pitching them. Small shifts stay close to the original frames and sound clean; large shifts force the engine to invent material that was never recorded, so you hear smearing, a "watery" or robotic quality, and a less natural voice. That is why the advice is to keep correction intervals small for transparent results.
+
+Two resynthesis engines sit behind these calls, and they fail differently: `pitchShift`, `pitchCorrectToMidi` and `voiceChange` stretch and resample (formants move with the pitch), while the contour-following correctors and the vocal session repitch grain by grain (formants stay roughly in place). [Two resynthesis engines](./glossary/editing/pitch-correction.md#two-resynthesis-engines) lists which call uses which.
 :::

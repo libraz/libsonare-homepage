@@ -8,6 +8,7 @@
 |--------------|------------|
 | 機能が存在するか | [機能ファミリー](#機能ファミリー) |
 | 呼び出しの名前をバインディングごとに知りたい | [バインディング別の名前](#バインディング別の名前) |
+| ビルドのプロセッサ、パラメータの範囲、プリセットをデータとして読みたい | [機能カタログ](./capability-catalog.md) |
 | ランタイムを選びたい | [ランタイム別の入口](#ランタイム別の入口) と [バインディング対応表](./binding-parity.md) |
 | DSP の内部挙動と制約 | [DSP 実装解説](./dsp-implementation.md) |
 | アルゴリズムや論文上の根拠 | [アルゴリズム根拠](./algorithm-references.md) |
@@ -37,8 +38,9 @@
 ::: details 表に出る略語
 - **STFT**: スペクトログラムの元になる短時間フーリエ変換。詳細は[スペクトログラムと STFT](./glossary/analysis/spectrogram-stft.md)。
 - **MFCC**: 音色を小さな特徴量に圧縮したもの。詳細は[メル・MFCC・音色](./glossary/analysis/mel-mfcc-timbre.md)。
-- **CQT / VQT**: 音楽のピッチ間隔に合わせた周波数変換。詳細は[クロマ特徴量](./glossary/analysis/chroma-features.md)。
-- **NNLS / NMF**: 音の成分を非負の部品へ分解する行列分解系の手法。詳細は[クロマ特徴量](./glossary/analysis/chroma-features.md)。
+- **CQT / VQT**: 音楽のピッチ間隔に合わせた周波数変換。詳細は[スペクトログラムと STFT](./glossary/analysis/spectrogram-stft.md)。
+- **NNLS**: 非負最小二乗法。NNLS クロマは、各フレームの対数周波数スペクトルを固定の倍音テンプレートに当てはめ、非負の音量だけを残します。詳細は[クロマ特徴量](./glossary/analysis/chroma-features.md)。
+- **NMF**: 非負値行列因子分解。スペクトルの部品と、それぞれが時間とともにどれだけ鳴るかを両方とも学習します。詳細は[音源分離](./source-separation.md)。
 - **PLP**: リズムの主な脈動を推定する特徴量。
 - **LUFS / LRA**: ラウドネスとラウドネスレンジの指標。詳細は[LUFS](./glossary/lufs.md)。
 - **VCA**: 複数ストリップの音量をまとめて動かすグループ制御。詳細は[バスとセンド](./glossary/mixing/buses-sends.md)。
@@ -101,7 +103,7 @@
 | ファミリー | 対象 | 主なページ |
 |------------|------|------------|
 | ユーティリティ / librosa 互換 | フレーム／サンプル／時間変換、dB 変換、pre/de-emphasis、無音の trim/split、peak pick、PCEN、tonnetz、テスト信号生成 | [librosa 互換性](./librosa-compatibility.md) |
-| ビルド機能の照会 | 機械可読な機能カタログ（プロセッサ、パラメータの範囲と既定値、プリセット一覧）とビルド診断レポート | [JavaScript API](./js-api.md#capabilitycatalog)、[Python API](./python-api.md#このビルドで何ができるか)、[CLI](./cli.md#doctor) |
+| ビルド機能の照会 | 機械可読な機能カタログ（プロセッサ、パラメータの範囲と既定値、プリセット一覧）とビルド診断レポート | [機能カタログ](./capability-catalog.md)、[JavaScript API](./js-api.md#capabilitycatalog)、[Python API](./python-api.md#このビルドで何ができるか)、[CLI](./cli.md#doctor) |
 
 この表が示すのは「何があるか」であり、「どのランタイムがどれだけ公開しているか」ではありません。ドメインごとの内訳は[バインディング対応表](./binding-parity.md)を参照してください。
 
@@ -175,58 +177,3 @@
 CLI は、プログラムを書かずにファイルを指定して解析・変換したいときの入口です。自動処理や検証には便利ですが、リアルタイム UI や細かい対話的制御には JavaScript / Python / C++ API の方が向いています。
 
 CLI は 2 種類あります。Python CLI は一般的な利用者向けコマンド（解析、特徴量サマリー、ファイルを書き出す編集、音響／ルーム処理、基本的なマスタリング／ミキシング）を扱います。ソースビルドの C++ CLI は、さらに低レベルなコマンド群（セクション／メロディユーティリティ、追加の特徴量ヘルパー、マスタリングのペア／ステレオ一覧やミキシングシーン書き出し）を加えます。最新の完全なコマンド一覧と例は [CLI](./cli.md) にあります。ランタイム差分は [バインディング対応表](./binding-parity.md) を参照してください。
-
-## 機能カタログが返すもの
-
-各ビルドは、自身が備えるプロセッサとそのパラメータを機械可読な形で報告できます。Node と WASM の `capabilityCatalog()`、Python の `capability_catalog()`、C ABI の `sonare_capability_catalog_json` は同じ JSON 文書を返します。内容は、ビルドのバージョンと ABI 番号、パラメータとスロットメタデータを持つ全プロセッサ、組み込みプリセット名一覧、マスタリングプリセットのメタデータです。どちらの CLI にもこのカタログはなく、`doctor` が出すのは別物のビルド診断レポートです。
-
-現行ビルドは **95 個のプロセッサと 5,579 個のパラメータ記述子** を公開します。うち 84 個のプロセッサはリアルタイムインサート可能で、どのプロセッサも `category` を報告します。これらの数も鵜呑みにせず数え直せます。libsonare リポジトリは生成物を `tools/capability-catalog.json` として追跡しており、共有ライブラリが実際に返す内容とずれると `make capability-catalog-check` が失敗し、`schemas/capability-catalog.schema.json` が形を固定しています。
-
-各パラメータ記述子は同じ 18 個のフィールドを持ちます。
-
-| フィールド | 内容 |
-|------------|------|
-| `name` | 構築時に読まれるキー。`releaseMs` や `band0.frequencyHz` など |
-| `id` | Mixer のインサートオートメーションと MIDI CC 紐付けに使う整数 id。構築時専用キーは `null` です。リアルタイムのインサート設定 API は `name` で対象を解決し、整数の id はオートメーション順に `0..n-1` です |
-| `rtSafe` | オーディオスレッドから稼働中に値を変えられるか |
-| `type` | 設定ビルダーが読む値の型。`number`、`boolean`、`enum`、`string`、`array` のいずれかです |
-| `default` | 設定構造体のフィールドの初期化子。フォールバックがない場合は `null` です |
-| `min`、`max` | 探索時に構築が受け入れた区間。その側の制限をカタログが知らなければ `null` |
-| `minExclusive`、`maxExclusive` | その境界の値自体が拒否されるか。その側が `null` のときは `false` |
-| `maxRelativeTo` | 実効上限が `max` とホストのナイキストの低いほうになるとき `'nyquist'`、それ以外は `null` |
-| `unit` | プロセッサがキーに宣言する単位。閉じた集合 `dB`、`dBFS`、`LUFS`、`Hz`、`ms`、`s`、`samples`、`m`、`cm`、`deg`、`percent`、`degC`、`V`、`inPerSec`、`dBPerOct`、`semitones`、`cents`、`ratio`、`bits`、`count`、`none` のいずれか。boolean、enum、string、array のキーには単位がなく `null` です |
-| `uiMin`、`uiMax` | コントロールが描画すべき範囲（`min` / `max` の内側）。受け入れ範囲がそのまま表示範囲なら `null` |
-| `scale` | コントロールが値を描く軸。`linear` または `log` |
-| `choices` | 名前付き数値選択肢の閉じた集合。間隔のある離散値も含み、閉じた集合を公開しない場合は `null` です |
-| `slot` | キーが属するプロセッサのスロット群。どの群にも属さないキーは `null` です |
-| `dependsOn` | 自分の値を（ライブの値で）制約する兄弟キー。`{ key, relation, factor }` の配列で、`relation` は `lt`、`le`、`gt`、`ge` のいずれかを `this <relation> factor * sibling` として読みます（単純な大小関係では `factor` は 1）。独立したキーでは空です |
-| `coupledWith` | `dependsOn` のほかに、単一の関係では表せない形でこのキーの受け入れ範囲を動かす兄弟キー（`effects.reverb.room` の `receiverSpacingM` なら `lengthM`、`widthM`、`listenerX`、`listenerY`、`sourceX`、`sourceY`）。独立したキーでは空です。`min` / `max` はこれらの兄弟を既定値にして測った値です |
-
-各プロセッサ項目は `causal` も持ちます。`causal` は、リアルタイムインサート可能なプロセッサすべてと、因果的な 4 つのリペア段（`repair.decrackle`、`repair.dehum`、`repair.denoiseClassical`、`repair.dereverbClassical`）で `true` です。`repair.declick`、`repair.declip`、`repair.trimSilence` は、あるサンプルの出力がそれ以前の入力だけで決まる構成を持たないため `false` で、インサートではないオフライン専用プロセッサ（`final.*`、`match.*`、`maximizer.loudnessOptimize`）も `false` です。各項目は `category` も持ち、値は `dynamics`、`effects`、`eq`、`final`、`reference`（`match.*` プロセッサ）、`maximizer`、`multiband`、`repair`、`saturation`、`spectral`、`stereo`、`utility`、`voice` のいずれかです。
-
-`id` が整数の項目はオートメーション対象で、構築時専用の項目は `id: null` かつ `rtSafe: false` です。`id` があっても `rtSafe: false` ならライブオートメーションへ渡せません。`choices` は名前付き数値の閉じた集合を示し、間隔のある離散値も含みます。`slot` はキーが属するスロット群を示し、`null` はどのスロットにも属さないことを示します。`slot` が非 null でも必ず条件付きとは限りません。各プロセッサの `slots` 配列にある `activation`（`anyKey` または `always`）、親スロットを示す `parent`、存在条件となる `minCrossoverCutoffs` を組み合わせて、スロットの有無を判断します。
-
-既定値は書き写したものではなくコードから読み取りますが、構築用キーにフォールバックがなければ `null` になります。`uiMin` / `uiMax`、`dependsOn`、`coupledWith` はコントロールの描き方と順序の手がかりで、受け入れ範囲はあくまで `min` / `max` です。範囲は実測です。候補値を呼び出し側と同じ構築経路に通し、そのプロセッサの他のパラメータは既定値のまま、検証が受け入れた区間をカタログが報告します。`null` の境界が意味するのは、その側ではどんな値も通る、または構築がそのキーを検証していない、のどちらかです。制限があるのに測っていない、という意味ではありません。スライダーを直結する前に押さえておきたい性質が 2 つあります。互いに制約し合う制御は相手の既定値を境界として報告すること、そして開区間の境界は除外される値そのものとして報告されることです。具体例は [JavaScript API](./js-api.md#capabilitycatalog) が順に追い、各フィールドは[インサートエフェクト](./effects-inserts.md#パラメータ記述子)にまとまっています。
-
-トップレベルの `chain` セクションは、マスタリングチェーン設定のフラットなキーを記述します。`stages` は各ステージのキー接頭辞、そのキーがパラメータとなるプロセッサ（なければ `null`）、`enabled` キーを列挙し、`lists` はインデックス付きリスト（マルチバンドステージの `cutoffsHz` と `bands`）を項目数つきで挙げ、`params` はどのプロセッサにも属さないキー（`enabled` スイッチ、`loudness.*`、`repair.denoise.gainFloor`、クロスオーバー FIR カーネルサイズとカットオフリスト）の記述子をチェーン自身の検証器で測って収め、`aliases` はキーの別名表記すべてを返します。Node、WASM、Python では `CapabilityCatalogChain` として宣言されています。`presets` には `playbackRoom` も含まれ、常に存在し、再生機能がビルドから除かれている場合は空になります。
-
-`presets.mastering` はマスタリングプリセット名の簡潔な配列です。トップレベルの `masteringPresets` は各名前について `kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持つオブジェクトを返します。レストレーション用の項目では、後ろ 3 つの数値が `null` です。選択したプリセットを展開した数値／真偽値のパラメータマップが必要なときは、バインディングの `masteringPresetParams` を使います。
-
-この記述子が役に立つ場面は 2 つあります。
-
-- **手書きの表を持たないコントロールサーフェス。** 各パラメータを `type`、`default`、`min`、`max`、`uiMin`、`uiMax`、`scale`、`unit` から組み立てれば、新しいプロセッサや番号の振り直された帯域は、誰かが表を直したときではなくビルドが変わったときに UI へ現れます。
-- **境界を越える前の値チェック。** 公開された範囲の外の数値は構築時に拒否されます。先にカタログと突き合わせておけば、その実行時エラーは、ユーザーが値を入力した場所での検証メッセージに変わります。
-
-```typescript
-const catalog = capabilityCatalog();
-const limiter = catalog.processors.find((p) => p.id === 'dynamics.brickwallLimiter');
-const release = limiter?.params.find((p) => p.name === 'releaseMs');
-
-function accepts(value: number): boolean {
-  if (!release) return false;
-  return (release.min === null || value >= release.min)
-      && (release.max === null || value <= release.max); // max is null: no upper bound is published
-}
-```
-
-カタログが外側から示すのは、どのプロセッサがあり、それぞれが何を受け付けるか、です。同じ id のプロセッサがどのランタイムにもある理由は、[アーキテクチャ](./architecture.md)の層構成にあります。

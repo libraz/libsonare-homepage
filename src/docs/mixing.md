@@ -11,10 +11,6 @@ libsonare includes a real-time-safe mixing and routing engine on top of the same
 
 If the words *strip*, *bus*, *send*, *fader*, *pan*, or *automation* are new to you, read [Mixing Basics](./glossary/concepts/mixing-basics.md) first — this page assumes you know what they mean and focuses on **how libsonare implements them** and **what to call to get a job done**.
 
-::: info Three words to know first
-A **strip** is one track's processing lane. A **bus** is a shared destination for one or more tracks. A **send** copies some of a track to another bus while the original path continues. These three ideas make faders, panning, reverb sends, and meters much easier to follow.
-:::
-
 ::: tip Where mixing sits in the pipeline
 | Stage | Role |
 |-------|------|
@@ -24,6 +20,37 @@ A **strip** is one track's processing lane. A **bus** is a shared destination fo
 | Mastering | Polishes the finished stereo mix for delivery |
 
 Mixing is the stage that turns "a folder of stems" — the individual instrument tracks or submixes exported from a session — into "a song". You usually mix first, then master the result.
+:::
+
+::: info Three words to know first
+A **strip** is one track's processing lane. A **bus** is a shared destination for one or more tracks. A **send** copies some of a track to another bus while the original path continues. These three ideas make faders, panning, reverb sends, and meters much easier to follow.
+:::
+
+## Inserts vs sends
+
+These are the two ways a strip uses a processor, and they answer different questions:
+
+| | Insert | Send |
+|---|--------|------|
+| Signal path | In series — the *whole* signal passes through | In parallel — a *copy* is routed to a bus |
+| Typical use | Compressor, EQ, de-esser on the track itself | Shared reverb/delay several tracks feed |
+| Wet/dry | The processor's own mix controls it | Dry stays on the strip; only the send copy is processed |
+| Where it sits | In a pre-fader or a post-fader slot | Tapped pre- or post-fader, your choice |
+
+A reverb you want on one vocal can be an insert. A reverb you want *shared* across the vocal, the snare, and the guitar should be a **send** into an aux bus with a reverb on its return — one reverb instance, many sources, consistent space.
+
+::: info Decibels, gain, and summing
+Faders, trims, and sends are set in dB. A gain of *g* dB multiplies the samples by 10^(*g*/20):
+
+| dB | Linear gain | What it means |
+|----|-------------|---------------|
+| 0 dB | 1.0 | Unchanged |
+| −3 dB | 0.707 | Half the power |
+| −6 dB | 0.5 | Half the amplitude |
+| −12 dB | 0.25 | A quarter of the amplitude |
+| −∞ dB | 0 | Silence |
+
+Summing two equal signals depends on how alike they are. Two identical (coherent) copies add up to +6 dB, because the amplitudes add. Two unrelated signals of equal level add up to about +3 dB, because only their power adds. That difference is why the pan laws below differ. See [Audio Basics](./glossary/concepts/audio-basics.md) for dBFS, headroom, and latency.
 :::
 
 ## What You Will Learn
@@ -265,19 +292,6 @@ The full scene schema, every field, and annotated preset JSON live in [Mixing Sc
 Loading a scene reports every key the reader did not consume (a misspelled field such as `strips[0].faderDB`, or an insert param no processor reads) as a **non-fatal warning**, readable with `mixer.sceneWarnings()` (Python `mixer.scene_warnings()`). The scene still loads; those keys just take no effect. Reading the warnings right after `fromSceneJson(...)` is the cheapest way to catch a knob that silently "does nothing". `masteringInsertParamNames(name)` lists the keys an insert accepts.
 :::
 
-### Inserts vs sends
-
-These are the two ways a strip uses a processor, and they answer different questions:
-
-| | Insert | Send |
-|---|--------|------|
-| Signal path | In series — the *whole* signal passes through | In parallel — a *copy* is routed to a bus |
-| Typical use | Compressor, EQ, de-esser on the track itself | Shared reverb/delay several tracks feed |
-| Wet/dry | The processor's own mix controls it | Dry stays on the strip; only the send copy is processed |
-| Where it taps | After the relevant fader stage | Pre- or post-fader, your choice |
-
-A reverb you want on one vocal can be an insert. A reverb you want *shared* across the vocal, the snare, and the guitar should be a **send** into an aux bus with a reverb on its return — one reverb instance, many sources, consistent space.
-
 ### Buses, roles, and the routing graph
 
 A **bus** is a shared destination. Strips connect to buses, buses connect to other buses, and one bus is the `master`.
@@ -290,19 +304,11 @@ Each strip's own path runs through its pre-fader inserts, the fader, and its pos
 |------|---------|
 | `master` | The final stereo output. Every signal eventually reaches it. |
 | `aux` | A parallel destination for sends, typically an effect return (reverb, delay). |
-| `submix` | A group of strips processed together before the master (a "drum bus"). |
+| `submix` (any other string) | A group of strips processed together before the master (a "drum bus"). The string is a label; see below. |
 
 `master` is the only role string the graph treats specially; `aux` is simply the default value a bus gets when you do not give it one. Any other role string (`submix`, `subgroup`, `group`, …) is treated as a generic non-master bus. A misspelled `"mastre"` therefore makes an ordinary bus, and the master becomes the bus with id `master` or an implicit one. The built-in `drumBusSubgroup` preset labels its drum bus `subgroup`, so a printed scene may show `"role": "subgroup"` rather than `"submix"`.
 
-::: info A group bus's inserts run once, on the summed signal
-A bus insert chain is stateful and usually non-linear — a compressor's envelope, a saturator's transfer curve, a reverb's tail. It therefore has to see the **sum** of everything feeding the bus, once per block, rather than each contributor on its own: a compressor fed two partial signals separately is not the same processor as one fed their sum.
-
-Inside the realtime engine, clip audio and hosted-instrument audio are two contributors to the same buses, so they share a single block-level aggregation pass. Every lane and every bus chain — and every strip smoother along the way — advances exactly once per block, no matter how many of those sources produced audio.
-
-That merged pass opens under two conditions: the instrument rack must be non-empty, and PDC must be inactive. With PDC active the clip bus is rendered into its own delayed scratch buffer so it lands phase-aligned with the internally-delayed instruments, and the buses in that pass genuinely belong to it. A project with no hosted instruments has only one contributor and needs no merge.
-
-If you have a saturating or compressing insert on a group bus, this is the difference between hearing it act on the group and hearing it act on each source that happens to feed the group.
-:::
+A bus runs its insert chain once per block, on the **sum** of everything feeding it, so a compressor or saturator on a group bus acts on the group rather than on each source separately. The realtime engine keeps the same rule when clip audio and hosted instruments both feed a bus; see [A bus insert chain sees the summed signal, once](./realtime-engine.md#a-bus-insert-chain-sees-the-summed-signal-once).
 
 Connections form a graph. `Mixer.fromSceneJson` builds and compiles that graph while constructing the mixer, so the returned mixer is ready to process immediately. After construction, buses are added and removed with `mixer.addBus(id, role?)` (`role` defaults to `'aux'`) and `mixer.removeBus(id)`, and `mixer.busCount()` reports the current count. `mixer.setOutputBus(sourceId, busId)` (Python `set_output_bus`; C `sonare_mixer_set_output_bus`) routes a strip or bus into a submix after construction, without rewriting scene JSON: it replaces the source's main connection, including a scene-authored strip-to-strip edge. It takes ids rather than strip indexes, and refuses an unknown id, a destination that is not a bus, the master as source, a self-route, or an edit that would close a cycle through connections or sends with a coded `InvalidParameter` error naming the ids, leaving the topology unchanged. A submix added with `addBus` reaches the master only once it is routed there too. A topology change marks the graph dirty, and it is recompiled lazily on the next `processStereo` call — or eagerly when you call `compile()`.
 
@@ -343,7 +349,7 @@ mixer.settle(roomMic);                       // see the next section
 
 ### Settle before an offline render: `settle`
 
-Input trim, the fader (with its VCA offset), pan, and width are **smoothed**: each glides to a new value over about 5 ms so a live fader move never clicks. Those smoothers are seeded when the strip is built — at 0 dB, centre, and width 1 — and the values from the scene are applied afterwards. So even a mixer fresh from `fromSceneJson` opens its first block at the defaults and slides to the scene's values: a strip whose fader reads −12 dB starts at 0 dB and fades down, a hard-left strip starts in the centre and moves out, across the first few milliseconds of output.
+Input trim, the fader (with its VCA offset), pan, and width are **smoothed**: each glides toward a new value with a 5 ms time constant (about 63% of the way after 5 ms, settled after roughly 25 ms), so a live fader move never clicks. Those smoothers are seeded when the strip is built — at 0 dB, centre, and width 1 — and the values from the scene are applied afterwards. So even a mixer fresh from `fromSceneJson` opens its first block at the defaults and slides to the scene's values: a strip whose fader reads −12 dB starts at 0 dB and fades down, a hard-left strip starts in the center and moves out, across the first 20 ms or so of output.
 
 `mixer.settle(strip)` snaps those four stages to the values already set, so the next block opens exactly there. It clears nothing else — queued automation, meters, insert state, and the scene JSON are untouched, since the smoothers only move to values the scene already records.
 
@@ -392,7 +398,7 @@ They are not instantaneous jumps, though. A lane's mute/solo gate is a smoothed 
 **Pan mode** is *how* a position maps to left/right; **pan law** is *how loud* the center is relative to the sides.
 
 - `balance` — for already-stereo material; turns one side down rather than moving the image.
-- `stereoPan` — a true pan that moves a mono-ish source across the field.
+- `stereoPan` — a true pan: it first folds the strip to mono, `(L + R) / 2`, then places that mono signal across the field. Anything that differs between the channels is lost, anti-phase content cancels, and a part that sat only in the left channel is halved (−6 dB) by the fold before the pan law applies. Use it for mono or near-mono sources, and `balance` or `dualPan` for real stereo material.
 - `dualPan` — independent left and right positions (set with `setDualPan(...)`), e.g. collapse a wide stereo track inward.
 
 A strip can also delay its own signal by a whole number of samples with `setChannelDelaySamples(...)` — a per-strip alignment nudge for time-aligning a close mic against a room mic, or compensating a parallel path, without touching the pan.
@@ -400,7 +406,7 @@ A strip can also delay its own signal by a whole number of samples with `setChan
 The persistent `Mixer` also drives the other in-strip stages live, each a **parameter** change that takes effect on the next block with no graph recompile:
 
 - `setInputTrimDb(strip, db)` — the **Input trim** stage from the signal flow (the same gain as the `inputTrimDb` `mixStereo` option); distinct from the fader.
-- `setWidth(strip, width)` — the **Stereo width** stage (`width` `mixStereo` option): `0` = mono, `1` = original, `>1` = widened.
+- `setWidth(strip, width)` — the **Stereo width** stage (`width` `mixStereo` option): `0` = mono, `1` = original, `>1` = widened. Width runs *after* pan, on the mid/side form of the panned signal, so on a panned mono source it moves the position too: a hard-left source at width `0` ends up centered at −6 dB, and at width `2` the right channel gets an anti-phase copy at half level. Leave width at `1` on mono sources and place them with pan alone.
 - `setPolarityInvert(strip, invertLeft, invertRight)` — the **Polarity invert** stage; flip the sign of the strip's left and/or right channel.
 
 Pan law options are `const3dB`, `const4.5dB`, `const6dB`, and `linear0dB` in the JavaScript APIs. Python accepts the same values as enums/ints, or normalized strings such as `const-3db` and `linear-0db`.
@@ -419,6 +425,8 @@ Most laws dip the center by a fixed amount, so a sound panned to the center is n
 ::: warning The center dip only reaches the output in `stereoPan` mode
 Those figures are the raw pan-law gains. In `balance` — the default mode — the panner divides both gains by the louder (near) one, so the near channel is always unity and only the away channel is pulled down. The center stays at 0 dB whichever law you choose; the law only sets the near/away *ratio*. Switch the strip to `stereoPan` if you want the center dip itself. A strip whose `sourceLayout` is `mono` is a third case: in `balance` it is unity at center under every law, and in `stereoPan` each output channel gets the law's center gain (0.707 / 0.595 / 0.5 / 1.0 for the four laws, as re-measured on a settled strip).
 :::
+
+<SonareDemo id="pan-law" />
 
 ### Surround and multichannel
 
@@ -440,10 +448,14 @@ The interpolation **curve** shapes the move between events:
 
 | Curve | Shape | Use it for |
 |-------|-------|-----------|
-| `linear` | straight ramp | general level/pan moves |
-| `exponential` | fast then slow | natural-sounding fades |
+| `linear` | straight ramp | general level/pan moves; on a dB fader lane this is already an even-sounding fade |
+| `exponential` | interpolates the value's magnitude on a log scale | frequency sweeps and linear-gain parameters |
 | `s-curve` | ease in *and* out | smooth, click-free transitions |
 | `hold` | jump, no ramp | stepped/instant changes |
+
+::: warning `exponential` on a dB lane
+Fader and send lanes carry **dB** values, and a straight line in dB is already an exponential change in amplitude. `exponential` bends the dB values a second time, and its shape depends on the direction: from −1 dB to −60 dB it reads −2.8, −7.9 and −22 dB at the quarter points (slow, then fast), while −60 to −1 dB reads −21, −7.6 and −2.7 dB (fast, then slow). A segment that starts or ends at exactly 0 dB, or crosses it, is interpolated linearly. Use `linear` or `s-curve` for fader fades.
+:::
 
 ::: tip Insert parameter automation
 `scheduleInsertAutomation` addresses inserts by their index in the *combined* sequence `[pre-inserts…, post-inserts…]`, and the `paramId` is processor-specific. Automating a compressor threshold to duck under a voice is a classic use — though for sidechain ducking the [`commentaryDucking`](./mixing-scene-json.md#built-in-presets) preset wires it for you.
@@ -455,19 +467,25 @@ Every strip (and the master) exposes a rich `MixMeterSnapshot`. Read it post-ren
 
 | Field | Tells you |
 |-------|-----------|
-| `peakDbL` / `peakDbR` | Sample peak per channel |
+| `peakDbL` / `peakDbR` | Sample peak per channel, over the measured window (see below) |
 | `truePeakDbL` / `truePeakDbR` / `maxTruePeakDb` | Inter-sample [true peak](./glossary/true-peak.md), estimated with 4x oversampling per ITU-R BS.1770-4 — close to what a DAC (digital-to-analog converter) reconstructs, though a real reconstruction filter can peak a little higher |
-| `rmsDbL` / `rmsDbR` | Short-term average level |
-| `momentaryLufs` / `shortTermLufs` / `integratedLufs` | [Loudness](./glossary/lufs.md) over 400 ms / 3 s / the whole signal |
-| `correlation` | −1…+1 phase correlation; near +1 is mono-safe, negative warns of cancellation |
+| `rmsDbL` / `rmsDbR` | Average (RMS) level per channel, over the measured window |
+| `momentaryLufs` / `shortTermLufs` / `integratedLufs` | [Loudness](./glossary/lufs.md) over 400 ms / 3 s / the whole signal (gated, per BS.1770) |
+| `correlation` | −1…+1 phase correlation over the measured window; near +1 is mono-safe, negative warns of cancellation |
 | `monoCompatWidth` / `monoCompatPeak` / `monoCompatSideRms` / `likelyMonoCompatible` | [Mono-compatibility](./glossary/concepts/mono-compatibility.md) summary |
 | `gainReductionDb` | How hard dynamics on the strip are working |
 | `seq` | Monotonic snapshot counter for change detection |
 
+::: info The measured window, and why a UI adds its own ballistics
+Peak, RMS, and correlation cover exactly the audio of one call. For `mixStereo` that is the whole render. For a `Mixer` or the realtime engine it is the last processed block, so a 128-frame block at 48 kHz is a 2.7 ms window, and the reading jumps from block to block. The LUFS fields are different: their 400 ms and 3 s windows slide across blocks, so they do not depend on the block size.
+
+Hardware-style meters smooth their readings with fixed **ballistics**: a VU meter integrates over about 300 ms, a peak program meter (PPM) rises within milliseconds and falls back slowly, and a peak-hold marker keeps the highest value for a second or two. libsonare reports the raw per-block values and leaves the ballistics to the display. A UI typically keeps a falling peak (for example 20 dB per second) and holds the maximum for about 1.5 s.
+:::
+
 <SonareDemo id="loudness-meter" />
 
 ::: info What is a goniometer?
-A goniometer (also called a vectorscope) is a dot-cloud display of the left vs. right signal. It shows the stereo image at a glance: a near-vertical line means mono, a wide blob means a wide stereo spread, and a horizontal smear warns of phase problems that may cancel in mono. It is the picture version of the `correlation` meter.
+A goniometer (also called a vectorscope) is a dot-cloud display of the left vs. right signal. It is usually drawn rotated by 45°, with x = (L − R) / √2 and y = (L + R) / √2. On that display a near-vertical line means mono, a wide blob means a wide stereo spread, and a horizontal smear warns of phase problems that may cancel in mono. It is the picture version of the `correlation` meter. `readGoniometerLatest` (below) returns raw `{ left, right }` pairs, so apply the rotation yourself; plotted unrotated, a mono signal is a 45° diagonal.
 :::
 
 The true-peak reading runs one reconstruction-filter group delay behind the block, so it does not depend on the block size. After the last block of a signal, call `mixer.flushMeters()` (Python `flush_meters()`) to read that pending stretch against silence and fold it into the snapshots; a later `processStereo` starts a new signal. Offline engine renders and the one-shot `mixStereo` do this for you. A short burst at the very end of a block shows the effect: `truePeakDbL` reads higher after the flush while the sample peak does not move.
@@ -549,6 +567,8 @@ Because the send is post-fader, automating the vocal fader down also pulls its r
 
 :::: details Drum subgroup with parallel compression
 Route kick/snare/overheads into one `submix` bus, glue them with parallel compression and tape, and ride them all with a VCA — the `drumBusSubgroup` preset.
+
+<SonareDemo id="parallel-compression" />
 
 ```typescript
 const mixer = Mixer.fromSceneJson(mixingScenePresetJson('drumBusSubgroup'), sampleRate, 512);

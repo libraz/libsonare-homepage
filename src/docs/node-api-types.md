@@ -303,7 +303,7 @@ softmax share. Use `detectKey` when you need the share reading.
 ::: warning A sixth and a seventh can spell the same notes
 A `major6` spells the same four pitch classes as the `minor7` a minor third
 below it, a `minor6` the same as the `halfDim7` a minor third below, and a
-`dominant7Sus4` the same as the `sus2Add4` a fourth below. Nothing in a
+`dominant7Sus4` the same as the `sus2Add4` a fourth above. Nothing in a
 chromagram separates a pair like that, so the established reading stays the
 default and only bass evidence promotes the sixth.
 :::

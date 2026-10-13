@@ -11,6 +11,50 @@ description: ホスト・ゲスト・音楽ベッドをダッキング済みで�
 このページは Python CLI（`pip install libsonare`、コマンド名 `sonare`）を使います。`mix` はネイティブの `sonare-cli` にはありません。[どの CLI を使っているか](../cli.md#どの-cli-を使っているか)を参照してください。コードからは `Mixer.fromSceneJson` が同じシーンを読み込みます（[ミキシングエンジン](../mixing.md#シーンベースのミックス-mixer)）。
 :::
 
+::: info 用意するもの
+- **インストール:** `pip install libsonare`（Python 3.11 以降）。Node のタブには `npm install @libraz/libsonare`（Node.js 22.12 以降）が必要です。
+- **長さとサンプルレートのそろった WAV ファイル 3 つ:** `host.wav`、`guest.wav`、`music-bed.wav`。モノラルでもステレオでもかまいません。ここでは 48 kHz を使っています。
+- **テスト素材:** 下の数値は 8 秒の合成音で測ったものです。下のスクリプトで似た素材（声は母音のような音節、ベッドは持続する和音）を書き出せます。出る数値は手元の素材で変わります。
+:::
+
+::: details テスト用の声と音楽ベッドを書き出すスクリプト
+`make_show.py` として保存し、`python make_show.py` を実行します（NumPy は `pip install libsonare` で一緒に入ります）。ホストは最初の 3 秒と最後の 3 秒に話し、その間はゲストが話します。
+
+```python
+"""Write host.wav, guest.wav and music-bed.wav: 8 s, 48 kHz mono test material."""
+import wave
+
+import numpy as np
+
+SR = 48000
+t = np.arange(8 * SR) / SR
+rng = np.random.default_rng(5)
+
+
+def save(path, x):
+    with wave.open(path, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(SR)
+        w.writeframes((np.clip(x, -1.0, 1.0) * 32767).astype("<i2").tobytes())
+
+
+def voice(f0, talking):
+    """Vowel-like syllables at about 4 per second, plus a little breath noise."""
+    phase = 2 * np.pi * np.cumsum(f0 * (1 + 0.05 * np.sin(2 * np.pi * 0.7 * t))) / SR
+    tone = sum(np.sin(k * phase) / k for k in range(1, 30))
+    syllables = np.clip(np.sin(2 * np.pi * 4.0 * t), 0.0, None) ** 0.5
+    x = (0.25 * tone + 0.02 * rng.standard_normal(len(t))) * syllables
+    return x * talking
+
+
+host_talks = ((t < 3.0) | (t >= 5.0)).astype(float)
+save("host.wav", voice(120.0, host_talks))
+save("guest.wav", voice(200.0, 1.0 - host_talks))
+save("music-bed.wav", 0.3 * sum(np.sin(2 * np.pi * f * t) for f in (220.0, 277.2, 329.6)) / 3)
+```
+:::
+
 ## このページで身につくこと
 
 このページを読むと、次のことができるようになります。
@@ -37,7 +81,7 @@ for strip in scene["strips"]:
     if strip["id"] == "music-bed":
         for insert in strip["inserts"]:
             if insert["processor"] == "dynamics.sidechainRouter":
-                insert["params"] = {"rangeDb": 5}
+                insert["params"].update({"rangeDb": 5})
 json.dump(scene, open("scene.json", "w"))
 '
 
@@ -101,8 +145,9 @@ sonare mixing-preset --preset commentaryDucking --json
 ```
 
 ```typescript [Node]
-import { mixingScenePresetJson } from '@libraz/libsonare-native';
+import { init, mixingScenePresetJson } from '@libraz/libsonare';
 
+await init();
 const scene = JSON.parse(mixingScenePresetJson('commentaryDucking'));
 ```
 
@@ -143,7 +188,7 @@ for strip in scene["strips"]:
     if strip["id"] == "music-bed":
         for insert in strip["inserts"]:
             if insert["processor"] == "dynamics.sidechainRouter":
-                insert["params"] = {"rangeDb": 30}
+                insert["params"].update({"rangeDb": 30})
 json.dump(scene, open("scene.json", "w"))
 '
 sonare mix --scene scene.json \
@@ -152,7 +197,7 @@ sonare mix --scene scene.json \
 cmp show.wav show-r30.wav   # 出力なし: 同一
 ```
 
-`rangeDb` をプリセットの既定値 18 から 30 へ上げても何も変わりません。`cmp` は 2 つのレンダリングをバイト単位で完全一致と報告します。この素材では、ホストの音量が求める削減量はどれだけ多くてもおよそ 7 dB までしかなく、8 dB 前後以上の上限であれば上限がないのと同じ挙動になるからです。その値より下げれば、編集が結果に現れます。`sonare dynamics` でファイル全体を測ると効果が出ますが、8 秒のうちホストが話していない区間も長く含めた平均なので値そのものは小さく出ます。
+`rangeDb` をプリセットの既定値 18 から 30 へ上げても何も変わりません。`cmp` は 2 つのレンダリングをバイト単位で完全一致と報告します。この素材では、ホストの音量が求める削減量はどれだけ多くてもおよそ 7 dB までしかなく、8 dB 前後以上の上限であれば上限がないのと同じ挙動になるからです。その値より下げれば、編集が結果に現れます。`sonare dynamics` でファイル全体を測ると何かが変わったことはわかりますが、声そのものと、ホストが話していない長い区間も含めた 8 秒の平均なので、変化はごく小さく見えます。
 
 | `rangeDb` | `rms_db`（ファイル全体） | `peak_db` | `18` との比較 |
 |-----------|--------------------------|-----------|---------------|
@@ -166,6 +211,96 @@ cmp show.wav show-r30.wav   # 出力なし: 同一
 
 ::: warning 一度も届いていない上限は、調整したことにならない
 `rangeDb` を下げても手元のレンダリングが何も変わらないなら、原因はパラメータではなく、ホストのトラックがルーターの反応するスレッショルドより静かで、そもそもダッキングが要求されていないことです。深さを詰める作業に時間をかける前に、プリセットの既定値でダッキングがそもそも働いているかを確認してください。
+:::
+
+### ダッキングを決めるパラメータ
+
+`rangeDb` はダッキングの上限を決めるだけです。どれだけ深く、どう動くかは、ルーターのコンプレッサー系の設定で決まります。プリセットが送っているのは `rangeDb` だけなので、ほかは既定値で動いています。
+
+| パラメータ | 既定値 | 話し声の下の音楽での出発点 | 理由 |
+|---|---|---|---|
+| `thresholdDb` | -24 | ホストのふだんの話し声より 10 dB ほど下 | フレーズごとにホストがここを超えないと、ダッキングはまったく起きません |
+| `ratio` | 4 | 4 | ホストがスレッショルドをどれだけ超えるかと合わせて深さが決まります。ホストが話している間、ベッドが 6〜12 dB 下がるのを目安にします |
+| `attackMs` | 5 | 5〜20 | 最初の音節が埋もれない程度に速く、クリック音が出ない程度に遅く |
+| `releaseMs` | 100 | 300〜500 | 100 ms だと単語の切れ目ごとにベッドが戻ってきて、ポンピングとして聞こえます。リリースを遅くすると 1 文の間ベッドが下がったままになります |
+| `rangeDb` | 18（プリセットの値） | 12〜18 | 上限です。大声を出してもベッドが完全に埋もれないようにします |
+
+これは出発点であって答えではありません。話し声の大きさもベッドも素材ごとに違うので、設定してレンダリングし、測ってください。
+
+編集は `rangeDb` と同じく、インサートの `params` にマージします。
+
+```python
+insert["params"].update({"thresholdDb": -36, "ratio": 4, "attackMs": 10, "releaseMs": 400})
+```
+
+<SonareDemo id="ducking" />
+
+ファイル全体の数値からは、ダッキングの深さはわかりません。ホストが話している間だけベッドを測り、同じ区間のダッキングしていないベッドと比べます。下のスクリプトはシーンを 3 回（そのまま、ダッキングを外して、ベッドだけで）レンダリングし、引き算でダッキング後のベッドだけを取り出して、`host.wav` が -40 dBFS より大きい 10 ms ブロックで両方のベッドを平均します。
+
+::: details 話し声の下でダッキングを測るスクリプト
+3 つの WAV ファイルと同じ場所に `duck_depth.py` として保存し、`python duck_depth.py scene.json` を実行します。
+
+```python
+"""Print how far the duck pulls the music bed down while the host is talking."""
+import copy
+import json
+import subprocess
+import sys
+
+import numpy as np
+from libsonare import Audio
+
+BLOCK = 480  # 10 ms at 48 kHz
+
+
+def render(scene, path):
+    with open("duck-scene.json", "w") as f:
+        json.dump(scene, f)
+    subprocess.run(
+        ["sonare", "mix", "--scene", "duck-scene.json", "--input", "host=host.wav",
+         "--input", "guest=guest.wav", "--input", "music-bed=music-bed.wav", "-o", path],
+        check=True, capture_output=True,
+    )
+    with Audio.from_file_channel(path, 0) as audio:
+        return audio.data
+
+
+def variant(scene, duck=True, voices=True):
+    s = copy.deepcopy(scene)
+    for strip in s["strips"]:
+        if strip["id"] == "music-bed" and not duck:
+            strip["inserts"] = []
+        if strip["id"] in ("host", "guest") and not voices:
+            strip["muted"] = True
+    return s
+
+
+def block_db(x):
+    x = x[: len(x) // BLOCK * BLOCK].reshape(-1, BLOCK)
+    return 10 * np.log10(np.mean(x**2, axis=1) + 1e-12)
+
+
+def level_db(x):
+    blocks = block_db(x)
+    n = min(len(blocks), len(talking))
+    return 10 * np.log10(np.mean(10 ** (blocks[:n][talking[:n]] / 10)))
+
+
+scene = json.load(open(sys.argv[1]))
+bed_alone = render(variant(scene, duck=False, voices=False), "duck-c.wav")
+# The master bus is a plain sum, so (with duck) - (without duck) + (bed alone)
+# leaves the ducked bed by itself.
+ducked = (render(variant(scene), "duck-a.wav") - render(variant(scene, duck=False), "duck-b.wav")
+          + bed_alone)
+with Audio.from_file("host.wav") as audio:
+    talking = block_db(audio.data) > -40.0  # 10 ms blocks where the host is speaking
+
+before, after = level_db(bed_alone), level_db(ducked)
+print(f"bed while the host talks: {before:.1f} dB unducked, {after:.1f} dB ducked, "
+      f"duck depth {before - after:.1f} dB")
+```
+
+このページ冒頭のスクリプトで作ったテスト素材では、編集していないプリセットはホストが話している間ベッドを約 3 dB 下げ、上の `update` 行（`rangeDb` はプリセットの 18 のまま）では約 9 dB 下げます。測るのは実際にレンダリングするシーンにしてください。冒頭のスクリプトは `rangeDb: 5` も設定しているので、ダッキングは 5 dB までに制限されます。
 :::
 
 サイドチェインルーターは、検出器がベッドではなくホストを聴いているコンプレッサーです。要求される削減量は下の網かけのゲインリダクションそのもので、キーがスレッショルドをどれだけ超えたかにレシオを掛けた分しかありません。プログラムが超えなくなるまでスレッショルドを上げると網かけは消えます。それが上の警告が述べている状態で、`rangeDb` をいくつにしても戻ってきません。
@@ -210,6 +345,20 @@ sonare mastering show.wav --assistant --preset speech --explain --target-platfor
 
 単独の `speech` プリセット実行は、組み込みの -16 LUFS を目標にします。アシスタント実行は同じチェーンを出発点にし、`--target-platform podcast` から -16 LUFS を取得します。さらに speech プリセットの低域モノメーカー段と説明を加えます。アシスタントは音声からジャンルを推測しないため、`--preset speech` という選択がそのまま表示され、再現できます。
 
+::: warning ノイズ除去は仕上がった番組ではなく、ミックス前の声にかける
+どちらの実行も `repair.denoise` から始まり、ここでは音楽ベッドを含む番組全体にかかります。音楽にノイズ除去をかけると持続音がにじみ、水っぽいアーティファクトが残りますが、ベッドにはそもそも必要ありません。実際の録音では、ステップ 3 の前に声を 1 本ずつ整音し、マスターのデノイズを無効にしてください。
+
+```bash
+sonare repair host.wav -o host-clean.wav --explain --json
+sonare repair guest.wav -o guest-clean.wav --explain --json
+# Mix host-clean.wav and guest-clean.wav in Step 3, then:
+sonare mastering show.wav --preset speech --params repair.denoise.enabled=0 \
+  -o show-master.wav --json
+```
+
+`repair.denoise.enabled=0` を付けると段のリストは `eq.tilt` から始まります。同じ `--params` は `--assistant` の実行でも使えます。`repair` は声ごとに計測し、その根拠が求める段だけを実行します（[録音素材をまとめて整音する](./recording-cleanup.md) を参照）。修復後のピークがフルスケールを超えた声はフルスケールまでスケーリングし直されるので、ミックスの前に声のレベルをもう一度確認してください。このシーンではホストのストリップにもディエッサーがあるので、マスターの `dynamics.deesser` はホストにとって 2 回目のディエッサーです。ホストのサ行が舌足らずに聞こえ始めたら、どちらかを弱めてください。
+:::
+
 ::: danger `--target-platform` には `--assistant` が必要です
 ```bash
 sonare mastering show.wav --preset speech --target-platform podcast -o x.wav --json
@@ -219,7 +368,23 @@ sonare mastering show.wav --preset speech --target-platform podcast -o x.wav --j
 プラットフォームターゲットはアシスタントへの入力であって、全体設定ではありません。単独の `--preset` 実行と組み合わせることはできないため、このフラグは拒否されます。名前付き speech チェーンとプラットフォームターゲットを両方使うときは、`--assistant --preset speech --target-platform podcast` を指定します。
 :::
 
-`--target-platform` は `streaming`、`youtube`、`broadcast`、`podcast`、`audiobook`、`cinema`、`club`、`cd` を受け付けます。`broadcast`、`podcast`、`club`、`cd` は、対応する値を明示していない場合に固有のラウドネスと天井を適用します。それ以外の名前は受け付けますが、現在の値を変更しません。全オプションは `sonare mastering --help` で確認できます。各ターゲットが実際に何を要求しているかは [配信ターゲット](../glossary/mastering/delivery-targets.md) にまとまっています。
+`--target-platform` は 8 つの名前を受け付けますが、実際に何かを変えるのはそのうち 4 つです。
+
+| `--target-platform` | ラウドネス目標 | True Peak のシーリング |
+|---|---|---|
+| `broadcast` | -23 LUFS | -1 dBTP |
+| `podcast` | -16 LUFS | -1 dBTP |
+| `club`、`cd` | -9 LUFS | -0.3 dBTP |
+| `streaming`、`youtube`、`audiobook`、`cinema` | `--target-lufs` の値（既定 -14 LUFS） | `--ceiling-db` の値（既定 -1 dBTP） |
+
+最後の行は独自の値を何も適用しません。特に `--target-platform audiobook` だけを指定すると -14 LUFS、-1 dBTP でマスタリングされ、オーディオブックの配信事業者がふつう受け付ける範囲（RMS で -23〜-18 dBFS、ピークは -3 dBFS 以下とするのが一般的）より大きく、ピークも高くなります。オーディオブックでは値を自分で渡し、配信先の仕様と照らし合わせてください。
+
+```bash
+sonare mastering chapter.wav --assistant --preset speech \
+  --target-lufs -20 --ceiling-db -3 -o chapter-master.wav --report chapter-report.json --json
+```
+
+`--target-lufs` や `--ceiling-db` を明示すると、値を持つ 4 つのターゲットよりもそちらが優先されます。全オプションは `sonare mastering --help` で確認できます。各ターゲットが実際に何を要求しているかは [配信ターゲット](../glossary/mastering/delivery-targets.md) にまとまっています。
 
 ## ステップ 5 — 声がモノラルで安全かを確認する
 

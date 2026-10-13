@@ -13,7 +13,7 @@ This page grounds voice editing in libsonare's `VoiceChanger` and `FormantWarp`;
 
 ## What a formant is
 
-A **formant** is a peak of acoustic energy at a fixed frequency range. In a voice, those peaks come from resonances of the vocal tract: mouth, throat, and nasal cavity.
+A **formant** is a resonance peak in the spectrum of a voice. The peaks come from resonances of the vocal tract (mouth, throat, and nasal cavity), so their frequencies change with the vowel being shaped and with the size of the speaker's vocal tract, but not with the note being sung.
 
 Formants define two things:
 
@@ -22,7 +22,7 @@ Formants define two things:
 | Vowel identity | The difference between "ee" and "oh" |
 | Perceived voice character | Whether a voice feels smaller, larger, brighter, or darker |
 
-The important point is that formants stay in roughly the **same frequency regions regardless of the note**. A soprano and a bass singing the same vowel have very different pitches, but their formants can sit in similar regions.
+The important point is that formants stay in roughly the **same frequency regions regardless of the note**. A soprano and a bass singing the same vowel have very different pitches, but their formants sit in similar regions; a shorter vocal tract places them only somewhat higher, typically 15 to 20 percent for adult female against adult male voices.
 
 Put differently: pitch carries *which note*, formants carry *whose voice* and *which vowel*. An instrument keeps its timbre as you play up and down the keyboard, and in the same way a singer keeps the character their vocal tract gives them across different notes. Because the two are independent, it is worth being able to move them separately.
 

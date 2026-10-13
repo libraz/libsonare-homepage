@@ -7,6 +7,8 @@ description: How to use libsonare room-acoustic analysis, room estimation, RIR s
 
 libsonare includes room-acoustic tools for describing how a space sounds.
 
+If *reverberation time*, *impulse response*, or *dB* are unfamiliar, read [Audio Basics](./glossary/concepts/audio-basics.md) and [Reverberation Time](./glossary/acoustics/reverberation-time.md) first — this page assumes that vocabulary and focuses on which API answers which room question.
+
 Use this page when you want to:
 
 - measure a clap or impulse-response recording;
@@ -77,7 +79,7 @@ That difference changes how you should treat the result.
 | Input assumption | The room response is easy to isolate | Music or speech is mixed with the room |
 | Best use | Measurement, comparison, validation | UI hints, tagging, warnings |
 | Confidence | Easier to trust when the IR is clean | Essential to inspect because the input controls reliability |
-| Low confidence usually means | The IR is noisy, too short, clipped, or poorly isolated | No clear free-decay region was found, or non-room material looked like decay |
+| Low confidence usually means | The IR is noisy, too short, clipped, or poorly isolated, or its EDT and RT60 genuinely differ (a microphone close to the source, two coupled rooms), which the score cannot tell apart from a bad fit | No clear free-decay region was found, or non-room material looked like decay |
 
 A **free-decay region** is a span where the source is no longer producing new sound and the room tail is naturally fading. Blind estimation cannot produce a trustworthy value when that region is not visible.
 

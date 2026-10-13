@@ -83,14 +83,14 @@ The classic oscillator → filter → amp voice. Detuned unison, drift, a pre-fi
 
 <SonareDemo id="synth-note" />
 
-The filter model is the heart of the "character". Four classic models are available via `filterModel`:
+The filter model is the heart of the "character". Four classic models are available via `filterModel`. A *pole* is one first-order stage of a filter; each adds 6 dB per octave to how steeply the response falls above the cutoff, so a four-pole filter darkens a sound much more abruptly than a two-pole one.
 
-| Model | Circuit topology | Notes |
-|-------|------------------|-------|
-| `svf` | TPT state-variable | Clean, the only model with a selectable `filterOutput` (lowpass / bandpass / highpass) |
-| `moog-ladder` | Four-pole transistor ladder | Zero-delay-feedback, saturating loop, self-oscillates |
-| `diode-ladder` | Diode ladder | Coupled-stage ZDF, self-oscillates |
-| `sallen-key` | Sallen-Key | Self-oscillates |
+| Model | Circuit topology | Poles (lowpass slope) | Notes |
+|-------|------------------|-----------------------|-------|
+| `svf` | TPT state-variable | 2 (12 dB/octave) | Clean, the only model with a selectable `filterOutput` (lowpass / bandpass / highpass) |
+| `moog-ladder` | Four-pole transistor ladder | 4 (24 dB/octave) | Zero-delay-feedback, saturating loop, self-oscillates |
+| `diode-ladder` | Diode ladder | 4 coupled stages (24 dB/octave far above cutoff) | Coupled-stage ZDF, self-oscillates |
+| `sallen-key` | Sallen-Key | 2 (12 dB/octave) | Self-oscillates |
 
 All four stay stable and zipper-free under per-sample cutoff/resonance modulation, and self-oscillation is deterministic.
 
@@ -144,7 +144,7 @@ A reed-bore waveguide with cylindrical and conical variants, tonehole/growth-con
 
 ### `brass` — lip-reed brass
 
-A brass waveguide with lip tension, brass-bell body resonance, conical/cylindrical voicing, register scaling, and a bright cuivré edge for loud playing. Good for **brass fallback and preview**. Presets: `brass`, `trumpet`, `trombone`, `tuba`, `french-horn`, `muted-trumpet`, `cornet`, `flugelhorn`, `euphonium`.
+A brass waveguide with lip tension, brass-bell body resonance, conical/cylindrical voicing, register scaling, and a bright cuivré edge for loud playing (the brassy, rasping tone a horn takes on when it is blown hard). Good for **brass fallback and preview**. Presets: `brass`, `trumpet`, `trombone`, `tuba`, `french-horn`, `muted-trumpet`, `cornet`, `flugelhorn`, `euphonium`.
 
 ### `flute` — air-jet flute
 
@@ -304,9 +304,9 @@ The `body` field is NativeSynth's body/formant resonance layer — the resonant 
 `body: 'vocal'` is the vowel formant bank, and it is reachable on **any** patch rather than only on the `vocal` engine — a subtractive oscillator driven through it is a sung tone rather than a filtered saw. That is exactly how the GM fallback bank voices Lead 6 (voice) and Pad 4 (choir), which is why those two do not sound like the synth leads and pads around them.
 
 ::: info Pitch bend, controller reset, and expression state
-NativeSynth responds to **pitch-bend** messages, and the bend range follows **RPN 0** (the standard pitch-bend-range parameter, set with the **CC6 / CC38** Data Entry MSB/LSB fine-byte pair — default ±2 semitones). A MIDI **Reset All Controllers** message returns the performance controllers (mod wheel, expression, pitch-bend value, the pedals) and the RPN/NRPN selection to their defaults, but it deliberately leaves the bend range where you set it — send RPN 0 again if you want ±2 semitones back. **CC 120 All Sound Off** kills sounding notes and **CC 123 All Notes Off** releases keys, but neither resets sustain (**CC64**) or sostenuto (**CC66**) state; pedal-held notes can therefore remain held after CC 123. **CC 121 Reset All Controllers** resets both pedal states. You drive these with ordinary MIDI events: pitch-bend events (e.g. `Project.midiPitchBend(...)` offline) and the RPN 0 / data-entry / reset CCs in your stream.
+NativeSynth responds to **pitch-bend** messages, and the bend range follows **RPN 0** (the standard pitch-bend-range parameter: select it with **CC101 = 0** and **CC100 = 0**, then write semitones with **CC6** and cents with **CC38**; default ±2 semitones; the full sequence is in [MIDI Basics](./glossary/instruments/midi-basics.md#pitch-bend-rpn-and-nrpn)). A MIDI **Reset All Controllers** message returns the performance controllers (mod wheel, expression, pitch-bend value, the pedals) and the RPN/NRPN selection to their defaults, but it deliberately leaves the bend range where you set it — send RPN 0 again if you want ±2 semitones back. **CC 120 All Sound Off** kills sounding notes and **CC 123 All Notes Off** releases keys, but neither resets sustain (**CC64**) or sostenuto (**CC66**) state; pedal-held notes can therefore remain held after CC 123. **CC 121 Reset All Controllers** resets both pedal states. You drive these with ordinary MIDI events: pitch-bend events (e.g. `Project.midiPitchBend(...)` offline) and the RPN 0 / data-entry / reset CCs in your stream.
 
-NativeSynth keeps ordinary controller state per channel and note-addressed expression per active voice. MIDI 2.0 note velocity, controller, pressure, and pitch-bend inputs retain their full resolution; NativeSynth handles channel pressure, polyphonic key pressure, and per-note pitch bend. Configure an MPE zone for member-channel expression, or send MIDI 2.0 per-note messages directly. RPN 0 sets the bend range, while generic high-resolution parameter mappings remain in the engine's `bindMidiCcBinding(...)` layer.
+NativeSynth keeps ordinary controller state per channel and note-addressed expression per active voice. MIDI 2.0 note velocity, controller, pressure, and pitch-bend inputs retain their full resolution; NativeSynth handles channel pressure, polyphonic key pressure, and per-note pitch bend. Configure an MPE zone ([what that is](./glossary/instruments/midi-basics.md#midi-files-and-midi-2-0)) for member-channel expression, or send MIDI 2.0 per-note messages directly. RPN 0 sets the bend range, while generic high-resolution parameter mappings remain in the engine's `bindMidiCcBinding(...)` layer.
 
 Piano-style pedal controls are decoded as ordinary MIDI CCs. Sustain pedal **CC64** supports half-pedal damping only on the `piano` engine — there, intermediate values 64-126 damp ringing key-up notes proportionally; on every other engine CC64 is a plain on/off sustain switching at the 64 threshold, so 64 and 126 sound the same as 127. **CC66** acts as sostenuto, and **CC67** applies una-corda / soft-pedal voicing where the active preset uses it.
 :::

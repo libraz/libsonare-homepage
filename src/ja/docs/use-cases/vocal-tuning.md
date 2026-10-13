@@ -28,6 +28,60 @@ description: 歌のテイクのどの音がどれだけずれているかを測�
 
 テイクは合成したもので、ノコギリ波を母音の 3 つのフォルマントに通しています。合成にしたのは、結果をすべて実際に歌ったずれと照らし合わせられるようにするためです。以下の表で「測定」とある列は、libsonare の外で独立に測った値です。各音の基音の瞬時周波数を、ビブラートのちょうど 1 周期にわたって平均しています。元のテイクでは、この測定は上の表と 0.1 セント以内で一致します。実際の声には子音や息があり、ビブラートも不規則なので、ここでの数値は最良の場合と考えてください。
 
+::: info 用意するもの
+- **インストール:** `pip install libsonare`（Python 3.11 以降）で、`sonare` コマンドと `tune.py` が使う Python バインディングが入ります。
+- **歌のテイク:** 1 本の歌のラインで、リバーブのかかっていないもの。WAV か MP3 です。ツールは一度に 1 つの音程を追うので、ステレオのテイクはモノラルにまとめられます。
+- **このページを再現するには:** `take.wav` は合成音です。下のスクリプトで同等のテイクを書き出せます。`--segmentation-threshold-cents 40` を付けると、`vocal-notes` はここに載せた数値と 2 セント程度以内で読み取ります。既定のしきい値では、くっついた E の値が数セント違って出ます。
+:::
+
+::: details テスト用のテイクを書き出すスクリプト
+`make_take.py` として保存し、`python make_take.py` を実行します（NumPy は `pip install libsonare` で一緒に入ります）。
+
+```python
+"""Write take.wav: a synthetic sung "ah", C D E F G A G E D C, each note off pitch by a known amount."""
+import wave
+
+import numpy as np
+
+SR = 44100
+MIDI = [60, 62, 64, 65, 67, 69, 67, 64, 62, 60]
+CENTS = [0, -35, 10, -45, 20, -15, 38, -25, 5, -30]
+SECONDS = [0.5, 0.5, 0.53, 0.45, 0.75, 0.49, 0.5, 0.5, 0.5, 1.05]
+FORMANTS = [(700, 110), (1220, 120), (2600, 160)]  # an "ah" vowel: center Hz, bandwidth Hz
+
+lead = int(0.15 * SR)
+pitch = [np.full(lead, MIDI[0] + CENTS[0] / 100)]
+for i, (m, c, s) in enumerate(zip(MIDI, CENTS, SECONDS)):
+    n = int(s * SR)
+    t = np.arange(n) / SR
+    target = m + c / 100
+    prev = MIDI[i - 1] + CENTS[i - 1] / 100 if i else target
+    ramp = 0.5 - 0.5 * np.cos(np.pi * np.minimum(1.0, t / 0.06))
+    glide = prev + (target - prev) * ramp  # 60 ms glide into the note
+    depth = 0.25 * np.minimum(1.0, t / 0.2)  # +-25 cents, built up over 200 ms
+    pitch.append(glide + depth * np.sin(2 * np.pi * 5.5 * t))
+midi = np.concatenate(pitch)
+f0 = 440.0 * 2 ** ((midi - 69) / 12)
+phase = 2 * np.pi * np.cumsum(f0) / SR
+
+voice = np.zeros_like(f0)
+for k in range(1, 60):  # sawtooth harmonics, weighted by the vowel's formants
+    fk = k * f0
+    gain = (1.0 + 2.0 * sum(np.exp(-0.5 * ((fk - fc) / bw) ** 2) for fc, bw in FORMANTS)) / k
+    voice += np.where(fk < SR / 2, gain * np.sin(k * phase), 0.0)
+voice[:lead] = 0.0
+env = np.minimum(1.0, np.arange(len(voice)) / (0.02 * SR)) * np.minimum(1.0, (len(voice) - np.arange(len(voice))) / (0.05 * SR))
+voice = 0.5 * voice * env / np.max(np.abs(voice))
+voice = np.concatenate([voice, np.zeros(int(0.13 * SR))])
+
+with wave.open("take.wav", "wb") as w:
+    w.setnchannels(1)
+    w.setsampwidth(2)
+    w.setframerate(SR)
+    w.writeframes((voice * 32767).astype("<i2").tobytes())
+```
+:::
+
 ## 全体のスクリプト
 
 ```bash
@@ -42,7 +96,8 @@ sonare pitch-correct-timevarying take.wav --mode scale --scale-root 0 \
   -o take-scale.wav --json
 sonare vocal-notes take-scale.wav
 
-# 3. 代わりに音符単位で直し、ビブラートを残す（スクリプトは後述）。
+# 3. 代わりに音符単位で直し、ビブラートを残す。先にステップ 3 の
+#    スクリプトを tune.py として保存しておく。
 python tune.py take.wav take-tuned.wav
 sonare vocal-notes take-tuned.wav --segmentation-threshold-cents 40
 ```
@@ -141,19 +196,17 @@ sonare pitch-correct-timevarying take.wav --mode scale --scale-root 0 \
 
 ## ステップ 3 — 音符単位で直す
 
-ボーカル編集セッションは、音符を 1 つの単位として補正します。`center` を目標にすると、測った音符の中心音程から目標までの差の分だけ音符全体を動かし、音符の中のゆらぎやビブラートは歌ったまま残します。次のスクリプトは、ステップ 1 と同じ 40 セントのしきい値で音符を見つけ、それぞれを最も近い半音へ直します。
+ボーカル編集セッションは、音符を 1 つの単位として補正します。`center` を目標にすると、測った音符の中心音程から目標までの差の分だけ音符全体を動かし、音符の中のゆらぎやビブラートは歌ったまま残します。次のスクリプトは、ステップ 1 と同じ 40 セントのしきい値で音符を見つけ、それぞれを最も近い半音へ直します。`tune.py` として保存してください。
 
 ```python
 """歌った各音を丸ごと最も近い半音へ寄せる。ビブラートは残す。"""
-import sys, wave
-import numpy as np
+import sys
+import wave
 from dataclasses import replace
-from libsonare import VocalCreateOptions, VocalSetNoteEdit, VocalTargetMode, create_vocal_edit_session
 
-def load(path):
-    with wave.open(path, "rb") as w:
-        pcm = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2")
-        return (pcm / 32768.0).astype(np.float32), w.getframerate()
+import numpy as np
+from libsonare import Audio, VocalCreateOptions, VocalSetNoteEdit, VocalTargetMode, create_vocal_edit_session
+
 
 def save(path, samples, sr):
     pcm = (np.clip(samples, -1.0, 1.0) * 32767).astype("<i2")
@@ -161,7 +214,10 @@ def save(path, samples, sr):
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
         w.writeframes(pcm.tobytes())
 
-samples, sr = load(sys.argv[1])
+
+# Audio.from_file は WAV と MP3 をデコードし、ステレオはモノラルにまとめる
+with Audio.from_file(sys.argv[1]) as audio:
+    samples, sr = audio.data, audio.sample_rate
 options = VocalCreateOptions(segmentation_threshold_cents=40.0)
 with create_vocal_edit_session(samples, sr, options=options) as session:
     notes, _ = session.notes()

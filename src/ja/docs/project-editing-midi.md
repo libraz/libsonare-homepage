@@ -62,14 +62,18 @@ Python では `annotate_keys` が `(start_ppq, end_ppq, tonic_pc, mode)` タプ�
 `chordSymbolFromAnalysis(chord)`（Python は `chord_symbol_from_analysis`、C は `sonare_chord_symbol_from_analysis`）は、解析結果のコードを `{ rootPc, quality, extensions, slashBassPc }`（Python は snake_case キー）へ変換します。ライブラリが和声タイムラインを組み立てるときに使うのと同じ変換です。ルートは渡された値のまま保たれ、ベースがルートと同じなら `slashBassPc` は `255` です。`keyModeFromAnalysis(mode)`（`key_mode_from_analysis`、`sonare_key_mode_from_analysis`）は、解析側のモード名または序数からアレンジ側の `mode`（1〜7）を返します。時刻は変換されないので、結果は `startPpq` / `endPpq` と合わせて配置してください。認識できない値はフィールド名を挙げた `RangeError`（Python は `SonareValueError`）、オブジェクトでないコードは `TypeError` になります。
 
 ```typescript
-const { chords } = detectChords(samples, sampleRate);
+const bpm = 120;                                  // プロジェクトの一定テンポ
+const toPpq = (seconds: number) => (seconds * bpm) / 60;
+const { chords } = detectChords(samples, sampleRate); // start / end は秒
 project.annotateChords(
-  chords.map((c) => ({ startPpq: 0, endPpq: 4, ...chordSymbolFromAnalysis(c) })),
+  chords.map((c) => ({ startPpq: toPpq(c.start), endPpq: toPpq(c.end), ...chordSymbolFromAnalysis(c) })),
 );
 project.annotateKeys([
   { startPpq: 0, endPpq: 16, tonicPc: key.root, mode: keyModeFromAnalysis(key.mode) },
 ]);
 ```
+
+ここでの `toPpq` は、テンポが 1 つで一定であることを前提にしています。複数のセグメントやランプを含むテンポマップでは、[秒・サンプル・PPQ の換算](./glossary/arrangement/clips-and-tracks.md#秒・サンプル・ppq-の換算)の式で各時刻を換算してください。
 
 注釈になる前に解析器が何を返すかは、[コード認識](./glossary/analysis/chord-recognition.md)と[キー検出](./glossary/analysis/key-detection.md)を参照してください。
 

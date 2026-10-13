@@ -175,7 +175,7 @@ librosa は低レベル DSP の充実が強みで、上位の音楽解析は別�
 
 | libsonare | 説明 |
 |-----------|-------------|
-| `KeyAnalyzer` | 音楽キー検出（Krumhansl-Schmuckler プロファイル） |
+| `KeyAnalyzer` | 音楽キー検出（Krumhansl-Kessler、Temperley、Sha'ath、Faraldo、Bellman-Budge のプロファイルとの Krumhansl-Schmuckler 相関） |
 | `ChordAnalyzer` | コード認識（フルテンプレートセット有効時は 12 ルート × 24 クオリティ。`analyze()` 内での既定がトライアドのみである点は [認識できるコードの種類は？](/ja/docs/faq#認識できるコードの種類は) を参照） |
 | `SectionAnalyzer` | 楽曲構造解析（イントロ／Aメロ／サビなど） |
 | `TimbreAnalyzer` | 音色特性（ブライトネス、温かみ、密度ほか） |

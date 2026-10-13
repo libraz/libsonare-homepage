@@ -44,7 +44,7 @@ sonare db-to-amplitude --values 0,-20 --json   # [1, 0.100000001]
 
 | コマンド | 結果 | オプション |
 |----------|------|-----------|
-| `sonare frame-signal --values ... --frame-length 4 --hop-length 2` | 列を重なりのあるフレームに切り、行ごとに平坦化する。フレーム `i` は `[i * L, (i + 1) * L)` の要素 | `--frame-length`（`--n-fft` の値。2048）, `--hop-length`（512） |
+| `sonare frame-signal --values ... --frame-length 4 --hop-length 2` | 列を重なりのあるフレームに切り、行ごとに平坦化する。フレーム `i` は入力の `[i * hop, i * hop + L)` の要素を写したもので、出力の `[i * L, (i + 1) * L)` の位置を占める | `--frame-length`（`--n-fft` の値。2048）, `--hop-length`（512） |
 | `sonare pad-center --values 1,2,3 --size 7` | 列を `size` 要素の中央に置き、左側に `(size - n) / 2` 個のパディングを入れる | `--size`（**必須**。列の長さ以上）, `--pad-value`（0.0） |
 | `sonare fix-length --values 1,2,3 --size 5` | ちょうど `size` 要素にする。右側を切り詰めるか、右側にパディングする | `--size`（**必須**）, `--pad-value`（0.0） |
 | `sonare fix-frames --values 0,3,3,7 --x-max 6` | 整数のフレーム番号列から `[x-min, x-max]` の外にある要素を落とし、境界値を挿入し、重複を除く | `--x-min`（0）, `--x-max`（-1。上限なし）, `--no-pad`（境界値を挿入しない） |

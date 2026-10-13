@@ -57,7 +57,7 @@ Each filled block is a **comp segment**: a start time, an end time, and the id o
 Comping is a non-destructive edit: the takes themselves are untouched. You are only describing *which* take to play *when*, so you can re-comp freely until it feels right.
 
 ::: warning Comping is not crossfading by hand
-A comp describes which take owns each time segment; it is a higher-level structure than dragging audio regions and crossfading them yourself. Boundaries between comp segments are where you would normally want short fades — keep that in mind when a switch between takes is audible.
+A comp describes which take owns each time segment; it is a higher-level structure than dragging audio regions and crossfading them yourself. Boundaries between comp segments are where a switch between takes can click, so a segment can carry a short equal-power crossfade into it (`crossfadePpq`; see [Softening the seam](../../recording-and-takes.md#softening-the-seam)).
 :::
 
 ::: details How libsonare implements this

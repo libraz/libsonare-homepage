@@ -7,6 +7,8 @@ description: The named mastering API of libsonare — presets, solo processors, 
 
 This page is the **registry** for the named mastering API in libsonare. It answers *"what can I call?"*, not *"how does it work internally?"*
 
+If *dBFS*, *headroom*, or *mastering chain* are unfamiliar, read [Audio Basics](./glossary/concepts/audio-basics.md) and [What Is Mastering?](./glossary/concepts/what-is-mastering.md) first — this page assumes that vocabulary and focuses on the processor names.
+
 The authoritative runtime source is the name-list API: `masteringProcessorNames()`, `masteringPairProcessorNames()`, `masteringPairAnalysisNames()`, `masteringStereoAnalysisNames()`, and `masteringPresetNames()`. This page mirrors those lists.
 
 ::: tip New to mastering? Don't start here
@@ -57,7 +59,7 @@ The last five names are restoration presets. They enable repair stages only, wit
 | `tapeHiss` | A tape transfer whose whole defect is broadband hiss; machine hum is not universal enough across tape sources to turn `dehum` on by default | `denoise` |
 | `fieldRecording` | Location audio: a mic floor, mains hum from whatever circuit the gear ran off, and the space it was captured in | `denoise`, `dehum` with `adaptive` on so it follows a grid frequency that drifts within tolerance rather than sitting on the configured 50 Hz, `dereverb` |
 | `voiceMemo` | Phone or laptop capture: clipped against its own AGC, a high mic floor, recorded in whatever room the speaker was in | `declip`, `denoise`, `dereverb` |
-| `shellac78` | A 78 rpm shellac transfer, whose coarser groove wears into wider pops and denser surface noise than an LP, over a higher noise floor | `declick` with `maxClickSamples` raised to 16 so a 78-length click still reaches the LPC reconstruction instead of the interpolation fallback; `decrackle` with `threshold` lowered to 0.25 so more of the surface counts as crackle; `denoise` with `reductionDb` deepened to 32 |
+| `shellac78` | A 78 rpm shellac transfer, whose coarser groove wears into wider pops and denser surface noise than an LP, over a higher noise floor | `declick` with `maxClickSamples` raised to 16, because a run longer than that cap is counted as `rejected` and left unrepaired, and the wider 78 rpm clicks would otherwise be skipped; `decrackle` with `threshold` lowered to 0.25 so more of the surface counts as crackle; `denoise` with `reductionDb` deepened to 32 |
 
 Hear what one repair stage does on the kind of material these presets exist for. The clip is a piano turnaround carrying mains hum, surface noise, and sparse clicks; the stage applied is the classical dereverberator. It can change the tail and timbre, but this demo does not run the declick or dehum stages:
 
@@ -92,7 +94,7 @@ A normal compressor turns the loud parts down.
 Use it when you want density and "glue" without flattening transients. It is also called New York compression. `dynamics.transientShaper` is the related tool for the opposite goal: exaggerating or softening the attack of each hit.
 :::
 
-Drag the threshold and ratio to watch the transfer curve bend and hear a `dynamics.compressor` work on a live signal:
+Drag the threshold and ratio to watch the transfer curve bend and hear a `dynamics.compressor` work on a live signal ([Dynamics Controls](./glossary/mastering/dynamics.md) explains threshold, ratio, attack, release and knee with a worked table):
 
 <SonareDemo id="compressor-curve" />
 
@@ -116,7 +118,7 @@ Most full chains use only a small subset: repair if needed, one tone stage, one 
 ::: info Loudness, oversampling, and metering details
 A few capabilities sit underneath the maximizer/final and analysis APIs:
 
-- Integrated LUFS measurement supports surround layouts up to 8 channels, applying the [BS.1770](./algorithm-references.md) channel weights. BS.1770-4 itself normatively defines layouts only up to 5.1 (6 channels); the 7.1/8-channel weighting (treating the side-surround pair like the rear surrounds, +1.5 dB) is a non-normative extrapolation, not part of the standard.
+- Integrated LUFS measurement supports surround layouts up to 8 channels, applying the [BS.1770](./algorithm-references.md) channel weights: unity for the front channels, +1.5 dB (a power weight of 1.41) for the surrounds, and the LFE channel left out. For layouts beyond 5.1, BS.1770-4 assigns weights by loudspeaker position: +1.5 dB for a channel between 60° and 120° azimuth at low elevation, unity elsewhere, so in 7.1 the side pair at ±90° takes +1.5 dB and the back pair at ±135° to ±150° takes unity. libsonare's 8-channel layout instead gives all four surround channels (side and back) +1.5 dB, so content concentrated in the back pair can measure up to 1.5 dB louder than the position rule gives. Quad (4 channels) likewise weights both surrounds +1.5 dB.
 - The internal oversampler and true-peak stages accept power-of-two oversampling factors from 1 to 16 (1, 2, 4, 8, 16; the live meter accepts the same factors), trading CPU for inter-sample-peak accuracy.
 - The loudness stage is not a gain trim followed by a separate limiter. It applies one static gain, then drives its own post-gain true-peak limiter to take back whatever that gain pushed over the ceiling. The gain is solved for the gated target by remeasuring the signal at the candidate gain, so it equals `target - current` only when the gain moves no blocks across the absolute gate. The same solve backs A/B loudness match, reference matching, LUFS normalize, and `maximizer.loudnessOptimize`, and every one of those paths shares the default below, so the chain, the standalone helper and the named processor normalize alike.
 - `loudness.maxLimiterGainReductionDb` (`maximizer.loudnessOptimize` reads the same key as `maxLimiterGainReductionDb`; finite and at least 0) bounds how far the stage drives that limiter: the static gain may exceed the peak headroom toward the ceiling by at most this much. It decides how peaky an input the stage will still try to normalize, not how loud a master can get, because the allowance never permits more gain than the solved target gain asks for and the ceiling is never exceeded.
@@ -126,9 +128,11 @@ A few capabilities sit underneath the maximizer/final and analysis APIs:
   | `12` (default) | The limiter may take back up to 12 dB of the gain that exceeds the peak headroom |
   | `0` | A strict headroom clamp; on peaky material the loudest targets fall short |
 
+  *Peak headroom* here is the distance from the input's true peak up to the ceiling ([Clipping and Headroom](./glossary/concepts/audio-basics.md#clipping-and-headroom)). Take a mix at −18 LUFS whose true peak already sits at −1 dBTP, normalized toward −14 LUFS under a −1 dBTP ceiling: the target asks for +4 dB, the headroom is 0 dB, so all 4 dB of that gain lands above the ceiling and the limiter has to take it back. That is within the default 12 dB allowance; with `0` the gain stops at 0 dB and the mix stays at −18 LUFS.
+
   A 6 s kick loop at -16.78 LUFS with a -14 LUFS target and -1 dBTP ceiling lands at -17.32 LUFS with `0` against -16.14 LUFS at the default. Whatever shortfall remains is the limiter's own gain reduction, which one non-iterating pass does not re-measure, and is reported through `loudnessTargetLimited`.
 - `maximizer.truePeakLimiter` enforces its ceiling sample by sample, never as a whole-block rescale, and every stage inside it carries its state across calls. Its output guard rechecks every earlier position a correction can raise, so a short burst cannot overshoot the true-peak ceiling, and lowering the ceiling live re-evaluates output already queued. `maximizer.truePeakLimiter` and `maximizer.adaptiveRelease` each report 129 samples of latency at their defaults.
-- The limiter's output does not depend on how the caller chunks the stream: the same material rendered in one block, in uniform blocks from 256 to 16384 samples, or in a ragged split that lands mid-transient comes out identical, so a streaming render and an offline render agree. What is left is a small inter-sample residue that is a property of measuring finer than the limiter runs, not of the block size: a meter at 8x oversampling reads about +0.02 dB above the ceiling set by the default 4x limiter, flat from 0 to +36 dB of drive. Meter at the limiter's own oversampling to see the ceiling held exactly, or raise its `oversampleFactor` to push the residue down.
+- The limiter's output does not depend on how the caller chunks the stream: the same material rendered in one block, in uniform blocks from 256 to 16384 samples, or in a ragged split that lands mid-transient comes out identical, so a streaming render and an offline render agree. What is left is a small inter-sample residue that is a property of measuring finer than the limiter runs, not of the block size: a meter at 8x or 16x oversampling reads the output of the default 4x limiter slightly above its ceiling. With a −1 dBTP ceiling at 48 kHz, a near-quarter-rate sine read −0.95 dBTP at 16x and broadband noise driven 24 dB into the limiter read −0.92 dBTP, so leave about 0.1 dB of margin when a finer meter checks the delivery. Meter at the limiter's own oversampling to see the ceiling held exactly, or raise its `oversampleFactor` to 8, which brought the same material to within 0.01 dB of the ceiling.
 - For UI metering, pass `maxPoints` to `meteringVectorscope(...)` and `meteringPhaseScope(...)`: they thin the point series down to at most `maxPoints` points, so a busy scope stays cheap to draw. (Without `maxPoints` they emit one point per input sample. The older `meteringVectorscopeDecimated(...)` / `meteringPhaseScopeDecimated(...)` aliases are deprecated and just delegate.) `meteringSpectrumFrame(...)` reads a single, non-time-averaged spectrum frame for spectrum-analyzer snapshots.
 - Every `multiband.*` solo processor (`compressor`, `dynamicEq`, `expander`, `imager`, `limiter`, and `saturation`) shares the same crossover mechanism and accepts a custom number of crossover cutoffs, so you can split into the band count your material needs instead of a fixed three. The solo and insert entry points expose up to 8 `cutoffNHz` slots (`cutoff0Hz` … `cutoff7Hz`), so a single `multiband.*` call addresses up to 9 bands; the mastering chain goes further, to 63 cutoffs and 64 bands (see [The chain-config JSON schema](#the-chain-config-json-schema)).
 :::
@@ -204,7 +208,7 @@ Most processors run through the single-array `masteringProcess()` (mono, or inte
 :::
 
 ::: details What is dither?
-When you reduce bit depth (e.g. 24-bit down to 16-bit for CD/streaming), rounding creates a faint distortion on quiet tails. Dither adds a tiny, carefully shaped noise that masks that distortion so fades sound smooth instead of grainy. Apply it once, last, at the final bit-depth reduction.
+When you reduce bit depth (e.g. 24-bit down to 16-bit for CD/streaming), rounding each sample to the nearest step leaves an error that follows the signal, which is heard as grainy distortion on quiet tails and fades. Dither adds a tiny random noise before the rounding, so the error no longer follows the signal: the distortion turns into a steady, very low hiss. `final.dither` uses TPDF (triangular) dither by default, the standard choice, which keeps both the average and the loudness of the error independent of the signal; RPDF (rectangular) and a noise-shaped option, which moves the hiss toward frequencies the ear is less sensitive to, are also available. Apply it once, last, at the final bit-depth reduction.
 :::
 
 ::: warning Repair is classical DSP, by design
@@ -227,14 +231,14 @@ Full-chain configs use shorter stage keys: `repair.denoise.*` and `repair.dereve
 Both naming styles point to the same classical denoise/dereverb implementations.
 :::
 
-::: details What is spectral subtraction (MMSE-STSA / LogMMSE)?
-These are classical denoising methods.
+::: details Classical denoise: spectral subtraction vs MMSE gain
+These are classical denoising methods. All of them work on short-time spectrum frames and need an estimate of the noise in each frequency bin first.
 
-1. The algorithm estimates a **noise profile** from quiet passages, such as steady hiss or hum.
-2. **Spectral subtraction** subtracts that estimated noise from each short-time spectrum frame.
-3. **MMSE-STSA** and **LogMMSE** are statistical versions that estimate how much of each frequency bin is signal versus noise before subtracting.
+1. **Noise estimation.** The `quantile` estimator (the offline default) averages the quietest 10% of frames into one fixed noise spectrum. `mcra`, `imcra` and `spp` instead track the noise frame by frame, so they follow a floor that changes and can run in a stream; `spp` is what the realtime insert and the repair recommendation use.
+2. **Spectral subtraction** subtracts that estimated noise power from each frame, with an over-subtraction factor and a floor.
+3. **MMSE-STSA** and **LogMMSE** (the default) subtract nothing. From the estimated signal-to-noise ratio of each bin they compute a gain between the floor and 1 and multiply the bin by it.
 
-This reduces the warbly "musical noise" that naive subtraction can leave. These methods do not separate instruments; they only attenuate noise.
+The SNR they use is smoothed from frame to frame (the decision-directed estimate, `ddAlpha`), which is what keeps them from leaving the warbly "musical noise" that plain subtraction tends to. None of these methods separate instruments; they only attenuate noise.
 :::
 
 ::: details `saturation.overdrive` and `saturation.distortion`

@@ -5,7 +5,7 @@ description: How to capture audio from the libsonare realtime engine, take brows
 
 # Recording, Takes & Comping
 
-**This page is about getting live sound into a project and turning many imperfect attempts into one good performance.** **Recording** is capturing live audio — a vocal, a guitar DI (plugged in directly, no amp mic), a synth performance — into a buffer you can keep, edit, and arrange. **Comping** (short for "compilation") is what you do afterwards: you record the same part several times as alternate **takes**, then assemble one keeper by stitching the best moments of each take together — like choosing the best line from each of several photos to build one perfect group shot.
+**This page is about getting live sound into a project and turning many imperfect attempts into one good performance.** **Recording** is capturing live audio — a vocal, a guitar DI (plugged in directly, no amp mic), a synth performance — into a buffer you can keep, edit, and arrange. **Comping** (short for "compositing") is what you do afterwards: you record the same part several times as alternate **takes**, then assemble one keeper by stitching the best moments of each take together — like choosing the best line from each of several photos to build one perfect group shot.
 
 libsonare splits this into two cooperating pieces. The [realtime engine](./realtime-streaming.md) owns the live **capture path** — arming, the capture buffer, input monitoring, and punch in/out (re-record only a chosen region, leaving the rest of the take untouched). The [project model](./project-editing.md) owns the *result* — clips that carry **takes** and **comp segments** that the edit compiler renders into one continuous performance.
 
@@ -335,7 +335,7 @@ Each `ProjectClipTake` is `{ id, sourceId?, sourceOffsetPpq?, name? }`; each `Pr
 
 ### Softening the seam
 
-Two takes are two different signals, so a comp splice steps the waveform wherever they disagree. `crossfadePpq` fades a segment in over the part *before* it, so the switch completes exactly where the segment starts and the clip length does not move. The fade is equal-power, which keeps the level steady across a correlated seam.
+Two takes are two different signals, so a comp splice steps the waveform wherever they disagree. `crossfadePpq` fades a segment in over the part *before* it, so the switch completes exactly where the segment starts and the clip length does not move. The fade is equal-power: the squared gains of the two takes sum to one. That holds the level steady when the two signals are unrelated, which is the usual case for two separate takes. Across a seam between near-identical material (the same take, or a doubled part played very tightly) the level rises by up to about 3 dB at the middle of the fade instead; [Fade curves and crossfades](./glossary/arrangement/clips-and-tracks.md#fade-curves-and-crossfades) explains why.
 
 ```typescript
 project.setClipCompSegments(clipId, [

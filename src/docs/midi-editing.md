@@ -33,6 +33,17 @@ A MIDI clip is a symbolic event list on a project timeline. This page covers the
 
 A MIDI clip holds a flat event list. Build events with the `Project.midi*` static packers (which produce the canonical MIDI 1.0 words) and replace the clip's list with `setMidiEvents`.
 
+::: info Numbers start at 0
+Every packer takes `(ppq, group, channel, …)`, and the numbers are the raw values on the wire, counted from `0`:
+
+| Argument | Range | What a MIDI device or GM chart calls it |
+|----------|-------|-----------------------------------------|
+| `group` | `0`–`15` | The UMP group, a bank of 16 channels in MIDI 2.0 packets. Use `0` unless you route several groups |
+| `channel` | `0`–`15` | MIDI channels 1–16; channel `9` is the GM drum channel 10 |
+| `program` | `0`–`127` | Programs 1–128; `4` is GM program 5, Electric Piano 1 |
+| `note` | `0`–`127` | `60` is middle C (C4) |
+:::
+
 ::: warning `setMidiEvents` discards the clip's SysEx
 A clip's SysEx payloads (a GS Reset, a Roland DT1 setup block) live beside its event list, reached through a handle that `ProjectMidiEvent` does not carry. `importSmf()` keeps them, `exportSmf()` writes them back byte for byte, `toJson()` carries them, and an offline bounce realizes them: a GS insertion-effect type-select embedded in an imported SMF changes the rendered audio. `setMidiEvents()` replaces the list and leaves nothing referring to the payloads, so one call drops every frame, and there is no read-back entry point to save them through first. A caller that must preserve a GS setup block edits the exported file rather than the clip's event list.
 :::
@@ -210,6 +221,8 @@ The config is a JSON object whose **stages are keyed by their parameters**: incl
 | Humanize | `humanize_ppq` (>=0), `humanize_velocity` (0–127), `seed` (non-negative integer); deterministic timing/velocity jitter |
 | Chord | `chord_intervals` (array of semitone offsets, 1-8 entries) |
 | Arpeggiator | `arpeggiator_intervals` (array of semitone offsets, 1-16 entries), `arpeggiator_step_ppq` (>0), `arpeggiator_gate_ppq` (defaults to the step length, capped to it) |
+
+Quantize moves events toward a grid of `quantize_ppq` quarter notes (`0.25` is a sixteenth-note grid), counted from the clip's own start. Each note-on moves toward its nearest grid line by `quantize_strength` times the distance (`1` lands on the line, `0.5` goes halfway), and its note-off moves by the same amount, so note lengths are kept. Other events, such as controllers, snap to the grid on their own. With a sixteenth grid at full strength, a note from `0.3` to `0.9` becomes `0.25` to `0.85`.
 
 `chord_intervals` is capped at 8 entries and `arpeggiator_intervals` at 16; an empty array, or one past either limit, makes `bakeMidiFx` throw an `InvalidParameter` error (`SonareError` in JS) rather than silently truncating.
 

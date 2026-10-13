@@ -7,7 +7,9 @@ description: Task guide to libsonare music information retrieval — the one-cal
 
 **Music analysis** is the part of libsonare that listens to a recording and reports what is in it: how fast it is, where the beats fall, what key and chords it uses, how it is laid out in sections, and what the melody does.
 
-This page is the task layer. It tells you which call to make, what the result actually means, and where the fuller explanation lives. The [glossary](./glossary/analysis/beats-downbeats.md) explains the concepts; the [JavaScript Analysis API](./js-api-analysis.md) is the field-by-field reference. Use this page to decide.
+This page is the task layer. It tells you which call to make, what the result actually means, and where the fuller explanation lives. The [glossary](./glossary/analysis/spectrogram-stft.md), starting from the spectrogram every feature is computed from, explains the concepts; the [JavaScript Analysis API](./js-api-analysis.md) is the field-by-field reference. Use this page to decide.
+
+New to audio or MIR? Read [Audio Basics](./glossary/concepts/audio-basics.md) (samples, sample rate, decibels) and [MIR Overview](./glossary/concepts/mir-overview.md) (what each feature family measures) first.
 
 ::: tip Where analysis sits in the pipeline
 **Analysis** tells you *what* a recording is. **Editing** changes one track. **Mixing** balances several. **Mastering** finishes the stereo result. Analysis is also the stage the others read from — a mastering target chosen per genre, a grid drawn from detected beats, a stem pulled out before pitch tracking.
@@ -39,7 +41,7 @@ await init();
 const ctx = new AudioContext();
 const response = await fetch('track.mp3');
 const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
-const samples = buffer.getChannelData(0); // mono Float32Array
+const samples = buffer.getChannelData(0); // the left channel only, not a mono mix
 
 const result = analyze({ samples, sampleRate: buffer.sampleRate });
 
@@ -78,6 +80,8 @@ sonare analyze track.mp3 --meter-candidates 3,4,5,6
 ```
 
 :::
+
+`getChannelData(0)` hands over the first channel of a stereo file, which is enough for a quick look but misses anything panned to the right. To analyze the whole mix, average the channels sample by sample first (`(left[i] + right[i]) / 2`).
 
 The call is synchronous and the WASM build is single-threaded, so drive it from a Web Worker for anything longer than a short clip. `analyzeWithProgress(...)` takes the same request, reports `(progress, stage)`, and can cancel a long run. Its analysis options go under `options`; a `tuning` written at the top level is ignored without an error.
 
@@ -168,7 +172,7 @@ for (const [index, beat] of beats.entries()) {
 
 | Route | Returns | Use it when |
 |-------|---------|-------------|
-| `result.bpm` from `analyze(...)` | One number plus `bpmConfidence` and `bpmCandidates`, each candidate labeled `primary`, `half`, `double` or `other` | You already ran the full analysis. The candidate relations are how you catch a half-time or double-time read. |
+| `result.bpm` from `analyze(...)` | One number plus `bpmConfidence` and `bpmCandidates`, each candidate labeled `primary`, `half`, `double` or `other` | You already ran the full analysis. The candidate relations are how you catch a half-time or double-time read. `bpmConfidence` is the share of the periodicity votes behind the winning tempo family ([Tempo and BPM](./glossary/analysis/tempo-bpm.md#confidence-and-stability)). |
 | `detectBpm(...)` | One number | Tempo is all you want from the file. |
 | `analyzeBpm(...)` | `bpm`, `confidence`, ranked `candidates`, plus the `autocorrelation` and `tempogram` behind them | You want to show the evidence, or to search a restricted range: `bpmMin` 30, `bpmMax` 300, `startBpm` 120 and `maxCandidates` 5 by default. |
 | `analyzeRhythm(...)` | Its own `bpm`, refined from the local beat period, alongside groove, syncopation, regularity and `beatIntervals` | You want rhythmic character rather than just a number. Its default range is narrower — `bpmMin` 60, `bpmMax` 200. |
@@ -347,7 +351,7 @@ Each peak must reach `threshold` times the largest novelty within `referenceWind
 | `absoluteThreshold` | 0.005 | Floor on the raw novelty. With 0, only `threshold` gates, and a stationary input is segmented anyway. |
 | `referenceWindow` | 60 | One-sided span in seconds for the local reference. 0 turns the relative gate off; a value at least the track length gives a whole-track reference. |
 | `peakDistance` | 2 | Minimum spacing between peaks in seconds, strongest peak first. |
-| `kernelSize` · `nMfcc` · `nChroma` · `useMfcc` · `useChroma` | 64 · 13 · 12 · true · true | The checkerboard kernel and the feature mix. At least one of `useMfcc` and `useChroma` must stay on. |
+| `kernelSize` · `nMfcc` · `nChroma` · `useMfcc` · `useChroma` | 64 · 13 · 12 · true · true | The checkerboard kernel, in frames of `hopLength` (64 frames at hop 512 and 22050 Hz span about 1.5 s), and the feature mix. At least one of `useMfcc` and `useChroma` must stay on. |
 
 ### Melody and pitch
 
@@ -362,7 +366,7 @@ const voiced = melody.points.filter((point) => point.frequency > 0);
 
 Pitch tracking reads the waveform directly rather than the STFT, and it expects **monophonic** material — one note at a time. Run it on a solo vocal, a lead line, or a stem you separated first; on a full mix it tracks whatever dominates, frame by frame.
 
-`points[].frequency` is `0` at unvoiced frames, so filter before averaging. `usePyin: true` selects the Viterbi-smoothed tracker, which costs more and jumps octaves far less than plain per-frame YIN — the usual choice for anything a user will see. The defaults span `fmin` 65 Hz to `fmax` 2093 Hz with a voicing `threshold` of 0.1; narrowing the range to the instrument you actually have is the cheapest accuracy win available here.
+`points[].frequency` is `0` at unvoiced frames, so filter before averaging. `usePyin: true` selects the Viterbi-smoothed tracker, which costs more and jumps octaves far less than plain per-frame YIN — the usual choice for anything a user will see. The defaults span `fmin` 65 Hz to `fmax` 2093 Hz with a YIN `threshold` of 0.1 (how deep a dip in the difference function must be to count as a period; lower is stricter). Under pYIN the voiced/unvoiced decision comes from `voicedFlag`, not from this value; narrowing the range to the instrument you actually have is the cheapest accuracy win available here.
 
 ## Source separation
 

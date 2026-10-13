@@ -297,12 +297,12 @@ sonare analyze song.mp3 --json > analysis.json
 :::
 
 ```bash [Python CLI]
-# 2 半音上に移調
+# 2 半音上にピッチシフト
 sonare pitch-shift --semitones 2 input.wav -o output.wav
 
 # 練習用にスローダウン
 sonare time-stretch --rate 0.8 song.wav -o practice.wav
 
-# ドラムとメロディを分離
+# 倍音成分（持続音）と打撃成分（ドラムなど）に分離
 sonare hpss song.wav -o separated
 ```

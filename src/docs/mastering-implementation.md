@@ -83,7 +83,7 @@ Continuous controls go to the engine as parameter setters, so a knob keeps the p
 
 The loudness fit moves only the Drive gain in front of the limiter, so the level feeding the dynamics stages never changes. It renders at most three times, and it reports a result as limited when the limiter cannot reach the target at the chosen ceiling.
 
-The meter bridge shows peak, true peak (held since playback started), momentary, short-term and integrated loudness, peak-to-loudness ratio, the deepest gain reduction in the chain, correlation, a goniometer, and a spectrum for the lane being heard, plus the loudness range of the last export render. Every edit is one history entry, so undo and redo reach the engine like any other edit.
+The meter bridge shows peak, true peak (held since playback started), momentary, short-term and integrated loudness, peak-to-loudness ratio, the deepest gain reduction in the chain, correlation, a goniometer, and a spectrum for the lane being heard, plus the loudness range of the last export render. [Reading Mastering Meters](./glossary/mastering/meter-reading.md#loudness-and-peak-readings-in-detail) defines each of these readings. Every edit is one history entry, so undo and redo reach the engine like any other edit.
 
 ## Data Ownership
 
@@ -151,6 +151,6 @@ After the last input block, call `flushMono()` or `flushStereo()` until it retur
 The fraction reaches 1.0 as the last DSP stage returns. The trailing work (output measurement, spectrum, and the band deltas that go into the returned report) happens after that and reports nothing, so the call keeps running for a moment once the bar is full. Drive a progress bar from the callback, but hold the UI in its working state until the call itself resolves rather than until the fraction hits 1.0.
 :::
 
-Related: [Browser Local Processing](./glossary/concepts/browser-local-processing.md), [Mastering](./glossary/mastering.md), [JavaScript API](./js-api-mastering.md), [WASM](./wasm.md)
+Related: [Browser Local Processing](./glossary/concepts/browser-local-processing.md), [The Mastering Chain](./glossary/mastering.md), [JavaScript API](./js-api-mastering.md), [WASM](./wasm.md)
 
 For the complete named processor, preset, pair-analysis, and stereo-analysis lists, see [Mastering Processors](./mastering-processors.md). For assistant suggestions and profile construction, see [Mastering Assistant](./mastering-assistant.md).

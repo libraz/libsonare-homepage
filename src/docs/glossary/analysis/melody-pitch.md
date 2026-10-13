@@ -15,6 +15,8 @@ A pitched sound has a periodic waveform and often a series of spectral **partial
 
 For example, when a singer holds A4, the F0 is 440 Hz. The recording often contains energy near 880 Hz, 1320 Hz, and other multiples.
 
+<SonareDemo id="waveform-harmonics" />
+
 The pitch you *perceive* generally corresponds to F0. That is why pitch tracking is really **F0 estimation** over time. The task is to infer the waveform's periodicity rather than choose the lowest or loudest spectral peak.
 
 ::: tip The integer-multiple picture has two limits

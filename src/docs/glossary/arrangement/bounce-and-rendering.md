@@ -15,10 +15,10 @@ You have arranged your clips, comped your takes, and warped your loops to the gr
 
 Bouncing is **offline**: it does not have to run in real time. It can run faster than real time on a quick project, or slower than real time on a heavy one. The goal is correctness, not keeping up with the clock.
 
-Because it is offline, it is also **deterministic**: the same project plus the same options plus the same instrument always produce the same audio, sample for sample. There is no live timing jitter, no dropped buffers. This is exactly why you bounce a final master from the offline path rather than recording your speakers.
+Because it is offline, it is also **deterministic**: on the same build and runtime, the same project plus the same options plus the same instrument always produce the same audio, sample for sample. (A different runtime or platform can differ in the last bits of floating-point rounding.) There is no live timing jitter, no dropped buffers. This is exactly why you bounce a final master from the offline path rather than recording your speakers.
 
 ::: tip Bounce is not "record the output"
-A bounce reconstructs the arrangement from its edit model and renders it cleanly. You are not capturing a live performance of the project; you are computing it, which is why it is repeatable and artifact-free.
+A bounce reconstructs the arrangement from its edit model and renders it cleanly. You are not capturing a live performance of the project; you are computing it, which is why it is repeatable and free of dropouts. Any artifacts the edits themselves introduce (a large stretch, a hard splice) are rendered just as they sound in playback.
 :::
 
 ## The mix is rendered through the mixer scene

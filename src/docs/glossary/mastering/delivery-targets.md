@@ -29,9 +29,13 @@ Streaming platforms normalize playback loudness. Past a point, raising the targe
 
 ## True-Peak Ceiling
 
-The ceiling protects the rendered file from peaks that may appear during reconstruction or codec conversion. A common streaming-oriented starting point is around `-1 dBTP` — dBTP means decibels true peak, the peak level measured between samples rather than at the sample points themselves.
+The ceiling is the highest true peak the rendered file may reach. dBTP means decibels true peak: the peak of the waveform as it is reconstructed between the samples, which can sit above every stored sample value. A common streaming-oriented starting point is around `-1 dBTP`.
 
-Use a lower ceiling, such as `-2 dBTP`, when you want more codec safety. Use a tighter ceiling only when the delivery path is known and controlled.
+The limiter holds the file itself under the ceiling, but a platform's lossy encoder changes the waveform afterwards and can push its peaks back up. The gap between the ceiling and 0 dBTP is the headroom left for that, so a lower ceiling, such as `-2 dBTP`, gives more codec safety. Use a ceiling closer to 0 dBTP (such as `-0.3 dBTP`) only when the delivery path is known and does not re-encode.
+
+<SonareDemo id="inter-sample-peak" />
+
+A meter that oversamples more finely than the limiter can read slightly above the ceiling; see [the limiter residue note](../../mastering-processors.md#processor-families-in-plain-english) for measured margins.
 
 ## Signs to Back Off
 

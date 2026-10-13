@@ -24,7 +24,7 @@ C50, C80, and D50 are produced only by `analyzeImpulseResponse(...)`. Blind anal
 
 > C50 = 10·log₁₀( early energy (0–50 ms) / late energy (>50 ms) )
 
-Fifty milliseconds is the rough window over which the ear fuses early reflections with the direct sound into a single, louder, *clearer* event (the precedence or Haas effect). Energy arriving later is heard as separate reverberation that masks the next syllable.
+Fifty milliseconds is the rough window within which early reflections add to the direct sound and help a syllable be understood, rather than smearing it. Energy arriving later is heard as separate reverberation that masks the next syllable. This is related to the precedence (Haas) effect, but it is not the same thing: precedence is about the first-arriving sound deciding *where* a source seems to be, while the 50 ms boundary is about early energy supporting *intelligibility*.
 
 - **High C50** (positive, several dB) — consonants stay crisp; good for speech, dialogue, lectures.
 - **Low C50** (negative) — the tail overwhelms the direct sound; speech smears and intelligibility drops.
@@ -43,6 +43,8 @@ C80 is the standard "clarity index" for concert halls. Hall designers balance it
 | 0 to +4 dB | Clear but supported by the room |
 | −2 to 0 dB | Reverberant, blended |
 | < −2 dB | Washy, indistinct |
+
+<SonareDemo id="clarity-split" />
 
 ## D50 — definition
 

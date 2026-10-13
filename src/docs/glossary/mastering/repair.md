@@ -21,14 +21,14 @@ The engine runs the repair stages in one order, and only the enabled ones run:
 | 2 | `declick` | Isolated clicks and pops | Short impulsive runs that stand out from their neighbors |
 | 3 | `decrackle` | Dense surface crackle | Samples that depart from the local median |
 | 4 | `dehum` | A mains-frequency harmonic series | A prominent fundamental and its harmonics |
-| 5 | `denoise` | Steady broadband noise | A noise spectrum estimated from the quietest frames |
+| 5 | `denoise` | Steady broadband noise | A per-bin noise spectrum, from the quietest frames or tracked frame by frame |
 | 6 | `dereverb` | The late reverberant tail | A stationary tail behind the direct sound |
 
 The order is fixed because every stage's detector assumes the damage the earlier stages handle is already gone. The stages run widest-damage-first, so each one sees material the previous has already made well-formed:
 
 - **`declip` before `declick`.** A flat-topped region has no transient for a click detector to measure. The peaks have to be rebuilt before a click can be told apart from a clipped edge.
-- **Impulsive repair before broadband estimation.** `denoise` builds its noise spectrum from the quietest frames and then subtracts that estimate from every frame. A click or a crackle burst still sitting in those frames becomes part of the "noise" and is pulled out of frames where it never occurred. `declick` and `decrackle` go first so the estimate describes only the floor.
-- **`dehum` before `denoise`.** Hum is a narrow harmonic series, which a tracked notch removes precisely. Left in place it would only be smeared into the broadband floor estimate.
+- **Impulsive repair before broadband estimation.** `denoise` estimates a noise spectrum and turns every frame's bins down according to it. A click or a crackle burst still sitting in the frames the estimate reads becomes part of the "noise" and is pulled out of frames where it never occurred. `declick` and `decrackle` go first so the estimate describes only the floor.
+- **`dehum` before `denoise`.** Hum is a narrow harmonic series, which a tracked canceller (or, in `notch` mode, a set of notches) removes precisely. Left in place it would only be smeared into the broadband floor estimate.
 - **`dereverb` last.** A broadband floor reads as a stationary late tail and biases the reverb estimate toward it. With the floor already down, what remains behind the direct sound is the room.
 
 There is no reordering option because there is no order in which a later stage would see cleaner input.
@@ -90,7 +90,7 @@ Which stages a source needs, and which presets bundle them, is the subject of [C
 
 :::: details Implementation notes
 
-When repair is active, the demo sends denoise settings to libsonare WASM through the worker so spectral processing does not block the UI thread. The stage is an STFT denoiser: it estimates the noise spectrum from the quietest fraction of frames, derives a per-bin gain from the decision-directed a priori SNR, and clamps that gain at the floor `repair.denoise.reductionDb` sets. Higher Denoise Amount deepens that floor and allows stronger suppression after noise estimation.
+When repair is active, the demo sends denoise settings to libsonare WASM through the worker so spectral processing does not block the UI thread. The stage is an STFT denoiser: it estimates the noise spectrum (offline by default from the quietest 10% of frames, or with a recursive tracker such as `spp` that follows the floor frame by frame), derives a per-bin gain from the decision-directed a priori SNR, and clamps that gain at the floor `repair.denoise.reductionDb` sets. Higher Denoise Amount deepens that floor and allows stronger suppression after noise estimation.
 
 Input Gain is intentionally narrow in range because final loudness is handled by the LUFS optimizer. Large input moves would make compressor threshold decisions harder to interpret and could push unnecessary work into the limiter.
 

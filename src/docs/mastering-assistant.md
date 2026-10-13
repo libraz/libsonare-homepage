@@ -159,7 +159,7 @@ A read-only summary of the input: how loud it is, how its energy is spread acros
 Optional `params` accept either JS-style or Python-style names: `nFft`/`n_fft` (default `2048`), `hopLength`/`hop_length` (default `512`) — both are sample counts at 48 kHz, rescaled to the input's rate, and band levels are normalized so they agree across rates, `truePeakOversample`/`true_peak_oversample` (default `4`), and `detectDefects`/`detect_defects` (default `false`).
 
 ::: info Why oversample for true peak?
-Stored samples have fixed positions, but a band-limited reconstruction can peak *between* them. Here, a 4× interpolation filter estimates those inter-sample peaks. The reported `truePeakDb` approximates the reconstructed signal under that filter; it is not a measurement of a particular converter's analogue output. Higher factors can improve the estimate but cost more CPU.
+Stored samples have fixed positions, but a band-limited reconstruction can peak *between* them. Here, a 4× interpolation filter estimates those inter-sample peaks. The reported `truePeakDb` approximates the reconstructed signal under that filter; it is not a measurement of a particular converter's analog output. At 4x a peak can still fall between the interpolated points: BS.1770 notes that a 4x meter can under-read by a fraction of a decibel (up to about 0.7 dB in the worst case, for content close to the Nyquist frequency), which is one reason delivery ceilings sit below 0 dBTP. Higher factors tighten the estimate but cost more CPU.
 :::
 
 <SonareDemo id="inter-sample-peak" />
@@ -205,19 +205,29 @@ The example is the profile of a synthetic four-second loop (kick, hats, and a pa
 | `spectral` | `subRmsDb` … `airRmsDb` | Energy per band (sub → air) in dBFS, on the mean-square convention of the noise fields: a full-scale sine reads −3.01 dBFS in its band |
 | | `centroidHz` | Spectral "center of mass" — a brightness proxy |
 | | `flatness` | 0 = tonal, 1 = noise-like |
-| | `rolloffHz` | Frequency below which most energy sits |
+| | `rolloffHz` | Frequency below which 85% of the spectral magnitude sits (frame average) |
 | `dynamics` | `attackDensity` | Onsets per second whose percussive rise clears a fixed floor, so a steady tone reads 0 |
 | | `sustainRatio` | How sustained vs. transient the material is |
 | `defects` | object | Defect counters and measurements; `measured` is `false` unless `detectDefects` is enabled |
 
 ::: info Reading the spectral bands
-The `*RmsDb` fields go from low to high frequency: `sub` (deep bass) → `low`/`lowMid` (bass and warmth) → `mid` (body, vocals) → `highMid`/`high` (presence, clarity) → `air` (top-end sparkle).
+The `*RmsDb` fields go from low to high frequency:
+
+| Field | Range | Rough content |
+|---|---|---|
+| `subRmsDb` | 20–60 Hz | Deep bass, kick fundamental |
+| `lowRmsDb` | 60–250 Hz | Bass and low warmth |
+| `lowMidRmsDb` | 250–500 Hz | Body, boxiness |
+| `midRmsDb` | 500 Hz–2 kHz | Vocals, most instruments' core |
+| `highMidRmsDb` | 2–6 kHz | Presence, attack, harshness |
+| `highRmsDb` | 6–12 kHz | Clarity, sibilance, cymbals |
+| `airRmsDb` | 12 kHz to Nyquist | Top-end air |
 
 They are dBFS on the mean-square convention of the profile's noise fields, so a band can be read against the noise floor and the other bands on one scale: a full-scale 1 kHz sine reads −3.01 dBFS in its band (measured −3.03 in the `mid` band) and −49 dBFS or lower elsewhere. The loop above reads `lowRmsDb: -9.29`, the loudest band, because the kick and pad sit there. Because music has a natural downward spectral tilt, `air` reads far below `low` on essentially every normal master, so comparing the bands against each other would call almost any track dark. Judge dark versus bright by comparing a band against the *same* band on a reference track or on a previous render.
 :::
 
 ::: details What do loudness range, attack density, and sustain ratio mean?
-- **Loudness range (LRA, in LU)** — how much the perceived loudness swings across the track. A high value means it gets noticeably quieter and louder (a dynamic classical piece); a low value means it stays at roughly one level (a dense EDM master). "LU" (loudness units) is the same scale as LUFS, measured as a spread rather than an absolute.
+- **Loudness range (LRA, in LU)** — how much the perceived loudness swings across the track. A high value means it gets noticeably quieter and louder (a dynamic classical piece); a low value means it stays at roughly one level (a dense EDM master). "LU" (loudness units) is the same scale as LUFS, measured as a spread rather than an absolute. LRA is computed from 3 s short-term readings, so it describes programme-length material. A 3 s window averages away anything faster than a few seconds, and a clip of a few seconds yields only a handful of overlapping readings, so treat the LRA of a short clip as rough: the 0.02 LU of the 4 s loop above says its level never changes, not that the track has no dynamics.
 - **Attack density** — roughly how many sharp note/drum onsets happen per second. Only onset peaks above a fixed floor of percussive rise count, so a steady tone reads 0. High = busy and percussive, low = sparse or sustained. It measures against the event maximum with the loudest events set aside: one per 10 s of audio, up to two (under 10 s nothing is set aside).
 - **Sustain ratio** (0–1) — whether the material is dominated by long held tones (near 1) or short bursts and attacks (near 0). It is measured separately from attack density (from the RMS envelope, not the onsets) but usually moves in the opposite direction.
 - **Short-term LUFS std-dev** — how much the moment-to-moment loudness wobbles. A higher number means the level is restless; near zero means it sits very steadily.
@@ -243,7 +253,7 @@ Accepted keys are `preset`, `targetPlatform`/`target_platform`, `targetLufs`/`ta
 | `club` | −9 LUFS | −0.3 dBTP |
 | `cd` | −9 LUFS | −0.3 dBTP |
 
-`streaming`, `youtube`, `audiobook`, and `cinema` are accepted names but leave the preset's target and ceiling unchanged (the default `streaming` preset aims for −14 LUFS under −1 dBTP). `enableRepair` turns on the cleanup stages (declick, denoise, etc.) when the source has defects, using the same selection as [`masteringRepairAnalyze`](./audio-repair.md#measure-and-repair-in-one-call). The declip stage is proposed only when runs of samples sit pinned at one level and no channel holds audio louder than that level, since the shared threshold would otherwise rewrite unclipped audio; mono input is held to the same rule, and the `explanation` then reads `declip withheld`. `preferStreamingSafe` selects the streaming-safe denoise estimator when repair is enabled. `speechMonoAmount` (0–1) controls how much the speech preset collapses side energy below its 120 Hz mono-maker crossover.
+The `club` and `cd` rows are loud-master conventions, not published specifications: the CD format itself defines no loudness target. `streaming`, `youtube`, `audiobook`, and `cinema` are accepted names but leave the preset's target and ceiling unchanged (the default `streaming` preset aims for −14 LUFS under −1 dBTP). `enableRepair` turns on the cleanup stages (declick, denoise, etc.) when the source has defects, using the same selection as [`masteringRepairAnalyze`](./audio-repair.md#measure-and-repair-in-one-call). The declip stage is proposed only when runs of samples sit pinned at one level and no channel holds audio louder than that level, since the shared threshold would otherwise rewrite unclipped audio; mono input is held to the same rule, and the `explanation` then reads `declip withheld`. `preferStreamingSafe` selects the streaming-safe denoise estimator when repair is enabled. `speechMonoAmount` (0–1) controls how much the speech preset collapses side energy below its 120 Hz mono-maker crossover.
 :::
 
 Think of this helper as a preset generator with an explanation. It returns a full starting point that your app can render directly, but the intended workflow is still editable.
@@ -286,7 +296,7 @@ Think of this helper as a preset generator with an explanation. It returns a ful
 | `profile` | A flattened copy of the source profile, so a suggestion is self-contained. |
 
 ::: details The params object covers the whole default chain
-The example above is trimmed. The real `params` map contains **every** parameter in the selected preset's chain — repair stages, EQ, dynamics, saturation, stereo, the true-peak limiter, and loudness — each with its full parameter set and an `enabled` flag. The assistant starts from the named preset, applies the requested target and ceiling, adds the speech preset's low-frequency mono-maker stage for `speech`, and can enable measured repair stages when `enableRepair` is true. Treat the map as an overridable snapshot of the whole chain, not a sparse diff.
+The example above is trimmed. The real `params` map contains **every** parameter in the selected preset's chain — repair stages, EQ, dynamics, saturation, stereo, the true-peak limiter, and loudness — each with its full parameter set and an `enabled` flag. The assistant starts from the named preset, applies the requested target and ceiling, enables the de-esser and the low-frequency mono-maker stage for `speech`, and can enable measured repair stages when `enableRepair` is true. Treat the map as an overridable snapshot of the whole chain, not a sparse diff.
 :::
 
 ### Turning a suggestion into a master

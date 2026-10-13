@@ -12,6 +12,12 @@ Use [`transcribe`](./js-api-analysis.md#transcribe-request) when a recording nee
 | Inspect or post-process a transcription | `transcribe({ samples, sampleRate, tempoBpm? })` | One constant tempo for this call; `tempoBpm` is supplied or detected | `{ events, noteCount, tempoBpm, tuning }`; the project is unchanged |
 | Put notes into an existing arrangement | `project.transcribeToClip({ clipId, samples, sampleRate, ... })` | The project's tempo map | Replaces the target MIDI clip's event list and returns the written note count |
 
+::: info Terms on this page
+- **PPQ position**: a musical time, counted in quarter notes from the start (the project timeline's own unit), rather than in seconds. Turning seconds into PPQ needs a tempo, which is why each entry point names its clock.
+- **UMP group and channel**: the addressing of a MIDI 2.0 Universal MIDI Packet. Group and channel together say which of up to 256 MIDI channels a note goes to.
+- **F0**: the fundamental frequency of a pitched note, the frequency its pitch is heard at ([Melody and Pitch](./glossary/analysis/melody-pitch.md#fundamental-frequency-f0)). **Multi-F0** estimation looks for several F0s sounding at once.
+:::
+
 The output is `ProjectMidiEvent[]`, a symbolic event list. Transcription does not modify the input audio. Its events are already shaped for `setMidiEvents`; a note produces two events, ordered with a note-off before a note-on at the same PPQ position.
 
 <SonareDemo id="audio-to-notes" />
@@ -64,6 +70,13 @@ with sonare.Project() as project:
 ## Choose the analysis mode
 
 The default monophonic path follows one [pYIN](./glossary/analysis/melody-pitch.md#yin-and-pyin)-derived pitch line and segments it into notes. Set `polyphonic: true` to use the multi-F0 path for overlapping notes. Omit either `fmin` or `fmax` to use that path's default for the endpoint (`65..2093 Hz` for mono, `55..1760 Hz` for poly). Explicit endpoints must be positive and are honored by both paths; the JavaScript and Python bindings reject an explicit `0`. In polyphonic mode the resolved bounds apply to the salience estimator's F0 axis. An `fmin` below the cent spectrum's own floor lowers that floor too, so a low fundamental can be read; the spectrum's ceiling stays independent. A note found above `fmax` is dropped rather than reported an octave low.
+
+::: details How the polyphonic path finds notes
+1. **Salience.** Each STFT frame is redrawn on a *cent spectrum*, a log-frequency axis where every semitone is 100 cents wide. On that axis, for every candidate F0, the energy at its harmonics (F0, 2·F0, 3·F0, ...) is summed into one *salience* value: how strongly the frame supports a note at that pitch.
+2. **Voices per frame.** The strongest salience peak becomes a voice, its partials are subtracted, and the search looks again. It stops once the next peak falls under `minFramePeakRatio` of the frame's first peak, or at `maxPolyphony` voices.
+3. **Ridges.** The voices are followed from frame to frame as *ridges*, one per sustained pitch. A ridge ends when its salience falls under `minRidgePeakRatio` of its own running peak, and it is split in two where the salience climbs past `reattackRatio` times the level just before (a re-strike).
+4. **Notes.** Each ridge becomes a note, which then has to pass the length, level and range rules in [Which notes are dropped](#which-notes-are-dropped).
+:::
 
 `tempoBpm` is a coordinate system for the standalone function. Omit it to run tempo detection; if no usable tempo is found, the call uses 120 BPM. `Project.transcribeToClip` has no tempo option because it reads the project's map. Call `autoTempo` first when the project should follow the recording, then transcribe into the clip.
 

@@ -9,6 +9,8 @@ description: PlaybackRenderer turns decoded mono/stereo/5.1/7.1 movie audio into
 
 Use it after your own decoder has produced PCM: a WebCodecs pipeline, a `<video>` element's `MediaElementAudioSourceNode`, a decoded file read from disk. For the input/output channel conventions this page assumes, see [Channel Formats](./channel-formats.md).
 
+If *channel layout*, *dB*, or *latency* are unfamiliar, read [Audio Basics](./glossary/concepts/audio-basics.md) first — this page assumes that vocabulary and focuses on the renderer.
+
 ## Stage Pipeline
 
 Processing runs through twelve named stages. The first six depend only on the *source* channel bed and run once regardless of target. The remaining stages split into a speakers branch (2 stages) and a headphones branch (3 stages), which converge on a shared output limiter.
@@ -135,7 +137,7 @@ The renderer does not know about video. What it gives a host toward keeping audi
 
 A headphones target convolves each virtual speaker direction through a head-related transfer function, held in an `HrtfSet` handle built from **SHRF v1** data — a small, self-contained format (minimum-phase impulse responses plus inter-aural time delay, on a regular azimuth/elevation grid) rather than the HDF5-based SOFA format HRTF measurements are usually published in.
 
-Every surface but WASM can build the embedded default set — SADIE II subject D1 (a KU100 dummy-head measurement) reduced to 504 directions — with one call and no file. WASM ships no embedded HRTF data, to keep the module's download size down; fetch the package's own default asset and pass its bytes to `HrtfSet.fromBytes`:
+Every surface but WASM can build the embedded default set — subject D1 of the SADIE II database (a dummy-head measurement) reduced to 504 directions — with one call and no file. WASM ships no embedded HRTF data, to keep the module's download size down; fetch the package's own default asset and pass its bytes to `HrtfSet.fromBytes`:
 
 ```typescript
 const bytes = new Uint8Array(await (await fetch(hrtfUrl)).arrayBuffer());

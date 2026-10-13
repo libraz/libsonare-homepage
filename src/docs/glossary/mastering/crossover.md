@@ -11,22 +11,36 @@ Every multiband processor starts by cutting the signal into frequency bands, pro
 
 A **cutoff** is the frequency where one band hands over to the next. A filter cannot stop dead at a frequency, so each band fades out across the cutoff, and the **slope** says how fast: how many decibels the band loses per octave past it. A gentle slope lets the neighboring bands overlap widely, so a compressor on the low band still reacts to some of the mids. A steep slope keeps each band to its own range, at the cost of more filter sections.
 
-libsonare names its slopes by filter order. `lr2`, `lr4` and `lr8` are second, fourth and eighth order: 12, 24 and 48 dB per octave. Measured on the low band of `multiband.compressor` with a 120 Hz cutoff, the band one octave above the cutoff sits at −14.0, −24.6 and −48.2 dB, and two octaves above at −24.6, −48.2 and −96.3 dB.
+libsonare names its slopes by filter order. `lr2`, `lr4` and `lr8` are second, fourth and eighth order: 12, 24 and 48 dB per octave. The `lr` prefix only names the order; the same three values set the order of the Butterworth and Bessel modes too. Measured on the low band of `multiband.compressor` with a 120 Hz cutoff, the band one octave above the cutoff sits at −14.0, −24.6 and −48.2 dB, and two octaves above at −24.6, −48.2 and −96.3 dB.
 
 ## Four modes
 
-The **mode** picks the filter family. With the slope fixed, the families differ in where each band sits at the cutoff, and so in what the sum looks like. The figures below come from `multiband.compressor` at the default 120 Hz and 2 kHz cutoffs with every band's ratio at 1, so the processor changes nothing except through its crossover.
+The **mode** picks the filter family. With the slope fixed, the families differ in where each band sits at the cutoff, and so in what the sum looks like. The figures below come from `multiband.compressor` at the default 120 Hz and 2 kHz cutoffs and the default `lr4` slope, with every band's ratio at 1, so the processor changes nothing except through its crossover.
 
-| `mode` | Band level at the cutoff | Summed bands | Latency |
+| `mode` | Band level at the cutoff | Summed bands at `lr4` | Latency |
 |---|---|---|---|
 | `linkwitzRiley` (default) | −6.0 dB | Flat (0.00 dB), phase rotated | 0 |
 | `butterworth` | −3.0 dB | +3 dB bump at each cutoff | 0 |
 | `bessel` | −3.0 dB, gentler roll-off | −3.8 dB and −2.8 dB dips at the cutoffs | 0 |
 | `firLinearPhase` | −6.0 dB when the kernel is long enough | Exact (0 dB, 0°) after the delay | `(firKernelSize − 1) / 2` samples |
 
+Only Linkwitz-Riley and the FIR mode sum flat at every slope. The other two change shape with the slope:
+
+| Sum at the 120 Hz / 2 kHz cutoffs | `lr2` | `lr4` | `lr8` |
+|---|---|---|---|
+| `butterworth` | Notch: −24.5 / −49.0 dB | +3.0 / +3.0 dB | +2.9 / +3.0 dB |
+| `bessel` | Dip: −7.2 / −8.5 dB | −3.8 / −2.8 dB | +3.0 / +3.0 dB |
+
+At `lr2` the Butterworth bands are half a cycle apart in phase at the cutoff, so they cancel instead of adding. libsonare sums the bands with the same polarity at every slope; it does not invert one band to turn that notch into a bump.
+
+<CrossoverSumFigure
+  title="Summed bands around one cutoff"
+  caption="The low and high band added back together around a single cutoff, from each mode's two-band filter response. Linkwitz-Riley and the FIR mode sum flat, Butterworth at lr4 rises 3 dB, Bessel at lr4 dips about 3 dB, and Butterworth at lr2 cancels into a notch that runs off the bottom of the plot. In the measured three-band split above, that notch bottoms out at −24.5 and −49.0 dB, and the Bessel dip at the 120 Hz cutoff deepens to −3.8 dB."
+/>
+
 **Linkwitz-Riley** is the default because two bands each 6 dB down at the cutoff add back to unity. The sum is flat in level at every slope, but not in phase: it behaves as an all-pass filter, delaying different frequencies by different amounts. At the `lr4` default the summed signal is rotated −67° at 1 kHz and about 180° near each cutoff. On sustained material this is inaudible; on a sharp transient it slightly smears the attack.
 
-**Butterworth** gives each band its flattest possible passband, but two bands each 3 dB down add to +3 dB at every cutoff. **Bessel** keeps each band's own timing tidier, at the cost of the gentlest roll-off of the three (−13.4 dB one octave past the cutoff at `lr4`, where Linkwitz-Riley gives −24.6) and dips in the sum. Choose either when a band is going to be heavily processed anyway and the summed response is not the point.
+**Butterworth** gives each band its flattest possible passband, but at `lr4` and `lr8` two bands each 3 dB down add to +3 dB at every cutoff, and at `lr2` they cancel into a notch. **Bessel** keeps each band's own timing tidier, at the cost of the gentlest roll-off of the three (−13.4 dB one octave past the cutoff at `lr4`, where Linkwitz-Riley gives −24.6) and dips in the sum. Choose either when a band is going to be heavily processed anyway and the summed response is not the point.
 
 **Linear-phase FIR** replaces the recursive filters with a symmetric windowed-sinc kernel per cutoff. The upper band is the delayed input minus the lower one, so the bands sum back to the input exactly, with no phase rotation at any frequency. The `slope` key is ignored in this mode (`lr2` and `lr8` render identical output); `firKernelSize` sets the steepness instead.
 

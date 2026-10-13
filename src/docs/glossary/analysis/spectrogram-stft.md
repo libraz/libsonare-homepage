@@ -32,6 +32,21 @@ This is the **time–frequency resolution trade-off**: you cannot have perfect f
 
 Strictly, it is the *window* length that sets that trade-off, not the transform length. They are the same number by default, and always the same through the JS/WASM bindings. In C++ you can set `StftConfig::win_length` shorter than `n_fft`; from there, raising `n_fft` only zero-pads each frame, which adds bins that interpolate the same spectrum more finely without buying any real frequency resolution — and without costing any time resolution either.
 
+### From samples to seconds and hertz
+
+Both parameters are counted in samples, so what they mean in time and frequency depends on the [sample rate](../concepts/audio-basics.md) (`sr`, samples per second):
+
+| Quantity | Formula | `nFft` 2048, `hopLength` 512 at 22050 Hz | The same at 44100 Hz |
+|----------|---------|------------------------------------------|----------------------|
+| Window duration | `nFft / sr` | 92.9 ms | 46.4 ms |
+| Hop duration | `hopLength / sr` | 23.2 ms | 11.6 ms |
+| Frames per second | `sr / hopLength` | 43.1 | 86.1 |
+| Spacing between frequency bins | `sr / nFft` | 10.8 Hz | 21.5 Hz |
+| Number of frequency bins | `nFft / 2 + 1` | 1025 | 1025 |
+| Time of frame `t` (centered framing, the default) | `t × hopLength / sr` | frame 100 ≈ 2.32 s | frame 100 ≈ 1.16 s |
+
+The same sample counts give half the window duration and twice the bin spacing at 44100 Hz. That is why the music analyzers rescale `nFft` to the input rate (see the details box below): it keeps their window the same length in seconds.
+
 ## Windowing
 
 Each block is multiplied by a **window function** (such as a Hann window) that tapers its edges to zero before the FFT. Without it, the abrupt block boundaries leak energy across frequencies (*spectral leakage*) and smear the result. Windowing is why frames overlap — the tapered edges are filled in by neighboring frames.

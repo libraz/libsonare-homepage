@@ -20,7 +20,13 @@ By the end of this page you should be able to:
 
 ## The gate script
 
-This assumes the mastering step already ran and left both files behind: the master itself, and the `--report` it wrote alongside it. See [Mix and Master a Song in the CLI](./cli-mix-and-master.md) for that step. The script runs on either CLI; on the native one, call `sonare-cli` instead of `sonare`.
+::: info What you need
+- **Install:** `pip install libsonare` (Python 3.11 or later). The script's last check imports the Python package, so it is needed even if you call the native `sonare-cli` for the first two commands (replace `sonare` with `sonare-cli` there).
+- **`master.wav` and `report.json`:** the stereo master and the `--report` the mastering step wrote for it. [Mix and Master a Song in the CLI](./cli-mix-and-master.md) produces both; every number on this page comes from that page's script run exactly as written on the stems it writes.
+- **The script:** save the block below as `gate.sh` and make it executable with `chmod +x gate.sh`.
+:::
+
+This assumes the mastering step already ran and left both files behind: the master itself, and the `--report` it wrote alongside it. See [Mix and Master a Song in the CLI](./cli-mix-and-master.md) for that step.
 
 ```bash
 #!/usr/bin/env bash
@@ -33,10 +39,13 @@ WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 
 # Delivery contract for this target. Change these, not the checks below.
-export GATE_SAMPLE_RATE=48000
-export GATE_TARGET_LUFS=-14.0
-export GATE_LUFS_TOLERANCE=0.5
-export GATE_CEILING_DBTP=-1.0
+# Each one can also be set in the environment for a one-off run.
+export GATE_SAMPLE_RATE="${GATE_SAMPLE_RATE:-48000}"
+export GATE_TARGET_LUFS="${GATE_TARGET_LUFS:--14.0}"
+export GATE_LUFS_TOLERANCE="${GATE_LUFS_TOLERANCE:-0.5}"
+export GATE_CEILING_DBTP="${GATE_CEILING_DBTP:--1.0}"
+export GATE_MAX_CLICKS_PER_S="${GATE_MAX_CLICKS_PER_S:-0.2}"
+export GATE_MAX_CRACKLE_PER_S="${GATE_MAX_CRACKLE_PER_S:-1.0}"
 
 # 1. Format: the file that ships is the file you think it is.
 sonare info "$MASTER" --json 2>/dev/null > "$WORKDIR/info.json"
@@ -44,16 +53,20 @@ sonare info "$MASTER" --json 2>/dev/null > "$WORKDIR/info.json"
 # 2. Damage: --detect writes nothing, so it is free to run on every delivery.
 sonare repair "$MASTER" --detect --json 2>/dev/null > "$WORKDIR/defects.json"
 
-python3 - "$REPORT" "$WORKDIR/info.json" "$WORKDIR/defects.json" <<'PY'
+python3 - "$MASTER" "$REPORT" "$WORKDIR/info.json" "$WORKDIR/defects.json" <<'PY'
 import json
 import os
 import sys
 
-report_path, info_path, defects_path = sys.argv[1], sys.argv[2], sys.argv[3]
+from libsonare import Audio, mastering_streaming_preview_stereo
+
+master_path, report_path, info_path, defects_path = sys.argv[1:5]
 target_lufs = float(os.environ["GATE_TARGET_LUFS"])
 tolerance = float(os.environ["GATE_LUFS_TOLERANCE"])
 ceiling_dbtp = float(os.environ["GATE_CEILING_DBTP"])
 sample_rate = int(os.environ["GATE_SAMPLE_RATE"])
+max_clicks = float(os.environ["GATE_MAX_CLICKS_PER_S"])
+max_crackle = float(os.environ["GATE_MAX_CRACKLE_PER_S"])
 
 failures = []
 
@@ -72,14 +85,14 @@ if not defects.get("measured"):
 else:
     if defects["clip_sample_fraction"] > 0.0:
         failures.append(f"clipping: {defects['clip_sample_fraction'] * 100:.3f}% of samples")
-    if defects["click_per_second"] > 0.2:
+    if defects["click_per_second"] > max_clicks:
         failures.append(f"clicks: {defects['click_per_second']:.2f}/s")
-    if defects["crackle_per_second"] > 1.0:
+    if defects["crackle_per_second"] > max_crackle:
         failures.append(f"crackle: {defects['crackle_per_second']:.2f}/s")
     if defects["hum_peak_found"] and defects["hum_fundamental_prominence"] > 6.0:
         failures.append(
             f"mains hum at {defects['hum_fundamental_hz']:.0f} Hz, "
-            f"{defects['hum_fundamental_prominence']:.1f} dB prominence"
+            f"prominence {defects['hum_fundamental_prominence']:.1f}"
         )
 
 # Loudness and true peak come from the mastering report -- the stereo
@@ -93,6 +106,22 @@ if abs(lufs_gap) > tolerance:
     )
 if after["true_peak_dbtp"] > ceiling_dbtp:
     failures.append(f"true_peak_dbtp = {after['true_peak_dbtp']:.2f} (ceiling {ceiling_dbtp})")
+
+# The report must describe this file. Re-measure the shipped stereo pair; a
+# mismatch means report.json came from another render, or the file changed after it.
+if info["channels"] == 2:
+    pair = []
+    for i in range(2):
+        with Audio.from_file_channel(master_path, i) as audio:
+            pair.append(audio.data)
+    spec = [{"name": "spec", "targetLufs": target_lufs, "ceilingDb": ceiling_dbtp}]
+    shipped = json.loads(mastering_streaming_preview_stereo(*pair, sample_rate, spec))["platforms"][0]
+    if (abs(shipped["integratedLufs"] - after["integrated_lufs"]) > 0.1
+            or abs(shipped["truePeakDb"] - after["true_peak_dbtp"]) > 0.1):
+        failures.append(
+            f"report does not match the file: file measures {shipped['integratedLufs']:.2f} LUFS, "
+            f"{shipped['truePeakDb']:.2f} dBTP"
+        )
 
 if failures:
     print("DELIVERY GATE: FAIL")
@@ -117,10 +146,66 @@ Run it against the mastered take from the mixing walkthrough:
 
 ```text
 DELIVERY GATE: FAIL
-  - true_peak_dbtp = -0.95 (ceiling -1.0)
+  - clicks: 2.43/s
+  - crackle: 1.56/s
 ```
 
-That is a real failure, not a rounding artifact: `-0.95` is *louder* than `-1.0`, and the gate treats the sign correctly even where eyeballing the two numbers tempts you not to. The fix belongs in the mastering step, not in this script — rerun it with a stricter `--ceiling-db`, or, if the actual delivery target tolerates more headroom loss, pick the `-2 dBTP` codec-safety ceiling from [Delivery Targets](../glossary/mastering/delivery-targets.md) and update `GATE_CEILING_DBTP` to match. What the gate must not do is have its ceiling loosened until this specific file happens to pass.
+Loudness and true peak are not on that list; the damage check is. It is about the test material, not the master's level: the test drums are a kick and noise bursts with instant onsets, which the click detector counts (the drums stem alone measures 2.17 clicks per second, and so does the mixdown), and the crackle detector reads 1.56 per second on the master where it read 0.00 on the mixdown. The defaults of `0.2` and `1.0` are for program material (see below), so override them for this one run instead of editing the script:
+
+```bash
+GATE_MAX_CLICKS_PER_S=3 GATE_MAX_CRACKLE_PER_S=2 ./gate.sh master.wav report.json
+```
+
+```text
+DELIVERY GATE: PASS
+  48000 Hz, 2ch, 11.52s, -14.05 LUFS, -1.00 dBTP
+```
+
+The `-1.00` is not luck. The mastering report measures true peak on the limiter's own 4x (BS.1770) detector, and the limiter holds the master at the ceiling on that measure: this report reads `-1.0000004`, so the master sits on the `-1.0` ceiling rather than under it. A miss therefore never shows in the report itself; it shows when the number is compared with a ceiling below the one the master was made for, or when another meter reads the file. Run the same master against a ceiling of `-1.2`:
+
+```bash
+GATE_MAX_CLICKS_PER_S=3 GATE_MAX_CRACKLE_PER_S=2 GATE_CEILING_DBTP=-1.2 ./gate.sh master.wav report.json
+```
+
+```text
+DELIVERY GATE: FAIL
+  - true_peak_dbtp = -1.00 (ceiling -1.2)
+```
+
+`-1.00` is *louder* than `-1.2`, and the gate treats the sign correctly even where eyeballing the two numbers tempts you not to. The fix belongs in the mastering step, not in this script: rerun it with `--ceiling-db -1.2` and the same gate passes at `-1.20 dBTP` (`-14.06` LUFS).
+
+Why master under the spec at all, when the report is exact? Because the spec is met on the limiter's measure and the file is read by other meters. This table measures the same mix mastered at three ceilings, each read by the report, by a 16x meter on the shipped file, and by the 16x meter after a round trip through a lossy encoder (all in dBTP, worst channel):
+
+| Mastered with `--ceiling-db` | Report (4x) | File, 16x | AAC 256 kbit/s, 16x | MP3 320 kbit/s, 16x |
+| --- | --- | --- | --- | --- |
+| -1.0 (default) | -1.000 | -0.997 | -0.672 | -0.391 |
+| -1.2 | -1.200 | -1.197 | -0.785 | -0.655 |
+| -2.0 | -2.000 | -1.997 | -1.315 | -1.374 |
+
+Read it against a `-1.0` spec. A finer meter reads this file 0.003 dB higher, so a default-ceiling master that a 16x checker measures fails by `-0.997 > -1.0`; the `-1.2` master clears it with room. A lossy encode moves the peak much further, by about 0.3 dB (AAC) and 0.6 dB (MP3) on the default master, and `-1.2` is still not enough: both decodes land above `-1.0`. Only the `-2 dBTP` codec-safety ceiling from [Delivery Targets](../glossary/mastering/delivery-targets.md) keeps both decodes under it (`-1.315` and `-1.374`), so master to that when the file will be encoded after delivery, and set `GATE_CEILING_DBTP` to match. These are one program and ffmpeg's built-in AAC and LAME encoders; another encoder reads differently, so measure your own delivery path. The table's commands:
+
+```bash
+ffmpeg -i master.wav -c:a aac -b:a 256k master.m4a && ffmpeg -i master.m4a master-aac.wav
+ffmpeg -i master.wav -c:a libmp3lame -b:a 320k master.mp3 && ffmpeg -i master.mp3 master-mp3.wav
+```
+
+```python
+import libsonare as sonare
+from libsonare import Audio
+
+
+def true_peak_db(path, oversample):
+    peaks = []
+    for i in range(Audio.file_channel_count(path)):
+        with Audio.from_file_channel(path, i) as audio:
+            peaks.append(sonare.metering_true_peak_db(audio.data, audio.sample_rate, oversample))
+    return max(peaks)
+
+
+print(true_peak_db("master.wav", 16))  # -0.9967
+```
+
+What the gate must not do is have its ceiling loosened until this specific file happens to pass.
 
 <FlowDiagram
   title="Gate a delivery"
@@ -157,8 +242,8 @@ sonare info master.wav --json
 ```
 
 ```json
-{"path": "master.wav", "duration": 10.303104166666667, "sample_rate": 48000,
- "channels": 2, "samples": 494549, "peak_db": -1.205, "rms_db": -18.57}
+{"path": "master.wav", "duration": 11.5219375, "sample_rate": 48000,
+ "channels": 2, "samples": 553053, "peak_db": -1.071, "rms_db": -19.44}
 ```
 
 `channels` and `sample_rate` are the cheapest possible check: they catch a render that came off a broken pipeline stage before you spend any time on the numbers that actually describe the sound. `channels` is fixed at `2` because this whole page assumes a stereo delivery; `GATE_SAMPLE_RATE` is a variable because that part of the spec genuinely differs by project. `duration < 1.0` catches a truncated file — an empty or aborted render still exits 0 from most tools further up the pipeline, so this is often the only check that notices.
@@ -172,17 +257,29 @@ sonare repair master.wav --detect --json
 ```
 
 ```typescript [Node]
-import { masteringRepairAnalyze } from '@libraz/libsonare-native';
+import { readFileSync } from 'node:fs';
+import { decodeChannels, init, masteringRepairAnalyze } from '@libraz/libsonare';
 
-const { defects } = masteringRepairAnalyze({ channels: [left, right], sampleRate: 48000 });
+await init();
+// Every channel of the master, measured separately rather than folded.
+const { sampleRate, channels } = decodeChannels(new Uint8Array(readFileSync('master.wav')));
+const { defects } = masteringRepairAnalyze({ channels, sampleRate });
 if (!defects.measured) throw new Error('damage not measured');
 console.log(defects.clipSampleFraction, defects.clickPerSecond, defects.cracklePerSecond, defects.humFundamentalProminence);
 ```
 
 ```python [Python]
 import libsonare as sonare
+from libsonare import Audio
 
-defects = sonare.mastering_repair_analyze([left, right], 48000)["defects"]
+# Every channel of the master, measured separately rather than folded.
+channels = []
+for i in range(Audio.file_channel_count("master.wav")):
+    with Audio.from_file_channel("master.wav", i) as audio:
+        channels.append(audio.data)
+        sample_rate = audio.sample_rate
+
+defects = sonare.mastering_repair_analyze(channels, sample_rate)["defects"]
 if not defects["measured"]:
     raise SystemExit("damage not measured")
 print(defects["clipSampleFraction"], defects["clickPerSecond"], defects["cracklePerSecond"], defects["humFundamentalProminence"])
@@ -192,28 +289,35 @@ print(defects["clipSampleFraction"], defects["clickPerSecond"], defects["crackle
 
 ```json
 {"mode": "detect", "defects": {
+  "measured": true,
   "clip_sample_fraction": 0.0, "clip_run_count": 0,
-  "click_count": 1, "click_per_second": 0.097,
-  "crackle_per_second": 0.485, "noise_floor_dbfs": -94.97,
-  "hum_peak_found": true, "hum_fundamental_hz": 60.0,
-  "hum_fundamental_prominence": 2.19
+  "click_count": 28, "click_per_second": 2.43,
+  "crackle_per_second": 1.56, "noise_floor_dbfs": -120.0,
+  "hum_peak_found": true, "hum_fundamental_hz": 51.75,
+  "hum_fundamental_prominence": 3.45
 }}
 ```
 
-`--detect` only measures. It writes nothing, so it costs nothing to run on every commit. A file too short for the detectors returns `{"measured": false}` and no other field; the gate treats that as a failure, not as a clean result. The library calls return the same measurements under camelCase names (`clipSampleFraction`, `clickPerSecond`); `hum_peak_found` exists only in the CLI output and means a prominence above 1.0 dB. Set `clip_sample_fraction`'s threshold to `0.0`: a finished master should never clip, because the limiter's whole job was to prevent it. `click_per_second` and `crackle_per_second` need real headroom instead, because the detector reports a nonzero baseline on ordinary program material — this master's own clean take measured `0.097` and `0.485` per second respectively, so `0.2` and `1.0` catch a genuinely damaged file without failing on normal density.
+`--detect` only measures. It writes nothing, so it costs nothing to run on every commit. A file too short for the detectors returns `{"measured": false}` and no other field; the gate treats that as a failure, not as a clean result. The library calls return the same measurements under camelCase names (`clipSampleFraction`, `clickPerSecond`); `hum_peak_found` exists only in the CLI output and means a prominence above 1.0. Set `clip_sample_fraction`'s threshold to `0.0`: a finished master should never clip, because the limiter's whole job was to prevent it. `click_per_second` and `crackle_per_second` need real headroom instead, because the detectors report a nonzero baseline on material with sharp onsets. The defaults of `0.2` and `1.0` are starting points for ordinary program material, not measurements of a clean master: this page's synthetic drums measured `2.43` and `1.56` per second on a master with no damage in it, which is why the walkthrough above raises both for that one run. Calibrate them on a few known-good masters of your own genre, and keep them in the contract block so a change is visible in review.
 
-`hum_peak_found` is a boolean by itself, and mains hum below the noise floor is common and inaudible — the gate should not fail on its mere presence. `hum_fundamental_prominence` is what turns it into a real check: this master's incidental 60 Hz peak sits at `2.19` dB of prominence, while a genuinely damaged take in the same session measured `18.6` dB at 50 Hz. `6.0` dB sits between the two — high enough to ignore an inaudible peak, low enough to catch an audible one.
+`hum_peak_found` is a boolean by itself, and mains hum below the noise floor is common and inaudible — the gate should not fail on its mere presence. `hum_fundamental_prominence` is what turns it into a real check. It is a plain ratio, not decibels: the energy of the strongest hum candidate over the median of all the candidates tried, so `1.0` means no peak at all. This master's incidental peak, at 51.75 Hz, is the fundamental of the test kick rather than hum, and has a prominence of `3.45`, while the damaged take in [Clean Up a Batch of Recordings](./recording-cleanup.md) measured `18.6` at 50 Hz. `6.0` sits between the two, high enough to ignore an inaudible peak and low enough to catch an audible one. It is stricter than the repair assistant, which only runs dehum above `10` (see [Clean Up a Batch of Recordings](./recording-cleanup.md#step-2-—-let-the-assistant-choose)): a take cleaned to a prominence of 7.9 still fails this gate.
+
+::: warning `repair --detect` measures the mono fold of a stereo master
+The CLI folds `master.wav` to mono before the damage check, and says so on stderr. A click or clip in one channel only can shrink or cancel in that fold, so a clean CLI report does not prove clean channels. To check each channel, run the library call from the Node or Python tab above on both channels; `masteringRepairAnalyze` and `mastering_repair_analyze` measure every channel they are given.
+:::
 
 ### Loudness and true peak: the mastering report
 
 ```json
-{"before": {"integrated_lufs": -19.61, "true_peak_dbtp": -6.13},
- "after":  {"integrated_lufs": -14.11, "true_peak_dbtp": -0.95}}
+{"before": {"integrated_lufs": -20.49, "true_peak_dbtp": -2.10},
+ "after":  {"integrated_lufs": -14.05, "true_peak_dbtp": -1.00}}
 ```
 
-Both numbers come from `after` in the `--report` the mastering step wrote — the measurement the chain itself took on the full stereo pair. `GATE_LUFS_TOLERANCE` should match how tightly the platform enforces its target; `±0.5` LU is generous for a streaming target and tight for a broadcast one. `GATE_CEILING_DBTP` should be the ceiling the mastering step itself was told to hit — the assistant already treats that value as a hard constraint, so a report that exceeds it means something upstream did not respect its own setting, which is worth failing loudly on regardless of the platform.
+Both numbers come from `after` in the `--report` the mastering step wrote — the measurement the chain itself took on the full stereo pair. `GATE_LUFS_TOLERANCE` should match how tightly the delivery spec states its target. `±0.5` LU is the tolerance EBU R128 allows for file-based broadcast programmes (live programmes get ±1 LU). Streaming platforms publish no tolerance at all: they normalize playback, turning a louder master down, so for a streaming target the tolerance is your own consistency rule, and the ceiling matters more. `GATE_CEILING_DBTP` should be the ceiling the mastering step itself was told to hit — the assistant already treats that value as a hard constraint, so a report that exceeds it means something upstream did not respect its own setting, which is worth failing loudly on regardless of the platform.
 
-`sonare info` reported `peak_db: -1.205` on this same file — a sample peak that would have passed the `-1.0` ceiling the true peak fails. The gap between the two is what the demo below draws: every stored sample sits under the ceiling while the waveform a converter rebuilds between them rises above it, which is why the gate reads `true_peak_dbtp` from the report and not `peak_db` from `info`.
+The last check makes sure the report belongs to the file. A gate that only reads `report.json` passes a stale report from an earlier render, or a master that was resampled, dithered or trimmed after mastering. The script re-measures the shipped stereo pair with `mastering_streaming_preview_stereo` and fails when its loudness or true peak differs from the report by more than 0.1 dB; a fresh 16-bit render agrees with its own report far more closely than that.
+
+`sonare info` reported `peak_db: -1.071` on this same file (it downmixes to mono first and warns). The loudest stored sample of the right channel is `-1.048`, while that channel's true peak is `-1.000`: the waveform a converter rebuilds between the stored samples rises above every one of them, which is what the demo below draws. That is why the gate reads `true_peak_dbtp` from the report and not `peak_db` from `info`.
 
 <SonareDemo id="inter-sample-peak" />
 
@@ -225,8 +329,8 @@ Both commands downmix a stereo input to mono before measuring, and warn on stder
 ```bash
 sonare lufs master.wav --json
 # warning: 2-channel input is downmixed to mono by this CLI command
-# {"integrated_lufs": -17.57, ...}          <- the mono fold
-# report.json after.integrated_lufs = -14.11 <- the stereo master
+# {"integrated_lufs": -17.36, ...}          <- the mono fold
+# report.json after.integrated_lufs = -14.05 <- the stereo master
 ```
 
 The same fold distorts a Spotify-target preview:
@@ -237,13 +341,13 @@ sonare mastering-streaming master.wav --json
 
 ```json
 {"platforms": [
-  {"name": "Spotify", "integrated_lufs": -17.57, "normalization_gain_db": 3.57,
-   "true_peak_db": -1.21, "ceiling_risk": true},
+  {"name": "Spotify", "integrated_lufs": -17.36, "normalization_gain_db": 3.36,
+   "true_peak_db": -1.07, "ceiling_risk": true},
   /* Apple Music, YouTube -- same integrated_lufs, each platform's own gain and risk */
 ]}
 ```
 
-The sample numbers above are one program, not a correction factor. Applying that gain to the fold's own peak reading projects to `+2.37` dBTP — 3.37 dB past the `-1.0` dBTP ceiling, which reads as an alarming failure. Redo the same arithmetic with the report's real stereo numbers (`-14.11` LUFS, `-0.95` dBTP) and the required gain drops to about `+0.1` dB, putting the projected peak at `-0.84` dBTP — still over the ceiling, but by `0.16` dB instead of `3.37`. The fold does not invent the risk here; it exaggerates a small, real overage into one that looks twenty times worse than it is. On a mono deliverable there is no fold to correct for, and `lufs` / `mastering-streaming` read the file directly — see `take-clean.wav` below.
+The sample numbers above are one program, not a correction factor. Applying that gain to the fold's own peak reading projects to `+2.29` dBTP (-1.07 + 3.36) — 3.29 dB past the `-1.0` dBTP ceiling, which reads as an alarming failure. Redo the same arithmetic with the report's real stereo numbers (`-14.05` LUFS, `-1.00` dBTP) and the required gain drops to about `+0.05` dB, putting the projected peak at `-0.95` dBTP — still over the ceiling, but by `0.05` dB instead of `3.29`. The fold does not invent the risk here; it exaggerates a small, real overage into one that looks about seventy times worse than it is. On a mono deliverable there is no fold to correct for, and `lufs` / `mastering-streaming` read the file directly — see `take-clean.wav` below.
 
 ```bash
 sonare lufs take-clean.wav --json
@@ -272,8 +376,8 @@ sonare mastering-streaming master.wav --platforms-file platforms.json --json
 
 ```json
 {"platforms": [
-  {"name": "Spotify", "integrated_lufs": -17.57, "normalization_gain_db": 3.57, "true_peak_db": -1.21, "ceiling_risk": true},
-  {"name": "Apple Music", "integrated_lufs": -17.57, "normalization_gain_db": 1.57, "true_peak_db": -1.21, "ceiling_risk": true}
+  {"name": "Spotify", "integrated_lufs": -17.36, "normalization_gain_db": 3.36, "true_peak_db": -1.07, "ceiling_risk": true},
+  {"name": "Apple Music", "integrated_lufs": -17.36, "normalization_gain_db": 1.36, "true_peak_db": -1.07, "ceiling_risk": true}
 ]}
 ```
 
@@ -304,9 +408,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - run: pip install libsonare
       - run: ./gate.sh master.wav report.json
 ```
+
+The job checks out the repository, so `gate.sh`, `master.wav` and `report.json` must be committed to it, `gate.sh` with its executable bit (`chmod +x gate.sh` before `git add`). `actions/setup-python` gives the job a Python that `pip install` can write to; the runner's system Python may refuse a global install.
 
 Every command the script calls takes `--json`, and every failure exits with a [documented code](../cli.md#exit-codes) rather than a bare `1` — `set -euo pipefail` at the top is what turns that into "the job fails at the stage that actually broke." `SONARE_LEGACY_EXIT=1` is there if a caller further up your pipeline still hardcodes the old all-failures-are-`1` contract; the gate script above does not need it, since it checks its own thresholds rather than branching on a specific exit code.
 

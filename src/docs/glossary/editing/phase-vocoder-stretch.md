@@ -55,12 +55,14 @@ Both operations invent or discard information.
 | Shift a voice up a fifth | Formants move too unless corrected |
 | Make a large transient edit | Attacks can soften or smear |
 
-Small moves stay transparent because the assumptions still hold. Large moves expose the assumptions as smearing, transient softening — a transient being the sharp attack at the start of a note or a drum hit — or a "chipmunk" timbre.
+Small moves stay transparent because the assumptions still hold. Large moves expose the assumptions as smearing, transient softening (a transient is the sharp attack at the start of a note or a drum hit), or a "chipmunk" timbre.
+
+Attacks soften for a specific reason. Each analysis frame is one window long (2048 samples, about 43 ms at 48 kHz, by default), so an attack inside it is spread across the whole frame, and re-propagating each bin's phase on its own breaks the alignment between bins that made the attack sharp. A longer window resolves frequency more finely but smears time more; a shorter one does the opposite.
 
 Practical rule: keep edits conservative for natural results, and treat big moves as deliberate creative effects.
 
 ::: details How libsonare implements stretching
-libsonare's default `NativeSpectral` backend uses a *peak-locked* phase vocoder (`phase_vocoder_phaselocked`), with resampling for pitch changes. Peak locking keeps bins near a spectral peak phase-consistent and can reduce phasey artifacts. A plain `phase_vocoder` is also available through the C++ backend choice; the JavaScript and Python entry points use the native spectral path. For an upward pitch ratio `R`, pitch shift first stretches at rate `1/R`, then resamples at the effective rate `sampleRate × R`. `noteStretch` and the pitch path of `voiceChange` also use spectral editing. These functions operate on decoded mono samples.
+libsonare's default `NativeSpectral` backend uses a *peak-locked* phase vocoder (`phase_vocoder_phaselocked`, identity phase locking in the sense of Laroche and Dolson, 1999), with resampling for pitch changes. Peak locking keeps bins near a spectral peak phase-consistent and can reduce phasey artifacts. A plain `phase_vocoder` is also available through the C++ backend choice; the JavaScript and Python entry points use the native spectral path. For an upward pitch ratio `R`, pitch shift first stretches at rate `1/R`, then resamples at the effective rate `sampleRate × R`. `noteStretch` and the pitch stage of `voiceChange` use the same stretcher; the contour-following pitch correctors use a different engine ([Two resynthesis engines](./pitch-correction.md#two-resynthesis-engines)). These functions operate on decoded mono samples.
 
 Artifacts depend on the source and stretch ratio. Transients and dense mixtures can be more sensitive than sustained tones, even for small edits. The configured STFT window and hop also affect the result; a passage that must stay bit-exact should bypass the stretcher.
 :::

@@ -62,14 +62,18 @@ The `mode` and `quality` numbers here are **arrangement ordinals**, distinct fro
 `chordSymbolFromAnalysis(chord)` (Python `chord_symbol_from_analysis`, C `sonare_chord_symbol_from_analysis`) turns an analysis chord into `{ rootPc, quality, extensions, slashBassPc }` (Python snake_case keys), the same conversion the library applies when it builds a harmonic timeline. The root is kept as given, and `slashBassPc` is `255` when the bass is the root. `keyModeFromAnalysis(mode)` (`key_mode_from_analysis`, `sonare_key_mode_from_analysis`) returns the annotation `mode` (1..7) for an analysis mode name or ordinal. Times are not converted; place the result with `startPpq` / `endPpq`. An unrecognized value is a `RangeError` (Python `SonareValueError`) naming the field, and a non-object chord is a `TypeError`.
 
 ```typescript
-const { chords } = detectChords(samples, sampleRate);
+const bpm = 120;                                  // the project's constant tempo
+const toPpq = (seconds: number) => (seconds * bpm) / 60;
+const { chords } = detectChords(samples, sampleRate); // start / end are in seconds
 project.annotateChords(
-  chords.map((c) => ({ startPpq: 0, endPpq: 4, ...chordSymbolFromAnalysis(c) })),
+  chords.map((c) => ({ startPpq: toPpq(c.start), endPpq: toPpq(c.end), ...chordSymbolFromAnalysis(c) })),
 );
 project.annotateKeys([
   { startPpq: 0, endPpq: 16, tonicPc: key.root, mode: keyModeFromAnalysis(key.mode) },
 ]);
 ```
+
+`toPpq` here assumes one constant tempo. Under a tempo map with several segments or ramps, convert each time with the formulas in [Converting seconds, samples, and PPQ](./glossary/arrangement/clips-and-tracks.md#converting-seconds-samples-and-ppq).
 
 What the analyzers report before it becomes an annotation is on [Chord Recognition](./glossary/analysis/chord-recognition.md) and [Key Detection](./glossary/analysis/key-detection.md).
 

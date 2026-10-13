@@ -82,6 +82,8 @@ Three instrument kinds can sit on a destination:
 | `setSf2Instrument(config, destinationId)` | A GS-compatible SoundFont player | [SoundFont Player](./soundfont-player.md) |
 
 ::: tip MIDI 2.0 and MPE expression
+MPE gives each sounding note its own channel inside a zone, so bend and pressure can shape one note of a chord; [MIDI Basics](./glossary/instruments/midi-basics.md#midi-files-and-midi-2-0) explains zones, manager and member channels, and UMP groups.
+
 The built-in waveform synth (`setBuiltinInstrument`), NativeSynth (`setSynthInstrument`), and SoundFont player (`setSf2Instrument`) receive MIDI 2.0 channel-voice UMPs at full value width. Note velocity, controllers, pressure, and pitch bend retain the precision supplied by the MIDI 2.0 message.
 
 The built-in synth and NativeSynth apply channel pressure, polyphonic key pressure, and per-note pitch bend. The SoundFont player applies full-width note velocity, channel pressure, pitch bend, and MIDI 2.0 per-note pitch, but intentionally ignores polyphonic key pressure. MPE-style member channels can therefore carry channel expression to each player, while poly-pressure expression is unavailable on SoundFont.
@@ -333,7 +335,8 @@ const binding = await bindWebMidi(engine, {
   ccBindings: [
     { channel: 0, controller: 1, paramId: 42, options: { minValue: 0, maxValue: 1 } },
   ],
-  timestampToSamples: (eventTimeMs) => Math.round((eventTimeMs / 1000) * 48000),
+  // Offset into the block that picks the event up; blockStartMs = page-clock time the block began.
+  timestampToSamples: (eventTimeMs) => Math.max(0, Math.round(((eventTimeMs - blockStartMs) / 1000) * 48000)),
   onInputsChanged: (inputs) => {
     // Called on hot-plug after the helper rebinds matching ports.
     console.log('MIDI inputs:', inputs.map((i) => `${i.name} (${i.state})`));
@@ -354,11 +357,11 @@ What each option does:
 
 ### Why timestamp → sample mapping matters
 
-The two clocks don't match. Web MIDI tags each message with a time in milliseconds (the page clock, `DOMHighResTimeStamp`), but the engine schedules events by **sample frame**. `timestampToSamples(eventTimeMs)` is the bridge between them: it converts a message time into the `portTimeSamples` value the engine queues.
+The two clocks don't match. Web MIDI tags each message with a time in milliseconds (the page clock, `DOMHighResTimeStamp`), but the engine schedules events by **sample frame**. `timestampToSamples(eventTimeMs)` is the bridge between them: it converts a message time into the `portTimeSamples` value the engine queues. That value is an **offset**, in samples, from the start of the render block that picks the event up, not a position on an absolute clock. An offset past the end of the block is clamped to the block's last frame. Measured with a 128-frame block, an offset of `40` starts the note at frame 41, while a page-clock time converted straight to samples (`480000` after ten seconds) produces nothing until the block's final frame, so every event of a fast run lands on the same frame.
 
 Why bother? Get the conversion right and tightly-timed passages — chords, fast runs — land on the exact frame you played them. Omit it, and every event is queued at sample `0` of the next block: fine for casual noodling, audibly loose for anything rhythmic.
 
-A practical implementation tracks the offset between `performance.now()` (or `AudioContext.currentTime`) and the engine's frame clock, and applies that offset here.
+A practical implementation records the page-clock time at which each render block starts (from `performance.now()`, or from `AudioContext.currentTime` converted to the same clock) and subtracts it here, as the example above does with `blockStartMs`.
 
 ### Lifecycle
 

@@ -9,7 +9,18 @@ description: The audio callback, why allocation and locks are forbidden, denorma
 
 ## The audio callback has a deadline
 
-Audio is delivered in blocks on a high-priority thread, and each block must be filled *before* the speaker needs it — often within a couple of milliseconds. Miss that deadline once and you get an audible click, pop, or dropout. So the callback has a hard real-time deadline, and anything that *might* take an unbounded amount of time is forbidden inside it.
+Audio is delivered in blocks on a high-priority thread, and each block must be filled *before* the speaker needs it. The time you have is the block's own duration, block size divided by sample rate:
+
+| Block size | At 44.1 kHz | At 48 kHz |
+|-----------:|------------:|----------:|
+| 128 frames | 2.9 ms | 2.7 ms |
+| 256 frames | 5.8 ms | 5.3 ms |
+| 512 frames | 11.6 ms | 10.7 ms |
+| 1024 frames | 23.2 ms | 21.3 ms |
+
+In a browser the block is fixed: an AudioWorklet's `process()` is called with a **render quantum** of 128 frames, so the budget is under 3 ms. Native audio APIs let the host pick a size, usually 64–1024 frames. The delay a listener hears is longer than one block, because the system also queues buffers on the way to the device (in a browser, `AudioContext.baseLatency` plus `outputLatency`); see [Audio Basics](../concepts/audio-basics.md#latency).
+
+Miss that deadline once and you get an audible click, pop, or dropout. So the callback has a hard real-time deadline, and anything that *might* take an unbounded amount of time is forbidden inside it.
 
 <CallbackBudgetFigure
   title="A budget, and one block that overruns"
@@ -21,11 +32,16 @@ Audio is delivered in blocks on a high-priority thread, and each block must be f
 | Forbidden | Why it breaks audio |
 |-----------|---------------------|
 | Memory allocation (`new`/`malloc`) | Can block for an unpredictable time |
+| JavaScript allocation in an AudioWorklet (new arrays, objects, closures, a `postMessage` per block) | Feeds the garbage collector, whose pauses land on the audio thread |
 | Locks / mutexes | Can stall waiting for another thread |
 | File / network I/O | Unbounded latency |
 | Anything unbounded | A single overrun misses the deadline |
 
-The discipline is: do all the slow work (allocation, file loading, setup) *outside* the callback, then let the callback only read and process pre-built buffers.
+The discipline is: do all the slow work (allocation, file loading, setup) *outside* the callback, then let the callback only read and process pre-built buffers. In JavaScript that means reusing the same typed arrays every block, for example through `Mixer.createRealtimeBuffer()` or the `...Into(...)` methods that write into arrays you allocated once.
+
+## Passing data without a lock: the ring buffer
+
+The audio thread still has to receive commands (a fader move) and send results back (meter values). It does that through a **ring buffer**: a fixed-size array with a write position and a read position that wrap around at the end. With one writer and one reader (single-producer, single-consumer, SPSC), each side only moves its own position, so neither ever waits for the other. When the ring is full the writer drops the item or reports it rather than blocking, which is why libsonare's queues expose overflow counters such as `droppedRecords`. libsonare's command queue, telemetry and meter queues, and the AudioWorklet's shared rings all work this way, and a single-consumer queue must be drained by only one reader.
 
 ## How libsonare stays safe
 

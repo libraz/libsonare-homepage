@@ -213,7 +213,7 @@ The [Audio class reference](./js-api-audio.md#audio-class) lists the instance me
 
 The `/mastering` demo uses the same WASM package described here. Audio decoding happens in the browser, mastering work runs in a Web Worker, and the rendered WAV plus JSON report are created locally. The [Mastering reference](./js-api-mastering.md) covers `masterAudio`, `masteringChain`, and the named processors.
 
-For implementation details, see [Mastering Implementation](./mastering-implementation.md), [Browser Local Processing](./glossary/concepts/browser-local-processing.md), [Mastering](./glossary/mastering.md), and [Stereo, Limiter, and Loudness Controls](./glossary/mastering/stereo-limiter-loudness.md).
+For implementation details, see [Mastering Implementation](./mastering-implementation.md), [Browser Local Processing](./glossary/concepts/browser-local-processing.md), [The Mastering Chain](./glossary/mastering.md), and [Stereo, Limiter, and Loudness Controls](./glossary/mastering/stereo-limiter-loudness.md).
 
 The mastering API also includes `masteringAssistantSuggest(...)`, `masteringAudioProfile(...)`, and `masteringStreamingPreview(...)` for JSON-driven assistant output, source profiling, and platform preview reporting.
 

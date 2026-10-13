@@ -287,6 +287,8 @@ it does not write `1.0` into a parameter that would reject it.
 
 By default (`formantMode: 'relative'`) the formant stage runs after the retune, so `formantFactor` multiplies the displacement the pitch shift has already caused. With `formantMode: 'absolute'` the formants are warped to `formantFactor` times the *input's* ahead of the retune, so `formantFactor: 1` keeps them where they were whatever the shift. In the preset JSON this is `dsp.formant.mode`.
 
+<SonareDemo id="formant-shift" />
+
 | | `'relative'` (default) | `'absolute'` |
 |---|---|---|
 | `formantFactor` means | Warp applied after the retune | Formant position relative to the input |
@@ -331,7 +333,14 @@ Large pitch, formant, or ambience moves can be useful for sound design, but they
 ::: info What "latency" means here
 **Latency** is the delay between sound going in and processed sound coming out, caused by the analysis the chain has to do. `latencySamples()` reports it in samples; divide by the sample rate for seconds.
 
-It is **fixed** for a given prepared chain: the retune and whole-chain dry paths are aligned to the overlap-add latency, so moving the wet or retune mix does not change the reported figure. That means you can read it once after `prepare(...)` and compensate for it, instead of re-reading it whenever a control moves. The dominant term is the retune stage's pitch-shift analysis window — a larger grain analyses more audio per step and adds more delay (see the [StreamingRetune](./js-api-streaming.md#streamingretune) `grainSize` field) — plus the true-peak (inter-sample peak, ISP) limiter's own delay when that limiter is active. On top of the reported figure the wet path carries a shift-dependent delay of up to two grains.
+The delay has two parts:
+
+| Part | What it covers | Changes with |
+|------|----------------|--------------|
+| `latencySamples()` (reported) | The dry path and the whole chain's alignment: the retune stage's analysis window plus the true-peak (inter-sample peak, ISP) limiter's delay when that limiter is active | Only `prepare(...)` and the grain size; moving the wet or retune mix does not change it |
+| Extra wet-path delay | The pitch-shifted signal drifting behind the input while it is resampled | The shift amount; zero at no shift, up to two grains otherwise |
+
+Read the reported figure once after `prepare(...)` and compensate for it, instead of re-reading it whenever a control moves. A larger grain analyses more audio per step and adds more delay to both parts (see the [StreamingRetune](./js-api-streaming.md#streamingretune) `grainSize` field). With the default grain (about 46 ms) at 48 kHz, `neutral-monitor` reports 2263 samples (47 ms), and a shifted voice can trail that by up to about another 93 ms, so pitched presets are less suited to tight live monitoring.
 :::
 
 Every live control is smoothed per sample, so adopting a new config snapshot with

@@ -11,6 +11,70 @@ The job is **not** "run declip on everything". A repair stage that runs when not
 
 This page uses the Python CLI (`pip install libsonare`, command `sonare`). `declip` (Step 7) is not in the native `sonare-cli`; every other command here exists in both. See [Which CLI Are You Using?](../cli.md#which-cli-are-you-using).
 
+::: info What you need
+- **Install:** `pip install libsonare` (Python 3.11 or later). The Node tab needs `npm install @libraz/libsonare` (Node.js 22.12 or later).
+- **Mono takes in `raw/`:** WAV files, any common sample rate. The CLI repairs **mono**: a stereo take is folded to mono and written back as a mono file (see [Step 8](#step-8-—-stereo-takes) for stereo).
+- **For Step 4:** two or three takes of the same part, `take1.wav` to `take3.wav`, at one sample rate.
+- **Test material:** the takes on this page are synthetic. The script below writes equivalent ones, so you can run every step first. Its numbers differ a little from the ones printed here.
+:::
+
+::: details A script that writes damaged test takes
+Save as `make_takes.py` and run `python make_takes.py`. It needs NumPy, which `pip install libsonare` already installs. It writes `raw/take-01.wav` (clipped, with 50 Hz hum and clicks), `raw/take-02.wav` (hum and clicks, no clipping) and `take1.wav` to `take3.wav` for Step 4, all mono at 48 kHz.
+
+```python
+"""Write damaged test takes: raw/take-01.wav, raw/take-02.wav, take1-3.wav."""
+import os
+import wave
+
+import numpy as np
+
+SR = 48000
+rng = np.random.default_rng(7)
+
+
+def save(path, x):
+    pcm = (np.clip(x, -1.0, 1.0) * 32767).astype("<i2")
+    with wave.open(path, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(SR)
+        w.writeframes(pcm.tobytes())
+
+
+def phrase(seconds):
+    t = np.arange(int(seconds * SR)) / SR
+    chord = sum(np.sin(2 * np.pi * f * t) for f in (220.0, 277.2, 329.6)) / 3
+    return 0.4 * chord * np.minimum(1.0, t / 0.02) * np.exp(-t / 3.0)
+
+
+def damage(x, clip_gain=None):
+    t = np.arange(len(x)) / SR
+    x = x + 0.03 * np.sin(2 * np.pi * 50 * t) + 0.01 * np.sin(2 * np.pi * 150 * t)  # mains hum
+    for i in rng.integers(SR, len(x) - SR, 6):  # sparse clicks
+        x[i : i + 3] += 0.5 * np.array([1.0, -0.8, 0.4])
+    if clip_gain is not None:
+        x = np.clip(x * clip_gain, -1.0, 1.0)  # input gain set too hot
+    pad = np.zeros(int(0.3 * SR))  # dead air at both ends
+    return np.concatenate([pad, x, pad])
+
+
+os.makedirs("raw", exist_ok=True)
+save("raw/take-01.wav", damage(phrase(7.0), clip_gain=4.0))
+save("raw/take-02.wav", damage(phrase(7.0)))
+
+# Three takes of one part for Step 4: three phrases each, entering at slightly different times.
+for take, shift in enumerate((0.0, -0.1, 0.08), start=1):
+    x = np.zeros(int(8.5 * SR))
+    for start in (0.6, 3.2, 6.0):
+        s = int((start + shift) * SR)
+        p = phrase(1.8)
+        x[s : s + len(p)] += p
+    save(f"take{take}.wav", x)
+```
+
+Running the batch on these two takes selects the same stages as below: declip, declick, decrackle and dehum for `take-01`, and the same minus declip for `take-02`.
+:::
+
 For the library workflow and individual defects, see [Audio Repair](../audio-repair.md), [Noise and Hum Removal](../repair-noise.md), [Clicks, Crackle, and Clipping](../repair-transients.md), and [Dereverberation](../repair-reverb.md).
 
 ## What You Will Learn
@@ -124,16 +188,29 @@ sonare repair take-raw.wav --detect --json
 ```
 
 ```typescript [Node]
-import { masteringRepairAnalyze } from '@libraz/libsonare-native';
+import { readFileSync } from 'node:fs';
+import { decodeChannels, init, masteringRepairAnalyze } from '@libraz/libsonare';
 
-const { defects, recommended, explanation } = masteringRepairAnalyze({ channels: [left, right], sampleRate: 48000 });
+await init();
+// One Float32Array per channel: one for a mono take, two for a stereo one.
+const { sampleRate, channels } = decodeChannels(new Uint8Array(readFileSync('take-raw.wav')));
+const { defects, recommended, explanation } = masteringRepairAnalyze({ channels, sampleRate });
 console.log(defects.clipSampleFraction, defects.humFundamentalProminence, recommended.map((s) => s.stage), explanation);
 ```
 
 ```python [Python]
 import libsonare as sonare
+from libsonare import Audio
 
-analysis = sonare.mastering_repair_analyze([left, right], 48000)
+# One array per channel: one for a mono take, two for a stereo one.
+path = "take-raw.wav"
+channels = []
+for i in range(Audio.file_channel_count(path)):
+    with Audio.from_file_channel(path, i) as audio:
+        channels.append(audio.data)
+        sample_rate = audio.sample_rate
+
+analysis = sonare.mastering_repair_analyze(channels, sample_rate)
 print(analysis["defects"]["clipSampleFraction"], analysis["defects"]["humFundamentalProminence"])
 print([s["stage"] for s in analysis["recommended"]], analysis["explanation"])
 ```
@@ -165,7 +242,7 @@ The library call covers the measuring of Step 1 and the choosing of Step 2: `rec
 }
 ```
 
-Four numbers already tell most of the story on this take: `clip_sample_fraction` says 11.4% of the samples are clipped, `clip_flat_level` near 1.0 says they are pinned flat rather than merely loud, a mains harmonic sits at exactly 50 Hz with 18.6 dB of prominence, and `crackle_per_second` says the noise floor is not just quiet hiss but broadband crackle. `click_count` is only 1 — `click_rejected` (4989) is how many impulsive-looking events the detector looked at and decided were not clicks, which is worth knowing before you conclude the detector missed something.
+Four numbers already tell most of the story on this take: `clip_sample_fraction` says 11.4% of the samples are clipped, `clip_flat_level` near 1.0 says they are pinned flat rather than merely loud, a mains harmonic sits at exactly 50 Hz with a prominence of 18.6, and a nonzero `crackle_per_second` says short impulsive crackle is present. `hum_fundamental_prominence` is a plain ratio, not decibels: the energy of the winning hum candidate divided by the median of all the candidates the search tried. `1.0` means no peak stood out at all; 18.6 means one frequency carries more than eighteen times the energy of a typical candidate. `click_count` is only 1 — `click_rejected` (4989) is how many impulsive-looking events the detector looked at and decided were not clicks, which is worth knowing before you conclude the detector missed something.
 
 ## Step 2 — Let the assistant choose
 
@@ -188,7 +265,25 @@ sonare repair take-raw.wav -o take-clean.wav --explain --json
 }
 ```
 
-Every stage names the exact evidence that triggered it, in the same vocabulary the detector used. `denoise` and `dereverb` are absent — this take's `noise_floor_dbfs` and `late_decay_ratio_db` did not call for them, so they never ran. `output_gain_db` is not a repair stage; declip rebuilds the peaks a clipper cut off, which routinely pushes the reconstructed waveform past full scale, so the whole file is fitted with one gain afterwards rather than clamped sample by sample.
+Every stage names the exact evidence that triggered it, in the same vocabulary the detector used. `denoise` is absent because this take's `noise_floor_dbfs` sits far below the program; the assistant adds denoise only when the floor comes within 12 dB of the take's integrated loudness. `dereverb` is never chosen by the assistant: no reverb measurement separates a reverberant take from a dry sustained one reliably, so dereverb runs only when you ask for it through a preset or `--params`.
+
+The assistant's triggers are presence tests, not severity tests:
+
+| Stage | The assistant runs it when |
+|---|---|
+| declip | runs of samples sit pinned at one level, and repairing at that level would not touch louder unclipped audio |
+| declick | the detector found at least one click |
+| decrackle | the detector found any crackle |
+| dehum | the hum peak lies within 0.25 Hz of 50 or 60 Hz and its prominence is above 10 |
+| denoise | the noise floor is less than 12 dB below the take's integrated loudness |
+
+That is why a take with a single click still gets declick. [Gate a Delivery in CI](./delivery-check.md) asks a different question about a finished master, "is there enough damage to reject it?", and uses rates for that: it tolerates up to 0.2 clicks and 1.0 crackle events per second, because the detectors report a small baseline on clean program material.
+
+`output_gain_db` is not a repair stage. The CLI scales the repaired file so its highest sample lands exactly at full scale, whenever the repair pushed a sample past it (declip routinely does, because it rebuilds the peaks a clipper cut off). The number is that one gain for the whole file: it tells you how far the peak went over, not how much of the waveform changed.
+
+::: warning Every take is scaled on its own
+Because the gain is fitted per file, two takes from the same session come out of `repair` at different levels, each with its peak at 0 dBFS. Compare and comp takes before repair, or bring the repaired takes back to a common level, before you judge one against another. A peak sitting at full scale also leaves no room for [inter-sample peaks](../glossary/true-peak.md); lower the level before the take goes into a mix or a master.
+:::
 
 ::: tip `--explain` and `--detect` do not combine
 `--detect` runs no repair stage, so there is nothing to explain; passing both is rejected as an invalid parameter. Drop `--detect` to see the reasoning, or drop `--explain` to just get the numbers.
@@ -246,6 +341,11 @@ Three takes and three shared intervals write nine files, `comp01_001.wav` throug
 
 What this does **not** do: it does not choose the best take, it does not crossfade between them, and it does not correct timing drift inside a phrase — a take that rushes or drags in the middle still rushes or drags after slicing. It hands you aligned slices to judge, not a finished comp.
 
+The demo below does the choosing that this command leaves to you: three takes, one pick per segment, joined by short crossfades.
+
+<SonareDemo id="comping" />
+
+
 Every take must share a sample rate; the check runs before anything else:
 
 ```bash
@@ -276,7 +376,9 @@ sonare repair take-clean.wav --detect --json
 | `hum_harmonics` | 2 | 1 |
 | `noise_floor_dbfs` | −120.0 | −101.5 |
 
-Clipping, clicks, and crackle all clear to (near) zero. Hum prominence drops by more than half but does not reach zero, and `noise_floor_dbfs` actually rises — declip's LPC reconstruction and the two impulsive-repair stages leave a small broadband footprint of their own on samples they touched. Neither number is a bug in the run; they are what an honest repair looks like. The next section shows why chasing the hum number further is usually the wrong move.
+Clipping, clicks, and crackle all clear to (near) zero. Hum prominence drops by more than half but does not reach zero, and `noise_floor_dbfs` actually rises — declip's LPC reconstruction and the two impulsive-repair stages leave a small broadband footprint of their own on samples they touched. Neither number is a bug in the run; they are what an honest repair looks like.
+
+The residual prominence of 7.94 is below the assistant's own trigger of 10, so a second `repair` pass would not run dehum again. It is above the 6.0 that [Gate a Delivery in CI](./delivery-check.md) rejects a finished master at, so this take would still fail that gate if it shipped as is. Listen to the low end at the level the take will be played. If the hum is audible, the fix is at the source (a re-recording with the ground fixed) or a stronger notch with the cost the next section measures; if it is not, the gate threshold is yours to set for this delivery.
 
 ::: info The detector is the point
 There is no separate "did it work" command. The same `--detect` that decided what to fix is what proves whether fixing it worked, on the same numbers, in the same units.
@@ -320,7 +422,12 @@ What a record-style restoration removes — and what it leaves for other stages 
 sonare repair take-raw.wav -o take-clean-harm.wav --params repair.dehum.harmonics=6 --json
 ```
 
-Raising the harmonic count the notch chases from the assistant's own 2 to 6 barely moves the residual: `hum_fundamental_prominence` comes back at 7.88 against 7.94 for the default run, a difference smaller than run-to-run measurement noise. What it does move is `output_gain_db`, which drops to −3.4 dB against −1.87 dB — nearly twice the gain reduction, meaning nearly twice as much of the waveform was reshaped to get essentially the same result. This is the shape every "chase it to zero" instinct takes with `dehum`: diminishing residual, real and measurable cost. The [Repair and Input Controls](../glossary/mastering/repair.md) glossary page makes the same point about denoise — a little noise left in beats smeared drums and watery artifacts, and the same restraint applies to a notch filter eating into the fundamental it shares with real musical content.
+Raising the harmonic count the notch chases from the assistant's own 2 to 6 barely moves the residual: `hum_fundamental_prominence` comes back at 7.88 against 7.94 for the default run. The detector is deterministic, so that 0.06 is a real difference, just too small to hear. `output_gain_db` changes too, to −3.4 dB against −1.87 dB, but that only says the repaired file peaks higher before the full-scale fit. A notch shifts the phase of everything near its frequency, which can move a waveform's peaks up or down; the number is not a measure of how much was changed. The cost of the extra notches is what they remove: every notch also takes out any real musical content at 100, 150, 200 Hz and so on, which on bass and kick drums is a great deal. This is the shape every "chase it to zero" instinct takes with `dehum`: a residual that barely moves, for content you can hear go missing. The [Repair and Input Controls](../glossary/mastering/repair.md) glossary page makes the same point about denoise — a little noise left in beats smeared drums and watery artifacts, and the same restraint applies to a notch filter eating into the fundamental it shares with real musical content.
+
+The demo below shows that trade on a clean chord with a 50 Hz hum and three harmonics: change how the hum is removed and read the HUM score for each choice.
+
+<SonareDemo id="repair-dehum" />
+
 
 ## Step 7 — The single-purpose escape hatch: `declip`
 

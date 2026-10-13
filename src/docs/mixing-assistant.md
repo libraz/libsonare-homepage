@@ -111,7 +111,7 @@ Most decisions use the two measurement layers described here. Source classificat
 | Band dominance (`bandDominance[]`) | Per band and per ordered pair, the masker's share of the summed band energy, `E_a / (E_a + E_b)`, averaged over the frames where both tracks clear the band's energy floor. 0.5 is parity; 1 is outright ownership. An energy ratio, not a loudness model — no auditory filterbank, no excitation pattern. | EQ, dynamics |
 | Alignment (`alignment[]`) | Per unordered pair, the lag and polarity of the strongest normalized cross-correlation peak, measured over the one-second window where the two are jointly most active. A pair counts as related only when the absolute correlation is at least 0.5; below that it is left alone. | Image |
 | Image occupancy (`crowdedBands[]`) | A per-band histogram of where energy already sits across nine pan positions, each stereo track placed per band from its own left/right balance. A band is crowded when its energy is concentrated into fewer than about 1.7 effective positions. | Image |
-| Mono risks (`monoRisks[]`) | Stereo tracks whose correlation is below 0.30, whose width exceeds 1.0 (side energy above mid), or whose low end alone is wide — the sub and low bands carry at least 10% of the track's energy and at least a quarter of that is side. | Image |
+| Mono risks (`monoRisks[]`) | Stereo tracks whose correlation is below 0.30, whose measured width (the side-to-mid level ratio, not the strip's `width` control) exceeds 1.0 (side energy above mid), or whose low end alone is wide — the sub and low bands carry at least 10% of the track's energy and at least a quarter of that is side. | Image |
 
 ### What each domain reads
 
@@ -285,7 +285,7 @@ It scales the level-like decisions toward nothing, but bus topology, routing, po
 | `bandDominance[]` | Which track masks which, in which band, and by how much (`masker`, `maskee`, `band`, `ratio`, `validFrames`). |
 | `alignment[]` | Pairwise timing and polarity (`reference`, `target`, `lagSamples`, `correlation`, `polarityOpposed`). |
 | `crowdedBands[]` | Bands the whole session is competing in. |
-| `monoRisks[]` | Strips that will partly disappear in mono (`correlation`, `width`, `wideLowEnd`). |
+| `monoRisks[]` | Strips that will partly disappear in mono (`correlation`, `width`, `wideLowEnd`). Here `width` is the measured side-to-mid ratio, not a strip setting. |
 
 ## Reading the explanation
 

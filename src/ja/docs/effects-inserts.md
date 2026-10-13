@@ -11,117 +11,14 @@ description: libsonare のミキシング／リアルタイムエンジン向け
 このページが扱うのは**ミキサー／エンジンのインサート**です。名前付き [マスタリングプロセッサ](./mastering-processors.md) レジストリ（コンプレッサー、EQ、サチュレーション、ステレオ、リペア、ラウドネス／マキシマイザー段）は別の範囲を持つ別トピックです。両者は重なっていて、すべての FX インサートは単発のマスタリングプロセッサ*でもあります*（後述）。マスタリングレジストリを探しているなら、そちらのページから始めてください。
 :::
 
-インサートはチャンネルの経路の中に入るので、その出力はフェーダー、センド、バスを含む下流のすべてに渡ります。この位置こそがインサートとセンドの違いであり、下のカタログを読む前に押さえておきたい点です。
+インサートはチャンネルの経路の中に入るので、その出力はあとに続くすべての段に渡ります。プリフェーダーインサートならフェーダー、センド、バスに、ポストフェーダーインサートならポストフェーダーセンドとバスに渡ります。この位置こそがインサートとセンドの違いであり（[インサートとセンド](./mixing.md#インサートとセンド) を参照）、下のカタログを読む前に押さえておきたい点です。
+
+下のデモでは、同じ「どこから信号を取るか」の違いをセンドで聴き比べられます。フェーダーを動かして、どの経路がそれに追従し、どれが追従しないかを確かめてください。
 
 <SonareDemo id="pre-post-fader" />
 
-## インサート集合を調べる
 
-ミキサーシーンのインサートはマスタリングインサートと同じファクトリを使います。すべてのインサート id は `masteringProcessorNames()` にも含まれます。逆は成り立たず、オフライン専用の 7 つのプロセッサ（`final.bitDepth`、`final.dither`、`final.outputChain`、`maximizer.loudnessOptimize`、`repair.declick`、`repair.declip`、`repair.trimSilence`）は単発呼び出しでのみ動きます。何が使えてどう設定するかは、次の 6 つの実行時 API で把握できます。
-
-| API | 返すもの |
-|-----|----------|
-| `masteringInsertNames()` | 有効なインサート id の全リスト |
-| `masteringInsertParamNames(name)` | 1 つのインサートが受け付ける構築用キー（バンド／サブバンド型はインデックス付きの `band{i}.*` キーを列挙し、未知の名前には空配列を返す） |
-| `masteringInsertParamInfo(name, sampleRate?)` | 構築用キーとリアルタイムオートメーション対象ごとの完全な記述子。[パラメータ記述子](#パラメータ記述子)を参照。`sampleRate` を渡すと、そのレートで決まるナイキスト上限を解決します |
-| `masteringProcessorCatalog()` | `kind`、`realtimeInsertable`、`stereoOnly`、`latencySamples`、`tailSamples`、`channelPolicy`、`params`、条件付き `slots` を持つ機械処理しやすいエントリ。代表的な既定構成（48 kHz／512 サンプル）のプローブでレイテンシと可聴な減衰テールを返し（オフライン専用はどちらも 0）、構成依存の正確なレイテンシは実際のプロセッサへ問い合わせます。プロセッサ ID をハードコードせず能力で絞り込めます。 |
-| `masteringInsertTiming(name, params, sampleRate)` | 1 つのインサート構成を prepare した正確なレイテンシとテール。`params` にはインサートの記述子が宣言するあらゆる値の型（数値、真偽値、列挙名、文字列、数値配列）を渡せます。[プリセットパラメータと構成済みインサートのタイミング](./js-api-mastering.md#プリセットパラメータと構成済みインサートのタイミング)を参照 |
-| `capabilityCatalog()` | ビルド全体のドキュメント。全プロセッサを `masteringInsertParamInfo` と同じ記述子付きで、チェーンキーのセクションとプリセット一覧とともに 1 回で読めます。[カタログからインサートの操作面へ](#カタログからインサートの操作面へ) を参照 |
-
-Python の対応関数は `mastering_insert_names()`、`mastering_insert_param_names(name)`、`mastering_insert_param_info(name, sample_rate=...)`、`mastering_processor_catalog()`、`mastering_insert_timing(name, params, sample_rate)`、`capability_catalog()` です。
-
-一覧外のキーはプロセッサに無視され、そのキーを含むシーンを読み込むと [`Mixer.sceneWarnings()`](./mixing-scene-json.md) が報告します。
-
-### パラメータ記述子
-
-`masteringInsertParamInfo(name)` は、構築用キーとリアルタイムオートメーション対象ごとに記述子を 1 つ返します。記述子は次の 18 フィールドをすべて持ち、省略可能なフィールドはありません。
-
-| フィールド | 型 | 意味 |
-|------------|----|------|
-| `name` | `string` | シーンインサートの params で使う JSON キー |
-| `id` | `number` \| `null` | リアルタイムオートメーションや MIDI CC 紐付けに使う整数のパラメータ id。構築時専用キーは `null` |
-| `rtSafe` | `boolean` | インサート稼働中にオーディオスレッドから値を変更できるか |
-| `type` | `'number'` \| `'boolean'` \| `'enum'` \| `'string'` \| `'array'` | 設定ビルダーがそのキーをどの型として読むか |
-| `min` | `number` \| `null` | 受理される最小値。カタログが制限を把握していない場合は `null` |
-| `max` | `number` \| `null` | 受理される最大値。カタログが制限を把握していない場合は `null` |
-| `minExclusive`、`maxExclusive` | `boolean` | 境界値そのものを拒否する（`true`）か受理するか |
-| `maxRelativeTo` | `'nyquist'` \| `null` | `'nyquist'` は処理レートで決まる上限を示し、実効上限は `max` とナイキストの低いほうです。`masteringInsertParamInfo` に `sampleRate` を渡すと解決されます |
-| `default` | `number` \| `boolean` \| `null` | キーを省略したときに使われる値 |
-| `unit` | `string` \| `null` | プロセッサがそのキーを読む単位。閉じた集合（下記）から選ばれ、boolean・enum・string・array のキーでは `null` |
-| `scale` | `'linear'` \| `'log'` | スライダーに使う軸 |
-| `uiMin`、`uiMax` | `number` \| `null` | `[min, max]` の内側にある任意の表示範囲。ライブラリが宣言していなければ `null`。対数軸（`scale: 'log'`）では、`uiMin ?? min` は必ず正、`uiMax ?? max` は必ず有限です。`null` の側は、受理範囲の端がそのまま表示範囲の端になることを表します |
-| `dependsOn` | `{ key: string; relation: 'lt' \| 'le' \| 'ge' \| 'gt'; factor: number }[]` | このキーの値域を、現在の値で縛る兄弟キー。`this <relation> factor * sibling` と読みます。`factor` は単純な大小関係（たとえば `cutoff0Hz` は `cutoff1Hz` 未満）なら 1 |
-| `coupledWith` | `string[]` | `dependsOn` の項目以外で、このキーの受理範囲を動かす兄弟キー。`dependsOn` では表せない連動を示します。`min` / `max` はこれらを既定値にして測った値です。独立したキーでは空 |
-| `choices` | `{ name: string; value: number }[]` \| `null` | 名前付き数値の閉じた集合。間隔のある離散値も含み、閉じた集合を公開しない場合は `null`。ミキサーシーンの `params` には名前ではなく数値（`value`）を書く |
-| `slot` | `string` \| `null` | キーが属するプロセッサのスロット群。どの群にも属さないキーは `null` |
-
-`unit` は `dB`、`dBFS`、`LUFS`、`Hz`、`ms`、`s`、`samples`、`m`、`cm`、`mm`、`deg`、`percent`、`degC`、`V`、`inPerSec`、`dBPerOct`、`semitones`、`cents`、`ratio`、`bits`、`count`、`none`（無次元の数値）のいずれかです。キーの綴りから推測するのではなく、そのキーを使うプロセッサが宣言するので、`decaySec` は `s`、`lengthM` は `m`、プレートと Dattorro の `modDepthSamples` は `samples` を返します。`null` になるのは数値以外のキーだけです。ホストは存在チェックなしにすべての記述子から 18 フィールドを読めます。`id: null` は構築時専用キーを、`rtSafe: false` は id の有無にかかわらずライブ変更できないことを表します。同じフィールドは `capabilityCatalog()` にも載り、`min` / `max` / `default` の出どころとどこまで信頼できるかは[カタログの値域の読み方](./mastering-processors.md#カタログの値域の読み方)で説明しています。値域、表示範囲、`dependsOn` は構築時の受理条件を表し、リアルタイムのパラメータ経路ではクランプされます。公開される境界は内側へ丸められるため、公開された限界値は常にインサートが受理する値です。
-
-::: info 記述子の一覧は構築用キーとオートメーション対象を含みます
-`masteringInsertParamNames(name)` は構築時に読み取るキーの一覧です。`masteringInsertParamInfo(name)` はその一覧に加えてリアルタイムオートメーション対象も返します。構築時専用の行は `id: null` かつ `rtSafe: false` です。準備済みプロセッサで安全に変更できない id 付き対象も `rtSafe: false` になります。パラメータ名からピッカーを作り、`rtSafe` が true の記述子だけをライブ操作に使ってください。
-:::
-
-処理レートで上限が決まる周波数キーは `maxRelativeTo: 'nyquist'` を公開し、`max` には既定レートでの値が入ります。セッションのレートを渡すと、そのレートで有効な上限が得られます。
-
-```typescript
-const band = (rate?: number) =>
-  masteringInsertParamInfo('eq.parametric', rate).find((p) => p.name === 'band0.frequencyHz')!;
-band().max;       // 24000（排他）
-band(44100).max;  // 22050（排他）
-band(96000).max;  // 48000（排他）
-```
-
-## カタログからインサートの操作面へ
-
-ドキュメントそのもの（どのサーフェスが返すか、記述子のフィールド、スロットメタデータ、値域の実測方法）は [機能カタログが返すもの](./api-surface.md#機能カタログが返すもの) が扱っています。この節はインサートに固有の部分です。ホストが自前の表を持たずに、プロセッサ id からコントロールを並べた操作面をどう組み立てるかを説明します。
-
-手順は、プロセッサごとに API を呼ぶのではなく、1 つのドキュメントを 3 回参照するだけです。
-
-1. **インサート集合を選ぶ。** `processors` を `realtimeInsertable` で絞ります。これは `masteringInsertNames()` が返す集合と同一です。残りはオフラインプロセッサ 7 つとペアプロセッサ 4 つです。`category` はピッカーと同じ切り方で集合を分けます。`effects` がこのページのクリエイティブ FX の id、`voice` が `voice.changer` インサート、その他のカテゴリがマスタリングの各ファミリーです。ピッカーがインサートをどう扱うかは、次の 3 つのフィールドで決まります。
-
-   | フィールド | 読み方 |
-   |---|---|
-   | `causal` | すべてのインサートで `true`。非インサートの 11 個（オフラインのリペアプロセッサ 3 つ `repair.declick`、`repair.declip`、`repair.trimSilence`、`final.*`、`maximizer.loudnessOptimize`、ペアプロセッサ）では `false`。 |
-   | `channelPolicy` | ステレオより広いバスでミキサーがそのインサートをどう包むか。リバーブ、モジュレーション、ディレイのインサートは `effects.modulation.ringModulator`（`multichannel`）を除いて `stereoPairOnly`。 |
-   | `params` | ペアプロセッサ、`final.*`、`maximizer.loudnessOptimize` では空。オフラインのリペアプロセッサ 3 つと、リアルタイムのリペアインサート 4 つ（`repair.decrackle`、`repair.dehum`、`repair.denoiseClassical`、`repair.dereverbClassical`）は構築時専用の行を公開する。 |
-
-2. **記述子を読む。** インサートの `params` は、その id に対して `masteringInsertParamInfo(id)` が返すリストと同一で、順序も同じです。カタログを持っているホストは、プロセッサごとの呼び出しを必要としません（オフライン専用のリペアプロセッサも同じ呼び出しで答えます）。`id: null` は構築時専用キーを示し、整数の id は Node／WASM の `Mixer.scheduleInsertAutomation(strip, insertIndex, paramId, samplePos, value)`、Python の `Mixer.schedule_insert_automation(...)`、C ABI の `sonare_strip_schedule_insert_automation` に渡すオートメーション id です。リアルタイムエンジンのセッターは代わりに `name` を取ります（`setTrackStripInsertParamByName` とそのマスター版、バス版）。
-3. **各コントロールを配置する。** `type`、`default`、`min`、`max`、`unit`、`choices` から組みます。構築時専用キーにも記述子があるため、フェイザーの `stages`、オートワウの `attackMs` / `releaseMs`、ロータリーの `stereoSpread`、ルームのジオメトリを構築時フィールドとして表現できます。`slot` で所属するスロット群を特定し、プロセッサの `slots` エントリにある `activation`（`anyKey` または `always`）、内側を包む `parent`、`minCrossoverCutoffs` を組み合わせて、その群の存在を表示・検証します。
-
-カタログには `saturation.overdrive` と `saturation.distortion` も `saturation` カテゴリで含まれます。どちらもマルチチャンネルのリアルタイムインサートで、ソロプロセッサでもあります。そのため、ミキサーのチェーン、リアルタイムエンジン、単発のマスタリング適用で同じ ID を使えます。
-
-同じ記述子経路から、現在インサートとして使えるマキシマイザーのコントロールも取得できます。`maximizer.truePeakLimiter`、`maximizer.maximizer`、`maximizer.adaptiveRelease`、`maximizer.softKneeMax` の `ceilingDb` です。GS に結び付いたリアルタイムコントロールも記述子に載ります。`effects.modulation.pitchShifter` の `windowMs`、`preDelayMs`、`preDelay2Ms`、`effects.modulation.rotary` の `stereoSpread`、`accelTauS`、`decelTauS`、`undershootHz`、`drumUndershootHz`、`effects.reverb.dattorro` の `preDelayMs`、`character`、`saturation.bitcrusher` の `typeLadder` です。別の操作表を持たず、記述子一覧を使ってください。
-
-```typescript
-const catalog = capabilityCatalog();
-const inserts = catalog.processors.filter((p) => p.realtimeInsertable);
-const fx = inserts.filter((p) => p.category === 'effects');               // このページのクリエイティブ FX の id
-const chorus = fx.find((p) => p.id === 'effects.modulation.chorus')!;
-for (const param of chorus.params) {
-  // param.id は構築時専用キーでは null、param.name はシーン JSON のキー
-  addControl(param.name, param.default, param.min, param.max, param.unit, param.rtSafe);
-  if (param.id !== null && param.rtSafe) {
-    bindAutomation(param.id, param.choices, param.slot);
-  }
-}
-```
-
-エフェクト系のエントリが報告する内容のうち、ドキュメントの一般的な読み方からは予想しにくいものが 4 つあります。
-
-- **`rtSafe: false` はオートメーションを止める。** ヒントではありません。そのパラメータにオートメーションをスケジュールすると `NotSupported`（コード 6）が返ります。構築時専用の行は `id: null` かつ `rtSafe: false` です。GS EFX の raw バイトはすべて id 付きでも `rtSafe: false` で、`modDepthSamples` も同じです。記述子ごとにオートメーションレーンを描く UI は、id の有無にかかわらず `rtSafe` が false の行をすべて無効化する必要があります。
-- **カタログには数値以外の型もあります。** エフェクト系の記述子には `number`、`boolean`、`enum`、`string`、`array` があります。`choices` には enum 値や、間隔のある離散的な数値集合が載ります。名前からトグルを推測せず、`type` を使い、離散値の操作には `choices` を使ってください。
-- **レイテンシとテールはインサートごとで、リバーブでは 0 ではない。** `effects.reverb.convolution`、`effects.reverb.room`、`effects.acoustic.roomMorph` は 256 サンプルのレイテンシを報告します。既定パラメータ・48 kHz では、リバーブのテールは約 1 秒（`room`、`roomMorph`）、1.5 秒（`convolution`）を経て約 7.5 秒（`fdn`）まで、ステレオディレイは約 2.5 秒です。報告されるテールは出力が満尺の 1e-5 に下がるまでを覆うので、バウンス長を決める上限として使えます。`realtimeCost` はリバーブでは `moderate`、`velvet` だけが `high`、モジュレーションとディレイはすべて `low` で、`null` になるのは非インサートの 11 個だけです。
-- **エフェクト系はパラメータ数が少ない。** 全カタログの記述子の大半は、バンド単位の EQ とマルチバンドのプロセッサが占めます。記述子の数で自身の大きさを決めるインサート UI は、ファミリー間で 1 桁違うことを前提にしてください。
-
-### null と既定値が教えてくれないこと
-
-**`null` の境界が示すのは構築がその値を拒否しないということだけで、どんな値でも意味を持つわけではありません。** 境界がないことは JSON では文字通り `null`（Python では `None`）です。スキーマは `min` と `max` を `number | null` と定め、すべての記述子が両方のキーを持ちます。構築時専用の記述子にも、検証が公開する場合は境界が載ります。一方、string や array のキーは通常 `null` です。`effects.modulation.chorus` は `dryWet` に境界を公開せず、構築は `5` を受け入れ、プロセッサは内部でウェット比を `[0, 1]` にクランプするので、`dryWet: 5` は `dryWet: 1` と同じ音になります。カタログが測るのは構築が拒否する値であり、拒否せず折り畳むプロセッサは `null` を報告します。`null` に対する範囲チェックは、1 種類の誤りしか除外できません。`null` の境界は「頼れる検証がない」と読み、妥当な範囲はパラメータの意味と単位から決めてください。
-
-カタログの有限な値域は受理条件です。たとえば `saturation.bitcrusher.bitDepth` は `min: 2`、`max: 24` を公開し、範囲外の値を拒否します。ゲイン系の一部は、dB から線形値へ変換した結果が有限にならない値も拒否します。大きな上限が実測されても、実用的な操作範囲を意味するわけではありません。
-
-**既定値は設定構造体の初期化子の値にすぎず、プリセットがその値を使うとは限りません。** 構築時専用の記述子は、フォールバックがなければ `default: null` になりますが、プリセットやシーンはそのキーを明示できます。`default` だけで初期化する操作面は、読み込んだシーンに対して誤った値を表示することがあります。シーン自身の `params` から初期化し、シーンが持たないキーだけカタログの既定値に戻し、`null` の既定値にはシーンまたはユーザーの明示値が必要だと扱ってください。
-
-これらの記述子からスライダー、トグル、バンドのスロットを組み立てる通しの例は、[パラメータ記述子からコントロールを組み立てる](./use-cases/parameter-controls.md)にあります。
+このページでは、まずカタログと各エフェクト系統の働きを説明し、そのあとで、ホストが独自の表を持たずにどのインサートの操作面も組み立てられる記述子 API を説明します。
 
 ## クリエイティブ FX インサートのカタログ
 
@@ -157,6 +54,30 @@ for (const param of chorus.params) {
 ::: warning ビルドフラグによる有効化
 これらの insert ID は、CMake オプション `BUILD_FX` を有効にしたビルドでのみ使えます（内部的にはこのオプションから `SONARE_HAVE_FX` マクロが導出されます）。幾何ベースのルーム系インサート（`effects.reverb.room`、`effects.acoustic.roomMorph`）は `BUILD_ACOUSTIC_SIM` も必要です。オプションを有効にしていないビルドでは、対応する ID は `masteringInsertNames()` に現れません。
 :::
+
+### エフェクトの系統とキーの意味
+
+これらのエフェクトの多くはいくつかの共通の考え方から作られていて、パラメータ名もそれに沿っています。
+
+**リバーブ**は、音のあとに部屋が付け加える残響のテールを合成します。作り方がそれぞれ異なるので、正しさではなく欲しい質感で選んでください。
+
+- **Plate / Dattorro**：滑らかで密度の高い、定番スタジオ的な響きです。Dattorro 方式は広く使われるプレート系の設計で、`plate` はその別名です。
+- **FDN**（フィードバックディレイネットワーク）：互いにフィードバックし合うディレイラインで構成し、小さな部屋から大ホールまで調整しやすい方式です。
+- **Velvet-noise**：まばらなランダムインパルスからテールを作ります。カタログはこの実装の `realtimeCost` を `high` としており、`moderate` を超えるリバーブはこれだけです。
+- **Convolution**（畳み込み）：実空間で測定したインパルス応答と信号を畳み込み、*実際の*空間を再現します。
+- **幾何ベースのルーム**：部屋の寸法と音源・聴取位置から応答を計算します（[後述](#幾何ベースのルーム系インサート)）。
+
+共通のキーは次のとおりです。`decaySec`（または正規化された `decay`）はテールの長さ、`damping` ／ `hfDamping` は高域を早く減衰させる量で、柔らかい内装が高音を吸うのに似ています。`preDelayMs` はドライ音からテールが始まるまでの間隔で、ボーカルを自身の残響から離して明瞭に保ちます。`dryWet` は処理済み信号の割合で、センドのリターン用ストリップでは `1` にします。
+
+<SonareDemo id="room-decay" />
+
+**モジュレーションディレイ**（コーラス、フランジャー、アンサンブル）は、数ミリ秒遅らせたコピーを原音に混ぜ、その遅延を低周波オシレーター（LFO）で揺らします。`centerDelayMs` は平均の遅延、`depthMs` は LFO が揺らす幅、`rateHz` はその速さです。効果を決めるのは遅延の範囲です。コーラスは 10〜30 ms 程度（ここでの既定値は 14 ms ± 6 ms）で、少し音程のずれたもう 1 人の奏者のように聞こえます。フランジャーは 1〜10 ms 程度（既定値は 3 ms ± 2 ms）で、コピーがスペクトルを櫛形に削り、ジェット音のようにうねるノッチ列を作ります。`feedback` は出力の一部を遅延へ戻し、そのノッチを鋭くします。
+
+**フェイザー**は、オールパスの `stages` を連ねたものを `minHz` と `maxHz` の間で動かし、フランジャーの細かい櫛形ではなく、少数の幅広いノッチを作ります。**ワウ**と**オートワウ**は共振するバンドパスフィルターを 1 つ動かします。オートワウは LFO ではなく入力レベル（`sensitivity`、`attackMs`、`releaseMs`）に追従します。
+
+**ディレイ**（`effects.delay.stereo`）は、`delayTimeLMs` ／ `delayTimeRMs` だけ遅れて信号を繰り返します。`feedback` は各リピートのうち次のリピートへ戻る量で、`0` ならエコーは 1 回、`1` に近づくほど長く残ります。`pingPong` はリピートを左右に往復させます。
+
+**リングモジュレーター**は信号に `carrierHz` のサイン波を掛け、各周波数を和と差の 2 つの音に置き換えます。金属的、鐘のよう、あるいはロボット的な音になります。**ピッチシフター**は信号全体を `semitones` だけ動かします。
 
 ### インサート別のパラメータ
 
@@ -232,15 +153,6 @@ const processed = masteringProcess('effects.gsEfx', samples, sampleRate, {
 
 `w` は `[0, 1]` の `dryWet` です。`0.5` では crossfade が両経路を半分のゲインにし、twoRamps は両経路を等倍にします。そのため、相関のある経路では音量が大きくなる場合があります。現在のカタログでは、この 9 エントリそれぞれの既定値が `crossfade` です。コントロールを作る際は、各プロセッサの `mixLaw` 記述子から `default`、`choices`、オートメーション ID を読みます。
 
-::: details これらのリバーブアルゴリズムの違いは？
-いずれも残響のテイルを生成する方式の違いです。正しさではなく、欲しい質感で選んでください。どれも有効です。
-
-- **Plate / Dattorro**：滑らかで密度の高い、定番スタジオ的な響き。Dattorro 方式は広く使われるプレート系の設計で、`plate` はその別名です。
-- **FDN**（フィードバックディレイネットワーク）：相互接続したディレイラインで構成する柔軟なアルゴリズミックリバーブ。小さな部屋から大ホールまで調整しやすいのが特長です。
-- **Velvet-noise**：まばらなランダムインパルスを使い、低い CPU 負荷で自然なテイルを作ります。
-- **Convolution**（畳み込み）：実空間で測定したインパルス応答と信号を畳み込み、*実際の*空間を再現します。
-:::
-
 ::: details `effects.modulation.ensemble` とは？
 バケツリレー素子（BBD）によるストリングマシンのアンサンブルで、ビンテージのストリングシンセらしい厚いコーラス感のある音色です。チャンネルごとに 3 つのディレイタップを持ち、低速と高速の 2 つの 3 相 LFO バンクで同時に揺らすため、単純なコーラスの揺れではなく密度の高いモジュレーションになります。ウェット経路には BBD のバケツ帯域を模したローパスがかかり、アナログのバケツリレー素子らしく暗くなります。右チャンネルの LFO 極性は反転しており、モノラルのソースを広いステレオ像へ広げます。インサートファクトリから利用でき、パラメータは全バインディングで `set_parameter` から自動化できます。
 :::
@@ -284,6 +196,114 @@ const processed = masteringProcess('effects.gsEfx', samples, sampleRate, {
 ## 単発マスタリングプロセッサでもあるインサート
 
 これらの id は [ミキシングシーン JSON](./mixing-scene-json.md) の `insert.processor` フィールドで使います。出荷される FX 有効の WASM ビルドでは、幾何ベースの `effects.reverb.room` と `effects.acoustic.roomMorph`、モジュレーションインサート（`effects.modulation.ensemble`、`wah`、`autoWah`、`rotary`、`ringModulator`、`pitchShifter`）を含め、すべてのインサート id が `masteringProcessorNames()` に含まれ、単発の適用経路で実行できます。そのため、同じパラメータマップをミキサーのチェーン、リアルタイムエンジン、`masteringProcess(...)` のどれでも使えます。単発呼び出しは `latencySamples` にインサートのレイテンシを報告します（コンボリューションと幾何ベースのルームのインサートは 256）。
+
+## インサート集合を調べる
+
+ミキサーシーンのインサートはマスタリングインサートと同じファクトリを使います。すべてのインサート id は `masteringProcessorNames()` にも含まれます。逆は成り立たず、オフライン専用の 7 つのプロセッサ（`final.bitDepth`、`final.dither`、`final.outputChain`、`maximizer.loudnessOptimize`、`repair.declick`、`repair.declip`、`repair.trimSilence`）は単発呼び出しでのみ動きます。何が使えてどう設定するかは、次の 6 つの実行時 API で把握できます。
+
+| API | 返すもの |
+|-----|----------|
+| `masteringInsertNames()` | 有効なインサート id の全リスト |
+| `masteringInsertParamNames(name)` | 1 つのインサートが受け付ける構築用キー（バンド／サブバンド型はインデックス付きの `band{i}.*` キーを列挙し、未知の名前には空配列を返す） |
+| `masteringInsertParamInfo(name, sampleRate?)` | 構築用キーとリアルタイムオートメーション対象ごとの完全な記述子。[パラメータ記述子](#パラメータ記述子)を参照。`sampleRate` を渡すと、そのレートで決まるナイキスト上限を解決します |
+| `masteringProcessorCatalog()` | `kind`、`realtimeInsertable`、`stereoOnly`、`latencySamples`、`tailSamples`、`channelPolicy`、`params`、条件付き `slots` を持つ機械処理しやすいエントリ。代表的な既定構成（48 kHz／512 サンプル）のプローブでレイテンシと可聴な減衰テールを返し（オフライン専用はどちらも 0）、構成依存の正確なレイテンシは実際のプロセッサへ問い合わせます。プロセッサ ID をハードコードせず能力で絞り込めます。 |
+| `masteringInsertTiming(name, params, sampleRate)` | 1 つのインサート構成を prepare した正確なレイテンシとテール。`params` にはインサートの記述子が宣言するあらゆる値の型（数値、真偽値、列挙名、文字列、数値配列）を渡せます。[プリセットパラメータと構成済みインサートのタイミング](./js-api-mastering.md#プリセットパラメータと構成済みインサートのタイミング)を参照 |
+| `capabilityCatalog()` | ビルド全体のドキュメント。全プロセッサを `masteringInsertParamInfo` と同じ記述子付きで、チェーンキーのセクションとプリセット一覧とともに 1 回で読めます。[カタログからインサートの操作面へ](#カタログからインサートの操作面へ) を参照 |
+
+Python の対応関数は `mastering_insert_names()`、`mastering_insert_param_names(name)`、`mastering_insert_param_info(name, sample_rate=...)`、`mastering_processor_catalog()`、`mastering_insert_timing(name, params, sample_rate)`、`capability_catalog()` です。
+
+一覧外のキーはプロセッサに無視され、そのキーを含むシーンを読み込むと [`Mixer.sceneWarnings()`](./mixing-scene-json.md) が報告します。
+
+### パラメータ記述子
+
+`masteringInsertParamInfo(name)` は、構築用キーとリアルタイムオートメーション対象ごとに記述子を 1 つ返します。記述子は次の 18 フィールドをすべて持ち、省略可能なフィールドはありません。
+
+| フィールド | 型 | 意味 |
+|------------|----|------|
+| `name` | `string` | シーンインサートの params で使う JSON キー |
+| `id` | `number` \| `null` | リアルタイムオートメーションや MIDI CC 紐付けに使う整数のパラメータ id。構築時専用キーは `null` |
+| `rtSafe` | `boolean` | インサート稼働中にオーディオスレッドから値を変更できるか |
+| `type` | `'number'` \| `'boolean'` \| `'enum'` \| `'string'` \| `'array'` | 設定ビルダーがそのキーをどの型として読むか |
+| `min` | `number` \| `null` | 受理される最小値。カタログが制限を把握していない場合は `null` |
+| `max` | `number` \| `null` | 受理される最大値。カタログが制限を把握していない場合は `null` |
+| `minExclusive`、`maxExclusive` | `boolean` | 境界値そのものを拒否する（`true`）か受理するか |
+| `maxRelativeTo` | `'nyquist'` \| `null` | `'nyquist'` は処理レートで決まる上限を示し、実効上限は `max` とナイキストの低いほうです。`masteringInsertParamInfo` に `sampleRate` を渡すと解決されます |
+| `default` | `number` \| `boolean` \| `null` | キーを省略したときに使われる値 |
+| `unit` | `string` \| `null` | プロセッサがそのキーを読む単位。閉じた集合（下記）から選ばれ、boolean・enum・string・array のキーでは `null` |
+| `scale` | `'linear'` \| `'log'` | スライダーに使う軸 |
+| `uiMin`、`uiMax` | `number` \| `null` | `[min, max]` の内側にある任意の表示範囲。ライブラリが宣言していなければ `null`。対数軸（`scale: 'log'`）では、`uiMin ?? min` は必ず正、`uiMax ?? max` は必ず有限です。`null` の側は、受理範囲の端がそのまま表示範囲の端になることを表します |
+| `dependsOn` | `{ key: string; relation: 'lt' \| 'le' \| 'ge' \| 'gt'; factor: number }[]` | このキーの値域を、現在の値で縛る兄弟キー。`this <relation> factor * sibling` と読みます。`factor` は単純な大小関係（たとえば `cutoff0Hz` は `cutoff1Hz` 未満）なら 1 |
+| `coupledWith` | `string[]` | `dependsOn` の項目以外で、このキーの受理範囲を動かす兄弟キー。`dependsOn` では表せない連動を示します。`min` / `max` はこれらを既定値にして測った値です。独立したキーでは空 |
+| `choices` | `{ name: string; value: number }[]` \| `null` | 名前付き数値の閉じた集合。間隔のある離散値も含み、閉じた集合を公開しない場合は `null`。ミキサーシーンの `params` には名前ではなく数値（`value`）を書く |
+| `slot` | `string` \| `null` | キーが属するプロセッサのスロット群。どの群にも属さないキーは `null` |
+
+`unit` は `dB`、`dBFS`、`LUFS`、`Hz`、`ms`、`s`、`samples`、`m`、`cm`、`mm`、`deg`、`percent`、`degC`、`V`、`inPerSec`、`dBPerOct`、`semitones`、`cents`、`ratio`、`bits`、`count`、`none`（無次元の数値）のいずれかです。キーの綴りから推測するのではなく、そのキーを使うプロセッサが宣言するので、`decaySec` は `s`、`lengthM` は `m`、プレートと Dattorro の `modDepthSamples` は `samples` を返します。`null` になるのは数値以外のキーだけです。ホストは存在チェックなしにすべての記述子から 18 フィールドを読めます。`id: null` は構築時専用キーを、`rtSafe: false` は id の有無にかかわらずライブ変更できないことを表します。同じフィールドは `capabilityCatalog()` にも載り、`min` / `max` / `default` の出どころとどこまで信頼できるかは[カタログの値域の読み方](./mastering-processors.md#カタログの値域の読み方)で説明しています。値域、表示範囲、`dependsOn` は構築時の受理条件を表し、リアルタイムのパラメータ経路ではクランプされます。公開される境界は内側へ丸められるため、公開された限界値は常にインサートが受理する値です。
+
+::: info 記述子の一覧は構築用キーとオートメーション対象を含みます
+`masteringInsertParamNames(name)` は構築時に読み取るキーの一覧です。`masteringInsertParamInfo(name)` はその一覧に加えてリアルタイムオートメーション対象も返します。構築時専用の行は `id: null` かつ `rtSafe: false` です。準備済みプロセッサで安全に変更できない id 付き対象も `rtSafe: false` になります。パラメータ名からピッカーを作り、`rtSafe` が true の記述子だけをライブ操作に使ってください。
+:::
+
+処理レートで上限が決まる周波数キーは `maxRelativeTo: 'nyquist'` を公開し、`max` には既定レートでの値が入ります。セッションのレートを渡すと、そのレートで有効な上限が得られます。
+
+```typescript
+const band = (rate?: number) =>
+  masteringInsertParamInfo('eq.parametric', rate).find((p) => p.name === 'band0.frequencyHz')!;
+band().max;       // 24000（排他）
+band(44100).max;  // 22050（排他）
+band(96000).max;  // 48000（排他）
+```
+
+## カタログからインサートの操作面へ
+
+ドキュメントそのもの（どのサーフェスが返すか、記述子のフィールド、スロットメタデータ、値域の実測方法）は [機能カタログ](./capability-catalog.md) が扱っています。この節はインサートに固有の部分です。ホストが自前の表を持たずに、プロセッサ id からコントロールを並べた操作面をどう組み立てるかを説明します。
+
+手順は、プロセッサごとに API を呼ぶのではなく、1 つのドキュメントを 3 回参照するだけです。
+
+1. **インサート集合を選ぶ。** `processors` を `realtimeInsertable` で絞ります。これは `masteringInsertNames()` が返す集合と同一です。残りはオフラインプロセッサ 7 つとペアプロセッサ 4 つです。`category` はピッカーと同じ切り方で集合を分けます。`effects` がこのページのクリエイティブ FX の id、`voice` が `voice.changer` インサート、その他のカテゴリがマスタリングの各ファミリーです。ピッカーがインサートをどう扱うかは、次の 3 つのフィールドで決まります。
+
+   | フィールド | 読み方 |
+   |---|---|
+   | `causal` | すべてのインサートで `true`。非インサートの 11 個（オフラインのリペアプロセッサ 3 つ `repair.declick`、`repair.declip`、`repair.trimSilence`、`final.*`、`maximizer.loudnessOptimize`、ペアプロセッサ）では `false`。 |
+   | `channelPolicy` | ステレオより広いバスでミキサーがそのインサートをどう包むか。リバーブ、モジュレーション、ディレイのインサートは `effects.modulation.ringModulator`（`multichannel`）を除いて `stereoPairOnly`。 |
+   | `params` | ペアプロセッサ、`final.*`、`maximizer.loudnessOptimize` では空。オフラインのリペアプロセッサ 3 つと、リアルタイムのリペアインサート 4 つ（`repair.decrackle`、`repair.dehum`、`repair.denoiseClassical`、`repair.dereverbClassical`）は構築時専用の行を公開する。 |
+
+2. **記述子を読む。** インサートの `params` は、その id に対して `masteringInsertParamInfo(id)` が返すリストと同一で、順序も同じです。カタログを持っているホストは、プロセッサごとの呼び出しを必要としません（オフライン専用のリペアプロセッサも同じ呼び出しで答えます）。`id: null` は構築時専用キーを示し、整数の id は Node／WASM の `Mixer.scheduleInsertAutomation(strip, insertIndex, paramId, samplePos, value)`、Python の `Mixer.schedule_insert_automation(...)`、C ABI の `sonare_strip_schedule_insert_automation` に渡すオートメーション id です。リアルタイムエンジンのセッターは代わりに `name` を取ります（`setTrackStripInsertParamByName` とそのマスター版、バス版）。
+3. **各コントロールを配置する。** `type`、`default`、`min`、`max`、`unit`、`choices` から組みます。構築時専用キーにも記述子があるため、フェイザーの `stages`、オートワウの `attackMs` / `releaseMs`、ロータリーの `stereoSpread`、ルームのジオメトリを構築時フィールドとして表現できます。`slot` で所属するスロット群を特定し、プロセッサの `slots` エントリにある `activation`（`anyKey` または `always`）、内側を包む `parent`、`minCrossoverCutoffs` を組み合わせて、その群の存在を表示・検証します。
+
+カタログには `saturation.overdrive` と `saturation.distortion` も `saturation` カテゴリで含まれます。どちらもマルチチャンネルのリアルタイムインサートで、ソロプロセッサでもあります。そのため、ミキサーのチェーン、リアルタイムエンジン、単発のマスタリング適用で同じ ID を使えます。
+
+同じ記述子経路から、現在インサートとして使えるマキシマイザーのコントロールも取得できます。`maximizer.truePeakLimiter`、`maximizer.maximizer`、`maximizer.adaptiveRelease`、`maximizer.softKneeMax` の `ceilingDb` です。GS に結び付いたリアルタイムコントロールも記述子に載ります。`effects.modulation.pitchShifter` の `windowMs`、`preDelayMs`、`preDelay2Ms`、`effects.modulation.rotary` の `stereoSpread`、`accelTauS`、`decelTauS`、`undershootHz`、`drumUndershootHz`、`effects.reverb.dattorro` の `preDelayMs`、`character`、`saturation.bitcrusher` の `typeLadder` です。別の操作表を持たず、記述子一覧を使ってください。
+
+```typescript
+const catalog = capabilityCatalog();
+const inserts = catalog.processors.filter((p) => p.realtimeInsertable);
+const fx = inserts.filter((p) => p.category === 'effects');               // このページのクリエイティブ FX の id
+const chorus = fx.find((p) => p.id === 'effects.modulation.chorus')!;
+for (const param of chorus.params) {
+  // param.id は構築時専用キーでは null、param.name はシーン JSON のキー
+  addControl(param.name, param.default, param.min, param.max, param.unit, param.rtSafe);
+  if (param.id !== null && param.rtSafe) {
+    bindAutomation(param.id, param.choices, param.slot);
+  }
+}
+```
+
+エフェクト系のエントリが報告する内容のうち、ドキュメントの一般的な読み方からは予想しにくいものが 4 つあります。
+
+- **`rtSafe: false` はオートメーションを止める。** ヒントではありません。そのパラメータにオートメーションをスケジュールすると `NotSupported`（コード 6）が返ります。構築時専用の行は `id: null` かつ `rtSafe: false` です。GS EFX の raw バイトはすべて id 付きでも `rtSafe: false` で、`modDepthSamples` も同じです。記述子ごとにオートメーションレーンを描く UI は、id の有無にかかわらず `rtSafe` が false の行をすべて無効化する必要があります。
+- **カタログには数値以外の型もあります。** エフェクト系の記述子には `number`、`boolean`、`enum`、`string`、`array` があります。`choices` には enum 値や、間隔のある離散的な数値集合が載ります。名前からトグルを推測せず、`type` を使い、離散値の操作には `choices` を使ってください。
+- **レイテンシとテールはインサートごとで、リバーブでは 0 ではない。** `effects.reverb.convolution`、`effects.reverb.room`、`effects.acoustic.roomMorph` は 256 サンプルのレイテンシを報告します。既定パラメータ・48 kHz では、リバーブのテールは約 1 秒（`room`、`roomMorph`）、1.5 秒（`convolution`）を経て約 7.5 秒（`fdn`）まで、ステレオディレイは約 2.5 秒です。報告されるテールは出力が満尺の 1e-5 に下がるまでを覆うので、バウンス長を決める上限として使えます。`realtimeCost` はリバーブでは `moderate`、`velvet` だけが `high`、モジュレーションとディレイはすべて `low` で、`null` になるのは非インサートの 11 個だけです。
+- **エフェクト系はパラメータ数が少ない。** 全カタログの記述子の大半は、バンド単位の EQ とマルチバンドのプロセッサが占めます。記述子の数で自身の大きさを決めるインサート UI は、ファミリー間で 1 桁違うことを前提にしてください。
+
+### null と既定値が教えてくれないこと
+
+**`null` の境界が示すのは構築がその値を拒否しないということだけで、どんな値でも意味を持つわけではありません。** 境界がないことは JSON では文字通り `null`（Python では `None`）です。スキーマは `min` と `max` を `number | null` と定め、すべての記述子が両方のキーを持ちます。構築時専用の記述子にも、検証が公開する場合は境界が載ります。一方、string や array のキーは通常 `null` です。`effects.modulation.chorus` は `dryWet` に境界を公開せず、構築は `5` を受け入れ、プロセッサは内部でウェット比を `[0, 1]` にクランプするので、`dryWet: 5` は `dryWet: 1` と同じ音になります。カタログが測るのは構築が拒否する値であり、拒否せず折り畳むプロセッサは `null` を報告します。`null` に対する範囲チェックは、1 種類の誤りしか除外できません。`null` の境界は「頼れる検証がない」と読み、妥当な範囲はパラメータの意味と単位から決めてください。
+
+カタログの有限な値域は受理条件です。たとえば `saturation.bitcrusher.bitDepth` は `min: 2`、`max: 24` を公開し、範囲外の値を拒否します。ゲイン系の一部は、dB から線形値へ変換した結果が有限にならない値も拒否します。大きな上限が実測されても、実用的な操作範囲を意味するわけではありません。
+
+**既定値は設定構造体の初期化子の値にすぎず、プリセットがその値を使うとは限りません。** 構築時専用の記述子は、フォールバックがなければ `default: null` になりますが、プリセットやシーンはそのキーを明示できます。`default` だけで初期化する操作面は、読み込んだシーンに対して誤った値を表示することがあります。シーン自身の `params` から初期化し、シーンが持たないキーだけカタログの既定値に戻し、`null` の既定値にはシーンまたはユーザーの明示値が必要だと扱ってください。
+
+これらの記述子からスライダー、トグル、バンドのスロットを組み立てる通しの例は、[パラメータ記述子からコントロールを組み立てる](./use-cases/parameter-controls.md)にあります。
 
 ## 関連
 

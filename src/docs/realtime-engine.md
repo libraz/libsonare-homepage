@@ -55,12 +55,21 @@ engine.destroy();
 
 `getTransportState()` includes a musical playhead as well as the raw sample and PPQ (musical position in quarter-note units) positions. `barCount` is zero-based, while `beat` is one-based within that bar and `beatFraction` is in `[0, 1)`, so a UI can show a conventional bar:beat display (`${barCount + 1}:${beat}`, for example "3:2") without deriving it from PPQ. Use `beatFraction` for a smooth indicator.
 
+::: info Three clocks
+The engine keeps three positions, and the API says which one each argument means:
+
+| Clock | Counts | Moves |
+|-------|--------|-------|
+| **Render frame** (`renderFrame`, the worklet's `sampleTime`) | Frames processed since `prepare` | Always forward, by every block, even while stopped; never jumps |
+| **Timeline sample** (`timelineSample`) | The playhead's position in samples | Only while playing; jumps on a seek and folds back at a loop end |
+| **PPQ** (`ppq`) | The playhead's musical position in quarter notes | Follows the timeline through the tempo map |
+
+Commands are *scheduled* in render frames: `renderFrame` says in which upcoming frame a command takes effect, and omitting it means the **block head**, the first frame of the next block the engine processes. Clips, markers, and automation are *placed* in timeline samples or PPQ, which is why they follow seeks and loops. `sampleAtPpq(ppq)` converts between the last two. One field name breaks the pattern: a [MIDI clip](#midi-clip-scheduling-and-sampleatppq) event's `renderFrame` holds an engine-timeline sample.
+:::
+
 ### Sizing prepare for the real channel count
 
-The constructor and `prepare(...)` take an optional trailing `maxChannels`.
-Prepare reserves the capture, instrument, PDC (plugin delay compensation), and
-monitor planes for that count rather than always reserving 64, so a stereo host
-is not paying for 64 planes of scratch it will never touch.
+The constructor and `prepare(...)` take an optional trailing `maxChannels`. Prepare reserves the capture, instrument, PDC (plugin delay compensation), and monitor planes for that count rather than always reserving 64, so a stereo host is not paying for 64 planes of scratch it will never touch.
 
 ```typescript
 // A stereo host reserves 2 planes, not 64 (commandCapacity and telemetryCapacity left default).
@@ -185,6 +194,8 @@ The engine also accepts **live MIDI** into its instruments: `pushMidiNoteOn`, `p
 
 The engine carries its own realtime-safe **lane mixer**, so a playback engine can mix the tracks it plays without a second mixing pass. Each track occupies a **lane**; lanes can feed **aux sends** into numbered **buses**; and tracks, buses, and the master each own a full **channel strip** — the same strip model (EQ, inserts, fader, pan, sends) as the [Mixing Engine](./mixing.md). Plugin delay compensation (PDC) is recomputed automatically whenever the lane layout is republished.
 
+A track lane therefore has two gain layers. The first is the lane's channel strip, with its own trim, EQ, inserts, fader, and pan (set through `setTrackStripJson` and the `setTrackStrip*` calls). After it the lane mixer applies a **lane fader**, the mute/solo **gate**, and a **lane pan** (the `faderDb` / `pan` automation targets, `setSoloMute`, and the facade's `setStripGain` / `setStripPan`). The cue taps and the sidechain key below are defined relative to these two layers.
+
 ```typescript
 // Declare buses first, then the lane order with sends.
 engine.setTrackBuses([{ busId: 1, gainDb: 0 }]);
@@ -223,33 +234,27 @@ A centered mono lane plays at unity for every pan law, including a lane whose st
 
 ### A bus insert chain sees the summed signal, once
 
-Clip audio and hosted-instrument audio are aggregated into one block before any strip, send, or bus chain runs, so a bus insert chain processes the **sum** of its contributors exactly once per block. A compressor or saturator run separately over each contribution would act on two partial signals, and a reverb would advance its tail twice per block. The merge needs plugin delay compensation to be inactive (with PDC in play the clip bus is rendered into its own scratch buffer and delayed so it lands phase-aligned with the internally-delayed instruments) and a non-empty instrument rack.
+A bus insert chain is stateful and usually non-linear: a compressor's envelope, a saturator's transfer curve, a reverb's tail. It therefore has to see the **sum** of everything feeding the bus, once per block. A compressor fed two partial signals separately is not the same processor as one fed their sum, and a reverb run twice would advance its tail twice per block.
+
+Clip audio and hosted-instrument audio are two contributors to the same buses, so they are aggregated into one block before any strip, send, or bus chain runs. Every lane, every bus chain, and every strip smoother along the way then advances exactly once per block, however many sources produced audio. That merged pass needs a non-empty instrument rack and inactive plugin delay compensation. With PDC in play the clip bus is rendered into its own scratch buffer and delayed so it lands phase-aligned with the internally delayed instruments. A project with no hosted instruments has only one contributor and needs no merge.
+
+With a saturating or compressing insert on a group bus, this is the difference between hearing it act on the group and hearing it act on each source that feeds the group.
 
 ::: info Solo and mute ramps take their full time
-Because each lane is finished once per block, its fader, pan, and gate smoothers advance once per block too. The gate — the smoother behind solo and mute — has a **10 ms** time constant, against **5 ms** for the pan smoother, so a solo or mute change is a short audible ramp rather than a step. This is unrelated to `setParamSmoothingMs`, which sets the default glide for insert-parameter and fader automation and defaults to 20 ms.
+Each lane is finished once per block, so its fader, pan, and gate smoothers are not advanced a second time by another source; within the block they still run sample by sample. The gate — the smoother behind solo and mute — has a **10 ms** time constant, against **5 ms** for the lane fader and pan, so a solo or mute change is a short audible ramp rather than a step. These times are fixed; `setParamSmoothingMs` does not change them.
 :::
 
 <SonareDemo id="engine-lane-mixer" />
 
 ## Track monitor taps: off, PFL, and AFL
 
-Each configured track lane can contribute to a separate cue/monitor bus. Queue a
-mode with `setTrackMonitorMode(laneIndex, mode, renderFrame?)`; `laneIndex` is
-the current index from the latest `setTrackLanes` call, so re-read it after a reorder;
-`renderFrame`, when omitted, applies at
-the next block head, and `mode` accepts `'off'`, `'pfl'`, or `'afl'`
-(or ordinals `0`, `1`, and `2`).
+Each configured track lane can contribute to a separate cue/monitor bus. Queue a mode with `setTrackMonitorMode(laneIndex, mode, renderFrame?)`; `laneIndex` is the current index from the latest `setTrackLanes` call, so re-read it after a reorder; `renderFrame`, when omitted, applies at the next block head, and `mode` accepts `'off'`, `'pfl'`, or `'afl'` (or ordinals `0`, `1`, and `2`).
 
 - **off**: the lane contributes nothing to the monitor bus.
-- **PFL** (pre-fader listen): taps after the lane strip and its plugin-delay
-  compensation, but before the lane fader, gate, and pan. It remains audible
-  there when the lane is muted or solo-gated.
-- **AFL** (after-fader listen): taps after the fader, gate, and pan. For a
-  surround lane it is after fader/gate and the surround plane placement; stereo
-  AFL is post-pan.
+- **PFL** (pre-fader listen): taps after the lane strip (including the strip's own fader) and its plugin-delay compensation, but before the lane fader, gate, and pan. It remains audible there when the lane is muted or solo-gated.
+- **AFL** (after-fader listen): taps after the fader, gate, and pan. For a surround lane it is after fader/gate and the surround plane placement; stereo AFL is post-pan.
 
-PFL behaves like a pre-fader send and AFL like a post-fader send. The demo below
-lets you hear the difference when the fader moves.
+PFL behaves like a pre-fader send and AFL like a post-fader send. The demo below lets you hear the difference when the fader moves.
 
 <SonareDemo id="pre-post-fader" />
 
@@ -274,10 +279,7 @@ lets you hear the difference when the fader moves.
   caption="PFL listens before the fader, gate, and pan, so it stays audible on a muted lane; AFL listens after them."
 />
 
-The monitor bus sums every lane with a PFL/AFL tap. The ordinary `process(...)`
-path folds that bus into the main output for compatibility. Use
-`processWithMonitor(...)` when the program output and cue output must stay
-separate:
+The monitor bus sums every lane with a PFL/AFL tap. The ordinary `process(...)` path folds that bus into the main output for compatibility, so a cued lane is heard there twice (at unity, a PFL lane comes out 6 dB louder) and a muted lane under PFL still reaches the main output. Use `processWithMonitor(...)` when the program output and cue output must stay separate:
 
 ```typescript
 engine.setTrackMonitorMode(0, 'pfl');
@@ -285,10 +287,7 @@ const { output, monitor } = engine.processWithMonitor([leftBlock, rightBlock]);
 engine.setTrackMonitorMode(0, 'off');
 ```
 
-WASM and Node return `{ output, monitor }`; Python uses
-`set_track_monitor_mode(0, 'afl')` and receives `(output, monitor)` from
-`process_with_monitor(...)`. The C entry points are
-`sonare_engine_set_track_monitor_mode` and `sonare_engine_process_with_monitor`.
+WASM and Node return `{ output, monitor }`; Python uses `set_track_monitor_mode(0, 'afl')` and receives `(output, monitor)` from `process_with_monitor(...)`. The C entry points are `sonare_engine_set_track_monitor_mode` and `sonare_engine_process_with_monitor`.
 
 ## Group routing, sidechains, and live strip controls
 
@@ -460,7 +459,7 @@ The id encodes the destination slot as well as the parameter, so it survives an 
 
 The engine holds **32** instrument-automation slots; once they are claimed, further resolutions fail rather than retargeting an existing lane. Resolution returns `-1` on WASM and Node — or `SONARE_ERROR_INVALID_PARAMETER` at the C entry point `sonare_engine_resolve_instrument_automation_id` — when the key is unknown, no instrument is bound to that destination, the instrument exposes no automatable parameters, or the slot table is full. Always check the returned id before handing it to a lane. In a build without the arrangement subsystem the C entry point returns `SONARE_ERROR_NOT_SUPPORTED`, and that build reports `instrumentParamAutomation: false` in its capability JSON — the way a host detects up front that the resolver will not answer. See [`capabilities()`](./js-api.md#capabilities).
 
-`setParamSmoothingMs(ms)` changes the default glide used by smoothed fader/pan changes, insert-parameter automation, and MIDI-CC mappings. The default is `20` ms; `0` makes changes immediate. Set it once from the control thread before playback unless your host intentionally changes the global feel of automation.
+`setParamSmoothingMs(ms)` sets the time constant of the ramps started by `setParameterSmoothed(...)`, whatever id they target. On the `SonareEngine` facade that includes `setStripGain`, `setStripPan`, and `setBusGain`, which send smoothed fader, pan, and bus-gain changes. The default is `20` ms; `0` makes those changes immediate. It does not affect automation-lane playback, insert and instrument automation (fixed 5 ms smoothers), MIDI-CC mappings (applied directly), or the lane fader, pan, and gate smoothers. Set it once from the control thread before playback.
 
 ### How a lane plays back
 
@@ -469,13 +468,13 @@ A lane is a breakpoint curve, not a list of scheduled jumps. Each point is `{ pp
 | `curveToNext` | Segment to the next point |
 |---------------|---------------------------|
 | `0` linear | a straight line between the two values |
-| `1` exponential | interpolated in the log domain, so a gain or frequency sweep sounds even; two values of opposite sign fall back to linear |
+| `1` exponential | interpolates the magnitude in the log domain, so a frequency or linear-gain sweep sounds even; two values of opposite sign fall back to linear, and 0 counts as positive. A `faderDb` lane is already in dB, where `linear` is the even fade (see [`exponential` on a dB lane](./mixing.md#automation)) |
 | `2` hold | keeps this point's value until the next point, then steps |
 | `3` s-curve | eases out of this point and into the next (smoothstep) |
 
 Outside the curve the lane is flat: before the first point it returns the first value, after the last point the last value, and nothing extrapolates. Points are sorted by `ppq` on receipt, and two points at the same `ppq` collapse to the first one you supplied — an instantaneous jump is a `hold` segment (or a second point placed a hair later), not two coincident points. A non-finite `ppq` or `value`, or a curve code outside `0..3`, is rejected as `InvalidParameter` rather than clamped.
 
-The audio thread samples the curve at every breakpoint — the block is split there, so a breakpoint lands on its exact frame — and every **64 frames** in between, widened only for blocks so large that the fixed boundary list would overflow. Each sampled value goes to the target the way a live `setParameter` would: mixer fader, pan and bus gain, insert parameters and instrument parameters run through their smoothers (`setParamSmoothingMs` governs the insert and instrument ones), so a step in the curve is a short glide; a parameter registered with `addParameter` is set directly and steps. A block holding more breakpoints than the boundary list can carry is reported as `BoundaryOverflow`, and the surplus breakpoints apply at the next 64-frame boundary instead of their own frame.
+The audio thread samples the curve at every breakpoint — the block is split there, so a breakpoint lands on its exact frame — and every **64 frames** in between, widened only for blocks so large that the fixed boundary list would overflow. Each sampled value goes to the target the way a live `setParameter` would: mixer fader, pan and bus gain, insert parameters and instrument parameters run through their own fixed smoothers (5 ms for lane fader and pan, insert, and instrument parameters), so a step in the curve is a short glide; a parameter registered with `addParameter` is set directly and steps. A block holding more breakpoints than the boundary list can carry is reported as `BoundaryOverflow`, and the surplus breakpoints apply at the next 64-frame boundary instead of their own frame.
 
 **Writing a lane while audio is running does not glitch.** `setAutomationLane(id, points)` replaces the lane for that one id and leaves the others in place. The control thread builds the new lane set and publishes it; the audio thread adopts the newest set once, at the start of its next block — never mid-block, never with a lock or an allocation. What *can* be audible is the value you wrote: if the new curve differs from the old one at the current playhead, the target moves to the new value at the next sub-block — a glide on a smoothed target, a step on a directly-set one. A lane aimed at an id nothing is bound to is skipped and reported on `drainTelemetry()` as `UnknownTarget`; a parameter registered with `rtSafe: false` is refused up front (WASM and Node throw `SonareError`, the C entry point returns `SONARE_ERROR_INVALID_PARAMETER`).
 

@@ -11,18 +11,24 @@ description: ステムから納品用マスターまで、ピアノの録音か�
 
 ## 作業から選ぶ
 
-| 手元にあるもの | やりたいこと | 実行環境 | ページ |
-|----------------|--------------|----------|--------|
-| ステムのフォルダ | 配信プラットフォームに出せるマスター | CLI | [CLI だけでミックスからマスタリングまで](./use-cases/cli-mix-and-master.md) |
-| 自分のミックスと、目標にしている市販曲 | 音色とラウドネスを参照曲と同じ土俵に乗せる | CLI | [リファレンス曲に寄せる](./use-cases/reference-master.md) |
-| 納品直前のマスター | CI で回る合否判定 | CLI | [納品前チェックを CI で回す](./use-cases/delivery-check.md) |
-| 荒い録音素材の山 | 整音済みのテイクと、何が問題だったかの記録 | CLI | [録音素材をまとめて整音する](./use-cases/recording-cleanup.md) |
-| ホスト・ゲスト・BGM | ダッキング済みでラウドネス規定を満たした 1 話 | CLI | [トーク番組を仕上げる](./use-cases/spoken-word-show.md) |
-| 練習中の曲 | 減速・移調・パート分離した練習用トラック | CLI | [練習用トラックを作る](./use-cases/practice-tracks.md) |
-| ピアノ曲の WAV や MP3 | 譜面と照合済みの MIDI ファイル | CLI + Python | [ピアノの録音を MIDI にする](./use-cases/audio-to-midi.md)。まず [ピアノ採譜](/ja/transcribe) で試せます |
-| 何音か音程のずれた歌のテイク | ずれた音だけを正しい音程に。ビブラートは歌ったまま | CLI + Python | [歌のピッチを直す](./use-cases/vocal-tuning.md) |
-| ローカルのステムと Web アプリの画面 | 操作しながらミックスし、WAV をダウンロード | JavaScript（WASM） | [ブラウザでミキシングアプリを作る](./use-cases/browser-mixer.md) |
-| インサートやマスタリングチェーンを扱うアプリ | エンジン自身のパラメータ記述子から生成した操作画面 | JavaScript（WASM） | [パラメータ記述子からコントロールを組み立てる](./use-cases/parameter-controls.md) |
+音を扱うのが初めてなら、[練習用トラックを作る](./use-cases/practice-tracks.md) から始めてください。曲のファイルが 1 つあれば足り、どの手順も 1 コマンドで、結果をすぐ耳で確かめられます。表はやさしい順に並んでいて、各ページは上のページで出てきた用語を前提にしています。
+
+| レベル | 手元にあるもの | やりたいこと | 実行環境 | ページ |
+|--------|----------------|--------------|----------|--------|
+| 1 | 練習中の曲 | 減速・移調・パート分離した練習用トラック | CLI | [練習用トラックを作る](./use-cases/practice-tracks.md) |
+| 1 | ピアノ曲の WAV や MP3 | 譜面と照合済みの MIDI ファイル | CLI + Python | [ピアノの録音を MIDI にする](./use-cases/audio-to-midi.md)。まず [ピアノ採譜](/ja/transcribe) で試せます |
+| 2 | 荒い録音素材の山 | 整音済みのテイクと、何が問題だったかの記録 | CLI | [録音素材をまとめて整音する](./use-cases/recording-cleanup.md) |
+| 2 | ホスト・ゲスト・BGM | ダッキング済みでラウドネス規定を満たした 1 話 | CLI | [トーク番組を仕上げる](./use-cases/spoken-word-show.md) |
+| 3 | ステムのフォルダ | 配信プラットフォームに出せるマスター | CLI | [CLI だけでミックスからマスタリングまで](./use-cases/cli-mix-and-master.md) |
+| 3 | 自分のミックスと、目標にしている市販曲 | 音色とラウドネスを参照曲と同じ土俵に乗せる | CLI | [リファレンス曲に寄せる](./use-cases/reference-master.md) |
+| 3 | 納品直前のマスター | CI で回る合否判定 | CLI | [納品前チェックを CI で回す](./use-cases/delivery-check.md) |
+| 3 | 何音か音程のずれた歌のテイク | ずれた音だけを正しい音程に。ビブラートは歌ったまま | CLI + Python | [歌のピッチを直す](./use-cases/vocal-tuning.md) |
+| 4 | ローカルのステムと Web アプリの画面 | 操作しながらミックスし、WAV をダウンロード | JavaScript（WASM） | [ブラウザでミキシングアプリを作る](./use-cases/browser-mixer.md) |
+| 4 | インサートやマスタリングチェーンを扱うアプリ | エンジン自身のパラメータ記述子から生成した操作画面 | JavaScript（WASM） | [パラメータ記述子からコントロールを組み立てる](./use-cases/parameter-controls.md) |
+
+レベル 1 は各手順が 1 コマンドです。レベル 2 ではバッチスクリプトや、編集して使うプリセットが加わります。レベル 3 は複数の段をつなぎ、ラウドネスや音色を自分で判断する場面があります。レベル 4 はアプリケーションのコードです。知らない用語が出てきたら、[オーディオ基礎](./glossary/concepts/audio-basics.md) と [ミキシングの基礎](./glossary/concepts/mixing-basics.md) を参照してください。
+
+各ページの冒頭には「用意するもの」の枠があり、必要なファイルとその形式、インストール方法をまとめています。素材が合成音のページでは、同等のテスト用ファイルを書き出す短いスクリプトも載せているので、自分の音源で試す前にすべての手順を実行できます。
 
 ## CLI のページの前提
 
@@ -33,7 +39,7 @@ CLI の手順は Python CLI（`pip install libsonare`）を使います。手順
 
 すべてのコマンドが `--json` を受け付け、失敗はすべて[終了コード](./cli.md#終了コード)に対応づけられています。そのため、どの手順もスクリプトから無人で実行できます。
 
-CLI + Python のページは同じ Python パッケージを使い、JavaScript のページは [はじめに](./getting-started.md#最初の結果) の npm パッケージを使います。
+CLI + Python のページは同じ Python パッケージ（Python 3.11 以降）を使います。CLI のページにある Node のタブと JavaScript のページは、[はじめに](./getting-started.md#最初の結果) と同じ WebAssembly 版の npm パッケージ `npm install @libraz/libsonare`（Node.js 22.12 以降）を使います。Node と Python の各タブには音声の読み込み方も載せているので、タブ内の変数はすべて定義済みです。
 
 ::: tip スクリプトではなく API を使う場面
 UI やプラグイン、リアルタイム処理に行き着くユースケースは、シェルスクリプトではなく API の領分です。[JavaScript API](./js-api.md)、[Python API](./python-api.md)、[C++ API](./cpp-api.md) から始めてください。考え方は同じで、このセクションの各ページからも要所で対応するガイドへリンクしています。

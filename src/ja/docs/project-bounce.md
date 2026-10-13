@@ -5,7 +5,7 @@ description: libsonare の Project を決定的にオフラインレンダリン
 
 # プロジェクトをオーディオへバウンス
 
-**バウンスは、アレンジ全体を 1 つの音声ファイルへ変換し、保存・再生・解析できるようにする操作です。** DAW を使ったことがあれば「エクスポート」や「レンダリング」のボタンにあたり、libsonare では `Project.bounce*` 系のメソッドが担います。レンダリングは**オフライン**（曲をライブ再生するのではなく、実時間より速く一括で処理します）かつ**決定的**で、同じプロジェクトと同じオプションからは、ビット単位までまったく同一のサンプルが常に得られます。
+**バウンスは、アレンジ全体を 1 つの音声ファイルへ変換し、保存・再生・解析できるようにする操作です。** DAW を使ったことがあれば「エクスポート」や「レンダリング」のボタンにあたり、libsonare では `Project.bounce*` 系のメソッドが担います。レンダリングは**オフライン**（曲をライブ再生するのではなく、実時間より速く一括で処理します）かつ**決定的**で、同じビルド・同じ実行環境なら、同じプロジェクトと同じオプションからは、ビット単位までまったく同一のサンプルが常に得られます。
 
 [Project](./project-editing.md) はタイムライン上にトラックとクリップを保持します。オーディオクリップはすでにサンプルを持つため、そのままレンダリングされます。一方 MIDI クリップが持つのは*イベント*（ノートオン・ノートオフ）であって音そのものではないので、楽譜に演奏者が要るのと同じで、音にするには**楽器**が必要です。つまりどのバウンスメソッドを選ぶかは、*どの楽器で MIDI を鳴らすか*という 1 つの問いに尽きます。
 
@@ -38,7 +38,7 @@ description: libsonare の Project を決定的にオフラインレンダリン
 この一連の処理はオフラインで計算されるため、結果は毎回再現できます。
 
 ::: info 位置は 4 分音符単位
-プロジェクトの位置とクリップ長は **PPQ** で表します。これは 4 分音符を表す float です。`ppq: 1` は 4 分音符 1 つ分です。120 BPM では 4 分音符が 0.5 秒なので、4 拍のクリップ（`lengthPpq: 4`）は 2 秒になります。`setTempoSegments([{ startPpq: 0, bpm: 120 }])` でテンポを明示しておくと、バウンスの長さが予測しやすくなります。
+プロジェクトの位置とクリップ長は **PPQ** で表します。これは 4 分音符を表す float です。`ppq: 1` は 4 分音符 1 つ分です。120 BPM では 4 分音符が 0.5 秒なので、4 分音符 4 つぶんのクリップ（`lengthPpq: 4`）は 2 秒になります。`setTempoSegments([{ startPpq: 0, bpm: 120 }])` でテンポを明示しておくと、バウンスの長さが予測しやすくなります。
 :::
 
 ::: tip バウンスは生クリップの加算ではなくミキサー全体を反映する
@@ -71,7 +71,7 @@ MIDI クリップでは、`setClipGain` とクリップフェードはそのク�
 | 自前のシンセで鳴らす MIDI | `bounceWithInstruments` / `bounceWithInstrument`（Node、WASM）、`bounce_with_instruments`（Python） | ホスト側が用意する [`ExternalInstrument`](#自前の楽器を組み込む) |
 
 ::: info 1 つの Project、すべての実行環境
-同じ `Project` モデルと中核のバウンス挙動は、WASM/JS、Node ネイティブ、Python から使えます。名前は各言語の慣習に従います（`bounceWithSynthInstrument` ↔ `bounce_with_synth_instrument`）。CLI では `project bounce`（MIDI を内蔵シンセへ通す `--synth` を含む）や SMF/MIDI 2.0 入出力としてプロジェクトワークフローを使えますが、デスティネーションごとの楽器バインドオプションがすべて配線されているわけではありません。アレンジモデル・コンパイラ・DSP は実行環境を問わず同一です。
+同じ `Project` モデルと中核のバウンス挙動は、WASM/JS、Node ネイティブ、Python から使えます。名前は各言語の慣習に従います（`bounceWithSynthInstrument` ↔ `bounce_with_synth_instrument`）。CLI では `project bounce`（MIDI を内蔵シンセへ通す `--synth` を含む）や SMF/MIDI 2.0 入出力としてプロジェクトワークフローを使えますが、デスティネーションごとの楽器バインドオプションがすべて配線されているわけではありません。アレンジモデル・コンパイラ・DSP のコードは実行環境を問わず同じです。ただし下で述べるビット単位の再現性は、1 つのビルド・1 つの実行環境の中での保証です。別のプラットフォームでは、浮動小数点演算の丸めで末尾のビットが変わることがあります。
 :::
 
 ## プレーンバウンス: オーディオクリップ
@@ -183,10 +183,10 @@ try {
   project.setSampleRate(48000);
   project.setTempoSegments([{ startPpq: 0, bpm: 120 }]);
 
-  const { clipId } = project.addMidiClip(0, 4);   // MIDI トラック + クリップ、4 拍長
+  const { clipId } = project.addMidiClip(0, 4);   // MIDI トラック + クリップ、4 分音符 4 つぶん
   project.setMidiEvents(clipId, [
-    Project.midiNoteOn(0, 0, 0, 60, 100),         // 0 拍目で C4
-    Project.midiNoteOff(3, 0, 0, 60, 0),          // 3 拍目でリリース
+    Project.midiNoteOn(0, 0, 0, 60, 100),         // 先頭（PPQ 0）で C4
+    Project.midiNoteOff(3, 0, 0, 60, 0),          // 4 分音符 3 つぶん後（PPQ 3）でリリース
   ]);
 
   // MIDI のみのプロジェクト -> 無音でないステレオ音声
@@ -204,10 +204,10 @@ with sonare.Project() as project:
     project.set_sample_rate(48000)
     project.set_tempo_segments([{"start_ppq": 0.0, "bpm": 120}])
 
-    _, clip_id = project.add_midi_clip(0.0, 4.0)  # MIDI トラック + クリップ、4 拍長
+    _, clip_id = project.add_midi_clip(0.0, 4.0)  # MIDI トラック + クリップ、4 分音符 4 つぶん
     project.set_midi_events(clip_id, [
-        sonare.Project.midi_note_on(0.0, 0, 0, 60, 100),   # 0 拍目で C4
-        sonare.Project.midi_note_off(3.0, 0, 0, 60, 0),    # 3 拍目でリリース
+        sonare.Project.midi_note_on(0.0, 0, 0, 60, 100),   # 先頭（PPQ 0）で C4
+        sonare.Project.midi_note_off(3.0, 0, 0, 60, 0),    # 4 分音符 3 つぶん後（PPQ 3）でリリース
     ])
 
     audio = project.bounce_with_builtin_instrument(
@@ -274,7 +274,7 @@ c = project.bounce_with_synth_instrument(
 <SonareDemo id="midi-piano-roll" />
 
 ::: info 決定的であること
-プロジェクト・オプション・パッチを固定すれば、`bounceWithSynthInstrument` はビット単位で再現可能です。これはすべてのバウンスメソッドに共通で、だからこそバウンスをテストのスナップショットに採ったり、ハッシュでキャッシュしたりしても安全です。
+プロジェクト・オプション・パッチを固定すれば、`bounceWithSynthInstrument` は同じビルド・同じ実行環境の上でビット単位で再現可能です。これはすべてのバウンスメソッドに共通で、だからこそバウンスをテストのスナップショットに採ったり、ハッシュでキャッシュしたりしても安全です。
 :::
 
 ## SoundFont で MIDI をバウンスする
@@ -471,6 +471,13 @@ const audio = project.bounceWithSynthInstrument('saw-lead', { numChannels: 2, sa
 const url = URL.createObjectURL(exportWav(audio, 48000, 2));
 // url を <a download> に割り当ててクリックさせる
 ```
+
+::: warning この書き出し関数がサンプルに対して行うこと
+バウンスは 32 ビット浮動小数点で、この書き出し関数はいちばん単純な方法で 16 ビット整数へ落とします。
+
+- **振り切れた部分はクリップされます**。浮動小数点のバウンスは 1.0（0 dBFS）を超えることがあり、`Math.max` / `Math.min` による制限はそのピークを平らに切り取ります。これは耳で分かるひずみです。先にピークを測り、1.0 を超えるならマスターを下げてください。
+- **端数は切り捨てられ、ディザはかかりません**。`setInt16` は小数部を捨てるので、信号に連動した量子化誤差が残り、静かなフェードやリバーブのテールでざらついたひずみとして聞こえることがあります。最終的な 16 ビットファイルにするなら、切り捨てではなく四捨五入にし、その前に TPDF ディザ（それぞれ ±0.5 LSB の独立な乱数 2 つの和）を加えるか、24 ビットまたは 32 ビット浮動小数点の WAV で書き出して、納品用のツールで変換してください。
+:::
 
 Python では CLI が WAV を書き出します（次節）。ライブラリから直接書く場合は、`np.ndarray` を `soundfile` や任意の WAV ライターへ渡してください。
 

@@ -15,7 +15,7 @@ Read [Audio Basics](./glossary/concepts/audio-basics.md) first, then [MIR Overvi
 
 | Looking for | Go to |
 |-------------|-------|
-| Sample rate, bit depth, dBFS, peak vs RMS, clipping, headroom, latency | [Audio Basics](./glossary/concepts/audio-basics.md) |
+| Samples, sample rate, Nyquist, bit depth, frequency and harmonics, phase and polarity, dB and dBFS, peak vs RMS, clipping, headroom, latency | [Audio Basics](./glossary/concepts/audio-basics.md) |
 | LUFS, integrated loudness, LRA, the loudness gate | [LUFS](./glossary/lufs.md) |
 | True peak, dBTP, inter-sample peak, limiter ceiling | [True Peak](./glossary/true-peak.md) |
 | Crest factor, dynamic range | [Crest Factor](./glossary/concepts/crest-factor.md), [Dynamic Range](./glossary/concepts/dynamic-range.md) |
@@ -37,7 +37,7 @@ These pages cover the signal and analysis concepts that recur across the API, CL
 
 | Guide | Covers |
 |-------|--------|
-| [Audio Basics](./glossary/concepts/audio-basics.md) | Sample rate, bit depth, mono/stereo, amplitude and dB (peak, RMS, loudness), clipping, headroom, and latency. |
+| [Audio Basics](./glossary/concepts/audio-basics.md) | Samples and sample rate, bit depth, mono/stereo and sample frames, frequency and harmonics, time vs frequency domain (Nyquist, phase, polarity), amplitude and dB (peak, RMS, loudness), clipping, headroom, and latency. |
 | [MIR Overview](./glossary/concepts/mir-overview.md) | BPM, beats, onsets, key, chords, chroma, FFT, STFT, spectrograms, MFCC, CQT, VQT, HPSS, pitch, and sections. |
 | [Mixing Basics](./glossary/concepts/mixing-basics.md) | Tracks and channel strips, trim, fader and gain staging, pan, inserts vs sends, buses and subgroups, automation, and metering. |
 | [Editing Basics](./glossary/concepts/editing-basics.md) | Pitch vs time, semitones and cents, MIDI note numbers, formant, and samples vs seconds. |
@@ -148,12 +148,11 @@ These guides explain the listening and measurement ideas behind the mastering de
 
 | Guide | Covers |
 |-------|--------|
-| [Mastering](./glossary/mastering.md) | The role of mastering and how loudness, tone, dynamics, stereo image, and peak safety work together. |
+| [The Mastering Chain](./glossary/mastering.md) | The order the mastering stages run in and how the demo exposes them. |
 | [What Is Mastering?](./glossary/concepts/what-is-mastering.md) | A fuller introduction to mastering as a final delivery process. |
 | [LUFS](./glossary/lufs.md) | Integrated loudness and common delivery targets. |
 | [True Peak](./glossary/true-peak.md) | Inter-sample peak safety and why `dBTP` differs from sample peak. |
-| [A/B Comparison](./glossary/ab-comparison.md) | Loudness-matched before/after listening. |
-| [Loudness Matching](./glossary/concepts/loudness-matching.md) | How to compare processing decisions without louder-is-better bias. |
+| [Loudness Matching and A/B Comparison](./glossary/concepts/loudness-matching.md) | Level-matched before/after listening, so decisions are not driven by louder-is-better bias. |
 | [Reference Track](./glossary/concepts/reference-track.md) | Using a finished release as a tonal and loudness anchor. |
 | [True Peak Safety](./glossary/concepts/true-peak-safety.md) | Choosing ceilings that survive encoding and playback conversion. |
 | [Dynamic Range](./glossary/concepts/dynamic-range.md) | Reading movement and density beyond loudness alone. |

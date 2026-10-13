@@ -82,6 +82,8 @@ libsonare の `RealtimeEngine` は、トランスポート・クリップ・オ�
 | `setSf2Instrument(config, destinationId)` | GS 互換の SoundFont プレイヤー | [SoundFont プレイヤー](./soundfont-player.md) |
 
 ::: tip MIDI 2.0 と MPE 表現
+MPE はゾーンの中で鳴っているノートごとに別のチャンネルを割り当てるので、和音の 1 音だけにベンドやプレッシャーをかけられます。ゾーン、マネージャーチャンネルとメンバーチャンネル、UMP のグループは [MIDI の基礎](./glossary/instruments/midi-basics.md#midi-ファイルと-midi-2-0)で説明しています。
+
 内蔵の波形シンセ（`setBuiltinInstrument`）、NativeSynth（`setSynthInstrument`）、SoundFont プレイヤー（`setSf2Instrument`）は、MIDI 2.0 のチャンネルボイス UMP を値の幅を落とさずに受け取ります。ノートベロシティ、コントローラー、プレッシャー、ピッチベンドは MIDI 2.0 メッセージから渡された分解能を保ちます。内蔵シンセと NativeSynth はチャンネルプレッシャー、ポリフォニックキープレッシャー、ノート単位のピッチベンドを適用します。SoundFont プレイヤーもフル幅のノートベロシティ、チャンネルプレッシャー、ピッチベンド、MIDI 2.0 のノート単位ピッチを適用しますが、ポリフォニックキープレッシャーは意図的に無視します。そのため MPE スタイルのメンバーチャンネルで各プレイヤーへチャンネル表現を送れますが、SoundFont ではポリフォニックプレッシャー表現を使えません。
 
 内蔵シンセでは、MPE のマネージャーチャンネルに送ったゾーン全体向けのコマンド（CC64 サステインなど）がゾーン内のすべてのメンバーチャンネルに届きます。
@@ -331,7 +333,8 @@ const binding = await bindWebMidi(engine, {
   ccBindings: [
     { channel: 0, controller: 1, paramId: 42, options: { minValue: 0, maxValue: 1 } },
   ],
-  timestampToSamples: (eventTimeMs) => Math.round((eventTimeMs / 1000) * 48000),
+  // イベントを拾うブロック内のオフセット。blockStartMs = そのブロックが始まったページクロックの時刻
+  timestampToSamples: (eventTimeMs) => Math.max(0, Math.round(((eventTimeMs - blockStartMs) / 1000) * 48000)),
   onInputsChanged: (inputs) => {
     // ホットプラグ時、ヘルパーが一致ポートを再バインドした後に呼ばれる
     console.log('MIDI inputs:', inputs.map((i) => `${i.name} (${i.state})`));
@@ -352,11 +355,11 @@ const binding = await bindWebMidi(engine, {
 
 ### タイムスタンプからサンプルへの変換が重要な理由
 
-ここには別々の 2 つのクロックがあります。Web MIDI は各メッセージをミリ秒の時刻（ページクロックの `DOMHighResTimeStamp`）付きで届けますが、エンジンはイベントを**サンプルフレーム**でスケジュールします。`timestampToSamples(eventTimeMs)` はその両者を橋渡しし、メッセージ時刻をエンジンがキューイングする `portTimeSamples` の値へ変換します。
+ここには別々の 2 つのクロックがあります。Web MIDI は各メッセージをミリ秒の時刻（ページクロックの `DOMHighResTimeStamp`）付きで届けますが、エンジンはイベントを**サンプルフレーム**でスケジュールします。`timestampToSamples(eventTimeMs)` はその両者を橋渡しし、メッセージ時刻をエンジンがキューイングする `portTimeSamples` の値へ変換します。この値は絶対的な時計の上の位置ではなく、イベントを拾うレンダリングブロックの先頭からの**オフセット**（サンプル数）です。ブロックの終わりを超えるオフセットは、そのブロックの最後のフレームに切り詰められます。128 フレームのブロックで測ると、オフセット `40` ではノートがフレーム 41 から鳴り始めます。一方、ページクロックの時刻をそのままサンプル数に換算した値（10 秒後なら `480000`）では、ブロックの最後のフレームまで何も鳴りません。速いパッセージのイベントがすべて同じフレームに重なってしまいます。
 
 変換が正しければ、タイミングが詰まった箇所（和音や速いパッセージ）が、演奏したとおりの正確なフレームに配置されます。省略すると、すべてのイベントが次のブロックのサンプル `0` にキューイングされます。気軽な演奏には十分ですが、リズミカルな素材ではタイミングのずれが聴き取れるほどになります。
 
-実用的な実装は、`performance.now()`（または `AudioContext.currentTime`）とエンジンのフレームクロックとの差分を追い、その差分をここで適用します。
+実用的な実装は、各レンダリングブロックが始まるときのページクロックの時刻を記録し（`performance.now()`、または同じ時計へ換算した `AudioContext.currentTime` から）、ここでその時刻を引きます。上の例の `blockStartMs` がそれにあたります。
 
 ### ライフサイクル
 

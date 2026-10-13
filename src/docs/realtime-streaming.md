@@ -10,6 +10,8 @@ This page covers the **streaming** side of libsonare: turning a live audio strea
 - **`StreamAnalyzer`** — feeds in blocks of audio and emits *analysis frames* (mel, chroma, onset, spectral) plus musical estimates that update as more audio arrives (BPM, key, chord, chord progression, pattern). Use it for visualizers and live "what is this song doing" displays.
 - **Engine streaming plumbing** — the AudioWorklet bridge that runs `RealtimeEngine` on the audio thread, paged clip audio streaming for arrangements too large to hold in memory, and waveform-peak reduction for drawing clips.
 
+If *block*, *latency*, or *audio thread* are unfamiliar, read [Realtime Safety](./glossary/realtime/realtime-safety.md) first, and [Audio Basics](./glossary/concepts/audio-basics.md) for samples and frames — this page assumes that vocabulary.
+
 The short version: use `StreamAnalyzer` when audio is the input and information is the output. If you are building a UI, it usually feeds graphs, meters, and labels.
 
 ::: tip Looking for the engine itself?

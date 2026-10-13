@@ -61,4 +61,4 @@ description: マスタリング済みファイルを書き出す前の、実用�
 
 ::::
 
-関連: [A/B 比較](../ab-comparison.md)、[リファレンスマッチ](./reference-match.md)、[エラー復旧](./error-recovery.md)
+関連: [A/B 比較](../concepts/loudness-matching.md)、[リファレンスマッチ](./reference-match.md)、[エラー復旧](./error-recovery.md)

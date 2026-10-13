@@ -32,6 +32,8 @@ libsonare covers several related jobs:
 | Room acoustics | Measure, estimate, synthesize, or morph room character | [Room Acoustics](./acoustic-analysis.md) |
 
 ::: info Loudness, LUFS, and true peak
+Digital levels are measured in decibels below **full scale** (dBFS): `0 dBFS` is the largest value a sample can hold, so ordinary levels are negative. [Audio Basics](./glossary/concepts/audio-basics.md#amplitude-and-db) covers the decibel from zero.
+
 LUFS (Loudness Units relative to Full Scale) is a standardized estimate of program loudness used in streaming and broadcasting. Matching two tracks by integrated LUFS is a useful starting point for comparison, but differences in spectrum and dynamics can still make them sound unequally loud. True peak estimates the highest level of the reconstructed signal, including peaks between samples that a sample-peak meter misses. Those peaks can cause distortion during playback or encoding.
 :::
 
@@ -104,11 +106,19 @@ What follows is a quick tour of the pipeline. For a deeper, cross-linked map of 
 
 ### Stage 1: Spectral Analysis
 
-Raw audio is a sequence of amplitude values over time: a waveform.
+Raw audio is a sequence of amplitude values over time: a waveform. Each value is one **sample**, and the **sample rate** says how many samples make up one second. [Audio Basics](./glossary/concepts/audio-basics.md) covers samples, decibels, and frequency from zero.
 
 To extract musical meaning, the first step is to convert this into a **spectrogram** using the Short-Time Fourier Transform (STFT).
 
-The STFT breaks the audio into short overlapping windows and computes the frequency content of each. The result is a 2D map of "which frequencies are present at each moment."
+The STFT breaks the audio into short overlapping windows and computes the frequency content of each. The result is a 2D map of "which frequencies are present at each moment." Three numbers set up that analysis:
+
+| Parameter | Meaning | Tradeoff |
+|-----------|---------|----------|
+| Sample rate | How many samples the audio contains per second, such as 44,100 Hz for CD quality | The highest frequency it can carry is half the rate (the Nyquist limit: 22,050 Hz at 44.1 kHz); higher rates use more data |
+| FFT size (`n_fft`) | How many samples each analysis window contains | Larger windows improve frequency resolution but blur time |
+| Hop length | How many samples the window moves between frames | Smaller hops give more time detail but cost more computation |
+
+libsonare generally asks you to pass the sample rate explicitly. Common DSP defaults such as `n_fft=2048` and `hop_length=512` mirror typical librosa usage. [Spectrogram and STFT](./glossary/analysis/spectrogram-stft.md) explains the window function that tapers each block.
 
 ::: details What is a Fourier Transform?
 A Fourier Transform decomposes a signal into its constituent frequencies, like splitting white light through a prism into a rainbow.
@@ -140,7 +150,7 @@ In music, a pitch class groups all octaves of the same note together. For exampl
 An onset is the beginning of a musical event — the moment a note is struck, a drum is hit, or a new sound begins. The onset envelope is a continuous curve that peaks at these moments. By finding the peaks, we can detect individual note attacks, which in turn helps estimate tempo and find beat positions.
 :::
 
-- **Mel Spectrogram** — Re-maps the spectrogram to the mel scale, which matches human perception of pitch (we hear the difference between 200 Hz and 400 Hz as the same "distance" as 2000 Hz and 4000 Hz). Widely used in audio ML.
+- **Mel Spectrogram** — Re-maps the spectrogram to the mel scale, which follows how human hearing spaces pitch: roughly linear below about 1 kHz and logarithmic above it, so the same 100 Hz step counts for much more at 200 Hz than at 5000 Hz. Widely used in audio ML.
 
 ::: details What is the mel scale?
 The mel scale is a perceptual scale of pitch. Humans don't perceive frequency linearly — the jump from 100 Hz to 200 Hz sounds like a big change, but 5000 Hz to 5100 Hz sounds almost the same. The mel scale compresses higher frequencies to match this perception. A mel spectrogram uses this scale for its frequency axis, making it better suited for tasks that relate to how we actually hear sound.
@@ -149,7 +159,7 @@ The mel scale is a perceptual scale of pitch. Humans don't perceive frequency li
 - **MFCC** (Mel-Frequency Cepstral Coefficients) — A compact representation of spectral shape derived from the mel spectrogram. Useful for classifying timbre and musical texture.
 
 ::: details What is timbre?
-Timbre (pronounced "TAM-ber") is what makes a piano and a guitar sound different even when playing the same note at the same volume. It's the "color" or "texture" of a sound, determined by the relative strengths of its harmonic frequencies. MFCC features capture this spectral shape in a compact form, making them useful for distinguishing between different instruments, voices, or sound types.
+Timbre (pronounced "TAM-ber") is what makes a piano and a guitar sound different even when playing the same note at the same volume. It's the "color" or "texture" of a sound, shaped mostly by the relative strengths of its partials and by how they change over the attack and decay of the note. MFCC features capture this spectral shape in a compact form, making them useful for distinguishing between different instruments, voices, or sound types.
 :::
 
 <SonareDemo id="waveform-harmonics" />
@@ -173,7 +183,7 @@ The high-level results that most users care about are built **on top of** the fe
 | Analysis | Built from | What it does |
 |----------|-----------|-------------|
 | **Key Detection** | Chroma → Krumhansl-Schmuckler algorithm | Determines the musical key (e.g., "A minor") by comparing chroma profiles against key templates |
-| **Chord Recognition** | Chroma → template matching | Identifies chords over time by matching chroma frames against per-root chord templates — 4 triad qualities by default, or 24 qualities across 12 roots once the full template set is enabled |
+| **Chord Recognition** | Chroma → template matching | Identifies chords over time by matching chroma frames against per-root chord templates. Standalone `detectChords` searches 24 qualities across 12 roots by default; inside `analyze()` the default is the 4 triad qualities only |
 | **BPM Detection** | Onset envelope → tempogram + autocorrelation | Estimates tempo by finding periodic patterns in onset strength |
 | **Beat Tracking** | Onset envelope → dynamic programming | Finds exact beat timestamps by optimizing for rhythmic regularity |
 | **Section Detection** | Chroma + spectral features → self-similarity | Segments the song into Intro, Verse, Chorus, etc. by detecting boundaries where musical character changes |
@@ -188,7 +198,7 @@ Self-similarity analysis compares every part of a song against every other part,
 :::
 
 ::: details What is the fundamental frequency (F0)?
-The fundamental frequency (F0) is the lowest frequency of a periodic sound — the frequency that determines the perceived pitch. When a singer sings an A4 note, the F0 is 440 Hz, even though many higher harmonics (880 Hz, 1320 Hz, ...) are also present. Pitch tracking algorithms like YIN and pYIN estimate this F0 over time to extract the melody line from audio.
+The fundamental frequency (F0) is the rate at which a periodic waveform repeats. For a harmonic sound it is also the spacing between the harmonics, and it is usually heard as the pitch. When a singer sings an A4 note, the F0 is 440 Hz, and harmonics sit at 880 Hz, 1320 Hz, and so on. The F0 component itself can be weak or missing and the pitch is still heard, which is why trackers read waveform periodicity rather than the lowest spectral peak. Pitch tracking algorithms like YIN and pYIN estimate this F0 over time to extract the melody line from audio.
 :::
 
 <SonareDemo id="beat-tracking" />
@@ -229,11 +239,11 @@ libsonare also provides audio processing capabilities that operate on the spectr
 ::: details What are harmonic and percussive components?
 In a spectrogram, harmonic sounds such as vocals, strings, and sustained notes appear as horizontal lines. They maintain a stable frequency over time.
 
-Percussive sounds such as drums, clicks, and transients appear as vertical lines. They contain many frequencies, but only for a brief moment.
+Percussive sounds such as drums, clicks, and transients (the short, sharp burst at the start of a note or hit) appear as vertical lines. They contain many frequencies, but only for a brief moment.
 
 HPSS exploits this difference with median filters: a horizontal median filter extracts the harmonic part, and a vertical median filter extracts the percussive part.
 :::
-- **Time Stretch / Pitch Shift** — Changes tempo or transposes pitch by combining phase-vocoder processing and resampling.
+- **Time Stretch / Pitch Shift** — Changes tempo or transposes pitch by combining phase-vocoder processing (rebuilding the signal from short overlapping spectral frames) and resampling.
 - **Editing DSP** — Pitch correction to a target MIDI note, note-region stretch, and voice-change pitch/formant controls ([Editing DSP](./editing-dsp.md)).
 - **Creative FX / inserts** — Sound-design DSP such as reverb inserts, chorus, flanger, phaser, and stereo delay.
 
@@ -278,18 +288,6 @@ The full WebAssembly and JavaScript bundle is about {{ wasmMeta.total.sizeKB }} 
 
 [librosa](https://librosa.org/) is the de facto standard Python library for audio analysis in the MIR community. libsonare provides similar MIR building blocks for environments where Python is not available, where native integration is useful, or where a single C++ core is preferred:
 
-::: details What are sample rate, FFT size, and hop length?
-These are the fundamental parameters of audio analysis.
-
-| Parameter | Meaning | Tradeoff |
-|-----------|---------|----------|
-| Sample rate | How many amplitude measurements the audio contains per second, such as 44,100 Hz for CD quality | Higher rates carry higher frequencies but use more data |
-| FFT size (`n_fft`) | How many samples each analysis window contains | Larger windows improve frequency resolution but blur time |
-| Hop length | How many samples the window moves between frames | Smaller hops give more time detail but cost more computation |
-
-libsonare generally asks you to pass the sample rate explicitly. Common DSP defaults such as `n_fft=2048` and `hop_length=512` mirror typical librosa usage.
-:::
-
 - Common DSP parameters and APIs are intentionally close to librosa where practical
 - Core features such as STFT, Mel spectrogram, MFCC, and chroma are covered by reference tests against librosa
 - Function names and API patterns are intentionally similar for easy migration
@@ -331,6 +329,7 @@ Two different readers leave this page. Take the path that matches what you want 
 
 ### If you want to understand the engine
 
+- [Audio Basics](/docs/glossary/concepts/audio-basics) — samples, sample rate, decibels, frequency and harmonics, from zero; the vocabulary every other page assumes
 - [Sound Sources](/docs/sound-sources) — why an audio engine ships no samples, what each synthesis method costs, and why GS is its control vocabulary
 - [Music Analysis](/docs/analysis) — what each analysis result means, which call produces it, and where its confidence comes from
 - [MIR Overview](/docs/glossary/concepts/mir-overview) — the map of how every feature relates, with the [Glossary](/docs/glossary) behind each term

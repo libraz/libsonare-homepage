@@ -12,13 +12,15 @@ If you have not run anything yet, start with [Getting Started](./getting-started
 
 ::: details Reading the docs front to back
 1. [Introduction](./introduction.md) for vocabulary and the overall audio-analysis pipeline.
-2. This page, to find the subject area your goal belongs to.
-3. [Getting Started](./getting-started.md), [Installation](./installation.md), and [Examples](./examples.md) to run one small program.
-4. [Feature Map](./api-surface.md) to find the right API family.
-5. One walkthrough from [Use Cases](./use-cases.md) when what you want is a finished deliverable rather than an integration.
-6. One guide from the subject area that matches your goal, below.
-7. One runtime reference from **API By Runtime**.
-8. The evidence pages only when you need implementation details, algorithm references, validation scope, or performance context.
+2. [Audio Basics](./glossary/concepts/audio-basics.md) for samples, sample rate, decibels (dBFS, RMS, LUFS), frequency and harmonics, and stereo, if any of those are new to you.
+3. [MIR Overview](./glossary/concepts/mir-overview.md) for how spectrograms, chroma, onsets, and the analysis results build on one another.
+4. This page, to find the subject area your goal belongs to.
+5. [Getting Started](./getting-started.md), [Installation](./installation.md), and [Examples](./examples.md) to run one small program.
+6. [Feature Map](./api-surface.md) to find the right API family.
+7. One walkthrough from [Use Cases](./use-cases.md) when what you want is a finished deliverable rather than an integration.
+8. One guide from the subject area that matches your goal, below. Mixing, editing, and mastering each have a basics page ([Mixing Basics](./glossary/concepts/mixing-basics.md), [Editing Basics](./glossary/concepts/editing-basics.md), [What Is Mastering?](./glossary/concepts/what-is-mastering.md)) to read first.
+9. One runtime reference from **API By Runtime**.
+10. The evidence pages only when you need implementation details, algorithm references, validation scope, or performance context.
 :::
 
 ## Start With Your Goal
@@ -151,7 +153,7 @@ Before implementing from a task page, check these points.
 
 | Layer | What it means | Pages |
 |-------|---------------|-------|
-| Concepts | What BPM, key, STFT, chroma, LUFS, true peak, and related terms mean | [Introduction](./introduction.md), [Glossary](./glossary.md) |
+| Concepts | What samples, decibels, BPM, key, STFT, chroma, LUFS, true peak, and related terms mean | [Introduction](./introduction.md), [Audio Basics](./glossary/concepts/audio-basics.md), [Glossary](./glossary.md) |
 | Tasks | What you want to build, in the ten subject areas above | [Feature Map](./api-surface.md), the area guides from [Music Analysis](./analysis.md) to [Playback Renderer](./playback.md) |
 | Runtime | Where the code runs: browser, Python, Node, CLI, C++ | [Getting Started](./getting-started.md), runtime references |
 | Evidence | How the implementation is structured and validated | [DSP Implementation Notes](./dsp-implementation.md), [Algorithm References](./algorithm-references.md), [Implementation Validation](./implementation-validation.md) |

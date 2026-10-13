@@ -17,7 +17,7 @@ The **downbeat** is the first beat of each bar, the accent you feel as the start
 
 <SonareDemo id="downbeat-tracking" />
 
-## Why beats are not just tempo ÷ meter
+## Why beats are not just an even 60/BPM grid
 
 You might expect beats to be trivial once the tempo is known: divide the timeline evenly. Real music makes that unreliable:
 
@@ -36,7 +36,7 @@ Beat tracking starts from the onset-strength envelope and a tempo estimate. The 
 
 When adaptive tempo is enabled in the native configuration, the tracker can follow local period changes while still penalizing sudden jumps. This is still a pulse estimate, not a score-level transcription.
 
-Picture a metronome grid laid over the song, then stretched and shifted as a whole until its ticks land on as many strong onsets as possible. Matching one nearby sound throws the rest off, so the tracker looks at the whole track and picks the placement that fits best overall.
+Picture a chain of beats rather than a rigid grid. Each gap between two neighboring beats may stretch or shrink a little, but every deviation from the expected beat period costs points (the cost grows with the square of the deviation, scaled by `tightness`), while every beat that lands on a strong onset earns points. The tracker scores every possible chain across the whole track and keeps the best one, so snapping one beat to a nearby sound is only worth it when the gaps on either side stay plausible.
 
 ## Downbeat tracking
 

@@ -7,7 +7,9 @@ description: libsonare の音楽情報検索（MIR）を使うためのタスク
 
 **楽曲解析**は、録音を聴いてその中身を報告する libsonare の機能群です。テンポ、ビートの位置、キーとコード、セクション構成、メロディの動きを取り出します。
 
-このページは目的別のガイドです。どの関数を呼ぶか、返ってきた値が実際には何を意味するか、そしてより詳しい説明がどこにあるかを示します。概念そのものは[用語集](./glossary/analysis/beats-downbeats.md)が、フィールド単位のリファレンスは [JavaScript 解析 API](./js-api-analysis.md) が担当します。どれを使うか決めるときにこのページを参照してください。
+このページは目的別のガイドです。どの関数を呼ぶか、返ってきた値が実際には何を意味するか、そしてより詳しい説明がどこにあるかを示します。概念そのものは、すべての特徴量の土台であるスペクトログラムから始まる[用語集](./glossary/analysis/spectrogram-stft.md)が、フィールド単位のリファレンスは [JavaScript 解析 API](./js-api-analysis.md) が担当します。どれを使うか決めるときにこのページを参照してください。
+
+音声や MIR に初めて触れる場合は、先に[オーディオ基礎](./glossary/concepts/audio-basics.md)（サンプル、サンプルレート、デシベル）と [MIR の全体像](./glossary/concepts/mir-overview.md)（各特徴量の系統が何を測るか）を読んでください。
 
 ::: tip 解析はパイプラインのどこに位置するか
 **解析**は録音の中身を明らかにします。**編集**は 1 トラックを変え、**ミキシング**は複数をまとめ、**マスタリング**は仕上がったステレオを整えます。解析は他の工程が参照する段階でもあります。ジャンル別のマスタリング目標、検出ビートから引いたグリッド、ピッチ追跡の前に取り出したステムなどです。
@@ -39,7 +41,7 @@ await init();
 const ctx = new AudioContext();
 const response = await fetch('track.mp3');
 const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
-const samples = buffer.getChannelData(0); // モノラルの Float32Array
+const samples = buffer.getChannelData(0); // 左チャンネルだけで、モノラルミックスではない
 
 const result = analyze({ samples, sampleRate: buffer.sampleRate });
 
@@ -78,6 +80,8 @@ sonare analyze track.mp3 --meter-candidates 3,4,5,6
 ```
 
 :::
+
+`getChannelData(0)` が渡すのはステレオファイルの最初のチャンネルだけです。ざっと確かめるには足りますが、右に定位した音は抜け落ちます。ミックス全体を解析するには、先にチャンネルをサンプルごとに平均してください（`(left[i] + right[i]) / 2`）。
 
 この呼び出しは同期で、WASM ビルドはシングルスレッドです。短いクリップでなければ Web Worker で実行してください。`analyzeWithProgress(...)` は同じリクエストを受け取り、`(progress, stage)` を通知し、長い処理をキャンセルできます。解析オプションは `options` の下に渡します。最上位に書いた `tuning` はエラーにならずに無視されます。
 
@@ -201,7 +205,7 @@ for (const [index, beat] of beats.entries()) {
 
 | 経路 | 返るもの | 使いどころ |
 |------|----------|------------|
-| `analyze(...)` の `result.bpm` | 数値 1 つと `bpmConfidence`、さらに `primary` / `half` / `double` / `other` のラベル付き `bpmCandidates` | すでに一括解析を回している場合。候補の関係ラベルは倍取り・半分取りを検知する手がかりになる。 |
+| `analyze(...)` の `result.bpm` | 数値 1 つと `bpmConfidence`、さらに `primary` / `half` / `double` / `other` のラベル付き `bpmCandidates` | すでに一括解析を回している場合。候補の関係ラベルは倍取り・半分取りを検知する手がかりになる。`bpmConfidence` は、勝ったテンポ系列が集めた周期性の票の割合（[テンポと BPM](./glossary/analysis/tempo-bpm.md#信頼度と安定性)）。 |
 | `detectBpm(...)` | 数値 1 つ | テンポだけが欲しい場合。 |
 | `analyzeBpm(...)` | `bpm`、`confidence`、順位付き `candidates`、その根拠である `autocorrelation` と `tempogram` | 根拠を見せたい、または範囲を絞って探索したい場合。既定値は `bpmMin` 30、`bpmMax` 300、`startBpm` 120、`maxCandidates` 5。 |
 | `analyzeRhythm(...)` | 局所的な拍周期から精緻化した独自の `bpm` と、グルーヴ、シンコペーション、規則性、`beatIntervals` | 数値よりもリズムの性格が欲しい場合。既定範囲は狭く `bpmMin` 60、`bpmMax` 200。 |
@@ -380,7 +384,7 @@ const { boundaries, noveltyCurve, noveltyPeak } = detectBoundaries({ samples, sa
 | `absoluteThreshold` | 0.005 | 生のノベルティに対する下限。0 にすると `threshold` だけで判定するので、定常的な入力でも区切られる。 |
 | `referenceWindow` | 60 | 局所基準を取る片側の秒数。0 で相対しきい値を無効にでき、曲の長さ以上なら基準が曲全体になる。 |
 | `peakDistance` | 2 | ピーク間の最小間隔（秒）。強いピークから順に採用する。 |
-| `kernelSize` · `nMfcc` · `nChroma` · `useMfcc` · `useChroma` | 64 · 13 · 12 · true · true | チェッカーボード型カーネルと特徴量の組み合わせ。`useMfcc` と `useChroma` のどちらかは有効のままにする。 |
+| `kernelSize` · `nMfcc` · `nChroma` · `useMfcc` · `useChroma` | 64 · 13 · 12 · true · true | チェッカーボード型カーネル（`hopLength` 単位のフレーム数。ホップ 512、22050 Hz で 64 フレームは約 1.5 秒）と特徴量の組み合わせ。`useMfcc` と `useChroma` のどちらかは有効のままにする。 |
 
 ### メロディとピッチ
 
@@ -395,7 +399,7 @@ const voiced = melody.points.filter((point) => point.frequency > 0);
 
 ピッチ追跡は STFT ではなく波形を直接読み、**モノフォニック**の素材、つまり同時に 1 音だけが鳴る素材を前提とします。ソロボーカル、リードライン、あるいは先に分離したステムに対して使ってください。フルミックスに掛けると、その瞬間に支配的な音をフレームごとに追いかけます。
 
-`points[].frequency` は無声フレームで `0` になるので、平均を取る前に除外します。`usePyin: true` は Viterbi で平滑化した追跡器を選びます。コストは上がりますが、素の YIN に比べてオクターブ飛びが格段に減るため、ユーザーに見せる用途では通常こちらです。既定の探索範囲は `fmin` 65 Hz から `fmax` 2093 Hz、有声判定の `threshold` は 0.1 です。実際に扱う楽器に合わせて範囲を狭めるのが、最も手軽に精度を上げる方法です。
+`points[].frequency` は無声フレームで `0` になるので、平均を取る前に除外します。`usePyin: true` は Viterbi で平滑化した追跡器を選びます。コストは上がりますが、素の YIN に比べてオクターブ飛びが格段に減るため、ユーザーに見せる用途では通常こちらです。既定の探索範囲は `fmin` 65 Hz から `fmax` 2093 Hz、YIN の `threshold` は 0.1 です（差分関数のくぼみがどこまで深ければ周期とみなすかを決める値で、小さいほど厳しくなります）。pYIN の有声判定はこの値ではなく `voicedFlag` で決まります。実際に扱う楽器に合わせて範囲を狭めるのが、最も手軽に精度を上げる方法です。
 
 ## 音源分離
 

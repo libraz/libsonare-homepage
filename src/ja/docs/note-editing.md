@@ -112,6 +112,10 @@ edited = sonare.render_notes(samples, sample_rate, notes, fade_ms=10)
 | `muted` | 区間を無音にする。ほかのフィールドは適用されない | `false` | 不要 |
 | `amplitudeEnvelope` | レンダリング後のノートの長さに引き伸ばされるゲイン点列。`gainDb` に上乗せされる | 空（なし） | 不要 |
 
+::: warning `pitchShiftSemitones` はフォルマントも動かす
+`renderNotes` は `pitchShiftSemitones` を、ノートのタイムストレッチとリサンプリングで適用します。そのためフォルマントも音高と一緒に動き、`formantShiftSemitones` はそこからさらにフォルマントを動かします。ノートの音程を直しつつ母音や声のキャラクターを保つには、反対の量をフォルマントシフトに渡します（例：`{ pitchShiftSemitones: 1, formantShiftSemitones: -1 }`）。ビブラートとドリフトの編集は、フォルマントを動かさない別のエンジンを通ります。2 つの比較は[再合成エンジンは 2 種類](./glossary/editing/pitch-correction.md#再合成エンジンは-2-種類)にあります。[ボーカル編集セッション](./vocal-editing.md)も、音高を動かすときにフォルマントを元の位置に保ちます。
+:::
+
 カーブ編集（`vibratoDepthChange`、`driftChange`）には、レンダリングリクエストにも元の `f0Hz` トラックと `frameRate` が必要で、JS/WASM では `f0Hz` を `Float32Array` にします。任意の `voiced` フラグ配列を渡す場合は `f0Hz` と同じ長さにします。`false` は正の F0 も抑制し、`true` でも利用できない F0 は有効になりません。`decomposeNotePitch` も同じフラグを受け付けます。`extractNotes` は有声音フラグまたは有声音確率を受け付け、0 以下または有限でない F0 フレームはピッチの計測に使いません。
 
 ### 秒指定とサンプル指定
@@ -205,9 +209,9 @@ with sonare.PolyphonicAnalysis.analyze(samples, sample_rate, max_polyphony=3) as
 
 編集が恒等の新しいポリフォニック解析をレンダリングすると、解析の STFT 再構成を含む往復結果になります。入力とバイト単位で同じになるわけではありません。保持するスペクトログラムと帰属セットは解析区間に応じて増えるため、短い区間を単位にし、解放したハンドルを再利用しないでください。
 
-<SonareDemo id="pitch-correct" />
-
 ## SMF を参照メロディにする: ノートターゲット
+
+<SonareDemo id="pitch-correct" />
 
 SMF は録音テイクの参照メロディとして使えます。`noteTargetsFromSmf` と `assignNoteTargets` はモジュールレベル関数です。前者はメモリ上の SMF からターゲットを読み、後者は `extractNotes` で得たノートに適用します。[編集 DSP](./editing-dsp.md) の `pitchCorrectToMidi` はバッファ全体に 1 つの音程差を適用しますが、このワークフローはノートごとにターゲットを割り当てます。
 
@@ -223,7 +227,7 @@ SMF は録音テイクの参照メロディとして使えます。`noteTargetsF
 | `'mute'` | `edit.muted` を立てる |
 | `'nearest'` | どれだけ離れていても、時間的に最も近いターゲットを採る |
 
-`medianHz` が有限の正の値でないノートは、割り当ても編集もされません。入力のノートは変更されません。結果は `{ notes, assignedCount }` で、`edit.pitchShiftSemitones` と `edit.muted` だけが書き換えられた新しい配列と、ターゲットを受け取ったノートの数を返します。`assignedCount` は `0` になることがあります。
+`medianHz` が有限の正の値でないノートは、割り当ても編集もされません。入力のノートは変更されません。結果は `{ notes, assignedCount }` で、`edit.pitchShiftSemitones` と `edit.muted` だけが書き換えられた新しい配列と、ターゲットを受け取ったノートの数を返します。`assignedCount` は `0` になることがあります。音程を直したノートのフォルマントを保つには、レンダリングの前に各ノートの `edit.formantShiftSemitones` を `pitchShiftSemitones` の符号を反転した値にしてください（[前述](#モノフォニックテイクを抽出してレンダリングする)）。
 
 ```typescript
 import { assignNoteTargets, extractNotes, noteTargetsFromSmf, pitchPyin, renderNotes } from '@libraz/libsonare';

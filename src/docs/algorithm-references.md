@@ -37,6 +37,8 @@ By the end of this page you should be able to:
 | Sliding maximum | Lemire sliding max | `README.md`, limiter and true-peak helper usage |
 | Tonnetz | Harte et al. 2006 via `librosa.feature.tonnetz` behavior | `src/feature/tonnetz.h`, `src/feature/tonnetz.cpp`, `tests/librosa/tonnetz_test.cpp` |
 | Pitch tracking | YIN and pYIN; pYIN uses probabilistic pitch candidates and Viterbi decoding | `src/feature/pitch.h`, `tests/librosa/pitch_test.cpp` |
+| Key profiles | Krumhansl-Kessler probe-tone profiles matched by the Krumhansl-Schmuckler correlation method; alternative published major/minor profiles after Temperley, Sha'ath (2011 thesis), Faraldo and Bellman-Budge. The five modal profiles are a stated construction, not a published set | `src/analysis/key_profiles.h`, `src/analysis/key_profiles.cpp` |
+| Polyphonic pitch salience | Harmonic-sum salience with the `(f0 + α) / (h·f0 + β)` partial weighting after Klapuri (ISMIR 2006), followed by iterated estimation and subtraction | `src/editing/polyphony/f0_salience.h`, `src/editing/polyphony/multi_f0.h` |
 | Room acoustics | Energy-decay metrics, blind decay fitting, RIR synthesis, room estimation, and room morphing | `src/analysis/acoustic_analyzer.*`, `src/acoustic/*`, `src/analysis/room_estimator.*`, `src/effects/acoustic/room_morph.*`, `tests/acoustic/*`, `tests/effects/room_morph_test.cpp` |
 | Sequence helpers | DTW, Viterbi, discriminative Viterbi, recurrence quantification analysis, mirroring `librosa.sequence` | `src/util/sequence.h`, `src/feature/segment.*`, librosa sequence references |
 | Time stretch and pitch shift | Native spectral stretch, phase-vocoder fallback, pitch shift by time stretch followed by resampling | `src/effects/time_stretch.h`, `src/effects/pitch_shift.h` |
@@ -58,6 +60,19 @@ This page cites algorithms by name; here is what the less-obvious ones do.
 - **Schroeder energy-decay curve** — integrates a room impulse response backward in time to get a smooth decay curve, which is what RT60/EDT are measured from.
 - **RBJ biquads / Linkwitz-Riley crossovers** — standard recipes for EQ filters and for splitting audio into frequency bands with correct phase behavior.
 :::
+
+## Algorithm-Named Analysis Families
+
+These analysis stages are named by algorithm family in the source, without a full paper citation.
+
+| Area | Algorithm family | Evidence |
+|------|------------------|----------|
+| Tempo | Onset-envelope autocorrelation, a weighted tempo histogram and harmonic clustering of its peaks; a Fourier tempogram for the local tempo curve | `src/analysis/bpm_analyzer.cpp` |
+| Beat tracking | Dynamic programming over the onset envelope with a squared tempo-deviation penalty (`tightness`) | `src/analysis/beat_analyzer.h`, `src/analysis/beat_analyzer.cpp` |
+| Section boundaries | Checkerboard-kernel novelty over a cosine self-similarity matrix of MFCC and chroma features | `src/analysis/boundary_detector.h` |
+| Harmonic/percussive separation | Median filtering along time and frequency with soft or hard masks | `src/effects/hpss.h` |
+| NMF components | Multiplicative-update NMF with a beta divergence, plus per-component soft masks on the complex spectrogram | `src/effects/decompose.cpp` |
+| Phase reconstruction | Griffin-Lim with momentum (the accelerated variant) | `src/core/spectrum.h`, `src/core/spectrum.cpp` |
 
 ## Built-in synthesis and GM/GS compatibility
 

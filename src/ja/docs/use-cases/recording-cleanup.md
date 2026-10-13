@@ -11,6 +11,70 @@ description: クリップし、ハムが乗り、クリックが混じり、頭�
 
 このページは Python CLI（`pip install libsonare`、コマンド名 `sonare`）を使います。`declip`（ステップ 7）はネイティブの `sonare-cli` にはなく、ほかのコマンドは両方にあります。[どの CLI を使っているか](../cli.md#どの-cli-を使っているか)を参照してください。
 
+::: info 用意するもの
+- **インストール:** `pip install libsonare`（Python 3.11 以降）。Node のタブには `npm install @libraz/libsonare`（Node.js 22.12 以降）が必要です。
+- **`raw/` に置いたモノラルのテイク:** WAV ファイルで、サンプルレートは一般的なものなら何でもかまいません。CLI のリペアはモノラルで動きます。ステレオのテイクはモノラルにまとめられ、モノラルのファイルとして書き出されます（ステレオの扱いは[ステップ 8](#ステップ-8-—-ステレオのテイク)）。
+- **ステップ 4 用:** 同じパートを 2〜3 回録ったテイク `take1.wav`〜`take3.wav`。サンプルレートはそろえてください。
+- **テスト素材:** このページのテイクは合成音です。下のスクリプトで同等のものを書き出せるので、まずすべての手順を試せます。出る数値はここに載せたものと少し違います。
+:::
+
+::: details 傷のあるテスト用テイクを書き出すスクリプト
+`make_takes.py` として保存し、`python make_takes.py` を実行します。必要な NumPy は `pip install libsonare` で一緒に入ります。`raw/take-01.wav`（クリップあり、50 Hz のハムとクリック入り）、`raw/take-02.wav`（ハムとクリックのみでクリップなし）、ステップ 4 用の `take1.wav`〜`take3.wav` を、すべて 48 kHz のモノラルで書き出します。
+
+```python
+"""Write damaged test takes: raw/take-01.wav, raw/take-02.wav, take1-3.wav."""
+import os
+import wave
+
+import numpy as np
+
+SR = 48000
+rng = np.random.default_rng(7)
+
+
+def save(path, x):
+    pcm = (np.clip(x, -1.0, 1.0) * 32767).astype("<i2")
+    with wave.open(path, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(SR)
+        w.writeframes(pcm.tobytes())
+
+
+def phrase(seconds):
+    t = np.arange(int(seconds * SR)) / SR
+    chord = sum(np.sin(2 * np.pi * f * t) for f in (220.0, 277.2, 329.6)) / 3
+    return 0.4 * chord * np.minimum(1.0, t / 0.02) * np.exp(-t / 3.0)
+
+
+def damage(x, clip_gain=None):
+    t = np.arange(len(x)) / SR
+    x = x + 0.03 * np.sin(2 * np.pi * 50 * t) + 0.01 * np.sin(2 * np.pi * 150 * t)  # mains hum
+    for i in rng.integers(SR, len(x) - SR, 6):  # sparse clicks
+        x[i : i + 3] += 0.5 * np.array([1.0, -0.8, 0.4])
+    if clip_gain is not None:
+        x = np.clip(x * clip_gain, -1.0, 1.0)  # input gain set too hot
+    pad = np.zeros(int(0.3 * SR))  # dead air at both ends
+    return np.concatenate([pad, x, pad])
+
+
+os.makedirs("raw", exist_ok=True)
+save("raw/take-01.wav", damage(phrase(7.0), clip_gain=4.0))
+save("raw/take-02.wav", damage(phrase(7.0)))
+
+# Three takes of one part for Step 4: three phrases each, entering at slightly different times.
+for take, shift in enumerate((0.0, -0.1, 0.08), start=1):
+    x = np.zeros(int(8.5 * SR))
+    for start in (0.6, 3.2, 6.0):
+        s = int((start + shift) * SR)
+        p = phrase(1.8)
+        x[s : s + len(p)] += p
+    save(f"take{take}.wav", x)
+```
+
+この 2 つのテイクにバッチを実行すると、下と同じ段が選ばれます。`take-01` は declip、declick、decrackle、dehum、`take-02` はそこから declip を除いたものです。
+:::
+
 ライブラリ API を使う手順と欠陥ごとの処理は、[音声リペア](../audio-repair.md)、[ノイズ・ハム除去](../repair-noise.md)、[クリック・クラックル・クリッピング修復](../repair-transients.md)、[デリバーブ](../repair-reverb.md)で説明しています。
 
 ## このページで身につくこと
@@ -124,16 +188,29 @@ sonare repair take-raw.wav --detect --json
 ```
 
 ```typescript [Node]
-import { masteringRepairAnalyze } from '@libraz/libsonare-native';
+import { readFileSync } from 'node:fs';
+import { decodeChannels, init, masteringRepairAnalyze } from '@libraz/libsonare';
 
-const { defects, recommended, explanation } = masteringRepairAnalyze({ channels: [left, right], sampleRate: 48000 });
+await init();
+// チャンネルごとに Float32Array を 1 つ。モノラルなら 1 つ、ステレオなら 2 つ
+const { sampleRate, channels } = decodeChannels(new Uint8Array(readFileSync('take-raw.wav')));
+const { defects, recommended, explanation } = masteringRepairAnalyze({ channels, sampleRate });
 console.log(defects.clipSampleFraction, defects.humFundamentalProminence, recommended.map((s) => s.stage), explanation);
 ```
 
 ```python [Python]
 import libsonare as sonare
+from libsonare import Audio
 
-analysis = sonare.mastering_repair_analyze([left, right], 48000)
+# チャンネルごとに配列を 1 つ。モノラルなら 1 つ、ステレオなら 2 つ
+path = "take-raw.wav"
+channels = []
+for i in range(Audio.file_channel_count(path)):
+    with Audio.from_file_channel(path, i) as audio:
+        channels.append(audio.data)
+        sample_rate = audio.sample_rate
+
+analysis = sonare.mastering_repair_analyze(channels, sample_rate)
 print(analysis["defects"]["clipSampleFraction"], analysis["defects"]["humFundamentalProminence"])
 print([s["stage"] for s in analysis["recommended"]], analysis["explanation"])
 ```
@@ -165,7 +242,7 @@ print([s["stage"] for s in analysis["recommended"]], analysis["explanation"])
 }
 ```
 
-このテイクでは 4 つの数値だけでほぼ全体像が分かります。`clip_sample_fraction` はサンプルの 11.4% がクリップしていることを示し、1.0 に近い `clip_flat_level` はそれが単に大きいのではなく平らに張り付いていることを示します。ちょうど 50 Hz に商用電源の倍音が 18.6 dB の突出度で乗っており、`crackle_per_second` はノイズフロアが単なる静かなヒスではなく広帯域のクラックルであることを示します。`click_count` はわずか 1 ですが、`click_rejected`（4989）は検出器が「クリックらしく見えて実はそうではない」と判断したイベントの数です。検出器が何かを見逃したと結論する前に、この数字を知っておく価値があります。
+このテイクでは 4 つの数値だけでほぼ全体像が分かります。`clip_sample_fraction` はサンプルの 11.4% がクリップしていることを示し、1.0 に近い `clip_flat_level` はそれが単に大きいのではなく平らに張り付いていることを示します。ちょうど 50 Hz に商用電源の倍音が突出度 18.6 で乗っており、`crackle_per_second` がゼロでないことから短いインパルス状のクラックルがあるとわかります。`hum_fundamental_prominence` は dB ではなく単純な比です。ハムの候補のうち勝ち残ったもののエネルギーを、探索で試したすべての候補のエネルギーの中央値で割った値で、`1.0` はどのピークも目立たなかったことを表します。18.6 は、ある 1 つの周波数に典型的な候補の 18 倍を超えるエネルギーが乗っているということです。`click_count` はわずか 1 ですが、`click_rejected`（4989）は検出器が「クリックらしく見えて実はそうではない」と判断したイベントの数です。検出器が何かを見逃したと結論する前に、この数字を知っておく価値があります。
 
 ## ステップ 2 — アシスタントに選ばせる
 
@@ -188,7 +265,25 @@ sonare repair take-raw.wav -o take-clean.wav --explain --json
 }
 ```
 
-各行は、検出器が使ったのと同じ語彙で、その段を選んだ根拠そのものを述べています。`denoise` と `dereverb` は入っていません。このテイクの `noise_floor_dbfs` と `late_decay_ratio_db` がそれらを求めなかったので、一度も実行されていないということです。`output_gain_db` はリペアの段ではありません。declip はクリッパーが削ったピークを再構築するため、その結果はフルスケールを超えて膨らみがちです。そこでサンプルごとにクランプするのではなく、ファイル全体に 1 つのゲインを当てて収めます。
+各行は、検出器が使ったのと同じ語彙で、その段を選んだ根拠そのものを述べています。`denoise` が入っていないのは、このテイクの `noise_floor_dbfs` がプログラムよりはるかに低いからです。アシスタントが denoise を加えるのは、ノイズフロアがテイクの統合ラウドネスから 12 dB 以内に迫ったときだけです。`dereverb` はアシスタントが選ぶことはありません。残響のあるテイクと残響のない持続音を確実に見分けられる計測がないためで、dereverb はプリセットか `--params` で指定したときにだけ動きます。
+
+アシスタントの判定は傷の有無を見るもので、程度を見るものではありません。
+
+| 段 | アシスタントが実行する条件 |
+|---|---|
+| declip | サンプルが一定のレベルに張り付いた区間があり、そのレベルで修復してもクリップしていない大きな音には触れないとき |
+| declick | 検出器がクリックを 1 つ以上見つけたとき |
+| decrackle | 検出器がクラックルを少しでも見つけたとき |
+| dehum | ハムのピークが 50 Hz か 60 Hz から 0.25 Hz 以内にあり、突出度が 10 を超えるとき |
+| denoise | ノイズフロアがテイクの統合ラウドネスから 12 dB 以内にあるとき |
+
+クリックが 1 つしかないテイクにも declick がかかるのはこのためです。[納品前チェックを CI で回す](./delivery-check.md) は仕上がったマスターについて「不合格にするほど傷があるか」という別の問いを立てるので、そちらでは頻度で判定します。きれいなプログラム素材でも検出器は小さな値を出すため、クリックは毎秒 0.2 個、クラックルは毎秒 1.0 回まで許容しています。
+
+`output_gain_db` はリペアの段ではありません。リペアでフルスケールを超えたサンプルが出たとき、CLI は最大のサンプルがちょうどフルスケールに来るよう、修復後のファイルをスケーリングします（declip はクリッパーが削ったピークを再構築するので、たいていそうなります）。この数値はファイル全体にかけたその 1 つのゲインで、ピークがどれだけはみ出したかを示すものです。波形がどれだけ変わったかを示すものではありません。
+
+::: warning テイクごとに別々にスケーリングされる
+ゲインはファイルごとに合わせるので、同じセッションの 2 つのテイクでも `repair` を通すと音量がそろわず、どちらもピークが 0 dBFS になります。テイク同士を比べたりコンピングしたりするのはリペアの前にするか、リペア後のテイクを共通のレベルに戻してからにしてください。ピークがフルスケールに張り付いていると[インターサンプルピーク](../glossary/true-peak.md)の余地もないので、ミックスやマスターに入れる前にレベルを下げてください。
+:::
 
 ::: tip `--explain` と `--detect` は併用できません
 `--detect` ではリペアの段が 1 つも実行されないため、説明すべき選択が存在しません。両方渡すと無効なパラメータとして拒否されます（終了コード 3）。理由を見たいなら `--detect` を外し、数値だけでよいなら `--explain` を外してください。
@@ -246,6 +341,11 @@ sonare split-silence take1.wav --input take2.wav --input take3.wav --write-takes
 
 ここで **やらないこと** も明確にしておきます。最良のテイクを選ぶことはなく、クロスフェードもせず、フレーズ途中のタイミングのずれも直しません。途中で前のめりになったり遅れたりしているテイクは、切り出した後も前のめりのまま、遅れたままです。手元に残るのは判断材料としての揃ったスライスであって、完成したコンピングではありません。
 
+このコマンドが利用者に任せている選択を、下のデモで試せます。3 つのテイクから区間ごとに 1 つ選び、短いクロスフェードでつなぎます。
+
+<SonareDemo id="comping" />
+
+
 全テイクのサンプルレートが一致している必要があり、これは何よりも先にチェックされます。
 
 ```bash
@@ -276,7 +376,9 @@ sonare repair take-clean.wav --detect --json
 | `hum_harmonics` | 2 | 1 |
 | `noise_floor_dbfs` | −120.0 | −101.5 |
 
-クリップ・クリック・クラックルはいずれもほぼゼロまで下がります。ハムの突出度は半分以下に下がりますがゼロにはならず、`noise_floor_dbfs` はむしろ上がります。declip の LPC 再構築と インパルス系の 2 つのリペアの段が、手を入れたサンプルにごくわずかな広帯域の痕跡を残すためです。どちらも実行の不具合ではなく、ありのままの修復結果です。ハムの数値をさらに追い込むことがたいてい割に合わない理由は、次の節で扱います。
+クリップ・クリック・クラックルはいずれもほぼゼロまで下がります。ハムの突出度は半分以下に下がりますがゼロにはならず、`noise_floor_dbfs` はむしろ上がります。declip の LPC 再構築と インパルス系の 2 つのリペアの段が、手を入れたサンプルにごくわずかな広帯域の痕跡を残すためです。どちらも実行の不具合ではなく、ありのままの修復結果です。
+
+残った突出度 7.94 はアシスタント自身のしきい値 10 を下回るので、もう一度 `repair` を通しても dehum は再実行されません。一方で、[納品前チェックを CI で回す](./delivery-check.md) が仕上がったマスターを不合格にする 6.0 は上回っているので、このまま納品すればそのゲートでは不合格になります。実際に再生されるレベルで低域を聴いてください。ハムが聞こえるなら、直すのは発生源（アースを直しての録り直し）か、次の節で測るコストを承知でのより強いノッチです。聞こえないなら、この納品でのゲートのしきい値は自分で決めてかまいません。
 
 ::: info 検出器そのものが答え
 「うまくいったか」を確かめる別コマンドはありません。何を直すか決めたのと同じ `--detect` が、直せたかどうかを、同じ数値・同じ単位で証明します。
@@ -320,7 +422,12 @@ sonare repair take-raw.wav --preset voiceMemo -o take-voicememo.wav --json
 sonare repair take-raw.wav -o take-clean-harm.wav --params repair.dehum.harmonics=6 --json
 ```
 
-ノッチが追う倍音の数をアシスタント自身の 2 から 6 に上げても、残留量はほとんど動きません。`hum_fundamental_prominence` は既定値での実行の 7.94 に対して 7.88 と、実行ごとの測定誤差に埋もれる程度の差です。動くのは `output_gain_db` のほうで、既定値の −1.87 dB に対して −3.4 dB まで下がります。ほぼ同じ結果を得るために、波形の作り直しがほぼ倍になったということです。`dehum` を「ゼロまで追い込みたい」という衝動は、いつもこういう結果になります。残留量は目減りしていく一方、コストは実際に、そして測定可能なかたちで積み上がります。[整音・入力系コントロール](../glossary/mastering/repair.md) のグロッサリーページも denoise について同じことを言っています。ノイズを少し残すほうが、ドラムがにじんだり水っぽいアーティファクトが出たりするより良い、と。ノッチフィルタが本物の音楽的成分と共有する基音を削ってしまう場面にも、同じ抑制が当てはまります。
+ノッチが追う倍音の数をアシスタント自身の 2 から 6 に上げても、残留量はほとんど動きません。`hum_fundamental_prominence` は既定値での実行の 7.94 に対して 7.88 です。検出器は決定的に動くので 0.06 は実在する差ですが、耳でわかる差ではありません。`output_gain_db` も既定値の −1.87 dB に対して −3.4 dB に変わりますが、これはフルスケールに合わせる前の修復後ファイルのピークが高くなったことを示すだけです。ノッチはその周波数付近の位相を動かすので、波形のピークは上にも下にも動きえます。この数値は、どれだけ手を入れたかの尺度ではありません。ノッチを増やすコストは、それが取り除くものにあります。ノッチは 100、150、200 Hz といった周波数にある本物の音楽的成分も削るので、ベースやキックではその量がかなりになります。`dehum` を「ゼロまで追い込みたい」という衝動は、いつもこういう結果になります。残留量はほとんど動かず、耳でわかるほど中身が削られます。[整音・入力系コントロール](../glossary/mastering/repair.md) のグロッサリーページも denoise について同じことを言っています。ノイズを少し残すほうが、ドラムがにじんだり水っぽいアーティファクトが出たりするより良い、と。ノッチフィルタが本物の音楽的成分と共有する基音を削ってしまう場面にも、同じ抑制が当てはまります。
+
+下のデモは、このトレードオフを 50 Hz のハムとその 3 つの倍音を載せたクリーンな和音で確かめます。ハムの除去方法を切り替えて、それぞれの HUM スコアを読んでください。
+
+<SonareDemo id="repair-dehum" />
+
 
 ## ステップ 7 — 単機能の逃げ道: `declip`
 

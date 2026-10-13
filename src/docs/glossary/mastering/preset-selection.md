@@ -74,7 +74,7 @@ Two roads, and both keep the preset as a starting point rather than a verdict:
 1. **Let the file decide.** `sonare repair` without `--preset` measures the six detectors and enables only the stages the evidence calls for; `--explain` prints the reason behind each one. This is the right road for a mixed case such as a clipped vinyl transfer.
 2. **Start from the nearest preset and add the missing stage.** Every stage has a `repair.<stage>.enabled` key, so `--preset vinyl --params repair.dehum.enabled=true` is vinyl plus a hum notch. `--params` on `repair` accepts `repair.` keys only.
 
-Restoration presets set no level. Once the damage is gone, master the result as a second pass with a genre preset, or build one chain config that carries both; `aiMusic`, `speech`, and `audiobook` are genre presets that already do.
+Restoration presets set no level. Once the damage is gone, master the result as a second pass with a genre preset, or build one chain config that carries both; `aiMusic`, `speech`, `podcast`, and `audiobook` are genre presets that already do.
 
 :::: details Implementation notes
 

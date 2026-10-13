@@ -7,9 +7,15 @@ description: Turn the engine's parameter descriptors into a control surface — 
 
 Every processor the engine can build describes its own parameters: name, type, unit, default, accepted range, display range, axis, sibling constraints, and whether the value can change while audio runs. A host that reads those descriptors can draw a control surface for any insert or mastering stage without a hand-written table, and the surface follows the engine when a build adds a key or a band.
 
-This page builds that surface step by step in plain JavaScript. The field-by-field reference is elsewhere and is linked rather than repeated: [The parameter descriptor](../effects-inserts.md#the-parameter-descriptor) for each field, [Reading a catalog bound](../mastering-processors.md#reading-a-catalog-bound) for where `min`, `max` and `default` come from, and [What the capability catalog reports](../api-surface.md#what-the-capability-catalog-reports) for the document as a whole.
+This page builds that surface step by step in plain JavaScript. The field-by-field reference is elsewhere and is linked rather than repeated: [The parameter descriptor](../effects-inserts.md#the-parameter-descriptor) for each field, [Reading a catalog bound](../mastering-processors.md#reading-a-catalog-bound) for where `min`, `max` and `default` come from, and [Capability Catalog](../capability-catalog.md) for the document as a whole.
 
 Every snippet below is one script, run in Node against the shipped WASM build; the output blocks are what it printed.
+
+::: info What you need
+- **Install:** `npm install @libraz/libsonare` (Node.js 22.12 or later). No audio files are needed until the last snippet, which makes its own test tone.
+- **Running it:** paste the snippets, in order, into one file named `controls.mjs` and run `node controls.mjs`. Later snippets use names the earlier ones define (`catalog`, `processor`, `gate`, `multiband`).
+- **Background:** the page assumes you know what an insert and a mastering chain are; [Mixing Basics](../glossary/concepts/mixing-basics.md) and [What Is Mastering?](../glossary/concepts/what-is-mastering.md) cover both.
+:::
 
 ## Read the descriptors
 
@@ -177,7 +183,7 @@ A UI has two reasonable responses when a sibling moves past a dependent value: c
 
 ## Show a band only when it exists
 
-A key with a non-null `slot` belongs to a group that exists under a condition. The processor's `slots` array gives each group's `activation`, `parent`, and `minCrossoverCutoffs` ([Slot metadata](../api-surface.md#what-the-capability-catalog-reports)). Two patterns cover the processors:
+A key with a non-null `slot` belongs to a group that exists under a condition. The processor's `slots` array gives each group's `activation`, `parent`, and `minCrossoverCutoffs` ([Slot metadata](../capability-catalog.md)). Two patterns cover the processors:
 
 - `activation: 'anyKey'`: the group exists once any of its keys is sent. A parametric EQ band is built by sending one of its keys, so the UI offers "add band" and shows the band's controls from then on.
 - `activation: 'always'` with `minCrossoverCutoffs`: the group exists while enough crossover cutoffs are in effect. A multiband compressor has one band more than it has cutoffs. With no cutoff key sent, the default split applies: the cutoffs that publish a non-null default.

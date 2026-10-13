@@ -22,8 +22,15 @@ By the end of this page you should be able to:
 
 Every number on this page comes from one file: the first 16 bars of the Aria from the Goldberg Variations (223 notes, 70 BPM, about 42 s), rendered through the engine's built-in piano and encoded as a 128 kbps MP3, `aria.mp3`. The score it was rendered from, `aria-score.mid`, is the answer key. A second file, `aria-band.mp3`, is the same piano with a bass line, a string pad holding each bar's chord and a drum kit mixed in at about the piano's level.
 
+::: info What you need
+- **Install:** `pip install libsonare` (Python 3.11 or later) gives you the `sonare` command and the Python binding the scoring script uses. The Node tab needs `npm install @libraz/libsonare` (Node.js 22.12 or later).
+- **A piano recording:** WAV or MP3, mono or stereo, any common sample rate. Transcription folds stereo to mono.
+- **A score to check against (optional):** a Standard MIDI File of the same piece. Without one you can still transcribe; you just skip Steps 2 and 3's scoring.
+- **`aria.mp3` and `aria-score.mid` are not downloadable.** To follow along with a known answer, make your own pair from any piano MIDI file, as below.
+:::
+
 ::: tip Making your own test pair
-Rendering a MIDI file you already have is the quickest way to get a recording with a known answer: `sonare project import-smf --smf score.mid -o score.json`, then `sonare midi-render --in score.json -o score.wav`. A rendered piano is cleaner than a microphone in a room, so treat the numbers it gives as an upper bound for real recordings.
+Rendering a MIDI file you already have is the quickest way to get a recording with a known answer: `sonare project import-smf --smf score.mid -o score.json`, then `sonare midi-render --in score.json -o score.wav`. Use `score.wav` where this page says `aria.mp3` and `score.mid` where it says `aria-score.mid`. A rendered piano is cleaner than a microphone in a room, so treat the numbers it gives as an upper bound for real recordings.
 :::
 
 ## The whole job
@@ -35,7 +42,8 @@ set -euo pipefail
 # 1. Transcribe. MP3 and WAV are both read directly.
 sonare transcribe aria.mp3 --polyphonic -o aria.mid --json
 
-# 2. With a score to compare against, measure the result (script below).
+# 2. With a score to compare against, measure the result. Save the script
+#    from Step 2 as score.py first.
 python score.py aria-score.mid aria.mid
 
 # 3. Fewer extra notes: a higher per-frame floor and a longer shortest note.
@@ -76,16 +84,24 @@ sonare transcribe aria.mp3 --polyphonic -o aria.mid --json
 ```
 
 ```typescript [Node]
-import { transcribe } from '@libraz/libsonare-native';
+import { readFileSync } from 'node:fs';
+import { Audio, init, transcribe } from '@libraz/libsonare';
 
-// samples: mono Float32Array of aria.mp3, decoded by your app
-const { events, noteCount, tempoBpm } = transcribe({ samples, sampleRate, polyphonic: true });
+await init();
+// Decodes WAV or MP3 and folds stereo to mono, as the CLI does.
+const audio = Audio.fromMemory(new Uint8Array(readFileSync('aria.mp3')));
+const { events, noteCount, tempoBpm } = transcribe({
+  samples: audio.data, sampleRate: audio.sampleRate, polyphonic: true,
+});
 ```
 
 ```python [Python]
 import libsonare as sonare
+from libsonare import Audio
 
-# samples: mono samples of aria.mp3, decoded by your app
+# Decodes WAV or MP3 and folds stereo to mono, as the CLI does.
+with Audio.from_file("aria.mp3") as audio:
+    samples, sample_rate = audio.data, audio.sample_rate
 result = sonare.transcribe(samples, sample_rate, polyphonic=True)
 print(result.note_count, result.tempo_bpm)
 ```
@@ -108,7 +124,7 @@ The demo shows the same idea on a short phrase: audio goes in, and a list of tim
 
 ## Step 2 — Check it against the score
 
-When you have a reference MIDI file for the piece, a few lines of Python with the libsonare binding score the transcription. A transcribed note counts as correct when it has the same MIDI note number as a score note and starts within 50 ms of it; each score note can be matched once.
+When you have a reference MIDI file for the piece, a few lines of Python with the libsonare binding score the transcription. Save the script below as `score.py`. A transcribed note counts as correct when it has the same MIDI note number as a score note and starts within 50 ms of it; each score note can be matched once.
 
 ```python
 """Compare a transcribed SMF against the score: onset within 50 ms, same MIDI note."""
@@ -175,6 +191,11 @@ What is left after tuning, sorted by cause. A note at the right pitch counts as 
 - **40 score notes are not found at all** at their pitch. 6 of those were found an octave away, and 15 are shorter than 150 ms.
 
 So the realistic result for a clean piano recording is a MIDI file that has the piece's pitches and most of its rhythm, and that still needs a pass in a piano-roll editor: deleting repeats of held notes and adding the short notes it missed. The [Piano Transcription](/transcribe) demo runs the same detector in the browser and shows which notes each option adds or removes.
+
+To see what that piano-roll view holds, the demo below draws a short MIDI passage as a roll and bounces the same notes through different built-in instruments.
+
+<SonareDemo id="midi-piano-roll" />
+
 
 ## Step 4 — A band mix needs a stem first
 

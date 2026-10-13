@@ -208,7 +208,7 @@ sonare pitch music.mp3 --algorithm pyin --json
 
 `/ja/mastering` デモは、このページで説明しているものと同じ WASM パッケージを使用しています。音源のデコードはブラウザで行い、マスタリング処理は Web Worker で実行し、レンダリング後の WAV と JSON レポートはローカルで生成されます。`masterAudio`、`masteringChain`、名前付きプロセッサは[マスタリングのリファレンス](./js-api-mastering.md)で説明しています。
 
-実装の詳細は [マスタリング実装](./mastering-implementation.md), [ブラウザ内ローカル処理](./glossary/concepts/browser-local-processing.md), [マスタリング](./glossary/mastering.md), [ステレオ、リミッター、ラウドネスコントロール](./glossary/mastering/stereo-limiter-loudness.md) を参照してください。
+実装の詳細は [マスタリング実装](./mastering-implementation.md), [ブラウザ内ローカル処理](./glossary/concepts/browser-local-processing.md), [マスタリングチェーン](./glossary/mastering.md), [ステレオ、リミッター、ラウドネスコントロール](./glossary/mastering/stereo-limiter-loudness.md) を参照してください。
 
 マスタリング API には、JSON ベースのアシスタント出力、音源プロファイル、配信プラットフォーム別のプレビューを返す `masteringAssistantSuggest(...)`、`masteringAudioProfile(...)`、`masteringStreamingPreview(...)` も含まれます。
 

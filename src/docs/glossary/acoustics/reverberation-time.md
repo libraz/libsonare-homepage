@@ -7,6 +7,11 @@ description: RT60 and early decay time — how long a room's tail takes to fade,
 
 **Reverberation time** is the headline measure of how long a room keeps ringing after a sound stops.
 
+::: info Two terms the acoustics pages rely on
+- An **impulse response (IR)** is the recording of a room answering one instantaneous click: the direct sound, then every reflection, then the reverberant tail. A balloon pop or a hand clap approximates one; a recorded sine sweep becomes one after it is deconvolved with the known sweep. Every measure on these pages is computed from an IR or estimated as if from one.
+- The **energy decay curve (EDC)** is the IR's remaining energy at each moment, in decibels: square the IR and add up everything still to come, working backward from the end (Schroeder's backward integration). It falls smoothly where the raw IR is jagged, so a straight line can be fitted to it, and that line's slope is the decay rate RT60 and EDT are read from.
+:::
+
 When a sound source switches off, the energy already in the room does not vanish — it keeps bouncing between surfaces, losing a little at every reflection, until it fades into the noise floor. How long that takes is what a room sounds like: a treated vocal booth dies away almost instantly, a stone cathedral washes on for many seconds.
 
 ## RT60: the 60 dB decay

@@ -25,11 +25,20 @@ A **pan mode** chooses the mapping:
 - A **balance** control turns one side of a stereo track down rather than repositioning it.
 - **Independent L/R** positioning places each side separately.
 
-Choosing the right mode matters most for stereo sources: a true-pan applied to an already-stereo track can collapse its image, where a balance keeps it intact.
+Choosing the right mode matters most for stereo sources. libsonare's true pan (`stereoPan`) first folds the track to mono, `(L + R) / 2`, and then places that mono signal, so it always collapses a stereo image: what differs between the channels is lost and anti-phase content cancels. A balance (the default) keeps the image intact.
 
 ## Pan law: keeping loudness steady as you pan
 
-When a source pans from center to a side, its perceived loudness can jump unless compensated. **Pan law** sets how much the center is attenuated relative to the sides (common laws are around −3 dB or −4.5 dB at center) so a part does not get louder or quieter simply because you moved it. Match the pan law to your monitoring and summing expectations.
+When a source pans from center to a side, its perceived loudness can jump unless compensated. **Pan law** sets how much the center is attenuated relative to the sides so a part does not get louder or quieter simply because you moved it. libsonare offers four:
+
+| Law | Center gain per channel | Keeps steady |
+|-----|-------------------------|--------------|
+| `const3dB` (default) | −3 dB (0.707) | Total power, which is what matters over speakers |
+| `const4.5dB` | −4.5 dB (0.595) | A compromise between the two |
+| `const6dB` | −6 dB (0.5) | The mono sum (constant amplitude) |
+| `linear0dB` | 0 dB (1.0) | Nothing; no center compensation |
+
+The center dip reaches the output only with a true pan. In the default balance mode the channel the pan points toward stays at unity and only the other channel is turned down, so a centered track is at 0 dB under every law; the law then only shapes how fast the far side falls. See [Mixing Engine](../../mixing.md#pan-modes-and-pan-laws) for the arithmetic.
 
 ## Stereo width
 
@@ -37,7 +46,7 @@ When a source pans from center to a side, its perceived loudness can jump unless
 
 Widening adds spaciousness, but it can create [mono compatibility](../concepts/mono-compatibility.md) problems. Side-only content disappears in a mono sum. Pure M/S width scales the side while keeping the mono sum unchanged; Haas delays, polarity changes, subsequent limiting, or comparison normalization can change the mono result.
 
-Narrowing tightens focus and improves mono robustness. Width belongs late in the strip, after pan, so it acts on the already placed signal.
+Narrowing tightens focus and improves mono robustness. Width sits late in the strip, after pan, so it acts on the already placed signal, and that has a side effect on a panned mono source: width changes its position too. A hard-left mono source at width 0 ends up centered at −6 dB, and at width 2 the opposite channel gets an anti-phase copy at half level. Leave width at 1 on mono sources and place them with pan.
 
 <SonareDemo id="mono-fold" />
 

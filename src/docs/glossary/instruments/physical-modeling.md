@@ -23,7 +23,7 @@ The consequence worth internalising is that **a model has no notion of a "note" 
 
 The workhorse of the family is the **digital waveguide**, and it is simpler than the name suggests. Three parts:
 
-- A **delay line** stands in for the travel. A wave leaving one end takes a fixed number of samples to reach the other, and that number *is* the pitch: a shorter trip means a faster round trip means a higher note. These engines have no tuning oscillator, because length does the tuning.
+- A **delay line** stands in for the travel. A wave leaving one end takes a fixed number of samples to reach the other, and that number sets the pitch: a shorter trip means a faster round trip means a higher note. For a string one round trip is one period; a tube closed at one end, like a clarinet, needs two, because its open end sends the wave back inverted. These engines have no tuning oscillator, because length does the tuning.
 - A **loss filter** stands in for what the trip costs. Every reflection loses energy, and loses more of it at high frequencies than at low — which is exactly why a plucked note goes dull before it goes quiet. One filter in the loop reproduces the whole decay behavior.
 - An **exciter** puts energy in. A hammer, a plectrum, a bow, a reed, a pair of lips, a jet of air.
 
@@ -78,6 +78,10 @@ A **struck or plucked** exciter is finished almost immediately. A hammer contact
 A **sustained** exciter keeps feeding the loop for as long as the note lasts. A bow stays on the string, a breath keeps arriving at the reed, a bellows keeps pushing air past the tongue. The exciter is inside the loop, reacting to the wave coming back at it, which is what makes these instruments feel alive: press harder and the tone changes because the coupling changed, not because a parameter was faded.
 
 What that buys is that **the player stays in the note**. A crescendo on a bowed string is one continuous gesture, not a sequence of re-articulations, and a wind player can shape a phrase after the attack has gone. On a struck model there is nothing left to shape, so an expressive control routed there has nowhere to land — and libsonare says so explicitly rather than accepting the control and quietly doing nothing with it.
+
+The audition below plays one note through each engine. Listen to the onsets: the plucked loops start with a burst and immediately lose energy, while the bowed string takes a few periods to grip and the winds ramp their pressure in.
+
+<SonareDemo id="physical-voice-audition" />
 
 ## The honest limits
 

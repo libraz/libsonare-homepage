@@ -38,9 +38,9 @@ There are three routes, and they answer different questions.
 | `decomposeStems(...)` | One mono signal | `nComponents` signals plus the `w` and `h` matrices | Yes | Unlabeled components you audition one by one |
 | `decomposeStemsLinked(...)` | Several equal-length channels | Each component on each channel | Yes | Components that keep the channel balance and phase of a multichannel recording |
 
-<SonareDemo id="stem-decompose" />
+<SonareDemo id="hpss-separation" />
 
-The demo is the harmonic/percussive split: a pad bed with broadband hits on every beat, and the B side is the percussive component alone. Sustained spectral lines are pushed out while the hits survive as short vertical events. That is one half of a two-way split, not a multi-instrument separation.
+The demo is the harmonic/percussive split on a band phrase with drums. Switch between the full mix and the two layers: sustained pitched lines stay in the harmonic layer as horizontal ridges, and the hits survive in the percussive layer as short vertical streaks. That is a two-way split by spectral shape, not a multi-instrument separation.
 
 ::: code-group
 
@@ -90,7 +90,7 @@ sonare decompose-stems recording.wav --n-components 4 --mask-power 2 -o stems.wa
 
 :::
 
-HPSS accepts an even `nFft` of at least 4 (mixed-radix FFT, so powers of two are not required), and an integer `hopLength` in `(0, nFft / 2]`. Both median kernels must be positive odd integers at most 524287. When supplying a custom STFT configuration in C++, its `winLength` and window must also leave no overlap-add gaps; invalid geometry is refused instead of producing periodic dropouts.
+HPSS accepts an even `nFft` of at least 4 (mixed-radix FFT, so powers of two are not required), and an integer `hopLength` in `(0, nFft / 2]`. Both median kernels must be positive odd integers at most 524287. The harmonic kernel is a width in STFT frames along time, and the percussive kernel a width in frequency bins: at the default 31 with `nFft` 2048 and `hopLength` 512 at 22050 Hz, that is about 0.72 s and about 330 Hz. A sound steadier than the first window reads as harmonic, and one broader than the second as percussive. When supplying a custom STFT configuration in C++, its `winLength` and window must also leave no overlap-add gaps; invalid geometry is refused instead of producing periodic dropouts.
 
 | | HPSS | `decomposeStems(...)` |
 |---|-------------|------------------------|
@@ -99,6 +99,24 @@ HPSS accepts an even `nFft` of at least 4 (mixed-radix FFT, so powers of two are
 | Labels | Known in advance | None — you inspect `w` and `h` to work out which component is which |
 | Reconstruction | Default soft-mask harmonic and percussive outputs sum back to the input; hard masks may leave a residual | The masks sum to one where the model has energy, so the components sum back to the input |
 | Phase | Original | Original — the mask is applied to the complex spectrogram, which is what makes each component listenable |
+
+::: info Soft, hard and Wiener-style masks
+A **mask** is a number per time-frequency cell saying how much of that cell a component keeps.
+- **Soft mask** (HPSS default): a fraction between 0 and 1. HPSS gives the harmonic side `H^p / (H^p + P^p)` of each cell, where `H` and `P` are the two median-filtered spectrograms and `p` the mask power (2 by default), and the percussive side the rest.
+- **Hard mask** (`hardMask: true`): each cell goes wholly to one side or the other. Cleaner on paper, but the switching between neighbors can be heard as artifacts.
+- **`maskPower`** for NMF: component `k` keeps `(W_k·H_k)^p / Σ_j (W_j·H_j)^p` of each cell. At 1 the share follows the magnitude ratio; at 2 (Wiener-style) the stronger component takes a larger share, separating harder at the cost of more artifacts where components overlap.
+:::
+
+### Reading `w` and `h`
+
+NMF approximates the magnitude spectrogram as the product of two non-negative matrices, so each component is a fixed spectral shape that gets louder and quieter over time.
+
+| Matrix | Shape (row-major) | Each column or row is | How to read it |
+|--------|-------------------|-----------------------|----------------|
+| `w` | `nBins × nComponents` (`nBins` = `nFft / 2 + 1`) | Column `k`: the spectral template of component `k`, one value per frequency bin | Where the energy sits: a low peak suggests a bass or kick, regularly spaced peaks a pitched note, a broad spread noise or cymbals |
+| `h` | `nComponents × nFrames` | Row `k`: the activation of component `k`, one value per frame | When it plays: sharp spikes are hits, long plateaus sustained notes |
+
+The value for frequency bin `f` in frame `t` is approximated by `Σ_k w[f][k] × h[k][t]`. Bin `f` is `f × sampleRate / nFft` Hz and frame `t` is `t × hopLength / sampleRate` seconds ([Spectrogram and STFT](./glossary/analysis/spectrogram-stft.md#from-samples-to-seconds-and-hertz)). `beta` picks how the fit is scored: `2` measures the squared difference (the Frobenius norm), `1` the Kullback-Leibler divergence, which weighs quiet detail relatively more.
 
 The NMF demo below lets you audition each of four components. It uses 30 iterations for interactive processing; components have no instrument labels.
 

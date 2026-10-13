@@ -7,6 +7,14 @@ description: Detect a noise floor or mains hum, choose the matching classical re
 
 Broadband noise and mains hum are different defects. A denoiser estimates a time-varying spectrum and applies a gain mask. A dehummer tracks a fundamental and its harmonics. Use the detector for the defect you actually hear, and check that a sustained musical tone is not being mistaken for noise.
 
+::: info Terms on this page
+- **STFT** (short-time Fourier transform): the signal cut into overlapping frames of `nFft` samples, `hopLength` apart, each turned into a spectrum of frequency bins. See [Spectrogram and STFT](./glossary/analysis/spectrogram-stft.md).
+- **Gain mask**: one gain between a floor and 1 per bin and frame; the denoiser multiplies the spectrum by it and converts back to audio.
+- **Noise estimator**: how the noise level in each bin is worked out. `quantile` averages the quietest 10% of frames into one fixed spectrum; `mcra`, `imcra` and `spp` track the noise frame by frame and can follow a changing floor.
+- **MMSE-STSA / LogMMSE**: gain rules that set each bin's gain from its estimated signal-to-noise ratio; **spectral subtraction** subtracts the noise power instead. The decision-directed smoothing (`ddAlpha`) keeps the gains from flickering into "musical noise".
+- **Fundamental and harmonics**: mains hum is a tone at 50 or 60 Hz plus whole-number multiples of it. `subtract` mode cancels each one with a tracked sine; `notch` mode filters each one out with a narrow notch.
+:::
+
 ## Choose the stage
 
 | Defect | Detect with | Repair with | Main risk |

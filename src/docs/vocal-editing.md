@@ -9,6 +9,10 @@ The vocal edit API turns one mono vocal recording into an editable note model. I
 
 Use a `VocalEditSession` for a vocal take that needs offline correction. Use a session together with `Project.applyVocalEdit()` when the result belongs to an arrangement. This API accepts one monophonic line; it does not separate overlapping voices or replace a polyphonic source editor. For realtime input, use the [realtime voice changer](./realtime-voice-changer.md).
 
+::: info Before you start
+This page uses the pitch vocabulary without re-explaining it. **F0** is the fundamental frequency of the voice at each moment, measured per analysis frame by a pitch tracker (pYIN by default); a frame is **voiced** when the singer is producing a pitched sound. Pitch differences are in **cents**, hundredths of a semitone. [Editing Basics](./glossary/concepts/editing-basics.md) covers semitones and MIDI note numbers, [Melody and Pitch](./glossary/analysis/melody-pitch.md) covers F0 tracking, and [Voice and Formant](./glossary/editing/voice-formant.md) covers formants.
+:::
+
 The vocal edit surface is exposed through the Node, browser/WASM, and Python bindings. On the CLI, `sonare vocal-notes` lists the notes a session finds in a take, with the session's analysis settings as options; editing and rendering a session have no CLI command.
 
 <FlowDiagram
@@ -116,10 +120,6 @@ Gate on `vocalEditAvailable()` and read the API version with `vocalEditApiVersio
 
 `session.notes()` returns notes and pitch transitions. A note contains its source span, analysis-frame span, median frequency, center MIDI note (`centerMidi`), pitch stability, amplitude samples, and the current edit. The center is measured from an F0 refined against the audio and averaged over whole vibrato cycles, leaving out the glides at either end, so it is not limited to the pitch tracker's 10-cent steps and a `center` target lands on the pitch you asked for. `session.analysis()` returns the F0 and voiced arrays, the analysis grid, algorithm metadata, source digest, and settings. `session.capabilities()` reports the profile, the monophonic constraint, whether analysis cancellation is supported by the loaded profile, and the available formant-shift range. Read those values instead of baking profile limits into a UI.
 
-::: warning Decimal strings
-Revisions, generations, request IDs, and byte limits (`maxHistoryBytes`, `maxCacheBytes`) cross the JavaScript boundary as decimal strings (`VocalUint64`). Keep them as strings; `maxUndoDepth` and `maxRenderJobs` are numbers. Pass `expectedRevision` and `expectedGeneration` on any write that can race another control-thread action.
-:::
-
 The Python binding uses snake_case method names, exposes those counters as Python integers, and closes a session at the end of a `with` block.
 
 `evaluatePitch(noteId)` returns measured, target, effective, and voiced arrays for a note. The coordinate mapping methods convert between source and destination samples after a timing edit.
@@ -147,6 +147,10 @@ Every option is optional. `analysis` supplies your own F0 track instead of runni
 
 ## What a note edit holds
 
+The session splits each note's measured pitch curve into three layers: the **center** (one pitch for the whole note, `centerMidi`), the **drift** (slow wandering around the center, below `vibratoCutoffHz`), and the **vibrato** (the faster periodic wobble above it). The edit fields below act on those layers separately, so a note can be moved to a new center while its drift and vibrato ride along unchanged. Pitch moves are resynthesized grain by grain, which keeps the formants roughly in place ([Two resynthesis engines](./glossary/editing/pitch-correction.md#two-resynthesis-engines)).
+
+<SonareDemo id="melody-contour" />
+
 Each note carries a `VocalNoteEdit`, and `setEdit` replaces it whole. Start from `note.edit` and change only the fields you mean to; the defaults below are what an untouched note reports. Pitch moves by the **target**:
 
 | `pitch.target` | Result |
@@ -172,6 +176,10 @@ Each note carries a `VocalNoteEdit`, and `setEdit` replaces it whole. Start from
 | `amplitudeEnvelope` | Gain points stretched over the rendered note, on top of `gainDb` | finite, `>= 0` | empty |
 
 ## Apply edits as a draft
+
+::: warning Decimal strings
+Revisions, generations, request IDs, and byte limits (`maxHistoryBytes`, `maxCacheBytes`) cross the JavaScript boundary as decimal strings (`VocalUint64`). Keep them as strings; `maxUndoDepth` and `maxRenderJobs` are numbers. Pass `expectedRevision` and `expectedGeneration` on any write that can race another control-thread action.
+:::
 
 `beginEdit()` opens one transaction against the current committed revision. `draft.apply()` checks the draft generation and returns dirty ranges and any note ID changes. `draft.commit()` publishes one new revision and makes the edit visible to the session. A failed or abandoned draft should be canceled so another draft can start.
 
@@ -391,7 +399,7 @@ The cancellation callback is checked between dependency entries; return a truthy
 
 - The session is monophonic. Check `capabilities().monophonicOnly` and expose the formant range returned by `minimumFormantShiftSemitones` and `maximumFormantShiftSemitones`.
 - A source sample rate must be between 8,000 and 384,000 Hz. The Project render rate must match the source rate for the v1 adapter.
-- Revisions, generations, request IDs and byte limits are decimal strings; see [Decimal strings](#create-and-inspect-a-session). Pass expected revisions and generations on writes that can race.
+- Revisions, generations, request IDs and byte limits are decimal strings; see [Decimal strings](#apply-edits-as-a-draft). Pass expected revisions and generations on writes that can race.
 - State persistence does not include source PCM or undo history. Store the original source or a content-addressed equivalent alongside the project JSON.
 - The Worker client runs in a browser or on a `node:worker_threads` Worker. Direct sessions are synchronous on the calling thread; use `renderAsync()` or the Worker for long renders and cancellation.
 

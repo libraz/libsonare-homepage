@@ -518,7 +518,7 @@ was already in the enum, transposed:
 
 - a `maj6` spells the `m7` a minor third below it (`C6` = `Am7`),
 - a `min6` spells the `m7b5` a minor third below it (`Cm6` = `Am7b5`),
-- a `7sus4` spells the `sus2add4` a fourth below it (`C7sus4` = `Gsus2add4`).
+- a `7sus4` spells the `sus2add4` a fourth above it (`C7sus4` = `Fsus2add4`).
 
 Nothing in a chromagram separates those pairs: the two readings are the same
 twelve-dimensional vector. The detector therefore keeps the established reading

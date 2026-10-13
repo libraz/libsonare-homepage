@@ -61,4 +61,4 @@ Treat the report as traceability, not as proof that the render is good. A render
 
 ::::
 
-Related: [A/B Comparison](../ab-comparison.md), [Reference Match](./reference-match.md), [Error Recovery](./error-recovery.md)
+Related: [A/B Comparison](../concepts/loudness-matching.md), [Reference Match](./reference-match.md), [Error Recovery](./error-recovery.md)

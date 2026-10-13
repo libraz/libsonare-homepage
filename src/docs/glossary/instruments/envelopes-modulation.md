@@ -46,6 +46,20 @@ A plucked sound is fast attack, fast decay, zero sustain, short release. A pad i
 Three of the four ADSR controls are durations (in milliseconds). Sustain is the odd one out: it is a *volume level*, the amount held for as long as you keep the key down. That is why a "zero sustain" patch goes silent even while the key is still pressed.
 :::
 
+### The shape of each stage
+
+The stages are curves, not straight lines, because a straight-line fade sounds mechanical: real instruments die away by a fixed fraction per unit of time.
+
+- **Attack** rises along a curve that is steep at first and flattens near the top, and it reaches full level at exactly the attack time. Measured in NativeSynth with a 200 ms attack, the level is −7.4 dB at 50 ms, −3.2 dB at 100 ms and full at 200 ms.
+- **Decay and release** fall exponentially, which is a straight line when the level is drawn in decibels. The time you set is where the fall has covered about 26 dB (three time constants, about 95% of the way), not where it reaches silence. A 600 ms release measures −8.5 dB after 200 ms, −17.2 dB after 400 ms, −25.9 dB after 600 ms, and is still at −51.9 dB after 1.2 s.
+
+<EnvelopeCurveFigure
+  title="An amplitude envelope in decibels"
+  caption="Attack 200 ms, decay 300 ms to a sustain of 0.5, release 600 ms. The attack aims past full scale and stops where it reaches it, which is why it is steep early. On a decibel axis the release is a straight line: each time constant, a third of the set time, takes off about 8.7 dB, so the set release time lands about 26 dB below where the release began and the tail keeps falling after it."
+/>
+
+So a release always rings on past its set time, quietly. When a tail must end at a known moment, shorten the release rather than expecting the set time to be the end.
+
 ## Delay and hold: DAHDSR
 
 Two more stages extend ADSR at the start. **Delay** keeps the envelope at zero for a set time after the key goes down, before the attack begins. **Hold** keeps it at the peak for a set time after the attack, before the decay begins. The full sequence is Delay, Attack, Hold, Decay, Sustain, Release: **DAHDSR**. With both at zero, which is the default, it is the ordinary ADSR above.

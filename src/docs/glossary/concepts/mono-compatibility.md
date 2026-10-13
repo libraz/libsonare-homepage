@@ -11,7 +11,7 @@ Many playback situations still collapse stereo partially or completely: phones, 
 
 ## Why Width Can Break
 
-Width comes from differences between left and right. Panned instruments, room reflections, and natural stereo recording are healthy differences. Phase cancellation is the harmful kind: when the channels are summed, out-of-phase content (opposite polarity, negative correlation, or a delay that puts some frequencies out of phase) subtracts instead of adding. Being merely decorrelated does not guarantee cancellation.
+Width comes from differences between left and right. Panned instruments, room reflections, and natural stereo recording are healthy differences. Phase cancellation is the harmful kind: when the channels are summed, out-of-phase content (opposite polarity, negative correlation, or a delay that puts some frequencies out of phase) subtracts instead of adding. Being merely decorrelated does not guarantee cancellation. [Phase and Polarity](./audio-basics.md#phase-and-polarity) shows the mechanism with a single sine.
 
 Summed to mono, the canceled content disappears. The result can be:
 
@@ -29,7 +29,8 @@ Correlation is a single number, from +1 to -1, that estimates how similar the le
 |-------------|-------------------|
 | Near +1 | Very similar channels; mono-safe but possibly narrow. |
 | Around 0 | Wide or decorrelated material; check mono carefully. |
-| Below 0 | Strong phase opposition; mono cancellation risk. |
+| Below 0 | Growing phase opposition; mono cancellation risk. |
+| Near -1 | Channels are close to inverted copies; summing to mono cancels most of the signal. |
 
 Correlation is not a full answer. Some wide mixes are safe, and some narrow mixes still have local phase problems. Always listen in mono when width decisions matter.
 
@@ -86,4 +87,4 @@ The demo's stereo width control is meant for finishing adjustments that preserve
 
 ::::
 
-Related: [Reference Track](./reference-track.md), [Dynamic Range](./dynamic-range.md), [Mastering](../mastering.md)
+Related: [Reference Track](./reference-track.md), [Dynamic Range](./dynamic-range.md), [The Mastering Chain](../mastering.md)

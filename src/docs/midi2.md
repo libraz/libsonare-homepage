@@ -35,7 +35,7 @@ A MIDI 2.0 UMP can carry a 16-bit note velocity, 32-bit controller or pressure v
 
 ## From MIDI 1.0 to MIDI 2.0
 
-A UMP channel-voice word carries a 4-bit group and a 4-bit MIDI channel. The channel voice message type distinguishes the value layout: MT `0x2` is a one-word MIDI 1.0 message, while MT `0x4` is a two-word MIDI 2.0 message. The second word is where the wider value fields live. Both message types still identify notes with 7-bit note numbers and use the same group/channel ranges.
+A UMP channel-voice word carries a 4-bit group and a 4-bit MIDI channel. A group is one of sixteen independent sets of sixteen channels, so one UMP stream can address 256 channels; a plain MIDI 1.0 setup uses group 0 ([MIDI Basics](./glossary/instruments/midi-basics.md#midi-files-and-midi-2-0)). The channel voice message type distinguishes the value layout: MT `0x2` is a one-word MIDI 1.0 message, while MT `0x4` is a two-word MIDI 2.0 message. The second word is where the wider value fields live. Both message types still identify notes with 7-bit note numbers and use the same group/channel ranges.
 
 | Value or expression | MIDI 1.0 channel voice | MIDI 2.0 channel voice |
 |---|---:|---:|

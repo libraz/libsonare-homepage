@@ -36,7 +36,7 @@ libsonare の大半は、音声を特徴量へ変換します。たとえばメ�
 MFCC はさらにもう 1 段の損失を加えます。先頭 `nMfcc` 個（多くは 13〜20）のケプストラム係数だけを残すためです。この係数が保持するのはスペクトル包絡の大まかな形で、その内側の細かい構造（倍音のディテールやフォルマントの鋭いエッジ）は捨てられます。そのため MFCC の逆変換は、音声を取り戻す前に*平滑化された*メルスペクトログラムを再構成します。
 
 ::: details ケプストラム係数とは？
-ケプストラムは、対数スペクトルに DCT（離散コサイン変換）をかけた結果です。スペクトルの大まかな形（音色）と細かいディテールを分離します。MFCC はこの係数の先頭の数個だけを残すため、全体的な音色をコンパクトに表せる一方で、細かいスペクトルのディテールは再構成できません。
+ケプストラムは「スペクトルのスペクトル」です。振幅スペクトルの対数を取り、それをもう一度変換します。古典的なケプストラムは逆フーリエ変換を使いますが、MFCC は対数*メル*帯域エネルギーに DCT（離散コサイン変換）をかけます。どちらの場合も、低次の係数がスペクトルの大まかな形（音色）を、高次の係数が細かいディテールを表します。MFCC はこの係数の先頭の数個だけを残すため、全体的な音色をコンパクトに表せる一方で、細かいスペクトルのディテールは再構成できません。
 :::
 
 ::: warning 再構成は近似であって復元ではない
@@ -100,11 +100,11 @@ MFCC はさらにもう 1 段の損失を加えます。先頭 `nMfcc` 個（多
 メルまたは MFCC の結果は、それを作った変換のパラメータを持っています。`nFft`、`hopLength`、`sampleRate`、適用された `fmin` と `fmax`、`htk`、MFCC ではさらに `nMels` と `lifter` です。JavaScript では逆変換が結果そのものをリクエストとして受け取るので、値を繰り返す必要も、ずれる余地もありません。
 
 ```typescript
-const mel = melSpectrogram(samples, sampleRate, 2048, 512, 128);
+const mel = melSpectrogram({ samples, sampleRate, nFft: 2048, hopLength: 512, nMels: 128 });
 const spectrum = melToStft({ result: mel });
 const preview = melToAudio({ result: mel, nIter: 32 });
 
-const coeffs = mfcc(samples, sampleRate, 2048, 512, 128, 20, 0, 0, false, 22);
+const coeffs = mfcc({ samples, sampleRate, nFft: 2048, hopLength: 512, nMels: 128, nMfcc: 20, lifter: 22 });
 const reMel = mfccToMel({ result: coeffs });
 const fromMfcc = mfccToAudio({ result: coeffs, nIter: 32 });
 ```
@@ -158,7 +158,7 @@ sonare mel-to-audio song.wav --n-fft 2048 --hop-length 512 --n-mels 128 -o mel-p
 
 ## 音声を再構成する
 
-`melToAudio` と `mfccToAudio` は、再生やファイル書き出しができるモノラルの `Float32Array` を返します。特徴量に位相がないため、どちらも **Griffin-Lim** を実行します。振幅にランダム（またはゼロ）位相を与えて開始し、STFT → 新しい位相を保持 → 既知の振幅を課す → 逆 STFT を繰り返し、位相が自己整合するまで反復します。
+`melToAudio` と `mfccToAudio` は、再生やファイル書き出しができるモノラルの `Float32Array` を返します。特徴量に位相がないため、どちらも **Griffin-Lim** を実行します。振幅にランダムな位相を与えて開始し、逆 STFT → STFT → 新しい位相を保持 → 既知の振幅を課す、を位相が自己整合するまで繰り返します。ランダムな初期位相は固定シードから作るので、同じ特徴量と `nIter` からは常に同じプレビューが得られます。
 
 `cqtToAudio` と `vqtToAudio` も、`cqt(...)`／`vqt(...)`（定 Q 変換と可変 Q 変換。周波数ビンを線形ではなく対数間隔で並べる変換です）が返す行優先の振幅行列に同じ反復手法を使います。順変換時の `sampleRate`、`hopLength`、`fmin`、`binsPerOctave`（VQT は `gamma` も。順変換で省略したなら省略）を変えずに渡してください。メル／MFCC の復元と同じく、これは近似的なモノラルプレビューであり、原音の復元ではありません。
 
@@ -236,7 +236,7 @@ Griffin-Lim は振幅のみからの反復再構成です。目標の振幅ス�
 2. その信号を順 STFT する。振幅は `|S|` から少しずれるが、**位相**は実波形により整合した値になる。
 3. 新しい位相を保持し、振幅を `|S|` に戻して繰り返す。
 
-各パスが、実際の信号が生み出しうる位相へ近づけます。`nIter` はパス数を制御します。反復が多いほど近づき（滑らかでアーティファクトが少ない）線形にコストが増え、少ないほど速い代わりに位相の乱れによる滲みが目立ちます。32 が無難な既定値で、高速 UI プレビューでは 8〜16 に、プレビュー品質重視なら 60 以上に上げます。
+各パスが、実際の信号が生み出しうる位相へ近づけます。libsonare はモーメンタム 0.99 の高速版を使います。新しい位相の推定を、前のパスが動かした方向へさらに押し進めるので、素朴な反復より少ないパスで収束します。初期位相は固定シードの乱数なので、結果は毎回同じです。`nIter` はパス数を制御します。反復が多いほど近づき（滑らかでアーティファクトが少ない）線形にコストが増え、少ないほど速い代わりに位相の乱れによる滲みが目立ちます。32 が無難な既定値で、高速 UI プレビューでは 8〜16 に、プレビュー品質重視なら 60 以上に上げます。
 :::
 
 `nIter` が主な品質／レイテンシのつまみです。それ以外の `nFft`、`hopLength`、`fmin`、`fmax`、`htk` は**順変換**と一致させる必要があります（下記参照）。ヘルパーのシグネチャでは、`fmin`／`fmax` の既定値は `0`（全域）、`htk` の既定値は `false`（Slaney）です。順変換に渡したのと同じ値を、同じ位置引数の枠に渡してください。
@@ -255,9 +255,9 @@ Griffin-Lim は振幅のみからの反復再構成です。目標の振幅ス�
 
 `decompose` は**振幅**スペクトログラムを成分と活性度に分解します。この因子は位相を持たないため、ひとつの成分を音に戻すには積を取って Griffin-Lim に渡すことになり、`melToAudio` と同じ近似、同じにじんだ質感になります。得られるのはその成分が*何を含んでいるか*のプレビューです。ステムではないので、成分を重ねて再生しても元の入力には戻りません。
 
-`decomposeStems` はもう一方の経路を取ります。同じ分解を行ったうえで、成分ごとの**ソフトマスク**（各時間周波数点における、その成分が占める振幅の割合）を作り、それを**元の複素**スペクトログラムに適用します。推定は一切行いません。各成分はソース自身の位相をそのまま保ち、マスクは各点を近似するのではなく分配するため、成分は**足し合わせると入力に戻ります**。
+`decomposeStems` はもう一方の経路を取ります。同じ分解を行ったうえで、成分ごとの**ソフトマスク**（各時間周波数点における、その成分が占める振幅の割合）を作り、それを**元の複素**スペクトログラムに適用します。位相の推定は一切行いません。各成分はソース自身の位相をそのまま保ち、マスクは各点を近似するのではなく分配するため、成分は**足し合わせると入力に戻ります**。
 
-マルチチャンネルの録音には `decomposeStemsLinked`（Python では `decompose_stems_linked`）を使います。各チャンネルの振幅を平均して 1 つの NMF モデルとマスクを作り、そのマスクを各チャンネル固有の複素スペクトログラムへ同じまま適用します。チャンネル間のレベル差と位相差が保たれます。同じ長さのチャンネルを少なくとも 1 つ、最大 64 チャンネルまで渡してください。結果の `components[k][c]` が成分 `k` のチャンネル `c` を表し、共有された `w` と `h` も返します。NMF の既定値は `decomposeStems` と同じで、成分 4 個、`nFft` 2048、`hopLength` 512、反復 100 回、`beta: 2`、`init: 'random'`、`maskPower: 1` です。`decomposeStems` と `decomposeStemsLinked` はどちらもサンプルレートを省略すると 22050 を使うため、録音の実際のレートを渡してください。1 チャンネルなら、同じオプションを渡した `decomposeStems` とビット単位で一致します。
+マルチチャンネルの録音では、`decomposeStemsLinked`（Python では `decompose_stems_linked`）がすべてのチャンネルに 1 つのモデルと 1 組のマスクを当てはめるので、チャンネル間のレベルと位相が保たれます。入力、結果の並び、既定値は[音源分離](./source-separation.md#方式を選ぶ)にあります。
 
 | | `decompose` ＋ Griffin-Lim | `decomposeStems` |
 |---|---------------------------|------------------|
@@ -267,39 +267,6 @@ Griffin-Lim は振幅のみからの反復再構成です。目標の振幅ス�
 | 向いている用途 | 成分が何を含むかを見る・聴く | そのまま使い続ける分離音声 |
 
 モノラルの成分を聴かせる、ミックスに載せる、ファイルに書き出す場合は `decomposeStems` を使います。複数チャンネルで分離を共有し、相対的なレベルと位相を保つ場合は `decomposeStemsLinked` を使います。Griffin-Lim の経路は、特徴量表現に何が残っているかを確認する用途に向いています。シグネチャと環境ごとの名前（`decomposeStems`、`decomposeStemsLinked`、`decompose_stems`、`decompose_stems_linked`）は [JavaScript API](./js-api-features.md) と [Python API](./python-api-analysis.md) にあります。
-
-::: code-group
-
-```typescript [Browser]
-import { init, decomposeStemsLinked } from '@libraz/libsonare';
-
-await init();
-const linked = decomposeStemsLinked({ channels: [leftChannel, rightChannel], sampleRate });
-const firstLeft = linked.components[0][0];
-const firstRight = linked.components[0][1];
-```
-
-```typescript [Node]
-import { decomposeStemsLinked } from '@libraz/libsonare-native';
-
-const linked = decomposeStemsLinked({ channels: [leftChannel, rightChannel], sampleRate });
-const firstLeft = linked.components[0][0];
-const firstRight = linked.components[0][1];
-```
-
-```python [Python]
-import libsonare as sonare
-
-linked = sonare.decompose_stems_linked([left_channel, right_channel], sample_rate=sample_rate)
-first_left = linked["components"][0][0]
-first_right = linked["components"][0][1]
-```
-
-```bash [CLI]
-# CLI はモノラルの `decompose-stems` だけを提供します。連動したチャンネルにはライブラリ API を使います。
-```
-
-:::
 
 ## 往復の動作確認
 

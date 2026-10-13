@@ -120,7 +120,7 @@ Branch on `code`; log the message to see which field was wrong. Validating a sce
 ::: details Field terms: dual pan, polarity invert, pan law, PDC
 - **Dual pan** (`panMode: 2`): pans the left and right channels to *independent* positions instead of moving the whole signal together. Useful for narrowing or re-placing an already-stereo source.
 - **Polarity invert**: multiplies a channel by −1, flipping the waveform. Used to fix a track recorded out of phase with another; it changes phase relationships, not perceived loudness on its own.
-- **Pan law**: how much the center is attenuated relative to hard-left/right so loudness stays even as you pan. `const 3/4.5/6 dB` are constant-power options; `linear 0 dB` keeps the summed level steady instead. See [Mixing Engine](./mixing.md#pan-modes-and-pan-laws).
+- **Pan law**: how much the center is attenuated relative to hard-left/right so loudness stays even as you pan. `const 3 dB` is constant power, `const 6 dB` is constant amplitude (it keeps the mono sum steady), `const 4.5 dB` sits between the two, and `linear 0 dB` applies no center compensation. The center dip reaches the output only in stereo-pan mode (`panMode: 1`); in the default balance mode a centered strip stays at 0 dB under every law. See [Mixing Engine](./mixing.md#pan-modes-and-pan-laws).
 - **PDC (plugin-delay compensation)**: when one path is delayed by a lookahead processor, the engine delays the shorter paths to match so everything lines up at the master. `channelDelaySamples` is excluded from that calculation.
 :::
 

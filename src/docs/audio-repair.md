@@ -7,7 +7,17 @@ description: Choose, measure, and apply libsonare's repair stages for noise, hum
 
 Repair starts with evidence. A click, a clipped peak, a mains hum, a steady noise floor, and a diffuse room tail need different measurements and different algorithms. Measure the original buffer first, choose only the stages the evidence supports, then listen again at the same playback gain.
 
+If *dBFS*, *noise floor*, or *clipping* are unfamiliar, read [Audio Basics](./glossary/concepts/audio-basics.md) first — this page assumes that vocabulary and focuses on which repair stage to run.
+
 The six repair stages are classical DSP. They reconstruct or attenuate part of the signal; they do not recover an original recording that was never captured. The stages run in one fixed order inside a mastering chain; when you combine the one-shot APIs, apply that same order yourself.
+
+::: info Terms on this page
+- **Detector**: a measurement that reports evidence for one defect (counts, levels, fractions) without changing the audio.
+- **Linked**: one gain mask computed from all channels together and applied to each, so the level and timing relationship between channels does not move.
+- **Causal**: a stage that needs only the audio it has already seen, plus a fixed delay, so it can run on a live stream; a non-causal stage needs the whole buffer.
+- **Latency and tail**: latency is how many samples late a realtime stage's output is; tail is how many samples of output keep coming after the input stops.
+- **Streaming-safe noise estimator**: the `spp` estimator, which tracks the noise frame by frame instead of ranking the whole file, so the same denoise can run offline and live.
+:::
 
 ## Choose the defect
 

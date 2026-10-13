@@ -184,7 +184,7 @@ librosa's strength is low-level DSP — higher-level music understanding is typi
 
 | libsonare | Description |
 |-----------|-------------|
-| `KeyAnalyzer` | Musical key detection (Krumhansl-Schmuckler profiles) |
+| `KeyAnalyzer` | Musical key detection (Krumhansl-Schmuckler correlation against Krumhansl-Kessler, Temperley, Sha'ath, Faraldo or Bellman-Budge profiles) |
 | `ChordAnalyzer` | Chord recognition (24 qualities across 12 roots when the full template set is enabled — see [Which chords can it recognize?](/docs/faq#which-chords-can-it-recognize) for the triads-only default inside `analyze()`) |
 | `SectionAnalyzer` | Song structure analysis (intro / verse / chorus, etc.) |
 | `TimbreAnalyzer` | Timbre characteristics (brightness, warmth, density, …) |

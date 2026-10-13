@@ -11,6 +11,50 @@ This page combines a host track, a guest track, and a music bed. It renders them
 This page uses the Python CLI (`pip install libsonare`, command `sonare`). `mix` is not in the native `sonare-cli`; see [Which CLI Are You Using?](../cli.md#which-cli-are-you-using). In code, `Mixer.fromSceneJson` loads the same scene (see [Mixing Engine](../mixing.md#scene-based-mixing-mixer)).
 :::
 
+::: info What you need
+- **Install:** `pip install libsonare` (Python 3.11 or later). The Node tab needs `npm install @libraz/libsonare` (Node.js 22.12 or later).
+- **Three WAV files of the same length and sample rate:** `host.wav`, `guest.wav` and `music-bed.wav`, mono or stereo. 48 kHz is the rate used here.
+- **Test material:** the numbers below come from 8-second synthetic tracks. The script below writes similar ones (vowel-like syllables for the voices, a sustained chord for the bed); your numbers will differ.
+:::
+
+::: details A script that writes test voices and a music bed
+Save as `make_show.py` and run `python make_show.py` (NumPy comes with `pip install libsonare`). The host talks for the first 3 seconds and the last 3; the guest talks in between.
+
+```python
+"""Write host.wav, guest.wav and music-bed.wav: 8 s, 48 kHz mono test material."""
+import wave
+
+import numpy as np
+
+SR = 48000
+t = np.arange(8 * SR) / SR
+rng = np.random.default_rng(5)
+
+
+def save(path, x):
+    with wave.open(path, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(SR)
+        w.writeframes((np.clip(x, -1.0, 1.0) * 32767).astype("<i2").tobytes())
+
+
+def voice(f0, talking):
+    """Vowel-like syllables at about 4 per second, plus a little breath noise."""
+    phase = 2 * np.pi * np.cumsum(f0 * (1 + 0.05 * np.sin(2 * np.pi * 0.7 * t))) / SR
+    tone = sum(np.sin(k * phase) / k for k in range(1, 30))
+    syllables = np.clip(np.sin(2 * np.pi * 4.0 * t), 0.0, None) ** 0.5
+    x = (0.25 * tone + 0.02 * rng.standard_normal(len(t))) * syllables
+    return x * talking
+
+
+host_talks = ((t < 3.0) | (t >= 5.0)).astype(float)
+save("host.wav", voice(120.0, host_talks))
+save("guest.wav", voice(200.0, 1.0 - host_talks))
+save("music-bed.wav", 0.3 * sum(np.sin(2 * np.pi * f * t) for f in (220.0, 277.2, 329.6)) / 3)
+```
+:::
+
 ## What You Will Learn
 
 By the end of this page you should be able to:
@@ -37,7 +81,7 @@ for strip in scene["strips"]:
     if strip["id"] == "music-bed":
         for insert in strip["inserts"]:
             if insert["processor"] == "dynamics.sidechainRouter":
-                insert["params"] = {"rangeDb": 5}
+                insert["params"].update({"rangeDb": 5})
 json.dump(scene, open("scene.json", "w"))
 '
 
@@ -101,8 +145,9 @@ sonare mixing-preset --preset commentaryDucking --json
 ```
 
 ```typescript [Node]
-import { mixingScenePresetJson } from '@libraz/libsonare-native';
+import { init, mixingScenePresetJson } from '@libraz/libsonare';
 
+await init();
 const scene = JSON.parse(mixingScenePresetJson('commentaryDucking'));
 ```
 
@@ -143,7 +188,7 @@ for strip in scene["strips"]:
     if strip["id"] == "music-bed":
         for insert in strip["inserts"]:
             if insert["processor"] == "dynamics.sidechainRouter":
-                insert["params"] = {"rangeDb": 30}
+                insert["params"].update({"rangeDb": 30})
 json.dump(scene, open("scene.json", "w"))
 '
 sonare mix --scene scene.json \
@@ -152,7 +197,7 @@ sonare mix --scene scene.json \
 cmp show.wav show-r30.wav   # identical — no output
 ```
 
-Raising `rangeDb` from the preset's default 18 to 30 changes nothing: `cmp` reports the two renders as byte-identical. On this material the host's level never calls for more than about 7 dB of reduction, so any ceiling at or above roughly 8 dB behaves the same as no ceiling at all. Lower it below that point and the edit is real — `sonare dynamics` on the whole-file mixdown shows the effect, small as it is once averaged over 8 seconds that include long stretches where the host isn't talking:
+Raising `rangeDb` from the preset's default 18 to 30 changes nothing: `cmp` reports the two renders as byte-identical. On this material the host's level never calls for more than about 7 dB of reduction, so any ceiling at or above roughly 8 dB behaves the same as no ceiling at all. Lower it below that point and the edit is real. `sonare dynamics` on the whole-file mixdown shows that something changed, but averaged over 8 seconds that include the voices and long stretches where the host isn't talking, the change looks tiny:
 
 | `rangeDb` | `rms_db` (whole file) | `peak_db` | Render vs `18` |
 |-----------|-----------------------|-----------|-----------------|
@@ -166,6 +211,96 @@ Raising `rangeDb` from the preset's default 18 to 30 changes nothing: `cmp` repo
 
 ::: warning A cap you never hit is not a cap you tuned
 If lowering `rangeDb` does nothing to your render either, the problem isn't the parameter — it's that your host track sits quieter than the threshold the router reacts to, so no ducking is being requested at all. Confirm the duck is engaging at the preset default before spending time tuning how deep it goes.
+:::
+
+### The parameters that set the duck
+
+`rangeDb` only caps the duck. How deep it goes, and how it moves, is set by the router's compressor controls. The preset sends only `rangeDb`, so the others run at their defaults:
+
+| Parameter | Default | Starting point for music under speech | Why |
+|---|---|---|---|
+| `thresholdDb` | -24 | about 10 dB below the host's typical speaking level | the host must cross it on every phrase, or nothing ducks |
+| `ratio` | 4 | 4 | together with how far the host crosses the threshold, this sets the depth; aim for the bed 6 to 12 dB lower while the host talks |
+| `attackMs` | 5 | 5 to 20 | fast enough that the first syllable is not masked, slow enough not to click |
+| `releaseMs` | 100 | 300 to 500 | 100 ms lets the bed swell back in every gap between words, which is heard as pumping; a slower release holds it down through a sentence |
+| `rangeDb` | 18 (the preset's) | 12 to 18 | a cap, so a shout cannot bury the bed entirely |
+
+These are starting points, not answers: speaking levels and beds differ, so set them, render, and measure.
+
+Edit them the same way as `rangeDb`, by merging into the insert's `params`:
+
+```python
+insert["params"].update({"thresholdDb": -36, "ratio": 4, "attackMs": 10, "releaseMs": 400})
+```
+
+<SonareDemo id="ducking" />
+
+A whole-file number cannot tell you how deep the duck is. Measure the bed only while the host is talking, and compare it with the same stretch of bed without the duck. The script below does that: it renders the scene three times (as is, with the duck removed, and with only the bed), recovers the ducked bed by subtraction, and averages both versions of the bed over the 10 ms blocks where `host.wav` is louder than -40 dBFS.
+
+::: details A script that measures the duck under speech
+Save as `duck_depth.py` next to the three WAV files and run `python duck_depth.py scene.json`.
+
+```python
+"""Print how far the duck pulls the music bed down while the host is talking."""
+import copy
+import json
+import subprocess
+import sys
+
+import numpy as np
+from libsonare import Audio
+
+BLOCK = 480  # 10 ms at 48 kHz
+
+
+def render(scene, path):
+    with open("duck-scene.json", "w") as f:
+        json.dump(scene, f)
+    subprocess.run(
+        ["sonare", "mix", "--scene", "duck-scene.json", "--input", "host=host.wav",
+         "--input", "guest=guest.wav", "--input", "music-bed=music-bed.wav", "-o", path],
+        check=True, capture_output=True,
+    )
+    with Audio.from_file_channel(path, 0) as audio:
+        return audio.data
+
+
+def variant(scene, duck=True, voices=True):
+    s = copy.deepcopy(scene)
+    for strip in s["strips"]:
+        if strip["id"] == "music-bed" and not duck:
+            strip["inserts"] = []
+        if strip["id"] in ("host", "guest") and not voices:
+            strip["muted"] = True
+    return s
+
+
+def block_db(x):
+    x = x[: len(x) // BLOCK * BLOCK].reshape(-1, BLOCK)
+    return 10 * np.log10(np.mean(x**2, axis=1) + 1e-12)
+
+
+def level_db(x):
+    blocks = block_db(x)
+    n = min(len(blocks), len(talking))
+    return 10 * np.log10(np.mean(10 ** (blocks[:n][talking[:n]] / 10)))
+
+
+scene = json.load(open(sys.argv[1]))
+bed_alone = render(variant(scene, duck=False, voices=False), "duck-c.wav")
+# The master bus is a plain sum, so (with duck) - (without duck) + (bed alone)
+# leaves the ducked bed by itself.
+ducked = (render(variant(scene), "duck-a.wav") - render(variant(scene, duck=False), "duck-b.wav")
+          + bed_alone)
+with Audio.from_file("host.wav") as audio:
+    talking = block_db(audio.data) > -40.0  # 10 ms blocks where the host is speaking
+
+before, after = level_db(bed_alone), level_db(ducked)
+print(f"bed while the host talks: {before:.1f} dB unducked, {after:.1f} dB ducked, "
+      f"duck depth {before - after:.1f} dB")
+```
+
+On the test material from the script at the top of this page, the unedited preset ducks the bed by about 3 dB while the host talks, and the `update` line above (with `rangeDb` left at the preset's 18) by about 9 dB. Measure the scene you will actually render: the script at the top of this page also sets `rangeDb: 5`, which caps the duck at 5 dB.
 :::
 
 The sidechain router is a compressor whose detector listens to the host instead of the bed, so the reduction it asks for is the shaded gain-reduction gap below: how far the key rises above the threshold, scaled by the ratio, and nothing more. Raise the threshold until the program no longer crosses it and the gap disappears — that is the state the warning above describes, and no `rangeDb` brings it back.
@@ -210,6 +345,20 @@ sonare mastering show.wav --assistant --preset speech --explain --target-platfor
 
 The standalone `speech` preset targets its built-in -16 LUFS. The assistant run starts from the same chain and gets -16 LUFS from `--target-platform podcast`; it also adds the speech preset's low-frequency mono-maker stage and includes the reasons in `explanation`. The assistant never infers a genre from the audio, so the `--preset speech` choice stays visible and reproducible.
 
+::: warning Clean the voices before the mix, not the finished show
+Both runs start with `repair.denoise`, and at this point it runs over the whole show, music bed included. Noise reduction on music smears its sustain and leaves watery artifacts, and the bed needs none. With real recordings, clean each voice before Step 3 and switch the master's denoise off:
+
+```bash
+sonare repair host.wav -o host-clean.wav --explain --json
+sonare repair guest.wav -o guest-clean.wav --explain --json
+# Mix host-clean.wav and guest-clean.wav in Step 3, then:
+sonare mastering show.wav --preset speech --params repair.denoise.enabled=0 \
+  -o show-master.wav --json
+```
+
+With `repair.denoise.enabled=0` the stage list starts at `eq.tilt`; the same `--params` works on the `--assistant` run. `repair` measures each voice and runs only the stages its evidence calls for (see [Clean Up a Batch of Recordings](./recording-cleanup.md)); it scales a voice whose repaired peak went past full scale back to full scale, so check the voice levels again before you mix. The host strip in this scene also carries its own de-esser, so the master's `dynamics.deesser` is a second pass on the host: if the host's "s" sounds start to lisp, lower one of the two.
+:::
+
 ::: danger `--target-platform` requires `--assistant`
 ```bash
 sonare mastering show.wav --preset speech --target-platform podcast -o x.wav --json
@@ -219,7 +368,23 @@ sonare mastering show.wav --preset speech --target-platform podcast -o x.wav --j
 The platform target is an assistant input, not a global option. A standalone `--preset` run cannot combine it, so the flag is rejected. Use `--assistant --preset speech --target-platform podcast` when you need both the named speech chain and the platform target.
 :::
 
-`--target-platform` accepts `streaming`, `youtube`, `broadcast`, `podcast`, `audiobook`, `cinema`, `club`, or `cd`. `broadcast`, `podcast`, `club`, and `cd` supply their own loudness and ceiling when the corresponding values were not explicit; the other accepted names leave the current values unchanged. Full option list: `sonare mastering --help`. What each target actually asks for is in [Delivery Targets](../glossary/mastering/delivery-targets.md).
+`--target-platform` accepts eight names, but only four of them change anything:
+
+| `--target-platform` | Loudness target | True-peak ceiling |
+|---|---|---|
+| `broadcast` | -23 LUFS | -1 dBTP |
+| `podcast` | -16 LUFS | -1 dBTP |
+| `club`, `cd` | -9 LUFS | -0.3 dBTP |
+| `streaming`, `youtube`, `audiobook`, `cinema` | whatever `--target-lufs` says (default -14 LUFS) | whatever `--ceiling-db` says (default -1 dBTP) |
+
+The last row applies nothing of its own. In particular, `--target-platform audiobook` on its own masters to -14 LUFS and -1 dBTP, which is louder and hotter than audiobook distributors usually accept (commonly RMS between -23 and -18 dBFS, with peaks at or below -3 dBFS). For an audiobook, pass the numbers yourself and check them against the distributor's spec:
+
+```bash
+sonare mastering chapter.wav --assistant --preset speech \
+  --target-lufs -20 --ceiling-db -3 -o chapter-master.wav --report chapter-report.json --json
+```
+
+An explicit `--target-lufs` or `--ceiling-db` also wins over the four targets that do supply values. Full option list: `sonare mastering --help`. What each target actually asks for is in [Delivery Targets](../glossary/mastering/delivery-targets.md).
 
 ## Step 5 — Check whether your voices are safe in mono
 

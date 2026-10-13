@@ -105,4 +105,4 @@ Quick Master selects sensible starting values for that chain. Studio exposes the
 
 ::::
 
-Related: [LUFS](../lufs.md), [True Peak](../true-peak.md), [A/B comparison](../ab-comparison.md)
+Related: [LUFS](../lufs.md), [True Peak](../true-peak.md), [Loudness Matching and A/B Comparison](./loudness-matching.md)

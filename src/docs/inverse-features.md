@@ -36,7 +36,7 @@ A forward feature transform is **lossy on purpose**. Two kinds of information ar
 MFCCs add a third loss on top: they keep only the first `nMfcc` cepstral coefficients (often 13–20), which hold the coarse spectral envelope and discard the fine structure inside it — the harmonic detail and the sharp edges of formants. Inverting MFCCs therefore reconstructs a *smoothed* mel spectrogram before any audio is recovered.
 
 ::: details What is a cepstral coefficient?
-A cepstrum is the result of taking a transform — a DCT, or discrete cosine transform — of the log spectrum. It separates the broad shape of the spectrum (timbre) from its fine detail. MFCCs keep only the first several of these coefficients, which is why they describe overall tonal color compactly but cannot reconstruct fine spectral detail.
+A cepstrum is a spectrum of a spectrum: take the log of a magnitude spectrum and transform it again. The classical cepstrum uses an inverse Fourier transform; MFCCs instead apply a DCT (discrete cosine transform) to the log *mel* band energies. Either way, the low coefficients describe the broad shape of the spectrum (timbre) and the high ones its fine detail. MFCCs keep only the first several of these coefficients, which is why they describe overall tonal color compactly but cannot reconstruct fine spectral detail.
 :::
 
 ::: warning Reconstruction is an approximation, never a restoration
@@ -98,11 +98,11 @@ If forward MFCC used a nonzero `lifter`, pass the same value to `mfccToMel` or `
 A mel or MFCC result carries the parameters of the transform that made it: `nFft`, `hopLength`, `sampleRate`, `fmin` and `fmax` as applied, `htk`, and for MFCC also `nMels` and `lifter`. In JavaScript the inverse takes the result itself as a request, so nothing has to be repeated and nothing can drift:
 
 ```typescript
-const mel = melSpectrogram(samples, sampleRate, 2048, 512, 128);
+const mel = melSpectrogram({ samples, sampleRate, nFft: 2048, hopLength: 512, nMels: 128 });
 const spectrum = melToStft({ result: mel });
 const preview = melToAudio({ result: mel, nIter: 32 });
 
-const coeffs = mfcc(samples, sampleRate, 2048, 512, 128, 20, 0, 0, false, 22);
+const coeffs = mfcc({ samples, sampleRate, nFft: 2048, hopLength: 512, nMels: 128, nMfcc: 20, lifter: 22 });
 const reMel = mfccToMel({ result: coeffs });
 const fromMfcc = mfccToAudio({ result: coeffs, nIter: 32 });
 ```
@@ -156,7 +156,7 @@ Both inputs are **row-major** matrices: the mel `power` is `[nMels x nFrames]`, 
 
 ## Reconstruct audio
 
-`melToAudio` and `mfccToAudio` produce a mono `Float32Array` you can play or write to a file. Because the features carry no phase, both run **Griffin-Lim**: start from the magnitude with random (or zero) phase, repeatedly STFT → keep the new phase → impose the known magnitude → inverse-STFT, until the phase settles into something self-consistent.
+`melToAudio` and `mfccToAudio` produce a mono `Float32Array` you can play or write to a file. Because the features carry no phase, both run **Griffin-Lim**: start from the magnitude with a random phase, repeatedly inverse-STFT → STFT → keep the new phase → impose the known magnitude, until the phase settles into something self-consistent. The random start uses a fixed seed, so the same features and `nIter` always give the same preview.
 
 Expect the preview to keep the outline and rhythm of the original while sounding smeared, metallic or grainy. That is the limit of estimating a discarded phase, not a bug in the wiring.
 
@@ -234,7 +234,7 @@ Griffin-Lim is an iterative magnitude-only reconstruction. Given a target magnit
 2. Forward-STFT that signal — its magnitude will drift away from `|S|`, but its **phase** is now more consistent with a real waveform.
 3. Keep the new phase, force the magnitude back to `|S|`, and repeat.
 
-Each pass nudges the phase toward something that an actual signal could have produced. `nIter` controls how many passes run. More iterations converge closer (smoother, fewer artifacts) at linear cost; fewer iterations are faster but "phasier". 32 is a reasonable default; drop to 8–16 for fast UI previews, raise to 60+ when preview quality matters.
+Each pass nudges the phase toward something that an actual signal could have produced. libsonare runs the accelerated variant with a momentum of 0.99: each new phase estimate is pushed further along the direction the previous pass moved it, which converges in fewer passes than the plain loop. The initial phase is random from a fixed seed, so the result is repeatable. `nIter` controls how many passes run. More iterations converge closer (smoother, fewer artifacts) at linear cost; fewer iterations are faster but "phasier". 32 is a reasonable default; drop to 8–16 for fast UI previews, raise to 60+ when preview quality matters.
 :::
 
 `nIter` is the main quality/latency dial. Everything else (`nFft`, `hopLength`, `fmin`, `fmax`, `htk`) must match the **forward** transform — see below. The helper signatures default `fmin`/`fmax` to `0` (full range) and `htk` to `false` (Slaney); pass the same values you gave the forward transform, in the same positional slots.
@@ -253,9 +253,9 @@ Everything above reconstructs from a magnitude, so everything above has to inven
 
 `decompose` factors a **magnitude** spectrogram into components and activations. Those factors carry no phase, so turning one component back into sound means multiplying it out and handing the result to Griffin-Lim — the same approximation as `melToAudio`, with the same smeared character. What comes back is a preview of what that component *is*. It is not a stem: play the components together and you do not get the input back.
 
-`decomposeStems` takes the other route. It runs the same factorization, then builds a per-component **soft mask** — each component's share of the total magnitude at every time-frequency point — and applies that mask to the **original complex** spectrogram. Nothing is estimated. Every component keeps the source's own phase, and because the masks divide each point rather than approximate it, the components **sum back to the input**.
+`decomposeStems` takes the other route. It runs the same factorization, then builds a per-component **soft mask** — each component's share of the total magnitude at every time-frequency point — and applies that mask to the **original complex** spectrogram. No phase is estimated. Every component keeps the source's own phase, and because the masks divide each point rather than approximate it, the components **sum back to the input**.
 
-For a multichannel recording, use `decomposeStemsLinked` (or `decompose_stems_linked` in Python). It averages the channels' magnitudes to fit one NMF model and one set of masks, then applies each mask unchanged to every channel's own complex spectrogram. Interchannel level and phase differences stay in place. Pass at least one same-length channel and no more than 64 channels. The result stores component `k` on channel `c` in `components[k][c]`, alongside the shared `w` and `h` factors. Its NMF defaults match `decomposeStems`: 4 components, `nFft` 2048, `hopLength` 512, 100 iterations, `beta` 2, `init: 'random'`, and `maskPower` 1. Both `decomposeStems` and `decomposeStemsLinked` default an omitted sample rate to 22050; pass the recording’s actual rate. With one channel, the result is bit-identical to `decomposeStems` with the same options.
+For a multichannel recording, `decomposeStemsLinked` (Python `decompose_stems_linked`) fits one model and one set of masks for all channels, so interchannel level and phase stay in place. Its inputs, result layout and defaults are on [Source Separation](./source-separation.md#choose-a-method).
 
 | | `decompose` + Griffin-Lim | `decomposeStems` |
 |---|---------------------------|------------------|
@@ -265,39 +265,6 @@ For a multichannel recording, use `decomposeStemsLinked` (or `decompose_stems_li
 | Use it for | Seeing and hearing what a component holds | Separated audio you intend to keep |
 
 Reach for `decomposeStems` whenever a mono component will be listened to, mixed, or written to a file. Use `decomposeStemsLinked` when several channels must share one separation while keeping their relative level and phase. Keep the Griffin-Lim route for inspecting what a feature representation retained. The signatures and per-runtime spellings (`decomposeStems`, `decomposeStemsLinked`, `decompose_stems`, `decompose_stems_linked`) are in [JavaScript API](./js-api-features.md) and [Python API](./python-api-analysis.md).
-
-::: code-group
-
-```typescript [Browser]
-import { init, decomposeStemsLinked } from '@libraz/libsonare';
-
-await init();
-const linked = decomposeStemsLinked({ channels: [leftChannel, rightChannel], sampleRate });
-const firstLeft = linked.components[0][0];
-const firstRight = linked.components[0][1];
-```
-
-```typescript [Node]
-import { decomposeStemsLinked } from '@libraz/libsonare-native';
-
-const linked = decomposeStemsLinked({ channels: [leftChannel, rightChannel], sampleRate });
-const firstLeft = linked.components[0][0];
-const firstRight = linked.components[0][1];
-```
-
-```python [Python]
-import libsonare as sonare
-
-linked = sonare.decompose_stems_linked([left_channel, right_channel], sample_rate=sample_rate)
-first_left = linked["components"][0][0]
-first_right = linked["components"][0][1]
-```
-
-```bash [CLI]
-# The CLI has mono `decompose-stems` only; use a library binding for linked channels.
-```
-
-:::
 
 ## A round-trip sanity check
 

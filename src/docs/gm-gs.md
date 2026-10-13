@@ -7,7 +7,7 @@ description: The NativeSynth GM fallback bank — GS variation tones, GM/GS drum
 
 This page covers the General MIDI and GS side of the [built-in synthesizer](./native-synth.md): the data-free GM fallback bank with its GS variation tones and drum-kit variants, how a bounce follows GM program changes, the Roland-GS architecture layer and insertion effects the [SoundFont player](./soundfont-player.md) implements, and when a note falls from a SoundFont to the bank. The per-program voicing table is on [GM Tone Map](./gm-tone-map.md).
 
-What lives here is the concrete side of GS — the addresses, the tables, the per-slot detail. *Why* a browser audio engine speaks GS at all, and how the places it parts company with the specification sort into extension, deliberate divergence and reduction, is on [Sound Sources](./sound-sources.md).
+What lives here is the concrete side of GS — the addresses, the tables, the per-slot detail. *Why* a browser audio engine speaks GS at all is on [Sound Sources](./sound-sources.md); how the places it parts company with the specification sort into extension, deliberate divergence and reduction is [below](#where-it-is-gs-and-where-it-deliberately-is-not).
 
 <MaturityNote
   item="gs-scope"
@@ -27,11 +27,11 @@ For beginners, the practical rule is simple: **use SoundFont when you need exact
 
 ### GS variation tones
 
-A GM program number selects a *capital* tone. GS and GM2 both let a file reach a **variation** of that capital — a wide piano, a detuned organ, a 12-string guitar — by sending Bank Select before the program change. The fallback bank voices thirty such variations under seventeen capital programs.
+A GM program number selects a *capital* tone. GS and GM2 both let a file reach a **variation** of that capital — a wide piano, a detuned organ, a 12-string guitar — by sending Bank Select before the program change. The fallback bank voices thirty such variations under seventeen capital programs. Program numbers on this page are zero-based ([Counting from 0 or from 1](./glossary/instruments/midi-basics.md#counting-from-0-or-from-1)).
 
-Each variation carries **two addresses for one voice**: its GS Bank Select MSB number and its GM2 number. A GS-authored file and a GM2-authored file therefore sound the same tone, rather than one of them landing on the capital because it used the other standard's number.
+Each variation carries **two addresses for one voice**: its GS Bank Select MSB number, and its GM2 number, which is the Bank Select LSB sent with GM2's melodic MSB 121 (`0x79`). A GS-authored file and a GM2-authored file therefore sound the same tone, rather than one of them landing on the capital because it used the other standard's number.
 
-| Capital program | Variation | GS MSB | GM2 |
+| Capital program | Variation | GS MSB | GM2 LSB (MSB 121) |
 |---|---|---|---|
 | 0 Acoustic Grand Piano | Wide | 8 | 1 |
 | 0 Acoustic Grand Piano | Dark | 16 | 2 |
@@ -80,6 +80,19 @@ The audition takes one capital — program 16, Drawbar Organ — and offers the 
 
 `drum-kit` selects the `percussion` engine and maps incoming MIDI notes to the **General MIDI drum map** — note 36 is the kick, note 38 the acoustic snare, and so on — rather than treating note number as pitch. Route a drum pattern's notes to a destination bound to `drum-kit` and each note triggers its mapped piece.
 
+### How each standard selects a drum kit
+
+Four conventions meet in this player, and each one reaches a kit differently:
+
+| Convention | What makes a part a drum part | What selects the kit |
+|---|---|---|
+| General MIDI | MIDI channel 10 (index `9`), fixed | Nothing: there is one standard kit |
+| GS | Channel 10 by default; any part can be switched to a rhythm part by SysEx ("use for rhythm part") | Program Change on that rhythm part; Bank Select is not used |
+| GM2 | Bank Select MSB 120 (`0x78`) | Program Change |
+| SoundFont 2 file | Presets stored in bank 128 | The preset's program number inside bank 128 |
+
+The SF2 row describes where a kit sits inside the file, not a message on the wire. The player maps a drum part, and a GM2 MSB 120, onto bank 128 of the loaded SoundFont, which is why the manifest reports drum parts as bank 128.
+
 ### GS / GM drum-kit variants
 
 `drum-kit` also recognizes GS-style drum-kit selection (GS is Roland's General MIDI extension set; kits are addressed by rhythm-part program numbers in bank 128) and reshapes the Standard kit per set at note-on — more shell body for Room, bigger/lower shells for Power, and so on.
@@ -88,7 +101,11 @@ Two numbers appear per row and they are not interchangeable. **Program** is what
 
 The **tone map** column is the earliest generation that defines the set, numbered as the wire numbers them — `1` is the oldest and `4` the newest — and Bank Select is what reaches it. The two halves of that message do two different jobs and never the same one: **Bank Select MSB selects the variation tone, and Bank Select LSB selects the tone map.** Writing a variation number into the LSB therefore pins a generation rather than picking a tone. (GM2 re-uses the LSB for its own variation number under its own two MSBs; [the GS architecture layer](#the-gs-architecture-layer) below has that exception.)
 
-Which generation counts as the current one is fixed by the device being targeted, and that device is the **newest-generation module, the one whose own map is map 4 — which includes the map 3 generation rather than trading against it.** The two Parameter Address Maps agree on every address they share and part company at ten points, and at nine of the ten the newer module is the superset, so a file written for map 3 selects that map (`40 4x 00` = `03`) and plays. Two consequences are worth stating because they remove work rather than add it: there is no double-module mode to implement, and the target's sixty-four parts are four ports of sixteen rather than a second address space, so a part is still named by one address nibble.
+In short: LSB `0` plays the module's own map, and `1` to `4` pin one of the four generations, oldest first.
+
+::: details Which device the "module's own map" refers to
+Which generation counts as the current one is fixed by the device being targeted, and that device is the newest-generation module, the one whose own map is map 4, which includes the map 3 generation rather than trading against it. The two Parameter Address Maps agree on every address they share and part company at ten points, and at nine of the ten the newer module is the superset, so a file written for map 3 selects that map (`40 4x 00` = `03`) and plays. Two consequences are worth stating because they remove work rather than add it: there is no double-module mode to implement, and the target's sixty-four parts are four ports of sixteen rather than a second address space, so a part is still named by one address nibble.
+:::
 
 A tone map is audible exactly where it fails to reach a kit. Sixteen of the twenty-six sets below were introduced by a later map, so pinning an older one drops those to Standard, exactly as a module of that generation does. The melodic side is the opposite case: every variation the bank voices is a map 1 tone that all maps reach, which is why the LSB alone moves nothing in the variation table above and a great deal in the kit table below.
 
@@ -308,7 +325,7 @@ The four levels are what the player promises per address. `AUDIBLE` means changi
 - **Bank-128 drum kits on channel 10** — drum programs live in bank 128; channel 10 (index 9) is the drum part by convention.
 - **NRPN part edits** — TVF cutoff/resonance, TVA envelope, and vibrato can be edited per part via NRPN, plus **per-note drum NRPNs** for individual drum sounds.
 - **GS / GM SysEx** — **GS Reset**, **GM System On**, and "use for rhythm part" SysEx are recognized — both from the host and from SysEx events embedded inside an arrangement. A player reset clears the system effects and the master EQ along with the controllers, so a reverb level or EQ lift set before it stops sounding.
-- **Send-return system effects** — one shared send-return bus behind all 16 parts, with **reverb**, **chorus**, and **delay** units. Each part's send amount is additive from two sources: the channel CC sends (**CC91** reverb, **CC93** chorus, **CC94** delay) and, for reverb and chorus only, the SF2 zone generators `reverbEffectsSend`/`chorusEffectsSend` layered on top (GS delay send is CC-only — there is no SF2 zone generator for it). At power-on the parts start with a musically audible default room (reverb send 40, chorus send 8), so a plain SMF that never sends a reset SysEx still has ambience. A separate per-part **drive** insert (gain-compensated saturation) sits alongside this bus — distinct from the GS **insertion effects (EFX)** described below.
+- **Send-return system effects** — one shared send-return bus behind all 16 parts, with **reverb**, **chorus**, and **delay** units. Each part's send amount is additive from two sources: the channel CC sends (**CC91** reverb, **CC93** chorus, **CC94** delay) and, for reverb and chorus only, the SF2 zone generators `reverbEffectsSend`/`chorusEffectsSend` layered on top (GS delay send is CC-only — there is no SF2 zone generator for it). At power-on the parts start with a reverb send of 40 and a chorus send of 0, so a plain SMF that never sends a reset SysEx still has ambience. A separate per-part **drive** insert (gain-compensated saturation) sits alongside this bus — distinct from the GS **insertion effects (EFX)** described below.
 - **System delay modes** — reverb `CHARACTER` 6 selects Delay and 7 selects Panning Delay, with their own time and feedback controls; Panning Delay alternates the left and right outputs. The separate GS delay unit preserves negative feedback, so successive echoes alternate polarity.
 - **MIDI 2.0 / GM2** — the player decodes MIDI 2.0 banked Program Change, and resolves the **Bank Select LSB (CC#32)** one of two ways depending on the MSB:
   - **GM2 addressing** — when the MSB is GM2's melodic bank (`0x79`) or percussion bank (`0x78`), the LSB *is* the variation number (or the percussion set), exactly as GM2 defines it.
@@ -326,6 +343,22 @@ This is the byte you set as `bankLsb` in `Project.midiBankProgram(...)` (see the
   }"
 />
 
+## Where it is GS, and where it deliberately is not
+
+Writing "GS compliant" and stopping there makes every intentional difference look like an oversight. The engine sorts its differences into three kinds, and this page uses the same three, because the three are not interchangeable — one is safe by construction, one is a decision with a reason, and one is an honest admission.
+
+| kind | meaning | representative example |
+|---|---|---|
+| **extension** | a capability added where the specification forbids nothing — safe precisely because **a spec-compliant file cannot reach it** | one insertion-effect unit for the whole module becomes **sixteen**, reachable through the `40 3u xx` block (`src/midi/synth/docs/gs.md`, `src/midi/synth/gs_address_table.h`) |
+| **deliberate divergence** | different behavior chosen on purpose, with the reason recorded beside it | pan value `00` means random on the hardware and **center** here, because a bit-identical bounce cannot live with a random number generator (the `40 1x 1C` and `41 m4 rr` rows in `src/midi/synth/gs_address_table.h`); a rhythm part's chorus send is inert on a measured unit and is sounded here. Both reasons are written up in `src/midi/synth/docs/gs.md` |
+| **reduction** | the configuration on this side does not have the thing, so the address is accepted and dropped | `40 4x 21` OUTPUT ASSIGN is `IGNORE` — "libsonare renders one output pair, so there is no second one to route a part to"; `50 ** **` and `51 ** **` are `IGNORE` for one port. Both reason strings are the rows' own, in `src/midi/synth/gs_address_table.h` |
+
+Every address in the space carries one of four levels, and an address with no row at all is treated as a defect rather than as silence. A reduction is therefore a written reason, not an omission.
+
+The sixteen-part limit is not a browser constraint either. It follows from receiving **a single MIDI port**, and the engine's own reason strings say exactly that. `50 ** **` and `51 ** **` — the addresses an older module used to reach the other sixteen parts — are `IGNORE` for the reasons "libsonare receives one port, so there is no second group of parts to address" and "libsonare receives one port, so there is no second group's drum setup to address". The per-channel port assignment at `00 01 xx` carries the same reason. All three rows are in `src/midi/synth/gs_address_table.h`.
+
+On the target device the sixty-four parts are four ports of sixteen rather than a second address space, and the device is a single-module Mode-1 machine besides: `00 00 7F` SYSTEM MODE SET accepts a range but only `00` acts (`src/midi/synth/docs/gs.md`). So there is no double-module mode to implement either. One port in, one group of sixteen — and a native build receiving four ports would face the same arithmetic.
+
 ## GS insertion effects (EFX)
 
 ::: info An original DSP re-creation, not bundled hardware data
@@ -341,7 +374,7 @@ Routing does not add an address either. `40 4x 22` PART EFX ASSIGN keeps `00` BY
   caption="A part's own rig runs before an EFX unit. A bypassed part sends to reverb, chorus and delay from the part path; a part routed into a unit sends after the effect, by the unit's own three send levels."
 />
 
-**Two different things wear the phrase "what the hardware does", and they must not be merged.** *One unit for the whole module* is a resource limit of the machine that was built, not a property of GS, and it is lifted. *Parts routed to the same unit sum into it* is not a limit at all — it is what an effect is, the way two guitars into one pedal intermodulate — and it is **not** lifted. A unit runs once, over the sum of every part assigned to it. So the unit count changed and the summing did not, and asking to "restore the summing" never means capping the units. [Sound Sources](./sound-sources.md) sets out why the one is a limit and the other is behavior.
+**Two different things wear the phrase "what the hardware does", and they must not be merged.** *One unit for the whole module* is a resource limit of the machine that was built, not a property of GS, and it is lifted. *Parts routed to the same unit sum into it* is not a limit at all — it is what an effect is, the way two guitars into one pedal intermodulate — and it is **not** lifted. A unit runs once, over the sum of every part assigned to it. So the unit count changed and the summing did not, and asking to "restore the summing" never means capping the units.
 
 Because a unit's output is one signal, what sits downstream of it belongs to the unit rather than to the parts. Its send to the system effects is the unit's own (`40 3u 17`–`19`), and the part-level CC91/CC93/CC94 send is suppressed for a routed part so the wet tail is not sent twice. Its master-EQ routing follows the parts feeding it only where those parts agree: a bypass at `40 4x 20` holds when every part on the unit asked for it, and otherwise the unit takes the EQ, which is what every part powers on with.
 

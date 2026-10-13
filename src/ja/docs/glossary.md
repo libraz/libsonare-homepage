@@ -15,7 +15,7 @@ description: libsonare のオーディオ解析、MIR、ブラウザ内マスタ
 
 | 探しているもの | 参照先 |
 |----------------|--------|
-| サンプルレート、ビット深度、dBFS、ピークと RMS の違い、クリッピング、ヘッドルーム、レイテンシ | [オーディオ基礎](./glossary/concepts/audio-basics.md) |
+| サンプル、サンプルレート、ナイキスト周波数、ビット深度、周波数と倍音、位相と極性、dB と dBFS、ピークと RMS の違い、クリッピング、ヘッドルーム、レイテンシ | [オーディオ基礎](./glossary/concepts/audio-basics.md) |
 | LUFS、Integrated ラウドネス、LRA、ラウドネスのゲート | [LUFS](./glossary/lufs.md) |
 | True Peak、dBTP、サンプル間ピーク、リミッターのシーリング | [True Peak](./glossary/true-peak.md) |
 | クレストファクター、ダイナミックレンジ | [クレストファクター](./glossary/concepts/crest-factor.md)、[ダイナミックレンジ](./glossary/concepts/dynamic-range.md) |
@@ -37,7 +37,7 @@ API、CLI、WASM、ブラウザデモで共通して出てくる信号処理と�
 
 | ガイド | 扱う内容 |
 |--------|----------|
-| [オーディオ基礎](./glossary/concepts/audio-basics.md) | サンプルレート、ビット深度、モノラル／ステレオ、振幅と dB（ピーク、RMS、ラウドネス）、クリッピング、ヘッドルーム、レイテンシ。 |
+| [オーディオ基礎](./glossary/concepts/audio-basics.md) | サンプルとサンプルレート、ビット深度、モノラル／ステレオとサンプルフレーム、周波数と倍音、時間領域と周波数領域（ナイキスト周波数、位相、極性）、振幅と dB（ピーク、RMS、ラウドネス）、クリッピング、ヘッドルーム、レイテンシ。 |
 | [MIR の全体像](./glossary/concepts/mir-overview.md) | BPM、ビート、オンセット、キー、コード、クロマ、FFT、STFT、スペクトログラム、MFCC、CQT、VQT、HPSS、ピッチ、セクション。 |
 | [ミキシングの基礎](./glossary/concepts/mixing-basics.md) | トラックとチャンネルストリップ、トリム、フェーダーとゲインステージング、パン、インサートとセンド、バスとサブグループ、オートメーション、メーター。 |
 | [編集の基礎](./glossary/concepts/editing-basics.md) | ピッチと時間、半音とセント、MIDI ノート番号、フォルマント、サンプルと秒。 |
@@ -148,12 +148,11 @@ libsonare が MIDI を音に変える仕組みを、[内蔵シンセサイザー
 
 | ガイド | 扱う内容 |
 |--------|----------|
-| [マスタリング](./glossary/mastering.md) | ラウドネス、音色、ダイナミクス、ステレオイメージ、ピーク安全性をまとめる最終工程。 |
+| [マスタリングチェーン](./glossary/mastering.md) | マスタリングの各段を実行する順序と、デモでの扱い。 |
 | [マスタリングとは?](./glossary/concepts/what-is-mastering.md) | リリース前の最終処理としてのマスタリング全体像。 |
 | [LUFS](./glossary/lufs.md) | Integrated ラウドネスと代表的な配信ターゲット。 |
 | [True Peak](./glossary/true-peak.md) | サンプル間ピークと `dBTP` がサンプルピークと異なる理由。 |
-| [A/B 比較](./glossary/ab-comparison.md) | 処理前後を同じラウドネスに揃えて聴く手法。 |
-| [ラウドネスマッチング](./glossary/concepts/loudness-matching.md) | 大きい方が良く聞こえる判断バイアスを避けるための比較手順。 |
+| [ラウドネスマッチングと A/B 比較](./glossary/concepts/loudness-matching.md) | 大きい方が良く聞こえるバイアスを避け、処理前後を同じラウドネスで聴き比べる手順。 |
 | [リファレンストラック](./glossary/concepts/reference-track.md) | 完成済みリリースをトーン／ラウドネスの基準として使う方法。 |
 | [True Peak 安全性](./glossary/concepts/true-peak-safety.md) | エンコードや再生変換後にも耐えるシーリングの考え方。 |
 | [ダイナミックレンジ](./glossary/concepts/dynamic-range.md) | ラウドネスだけでは読み取れない動きと密度。 |

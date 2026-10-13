@@ -40,13 +40,21 @@ That is the whole trick, and it has two consequences worth knowing before you us
   caption="Excitation, travel, loss, radiation. A delay line can represent propagation and a loss filter can represent decay, but each model may add its own topology, radiation, and control behavior. The bow, reed, lip, and jet therefore share an abstraction rather than one identical loop."
 />
 
-For a waveguide-style model, read it left to right: the **exciter** injects energy into the **delay line**, the wave travels, and at the far end it turns around and comes back through the **loss filter** to meet the exciter again. The length of that round trip — the sample rate divided by the fundamental — sets the pitch in this abstraction, so these voices do not need a separate tuning oscillator. A loop too short to hold its pitch at the host rate (a high note at a low rate) runs internally at a rate of at least 48 kHz and is decimated back, so a top note sounds the same pitch at 8, 16, 24, 44.1 and 48 kHz. The **radiation** stage is a tap taken outside the loop, where the body or the bell turns the internal wave into something a microphone would hear.
+For a waveguide-style model, read it left to right: the **exciter** injects energy into the **delay line**, the wave travels, and at the far end it turns around and comes back through the **loss filter** to meet the exciter again. The length of that round trip sets the pitch in this abstraction, so these voices do not need a separate tuning oscillator. For a string or an open pipe one round trip is one period, so the loop holds the sample rate divided by the fundamental. A cylinder closed at one end, the clarinet's bore, is the exception: its open end sends the wave back inverted, so the wave needs two round trips to return to its starting shape. The `reed` engine's cylindrical bore therefore runs a loop of half the period with an inverting reflection, which is why it sounds an octave below an open pipe of the same length and favors odd harmonics. A loop too short to hold its pitch at the host rate (a high note at a low rate) runs internally at a rate of at least 48 kHz and is decimated back, so a top note sounds the same pitch at 8, 16, 24, 44.1 and 48 kHz. The **radiation** stage is a tap taken outside the loop, where the body or the bell turns the internal wave into something a microphone would hear.
 
 Where a model exposes them, `brightness` and `damping` describe the spectral openness and energy loss of its propagation or radiation stages. Their exact response is model-specific. On a bowed or blown voice the exciter can replenish losses, so the note can sustain while those controls still change its color and decay.
 
 The exciter is one important difference between instruments, but it is not the only one. A bow is stick-and-slip friction against the string. A reed is a valve that mouth pressure drives against the bore. A lip adds its own resonance, and a jet has its own transit behavior. The delay topology, losses, radiation, and body coupling also vary by engine.
 
 The struck and plucked voices — `piano`, `plucked-string`, `karplus-strong`, `harpsichord` — use waveguide or delay-line structures with a brief exciter. After the hammer, pick, or quill transfers energy, the remaining state rings down. A control moved mid-note can therefore reach a sustained bowed voice while a struck voice may have no active exciter axis to receive it.
+
+::: info Terms used in the tables below
+- **Bore** — the air column inside a wind instrument's tube; its shape (cylinder or cone) decides which resonances it supports.
+- **Embouchure** — how a player's lips are set against a mouthpiece; on brass it tunes the lip's own resonance.
+- **Helmholtz motion** — the steady motion of a bowed string: a single kink travels around the string, and once per period the string sticks to the bow, then slips back.
+- **t60** — the time a string's vibration takes to fall by 60 dB, the same measure a room's [RT60](./glossary/acoustics/reverberation-time.md) applies to its reverberation.
+- **8′ and 4′** — organ and harpsichord registration, named after pipe length in feet: an 8′ stop sounds at the written pitch, a 4′ stop an octave higher.
+:::
 
 ## The acoustic models
 
@@ -115,7 +123,7 @@ Bow position and bow force are the pair a player actually controls, and they are
 | `reed.breath_pressure` | `0.6` | `0 – 1` | Steady mouth pressure — the dynamic level. The reed only speaks above a threshold, so very low values approach silence. |
 | `reed.reed_stiffness` | `0.5` | `0 – 1` | Slope of the reed table: soft and dark through hard, bright and buzzy. |
 | `reed.reed_opening` | `0.5` | `0 – 1` | How far the reed tip sits open at rest. Low pinches shut sooner and the tone turns nasal. |
-| `reed.conical` | `false` | — | `false` is a cylinder closed at the reed — a clarinet, odd harmonics only. `true` is a cone, approximated as an open pipe with the full series: saxophone, oboe, bassoon. |
+| `reed.conical` | `false` | — | `false` is a cylinder closed at the reed — a clarinet, where odd harmonics dominate. `true` is a cone, approximated as an open pipe with the full series: saxophone, oboe, bassoon. |
 | `reed.brightness` | `0.5` | `0 – 1` | Bell reflection openness. |
 | `reed.chiff` | `0.4` | `0 – 1` | The brief bright noise as the reed starts to speak, so the note articulates rather than swelling in. |
 
@@ -127,7 +135,7 @@ Bow position and bow force are the pair a player actually controls, and they are
 |---|---|---|---|
 | `brass.breath_pressure` | `0.7` | `0 – 1` | Steady mouth pressure driving the lip valve. |
 | `brass.lip_tension` | `0.5` | `0 – 1` | Embouchure: where the lip resonance sits relative to the bore. Tighter puts it a touch above, the outward-striking point that gives brass its edge; looser is a broader, more slotted center. |
-| `brass.lip_damping` | `0.5` | `0 – 1` | The lip resonator's pole radius. Low is a tight, buzzing lip; high is soft and rounded. |
+| `brass.lip_damping` | `0.5` | `0 – 1` | Width of the lip resonance. It sets the resonator's Q from 30 at `0` down to 8 at `1`, held constant across the range so the resonance stays proportionally as narrow on a low note as on a high one. Low is a sharp, buzzing lip; high is a broad, rounded one. |
 | `brass.conical` | `false` | — | Cylindrical body (trumpet, trombone) against conical (horn, tuba, cornet, flugelhorn). Both radiate the full series; the flag colors the bell reflection. |
 | `brass.brightness` | `0.5` | `0 – 1` | Bell reflection openness. |
 | `brass.damping` | `0.4` | `0 – 1` | Bore loop loss. |

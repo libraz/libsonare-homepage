@@ -25,6 +25,13 @@ description: ミキシングスタジオを参考に、1 つのプロジェク�
 
 ## 1 回の呼び出しでミックスを書き出す
 
+::: info 用意するもの
+- **インストール:** ES モジュールと `.wasm` ファイルを配信できるバンドラー（Vite など）を使った Web プロジェクトで `npm install @libraz/libsonare` を実行します。パッケージの読み込みは [WebAssembly ガイド](../wasm.md) で解説しています。
+- **ファイル選択:** `<input type="file" accept="audio/*" multiple>`。その `files` が、下のコードが読む `File[]` です。
+- **ユーザー操作:** `AudioContext` はクリックのハンドラーの中で作るか再開してください。ユーザー操作なしに作った `AudioContext` はブラウザが停止状態のままにするので、結果を再生できません。
+- **ステム:** 同じセッションから書き出し、頭がそろった WAV か MP3。
+:::
+
 最小のミキサーは `mixStereo` です。ステムをデコードして長さを揃え、ミックスし、結果を WAV に変換します。フェーダー、パン、トリム、幅はステムごとに 1 つずつ値を渡し、`mix.meters[i]` には各ステムのメーターが入ります。`files` はファイル選択で得た `File[]` で、ゼロの部分は UI の値に置き換えます。
 
 ```typescript
@@ -69,8 +76,16 @@ function encodeWav(left: Float32Array, right: Float32Array, sampleRate: number):
   return new Blob([view.buffer], { type: 'audio/wav' });
 }
 
+// 合計にはリミッターがかからない。0 dB のステムを足すとフルスケールを超えることがあり、
+// その場合は上のエンコーダーが平らにクランプしてしまう。エンコード前にピークを確かめる
+let peak = 0;
+for (const ch of [mix.left, mix.right]) for (const x of ch) peak = Math.max(peak, Math.abs(x));
+if (peak > 1) console.warn(`mix peaks at ${(20 * Math.log10(peak)).toFixed(1)} dBFS; lower the faders`);
+
 const url = URL.createObjectURL(encodeWav(mix.left, mix.right, mix.sampleRate));
 ```
+
+警告が出たら、フェーダーを下げて（あるいは両チャンネルに同じゲインをかけて）からミックスし直してください。0 dB の 3 本のステムが同相で重なると、フルスケールの 3 倍に達することもあります。サンプルピークがフルスケール未満でも、納品前には[インターサンプルピーク](../glossary/true-peak.md)の確認が残ります。
 
 このページの以降の内容は、この呼び出しの周りにアプリが足すもの、つまりライブ再生、書き出しと同期した編集、プロジェクトファイルです。
 

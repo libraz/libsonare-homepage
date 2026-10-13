@@ -5,7 +5,7 @@ description: Deterministic offline rendering of a libsonare Project — plain au
 
 # Bouncing Projects to Audio
 
-**Bouncing turns your whole arrangement into a single audio file you can save, play, or analyze.** If you have used a DAW, it is the "export" or "render" button; in libsonare it is the `Project.bounce*` family. The rendering happens **offline** (faster than real time, all at once, not by playing the song back live) and **deterministically**: the same project plus the same options always yields exactly the same samples, down to the bit.
+**Bouncing turns your whole arrangement into a single audio file you can save, play, or analyze.** If you have used a DAW, it is the "export" or "render" button; in libsonare it is the `Project.bounce*` family. The rendering happens **offline** (faster than real time, all at once, not by playing the song back live) and **deterministically**: on the same build and runtime, the same project plus the same options always yields exactly the same samples, down to the bit.
 
 A [Project](./project-editing.md) holds tracks and clips on a timeline. Audio clips already carry samples, so they render directly. MIDI clips carry *events* (note-on, note-off), not sound, so they need an **instrument** to become audible, the same way sheet music needs a player. So the choice of bounce method is really one question: *which instrument plays your MIDI?*
 
@@ -38,7 +38,7 @@ A [Project](./project-editing.md) holds tracks and clips on a timeline. Audio cl
 The whole pass is computed offline, so the result is reproducible every time.
 
 ::: info Positions are in quarter notes
-Project positions and clip lengths are expressed in **PPQ — quarter notes as a float**. `ppq: 1` is one quarter note. At 120 BPM one quarter note lasts 0.5 s, so a 4-beat clip (`lengthPpq: 4`) is 2 s. Set the tempo explicitly with `setTempoSegments([{ startPpq: 0, bpm: 120 }])` so durations in your bounce are predictable.
+Project positions and clip lengths are expressed in **PPQ — quarter notes as a float**. `ppq: 1` is one quarter note. At 120 BPM one quarter note lasts 0.5 s, so a clip of four quarter notes (`lengthPpq: 4`) is 2 s. Set the tempo explicitly with `setTempoSegments([{ startPpq: 0, bpm: 120 }])` so durations in your bounce are predictable.
 :::
 
 ::: tip Bounce reflects the full mixer, not raw clips
@@ -71,7 +71,7 @@ Start at the top and only move down when your MIDI needs a richer instrument.
 | MIDI played by your own synth | `bounceWithInstruments` / `bounceWithInstrument` (Node, WASM); `bounce_with_instruments` (Python) | Host-supplied [`ExternalInstrument`](#host-your-own-instrument) |
 
 ::: info One Project, every runtime
-The same `Project` model and core bounce behavior are exposed through WASM/JS, Node native, and Python. Names follow each language's convention (`bounceWithSynthInstrument` ↔ `bounce_with_synth_instrument`). The CLI exposes the project workflow as commands (`project bounce`, including `--synth` to route MIDI through the built-in synth, plus SMF/MIDI 2.0 import-export), but not every per-destination instrument binding option is wired there. The arrangement model, the compiler, and the DSP are identical across runtimes.
+The same `Project` model and core bounce behavior are exposed through WASM/JS, Node native, and Python. Names follow each language's convention (`bounceWithSynthInstrument` ↔ `bounce_with_synth_instrument`). The CLI exposes the project workflow as commands (`project bounce`, including `--synth` to route MIDI through the built-in synth, plus SMF/MIDI 2.0 import-export), but not every per-destination instrument binding option is wired there. The arrangement model, the compiler, and the DSP code are the same in every runtime; the bit-exact guarantee below holds within one build and runtime, since another platform can round floating-point math differently in the last bits.
 :::
 
 ## Plain bounce: audio clips
@@ -183,10 +183,10 @@ try {
   project.setSampleRate(48000);
   project.setTempoSegments([{ startPpq: 0, bpm: 120 }]);
 
-  const { clipId } = project.addMidiClip(0, 4);   // MIDI track + clip, 4 beats long
+  const { clipId } = project.addMidiClip(0, 4);   // MIDI track + clip, 4 quarter notes long
   project.setMidiEvents(clipId, [
-    Project.midiNoteOn(0, 0, 0, 60, 100),         // C4 at beat 0
-    Project.midiNoteOff(3, 0, 0, 60, 0),          // release at beat 3
+    Project.midiNoteOn(0, 0, 0, 60, 100),         // C4 at the start (PPQ 0)
+    Project.midiNoteOff(3, 0, 0, 60, 0),          // release three quarter notes in (PPQ 3)
   ]);
 
   // MIDI-only project -> non-silent stereo audio.
@@ -204,10 +204,10 @@ with sonare.Project() as project:
     project.set_sample_rate(48000)
     project.set_tempo_segments([{"start_ppq": 0.0, "bpm": 120}])
 
-    _, clip_id = project.add_midi_clip(0.0, 4.0)  # MIDI track + clip, 4 beats long
+    _, clip_id = project.add_midi_clip(0.0, 4.0)  # MIDI track + clip, 4 quarter notes long
     project.set_midi_events(clip_id, [
-        sonare.Project.midi_note_on(0.0, 0, 0, 60, 100),   # C4 at beat 0
-        sonare.Project.midi_note_off(3.0, 0, 0, 60, 0),    # release at beat 3
+        sonare.Project.midi_note_on(0.0, 0, 0, 60, 100),   # C4 at the start (PPQ 0)
+        sonare.Project.midi_note_off(3.0, 0, 0, 60, 0),    # release three quarter notes in (PPQ 3)
     ])
 
     audio = project.bounce_with_builtin_instrument(
@@ -274,7 +274,7 @@ The piano roll below is exactly this call at work: one MIDI passage routed throu
 <SonareDemo id="midi-piano-roll" />
 
 ::: info Deterministic by construction
-For a fixed project, options, and patch, `bounceWithSynthInstrument` is bit-for-bit reproducible. The same is true of every bounce method, which is what makes a bounce safe to snapshot in a test or cache by hash.
+For a fixed project, options, and patch, `bounceWithSynthInstrument` is bit-for-bit reproducible on the same build and runtime. The same is true of every bounce method, which is what makes a bounce safe to snapshot in a test or cache by hash.
 :::
 
 ## Bounce MIDI through a SoundFont
@@ -471,6 +471,13 @@ const audio = project.bounceWithSynthInstrument('saw-lead', { numChannels: 2, sa
 const url = URL.createObjectURL(exportWav(audio, 48000, 2));
 // assign url to an <a download> and click it
 ```
+
+::: warning What this writer does to the samples
+The bounce is 32-bit float, and this writer reduces it to 16-bit integers in the simplest way:
+
+- **Overs are clipped.** A float bounce can go above 1.0 (0 dBFS); the `Math.max` / `Math.min` clamp cuts those peaks flat, which is audible distortion. Measure the peak first and lower the master if it exceeds 1.0.
+- **Samples are truncated, not dithered.** `setInt16` drops the fraction, which leaves quantization error that follows the signal; on quiet fades and reverb tails it can be heard as grainy distortion. For a final 16-bit file, round instead of truncating and add TPDF dither (the sum of two independent random values of ±0.5 LSB each) before rounding, or write 24-bit or 32-bit float WAV and let the delivery tool reduce it.
+:::
 
 In Python, the CLI writes the WAV for you (next section); from the library, hand the `np.ndarray` to `soundfile` or your WAV writer of choice.
 

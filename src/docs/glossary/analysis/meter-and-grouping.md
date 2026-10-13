@@ -61,7 +61,7 @@ The C ABI entry point is `sonare_estimate_meter_json(beat_times, beat_strengths,
 
 ## An odd meter is reported only if its numerator was asked for
 
-The default candidate set is `{3, 4, 6}`. A 5, a 7 or an 11 is not in it, and the estimator never scores a numerator it was not handed, so an odd meter stays unreachable until `candidateNumerators` is widened to include it. That is the single most common reason a 7/8 piece comes back as a four.
+The default candidate set is `{3, 4, 6}`. A 5, a 7 or an 11 is not in it, and the estimator never scores a numerator it was not handed, so an odd meter stays unreachable until `candidateNumerators` is widened to include it. That is the single most common reason a 7/8 piece comes back as a four. With 7 added, the same piece reports 7/4, as in the example above: this entry point counts beats and returns the denominator you passed (4 by default), so read the numerator as "beats per bar" and choose the denominator yourself (see [the beat unit](#three-properties-to-read-before-using-it-as-a-measurement) below).
 
 Widening the set does not push the answer wider: every requested numerator competes on the same evidence, and a straight four asked to choose between 3, 4, 5, 6 and 7 still comes back a four. The list holds at most 16 entries, each in `[2, 32]`, and an empty list is rejected rather than falling back to the default.
 

@@ -119,4 +119,4 @@ sonare mastering track.wav --preset pop -o master.wav
 
 ::::
 
-関連: [LUFS](../lufs.md)、[True Peak](../true-peak.md)、[A/B 比較](../ab-comparison.md)
+関連: [LUFS](../lufs.md)、[True Peak](../true-peak.md)、[ラウドネスマッチングと A/B 比較](./loudness-matching.md)

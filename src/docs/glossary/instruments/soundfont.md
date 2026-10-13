@@ -51,6 +51,20 @@ The principle underneath is simple: a note list is instrument-agnostic, and the 
 
 <SonareDemo id="midi-piano-roll" />
 
+## Inside a preset: zones, generators and modulators
+
+A preset is not one recording. It is a set of **zones**, each covering a key range and a velocity range and pointing at one sample (through an intermediate *instrument* layer, so one instrument can be reused by several presets). Each zone carries **generators**, fixed settings such as the sample's root key, its loop points, the filter cutoff and the envelope times. **Modulators** connect a live input (velocity, a CC, pitch bend) to a generator, so that playing harder lowers the attenuation or the mod wheel deepens the vibrato. The spec defines a default modulator set that every player applies even when the file lists none.
+
+Generators are stored in logarithmic units, because hearing is logarithmic:
+
+| Unit | Used for | Conversion |
+|---|---|---|
+| **timecent** | envelope and LFO-delay times | seconds = 2^(timecents / 1200); −12000 is about 1 ms, 0 is 1 s, 1200 is 2 s |
+| **centibel** | attenuation, sustain level | 1 cB = 0.1 dB, so 960 cB is 96 dB down |
+| **absolute cent** | filter cutoff, LFO rate | Hz = 8.176 × 2^(cents / 1200); 13500 cents is about 20 kHz |
+
+With these units every doubling of a time, or every equal step in level, is the same distance on the number line, which is why a file can scale an envelope with key number or velocity by simple addition.
+
 ## How libsonare resolves a note
 
 libsonare can load a SoundFont and play MIDI through it, but it adds one important guarantee. After you supply a `.sf2` file, every used `(channel, bank, program)` group is summarized by one backend status:

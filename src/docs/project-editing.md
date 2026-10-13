@@ -10,7 +10,7 @@ description: Beginner-friendly guide to libsonare's headless-DAW edit API — th
 The workflow is a short loop. You assemble an arrangement, edit it with undoable operations, [compile](./project-save-load.md#compiling-the-arrangement) it into a renderable timeline, save it to JSON, and [render audio](./project-bounce.md). Key and chord annotations live on [Project MIDI](./project-editing-midi.md), persistence on [Project Save & Load](./project-save-load.md), and monophonic vocal work on [Offline Vocal Editing](./vocal-editing.md). `Project` is an **offline, control-thread API** (it never runs on the audio thread), and it behaves identically in the browser (WASM), Node, and Python.
 
 ::: info Three words to know first
-A **track** is one lane in the timeline (an audio lane or a MIDI lane). A **clip** is one block of content placed on a track — a slice of recorded audio or a region of MIDI notes. **PPQ** ("pulses per quarter note") is how libsonare measures musical time: every clip start, length, and event position is given in quarter-note units, so `lengthPpq: 4` is four quarter notes long regardless of tempo.
+A **track** is one lane in the timeline (an audio lane or a MIDI lane). A **clip** is one block of content placed on a track — a slice of recorded audio or a region of MIDI notes. **PPQ** is how libsonare measures musical time: every clip start, length, and event position is given in quarter notes, as a fractional number, so `lengthPpq: 4` is four quarter notes long regardless of tempo. The suffix comes from "pulses per quarter note", the tick resolution of MIDI files, but the values here are not ticks: `1.0` is one quarter note, where a 480-tick file would say `480`.
 :::
 
 ::: info Headless DAW
@@ -195,15 +195,15 @@ Every clip operation is a single undoable command and addresses the clip by its 
 project.setClipGain(clipId, 0.8);
 project.setClipFade(
   clipId,
-  { lengthPpq: 0.5, curve: 'equal-power' },  // fade in over half a beat
-  { lengthPpq: 1.0, curve: 'linear' },       // fade out over one beat
+  { lengthPpq: 0.5, curve: 'equal-power' },  // fade in over an eighth note
+  { lengthPpq: 1.0, curve: 'linear' },       // fade out over one quarter note
 );
-const tailId = project.splitClip(clipId, 2); // cut at beat 2; tail becomes a new clip
-project.setClipLoop(tailId, 'loop', 2, 0.05); // loop the tail every two beats with a short seam crossfade
+const tailId = project.splitClip(clipId, 2); // cut two quarter notes in; tail becomes a new clip
+project.setClipLoop(tailId, 'loop', 2, 0.05); // loop the tail every two quarter notes with a short seam crossfade
 const copyId = project.duplicateClip(tailId, 8);
 ```
 
-Fade curves are `'linear'`, `'equal-power'`, `'exponential'`, and `'logarithmic'`. Each fade length is clamped to the clip length, so an oversized fade cannot start before the clip; a negative length is rejected outright. Loop mode is `'off'` or `'loop'`. `loopLengthPpq` is the loop period: omit it (or pass `0`) to loop the whole clip. A negative or non-finite value is rejected. `loopCrossfadePpq` is an optional equal-power crossfade at the loop seam. `0` keeps a hard loop; positive values blend the loop tail with the pre-roll source material. The engine clamps the value to the available source offset and half the loop length, and disables the seam crossfade for warped clips.
+Fade curves are `'linear'`, `'equal-power'`, `'exponential'`, and `'logarithmic'`. Each fade length is clamped to the clip length, so an oversized fade cannot start before the clip; a negative length is rejected outright. Loop mode is `'off'` or `'loop'`. `loopLengthPpq` is the loop period: omit it (or pass `0`) to loop the whole clip. A negative or non-finite value is rejected. `loopCrossfadePpq` is an optional equal-power crossfade at the loop seam. `0` keeps a hard loop; positive values blend the loop tail with the pre-roll source material. The engine clamps the value to the available source offset and half the loop length, and disables the seam crossfade for warped clips. Each curve's formula, its gain halfway through, and when to pick it are in [Fade curves and crossfades](./glossary/arrangement/clips-and-tracks.md#fade-curves-and-crossfades). In short: `'equal-power'` crosses two unrelated signals without a level change, `'linear'` crosses two near-identical ones, and the loop-seam and comp-seam crossfades are always equal-power.
 
 ::: warning `setClipGain` / `setClipFade` shape a MIDI clip's rendered audio, not its events
 On a MIDI clip, gain and fade scale the bound instrument's output; they never touch velocity or timing (the note-on and note-off events are copied verbatim into the render schedule). The envelope belongs to the clip's MIDI destination, and one clip governs it at a time:
@@ -311,9 +311,7 @@ project.setMaxHistoryBytes(8 * 1024 * 1024); // one cap shared by undo and redo
 project.clearHistory();       // the arrangement stays as-is; undo/redo are now empty
 ```
 
-Because the history is exact, calling `toJson()` before an edit, undoing, and calling `toJson()` again yields byte-identical JSON — a useful invariant for testing and for change detection in an editor UI.
-
-Compound clip edits are one history transaction: an operation that changes several clips is undone or redone in one step, rather than leaving the arrangement half-applied.
+Because the history is exact, calling `toJson()` before an edit, undoing, and calling `toJson()` again yields byte-identical JSON — a useful invariant for testing and for change detection in an editor UI. Compound clip edits are one history transaction: an operation that changes several clips is undone or redone in one step, rather than leaving the arrangement half-applied.
 
 ## Musical time: PPQ, tempo, time signatures, markers
 
@@ -321,9 +319,7 @@ All positions are in **PPQ** (quarter notes as a floating-point value, so fracti
 
 ### Tempo map and tempo segments
 
-The **tempo map** is a list of tempo segments. Each segment starts at a PPQ position and sets a BPM; an optional `endBpm` makes the segment ramp linearly to a new tempo.
-
-Drag the tempo to see how segments turn quarter notes into seconds.
+The **tempo map** is a list of tempo segments. Each segment starts at a PPQ position and sets a BPM; an optional `endBpm` makes the segment ramp linearly to a new tempo. Drag the tempo to see how segments turn quarter notes into seconds.
 
 <SonareDemo id="tempo-grid" />
 
@@ -348,6 +344,8 @@ project.tempo_segment_count()  # 3
 ```
 
 :::
+
+Analysis results (onsets, chords, beats) come back in seconds or samples and [warp anchors](#warp-stretching-clips-to-the-grid) are in samples, while clips are placed in PPQ. `Project` has no conversion call; at a constant tempo `seconds = ppq × 60 / bpm`, and [Converting seconds, samples, and PPQ](./glossary/arrangement/clips-and-tracks.md#converting-seconds-samples-and-ppq) works through ramps and a warp anchor with this map.
 
 ### Time signatures
 
@@ -443,13 +441,16 @@ project.getOverlapPolicy();  // read it back
 
 **Warp** lets a recorded audio clip follow the project's grid instead of playing back at its fixed original speed — think of nudging and stretching a recording so its beats land where you want them. Internally, the clip keeps its own recorded timeline; a warp map pins positions on that recorded timeline to positions in project time. Each clip has a warp **mode**, and every mode except `'off'` needs a **warp map** of anchors to do anything.
 
+::: tip Your app computes the anchors
+A clip does not follow the tempo map by itself. It follows its warp map, and the anchors in that map are absolute sample pairs your app supplies; the engine never derives them from the tempo. To make a loop follow the project tempo, convert the beat positions to samples ([Converting seconds, samples, and PPQ](./glossary/arrangement/clips-and-tracks.md#converting-seconds-samples-and-ppq)) and write a map. The details are in the warning under the example below.
+:::
+
 | Warp mode | Meaning |
 |-----------|---------|
-| `'off'` | Play the audio at its native rate; ignore tempo |
-| `'repitch'` | Speed up / slow down with the tempo (pitch moves too, like a tape) |
-| `'tempo-sync'` | Time-stretch to follow the tempo while preserving pitch, baked on the control thread |
-| `'time-stretch'` | Time-stretch to follow the tempo while preserving pitch, synthesized on the audio thread |
-
+| `'off'` | Play the audio at its native rate; ignore any warp map |
+| `'repitch'` | Speed up or slow down to follow the warp map; pitch moves too, like a tape. Reads with linear interpolation and no anti-aliasing filter, so a large speed-up can alias on bright material |
+| `'tempo-sync'` | Time-stretch to follow the warp map while preserving pitch, baked on the control thread |
+| `'time-stretch'` | Time-stretch to follow the warp map while preserving pitch, synthesized on the audio thread |
 ::: info How tempo-sync keeps the pitch
 `'tempo-sync'` time-stretches the audio with a **phase vocoder** — an STFT-based time-stretch that changes the timing without changing the pitch (unlike `'repitch'`, which moves both like a tape). The same algorithm runs in both realtime playback and offline [bounce](./project-bounce.md), so a warped clip sounds identical whichever way you render it. On stereo and multichannel clips, all channels are stretched by one peak-locked vocoder pass, so the stretch stays phase-coherent across channels and the stereo image does not drift.
 :::
@@ -495,7 +496,7 @@ project.setWarpMap({
   name: 'groove',
   anchors: [
     { warpSample: 0,     sourceSample: 0 },
-    { warpSample: 24000, sourceSample: 12000 }, // first half of the bar plays at 2x source
+    { warpSample: 24000, sourceSample: 12000 }, // 12000 source samples fill 24000: half speed, twice as long
   ],
 });
 project.setClipWarpRef(clipId, 1);          // reference the map (0 clears it)
@@ -572,9 +573,7 @@ fader_lane_id = project.add_automation_lane(
 
 :::
 
-In Python the breakpoints are `(ppq, value, curve)` tuples rather than objects, and `add_automation_lane` / `edit_automation_lane` take `target_param_id` and `points` as separate arguments. Pass `target_kind="opaque"` (or omit it) for the legacy lane, or `"track-fader-db"` / `"track-pan"` for a typed mixer target; Python accepts those names or ordinals `0` / `1` / `2`, and also accepts a mapping descriptor with snake_case or camelCase keys.
-
-The lane's `targetParamId` is your own parameter id; the project stores the breakpoints verbatim and replays them through the compiled timeline. It is also the lane's **identity**: a track holds at most one lane per target, `addAutomationLane` returns that id, and the edit and remove calls address a lane by it. Changing which parameter a lane drives is therefore a remove followed by an add, not an edit.
+In Python the breakpoints are `(ppq, value, curve)` tuples rather than objects, and `add_automation_lane` / `edit_automation_lane` take `target_param_id` and `points` as separate arguments. Pass `target_kind="opaque"` (or omit it) for the legacy lane, or `"track-fader-db"` / `"track-pan"` for a typed mixer target; Python accepts those names or ordinals `0` / `1` / `2`, and also accepts a mapping descriptor with snake_case or camelCase keys. The lane's `targetParamId` is your own parameter id; the project stores the breakpoints verbatim and replays them through the compiled timeline. It is also the lane's **identity**: a track holds at most one lane per target, `addAutomationLane` returns that id, and the edit and remove calls address a lane by it. Changing which parameter a lane drives is therefore a remove followed by an add, not an edit.
 
 Typed lanes use `targetKind: 'track-fader-db'` or `'track-pan'` to target the owning track's mixer fader or pan. JavaScript accepts the names or ordinals `0` / `1` / `2`; at compile/install time the project resolves that lane to the engine's reserved parameter namespace (the persistent `targetParamId` is not the realtime id), and an offline bounce applies it through the track mixer. A track may have at most one lane for each typed kind. `targetKind: 'opaque'` is the host-defined legacy target and is used when `targetKind` is omitted. The JSON field is `target_kind`; a project containing a typed lane uses schema version `2` when no higher fields are present. Physical source offsets or loop anchors raise the schema to `3`, and comp render parts raise it to `4`. A project with only opaque lanes and none of those higher fields keeps schema version `1` and its existing bytes. The C extended entry points are `sonare_project_add_automation_lane_ex` and `sonare_project_edit_automation_lane_ex`; the legacy C calls remain opaque/preserve-kind paths.
 

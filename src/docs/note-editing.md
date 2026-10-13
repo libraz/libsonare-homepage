@@ -112,6 +112,10 @@ Every `NoteEdit` field is optional, and an omitted one is the neutral value:
 | `muted` | Silences the span; the other fields then do not apply | `false` | No |
 | `amplitudeEnvelope` | Gain points stretched over the rendered note, on top of `gainDb` | empty (none) | No |
 
+::: warning `pitchShiftSemitones` moves the formants too
+`renderNotes` applies `pitchShiftSemitones` by stretching and resampling the note, so the formants move with the pitch, and `formantShiftSemitones` then moves them further from there. To retune a note and keep its vowel and voice character, pass the opposite amount as the formant shift, for example `{ pitchShiftSemitones: 1, formantShiftSemitones: -1 }`. The vibrato and drift edits go through a different engine that leaves the formants in place; [Two resynthesis engines](./glossary/editing/pitch-correction.md#two-resynthesis-engines) compares them. The [vocal edit session](./vocal-editing.md) keeps formants in place for its pitch moves as well.
+:::
+
 Curve edits (`vibratoDepthChange`, `driftChange`) need the original `f0Hz` track and `frameRate` in the render request; in JS/WASM, `f0Hz` must be a `Float32Array`. An optional `voiced` flag array must have the same length as `f0Hz`: `false` suppresses a positive F0, while `true` cannot make an unusable F0 valid. `decomposeNotePitch` accepts the same flags. `extractNotes` accepts either voiced flags or voiced probabilities; a non-positive or non-finite F0 frame contributes no pitch measurement.
 
 ### Seconds beside samples
@@ -205,9 +209,9 @@ A 1.5 times strike splits only at `1.5`, and an 8 times strike splits at every s
 
 The fresh polyphonic render is the analysis round trip, including STFT reconstruction error; it is not a byte-for-byte copy of the source. A short passage is the practical unit: the held spectrogram and claim sets scale with the analyzed audio, and a released handle cannot be queried or rendered.
 
-<SonareDemo id="pitch-correct" />
-
 ## An SMF as a reference melody: note targets
+
+<SonareDemo id="pitch-correct" />
 
 An SMF can provide the reference melody for a recorded take. `noteTargetsFromSmf` and `assignNoteTargets` are module-level functions: the first reads targets from an in-memory SMF, and the second applies them to notes from `extractNotes`. `pitchCorrectToMidi` on [Editing DSP](./editing-dsp.md) moves a whole buffer by one interval; this workflow assigns a target to each note.
 
@@ -223,7 +227,7 @@ A **note** (`NoteObject`) contains a sample span and measured `medianHz`. A **no
 | `'mute'` | `edit.muted` is set |
 | `'nearest'` | Takes the target nearest in time, however far away it is |
 
-A note whose `medianHz` is not finite and positive is never assigned and never edited. The input notes are not modified. The result is `{ notes, assignedCount }`: a new array in which only `edit.pitchShiftSemitones` and `edit.muted` are rewritten, plus the number of notes that received a target. `assignedCount` can be `0`.
+A note whose `medianHz` is not finite and positive is never assigned and never edited. The input notes are not modified. The result is `{ notes, assignedCount }`: a new array in which only `edit.pitchShiftSemitones` and `edit.muted` are rewritten, plus the number of notes that received a target. `assignedCount` can be `0`. To keep the formants of the retuned notes, set each `edit.formantShiftSemitones` to minus its `pitchShiftSemitones` before rendering ([see above](#extract-and-render-a-monophonic-take)).
 
 ```typescript
 import { assignNoteTargets, extractNotes, noteTargetsFromSmf, pitchPyin, renderNotes } from '@libraz/libsonare';

@@ -65,4 +65,4 @@ description: 完成済みリリースを、盲目的なコピーではなく判�
 
 ::::
 
-関連: [リファレンストラック](../concepts/reference-track.md)、[A/B 比較](../ab-comparison.md)、[トーンと Air コントロール](./tone-air.md)
+関連: [リファレンストラック](../concepts/reference-track.md)、[A/B 比較](../concepts/loudness-matching.md)、[トーンと Air コントロール](./tone-air.md)

@@ -303,6 +303,6 @@ sonare pitch-shift --semitones 2 input.wav -o output.wav
 # Slow down for practice
 sonare time-stretch --rate 0.8 song.wav -o practice.wav
 
-# Separate drums from melody
+# Separate sustained (harmonic) from percussive content such as drums
 sonare hpss song.wav -o separated
 ```

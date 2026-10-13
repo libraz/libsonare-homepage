@@ -12,13 +12,15 @@
 
 ::: details ドキュメントを先頭から順に読む場合
 1. [イントロダクション](./introduction.md) で用語と音声解析パイプラインの全体像を読む。
-2. このページで、目的がどの分野に属するかを見つける。
-3. [はじめに](./getting-started.md)、[インストール](./installation.md)、[使用例](./examples.md) で小さなプログラムを 1 つ動かす。
-4. [機能マップ](./api-surface.md) で必要な API ファミリーを探す。
-5. 組み込みではなく完成した成果物が目的なら、[実践ユースケース](./use-cases.md) から通し手順を 1 つ読む。
-6. 下の一覧から、目的に合う分野のガイドを 1 つ読む。
-7. **実行環境別 API** から実行環境に合うリファレンスを 1 つ読む。
-8. 実装詳細、アルゴリズム根拠、検証範囲、性能が必要になったときだけ、根拠のページを読む。
+2. サンプル、サンプルレート、デシベル（dBFS、RMS、LUFS）、周波数と倍音、ステレオのどれかが初めてなら、[オーディオ基礎](./glossary/concepts/audio-basics.md) を読む。
+3. [MIR の全体像](./glossary/concepts/mir-overview.md) で、スペクトログラム、クロマ、オンセット、解析結果がどう積み上がるかを読む。
+4. このページで、目的がどの分野に属するかを見つける。
+5. [はじめに](./getting-started.md)、[インストール](./installation.md)、[使用例](./examples.md) で小さなプログラムを 1 つ動かす。
+6. [機能マップ](./api-surface.md) で必要な API ファミリーを探す。
+7. 組み込みではなく完成した成果物が目的なら、[実践ユースケース](./use-cases.md) から通し手順を 1 つ読む。
+8. 下の一覧から、目的に合う分野のガイドを 1 つ読む。ミキシング、編集、マスタリングには先に読む基礎のページがあります（[ミキシングの基礎](./glossary/concepts/mixing-basics.md)、[編集の基礎](./glossary/concepts/editing-basics.md)、[マスタリングとは?](./glossary/concepts/what-is-mastering.md)）。
+9. **実行環境別 API** から実行環境に合うリファレンスを 1 つ読む。
+10. 実装詳細、アルゴリズム根拠、検証範囲、性能が必要になったときだけ、根拠のページを読む。
 :::
 
 ## 作りたいものから選ぶ
@@ -151,7 +153,7 @@
 
 | 層 | 内容 | ページ |
 |----|------|--------|
-| 概念 | BPM、キー、STFT、クロマ、LUFS、True Peak などの意味 | [イントロダクション](./introduction.md)、[用語集](./glossary.md) |
+| 概念 | サンプル、デシベル、BPM、キー、STFT、クロマ、LUFS、True Peak などの意味 | [イントロダクション](./introduction.md)、[オーディオ基礎](./glossary/concepts/audio-basics.md)、[用語集](./glossary.md) |
 | 目的 | 上の 10 分野のどれで、何を作りたいか | [機能マップ](./api-surface.md)、[楽曲解析](./analysis.md) から [再生レンダラー](./playback.md) までの各分野ガイド |
 | 実行環境 | ブラウザ、Python、Node、CLI、C++ のどこで動かすか | [はじめに](./getting-started.md)、実行環境別リファレンス |
 | 根拠 | 実装の構造、アルゴリズム、検証状況 | [DSP 実装解説](./dsp-implementation.md)、[アルゴリズム根拠](./algorithm-references.md)、[実装検証](./implementation-validation.md) |

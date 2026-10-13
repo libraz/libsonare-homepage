@@ -9,7 +9,7 @@
           "id": "mastering",
           "path": "mastering.md",
           "status": "published",
-          "title": { "en": "Mastering", "ja": "マスタリング" }
+          "title": { "en": "The Mastering Chain", "ja": "マスタリングチェーン" }
         },
         {
           "id": "lufs",
@@ -22,12 +22,6 @@
           "path": "true-peak.md",
           "status": "published",
           "title": { "en": "True Peak", "ja": "True Peak" }
-        },
-        {
-          "id": "ab-comparison",
-          "path": "ab-comparison.md",
-          "status": "published",
-          "title": { "en": "A/B Comparison", "ja": "A/B 比較" }
         },
         {
           "id": "air-band",
@@ -69,7 +63,10 @@
         {
           "id": "loudness-matching",
           "status": "published",
-          "title": { "en": "Loudness Matching", "ja": "ラウドネスマッチング" }
+          "title": {
+            "en": "Loudness Matching and A/B Comparison",
+            "ja": "ラウドネスマッチングと A/B 比較"
+          }
         },
         {
           "id": "reference-track",

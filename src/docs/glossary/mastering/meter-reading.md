@@ -30,11 +30,29 @@ The demo below covers the first two rows on a real clip — loudness and peak sa
 
 <SonareDemo id="loudness-meter" />
 
+## Loudness and Peak Readings in Detail
+
+"Loudness" and "peak" each come in several forms, and meters label them separately. The loudness readings follow ITU-R BS.1770 and EBU R128; the loudness range follows EBU Tech 3342.
+
+| Reading | How it is measured | What it tells you |
+|---------|--------------------|-------------------|
+| Momentary loudness | 400 ms window, updated every 100 ms | Moment-to-moment level; jumps on every hit |
+| Short-term loudness | 3 s window | The level of a phrase; the one to watch while playing |
+| Integrated loudness | The whole track in 400 ms blocks: blocks below −70 LUFS are dropped, then blocks more than 10 LU below the average of the rest | The single number delivery targets refer to |
+| Loudness range (LRA) | Short-term readings across the track, ignoring those more than 20 LU below their average; the spread between the 10th and 95th percentile, in LU | How much the loudness moves between quiet and loud sections |
+| Sample peak | The largest stored sample value, in dBFS | Can miss peaks that fall between samples |
+| True peak | The peak of the waveform reconstructed at 4x oversampling, in dBTP | Never below the sample peak; what delivery ceilings are written against |
+| PLR (peak-to-loudness ratio) | True peak minus integrated loudness, in dB | Small means dense and heavily limited; large means open and dynamic |
+
+The gap between sample peak and true peak is easiest to see on a waveform:
+
+<SonareDemo id="inter-sample-peak" />
+
 ## What To Check First
 
 Start with loudness and peak safety. A master that misses the target or clips is not ready.
 
-Then check crest factor and correlation. A track can hit the target and still feel lifeless if the crest factor is too low. A track can sound wide in headphones and still collapse badly in mono if correlation is unstable.
+Then check crest factor and correlation. A track can hit the target and still feel lifeless if the crest factor is too low. A track can sound wide in headphones and still collapse badly in mono if correlation swings negative.
 
 ## Do Not Chase Perfect Numbers
 

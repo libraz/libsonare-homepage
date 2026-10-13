@@ -23,7 +23,7 @@ libsonare processes each block of a strip in one fixed order. Reading it top to 
 4. **EQ**: tone shaping, always before the fader (see below).
 5. **Pre-fader inserts**: in-series processors that run before the fader.
 6. **Fader (+ VCA offset)**: the balance control you ride against other tracks.
-7. **Pan**: places the track across the stereo field, using the chosen [pan law](./pan-width.md) (the rule that keeps a part's loudness steady as it moves off center).
+7. **Pan**: places the track across the stereo field, using the chosen [pan mode and pan law](./pan-width.md) (the pan law sets how loud the center is compared with the sides).
 8. **Stereo width**: narrows or widens the stereo image.
 9. **Post-fader inserts**: in-series processors after the fader.
 10. **Meter / goniometer tap**: measurement, not processing. The goniometer is the dot-plot display that shows how wide the stereo image is.
@@ -49,10 +49,14 @@ The EQ runs pre-fader, so it shapes the tone that the inserts and fader then act
 
 Sometimes you need to hear one track in isolation without disturbing the mix everyone else is hearing — checking a vocal for breath noise before a show, or auditioning a track while the room keeps listening to the main output. That is **cue monitoring**: a separate tap that feeds a headphone or monitor bus alongside the regular mix, not instead of it.
 
-**PFL** (pre-fader listen) taps the signal after the lane strip but before the lane's fader, gate, and pan, so a PFL cue stays audible even when the track is muted, gated, or panned away — useful for checking a source's raw content regardless of where the fader sits. **AFL** (after-fader listen) taps after those stages instead, including the surround path, so it reflects the same level and placement the track is actually contributing to the mix.
+The cue stays separate only when you ask for it. The realtime engine's plain `process(...)` adds the monitor bus into the main output, so a cued lane is heard twice there (and a muted lane under PFL is heard at all). Use `processWithMonitor(...)`, or create the worklet node with `cueOutput: true`, to get the program and the cue as two outputs; see [Track monitor taps](../../realtime-engine.md#track-monitor-taps-off-pfl-and-afl).
+
+In the realtime engine a track lane has two gain layers. First comes the lane's own strip, the full chain on this page with its own trim, fader, and pan. After it, the lane mixer applies a lane fader, the mute/solo gate, and a lane pan. The cue taps sit between and after those layers.
+
+**PFL** (pre-fader listen) taps the signal after the lane strip (including the strip's own fader) but before the lane fader, gate, and pan, so a PFL cue stays audible even when the track is muted, gated, or panned away — useful for checking a source's raw content regardless of where the fader sits. **AFL** (after-fader listen) taps after those stages instead, including the surround path, so it reflects the same level and placement the track is actually contributing to the mix.
 
 ::: details How libsonare schedules a cue tap
-Cue monitoring is a queueable realtime command: `setTrackMonitorMode(laneIndex, mode, renderFrame?)` on `RealtimeEngine` (`EngineTrackMonitorMode` = `'off' | 'pfl' | 'afl'`), mirrored in the C ABI as `sonare_engine_set_track_monitor_mode` (`SonareEngineTrackMonitorMode`) and exposed in Python as `set_track_monitor_mode`. It is reachable from the WASM AudioWorklet path the same as any other engine command, and the monitor bus is folded into the engine's regular output while also being readable on its own.
+Cue monitoring is a queueable realtime command: `setTrackMonitorMode(laneIndex, mode, renderFrame?)` on `RealtimeEngine` (`EngineTrackMonitorMode` = `'off' | 'pfl' | 'afl'`), mirrored in the C ABI as `sonare_engine_set_track_monitor_mode` (`SonareEngineTrackMonitorMode`) and exposed in Python as `set_track_monitor_mode`. It is reachable from the WASM AudioWorklet path the same as any other engine command, and `process(...)` folds the monitor bus into the engine's regular output, while `processWithMonitor(...)` returns it as a separate output and leaves the program unchanged.
 :::
 
 ::: details How libsonare models a strip

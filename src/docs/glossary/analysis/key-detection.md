@@ -26,7 +26,11 @@ Relative pairs such as C major and A minor share all seven notes, so a chroma pr
 
 Key detection starts from a mean chroma vector: the 12 pitch-class bins are averaged over the material, optionally after preparation such as [HPSS](../../source-separation.md) (which suppresses percussion so harmony reads more cleanly), loudness weighting, or high-pass filtering. libsonare compares that vector with rotated key profiles for each candidate root and mode.
 
-A key profile is a 12-number template of how strongly each pitch class is expected to appear in a given key. The default profile is Krumhansl-Schmuckler, a classic set of reference pitch-class weights derived from listener experiments. The implementation can also use other profile families (Shaath, Faraldo EDM variants, Bellman-Budge, and Temperley), each tuned for different material; `genreHint` can steer the choice, and `auto` keeps the historical behavior unless another profile has clearly stronger evidence.
+A key profile is a 12-number template of how strongly each pitch class is expected to appear in a given key. The default profile is the Krumhansl-Kessler one, a classic set of pitch-class weights measured in probe-tone listening experiments, matched by the Krumhansl-Schmuckler method (hence the option name `'ks'`). The implementation can also use other profile families (Shaath, Faraldo EDM variants, Bellman-Budge, and Temperley), each tuned for different material; `genreHint` can steer the choice, and `auto` uses the default profile unless another profile has clearly stronger evidence.
+
+::: info Correlation, in one paragraph
+The match between the chroma vector and a profile is a **Pearson correlation**: a number from −1 to 1 that says how well the two 12-number shapes rise and fall together. 1 means the same shape, 0 means unrelated, and a negative value means the chroma is strong where the profile expects weakness. It ignores overall level, so a quiet and a loud take of the same music correlate the same. Each of the 24 (or more) candidate keys gets one correlation, and the highest one names the key.
+:::
 
 The candidate set is the 24 major and minor keys by default. `modes` widens it to the five church modes (`'modal'`) or to all seven (`'all'`). Options and defaults (`profile`, `modes`, `genreHint`, `tuning`): [Music Analysis](../../analysis.md#key).
 
@@ -40,7 +44,7 @@ Every major and minor profile above is a published one, derived from listening e
 
 ## Confidence is relative
 
-`Key.confidence` is a **softmax over the profile correlation of every candidate that was scored**. That shape, not a rule of thumb, is what the number means, and four consequences follow from it directly:
+`Key.confidence` is a **softmax over the profile correlation of every candidate that was scored**. A softmax turns a list of scores into shares that sum to 1: each score is exponentiated, so a small lead in correlation becomes a large lead in share, and the shares are then divided by their total. The *temperature* sets how small a lead counts as large (see [Reading the number](#reading-the-number)). That shape, not a rule of thumb, is what the number means, and four consequences follow from it directly:
 
 - it lands in `[0, 1)`, and the confidences of one analysis sum to 1;
 - a share of 24 candidates cannot reach 1, so a value here is not comparable with one from a two-way decision;
@@ -55,7 +59,7 @@ It says how decisively the chroma picked one candidate out of the set. It does n
 
 The softmax has a fixed temperature, `kConfidenceTemperature` = 0.08 of correlation. At that gap the winner outweighs the runner-up by a factor of *e*; at twice it by about 7:1; at a 0.2 gap by about 12:1. Two things follow. Only the *gaps* between candidates matter: the best correlation is subtracted from every candidate before exponentiating, so a winning correlation of 0.9 and one of 0.2 report the same confidence if the field behind them has the same shape. And with 24 candidates the value is dominated by the runner-up: once everything else is far behind, the confidence is close to 1 / (1 + *e*^(−gap / 0.08)), so a 0.2 lead reads about 0.92 whether the input was a whole song or four bars.
 
-That is why a short or thin excerpt can read high. A few sustained notes correlate weakly with every profile — nothing fits well — but one profile still fits less badly than the rest, and the softmax reports that lead as belief. The blend this replaced put half its weight on the winner's own correlation and could not read high without a good absolute fit; it survives as `evidence_score()` (C++ only), which is what the analyzer compares when choosing between chroma front-ends, because a posterior mechanically shrinks as the candidate set widens whether or not the evidence changed, and a margin does not. For the absolute fit read `KeyCandidate.correlation`, which stays the raw value the softmax was computed from.
+That is why a short or thin excerpt can read high. A few sustained notes correlate weakly with every profile — nothing fits well — but one profile still fits less badly than the rest, and the softmax reports that lead as belief. A second measure, `evidence_score()` (C++ only), puts half its weight on the winner's own correlation and so cannot read high without a good absolute fit. That is the one the analyzer compares when choosing between chroma front-ends, because a posterior mechanically shrinks as the candidate set widens whether or not the evidence changed, and a margin does not. For the absolute fit read `KeyCandidate.correlation`, which stays the raw value the softmax was computed from.
 
 Use the confidence to rank candidates within one analysis, to show how divided the decision is, and to flag relative-key ambiguity — two entries near 0.5. Do not use it to say how well the track fits its key at all (that is the correlation), to compare analyses that scored different candidate sets (`modes` changes the denominator), or as an accuracy: nothing here is calibrated.
 

@@ -18,7 +18,7 @@ libsonare recognizes four channel layouts system-wide — mono, stereo, 5.1 and 
 
 Canonical order matches `WAVE_FORMAT_EXTENSIBLE`. In 7.1, `Ls`/`Rs` (indices 4/5) and `Lss`/`Rss` (indices 6/7) are two distinct role pairs, not the same pair renamed — see [Widening](#widening-upmix) for where each one sits.
 
-**LFE** (low-frequency effects) carries only the bass content mixed into the track at reduced level, on the assumption a decoder boosts it back by about 10 dB on the way to a subwoofer. Two rules cover every case a target without its own way to reproduce it can end up in:
+**LFE** (low-frequency effects) carries only the bass content mixed into the track at reduced level, on the assumption a decoder boosts it back by about 10 dB on the way to a subwoofer. Three rules cover every case a target can end up in:
 
 - **Fold-in** (no LFE channel on the target, or bass management has no subwoofer): the LFE signal is low-pass filtered at 120 Hz and added into the L/R pair at reduced level.
 - **Subwoofer feed** (bass management enabled with a subwoofer): the LFE signal is boosted and combined with the low-frequency content crossed over from speakers marked `"small"`, then sent to the LFE channel.
@@ -50,7 +50,7 @@ Decoders disagree on channel order. AAC uses `C L R Ls Rs LFE`, some frameworks 
 
 ## Narrowing (Downmix)
 
-Every module that renders a surround bus to something narrower (file loading, the mixer graph, project bounce and the playback renderer) uses the same ITU-R BS.775 coefficients, exposed as `downmix` in the mixing module. The surround pair enters the front pair at reduced level, and the LFE channel stays out of the arithmetic so the LFE rules above handle it. In JavaScript the same coefficients are `downmix(channels, targetLayout)`: centre and surround enter the front pair at -3 dB and the LFE plane is dropped. `decodeChannels(bytes)` keeps every channel of a file so you can narrow it yourself, and the browser-codec fallback of `Audio.fromMemoryWithBrowserFallback` folds to mono through this rule, so both decoders give the same samples.
+Every module that renders a surround bus to something narrower (file loading, the mixer graph, project bounce and the playback renderer) uses the same ITU-R BS.775 coefficients, exposed as `downmix` in the mixing module. BS.775 itself defines the downmix for formats up to 5.1; the 7.1 rules below extend it by folding each side pair into its surround pair. The surround pair enters the front pair at reduced level, and the LFE channel stays out of the arithmetic so the LFE rules above handle it. In JavaScript the same coefficients are `downmix(channels, targetLayout)`: centre and surround enter the front pair at -3 dB and the LFE plane is dropped. `decodeChannels(bytes)` keeps every channel of a file so you can narrow it yourself, and the browser-codec fallback of `Audio.fromMemoryWithBrowserFallback` folds to mono through this rule, so both decoders give the same samples.
 
 `downmix` reads the source layout from the channel count (1, 2, 6 or 8). The target is a `ChannelLayout` ordinal: 0 mono, 1 stereo, 2 5.1, 3 7.1.
 

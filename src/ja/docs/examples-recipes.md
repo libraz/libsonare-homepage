@@ -22,7 +22,13 @@ async function quickAnalysis(url: string) {
   const arrayBuffer = await response.arrayBuffer();
   const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
 
-  const samples = audioBuffer.getChannelData(0);
+  // チャンネルを平均してモノラルに畳む（ステレオでは Audio.fromMemory と同じ畳み方）。
+  // getChannelData(0) だけでは左チャンネルしか解析されない。
+  const samples = new Float32Array(audioBuffer.length);
+  for (let ch = 0; ch < audioBuffer.numberOfChannels; ch++) {
+    const channel = audioBuffer.getChannelData(ch);
+    for (let i = 0; i < channel.length; i++) samples[i] += channel[i] / audioBuffer.numberOfChannels;
+  }
   const sampleRate = audioBuffer.sampleRate;
 
   const bpm = detectBpm(samples, sampleRate);
@@ -227,8 +233,8 @@ await init();
 
 const result = hpss(samples, sampleRate);
 
-// result.harmonic   — 倍音成分（ボーカル／メロディ／コード）
-// result.percussive — 打撃成分（ドラム／パーカッション）
+// result.harmonic   — 倍音成分（持続する音程のある音：ボーカル／コード／ベース／パッド）
+// result.percussive — 打撃成分（短く帯域の広い音：ドラム／発音の立ち上がり／子音）
 
 // ドラムやトランジェントはクロマ推定をにじませるため、倍音成分だけで
 // キー検出するとクリーンな結果が得られます
@@ -240,8 +246,8 @@ from libsonare import Audio, detect_key
 
 with Audio.from_file("song.mp3") as audio:
     result = audio.hpss()
-    # result.harmonic   — 倍音成分（ボーカル／メロディ／コード）
-    # result.percussive — 打撃成分（ドラム／パーカッション）
+    # result.harmonic   — 倍音成分（持続する音程のある音：ボーカル／コード／ベース／パッド）
+    # result.percussive — 打撃成分（短く帯域の広い音：ドラム／発音の立ち上がり／子音）
 
 # ドラムやトランジェントはクロマ推定をにじませるため、倍音成分だけで
 # キー検出するとクリーンな結果が得られます
@@ -270,13 +276,14 @@ await init();
 // 80% 速度にスローダウン
 const slower = timeStretch(samples, sampleRate, 0.8);
 
-// 2 半音上に移調
+// 2 半音上にピッチシフト
 const higher = pitchShift(samples, sampleRate, 2);
 
-// -3dB に正規化
+// サンプルピークを -3 dBFS に正規化
 const normalized = normalize(samples, sampleRate, -3);
 
-// 無音をトリム
+// 先頭と末尾で RMS が -60 dBFS を下回るフレームを切り詰める
+// （絶対レベル。librosa の top_db のようなピーク基準ではない）
 const trimmed = trim(samples, sampleRate, -60);
 ```
 
@@ -285,9 +292,9 @@ from libsonare import Audio
 
 with Audio.from_file("song.mp3") as audio:
     slower = audio.time_stretch(0.8)        # 80% 速度にスローダウン
-    higher = audio.pitch_shift(2)           # 2 半音上に移調
-    normalized = audio.normalize(-3)        # -3 dB に正規化
-    trimmed = audio.trim(-60)               # -60 dB 以下の無音をトリム
+    higher = audio.pitch_shift(2)           # 2 半音上にピッチシフト
+    normalized = audio.normalize(-3)        # サンプルピークを -3 dBFS に正規化
+    trimmed = audio.trim(-60)               # RMS が -60 dBFS（絶対レベル）を下回る端を切り詰める
 ```
 
 ```bash [CLI]
@@ -349,7 +356,7 @@ sonare chroma song.mp3 --json
 
 ## ピッチ検出
 
-ピッチ検出は F0（基本周波数。周期的な音の最も低い周波数で、人が音の高さとして聞き取る成分）をフレームごとに推定します。モノフォニックの音声からメロディラインを取り出すのはこの値です。
+ピッチ検出は F0（基本周波数。周期的な波形が繰り返す速さで、ふつうは音の高さとして聞こえる値）をフレームごとに推定します。モノフォニックの音声からメロディラインを取り出すのはこの値です。
 
 ::: code-group
 

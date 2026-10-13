@@ -65,4 +65,4 @@ Studio mode exposes the air-band shelf frequency, but pushing it too high often 
 
 ::::
 
-Related: [Mastering](./mastering.md), [A/B comparison](./ab-comparison.md)
+Related: [The Mastering Chain](./mastering.md), [Loudness Matching and A/B Comparison](./concepts/loudness-matching.md)

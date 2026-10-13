@@ -17,7 +17,7 @@ A **bus** is a destination that sums several signals. libsonare gives a bus a **
 
 - **Master** — the final stereo output everything eventually reaches.
 - **Aux** — the return for sends, where a shared effect (one reverb, one delay) lives.
-- **Submix** — a group that collects related tracks (all the drums) so you can process and ride them as one.
+- **Submix** — a group that collects related tracks (all the drums) so you can process and ride them as one. In a scene this is any role string other than `master` (`submix`, `subgroup`, …); the string is only a label.
 
 A compressor on a drum submix glues the kit together; one fader then controls the whole kit. The master is special only in that it is the last bus in the graph.
 

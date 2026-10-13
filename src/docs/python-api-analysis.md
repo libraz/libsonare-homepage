@@ -253,7 +253,7 @@ Keyword options are `candidate_numerators` (default `(3, 4, 6)`), `denominator=4
 
 #### Chord qualities
 
-`Chord.quality` is one of the strings listed under [Types](./python-api-types.md#types). Some of them are anagrams of each other and no chromagram can separate the pair: a `major6` spells the `minor7` a minor third below, a `minor6` the `halfDim7` below it, and a `dominant7Sus4` the `sus2Add4` a fourth below. The established reading stays the default in each pair, and only bass evidence promotes the sixth.
+`Chord.quality` is one of the strings listed under [Types](./python-api-types.md#types). Some of them are anagrams of each other and no chromagram can separate the pair: a `major6` spells the `minor7` a minor third below, a `minor6` the `halfDim7` below it, and a `dominant7Sus4` the `sus2Add4` a fourth above. The established reading stays the default in each pair, and only bass evidence promotes the sixth.
 
 For long files, `analyze_with_progress(...)` returns the same `AnalysisResult` as `analyze(...)`, accepts the same analysis keyword options including `tuning`, and accepts an `on_progress=(progress, stage)` callback plus keyword-only `cancel`. It mirrors the mastering progress callbacks below:
 

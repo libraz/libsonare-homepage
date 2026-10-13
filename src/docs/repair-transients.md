@@ -7,6 +7,14 @@ description: Detect and repair impulsive defects with libsonare's declip, declic
 
 Clipping, clicks, and crackle are all short-time defects, but their evidence is different. Clipping creates runs at or near a ceiling, a click is an isolated discontinuity, and crackle is a dense set of sample-scale deviations. Detect each defect before choosing its reconstruction method.
 
+::: info Terms on this page
+- **Run**: a stretch of consecutive samples a detector marks as damaged. Clip runs sit at one level; click runs stand out from their neighbors.
+- **LPC / AR model** (linear prediction, autoregressive): a model that predicts each sample from the few dozen before it. Declick and declip fit one to the undamaged audio around a run and use it to fill the run with a waveform that continues the surrounding signal (`lpcOrder` is how many past samples it uses).
+- **Interpolation fallback**: a run too long for the model is filled with a smooth curve between its edges instead.
+- **Median criterion**: decrackle compares each sample with the median of its neighbors and replaces the ones that depart too far.
+- **Wavelet shrinkage**: the other decrackle mode splits the signal into detail levels (`levels`) and shrinks the small detail coefficients where crackle lives, rather than replacing individual samples.
+:::
+
 ## Select a detector
 
 | Defect | Detector | Repair stage | What to inspect |

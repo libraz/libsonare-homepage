@@ -25,6 +25,13 @@ Mixing Studio uses the third row. The facade plays the project live, and a worke
 
 ## Render a mix in one call
 
+::: info What you need
+- **Install:** `npm install @libraz/libsonare` in a web project with a bundler that serves ES modules and `.wasm` files, such as Vite. The [WebAssembly guide](../wasm.md) covers loading the package.
+- **A file picker:** `<input type="file" accept="audio/*" multiple>`. Its `files` list is the `File[]` the code below reads.
+- **A user gesture:** create or resume the `AudioContext` from a click handler. Browsers keep an `AudioContext` created without one suspended, and you need it running to play the result.
+- **Stems:** WAV or MP3 exported from one session, so they start together.
+:::
+
 The smallest working mixer is `mixStereo`: decode the stems, pad them to one length, mix, and encode the result. Fader, pan, trim and width take one value per stem; `mix.meters[i]` holds each stem's meter for the block. `files` is the `File[]` from your picker, and the zeros stand in for values from your UI.
 
 ```typescript
@@ -69,8 +76,16 @@ function encodeWav(left: Float32Array, right: Float32Array, sampleRate: number):
   return new Blob([view.buffer], { type: 'audio/wav' });
 }
 
+// The sum is not limited: stems at 0 dB can add up past full scale, and the
+// encoder above would then clamp them flat. Check the peak before encoding.
+let peak = 0;
+for (const ch of [mix.left, mix.right]) for (const x of ch) peak = Math.max(peak, Math.abs(x));
+if (peak > 1) console.warn(`mix peaks at ${(20 * Math.log10(peak)).toFixed(1)} dBFS; lower the faders`);
+
 const url = URL.createObjectURL(encodeWav(mix.left, mix.right, mix.sampleRate));
 ```
+
+If the warning fires, lower the faders (or apply one gain to both channels) and mix again; three stems at 0 dB summing in phase can reach three times full scale. A sample peak under full scale still leaves [inter-sample peaks](../glossary/true-peak.md) to check before the file is delivered.
 
 The rest of this page is what an app adds around that call: live playback, edits that stay in sync with the export, and project files.
 

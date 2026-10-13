@@ -37,6 +37,8 @@
 | スライディング最大値 | Lemire sliding max | `README.md`、リミッター／True Peak 補助処理の利用箇所 |
 | Tonnetz | Harte et al. 2006 と `librosa.feature.tonnetz` の挙動 | `src/feature/tonnetz.h`、`src/feature/tonnetz.cpp`、`tests/librosa/tonnetz_test.cpp` |
 | ピッチ追跡 | YIN と pYIN。pYIN は確率的な複数ピッチ候補と Viterbi decoding を使う | `src/feature/pitch.h`、`tests/librosa/pitch_test.cpp` |
+| キープロファイル | Krumhansl-Kessler のプローブトーンによるプロファイルを Krumhansl-Schmuckler の相関法で照合する。代わりの公表済みメジャー／マイナープロファイルとして Temperley、Sha'ath（2011 年の学位論文）、Faraldo、Bellman-Budge を持つ。5 種のモーダルプロファイルは明示された構成物で、公表済みのセットではない | `src/analysis/key_profiles.h`、`src/analysis/key_profiles.cpp` |
+| ポリフォニックのピッチサリエンス | Klapuri（ISMIR 2006）に基づく `(f0 + α) / (h·f0 + β)` の倍音重み付きの倍音和サリエンスと、それに続く推定と差し引きの反復 | `src/editing/polyphony/f0_salience.h`、`src/editing/polyphony/multi_f0.h` |
 | ルーム音響解析 | 減衰指標、ブラインド減衰フィット、RIR 合成、ルーム推定、ルームモーフィング | `src/analysis/acoustic_analyzer.*`、`src/acoustic/*`、`src/analysis/room_estimator.*`、`src/effects/acoustic/room_morph.*`、`tests/acoustic/*`、`tests/effects/room_morph_test.cpp` |
 | シーケンスヘルパー | DTW、Viterbi、discriminative Viterbi、recurrence quantification analysis、`librosa.sequence` 互換 | `src/util/sequence.h`、`src/feature/segment.*`、librosa のシーケンス参照 |
 | タイムストレッチとピッチシフト | Native spectral stretch、phase-vocoder fallback、time stretch followed by resampling による pitch shift | `src/effects/time_stretch.h`、`src/effects/pitch_shift.h` |
@@ -58,6 +60,19 @@ Tonnetz（「音のネットワーク」）は、和声を幾何空間へ写像�
 - **Schroeder エネルギー減衰曲線**: 部屋のインパルス応答を時間方向に逆積分して滑らかな減衰曲線を得ます。RT60／EDT はこれを基に測定します。
 - **RBJ バイカッド／Linkwitz-Riley クロスオーバー**: EQ フィルターの標準的な設計法と、正しい位相特性で音声を帯域分割する方式です。
 :::
+
+## アルゴリズム名で確認できる解析の系統
+
+次の解析段は、ソースにアルゴリズムの系統名がありますが、完全な論文引用はありません。
+
+| 領域 | アルゴリズムの系統 | 根拠 |
+|------|--------------------|------|
+| テンポ | オンセット包絡線の自己相関、重み付きテンポヒストグラム、そのピークの倍音クラスタリング。局所テンポ曲線には Fourier テンポグラム | `src/analysis/bpm_analyzer.cpp` |
+| ビート追跡 | オンセット包絡線上の動的計画法と、テンポからのずれの 2 乗に比例するペナルティ（`tightness`） | `src/analysis/beat_analyzer.h`、`src/analysis/beat_analyzer.cpp` |
+| セクション境界 | MFCC とクロマ特徴量のコサイン自己類似度行列に対するチェッカーボード型カーネルのノベルティ | `src/analysis/boundary_detector.h` |
+| 倍音成分／打撃成分の分離 | 時間方向と周波数方向のメディアンフィルタと、ソフトまたはハードのマスク | `src/effects/hpss.h` |
+| NMF の成分 | beta ダイバージェンスによる乗法更新の NMF と、複素スペクトログラムへの成分ごとのソフトマスク | `src/effects/decompose.cpp` |
+| 位相の再構成 | モーメンタム付きの Griffin-Lim（高速版） | `src/core/spectrum.h`、`src/core/spectrum.cpp` |
 
 ## 内蔵合成と GM/GS 互換
 

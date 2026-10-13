@@ -1,23 +1,13 @@
 ---
-title: マスタリング
-description: マスタリングの役割と libsonare ブラウザデモでの考え方。
+title: マスタリングチェーン
+description: libsonare のマスタリングチェーンが各段を実行する順序と、ブラウザデモでの扱い。
 ---
 
-# マスタリング
+# マスタリングチェーン
 
-マスタリングはリリース前の最終処理です。体感上の音量、大まかな音色バランス、ダイナミクス、ステレオイメージ、ピーク安全性を整えます。
+このページでは、libsonare のマスタリングチェーンの順序と、ブラウザデモでの扱いを説明します。マスタリングとは何か、何を直せて何を直せないかは [マスタリングとは?](./concepts/what-is-mastering.md) を参照してください。
 
-libsonare のデモでは、マスタリング処理をブラウザ内の WebAssembly が実行します。ブラウザが音源をデコードし、設定されたチェーンに通し、サーバーへアップロードすることなく WAV として書き出します。
-
-## 何を調整するか
-
-| 項目 | 目的 |
-|------|------|
-| ラウドネス | -14 LUFS（Loudness Units relative to Full Scale）や -16 LUFS などのターゲットに合わせる。 |
-| トーン | 個別トラックを触らず、大まかな音色バランスを整える。 |
-| ダイナミクス | 動きを残しながらピークと密度を制御する。 |
-| ステレオ | [モノラル互換性](./concepts/mono-compatibility.md)を崩さず、有効な広がりを保つ。 |
-| ピーク | 変換後や配信再生でのクリップを避ける。 |
+チェーンはブラウザ内の WebAssembly で実行されます。音源はブラウザでデコードされ、設定されたチェーンに通され、サーバーへアップロードされることなく WAV として書き出されます。
 
 ## デモでの使い方
 
@@ -48,7 +38,7 @@ libsonare のデモでは、マスタリング処理をブラウザ内の WebAss
     { from: 'limiter', to: 'loudness' },
     { from: 'loudness', to: 'export' }
   ]"
-  caption="補正系の段を先に実行し、ピーク安全性とラウドネスは最後に確定します。"
+  caption="補正系の段を先に実行し、ピーク安全性とラウドネスは最後に確定します。ラウドネスの段はゲインをかけたあと自前の True Peak リミッターを通すので、ゲインをかけてもシーリングは守られます。"
 />
 
 各パラメータを細かいページへ分けず、以下の機能群ガイドで実装上の詳細までまとめています。
@@ -74,4 +64,4 @@ libsonare のデモでは、マスタリング処理をブラウザ内の WebAss
 
 ::::
 
-関連: [LUFS](./lufs.md)、[True Peak](./true-peak.md)、[A/B 比較](./ab-comparison.md)、[ブラウザ内ローカル処理](./concepts/browser-local-processing.md)、[マスタリング実装](../mastering-implementation.md)
+関連: [マスタリングとは?](./concepts/what-is-mastering.md)、[LUFS](./lufs.md)、[True Peak](./true-peak.md)、[ラウドネスマッチングと A/B 比較](./concepts/loudness-matching.md)、[ブラウザ内ローカル処理](./concepts/browser-local-processing.md)、[マスタリング実装](../mastering-implementation.md)

@@ -22,8 +22,15 @@ description: ピアノ曲の WAV や MP3 を CLI だけで Standard MIDI File �
 
 このページの数値はすべて 1 つのファイルから取っています。ゴルトベルク変奏曲のアリアの冒頭 16 小節（223 音、70 BPM、約 42 秒）を エンジン内蔵のピアノで描画し、128 kbps の MP3 にした `aria.mp3` です。描画元の譜面 `aria-score.mid` が正解になります。もう 1 つの `aria-band.mp3` は、同じピアノにベースライン、小節ごとの和音を伸ばすストリングスのパッド、ドラムキットをピアノとほぼ同じ音量で重ねたものです。
 
+::: info 用意するもの
+- **インストール:** `pip install libsonare`（Python 3.11 以降）で、`sonare` コマンドと採点スクリプトが使う Python バインディングが入ります。Node のタブには `npm install @libraz/libsonare`（Node.js 22.12 以降）が必要です。
+- **ピアノの録音:** WAV か MP3。モノラルでもステレオでも、一般的なサンプルレートなら何でもかまいません。採譜ではステレオはモノラルにまとめられます。
+- **照合用の譜面（任意）:** 同じ曲の Standard MIDI File です。なくても採譜はできます。その場合はステップ 2 と 3 の採点を飛ばしてください。
+- **`aria.mp3` と `aria-score.mid` は配布していません。** 正解のわかっている素材で試すには、下のとおり手元のピアノの MIDI ファイルから組を作ってください。
+:::
+
 ::: tip 自分で検証用の組を作る
-正解の分かっている録音を手早く用意するには、手元の MIDI ファイルを描画するのが近道です。`sonare project import-smf --smf score.mid -o score.json` のあとに `sonare midi-render --in score.json -o score.wav` を実行します。描画したピアノは部屋で録ったマイク録音よりきれいなので、得られる数値は実際の録音での上限と考えてください。
+正解の分かっている録音を手早く用意するには、手元の MIDI ファイルを描画するのが近道です。`sonare project import-smf --smf score.mid -o score.json` のあとに `sonare midi-render --in score.json -o score.wav` を実行します。このページの `aria.mp3` の代わりに `score.wav` を、`aria-score.mid` の代わりに `score.mid` を使ってください。描画したピアノは部屋で録ったマイク録音よりきれいなので、得られる数値は実際の録音での上限と考えてください。
 :::
 
 ## 全体のスクリプト
@@ -35,7 +42,8 @@ set -euo pipefail
 # 1. 採譜する。MP3 も WAV もそのまま読める。
 sonare transcribe aria.mp3 --polyphonic -o aria.mid --json
 
-# 2. 照合する譜面があれば、結果を測る（スクリプトは後述）。
+# 2. 照合する譜面があれば、結果を測る。先にステップ 2 のスクリプトを
+#    score.py として保存しておく。
 python score.py aria-score.mid aria.mid
 
 # 3. 余分な音を減らす。フレームごとの下限を上げ、最短ノートを長くする。
@@ -76,16 +84,24 @@ sonare transcribe aria.mp3 --polyphonic -o aria.mid --json
 ```
 
 ```typescript [Node]
-import { transcribe } from '@libraz/libsonare-native';
+import { readFileSync } from 'node:fs';
+import { Audio, init, transcribe } from '@libraz/libsonare';
 
-// samples: aria.mp3 をデコードしたモノラル Float32Array
-const { events, noteCount, tempoBpm } = transcribe({ samples, sampleRate, polyphonic: true });
+await init();
+// WAV と MP3 をデコードし、CLI と同じくステレオをモノラルにまとめる
+const audio = Audio.fromMemory(new Uint8Array(readFileSync('aria.mp3')));
+const { events, noteCount, tempoBpm } = transcribe({
+  samples: audio.data, sampleRate: audio.sampleRate, polyphonic: true,
+});
 ```
 
 ```python [Python]
 import libsonare as sonare
+from libsonare import Audio
 
-# samples: aria.mp3 をデコードしたモノラルのサンプル
+# WAV と MP3 をデコードし、CLI と同じくステレオをモノラルにまとめる
+with Audio.from_file("aria.mp3") as audio:
+    samples, sample_rate = audio.data, audio.sample_rate
 result = sonare.transcribe(samples, sample_rate, polyphonic=True)
 print(result.note_count, result.tempo_bpm)
 ```
@@ -108,7 +124,7 @@ print(result.note_count, result.tempo_bpm)
 
 ## ステップ 2 — 譜面と照合する
 
-その曲の基準となる MIDI ファイルがあれば、libsonare の Python バインディングを使った数行のスクリプトで採譜を採点できます。採譜した音は、譜面のどれかの音と MIDI ノート番号が同じで、開始が 50 ms 以内なら正解とします。譜面の 1 音に対応づけるのは 1 回だけです。
+その曲の基準となる MIDI ファイルがあれば、libsonare の Python バインディングを使った数行のスクリプトで採譜を採点できます。下のスクリプトを `score.py` として保存してください。採譜した音は、譜面のどれかの音と MIDI ノート番号が同じで、開始が 50 ms 以内なら正解とします。譜面の 1 音に対応づけるのは 1 回だけです。
 
 ```python
 """採譜した SMF を譜面と照合する: 開始が 50 ms 以内で、MIDI ノート番号が同じ。"""
@@ -175,6 +191,11 @@ score 223  found 221  matched 174  precision 0.79  recall 0.78  F1 0.78
 - 譜面の 40 音は、その音高ではまったく見つかっていません。そのうち 6 音は 1 オクターブずれた位置で見つかっていて、15 音は 150 ms より短い音です。
 
 きれいなピアノ録音で現実的に得られるのは、曲の音高とリズムの大部分を備え、まだピアノロールでの手直しが要る MIDI ファイルです。伸ばした音の重複を消し、取りこぼした短い音を足す作業が残ります。[ピアノ採譜](/ja/transcribe)のデモはブラウザで同じ検出器を動かし、オプションごとにどの音が増減するかを見せます。
+
+ピアノロールに何が入っているかは、下のデモで確かめられます。短い MIDI の一節をロールとして描き、同じノートを別の内蔵楽器で鳴らし直します。
+
+<SonareDemo id="midi-piano-roll" />
+
 
 ## ステップ 4 — バンドのミックスには先にステムが要る
 

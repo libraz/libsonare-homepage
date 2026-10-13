@@ -28,7 +28,7 @@ Most examples follow the same pattern: load or decode audio, pass `Float32Array`
 [Audio Basics](./glossary/concepts/audio-basics.md) explains these terms at more length.
 
 ::: info Separate the file from the samples
-MP3 and WAV are file formats. Most libsonare APIs receive decoded PCM samples, such as a `Float32Array` in JavaScript or a sample array in Python. Every runtime below can decode WAV and MP3 for you; for other formats, the browser decodes the file first, and Python needs an FFmpeg-enabled build.
+MP3 and WAV are file formats. Most libsonare APIs receive decoded PCM samples (the plain, uncompressed sample values), such as a `Float32Array` in JavaScript or a sample array in Python. Every runtime below can decode WAV and MP3 for you; for other formats, the browser decodes the file first, and Python needs an FFmpeg-enabled build.
 :::
 
 ## Where Does It Run?

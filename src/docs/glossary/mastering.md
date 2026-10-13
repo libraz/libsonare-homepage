@@ -1,23 +1,13 @@
 ---
-title: Mastering
-description: What mastering does and how the libsonare browser demo approaches it.
+title: The Mastering Chain
+description: The order libsonare's mastering chain runs its stages in, and how the browser demo exposes it.
 ---
 
-# Mastering
+# The Mastering Chain
 
-Mastering is the final processing step before release. It prepares a mix for distribution by balancing perceived loudness, broad tonal shape, dynamics, stereo image, and peak safety.
+This page covers how the libsonare mastering chain is ordered and how the browser demo exposes it. For what mastering is and what it can and cannot fix, see [What Is Mastering?](./concepts/what-is-mastering.md).
 
-In the libsonare demo, mastering runs locally in WebAssembly. The file is decoded in the browser, processed through a configurable chain, and exported as WAV without uploading audio to a server.
-
-## What It Controls
-
-| Area | Goal |
-|------|------|
-| Loudness | Match the selected target such as -14 LUFS (Loudness Units relative to Full Scale) or -16 LUFS. |
-| Tone | Make broad corrections without remixing individual instruments. |
-| Dynamics | Control peaks and density while preserving movement. |
-| Stereo | Keep width useful without breaking [mono compatibility](./concepts/mono-compatibility.md). |
-| Peaks | Avoid clipping after conversion or streaming playback. |
+The chain runs locally in WebAssembly: the file is decoded in the browser, processed through the configurable chain, and exported as WAV without uploading audio to a server.
 
 ## In The Demo
 
@@ -48,7 +38,7 @@ The browser demo presents the chain as a small number of musical decisions, but 
     { from: 'limiter', to: 'loudness' },
     { from: 'loudness', to: 'export' }
   ]"
-  caption="Corrective stages run first; peak safety and loudness are locked in last."
+  caption="Corrective stages run first; peak safety and loudness are locked in last. The loudness stage applies its gain and then runs its own true-peak limiter, so the ceiling still holds after the gain."
 />
 
 The grouped guides below explain the implementation details without splitting every parameter into a thin page:
@@ -78,4 +68,4 @@ When these stages disagree, peak safety wins over target loudness. Otherwise a m
 
 ::::
 
-Related: [LUFS](./lufs.md), [True Peak](./true-peak.md), [A/B comparison](./ab-comparison.md), [Browser Local Processing](./concepts/browser-local-processing.md), [Mastering Implementation](../mastering-implementation.md)
+Related: [What Is Mastering?](./concepts/what-is-mastering.md), [LUFS](./lufs.md), [True Peak](./true-peak.md), [Loudness Matching and A/B Comparison](./concepts/loudness-matching.md), [Browser Local Processing](./concepts/browser-local-processing.md), [Mastering Implementation](../mastering-implementation.md)

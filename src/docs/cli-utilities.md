@@ -44,7 +44,7 @@ sonare db-to-amplitude --values 0,-20 --json   # [1, 0.100000001]
 
 | Command | Result | Options |
 |---------|--------|---------|
-| `sonare frame-signal --values ... --frame-length 4 --hop-length 2` | Overlapping frames of the list, flattened row by row: frame `i` is entries `[i * L, (i + 1) * L)` | `--frame-length` (the `--n-fft` value, 2048), `--hop-length` (512) |
+| `sonare frame-signal --values ... --frame-length 4 --hop-length 2` | Overlapping frames of the list, flattened row by row: frame `i` copies input entries `[i * hop, i * hop + L)` and occupies output positions `[i * L, (i + 1) * L)` | `--frame-length` (the `--n-fft` value, 2048), `--hop-length` (512) |
 | `sonare pad-center --values 1,2,3 --size 7` | The list centred in `size` entries, with `(size - n) / 2` of padding on the left | `--size` (**required**, at least the list length), `--pad-value` (0.0) |
 | `sonare fix-length --values 1,2,3 --size 5` | Exactly `size` entries: cropped from the right, or padded on the right | `--size` (**required**), `--pad-value` (0.0) |
 | `sonare fix-frames --values 0,3,3,7 --x-max 6` | Integer frame indices with entries outside `[x-min, x-max]` dropped, the bounds inserted, and duplicates removed | `--x-min` (0), `--x-max` (-1, no upper bound), `--no-pad` (do not insert the bounds) |

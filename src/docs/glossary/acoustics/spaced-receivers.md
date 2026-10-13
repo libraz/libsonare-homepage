@@ -9,13 +9,13 @@ A room has no left and right. A stereo room sound exists only once something lis
 
 ## Two microphones, one room
 
-Put two identical omnidirectional microphones in a hall a short distance apart. Neither one is aimed anywhere; they differ only in where they stand. Each picks up the direct sound, then its own set of wall reflections, then the dense late reverberation. The direct sound and the early reflections arrive at slightly different times at the two positions. The late reverberation is a field of waves arriving from every direction at once, and two points in such a field hear the same thing only at wavelengths long compared with the gap between them.
+Put two identical omnidirectional microphones in a hall a short distance apart. Neither one is aimed anywhere; they differ only in where they stand. Each picks up the direct sound, then its own set of wall reflections, then the dense late reverberation. The direct sound and the early reflections arrive at slightly different times at the two positions. The late reverberation is a field of waves arriving from every direction at once, and two points in such a field hear the same thing only at wavelengths long compared with the gap between them. Acoustics calls that an ideal **diffuse field**: equal energy arriving from every direction, with no phase relation between the arrivals.
 
-That last property has a name: **inter-channel coherence**, how alike two signals are at each frequency. 1 means identical, 0 means unrelated. For two points a distance *d* apart in an ideal diffuse field, the coherence at frequency *f* is
+How alike the two signals are at each frequency is their **inter-channel correlation**, a coefficient from −1 to 1: 1 means identical, 0 means unrelated, and a negative value means the two move in opposite directions. (Coherence is the closely related magnitude of that relation, which never goes below 0.) For two points a distance *d* apart in a diffuse field, the correlation at frequency *f* is
 
-sinc(2π·f·d / c), with c = 343 m/s,
+sin(kd) / (kd), with k = 2π·f / c and c = 343 m/s,
 
-which starts at 1 at low frequencies and first reaches 0 at f = c / (2d). At the default 0.5 m that is 343 Hz. Below it the two tails move together; above it they are close to independent.
+which starts at 1 at low frequencies, first reaches 0 at f = c / (2d), and above that swings slightly negative and back toward 0. At the default 0.5 m that is 343 Hz. Below it the two tails move together; above it they are close to independent.
 
 ## Why the spacing matters
 

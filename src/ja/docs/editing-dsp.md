@@ -38,9 +38,49 @@ DSP は Digital Signal Processing の略で、音声信号を数値として測�
 `voiceChange` がこの 2 つを分けて扱うのはこのためです。フォルマント係数を下げると声は大きく暗く、上げると小さく明るく聞こえます。フォルマント段が動かすのはスペクトル包絡だけなので、音程は `pitchSemitones` で指定した位置に残ります。
 :::
 
+<SonareDemo id="formant-shift" />
+
 <SonareDemo id="pitch-shift" />
 
 <SonareDemo id="time-stretch" />
+
+## 単位：ノート番号、サンプル、秒
+
+以下の関数は、音高を MIDI ノート番号か半音数で、位置をサンプルか秒で受け取ります。例で使う換算は次の 2 つの表にまとめてあります。
+
+### MIDI ノート番号
+
+MIDI ノート番号は、音の高さを半音単位の番号で表す方法です。整数 1 つが 1 半音に対応し、小数も使えます。
+
+覚えておく基準は次の 2 つです。
+
+| 音 | MIDI ノート番号 | 周波数 |
+|----|-----------------|--------|
+| C4（中央のド） | `60` | 約 261.63 Hz |
+| A4 | `69` | 440 Hz |
+
+オクターブが 1 つ上がると、MIDI ノート番号は 12 増えます。たとえば C4 が `60` なので、C5 は `72` です。
+
+対応表全体と `freq ↔ midi` の式は [編集の基礎](./glossary/concepts/editing-basics.md#midi-ノート番号) を参照してください。
+
+### サンプル指定と秒指定
+
+編集位置はすべて、サンプルまたは秒で指定できます。境界ごとにどちらか一方の表記だけを渡してください。両方を渡すと拒否されます。
+
+| 呼び出し | サンプル | 秒 | Python（秒） |
+|----------|----------|----|--------------|
+| `spectralEdit` の領域 | `startSample` / `endSample` | `startSec` / `endSec` | `start_sec` / `end_sec` |
+| `noteStretch`、`noteMove` | `onsetSample` / `offsetSample`。`noteMove` はさらに `targetOnsetSample` | `onsetSec` / `offsetSec`、`targetOnsetSec` | `onset_sec` / `offset_sec`、`target_onset_sec` |
+| `renderNotes`、`renderPercussiveEvents` | `onsetSample` / `offsetSample`、編集の `timeOffsetSamples` | `onsetSec` / `offsetSec`、`timeOffsetSec` | `onset_sec` / `offset_sec`、`time_offset_sec` |
+| ボーカルの `setSourceSpan` | `sourceStartSample`、`sourceEndSample`、`destinationStartSample`、`destinationLengthSamples` | 末尾を `Sec` にした同名のフィールド | `source_start_sec` と対応するフィールド |
+| ボーカルの `split` | `sourceSample` | `sourceSec` | `cut_source_sample` / `cut_source_sec` |
+| ボーカルのレンダリング `range` | `startSample` / `endSample` | `startSec` / `endSec` | `start_sec` / `end_sec` キーワード |
+
+- 秒は、呼び出しのサンプルレート（ボーカルの行ではセッション自身のレート）で最も近いサンプルに丸められます。
+- 負の位置は拒否されます。WASM と Node は `RangeError`、Python は `SonareValueError` です。
+- `-1` は「末尾まで」を表す値ではありません。終端の境界を省略すると入力の端が使われます（Python は `None`）。
+
+位置が解析から得られた値なら、サンプル値のまま渡すと、丸めが 2 回かかりません。
 
 ## 関数
 
@@ -205,7 +245,7 @@ await init();
 const hopLength = 256;
 const pitch = pitchPyin({ samples: vocal, sampleRate, hopLength });
 
-// 有声フレームを C メジャーへ、緩やかに、ビブラートを残して寄せる。
+// 有声フレームを 80% の強さで C メジャーへ寄せる。
 const tuned = pitchCorrectTimevarying({
   samples: vocal,
   f0Hz: pitch.f0,
@@ -259,11 +299,11 @@ Node はブラウザと同じ呼び出しです。Python ではオプション�
 | `referenceMidi` | `reference_midi` | `--reference-midi` | 有限値 | `69` | 音階グリッドの基準音。各度数はこの音から測る |
 | `retuneAmount` | `retune_amount` | `--retune-amount` | `[0, 1]` | `1` | `0` でバイパス、`1` で完全に寄せる。低いと自然な揺れが残る |
 | `retuneSpeedMs` | `retune_speed_ms` | `--retune-speed-ms` | `>= 0` | `50` | リチューンの時定数。大きいほど音程へ乗るグライドが遅い |
-| `vibratoThresholdCents` | `vibrato_threshold_cents` | `--vibrato-threshold-cents` | `>= 0` | `20` | これより小さい補正はビブラート保持のためスキップ |
+| `vibratoThresholdCents` | `vibrato_threshold_cents` | `--vibrato-threshold-cents` | `>= 0` | `20` | 目標にこれより近いフレームは音程が合っているとみなし、そのまま残す |
 | `maxCorrectionSemitones` | `max_correction_semitones` | `--max-correction-semitones` | `>= 0` | `12` | 1 フレームの移動量の上限 |
 | `voiced` / `voicedProb` | `voiced` / `voiced_prob` | （CLI が測定） | フラグ／`[0, 1]` | 全フレームが有声 | 補正するフレーム。`voiced` が `voicedProb` より優先 |
 
-セントは半音の 100 分の 1 なので、既定の `vibratoThresholdCents` の `20` は、半音の 5 分の 1 に満たない補正をそのまま残します。自然なビブラートの揺れはこの範囲にあります。`retuneAmount: 1` に短い `retuneSpeedMs` を合わせると、硬いロボット的な効果になります。`maxCorrectionSemitones` は、検出器が 1 フレームだけオクターブを取り違えても、そのフレームがまるまる 1 オクターブ引っ張られないよう上限で抑えます。検出が不安定なときは値を下げてください。
+セントは半音の 100 分の 1 なので、既定の `vibratoThresholdCents` の `20` は、目標との差が半音の 5 分の 1 に収まるフレームを、すでに音程が合っているものとしてそのまま残します。歌のビブラートの揺れはこれよりずっと大きく、一般に ±50〜±100 セント、5〜7 Hz なので、このしきい値ではビブラートは守られません。ビブラートを残すのは、遅めの `retuneSpeedMs`（または `1` 未満の `retuneAmount`）です。平滑化された補正がひと揺れごとではなくノートの平均的な音高を追うようになります。時定数がごく短いと、揺れのたびに追いかけてビブラートを平らにしてしまいます。`retuneAmount: 1` に短い `retuneSpeedMs` を合わせると、硬いロボット的な効果になります。`maxCorrectionSemitones` は、検出器が 1 フレームだけオクターブを取り違えても、そのフレームがまるまる 1 オクターブ引っ張られないよう上限で抑えます。検出が不安定なときは値を下げてください。
 
 C ナチュラルマイナー `{0,2,3,5,7,8,10}` は `0x5ad` です。`mode: 'midi'` では、この関数は `pitchCorrectToMidiTimevarying(...)` と同じく `targetMidi` へ補正します。オプションの考え方は[ピッチ補正の用語集](./glossary/editing/pitch-correction.md)で説明しています。
 
@@ -323,21 +363,6 @@ in_d = sonare.auto_tune(vocal, sample_rate, key=(2, "dorian"))
 
 自分で測った輪郭を音階に合わせたい場合は、`scaleMaskForMode(root, mode)` でマスクを作り、`scaleModeMask` に渡します。教会旋法の 12 ビットマスクを返し（`scaleMaskForMode(0, 'major')` は `0b101010110101`）、`pitchCorrectTimevarying(...)` は `scaleModeMask` にモード名を直接渡すこともできます。
 
-### MIDI ノート番号
-
-MIDI ノート番号は、音の高さを半音単位の番号で表す方法です。整数 1 つが 1 半音に対応し、小数も使えます。
-
-覚えておく基準は次の 2 つです。
-
-| 音 | MIDI ノート番号 | 周波数 |
-|----|-----------------|--------|
-| C4（中央のド） | `60` | 約 261.63 Hz |
-| A4 | `69` | 440 Hz |
-
-オクターブが 1 つ上がると、MIDI ノート番号は 12 増えます。たとえば C4 が `60` なので、C5 は `72` です。
-
-対応表全体と `freq ↔ midi` の式は [編集の基礎](./glossary/concepts/editing-basics.md#midi-ノート番号) を参照してください。
-
 ### `noteStretch(...)` の区間指定
 
 `noteStretch(...)` は、伸ばしたい区間をサンプル位置（`onsetSample`、`offsetSample`）または秒（`onsetSec`、`offsetSec`）で指定します（[サンプル指定と秒指定](#サンプル指定と秒指定)を参照）。`onsetSample` の既定値は入力の先頭、`offsetSample` の既定値は入力の末尾なので、区間が端まで続く場合はその境界を省略できます。
@@ -350,30 +375,13 @@ const heldNote = noteStretch(vocal, sampleRate, { onsetSec: 0.25, offsetSec: 0.5
 
 `stretchRatio` は、選択区間を置き換えるストレッチ後の長さの倍率です。`noteStretch` は置換区間の始端と終端で元のサンプルを 等電力クロスフェードで混ぜます。クロスフェードは置換区間内で完結し、隣接音声のサンプルを重ねて消費しません。そのため出力全体の長さと区間後の音声の移動量は、置換区間の長さの差分に従います。`stretchRatio: 1.0` ではクリップ全体の長さは変わりません。他の比率では時間ストレッチのサンプル丸めにより数サンプルの差が出ることがあります。入力の端に接する側には隣接音声がないため、その側のクロスフェードはありません。
 
+等電力クロスフェードは無関係な 2 つの信号ならレベルを保ちますが、ここで混ぜるストレッチ後の区間と元の音声はよく似ているため、継ぎ目の中でレベルが動きます。440 Hz の持続音を `1.25` で伸ばすと、始端の継ぎ目では元の音より約 2.8 dB 大きくなり、両者の位相がずれた終端の継ぎ目では約 4.3 dB 小さくなります。持続音ほどこの影響が目立ちます。相関とフェードの関係は[フェードカーブとクロスフェード](./glossary/arrangement/clips-and-tracks.md#フェードカーブとクロスフェード)で説明しています。
+
 | `stretchRatio` | 結果 |
 |----------------|------|
 | `1.25` | 置換区間を 25% 長くする。後続音声は区間長の増加分だけ後ろへ移動します（サンプル丸めを除く） |
 | `1.0` | 置換区間とクリップ全体の長さを維持します |
 | `0.8` | 置換区間を 20% 短くする。後続音声は区間長の短縮分だけ前へ移動します（サンプル丸めを除く） |
-
-### サンプル指定と秒指定
-
-編集位置はすべて、サンプルまたは秒で指定できます。境界ごとにどちらか一方の表記だけを渡してください。両方を渡すと拒否されます。
-
-| 呼び出し | サンプル | 秒 | Python（秒） |
-|----------|----------|----|--------------|
-| `spectralEdit` の領域 | `startSample` / `endSample` | `startSec` / `endSec` | `start_sec` / `end_sec` |
-| `noteStretch`、`noteMove` | `onsetSample` / `offsetSample`。`noteMove` はさらに `targetOnsetSample` | `onsetSec` / `offsetSec`、`targetOnsetSec` | `onset_sec` / `offset_sec`、`target_onset_sec` |
-| `renderNotes`、`renderPercussiveEvents` | `onsetSample` / `offsetSample`、編集の `timeOffsetSamples` | `onsetSec` / `offsetSec`、`timeOffsetSec` | `onset_sec` / `offset_sec`、`time_offset_sec` |
-| ボーカルの `setSourceSpan` | `sourceStartSample`、`sourceEndSample`、`destinationStartSample`、`destinationLengthSamples` | 末尾を `Sec` にした同名のフィールド | `source_start_sec` と対応するフィールド |
-| ボーカルの `split` | `sourceSample` | `sourceSec` | `cut_source_sample` / `cut_source_sec` |
-| ボーカルのレンダリング `range` | `startSample` / `endSample` | `startSec` / `endSec` | `start_sec` / `end_sec` キーワード |
-
-- 秒は、呼び出しのサンプルレート（ボーカルの行ではセッション自身のレート）で最も近いサンプルに丸められます。
-- 負の位置は拒否されます。WASM と Node は `RangeError`、Python は `SonareValueError` です。
-- `-1` は「末尾まで」を表す値ではありません。終端の境界を省略すると入力の端が使われます（Python は `None`）。
-
-位置が解析から得られた値なら、サンプル値のまま渡すと、丸めが 2 回かかりません。
 
 ### オフライン `voiceChange(...)` と `RealtimeVoiceChanger`
 
@@ -475,4 +483,6 @@ sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
 
 ::: info 大きく動かすほど音が悪くなる理由
 これらの変換は、音を短く重なり合うフレームに分解し、それらを並べ直したり音高を付け替えたりして動作します。小さな移動では元のフレームに近いままなのでクリーンに聞こえますが、大きな移動ではエンジンが録音されていない音を作り出さざるを得ず、にじみや「水っぽい」あるいはロボット的な質感、自然さの欠けた声として聞こえます。補正量を小さく保つよう勧めるのはこのためです。
+
+これらの関数の裏には再合成エンジンが 2 つあり、崩れ方が異なります。`pitchShift`、`pitchCorrectToMidi`、`voiceChange` はタイムストレッチとリサンプリングで音高を変えるので、フォルマントも音高と一緒に動きます。輪郭に沿う補正関数とボーカルセッションは、波形を周期単位の断片に分けて並べ直すので、フォルマントはほぼ元の位置に残ります。どの呼び出しがどちらを使うかは[再合成エンジンは 2 種類](./glossary/editing/pitch-correction.md#再合成エンジンは-2-種類)にまとめてあります。
 :::

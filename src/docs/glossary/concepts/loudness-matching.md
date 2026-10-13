@@ -1,11 +1,11 @@
 ---
-title: Loudness Matching
-description: Why before/after comparisons should be level-matched when judging mastering changes.
+title: Loudness Matching and A/B Comparison
+description: How to run a level-matched A/B comparison between source and mastered audio, what to listen for, and when to turn matching off.
 ---
 
-# Loudness Matching
+# Loudness Matching and A/B Comparison
 
-Loudness matching means comparing two versions at the same perceived volume. It is one of the simplest ways to make better mastering decisions.
+A/B comparison switches between two versions of the same audio, typically the source and the processed master. Loudness matching means doing that at the same perceived volume, so the comparison is about tone, dynamics, width, and peak behavior rather than simple level. It is one of the simplest ways to make better mastering decisions.
 
 Without loudness matching, the louder version usually wins the first impression. That can be useful when checking final delivery level, but it is a poor way to judge whether EQ, compression, stereo width, saturation, or limiting actually improved the track.
 
@@ -39,11 +39,19 @@ If the processed version only sounds better when matching is off, the processing
 
 <SonareDemo id="loudness-meter" />
 
+## What To Listen For
+
+Do not ask only whether the master is louder. Ask whether the problems are smaller. Check whether the low end is steadier, the vocal or lead part is easier to follow, cymbals and sibilants (the sharp "s" sounds of a vocal) remain comfortable, and the loudest chorus is not being pinned by the limiter.
+
+Avoid judging from one short loop. The intro, loudest chorus, bass-heavy section, and near-silent parts can reveal different side effects. Denoise, exciter, and stereo width changes are especially easy to overdo in quiet passages or on headphones.
+
 ## What It Does Not Tell You
 
 Loudness matching is not a delivery target. A file can compare fairly in A/B mode and still be too loud, too quiet, or unsafe for release.
 
 It also does not replace metering. Use [LUFS](../lufs.md) (Loudness Units relative to Full Scale, the broadcast/streaming unit for perceived loudness) and [true-peak](../true-peak.md) readings to check delivery constraints, then use matched listening to decide whether the processing is musically useful.
+
+Turn matching off when verifying the actual exported level, the true peak ceiling, and the WAV file that will be delivered. Cross-environment checks follow the same logic: phone speakers, cheap earbuds, car stereos, and low-volume playback are easier to judge with matching off, because translation issues (whether the master still holds up on another playback system) are about absolute loudness, low-end balance, and sibilance, not the comparison fairness that matching exists to enforce.
 
 ## Measure it in libsonare
 
@@ -62,10 +70,10 @@ const anchor = Math.min(a, b);
 const gainA = anchor - a;   // dB to apply to A
 const gainB = anchor - b;   // dB to apply to B
 
-// Or let the engine bring one take to the other's loudness:
+// Or let the engine bring the louder take (A) down to the quieter one (B):
 const { samples: matched, appliedGainDb, matchedTruePeakDbtp } = masteringAbMatchLoudness({
-  source: samplesB,
-  reference: samplesA,
+  source: samplesA,
+  reference: samplesB,
   sampleRate,
 });
 ```
@@ -79,8 +87,8 @@ anchor = min(a, b)
 gain_a = anchor - a   # dB to apply to A
 gain_b = anchor - b   # dB to apply to B
 
-# Or let the engine bring one take to the other's loudness:
-matched, match = sonare.mastering_ab_match_loudness(samples_b, samples_a, sample_rate)
+# Or let the engine bring the louder take (A) down to the quieter one (B):
+matched, match = sonare.mastering_ab_match_loudness(samples_a, samples_b, sample_rate)
 ```
 
 ```bash [CLI]
@@ -91,7 +99,7 @@ sonare lufs take-b.wav   # integrated LUFS of B
 
 :::
 
-`masteringAbMatchLoudness` raises the source to the reference's level with no headroom limit, so it can push the peak past 0 dBTP. Read `matchedTruePeakDbtp` before you export what it returns.
+`masteringAbMatchLoudness` moves the source to the reference's level in either direction. Pointed the other way, at a quieter source, it raises it with no headroom limit and can push the peak past 0 dBTP. Read `matchedTruePeakDbtp` before you export what it returns.
 
 ### Engine delivery targets
 
@@ -121,4 +129,4 @@ This avoids modifying either buffer and keeps the exported WAV authoritative. It
 
 ::::
 
-Related: [A/B comparison](../ab-comparison.md), [LUFS](../lufs.md), [What Is Mastering?](./what-is-mastering.md)
+Related: [LUFS](../lufs.md), [What Is Mastering?](./what-is-mastering.md)

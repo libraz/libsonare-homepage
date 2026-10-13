@@ -7,6 +7,16 @@ description: Measure a late diffuse tail, configure libsonare's offline classica
 
 `masteringRepairDereverbClassical` is for a sustained, diffuse tail that masks the direct sound. It uses STFT-domain spectral subtraction and can run an optional WPE pre-stage. It is an offline restoration pass, not room-impulse-response deconvolution and not a way to recover a perfectly dry source.
 
+::: info Terms on this page
+- **Direct sound, early reflections, late tail**: in a room, a listener first hears the sound that travels straight from the source, then a few distinct reflections from nearby surfaces, then a dense, diffuse decay (the late tail or reverb). Dereverb targets the late tail.
+- **RT60**: the time the late tail takes to decay by 60 dB, the usual measure of how reverberant a room is. See [Reverberation Time](./glossary/acoustics/reverberation-time.md).
+- **Mixing time**: the point after which reflections have blended into the diffuse tail; `lateDelayMs` marks it.
+- **Spectral subtraction**: estimating the tail's power in each STFT bin from the same bin one late delay earlier, decayed at the `t60Sec` rate, and subtracting it, as a denoiser subtracts noise.
+- **WPE** (weighted prediction error): an optional pre-stage that predicts the late reverberation of each bin from earlier frames and subtracts that prediction.
+:::
+
+<SonareDemo id="room-decay" />
+
 ## Detect before dereverb
 
 The detector reports the statistic used by the dereverberator. It does not calculate an ISO 3382 RT60. Use `estimateRoom` (see [Room Acoustics](./acoustic-analysis.md)) when you need an equivalent-room estimate and inspect its confidence before using it to configure the repair.

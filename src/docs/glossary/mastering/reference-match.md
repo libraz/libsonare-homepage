@@ -65,4 +65,4 @@ The match result is also stored as metrics in the report, so it can guide manual
 
 ::::
 
-Related: [Reference Track](../concepts/reference-track.md), [A/B Comparison](../ab-comparison.md), [Tone and Air Controls](./tone-air.md)
+Related: [Reference Track](../concepts/reference-track.md), [A/B Comparison](../concepts/loudness-matching.md), [Tone and Air Controls](./tone-air.md)

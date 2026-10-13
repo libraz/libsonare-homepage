@@ -5,7 +5,7 @@ description: General MIDI の全128プログラムについて、NativeSynth の
 
 # GM 音色マップ
 
-このページは、General MIDI の 128 プログラムそれぞれについて、SoundFont がそのプログラムを持たないときに NativeSynth が使うデータ非依存のフォールバック音色を、楽器名・エンジン・備考の形で一覧にしたものです。プログラムごとの表はこのページだけにあります。土台となるバンクの挙動（GS バリエーション音色、ドラムキットバリエーション、SoundFont フォールバックのルーティング）は [GM／GS フォールバックバンク](./gm-gs.md) にあり、各プログラムの正式名称は実行時に `Project.gmInstrumentName(program)` からも取得できます。
+このページは、General MIDI の 128 プログラムそれぞれについて、SoundFont がそのプログラムを持たないときに NativeSynth が使うデータ非依存のフォールバック音色を、楽器名・エンジン・備考の形で一覧にしたものです。プログラムごとの表はこのページだけにあります。土台となるバンクの挙動（GS バリエーション音色、ドラムキットバリエーション、SoundFont フォールバックのルーティング）は [GM／GS フォールバックバンク](./gm-gs.md) にあり、各プログラムの正式名称は実行時に `Project.gmInstrumentName(program)` からも取得できます。このページのプログラム番号は、信号線上と同じく 0 始まりです。1 から数えるマニュアルでは、どのプログラムも 1 つ大きい番号で載っています（[0 から数えるか、1 から数えるか](./glossary/instruments/midi-basics.md#_0-から数えるか、1-から数えるか)）。
 
 <MaturityNote
   item="physical-model-maturity"

@@ -22,6 +22,20 @@ Loudness is only one delivery constraint. A master also needs enough [True Peak 
 
 <SonareDemo id="loudness-meter" />
 
+## How It Is Computed
+
+LUFS is defined by ITU-R BS.1770. It is a mean-square (power) measurement, so it uses the `10 · log10` form of the decibel ([Audio Basics](./concepts/audio-basics.md#amplitude-and-db)), with a filter in front that makes it follow hearing more closely than a plain RMS meter.
+
+| Step | What happens |
+|------|--------------|
+| K-weighting | Each channel passes through a high-shelf filter that lifts the upper frequencies by about 4 dB (the effect of the head on incoming sound) and a high-pass that discounts deep bass, where hearing is less sensitive. |
+| Mean square per block | The weighted signal is squared and averaged over 400 ms blocks that start every 100 ms (75% overlap). |
+| Channel sum | The channels' block powers are added. Left, right, and center count once each, surround channels count about 1.41 times (+1.5 dB), and the LFE channel is left out. |
+| Decibels | `loudness = -0.691 + 10 · log10(sum)`. The -0.691 cancels the K-weighting's gain at 1 kHz. |
+| Gating and averaging | For the integrated reading, the gates below decide which blocks count, and the survivors are averaged as power. |
+
+**Momentary** loudness is a single 400 ms block and **short-term** loudness a 3 s window; the integrated reading covers the whole programme. Differences are counted in LU, and 1 LU is the same step as 1 dB. Two anchors make the scale concrete: a 1 kHz sine peaking at full scale in a mono file reads about -3.0 LUFS (its RMS is -3.01 dBFS), and the same sine in both channels of a stereo file reads about 0 LUFS, because the two channels' powers add.
+
 ## What "Gated" Means
 
 An integrated LUFS reading is not the average of the whole file. Loudness is measured in short blocks, and two gates decide which blocks are allowed to count: an **absolute** gate at -70 LUFS drops silence outright, then a **relative** gate 10 LU below the surviving average drops the quiet material as well.
@@ -83,4 +97,4 @@ Keeping them separate makes it possible to distinguish useful states: a master c
 
 ::::
 
-Related: [A/B comparison](./ab-comparison.md), [True Peak](./true-peak.md), [Dynamic Range](./concepts/dynamic-range.md)
+Related: [Loudness Matching and A/B Comparison](./concepts/loudness-matching.md), [True Peak](./true-peak.md), [Dynamic Range](./concepts/dynamic-range.md)

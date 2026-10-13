@@ -8,7 +8,7 @@ description: How warping makes an audio clip follow the project tempo — the of
 Drop a drum loop recorded at 90 BPM (beats per minute) into a project running at 120 BPM and it will not line up — it plays at its own speed while your grid moves faster. **Warping** is the feature that makes an audio clip bend to the project's tempo so everything stays locked together.
 
 ::: info One-line definition
-**Warp** = time-stretching an audio clip so it follows the project tempo instead of its own original tempo.
+**Warp** = changing an audio clip's speed or duration (by time-stretching or by varispeed) so it follows the project tempo instead of its own original tempo.
 :::
 
 ## The tempo map: the project's grid
@@ -27,17 +27,21 @@ The grid is the thing a clip warps *to*, so it helps to see how tempo turns musi
 
 Every audio clip has a **warp mode** that decides *how* (or whether) it follows the grid.
 
+::: tip Your app owns the anchors
+A clip follows its **warp map**, not the tempo map directly. The map's anchors (described [below](#warp-anchors-pinning-the-audio-to-the-grid)) are absolute pairs of sample positions that your app computes from the tempo and supplies; the engine reads them and never invents them. Editing the tempo map afterwards does not rewrite them, so a host that lets the user change tempo has to recompute the anchors and push a new warp map. `setWarpMap` refuses a map with fewer than two anchors. A `repitch` or `time-stretch` clip with no warp map attached plays at its native rate, and a `tempo-sync` clip with none fails to compile.
+:::
+
 ::: tip off vs repitch vs tempo-sync vs time-stretch
 - **off** — no stretching. The clip plays at its native speed and pitch, ignoring the project tempo. Use this for one-shots and sound effects that should not bend.
-- **repitch** — like changing the speed of a tape. The clip is sped up or slowed down to fit the tempo, and the **pitch moves with it**: faster means higher, slower means lower. Simple, CPU-cheap, and musically useful when you *want* that vintage varispeed character.
+- **repitch** — like changing the speed of a tape. The clip is sped up or slowed down to fit its warp map, and the **pitch moves with it**: faster means higher, slower means lower. Simple, CPU-cheap, and musically useful when you *want* that vintage varispeed character.
 - **tempo-sync** — follow the tempo while **keeping the original pitch**. The clip is time-stretched so its timing matches the grid, but a phase vocoder — an algorithm that stretches audio in the frequency domain — holds the pitch constant. This is what you want for vocals, melodic loops, and anything where the notes must stay in tune.
 - **time-stretch** — also keeps the original pitch, but produces the stretch on the audio thread. It reads the *same* anchor map as repitch and synthesizes the output by overlap-adding source segments at a fixed rate, so changing the map moves the timing and leaves the pitch where it was. Use it when the user is dragging a tempo or an anchor and the result has to be audible immediately.
 :::
 
 <SonareDemo id="time-stretch" />
 
-| Mode | Timing follows tempo? | Pitch stays the same? | Typical use |
-|------|----------------------|----------------------|-------------|
+| Mode | Timing follows the warp map? | Pitch stays the same? | Typical use |
+|------|------------------------------|----------------------|-------------|
 | off | No | Yes | One-shots, SFX |
 | repitch | Yes | No (moves with speed) | Tape/varispeed feel, drums |
 | tempo-sync | Yes | Yes | Vocals, melodic loops |
@@ -57,14 +61,14 @@ The fallback makes no sound of its own — the clip simply starts behaving like 
 
 ### What time-stretch does, and what it costs
 
-`tempo-sync` stretches in the frequency domain: the phase vocoder takes the clip apart into sinusoids, moves them in time and puts them back together. `time-stretch` stays in the time domain. It cuts the source into overlapping frames of 1024 samples, lays them down at a fixed hop of 512 samples so the output always advances by the same amount, and chooses *where in the source* each frame is cut from according to the warp map. Playing faster means the cut points advance through the source faster than the output does, so frames get skipped; slower means they get repeated. Because each frame is a verbatim slice of the source, the waveform's own period — its pitch — is untouched.
+`tempo-sync` stretches in the frequency domain: the phase vocoder cuts the clip into short overlapping spectra (STFT frames), re-spaces them in time while advancing each frequency bin's phase to match, and adds them back together. `time-stretch` stays in the time domain. It cuts the source into overlapping frames of 1024 samples, lays them down at a fixed hop of 512 samples so the output always advances by the same amount, and chooses *where in the source* each frame is cut from according to the warp map. Playing faster means the cut points advance through the source faster than the output does, so frames get skipped; slower means they get repeated. Because each frame is a verbatim slice of the source, the waveform's own period — its pitch — is untouched.
 
 Laying arbitrary slices end to end would produce clicks and cancellation wherever two overlapping frames disagree in phase. That is the WSOLA step: before cutting a frame, the stretcher searches a window of ±512 samples around the mapped position for the offset whose start best continues the frame it just emitted, so consecutive frames overlap in phase and the sum stays clean. The search is a correlation, coarse first and then refined, and it is the whole per-frame cost: a bounded number of multiply-adds on the audio thread, with no transform and no allocation.
 
 That design sets what it costs and what it sounds like.
 
 - **A configurable voice budget.** The stretcher's state is preallocated so the audio thread never allocates. The pool starts with 8 voices, accepts capacities from 0 through 64, and can be changed with `setWarpVoiceCapacity`. Capacity 0 disables `time-stretch` without incrementing the overflow counter; a prepared engine rebuilds the pool and restarts active WSOLA state when the capacity changes. How voices are assigned and how to watch the overflow counter is on [Realtime Engine](../../realtime-engine.md#the-time-stretch-voice-budget).
-- **Transients survive; dense textures can double.** A slice is the source itself, so a drum hit keeps its attack shape. On sustained, polyphonic material — a pad, a choir — a large stretch repeats or skips slices that no single offset can align for every note at once, and the result is a faint doubling or flutter rather than the phase vocoder's smear.
+- **Transients survive; dense textures can double.** A slice is the source itself, so a drum hit keeps its attack shape. The exception is a large stretch: slowing down far enough repeats a slice that contains an attack, which sounds as a doubled hit (a flam), and speeding up far enough can skip one. On sustained, polyphonic material — a pad, a choir — a large stretch repeats or skips slices that no single offset can align for every note at once, and the result is a faint doubling or flutter rather than the phase vocoder's smear.
 - **A roughly 10 ms grain.** Position is honored to within the search radius: each frame lands within about 10 ms of where the map points, which is invisible for tempo following and only matters when lining up sample-exact edits.
 
 Reach for `time-stretch` when the map is going to *change while audio runs* — a tempo the user is dragging, an anchor being nudged, a groove being auditioned — because the next block simply reads the new map. On the raw engine it is also the pitch-preserving mode that works with paged clips, where `tempo-sync` bakes and therefore cannot. Reach for `tempo-sync` when the map is settled and the material is sustained or harmonic, where the vocoder's whole-clip view gives the cleaner stretch.
@@ -81,12 +85,12 @@ Each anchor ties a position in the source audio to a position on the project tim
   caption="An anchor fixes one point in the source to one point on the timeline. Whatever audio sits between two anchors is fitted to whatever distance the grid gives it, so a rushed phrase gets stretched and a dragging one gets compressed — inside the same clip, with no edit to the source file."
 />
 
-::: tip Your app owns the anchors
-The engine reads anchors, it does not invent them. Each anchor is an absolute pair of sample positions, so a clip bends to the grid exactly as far as the map you supplied says — and editing the tempo map afterwards does not rewrite it. A host that lets the user change tempo has to recompute the anchors and push a new warp map. `setWarpMap` refuses a map with fewer than two anchors. A `repitch` or `time-stretch` clip with no warp map attached plays at its native rate, and a `tempo-sync` clip with none fails to compile.
-:::
+A clip bends to the grid exactly as far as the map you supplied says. [Converting seconds, samples, and PPQ](./clips-and-tracks.md#converting-seconds-samples-and-ppq) shows how to compute an anchor from a musical position.
 
 ::: warning tempo-sync is real time-stretching, with limits
-Because tempo-sync changes duration while preserving pitch, it uses a phase vocoder under the hood — the same family of algorithm described in [Phase Vocoder Stretch](../editing/phase-vocoder-stretch.md). Small stretches are transparent; very large ones can smear transients or add a "phasey" quality. On stereo and multichannel clips the stretch is phase-locked across channels, so the stereo image does not drift between left and right. repitch has no such artifacts (it is just resampling) but it moves the pitch, so the two modes trade different costs.
+Because tempo-sync changes duration while preserving pitch, it uses a phase vocoder under the hood — the same family of algorithm described in [Phase Vocoder Stretch](../editing/phase-vocoder-stretch.md). Small stretches are transparent; very large ones can smear transients or add a "phasey" quality. On stereo and multichannel clips every channel follows one shared phase evolution, so the stereo image does not drift between left and right. repitch has none of these artifacts but moves the pitch, and it reads the source with linear interpolation and no anti-aliasing filter, so a large speed-up can alias on bright material. The two modes trade different costs.
+
+tempo-sync stretches each span between two anchors as a separate pass and joins the spans with a short blend, so every anchor restarts the vocoder's phase. On sustained, tonal material a map with many closely spaced anchors can make those joins audible; place anchors on attacks where you can. (Audio whose source sample rate differs from the project rate is converted once at compile with a band-limited resampler, so that conversion does not alias.)
 :::
 
 ## How playback and bounce stay consistent

@@ -72,4 +72,4 @@ Air バンドは最終段のラウドネスオプティマイザーの前に配�
 
 ::::
 
-関連: [マスタリング](./mastering.md)、[A/B 比較](./ab-comparison.md)
+関連: [マスタリングチェーン](./mastering.md)、[ラウドネスマッチングと A/B 比較](./concepts/loudness-matching.md)

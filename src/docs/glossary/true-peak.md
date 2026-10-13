@@ -93,4 +93,4 @@ The ceiling guarantee belongs to the default polyphase path, which limits the ov
 
 ::::
 
-Related: [True Peak Safety](./concepts/true-peak-safety.md), [Mastering](./mastering.md), [LUFS](./lufs.md)
+Related: [True Peak Safety](./concepts/true-peak-safety.md), [The Mastering Chain](./mastering.md), [LUFS](./lufs.md)

@@ -248,7 +248,7 @@ if meter.searched:
 
 #### コードのクオリティ
 
-`Chord.quality` は[型定義](./python-api-types.md#型定義)に列挙した文字列のいずれかです。そのうちいくつかは互いにアナグラムで、クロマグラムではこのペアを区別できません。`major6` は短 3 度下の `minor7` と同じ構成音で、`minor6` はその下の `halfDim7`、`dominant7Sus4` は完全 4 度下の `sus2Add4` と同じです。各ペアでは確立された読み方が既定のまま残り、6th へ持ち上げられるのはベースの証拠がある場合だけです。
+`Chord.quality` は[型定義](./python-api-types.md#型定義)に列挙した文字列のいずれかです。そのうちいくつかは互いにアナグラムで、クロマグラムではこのペアを区別できません。`major6` は短 3 度下の `minor7` と同じ構成音で、`minor6` はその下の `halfDim7`、`dominant7Sus4` は完全 4 度上の `sus2Add4` と同じです。各ペアでは確立された読み方が既定のまま残り、6th へ持ち上げられるのはベースの証拠がある場合だけです。
 
 長いファイルでは、`analyze_with_progress(...)` が `analyze(...)` と同じ `AnalysisResult` を返し、`tuning` を含む同じ解析キーワード、`on_progress=(progress, stage)` コールバック、キーワード専用の `cancel` コールバックを受け取れます。下のマスタリング進捗コールバックと同じ形です。
 
