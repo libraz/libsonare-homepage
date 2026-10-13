@@ -6,11 +6,12 @@ defineProps<{
   disabled?: boolean;
 }>();
 
-defineEmits<(e: 'click') => void>();
+defineEmits<(e: 'click', event: MouseEvent) => void>();
 </script>
 
 <template>
   <button
+    type="button"
     class="transport-btn"
     :class="[
       variant && `transport-btn--${variant}`,
@@ -18,7 +19,7 @@ defineEmits<(e: 'click') => void>();
       { 'transport-btn--round': round, 'transport-btn--disabled': disabled }
     ]"
     :disabled="disabled"
-    @click="$emit('click')"
+    @click="$emit('click', $event)"
   >
     <slot />
   </button>
@@ -48,8 +49,12 @@ defineEmits<(e: 'click') => void>();
   font-weight: 500;
   letter-spacing: 0.08em;
   cursor: pointer;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast),
-    color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+  transition:
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    color var(--demo-dur-fast) var(--demo-ease-standard),
+    box-shadow var(--demo-dur-fast) var(--demo-ease-standard),
+    transform var(--demo-dur-instant) var(--demo-ease-standard);
 }
 
 .transport-btn:hover:not(:disabled) {
@@ -58,7 +63,7 @@ defineEmits<(e: 'click') => void>();
 }
 
 .transport-btn:active:not(:disabled) {
-  transform: scale(0.96);
+  transform: scale(0.97);
 }
 
 /* Variants */

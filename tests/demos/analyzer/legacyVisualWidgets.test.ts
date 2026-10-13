@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DataConsole from '@/demos/analyzer/DataConsole.vue';
 import WaveformVisualizer from '@/demos/analyzer/WaveformVisualizer.vue';
 
+vi.mock('vitepress', () => ({ useData: () => ({ lang: { value: 'en' } }) }));
+
 function makeAudioBuffer(channels: Float32Array[], sampleRate = 44100): AudioBuffer {
   return {
     numberOfChannels: channels.length,
@@ -120,7 +122,9 @@ describe('WaveformVisualizer', () => {
     });
 
     await wrapper.setProps({ currentTime: 1.5 });
-    expect(wrapper.find('.waveform__playhead').attributes('style')).toContain('left: 75%');
+    expect(wrapper.find('.waveform__playhead-track').attributes('style')).toContain(
+      'transform: translateX(75%)',
+    );
     expect(ctx.fillRect).toHaveBeenCalled();
     expect(ctx.stroke).toHaveBeenCalled();
 

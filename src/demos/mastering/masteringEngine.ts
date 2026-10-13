@@ -14,6 +14,7 @@ import { fitLoudness, type LoudnessFitResult } from '@/demos/mastering/mastering
 import type {
   MasteringLane,
   MasteringRepair,
+  MasteringRepairStage,
   MasteringState,
 } from '@/demos/mastering/masteringState';
 import {
@@ -33,7 +34,7 @@ import {
   type StripRef,
   type StripSpec,
 } from '@/utils/engineApply';
-import type { MasteringChainConfig } from '@/wasm/index.js';
+import type { MasteringRepairStage as MasteringRepairRequest } from '@/wasm/index.js';
 
 /** Engine track id of each lane, in lane order. */
 export const MASTERING_LANE_TRACK: Readonly<Record<MasteringLane, number>> = {
@@ -293,10 +294,7 @@ export function diff(
 type Wasm = typeof import('@/wasm/index.js');
 
 /** The parts of `index.js` an offline render needs; the Worker and the gate pass the module. */
-export type MasteringRenderApi = Pick<
-  Wasm,
-  'RealtimeEngine' | 'masteringInsertTiming' | 'lufsInterleaved'
->;
+export type MasteringRenderApi = Pick<Wasm, 'RealtimeEngine' | 'lufsInterleaved'>;
 
 export interface MasteringRenderOptions {
   /** 0 none, 1 RPDF, 2 TPDF, 3 noise-shaped. */
@@ -315,21 +313,6 @@ export interface MasteringRender {
 /** Engine render quantum, also the offline block size. */
 export const MASTERING_BLOCK_SIZE = 128;
 
-/** Lane 1's plugin delay, which every lane is compensated to. */
-export function masteringLatencySamples(
-  api: Pick<MasteringRenderApi, 'masteringInsertTiming'>,
-  state: MasteringState,
-  sampleRate: number,
-): number {
-  return MASTERING_INSERT_LAYOUT.reduce(
-    (sum, entry, slot) =>
-      sum +
-      api.masteringInsertTiming(entry.processor, state.inserts[slot].params, sampleRate)
-        .latencySamples,
-    0,
-  );
-}
-
 /**
  * Renders the export variant of `state` over `program` on a fresh engine, so
  * every render starts from the same insert state the live preview starts from.
@@ -342,7 +325,6 @@ export function renderMasteringState(
 ): MasteringRender {
   const { sampleRate } = program;
   const frames = Math.min(program.left.length, program.right.length);
-  const latency = masteringLatencySamples(api, state, sampleRate);
   const engine = new api.RealtimeEngine(sampleRate, MASTERING_BLOCK_SIZE);
   try {
     applyOps(
@@ -353,6 +335,8 @@ export function renderMasteringState(
         'export',
       ),
     );
+    // Lane 1's plugin delay; a bypassed insert keeps its share, so it holds across bypass.
+    const latency = Math.round(engine.graphLatencySamplesQ8() / 256);
     engine.play();
     const bounce = engine.bounceOffline({
       totalFrames: frames + latency,
@@ -431,44 +415,40 @@ export function fitMasteringLoudness(
   });
 }
 
-/** Chain config enabling only the repair stages that are on; null when none is. */
-export function repairChainConfig(repair: MasteringRepair): MasteringChainConfig | null {
-  const stages = MASTERING_REPAIR_STAGES.filter((stage) => repair[stage].enabled);
-  if (stages.length === 0) return null;
-  return {
-    repair: Object.fromEntries(
-      stages.map((stage) => [stage, { ...repair[stage].params, enabled: true }]),
-    ),
-  } as MasteringChainConfig;
+/** The enabled repair stages as `masteringRepairApply` takes them; empty when none is on. */
+export function repairStages(repair: MasteringRepair): MasteringRepairRequest[] {
+  return MASTERING_REPAIR_STAGES.filter((stage) => repair[stage].enabled).map((stage) => ({
+    stage,
+    ...repair[stage].params,
+  }));
 }
 
 /** The program lanes 1 and 2 play: the source through the enabled repair stages. */
 export function prepareProgram(
-  api: Pick<Wasm, 'masteringChainStereoWithProgress' | 'lufsInterleaved'>,
+  api: Pick<Wasm, 'masteringRepairApply' | 'lufsInterleaved'>,
   source: MasteringClip,
   repair: MasteringRepair,
   onProgress: (progress: number) => void = () => {},
-): { program: MasteringClip; stages: string[] } {
-  const config = repairChainConfig(repair);
-  if (!config) {
+): { program: MasteringClip; stages: MasteringRepairStage[] } {
+  const stages = repairStages(repair);
+  if (stages.length === 0) {
     const integratedLufs = measureLufs(api, source.left, source.right, source.sampleRate);
     return { program: { ...source, integratedLufs }, stages: [] };
   }
-  const result = api.masteringChainStereoWithProgress(
-    source.left,
-    source.right,
-    source.sampleRate,
-    config,
-    (progress: number) => onProgress(progress),
-  );
-  const integratedLufs = measureLufs(api, result.left, result.right, source.sampleRate);
+  const result = api.masteringRepairApply({
+    channels: [source.left, source.right],
+    sampleRate: source.sampleRate,
+    stages,
+    onProgress: (progress: number) => onProgress(progress),
+  });
+  const [left, right] = result.channels;
   return {
     program: {
-      left: result.left,
-      right: result.right,
+      left,
+      right,
       sampleRate: source.sampleRate,
-      integratedLufs,
+      integratedLufs: measureLufs(api, left, right, source.sampleRate),
     },
-    stages: result.stages,
+    stages: result.reports.map((report) => report.stage),
   };
 }

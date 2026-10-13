@@ -4,8 +4,8 @@
  * fit no longer describes lane 1 it refits first and keeps the new drive, so
  * the preview and the file stay one render.
  */
-
 import { computed, ref } from 'vue';
+import { DemoNotice, SegmentedControl, Tooltip } from '@/components/ui';
 import { useMasteringCopy } from '@/demos/mastering/masteringCopy';
 import type { MasteringLoudnessFitRecord } from '@/demos/mastering/masteringState';
 import { formatNumber } from '@/demos/mastering/masteringUi';
@@ -71,6 +71,17 @@ const results = computed(() => {
   ];
 });
 
+const formatOptions = computed(() =>
+  WAV_FORMATS.map((id) => ({ id, label: copy.value.export.formats[id] })),
+);
+const ditherOptions = computed(() =>
+  WAV_DITHERS.map((id) => ({
+    id,
+    label: copy.value.export.dithers[id],
+    disabled: format.value === 'float32',
+  })),
+);
+
 const renderedLine = computed(() => {
   const render = props.lastRender;
   if (!render) return '';
@@ -86,79 +97,80 @@ const renderedLine = computed(() => {
   <section class="export" :aria-label="copy.export.title">
     <div class="export__fit" :class="{ 'is-stale': fitStale && hasProgram }">
       <div class="export__fit-text">
-        <span class="export__badge" :class="{ 'is-warn': fitStale }" :title="fitStale ? copy.fit.badgeHint : undefined">
+        <span class="export__badge" :class="{ 'is-warn': fitStale }">
           {{ fitStale ? copy.fit.badge : `${copy.statusFields.target} ${formatNumber(targetLufs, 1)} LUFS` }}
+          <Tooltip v-if="fitStale" :title="copy.fit.badge" :body="copy.fit.badgeHint" :aria-label="copy.fit.badge" />
         </span>
         <span class="export__fit-line">{{ fitLine }}</span>
-        <span v-if="limitedLine" class="export__limited" role="note">{{ limitedLine }}</span>
       </div>
-      <button type="button" class="export__secondary" :disabled="!canAct" @click="emit('fit')">
+      <button type="button" class="demo-btn demo-btn--sm" :disabled="!canAct" @click="emit('fit')">
         {{ fit ? copy.fit.refit : copy.fit.button }}
       </button>
     </div>
+    <DemoNotice v-if="limitedLine" tone="warn">{{ limitedLine }}</DemoNotice>
 
     <div class="export__options">
-      <div class="export__choice" role="radiogroup" :aria-label="copy.export.format">
+      <div class="export__choice">
         <span class="export__label">{{ copy.export.format }}</span>
-        <div class="export__segments">
-          <button
-            v-for="option in WAV_FORMATS"
-            :key="option"
-            type="button"
-            role="radio"
-            :aria-checked="format === option"
-            @click="format = option"
-          >
-            {{ copy.export.formats[option] }}
-          </button>
-        </div>
+        <SegmentedControl
+          :model-value="format"
+          :options="formatOptions"
+          :ariaLabel="copy.export.format"
+          size="sm"
+          @update:model-value="(next: string) => (format = next as WavFormat)"
+        />
       </div>
-      <div class="export__choice" role="radiogroup" :aria-label="copy.export.dither">
+      <div class="export__choice">
         <span class="export__label">{{ copy.export.dither }}</span>
-        <div class="export__segments">
-          <button
-            v-for="option in WAV_DITHERS"
-            :key="option"
-            type="button"
-            role="radio"
-            :aria-checked="format !== 'float32' && dither === option"
-            :disabled="format === 'float32'"
-            @click="dither = option"
-          >
-            {{ copy.export.dithers[option] }}
-          </button>
-        </div>
-        <span v-if="format === 'float32'" class="export__hint">{{ copy.export.noDither }}</span>
+        <SegmentedControl
+          :model-value="format === 'float32' ? '' : dither"
+          :options="ditherOptions"
+          :ariaLabel="copy.export.dither"
+          size="sm"
+          @update:model-value="(next: string) => (dither = next as WavDither)"
+        />
       </div>
     </div>
+    <DemoNotice v-if="format === 'float32'" tone="hint">{{ copy.export.noDither }}</DemoNotice>
 
     <div class="export__actions">
-      <button type="button" class="export__primary" :disabled="!canAct" @click="emit('export', format, dither)">
+      <button type="button" class="demo-btn demo-btn--primary export__primary" :disabled="!canAct" @click="emit('export', format, dither)">
         {{ fitStale ? copy.export.refitAction : copy.export.action }}
       </button>
-      <div v-if="busy && job" class="export__progress" role="status">
-        <span>{{ copy.jobs[job.kind] }} {{ Math.round(job.progress * 100) }}%</span>
-        <span class="export__bar" aria-hidden="true"><i :style="{ width: `${job.progress * 100}%` }"></i></span>
-        <button type="button" class="export__secondary" @click="emit('cancel')">{{ copy.jobs.cancel }}</button>
-      </div>
-    </div>
-    <p class="export__hint">{{ fitStale && hasProgram ? copy.export.refitNote : copy.export.sameRender }}</p>
-
-    <div v-if="lastRender" class="export__result">
-      <div class="export__result-head">
-        <span>{{ renderedLine }}</span>
-        <span class="export__links">
-          <button type="button" class="export__link" @click="emit('download')">{{ copy.export.download }}</button>
-          <button type="button" class="export__link" @click="emit('report')">{{ copy.export.report }}</button>
-        </span>
-      </div>
-      <dl class="export__grid">
-        <div v-for="item in results" :key="item.label">
-          <dt>{{ item.label }}</dt>
-          <dd>{{ item.value }}<small>{{ item.unit }}</small></dd>
+      <Transition name="demo-rise">
+        <div v-if="busy && job" class="export__progress">
+          <span>{{ copy.jobs[job.kind] }} {{ Math.round(job.progress * 100) }}%</span>
+          <span
+            class="export__bar"
+            role="progressbar"
+            :aria-label="copy.jobs[job.kind]"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            :aria-valuenow="Math.round(job.progress * 100)"
+          ><i :style="{ transform: `scaleX(${job.progress})` }"></i></span>
+          <button type="button" class="demo-btn demo-btn--sm" @click="emit('cancel')">{{ copy.jobs.cancel }}</button>
         </div>
-      </dl>
+      </Transition>
     </div>
+    <DemoNotice tone="hint">{{ fitStale && hasProgram ? copy.export.refitNote : copy.export.sameRender }}</DemoNotice>
+
+    <Transition name="demo-rise">
+      <div v-if="lastRender" class="export__result">
+        <div class="export__result-head">
+          <span>{{ renderedLine }}</span>
+          <span class="export__links">
+            <button type="button" class="demo-btn demo-btn--sm demo-btn--ghost" @click="emit('download')">{{ copy.export.download }}</button>
+            <button type="button" class="demo-btn demo-btn--sm demo-btn--ghost" @click="emit('report')">{{ copy.export.report }}</button>
+          </span>
+        </div>
+        <dl class="export__grid">
+          <div v-for="item in results" :key="item.label">
+            <dt>{{ item.label }}</dt>
+            <dd>{{ item.value }}<small>{{ item.unit }}</small></dd>
+          </div>
+        </dl>
+      </div>
+    </Transition>
   </section>
 </template>
 
@@ -177,7 +189,10 @@ const renderedLine = computed(() => {
   gap: 10px;
   padding: 10px 12px;
   border: 1px solid var(--demo-border);
-  border-radius: 6px;
+  border-radius: var(--demo-radius-sm);
+  transition:
+    border-color var(--demo-dur-base) var(--demo-ease-standard),
+    background-color var(--demo-dur-base) var(--demo-ease-standard);
 }
 
 .export__fit.is-stale {
@@ -192,6 +207,9 @@ const renderedLine = computed(() => {
 }
 
 .export__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--demo-text-muted);
   font-family: var(--font-mono);
   font-size: var(--demo-label-size);
@@ -200,8 +218,7 @@ const renderedLine = computed(() => {
   text-transform: uppercase;
 }
 
-.export__badge.is-warn,
-.export__limited {
+.export__badge.is-warn {
   color: var(--demo-warn-text);
 }
 
@@ -210,10 +227,6 @@ const renderedLine = computed(() => {
   font-family: var(--font-mono);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
-}
-
-.export__limited {
-  font-size: 12px;
 }
 
 .export__options {
@@ -236,84 +249,17 @@ const renderedLine = computed(() => {
   text-transform: uppercase;
 }
 
-.export__segments {
-  display: flex;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 5px;
-  overflow: hidden;
-}
-
-.export__segments button {
-  flex: 1 1 0;
-  padding: 6px 4px;
-  border: 0;
-  background: transparent;
-  color: var(--demo-text);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.export__segments button + button {
-  border-left: 1px solid var(--demo-border-strong);
-}
-
-.export__segments button[aria-checked='true'] {
-  background: var(--demo-accent-subtle);
-  color: var(--demo-accent);
-  font-weight: 700;
-}
-
-.export__segments button:disabled {
-  opacity: var(--demo-disabled-opacity);
-  cursor: not-allowed;
-}
-
 .export__actions {
   display: grid;
   gap: 8px;
 }
 
 .export__primary {
-  padding: 10px 14px;
-  border: 1px solid var(--demo-accent);
-  border-radius: 6px;
-  background: var(--demo-accent);
-  color: var(--demo-on-accent);
+  --demo-btn-h: 40px;
+
   font-family: var(--font-body);
   font-size: 13.5px;
-  font-weight: 650;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.export__secondary,
-.export__link {
-  padding: 5px 10px;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--demo-text);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.export__link {
-  border-color: transparent;
-  color: var(--demo-accent);
-}
-
-.export__primary:disabled,
-.export__secondary:disabled {
-  opacity: var(--demo-disabled-opacity);
-  cursor: not-allowed;
-}
-
-.export button:focus-visible {
-  outline: 2px solid var(--demo-accent);
-  outline-offset: 2px;
+  letter-spacing: 0;
 }
 
 .export__progress {
@@ -337,13 +283,8 @@ const renderedLine = computed(() => {
   display: block;
   height: 100%;
   background: var(--demo-accent);
-}
-
-.export__hint {
-  margin: 0;
-  color: var(--demo-text-muted);
-  font-size: 11.5px;
-  line-height: 1.5;
+  transform-origin: left;
+  transition: transform var(--demo-dur-base) var(--demo-ease-standard);
 }
 
 .export__result {
@@ -362,6 +303,15 @@ const renderedLine = computed(() => {
   color: var(--demo-text);
   font-family: var(--font-mono);
   font-size: 11px;
+}
+
+.export__links {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.export__links .demo-btn {
+  color: var(--demo-accent);
 }
 
 .export__grid {

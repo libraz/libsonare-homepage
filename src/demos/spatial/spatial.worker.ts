@@ -7,12 +7,18 @@
  *  - `synthesizeRir(...)`    → for the built-in "known room" presets, so the demo can
  *                              estimate a room back from a deterministic RIR and compare
  *                              the estimate against the ground-truth geometry.
- *  - `roomMorph(...)`        → audition content through the estimated or selected room.
+ *  - `roomMorphStereo(...)`  → audition content through the estimated or selected room,
+ *                              heard by two receivers so the tail differs between ears.
  *
  * Everything is dependency-free WASM running locally; no audio leaves the browser.
  */
 import { type RenderNote, renderNotes } from '@/demos/spatial/renderNotes';
-import type { AcousticResult, RirResult, RoomEstimateResult, RoomMorphResult } from '@/wasm/index';
+import type {
+  AcousticResult,
+  RirResult,
+  RoomEstimateResult,
+  RoomMorphStereoResult,
+} from '@/wasm/index';
 
 export interface RoomGeometry {
   lengthM: number;
@@ -97,15 +103,32 @@ type PresetRequest = {
 /** The part of a room that decides how long its response runs. */
 type TailGeometry = { lengthM: number; widthM: number; heightM: number; absorption: number };
 
-type MorphGeometry = Partial<RoomGeometry> & {
+type MorphRoom = Partial<RoomGeometry> & {
   lengthM: number;
   widthM: number;
   heightM: number;
   absorption?: number;
+  /** Per-octave-band absorption; overrides `absorption` in the engine when given. */
+  bandAbsorption?: ArrayLike<number>;
   ismOrder?: number;
   maxSeconds?: number;
   seed?: number;
 };
+
+/** A scanned room: the estimate it is rebuilt from, with the placement the page chose. */
+export type EstimatedMorphGeometry = {
+  estimate: {
+    lengthM: number;
+    widthM: number;
+    heightM: number;
+    bandAbsorption: number[];
+  };
+  source: { x: number; y: number; z: number };
+  listener: { x: number; y: number; z: number };
+};
+
+/** A full room geometry (a preset), or a scanned room the worker rebuilds from its estimate. */
+export type MorphGeometry = MorphRoom | EstimatedMorphGeometry;
 
 type MorphRequest = {
   type: 'morph';
@@ -136,11 +159,19 @@ type WasmModule = {
     options?: { nOctaveBands?: number },
   ) => AcousticResult;
   synthesizeRir: (options?: Record<string, unknown>) => RirResult;
-  roomMorph: (
-    samples: Float32Array,
-    sampleRate: number,
-    options?: Record<string, unknown>,
-  ) => RoomMorphResult;
+  roomGeometryFromEstimate: (
+    estimate: EstimatedMorphGeometry['estimate'],
+    options: {
+      source: EstimatedMorphGeometry['source'];
+      listener: EstimatedMorphGeometry['listener'];
+    },
+  ) => MorphRoom;
+  roomMorphStereo: (request: {
+    left: Float32Array;
+    right: Float32Array;
+    sampleRate: number;
+    [option: string]: unknown;
+  }) => RoomMorphStereoResult;
   version: () => string;
 };
 
@@ -155,6 +186,15 @@ const RIR_MIN_SECONDS = 2.5;
 // lengths: a cathedral's last seconds are worth far less than the wait they add.
 const RIR_MAX_SECONDS = 12;
 const MORPH_MAX_SECONDS = 6;
+// Two receivers this far apart around the listener give the tail a different
+// reflection pattern at each ear; the engine default.
+const RECEIVER_SPACING_M = 0.5;
+
+/** Keeps both receivers of the pair inside a room dimension, as the engine requires. */
+function clampReceiverPair(position: number, size: number): number {
+  const half = RECEIVER_SPACING_M / 2;
+  return clamp(position, half, size - half);
+}
 
 let wasmModule: WasmModule | null = null;
 
@@ -169,13 +209,39 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
     if (request.type === 'morph') {
       const { id, left, right, sampleRate } = request;
-      const geometry = { ...request.geometry, absorption: request.geometry.absorption ?? 0.18 };
+      const room =
+        'estimate' in request.geometry
+          ? wasmModule.roomGeometryFromEstimate(request.geometry.estimate, {
+              source: request.geometry.source,
+              listener: request.geometry.listener,
+            })
+          : request.geometry;
+      const geometry = { ...room, absorption: room.absorption ?? 0.18 };
       const maxSeconds = geometry.maxSeconds ?? responseSeconds(geometry, MORPH_MAX_SECONDS);
-      self.postMessage({ type: 'progress', id, stage: 'morph-left', value: 0.35 });
-      const leftOut = morphChannel(left, sampleRate, geometry, maxSeconds);
-      self.postMessage({ type: 'progress', id, stage: 'morph-right', value: 0.7 });
-      const rightOut = morphChannel(right, sampleRate, geometry, maxSeconds);
-      const notes = renderNotes([...leftOut.diagnostics, ...rightOut.diagnostics], {
+      self.postMessage({ type: 'progress', id, stage: 'morph', value: 0.35 });
+      const morphed = wasmModule.roomMorphStereo({
+        left,
+        right,
+        sampleRate,
+        lengthM: geometry.lengthM,
+        widthM: geometry.widthM,
+        heightM: geometry.heightM,
+        absorption: geometry.absorption,
+        bandAbsorption: geometry.bandAbsorption,
+        sourceX: geometry.sourceX,
+        sourceY: geometry.sourceY,
+        sourceZ: geometry.sourceZ,
+        listenerX: geometry.listenerX,
+        listenerY: geometry.listenerY,
+        listenerZ: geometry.listenerZ,
+        receiverSpacingM: RECEIVER_SPACING_M,
+        ismOrder: geometry.ismOrder ?? 2,
+        maxSeconds,
+        wet: 0.42,
+        sourceTailSuppression: 0.18,
+        seed: geometry.seed ?? 2026,
+      });
+      const notes = renderNotes(morphed.diagnostics, {
         seconds: maxSeconds,
         rt60: sabineRt60(geometry),
       });
@@ -183,12 +249,12 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         {
           type: 'morphDone',
           id,
-          left: leftOut.audio,
-          right: rightOut.audio,
-          sampleRate: leftOut.sampleRate,
+          left: morphed.left,
+          right: morphed.right,
+          sampleRate: morphed.sampleRate,
           notes,
         },
-        [leftOut.audio.buffer, rightOut.audio.buffer],
+        { transfer: [morphed.left.buffer, morphed.right.buffer] },
       );
       return;
     }
@@ -225,7 +291,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         seconds: maxSeconds,
         rt60: sabineRt60(geometry),
       });
-      self.postMessage({ type: 'done', id, result }, [rir.rir.buffer]);
+      self.postMessage({ type: 'done', id, result }, { transfer: [rir.rir.buffer] });
       return;
     }
 
@@ -243,33 +309,6 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     });
   }
 };
-
-function morphChannel(
-  samples: Float32Array,
-  sampleRate: number,
-  geometry: MorphGeometry & { absorption: number },
-  maxSeconds: number,
-): RoomMorphResult {
-  const wasm = wasmModule;
-  if (!wasm) throw new Error('WASM not initialized');
-  return wasm.roomMorph(samples, sampleRate, {
-    lengthM: geometry.lengthM,
-    widthM: geometry.widthM,
-    heightM: geometry.heightM,
-    absorption: geometry.absorption,
-    sourceX: geometry.sourceX,
-    sourceY: geometry.sourceY,
-    sourceZ: geometry.sourceZ,
-    listenerX: geometry.listenerX,
-    listenerY: geometry.listenerY,
-    listenerZ: geometry.listenerZ,
-    ismOrder: geometry.ismOrder ?? 2,
-    maxSeconds,
-    wet: 0.42,
-    sourceTailSuppression: 0.18,
-    seed: geometry.seed ?? 2026,
-  });
-}
 
 function analyse(
   samples: Float32Array,
@@ -293,9 +332,9 @@ function analyse(
   // instead of rendering a broken (NaN-geometry) scene.
   const valid =
     Number.isFinite(estimate.lengthM) &&
-    estimate.lengthM > 0.1 &&
+    estimate.lengthM >= RECEIVER_SPACING_M &&
     Number.isFinite(estimate.widthM) &&
-    estimate.widthM > 0.1 &&
+    estimate.widthM >= RECEIVER_SPACING_M &&
     Number.isFinite(estimate.heightM) &&
     estimate.heightM > 0.1 &&
     Number.isFinite(estimate.volume) &&
@@ -321,7 +360,11 @@ function analyse(
   // Listener: a sensible interior measurement point. Use truth listener for presets.
   const listener = truthGeometry
     ? { x: truthGeometry.listenerX, y: truthGeometry.listenerY, z: truthGeometry.listenerZ }
-    : { x: estimate.lengthM * 0.62, y: estimate.widthM * 0.5, z: 1.5 };
+    : {
+        x: clampReceiverPair(estimate.lengthM * 0.62, estimate.lengthM),
+        y: clampReceiverPair(estimate.widthM * 0.5, estimate.widthM),
+        z: 1.5,
+      };
 
   // Representative source point: a fixed bearing at exactly sourceDistance from the
   // listener, so the marker always sits on the drawn distance shell. (A single channel

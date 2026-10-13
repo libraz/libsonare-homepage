@@ -5,6 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const wasmMock = vi.hoisted(() => ({
   init: vi.fn(async () => undefined),
   version: vi.fn(() => '1.2.3-test'),
+  downmix: vi.fn((channels: Float32Array[]) => [
+    channels[0].map((value, index) => (value + channels[1][index]) * 0.5),
+  ]),
+  tuningToReferenceHz: vi.fn((tuning: number, a4 = 440) => a4 * 2 ** (tuning / 12)),
   resample: vi.fn((samples: Float32Array, sourceRate: number, targetRate: number) => {
     const targetLength = Math.max(1, Math.round((samples.length / sourceRate) * targetRate));
     return new Float32Array(targetLength);
@@ -22,7 +26,9 @@ const wasmMock = vi.hoisted(() => ({
         key: { name: 'A minor', confidence: 0.7 },
         timeSignature: { numerator: 3, denominator: 4 },
         beatTimes: new Float32Array([0, 0.5, 1]),
-        chords: [{ name: 'Am', start: 0, end: 1, confidence: 0.9 }],
+        beatLocalBpm: [122, 123, 124],
+        tuning: 0.1,
+        chords: [{ name: 'Am', start: 0, end: 1, confidence: 0.9, romanNumeral: 'i' }],
         dynamics: { dynamicRangeDb: 8, crestFactor: 10 },
         timbre: { brightness: 0.4, warmth: 0.6 },
       };
@@ -119,8 +125,8 @@ describe('music analysis worker protocol', () => {
     Object.defineProperty(globalThis, 'self', {
       configurable: true,
       value: {
-        postMessage: vi.fn((message: unknown, transfer?: Transferable[]) => {
-          posted.push({ message, transfer });
+        postMessage: vi.fn((message: unknown, options?: { transfer?: Transferable[] }) => {
+          posted.push({ message, transfer: options?.transfer });
         }),
       },
     });
@@ -176,6 +182,7 @@ describe('music analysis worker protocol', () => {
           bpmConfidence: 0.8,
           keyName: 'A minor',
           keyConfidence: 0.7,
+          tuning: 0.1,
           timeSignature: '3/4',
           integratedLufs: -14,
           loudnessRange: 4,
@@ -189,9 +196,14 @@ describe('music analysis worker protocol', () => {
           { name: 'C major', confidence: 0.5, correlation: 0.6 },
         ],
         sections: [{ name: 'Intro', start: 0, end: 1, confidence: 0.8, energyLevel: 0.4 }],
-        chords: [{ name: 'Am', start: 0, end: 1, confidence: 0.9 }],
+        chords: [{ name: 'Am', start: 0, end: 1, confidence: 0.9, romanNumeral: 'i' }],
         beats: [0, 0.5, 1],
         downbeats: [0, 2],
+        tempoCurve: [
+          { time: 0, bpm: 122 },
+          { time: 0.5, bpm: 123 },
+          { time: 1, bpm: 124 },
+        ],
         melody: {
           pitchRangeOctaves: 1.2,
           pitchStability: 0.8,
@@ -203,6 +215,18 @@ describe('music analysis worker protocol', () => {
     });
 
     const result = (done.message as any).result;
+    expect(wasmMock.analyzeWithProgress).toHaveBeenCalledWith(
+      samples,
+      48_000,
+      expect.any(Function),
+      {
+        computeTempoCurve: true,
+        adaptiveTempo: true,
+        tuning: 'auto',
+      },
+    );
+    expect(wasmMock.tuningToReferenceHz).toHaveBeenCalledWith(0.1);
+    expect(result.summary.referenceHz).toBeCloseTo(440 * 2 ** (0.1 / 12), 6);
     expect(result.heatmaps.chroma).toMatchObject({ rows: 12, columns: 2, min: 0.5, max: 0.5 });
     expect(result.heatmaps.mel).toMatchObject({ rows: 96, columns: 2, min: -20, max: -20 });
     expect(result.heatmaps.cqt).toMatchObject({ rows: 72, columns: 2, min: 0.25, max: 0.25 });
@@ -272,6 +296,7 @@ describe('music analysis worker protocol', () => {
       analyzedSamples,
       22_050,
       expect.any(Function),
+      expect.objectContaining({ computeTempoCurve: true }),
     );
     expect(wasmMock.chroma).toHaveBeenCalledWith(analyzedSamples, 22_050, 4096, 1024);
 
@@ -431,6 +456,10 @@ describe('music analysis worker protocol', () => {
       data: { type: 'analyze', id: 7, sourceLeft: left, sourceRight: right, sampleRate: 48_000 },
     });
 
+    expect(wasmMock.downmix).toHaveBeenCalledWith([left, right], 0);
+    expect(wasmMock.analyzeWithProgress.mock.calls.at(-1)?.[0]).toBe(
+      wasmMock.downmix.mock.results.at(-1)?.value[0],
+    );
     const interleaved = wasmMock.lufsInterleaved.mock.calls.at(-1)?.[0] as Float32Array;
     expect(Array.from(interleaved)).toEqual([1, -1, 0.5, -0.5, 0, 0, -0.25, 0.25]);
     expect(wasmMock.lufsInterleaved).toHaveBeenCalledWith(interleaved, 2, 48_000);

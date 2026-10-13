@@ -98,5 +98,27 @@
       "emptyHint": "Try a shorter term, or search in another section.",
       "idle": "Start typing to search the site."
     }
+  },
+  "ui": {
+    "loadingDemo": "Loading demo…",
+    "dismiss": "Dismiss",
+    "moreInfo": "More info",
+    "tooltip": {
+      "tipLabel": "Use when",
+      "defaultLabel": "Default",
+      "linkLabel": "Read in docs"
+    },
+    "transport": {
+      "play": "Play",
+      "pause": "Pause",
+      "seek": "Seek"
+    },
+    "audioSource": {
+      "dropTitle": "Drop audio file here",
+      "dropHint": "or click to browse",
+      "supported": "Supported",
+      "demoLabel": "Demo audio",
+      "clear": "Clear source"
+    }
   }
 }

@@ -11,10 +11,6 @@
 }
 
 @media (max-width: 820px) {
-  .analysis-statusbar {
-    padding: 8px 10px;
-  }
-
   .analysis-studio {
     grid-template-columns: 1fr;
   }

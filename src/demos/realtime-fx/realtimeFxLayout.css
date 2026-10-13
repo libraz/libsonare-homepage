@@ -1,24 +1,3 @@
-.rt-statusbar {
-  display: flex;
-  gap: 14px;
-  align-items: center;
-  padding: 8px 18px;
-  border-top: 1px solid var(--demo-border);
-  background: var(--demo-bg-overlay);
-}
-
-.rt-statusbar__field {
-  display: inline-flex;
-  gap: 6px;
-  color: var(--demo-text);
-  font-family: var(--font-mono);
-  font-size: 9px;
-}
-
-.rt-statusbar__field b {
-  color: var(--demo-text-faint);
-}
-
 .rt-lab {
   display: grid;
   grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(250px, 320px);
@@ -42,21 +21,6 @@
   padding: 14px;
 }
 
-/* Staggered entrance mirroring the spatial metrics rhythm. */
-.rt-metric-list > * {
-  animation: rt-rise 0.4s ease both;
-}
-
-.rt-metric-list > *:nth-child(2) { animation-delay: 0.04s; }
-.rt-metric-list > *:nth-child(3) { animation-delay: 0.08s; }
-.rt-metric-list > *:nth-child(4) { animation-delay: 0.12s; }
-.rt-metric-list > *:nth-child(5) { animation-delay: 0.16s; }
-
-@keyframes rt-rise {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: none; }
-}
-
 /* Balance the three columns: the voice panel stretches to match the meters
    column, and its controls spread through the extra room like a rack unit. */
 .rt-lab__center > .tech-panel {
@@ -74,17 +38,10 @@
   width: 64px;
   height: 64px;
   border: 1px solid var(--demo-accent-border);
-  border-radius: 8px;
+  border-radius: var(--demo-radius-md);
   color: var(--demo-cyan);
   font-family: var(--font-mono);
   font-weight: 800;
-}
-
-.rt-input p {
-  margin: 0;
-  color: var(--demo-text-muted);
-  font-size: 12px;
-  line-height: 1.6;
 }
 
 .rt-actions,
@@ -92,164 +49,64 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.rt-presets {
   padding: 14px;
 }
 
-.rt-preset-hint {
-  margin: 0;
-  padding: 0 14px 14px;
-  color: var(--demo-text-muted);
-  font-size: 11px;
-  line-height: 1.6;
-}
-
-.rt-button,
+.rt-actions .demo-btn,
 .rt-monitor,
 .rt-preset {
   min-height: 36px;
-  border: 1px solid var(--demo-border);
-  border-radius: 6px;
-  background: var(--demo-bg-elevated);
-  color: var(--demo-text);
-  cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
-.rt-monitor {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-/* Live monitoring routes mic to output (a feedback-risk state), so the active
-   monitor button pulses to stay an unmistakable live indicator. */
-.rt-monitor--active {
-  animation: rt-armed-pulse 1.6s ease-in-out infinite;
-}
-
-@keyframes rt-armed-pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 var(--demo-accent-dim);
-  }
-  50% {
-    box-shadow: 0 0 0 4px transparent;
-  }
-}
-
-.rt-monitor__icon {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 auto;
-}
-
-.rt-button,
-.rt-monitor,
 .rt-preset {
-  transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+  white-space: normal;
 }
 
-.rt-button:hover:not(:disabled),
-.rt-monitor:hover:not(:disabled),
-.rt-preset:hover:not(:disabled) {
-  border-color: var(--demo-accent);
-  background: var(--demo-accent-subtle);
-  color: var(--demo-text-strong);
-}
-
-.rt-button:focus-visible,
-.rt-monitor:focus-visible,
-.rt-preset:focus-visible {
-  outline: 2px solid var(--demo-accent);
-  outline-offset: 2px;
-}
-
-.rt-button--primary,
+/* A character is applied, then shown as the pressed one. */
+.rt-preset[aria-pressed='true'],
+.rt-preset[aria-pressed='true']:hover:not(:disabled),
 .rt-monitor--active,
-.rt-preset--active {
+.rt-monitor--active:hover:not(:disabled) {
   border-color: var(--demo-accent);
   background: var(--demo-accent);
   color: var(--demo-on-accent);
 }
 
-/* Keep the filled/active variants reading as solid on hover (white on accent). */
-.rt-button--primary:hover:not(:disabled),
-.rt-monitor--active:hover:not(:disabled),
-.rt-preset--active:hover:not(:disabled) {
-  background: var(--demo-accent-light);
-  border-color: var(--demo-accent-light);
-  color: var(--demo-on-accent);
+.rt-preset-hint {
+  display: grid;
+  min-height: 64px;
+  padding: 0 14px 14px;
 }
 
-.rt-button:disabled,
-.rt-monitor:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
+.rt-monitor__icon {
+  width: 15px;
+  height: 15px;
 }
 
-.rt-slider input:focus-visible,
-.rt-bypass input:focus-visible {
-  outline: 2px solid var(--demo-accent);
-  outline-offset: 2px;
+/* Live monitoring routes mic to output (a feedback-risk state), so the active
+   monitor button pulses to stay an unmistakable live indicator. */
+.rt-monitor--active {
+  animation: rt-armed-pulse 1.6s var(--demo-ease-standard) infinite;
 }
 
-.rt-bypass input {
-  accent-color: var(--demo-accent);
-  cursor: pointer;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rt-button,
-  .rt-monitor,
-  .rt-preset {
-    transition: none;
+@keyframes rt-armed-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--demo-accent-dim);
   }
 
-  .rt-monitor--active {
-    animation: none;
-  }
-
-  .rt-metric-list > * {
-    animation: none;
+  50% {
+    box-shadow: 0 0 0 4px transparent;
   }
 }
 
-/* Scoped under .rt-input so it outranks the generic `.rt-input p` rule
-   without needing !important. */
-.rt-input .rt-error {
-  margin: 0;
-  padding: 7px 10px;
-  border: 1px solid color-mix(in srgb, var(--demo-danger) 38%, transparent);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--demo-danger) 9%, transparent);
-  color: var(--demo-danger);
-  font-size: 11.5px;
-  line-height: 1.5;
-  animation: rt-error-in 0.25s ease;
-}
-
-@keyframes rt-error-in {
-  from {
-    opacity: 0;
-    transform: translateY(-3px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rt-input .rt-error {
-    animation: none;
-  }
-}
-
-.rt-slider {
+.rt-slider,
+.rt-mode {
   display: grid;
   gap: 8px;
   color: var(--demo-text-muted);
@@ -266,11 +123,11 @@
 
 .rt-slider b {
   color: var(--demo-text-strong);
+  font-variant-numeric: tabular-nums;
 }
 
 .rt-slider input {
   width: 100%;
-  accent-color: var(--demo-accent);
 }
 
 .rt-bypass {
@@ -279,4 +136,9 @@
   color: var(--demo-text);
   font-family: var(--font-mono);
   font-size: 10px;
+}
+
+.rt-bypass input {
+  accent-color: var(--demo-accent);
+  cursor: pointer;
 }

@@ -1,7 +1,7 @@
 # GS Sound Module
 
 A GM/GS tone module you can drive from the page: pick a sound per part, mix
-sixteen parts, choose an insertion effect, and drop a `.mid` to hear your own
+sixteen parts, choose an insertion effect, and drop or choose a `.mid` to hear your own
 file through it. No SoundFont is loaded, so every note plays the built-in
 fallback voices and the page ships no sample data.
 
@@ -62,7 +62,7 @@ The unit beside a target is asked of the engine at runtime through `capabilityCa
 | `GsPatchBrowser.vue` | Programs by family, and bank variations |
 | `GsKitBrowser.vue` | Rhythm sets on the rhythm part |
 | `GsEfxInspector.vue` | Effect type, its named slots, and what each one does here |
-| `GsSourcePanel.vue` | File drop, the scope, and the bytes being sent |
+| `GsSourcePanel.vue` | File drop and picker, the scope, and the bytes being sent |
 
 The fader and the knobs are the shared `ChannelStrip` and `RotaryKnob` from
 `src/components/ui`, and the chassis is the shared `.demo-deck` face, so this

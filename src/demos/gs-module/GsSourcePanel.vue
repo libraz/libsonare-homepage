@@ -14,6 +14,7 @@
  * a handful of bytes.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { DemoNotice, Tooltip } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { amplitudeToDb, type WaveformPeak } from '@/utils/audio';
 import { prepareCanvas2D } from '@/utils/canvas';
@@ -39,15 +40,19 @@ const emit = defineEmits<{
 const { localizedValue } = useI18n();
 const dragging = ref(false);
 const canvasRef = ref<HTMLCanvasElement | null>(null);
+const fileInputRef = ref<HTMLInputElement | null>(null);
 
 const copy = computed(() =>
   localizedValue({
     en: {
+      title: 'Output',
+      help: 'Play builds a Standard MIDI File from the panels — the selected part’s phrase, or your .mid — imports it, bounces it offline and plays the result. The scope is that render; the list is every message that sets the module up from power-on.',
+      choose: 'Choose .mid',
       rendering: 'Rendering…',
       error: 'Render failed',
       emptyMidi: 'This MIDI file has no notes to play.',
       idle: 'Press play to bounce and hear the module',
-      builtIn: 'Built-in phrase — drop a .mid to play your own',
+      builtIn: 'Built-in phrase — drop a .mid here or choose one to play your own',
       dropHint: 'Release to load',
       clear: 'Remove',
       scope: 'The render on the output',
@@ -58,11 +63,14 @@ const copy = computed(() =>
         'The file plays as it arrived. Any GS setup it carries is applied, and the panels above are sent alongside it.',
     },
     ja: {
+      title: '出力',
+      help: '再生すると、パネルの設定（選択中パートのフレーズ、または読み込んだ .mid）から標準 MIDI ファイルを組み立てて読み込み、オフラインでバウンスして鳴らします。スコープはそのレンダリング結果、一覧は電源投入時の状態からモジュールを設定するメッセージのすべてです。',
+      choose: '.mid を選ぶ',
       rendering: 'レンダリング中…',
       error: 'レンダリングに失敗しました',
       emptyMidi: 'この MIDI ファイルに再生できるノートはありません。',
       idle: '再生するとバウンスして音が出ます',
-      builtIn: '内蔵フレーズ。.mid を落とすと自分のファイルを鳴らせます',
+      builtIn: '内蔵フレーズ。.mid をここに落とすか選ぶと、自分のファイルを鳴らせます',
       dropHint: '離すと読み込みます',
       clear: '外す',
       scope: '出力されているレンダリング結果',
@@ -76,11 +84,13 @@ const copy = computed(() =>
 );
 
 /** What the scope says when it has no render to show. */
-const emptyLabel = computed(() => {
-  if (props.status === 'rendering') return copy.value.rendering;
-  if (props.status === 'error')
-    return props.error instanceof EmptyMidiError ? copy.value.emptyMidi : copy.value.error;
-  return copy.value.idle;
+const emptyLabel = computed(() =>
+  props.status === 'rendering' ? copy.value.rendering : copy.value.idle,
+);
+
+const errorMessage = computed(() => {
+  if (props.status !== 'error') return null;
+  return props.error instanceof EmptyMidiError ? copy.value.emptyMidi : copy.value.error;
 });
 
 /**
@@ -171,6 +181,14 @@ function onDrop(payload: DragEvent) {
   if (file) emit('drop', file);
 }
 
+/** The keyboard and touch path to the same file the drop takes. */
+function onPick(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (file) emit('drop', file);
+  input.value = '';
+}
+
 /** A frame as the hex a reader can compare against the address table. */
 function spell(event: SmfEvent): string {
   const bytes = event.sysex ? [0xf0, ...event.sysex] : (event.bytes ?? []);
@@ -180,15 +198,26 @@ function spell(event: SmfEvent): string {
 
 <template>
   <div class="gs-source">
-    <div class="gs-scope">
-      <canvas ref="canvasRef" class="gs-scope__canvas" :aria-label="copy.scope" role="img"></canvas>
-      <span v-if="!props.waveform.length" class="gs-scope__empty">{{ emptyLabel }}</span>
-      <span v-else class="gs-scope__peak">
-        <b>{{ copy.peak }}</b>{{ peakLabel }}
+    <div class="gs-source__head">
+      <span class="gs-rack__title">
+        {{ copy.title }}
+        <Tooltip :title="copy.title" :body="copy.help" />
       </span>
     </div>
 
+    <div class="gs-scope">
+      <canvas ref="canvasRef" class="gs-scope__canvas" :aria-label="copy.scope" role="img"></canvas>
+      <Transition name="demo-fade" mode="out-in">
+        <span v-if="!props.waveform.length" :key="emptyLabel" class="gs-scope__empty">{{ emptyLabel }}</span>
+        <span v-else class="gs-scope__peak">
+          <b>{{ copy.peak }}</b>{{ peakLabel }}
+        </span>
+      </Transition>
+    </div>
+
     <div class="gs-source__side">
+      <DemoNotice v-if="errorMessage" tone="error">{{ errorMessage }}</DemoNotice>
+
       <div
         class="gs-drop"
         :class="{ 'gs-drop--over': dragging }"
@@ -198,14 +227,28 @@ function spell(event: SmfEvent): string {
       >
         <template v-if="props.droppedFile">
           <span class="gs-drop__file">{{ props.droppedFile.name }}</span>
-          <button type="button" class="gs-button" @click="emit('clearFile')">
+          <button type="button" class="demo-btn demo-btn--sm" @click="emit('clearFile')">
             {{ copy.clear }}
           </button>
         </template>
-        <span v-else class="gs-note">{{ dragging ? copy.dropHint : copy.builtIn }}</span>
+        <template v-else>
+          <span class="gs-drop__hint">{{ dragging ? copy.dropHint : copy.builtIn }}</span>
+          <button type="button" class="demo-btn demo-btn--sm" @click="fileInputRef?.click()">
+            {{ copy.choose }}
+          </button>
+        </template>
+        <input
+          ref="fileInputRef"
+          type="file"
+          accept=".mid,.midi,audio/midi,audio/x-midi"
+          class="demo-sr-only"
+          tabindex="-1"
+          aria-hidden="true"
+          @change="onPick"
+        />
       </div>
 
-      <p v-if="props.droppedFile" class="gs-note">{{ copy.fileNote }}</p>
+      <DemoNotice v-if="props.droppedFile" tone="hint">{{ copy.fileNote }}</DemoNotice>
 
       <details v-if="props.frames.length" class="gs-details">
         <summary>{{ copy.framesSome(props.frames.length) }}</summary>
@@ -215,7 +258,7 @@ function spell(event: SmfEvent): string {
           </li>
         </ol>
       </details>
-      <p v-else class="gs-note">{{ copy.framesNone }}</p>
+      <p v-else class="gs-source__frames-none">{{ copy.framesNone }}</p>
     </div>
   </div>
 </template>

@@ -48,15 +48,22 @@ const wasmMock = vi.hoisted(() => {
     bandAbsorption: new Float32Array([0.1, 0.12, 0.15, 0.18, 0.2, 0.22]),
     rt60Bands: new Float32Array([0.5, 0.55, 0.6, 0.62, 0.58, 0.5]),
   });
+  // Only just wider than the receiver pair, so the default listener spot would put it out.
+  const narrowRoom = (lengthM: number) => ({ ...room(), lengthM, widthM: 0.55, heightM: 2.5 });
   return {
     degenerate: { value: false },
     farSource: { value: false },
+    narrowLengthM: { value: 0 },
     rirError: { value: false },
     rirDiagnostics: { value: [] as Array<{ code: string; message: string; severity: string }> },
     init: vi.fn(async () => undefined),
     version: vi.fn(() => '1.3.1-test'),
     estimateRoom: vi.fn(() =>
-      wasmMock.farSource.value ? farRoom() : room(wasmMock.degenerate.value),
+      wasmMock.narrowLengthM.value > 0
+        ? narrowRoom(wasmMock.narrowLengthM.value)
+        : wasmMock.farSource.value
+          ? farRoom()
+          : room(wasmMock.degenerate.value),
     ),
     analyzeImpulseResponse: vi.fn(() => acoustic(false)),
     detectAcoustic: vi.fn(() => acoustic(true)),
@@ -70,11 +77,38 @@ const wasmMock = vi.hoisted(() => {
         diagnostics: wasmMock.rirDiagnostics.value,
       };
     }),
-    roomMorph: vi.fn(
-      (samples: Float32Array, sampleRate: number, _options?: Record<string, number>) => ({
-        audio: new Float32Array(samples),
-        sampleRate,
-        diagnostics: [],
+    roomGeometryFromEstimate: vi.fn(
+      (
+        estimate: { lengthM: number; widthM: number; heightM: number; bandAbsorption: number[] },
+        options: {
+          source: { x: number; y: number; z: number };
+          listener: { x: number; y: number; z: number };
+        },
+      ) => ({
+        lengthM: estimate.lengthM,
+        widthM: estimate.widthM,
+        heightM: estimate.heightM,
+        absorption: 0.15,
+        bandAbsorption: estimate.bandAbsorption,
+        sourceX: options.source.x,
+        sourceY: options.source.y,
+        sourceZ: options.source.z,
+        listenerX: options.listener.x,
+        listenerY: options.listener.y,
+        listenerZ: options.listener.z,
+      }),
+    ),
+    roomMorphStereo: vi.fn(
+      (request: {
+        left: Float32Array;
+        right: Float32Array;
+        sampleRate: number;
+        [option: string]: unknown;
+      }) => ({
+        left: new Float32Array(request.left),
+        right: new Float32Array(request.right),
+        sampleRate: request.sampleRate,
+        diagnostics: [] as Array<{ code: string; message: string; severity: string }>,
       }),
     ),
   };
@@ -104,6 +138,7 @@ describe('spatial worker protocol', () => {
     vi.clearAllMocks();
     wasmMock.degenerate.value = false;
     wasmMock.farSource.value = false;
+    wasmMock.narrowLengthM.value = 0;
     wasmMock.rirError.value = false;
     wasmMock.rirDiagnostics.value = [];
     posted = [];
@@ -111,8 +146,8 @@ describe('spatial worker protocol', () => {
     Object.defineProperty(globalThis, 'self', {
       configurable: true,
       value: {
-        postMessage: vi.fn((message: unknown, transfer?: Transferable[]) => {
-          posted.push({ message, transfer });
+        postMessage: vi.fn((message: unknown, options?: { transfer?: Transferable[] }) => {
+          posted.push({ message, transfer: options?.transfer });
         }),
       },
     });
@@ -214,6 +249,37 @@ describe('spatial worker protocol', () => {
     expect(source.x).toBeLessThan(0);
   });
 
+  it('keeps the receiver pair of an estimated room inside its walls', async () => {
+    const spacing = 0.5;
+    wasmMock.narrowLengthM.value = 0.55;
+    await send({
+      type: 'scan',
+      id: 43,
+      samples: new Float32Array([0.2, -0.1, 0.05]),
+      sampleRate: 48000,
+      isIR: false,
+    });
+    const { valid, listener, room } = done()!.message.result;
+    expect(valid).toBe(true);
+    // The unclamped spot (0.62 of the length) would leave the pair outside the room.
+    expect(listener.x).toBeGreaterThanOrEqual(spacing / 2);
+    expect(listener.x).toBeLessThanOrEqual(room.length - spacing / 2);
+    expect(listener.y).toBeGreaterThanOrEqual(spacing / 2);
+    expect(listener.y).toBeLessThanOrEqual(room.width - spacing / 2);
+  });
+
+  it('rejects an estimated room too small to hold the receiver pair', async () => {
+    wasmMock.narrowLengthM.value = 0.4;
+    await send({
+      type: 'scan',
+      id: 44,
+      samples: new Float32Array([0.2, -0.1, 0.05]),
+      sampleRate: 48000,
+      isIR: false,
+    });
+    expect(done()!.message.result.valid).toBe(false);
+  });
+
   it('sizes preset RIRs by reverberation time so long-decay rooms are not truncated', async () => {
     // A small, damped room: Sabine RT60 is short, so the RIR stays at the floor length.
     const smallRoom = { ...geometry, lengthM: 4, widthM: 3, heightM: 2.5, absorption: 0.32 };
@@ -243,16 +309,21 @@ describe('spatial worker protocol', () => {
     });
   });
 
-  it('morphs both channels and transfers the rendered buffers', async () => {
+  it('morphs both channels as one stereo room and transfers the rendered buffers', async () => {
     const left = new Float32Array([0.1, 0.2]);
     const right = new Float32Array([0.3, 0.4]);
     await send({ type: 'morph', id: 6, left, right, sampleRate: 48000, geometry });
 
-    expect(wasmMock.roomMorph).toHaveBeenCalledTimes(2);
-    expect(wasmMock.roomMorph).toHaveBeenCalledWith(
-      left,
-      48000,
-      expect.objectContaining({ wet: 0.42, ismOrder: 2 }),
+    expect(wasmMock.roomMorphStereo).toHaveBeenCalledTimes(1);
+    expect(wasmMock.roomMorphStereo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        left,
+        right,
+        sampleRate: 48000,
+        receiverSpacingM: 0.5,
+        wet: 0.42,
+        ismOrder: 2,
+      }),
     );
     const morph = posted.find((p) => p.message?.type === 'morphDone')!;
     expect(morph.message.left).toBeInstanceOf(Float32Array);
@@ -265,6 +336,30 @@ describe('spatial worker protocol', () => {
     for (const buffer of morph.transfer!) expect(buffer).toBeInstanceOf(ArrayBuffer);
   });
 
+  it('rebuilds a scanned room from its estimate with the page placement before morphing', async () => {
+    const estimate = { lengthM: 5, widthM: 4, heightM: 3, bandAbsorption: [0.1, 0.2, 0.3] };
+    const source = { x: 1, y: 2, z: 1.5 };
+    const listener = { x: 3, y: 2, z: 1.2 };
+    await send({
+      type: 'morph',
+      id: 9,
+      left: new Float32Array(2),
+      right: new Float32Array(2),
+      sampleRate: 48000,
+      geometry: { estimate, source, listener },
+    });
+    expect(wasmMock.roomGeometryFromEstimate).toHaveBeenCalledWith(estimate, { source, listener });
+    expect(wasmMock.roomMorphStereo).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        lengthM: 5,
+        absorption: 0.15,
+        bandAbsorption: estimate.bandAbsorption,
+        sourceX: 1,
+        listenerX: 3,
+      }),
+    );
+  });
+
   it('lets a morph tail grow with the room, up to what it is worth waiting for', async () => {
     const small = { ...geometry, lengthM: 4, widthM: 3, heightM: 2.5, absorption: 0.32 };
     await send({
@@ -275,7 +370,7 @@ describe('spatial worker protocol', () => {
       sampleRate: 48000,
       geometry: small,
     });
-    const smallMax = wasmMock.roomMorph.mock.calls.at(-1)![2]?.maxSeconds as number;
+    const smallMax = wasmMock.roomMorphStereo.mock.calls.at(-1)![0].maxSeconds as number;
 
     const big = { ...geometry, lengthM: 34, widthM: 20, heightM: 24, absorption: 0.07 };
     await send({
@@ -286,7 +381,7 @@ describe('spatial worker protocol', () => {
       sampleRate: 48000,
       geometry: big,
     });
-    const bigMax = wasmMock.roomMorph.mock.calls.at(-1)![2]?.maxSeconds as number;
+    const bigMax = wasmMock.roomMorphStereo.mock.calls.at(-1)![0].maxSeconds as number;
 
     // A damped room decays inside the floor length; a cavernous one runs to the cap.
     // Convolution costs the product of clip and tail, so the morph cap is the shorter
@@ -300,15 +395,14 @@ describe('spatial worker protocol', () => {
   });
 
   it('passes a morph tail cut on once, with the depth it was cut at', async () => {
-    const clamped = (samples: Float32Array, sampleRate: number) => ({
-      audio: new Float32Array(samples),
-      sampleRate,
+    wasmMock.roomMorphStereo.mockImplementationOnce((request) => ({
+      left: new Float32Array(request.left),
+      right: new Float32Array(request.right),
+      sampleRate: request.sampleRate,
       diagnostics: [
         { code: 'acoustic.rir_length_clamped', message: 'clamped', severity: 'warning' },
       ],
-    });
-    // Both channels report the cut, as the engine does.
-    wasmMock.roomMorph.mockImplementationOnce(clamped).mockImplementationOnce(clamped);
+    }));
     const big = { ...geometry, lengthM: 34, widthM: 20, heightM: 24, absorption: 0.07 };
     await send({
       type: 'morph',

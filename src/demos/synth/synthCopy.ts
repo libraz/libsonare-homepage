@@ -29,6 +29,7 @@ export const enCopy = {
     output: 'Output',
     midi: 'MIDI In',
     keys: 'Keybed',
+    model: 'Model',
   },
   controls: {
     preset: 'Preset',
@@ -49,6 +50,35 @@ export const enCopy = {
     reset: 'Reset to preset',
     hint: 'Tweaks layer on top of the selected program and apply live while you play.',
     engine: 'Engine',
+    auto: 'AUTO',
+    baseVoice: 'base voice',
+    filterLabels: {
+      default: 'AUTO',
+      svf: 'SVF',
+      'moog-ladder': 'LADDER',
+      'diode-ladder': 'DIODE',
+      'sallen-key': 'S-KEY',
+    } as Record<string, string>,
+  },
+  model: {
+    group: 'Section',
+    main: 'main',
+    on: 'ON',
+    off: 'OFF',
+    locked:
+      'A program does not publish its own model settings. Pick the engine’s base voice at the top of its list to shape the model from the values it plays.',
+    none: 'This engine has no model section of its own: its sound is the oscillator, filter and envelope above.',
+    rebind:
+      'Model changes rebuild the voice, so held notes are struck again; the filter, envelope and voice knobs move sounding notes in place.',
+    openBase: 'Open base voice',
+    kit: 'With the GM-kit switch on, the kit plays every note from its own drum patch, so the section’s other fields do not reach it and stay hidden. Switch it off and the fields the base voice builds from appear, more of them as the values they depend on open them.',
+  },
+  statusbar: {
+    program: 'PROGRAM',
+    engine: 'ENGINE',
+    octave: 'OCTAVE',
+    peak: 'PEAK',
+    rate: 'RATE',
   },
   engineNotes: {
     noOscillator:
@@ -71,14 +101,19 @@ export const enCopy = {
     gain: 'Gain',
     clip: 'Output clipped — click to reset',
   },
-  keyboardHint:
-    'Click or tap the keys, or play with your computer keyboard: A W S E D F T G Y H U J K. Use Z / X to shift the octave. Drag across keys for glissando — striking lower on a key plays louder.',
+  keyboard: {
+    touch:
+      'Click or tap the keys; drag across them for a glissando, and strike lower on a key to play louder.',
+    play: 'Computer keyboard:',
+    keys: 'A W S E D F T G Y H U J K',
+    octave: 'shifts the octave.',
+  },
   errors: {
     start: 'Could not start the synthesizer. Reload and try again.',
   },
   guide: {
     title: 'Native polyphonic synthesis, in the browser',
-    body: "Every key plays through libsonare's NativeSynth hosted in a SAB-free AudioWorklet: notes become live MIDI events, and the engine renders a stereo bus in the audio thread with its own WebAssembly heap. Hold several keys for full polyphony. The piano has been tuned; every other physical-model voice still awaits adjustment and calibration, with further work planned for future patch releases.",
+    body: 'Play the on-screen keys, your computer keyboard or a MIDI keyboard. Pick a program, then shape it with the filter, envelope and voice knobs; cutoff, resonance, attack, release, glide and width also move notes you are already holding. Sound is generated in your browser and nothing is uploaded. Only the piano model is calibrated against a reference recording; the other physical models are approximations.',
     docs: 'Realtime Engine docs',
   },
   terms: {
@@ -89,7 +124,7 @@ export const enCopy = {
     items: {
       program: {
         title: 'Program',
-        body: 'Programs are grouped by the engine that plays them: subtractive, FM, the physical models and the rest. Each program is a complete saved patch; selecting one reloads every control to the stored sound and clears your tweaks. Picking an engine plays the program you last chose on it.',
+        body: 'Programs are grouped by the engine that plays them: subtractive, FM, the physical models and the rest. Each list opens with the engine’s base voice — the engine on its own, from a patch that names only its mode — followed by complete saved patches. Selecting one reloads every control to the stored sound and clears your tweaks. Picking an engine plays the program you last chose on it.',
         tip: 'Start here: pick the program closest to the sound you want, then nudge the knobs from there. A control the engine does not use is dimmed.',
       },
       waveform: {
@@ -111,7 +146,7 @@ export const enCopy = {
       },
       filterModel: {
         title: 'Filter model',
-        body: 'The filter circuit being modeled. SVF is clean and neutral; the Moog and diode ladders add analog warmth and drive; Sallen-Key is punchy. AUTO uses the program filter.',
+        body: 'The filter circuit being modeled. SVF (state-variable) is clean and neutral; the transistor ladder and the diode ladder add analog warmth and drive; Sallen-Key is punchy. AUTO uses the program filter.',
         tip: 'Switch models to recolor the same cutoff and resonance — ladders sound thicker, SVF stays transparent.',
       },
       attack: {
@@ -125,6 +160,26 @@ export const enCopy = {
         body: 'How long a note takes to fade out after the key is let go (10–5000 ms). A long release leaves notes ringing into each other.',
         tip: 'Stretch release for ambient tails; shorten it for tight, staccato playing.',
         defaultRationale: "Double-click the knob to restore the program's release.",
+      },
+      envelope: {
+        title: 'Amp envelope',
+        body: 'How each note’s level rises when a key goes down and falls when it is let go. Both knobs move notes that are already sounding: the engine retunes held voices in place.',
+        tip: 'Hold a chord and turn release up to hear the tail lengthen on the notes you are holding.',
+      },
+      voice: {
+        title: 'Voice',
+        body: 'How notes connect and where they sit in the stereo field: glide slides pitch between notes, width scatters voices left and right. Both move live on sounding notes.',
+        tip: 'Glide suits monophonic leads and basses; width suits pads.',
+      },
+      output: {
+        title: 'Output',
+        body: 'The monitor level after the engine’s master limiter, the peak meter and the all-notes-off switch.',
+        tip: 'Leave the gain near 90% and let the limiter catch loud chords.',
+      },
+      model: {
+        title: 'Model',
+        body: 'The fields of the selected engine’s own section — FM operators, modal partials, organ ranks, bow and breath — with the keys, ranges and units the engine publishes through synthEngineParamInfo(). The deck draws a knob for every field with a closed range and a switch for every on/off field.',
+        tip: 'Pick an engine’s base voice, then work through its sections. Changes rebuild the voice, so a held note is struck again.',
       },
       glide: {
         title: 'Glide (portamento)',
@@ -192,6 +247,7 @@ export const jaCopy: typeof enCopy = {
     output: '出力',
     midi: 'MIDI 入力',
     keys: '鍵盤',
+    model: 'モデル',
   },
   controls: {
     preset: 'プリセット',
@@ -212,6 +268,35 @@ export const jaCopy: typeof enCopy = {
     reset: 'プリセットに戻す',
     hint: '選択中のプログラムに重ねて適用され、演奏中もリアルタイムに反映されます。',
     engine: 'エンジン',
+    auto: '自動',
+    baseVoice: '基本音',
+    filterLabels: {
+      default: '自動',
+      svf: 'SVF',
+      'moog-ladder': 'LADDER',
+      'diode-ladder': 'DIODE',
+      'sallen-key': 'S-KEY',
+    },
+  },
+  model: {
+    group: 'セクション',
+    main: 'メイン',
+    on: 'ON',
+    off: 'OFF',
+    locked:
+      'プログラムは自分のモデル設定を公開していません。リスト先頭にあるエンジンの基本音を選ぶと、実際に鳴っている値からモデルを調整できます。',
+    none: 'このエンジンには独自のモデルセクションがありません。音色は上のオシレーター・フィルター・エンベロープで決まります。',
+    rebind:
+      'モデルの変更はボイスを作り直すため、押さえている音は鳴らし直されます。フィルター・エンベロープ・ボイスのノブは、鳴っている音をそのまま動かします。',
+    openBase: '基本音を開く',
+    kit: 'GM キットのスイッチがオンの間、キットは各ノートを専用のドラムパッチで鳴らすため、セクションのほかのフィールドは作用せず、表示されません。オフにすると基本音が組み立てに使うフィールドが現れ、依存する値が開くにつれて増えていきます。',
+  },
+  statusbar: {
+    program: 'プログラム',
+    engine: 'エンジン',
+    octave: 'オクターブ',
+    peak: 'ピーク',
+    rate: 'レート',
   },
   engineNotes: {
     noOscillator:
@@ -234,14 +319,19 @@ export const jaCopy: typeof enCopy = {
     gain: 'ゲイン',
     clip: '出力クリップ — クリックでリセット',
   },
-  keyboardHint:
-    '鍵盤をクリック／タップするか、PC キーボードで演奏できます: A W S E D F T G Y H U J K。Z / X でオクターブを切り替えます。鍵盤上をドラッグするとグリッサンド、鍵盤の下側を押すほど強く鳴ります。',
+  keyboard: {
+    touch:
+      '鍵盤をクリック／タップして演奏します。鍵盤上をドラッグするとグリッサンド、鍵盤の下側を押すほど強く鳴ります。',
+    play: 'PC キーボード:',
+    keys: 'A W S E D F T G Y H U J K',
+    octave: 'でオクターブを切り替えます。',
+  },
   errors: {
     start: 'シンセを起動できませんでした。再読み込みして再度お試しください。',
   },
   guide: {
     title: 'ブラウザで動く内蔵ポリフォニックシンセ',
-    body: '鍵盤を押すと、その入力が MIDI イベントとして NativeSynth に届き、AudioWorklet のオーディオスレッドで音声が生成されます。処理はブラウザ内の WebAssembly で完結し、音源はアップロードされません。複数の鍵盤を同時に押すと、和音としてポリフォニックに鳴ります。ピアノは調整済みですが、その他の物理モデル音源はまだ調整・キャリブレーションを行っておらず、残りの作業は今後のパッチリリースで進めます。',
+    body: '画面の鍵盤、パソコンのキーボード、MIDI キーボードで演奏できます。プログラムを選び、フィルター・エンベロープ・ボイスのつまみで音を整えます。カットオフ、レゾナンス、アタック、リリース、グライド、広がりは、押さえている音にもその場で効きます。内蔵シンセ（NativeSynth）の音はブラウザ内で生成され、アップロードされません。較正済みの物理モデルはピアノだけで、ほかは近似です。',
     docs: 'リアルタイムエンジンのドキュメント',
   },
   terms: {
@@ -252,12 +342,12 @@ export const jaCopy: typeof enCopy = {
     items: {
       program: {
         title: 'プログラム',
-        body: 'プログラムは、それを鳴らすエンジンごとにまとめてあります。減算方式、FM、物理モデルなどです。各プログラムは設定一式を収めた保存パッチで、選ぶとすべてのコントロールが保存音色に戻り、それまでの微調整はクリアされます。エンジンを選ぶと、そのエンジンで最後に選んだプログラムが鳴ります。',
+        body: 'プログラムは、それを鳴らすエンジンごとにまとめてあります。減算方式、FM、物理モデルなどです。各リストの先頭はエンジンの基本音で、モードだけを指定したパッチでエンジンそのものを鳴らします。続く各プログラムは設定一式を収めた保存パッチです。選ぶとすべてのコントロールが保存音色に戻り、それまでの微調整はクリアされます。エンジンを選ぶと、そのエンジンで最後に選んだプログラムが鳴ります。',
         tip: 'まずここから。目的に近いプログラムを選び、そこからノブで詰めていきます。そのエンジンが使わないコントロールは暗く表示されます。',
       },
       waveform: {
         title: '波形',
-        body: 'フィルターに入る前の、オシレーターの元の音です。サイン波は純粋、ノコギリ波と矩形波は明るく倍音が豊か、三角波は柔らかく、ノイズは音程を持ちません。AUTO はプログラム本来の波形を使います。',
+        body: 'フィルターに入る前の、オシレーターの元の音です。サイン波は純粋、ノコギリ波と矩形波は明るく倍音が豊か、三角波は柔らかく、ノイズは音程を持ちません。自動はプログラム本来の波形を使います。',
         tip: 'もっと前に出したいときはノコギリ波／矩形波、後ろに収めたいときは三角波／サイン波を。オシレーターを切り替えられるのは減算方式のプログラム（sine・saw・square・triangle・各リード・サブベース・ウォームパッド）だけで、物理モデルや FM などのプログラムはそれぞれのエンジンで音を作るため、この切り替えは暗く表示されます。',
       },
       cutoff: {
@@ -274,7 +364,7 @@ export const jaCopy: typeof enCopy = {
       },
       filterModel: {
         title: 'フィルターモデル',
-        body: 'モデル化するフィルター回路です。SVF はクリーンでニュートラル、Moog／diode ラダーはアナログ的な温かみとドライブ、Sallen-Key は押し出しが強め。AUTO はプログラムのフィルターを使います。',
+        body: 'モデル化するフィルター回路です。SVF（ステートバリアブル）はクリーンでニュートラル、トランジスターラダーとダイオードラダーはアナログ的な温かみとドライブ、Sallen-Key は押し出しが強め。自動はプログラムのフィルターを使います。',
         tip: '同じカットオフ／レゾナンスのまま色付けを変えられます。ラダーは太く、SVF は素直です。',
       },
       attack: {
@@ -289,6 +379,26 @@ export const jaCopy: typeof enCopy = {
         tip: 'アンビエントな余韻は長め、タイトでスタッカートな演奏は短めに。',
         defaultRationale: 'ノブをダブルクリックするとプログラムのリリースに戻ります。',
       },
+      envelope: {
+        title: 'アンプエンベロープ',
+        body: '押鍵で音量が立ち上がり、離鍵で消えていく様子を決めます。どちらのノブも鳴っている音に作用し、エンジンは押さえたままのボイスをその場で調整し直します。',
+        tip: '和音を押さえたままリリースを上げると、押さえている音の余韻が伸びるのが聞こえます。',
+      },
+      voice: {
+        title: 'ボイス',
+        body: '音同士のつながりとステレオ上の位置を決めます。グライドは音程を滑らせ、広がりはボイスを左右に散らします。どちらも鳴っている音にそのまま反映されます。',
+        tip: 'グライドはモノフォニックなリードやベースに、広がりはパッドに向いています。',
+      },
+      output: {
+        title: '出力',
+        body: 'エンジンのマスターリミッター後のモニターレベル、ピークメーター、全音オフスイッチです。',
+        tip: 'ゲインは 90% 前後のままにして、大きな和音はリミッターに受け止めさせます。',
+      },
+      model: {
+        title: 'モデル',
+        body: '選択中のエンジン固有のセクション（FM オペレーター、モーダルの部分音、オルガンのランク、弓や息など）のフィールドです。キー・範囲・単位はエンジンが synthEngineParamInfo() で公開している値をそのまま使い、範囲が閉じたフィールドはノブ、オン／オフのフィールドはスイッチとして並べます。',
+        tip: 'エンジンの基本音を選んでから、各セクションを順に調整してみてください。変更でボイスが作り直されるため、押さえている音は鳴らし直されます。',
+      },
       glide: {
         title: 'グライド（ポルタメント）',
         body: '直前の音から次の音へ、この時間をかけて音程を滑らせます（0〜300 ms）。0 ms ではすぐ次の音程へ移ります。',
@@ -302,7 +412,7 @@ export const jaCopy: typeof enCopy = {
       },
       gain: {
         title: '出力ゲイン',
-        body: 'エンジンのマスターリミッター後のモニターレベル（0〜100%）。エンジンのマスターストリップに入ったトゥルーピークリミッターがシンセバスを −1 dBTP に抑えるため、大きな音色で和音を押し込んでもクリップせずそこで止まります。このノブはその上限をどの音量で聴くかを決めるだけです。',
+        body: 'エンジンのマスターリミッター後のモニターレベル（0〜100%）。エンジンのマスターストリップに入った True Peak リミッターがシンセバスを −1 dBTP に抑えるため、大きな音色で和音を押し込んでもクリップせずそこで止まります。このノブはその上限をどの音量で聴くかを決めるだけです。',
         tip: '90% 前後のままにして、保護はリミッターに任せます。ノブを下げても和音が上限に当たる強さは変わりません。',
         defaultRationale: 'ノブをダブルクリックすると 90% に戻ります。',
       },
@@ -346,6 +456,10 @@ export const SYNTH_TERM_SLUGS: Record<SynthTermKey, string | undefined> = {
   attack: 'instruments/envelopes-modulation',
   release: 'instruments/envelopes-modulation',
   glide: 'instruments/envelopes-modulation',
+  envelope: 'instruments/envelopes-modulation',
+  voice: 'instruments/synthesis-basics',
+  output: 'concepts/audio-basics',
+  model: 'instruments/synthesis-basics',
   spread: 'instruments/synthesis-basics',
   gain: 'concepts/audio-basics',
   peak: 'concepts/audio-basics',

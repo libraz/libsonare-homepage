@@ -7,7 +7,7 @@
  * automation points are cheap and move live.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { TermLabel } from '@/components/ui';
+import { DemoEmpty, SegmentedControl, TermLabel } from '@/components/ui';
 import EngineTransport, { type EngineTransportLoop } from '@/components/ui/EngineTransport.vue';
 import MixAutomationLane from '@/demos/mixing/MixAutomationLane.vue';
 import { useMixingCopy } from '@/demos/mixing/mixingCopy';
@@ -266,6 +266,17 @@ function seekAt(event: PointerEvent): void {
   m.seek((event.clientX - rect.left) / pps.value);
 }
 
+const paramOptions = computed(() =>
+  AUTOMATION_PARAMS.map((id, i) => ({ id, label: copy.value.automationParams[i] })),
+);
+const curveOptions = computed(() =>
+  AUTOMATION_CURVES.map((id, i) => ({
+    id,
+    label: copy.value.automationCurves[i],
+    disabled: editLocked.value,
+  })),
+);
+
 const playheadLeft = computed(() => x(position.value));
 const loopBox = computed(() => {
   const { loop } = view.value;
@@ -300,34 +311,31 @@ const loopBox = computed(() => {
 
     <div class="arr__toolbar">
       <div class="arr__zoom" role="group" :aria-label="copy.arrange.title">
-        <button type="button" :aria-label="copy.arrange.zoomOut" @click="zoom(-1)">−</button>
-        <button type="button" :aria-label="copy.arrange.zoomIn" @click="zoom(1)">+</button>
-        <button type="button" @click="fitView">{{ copy.arrange.fit }}</button>
+        <button type="button" class="demo-btn demo-btn--sm demo-btn--icon" :aria-label="copy.arrange.zoomOut" @click="zoom(-1)">−</button>
+        <button type="button" class="demo-btn demo-btn--sm demo-btn--icon" :aria-label="copy.arrange.zoomIn" @click="zoom(1)">+</button>
+        <button type="button" class="demo-btn demo-btn--sm" @click="fitView">{{ copy.arrange.fit }}</button>
       </div>
       <TermLabel v-bind="term('automation', true)">{{ copy.arrange.automation }}</TermLabel>
-      <div class="arr__segment" role="group" :aria-label="copy.arrange.automation">
-        <button
-          v-for="(name, i) in AUTOMATION_PARAMS"
-          :key="name"
-          type="button"
-          :aria-pressed="param === name"
-          @click="param = name"
-        >{{ copy.automationParams[i] }}</button>
-      </div>
+      <SegmentedControl
+        :model-value="param"
+        :options="paramOptions"
+        :ariaLabel="copy.arrange.automation"
+        size="sm"
+        :fill="false"
+        @update:model-value="(id) => (param = id as AutomationParam)"
+      />
       <TermLabel v-bind="term('curve', true)">{{ copy.arrange.curve }}</TermLabel>
-      <div class="arr__segment" role="group" :aria-label="copy.arrange.curve">
-        <button
-          v-for="(name, i) in AUTOMATION_CURVES"
-          :key="name"
-          type="button"
-          :aria-pressed="curve === name"
-          :disabled="editLocked"
-          @click="chooseCurve(name)"
-        >{{ copy.automationCurves[i] }}</button>
-      </div>
+      <SegmentedControl
+        :model-value="curve"
+        :options="curveOptions"
+        :ariaLabel="copy.arrange.curve"
+        size="sm"
+        :fill="false"
+        @update:model-value="(id) => chooseCurve(id as AutomationCurve)"
+      />
       <button
         type="button"
-        class="arr__clear"
+        class="demo-btn demo-btn--sm"
         :disabled="editLocked || !selectedTrack || lanePoints.length === 0"
         @click="selectedTrack && m.edit('clearAutomation', selectedTrack.id, param)"
       >{{ copy.arrange.clear }}</button>
@@ -438,7 +446,9 @@ const loopBox = computed(() => {
               ></span>
             </div>
           </div>
-          <p v-if="clips.length === 0" class="arr__empty">{{ copy.arrange.empty }}</p>
+          <DemoEmpty v-if="clips.length === 0" compact :title="copy.arrange.emptyTitle">
+            <p>{{ copy.arrange.empty }}</p>
+          </DemoEmpty>
 
           <MixAutomationLane
             ref="laneRef"
@@ -450,7 +460,7 @@ const loopBox = computed(() => {
             :height="AUTO_HEIGHT"
           />
 
-          <div class="arr__playhead" :style="{ left: `${playheadLeft}px` }" aria-hidden="true"></div>
+          <div class="arr__playhead" :style="{ transform: `translateX(${playheadLeft}px)` }" aria-hidden="true"></div>
         </div>
       </div>
     </div>
@@ -464,7 +474,7 @@ const loopBox = computed(() => {
   min-width: 0;
   padding: 10px 12px 12px;
   border: 1px solid var(--demo-border);
-  border-radius: 6px;
+  border-radius: var(--demo-radius-md);
   background: var(--demo-bg-elevated);
 }
 
@@ -475,47 +485,9 @@ const loopBox = computed(() => {
   gap: 8px 12px;
 }
 
-.arr__zoom,
-.arr__segment {
+.arr__zoom {
   display: inline-flex;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.arr__zoom button,
-.arr__segment button,
-.arr__clear {
-  min-width: 28px;
-  padding: 3px 8px;
-  border: 0;
-  border-left: 1px solid var(--demo-border);
-  background: var(--demo-control-bg);
-  color: var(--demo-text-muted);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  cursor: pointer;
-}
-
-.arr__zoom button:first-child,
-.arr__segment button:first-child {
-  border-left: 0;
-}
-
-.arr__segment button[aria-pressed='true'] {
-  background: var(--demo-accent-subtle);
-  color: var(--demo-accent);
-  font-weight: 600;
-}
-
-.arr__clear {
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 4px;
-}
-
-.arr button:disabled {
-  cursor: not-allowed;
-  opacity: var(--demo-disabled-opacity);
+  gap: 3px;
 }
 
 .arr__body {
@@ -727,17 +699,11 @@ const loopBox = computed(() => {
   cursor: ew-resize;
 }
 
-.arr__empty {
-  margin: 0;
-  padding: 18px 12px;
-  color: var(--demo-text-muted);
-  font-size: 12px;
-}
-
 .arr__playhead {
   position: absolute;
   top: 0;
   bottom: 0;
+  left: 0;
   width: 1px;
   background: var(--demo-playhead);
   pointer-events: none;

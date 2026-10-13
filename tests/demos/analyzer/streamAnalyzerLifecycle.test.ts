@@ -3,10 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent } from 'vue';
 
 const wasmMock = vi.hoisted(() => {
-  const instances: Array<{ dispose: ReturnType<typeof vi.fn>; reset: ReturnType<typeof vi.fn> }> =
+  const instances: Array<{ delete: ReturnType<typeof vi.fn>; reset: ReturnType<typeof vi.fn> }> =
     [];
   class StreamAnalyzerMock {
-    dispose = vi.fn();
+    delete = vi.fn();
     reset = vi.fn();
     constructor(public config: unknown) {
       instances.push(this);
@@ -45,7 +45,7 @@ describe('useStreamAnalyzer lifecycle', () => {
     return { wrapper, api };
   }
 
-  it('disposes the native analyzer on destroy so it does not leak on route leave', async () => {
+  it('deletes the native analyzer on destroy so it does not leak on route leave', async () => {
     const { wrapper, api } = mountAnalyzer();
 
     await api.init();
@@ -54,13 +54,13 @@ describe('useStreamAnalyzer lifecycle', () => {
 
     api.destroy();
 
-    expect(analyzer.dispose).toHaveBeenCalledTimes(1);
+    expect(analyzer.delete).toHaveBeenCalledTimes(1);
     expect(api.isInitialized.value).toBe(false);
 
     wrapper.unmount();
   });
 
-  it('disposes the native analyzer when the component unmounts', async () => {
+  it('deletes the native analyzer when the component unmounts', async () => {
     const { wrapper, api } = mountAnalyzer();
 
     await api.init();
@@ -68,7 +68,7 @@ describe('useStreamAnalyzer lifecycle', () => {
 
     wrapper.unmount();
 
-    expect(analyzer.dispose).toHaveBeenCalledTimes(1);
+    expect(analyzer.delete).toHaveBeenCalledTimes(1);
   });
 
   it('rejects init when the engine fails to load, and reinit reports the same cause', async () => {

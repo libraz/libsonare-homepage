@@ -32,6 +32,8 @@ const analyzerWasmMock = vi.hoisted(() => ({
   rmsEnergy: vi.fn(() => new Float32Array([0.1, 0.2, 0.3])),
   detectBeats: vi.fn(() => new Float32Array([0.5, 1.5, 2.5])),
   estimateTuning: vi.fn(() => 0.13),
+  tuningToReferenceHz: vi.fn((tuning: number) => 440 * 2 ** (tuning / 12)),
+  downmix: vi.fn((channels: Float32Array[]) => [channels[0].slice()]),
   chroma: vi.fn(() => ({
     features: new Float32Array(36).fill(0.25),
     nFrames: 3,
@@ -326,7 +328,9 @@ describe('AudioAnalyzer visual player flow', () => {
     expect(streamMock.setExpectedDuration).toHaveBeenCalledWith(4);
     expect(streamMock.setNormalizationGain).toHaveBeenCalledWith(0.5);
     // The live key and chord readings follow the reference the recording sits at.
+    expect(analyzerWasmMock.tuningToReferenceHz).toHaveBeenCalledWith(0.13);
     expect(streamMock.setTuningRefHz).toHaveBeenCalledWith(440 * 2 ** (0.13 / 12));
+    expect(analyzerWasmMock.downmix).toHaveBeenCalledWith(expect.any(Array), 0);
     expect(playerMock.setProcessCallback).toHaveBeenCalledWith(expect.any(Function));
     const processCallback = playerMock.setProcessCallback.mock.calls.find(
       ([callback]) => typeof callback === 'function',
@@ -351,6 +355,15 @@ describe('AudioAnalyzer visual player flow', () => {
     expect(metricLabels).not.toContain('ANALYSIS');
     expect(analyzerWasmMock.detectBeats).toHaveBeenCalledWith(expect.any(Float32Array), 48_000);
     expect(wrapper.find('.waveform-stub').attributes('data-beats')).toBe('0.5,1.5,2.5');
+
+    // The page renders the player's status in the shell's status bar.
+    const status = wrapper.emitted('status')!.at(-1)![0] as {
+      status: string;
+      fields: Array<{ key: string; value: string }>;
+    };
+    expect(status.status).toBe('active');
+    expect(status.fields.find((field) => field.key === 'KEY')?.value).toBe('A minor');
+    expect(status.fields.find((field) => field.key === 'TUNE')?.value).toBe('+13¢');
   });
 
   it('routes transport buttons and waveform seeks to the audio player', async () => {
@@ -373,13 +386,13 @@ describe('AudioAnalyzer visual player flow', () => {
     expect(playerMock.stop).toHaveBeenCalledTimes(1);
   });
 
-  it('resets the loaded file and analyzer state from the FILE control', async () => {
+  it('resets the loaded file and analyzer state from the change-file control', async () => {
     const wrapper = mount(AudioAnalyzer);
     await drainAsyncWork();
 
     await wrapper
       .findAll('button')
-      .find((button) => button.text().includes('FILE'))!
+      .find((button) => button.attributes('aria-label') === 'Change file')!
       .trigger('click');
 
     expect(playerMock.state.audioBuffer.value).toBeNull();
@@ -414,6 +427,7 @@ describe('AudioAnalyzer visual player flow', () => {
       // The error is surfaced to the user instead of being silently swallowed.
       const errorEl = wrapper.find('.analyzer__error');
       expect(errorEl.exists()).toBe(true);
+      expect(wrapper.find('[role="alert"]').text()).toContain('Could not decode');
       expect(errorEl.text()).toContain('Could not decode');
 
       // Upload state is rolled back: the loading overlay is gone and the drop
@@ -436,7 +450,7 @@ describe('AudioAnalyzer visual player flow', () => {
       await drainAsyncWork();
       await wrapper
         .findAll('button')
-        .find((button) => button.text().includes('FILE'))!
+        .find((button) => button.attributes('aria-label') === 'Change file')!
         .trigger('click');
       analyzerWasmMock.melSpectrogram.mockImplementationOnce(() => {
         throw new Error('mel failed');
@@ -463,7 +477,7 @@ describe('AudioAnalyzer visual player flow', () => {
     await drainAsyncWork();
     await wrapper
       .findAll('button')
-      .find((button) => button.text().includes('FILE'))!
+      .find((button) => button.attributes('aria-label') === 'Change file')!
       .trigger('click');
 
     const slowBuffer = { ...audioBuffer(), duration: 9 } as AudioBuffer;

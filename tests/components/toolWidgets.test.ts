@@ -1,34 +1,12 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import ToolModeTabs from '@/components/ToolModeTabs.vue';
 import ToolStatusBar from '@/components/ToolStatusBar.vue';
 import DataConsole from '@/demos/analyzer/DataConsole.vue';
 
+vi.mock('vitepress', () => ({ useData: () => ({ lang: { value: 'en' } }) }));
+
 afterEach(() => {
   vi.useRealTimers();
-});
-
-describe('ToolModeTabs', () => {
-  it('renders accessible mode buttons and emits model updates', async () => {
-    const wrapper = mount(ToolModeTabs, {
-      props: {
-        modelValue: 'quick',
-        ariaLabel: 'Mastering mode',
-        options: [
-          { id: 'quick', label: 'Quick' },
-          { id: 'studio', label: 'Studio' },
-        ],
-      },
-    });
-
-    expect(wrapper.find('nav').attributes('aria-label')).toBe('Mastering mode');
-    const buttons = wrapper.findAll('button');
-    expect(buttons.map((button) => button.text())).toEqual(['Quick', 'Studio']);
-    expect(buttons[0].classes()).toContain('tool-mode-tabs__button--active');
-
-    await buttons[1].trigger('click');
-    expect(wrapper.emitted('update:modelValue')).toEqual([['studio']]);
-  });
 });
 
 describe('ToolStatusBar', () => {
@@ -49,9 +27,9 @@ describe('ToolStatusBar', () => {
       },
     });
 
-    expect(wrapper.attributes('role')).toBe('status');
-    expect(wrapper.attributes('aria-live')).toBe('polite');
-    expect(wrapper.text()).toContain('Needs attention');
+    expect(wrapper.attributes('role')).toBeUndefined();
+    expect(wrapper.find('[role="status"]').text()).toContain('Needs attention');
+    expect(wrapper.find('[role="status"]').attributes('aria-live')).toBe('polite');
     expect(wrapper.findAll('.tool-statusbar__key').map((node) => node.text())).toEqual([
       'SRC',
       'LEN',

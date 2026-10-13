@@ -4,7 +4,9 @@
  * suggestion maps with only the loudness-stage extras left over, and the
  * match-EQ fit recovers the curve it is given.
  */
-import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { beforeAll, describe, expect, it } from 'vitest';
 import {
   CHAIN_STAGE_SLOTS,
   chainParamTargets,
@@ -16,6 +18,7 @@ import {
 import {
   defaultMasteringState,
   MASTERING_INSERT_LAYOUT,
+  MASTERING_REPAIR_STAGES,
   MASTERING_SLOT,
   type MasteringState,
   masteringMutators as m,
@@ -23,31 +26,79 @@ import {
 } from '@/demos/mastering/masteringState';
 import { MASTERING_PRESETS, MASTERING_VENUES } from '@/demos/mastering/masteringUi';
 import type { MasteringPresetId, MasteringVenueId } from '@/demos/mastering/useMastering';
-
-const STAGE_PROCESSOR: Record<string, string> = {
-  'eq.tilt': 'eq.tilt',
-  'dynamics.deesser': 'dynamics.deesser',
-  'dynamics.transientShaper': 'dynamics.transientShaper',
-  'dynamics.compressor': 'dynamics.compressor',
-  'dynamics.multibandComp': 'multiband.compressor',
-  'saturation.tape': 'saturation.tape',
-  'saturation.exciter': 'saturation.exciter',
-  'spectral.airBand': 'spectral.airBand',
-  'stereo.imager': 'stereo.imager',
-  'stereo.monoMaker': 'stereo.monoMaker',
-  'maximizer.truePeakLimiter': 'maximizer.truePeakLimiter',
-};
+import * as wasm from '@/wasm/index.js';
 
 const param = (state: MasteringState, slot: keyof typeof MASTERING_SLOT, name: string) =>
   state.inserts[MASTERING_SLOT[slot]].params[name];
 const bypassed = (state: MasteringState, slot: keyof typeof MASTERING_SLOT) =>
   state.inserts[MASTERING_SLOT[slot]].bypassed;
 
-it('each chain stage maps onto the slot running that processor', () => {
-  expect(Object.keys(CHAIN_STAGE_SLOTS).sort()).toEqual(Object.keys(STAGE_PROCESSOR).sort());
-  for (const [stage, slot] of Object.entries(CHAIN_STAGE_SLOTS)) {
-    expect(MASTERING_INSERT_LAYOUT[slot].processor, stage).toBe(STAGE_PROCESSOR[stage]);
-  }
+describe('the chain table mirrors the engine catalog', () => {
+  let chain: ReturnType<typeof wasm.capabilityCatalog>['chain'];
+  beforeAll(async () => {
+    await wasm.init({ wasmBinary: readFileSync(join(process.cwd(), 'src/wasm/sonare.wasm')) });
+    chain = wasm.capabilityCatalog().chain;
+  }, 30_000);
+
+  it('each insert stage maps onto the slot running the processor the catalog names', () => {
+    const insertStages = chain.stages.filter(
+      (stage) => stage.processor !== null && !stage.prefix.startsWith('repair.'),
+    );
+    expect(Object.keys(CHAIN_STAGE_SLOTS).sort()).toEqual(
+      insertStages.map((stage) => stage.prefix).sort(),
+    );
+    for (const stage of insertStages) {
+      const slot = CHAIN_STAGE_SLOTS[stage.prefix];
+      expect(MASTERING_INSERT_LAYOUT[slot].processor, stage.prefix).toBe(stage.processor);
+    }
+  });
+
+  it('the repair stages are the catalog repair prefixes', () => {
+    const repair = chain.stages
+      .filter((stage) => stage.prefix.startsWith('repair.'))
+      .map((stage) => stage.prefix.slice('repair.'.length));
+    expect([...MASTERING_REPAIR_STAGES].sort()).toEqual(repair.sort());
+  });
+
+  it('every multiband spelling the catalog lists lands where its canonical key does', () => {
+    const at = (key: string, index: number) => key.replaceAll('<i>', String(index));
+    const param = (key: string) => {
+      const target = chainParamTargets({ [key]: 1 })[0];
+      return target.kind === 'insertParam' ? target.param : target.kind;
+    };
+    const aliases = chain.aliases.filter((entry) =>
+      entry.key.startsWith('dynamics.multibandComp.'),
+    );
+    expect(aliases.length).toBeGreaterThan(10);
+    for (const { key, aliases: spellings } of aliases) {
+      for (const index of [0, 1, 2]) {
+        for (const spelling of spellings) {
+          expect(param(at(spelling, index)), at(spelling, index)).toBe(param(at(key, index)));
+        }
+      }
+    }
+  });
+
+  it('indexed keys reach the three-band layout and a fourth band is listed as not applied', () => {
+    expect(
+      unmappedChainParams({
+        'dynamics.multibandComp.enabled': true,
+        'dynamics.multibandComp.bands.2.ratio': 3,
+        'dynamics.multibandComp.band1.thresholdDb': -20,
+        'dynamics.multibandComp.crossover.cutoffsHz.1': 3000,
+        'dynamics.multibandComp.bands.3.ratio': 2,
+      }),
+    ).toEqual(['dynamics.multibandComp.bands.3.ratio']);
+    expect(chainParamTargets({ 'dynamics.multibandComp.crossover.cutoffsHz.1': 3000 })).toEqual([
+      {
+        kind: 'insertParam',
+        key: 'dynamics.multibandComp.crossover.cutoffsHz.1',
+        slot: CHAIN_STAGE_SLOTS['dynamics.multibandComp'],
+        param: 'cutoff1Hz',
+        value: 3000,
+      },
+    ]);
+  });
 });
 
 // The earlier chain builder at neutral fine-tune, by genre (studio venue).

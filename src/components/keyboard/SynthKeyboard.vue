@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { KEY_GEOMETRY, KEY_GEOMETRY_STYLE } from '@/components/keyboard/keyGeometry';
 import { KEY_LAYOUT, type KeyDef } from '@/components/keyboard/keyLayout';
 import { formatNoteName } from '@/utils/pitch';
 
@@ -15,6 +16,11 @@ const props = defineProps<{
    * hints are kept only for the notes `KEY_LAYOUT` covers.
    */
   octaves?: number;
+  /**
+   * Render as many whole octaves as fit the available width at full key size
+   * (2 to 5), instead of stretching the keys. Ignored when `octaves` is set.
+   */
+  fit?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -37,12 +43,23 @@ const PC_BY_SEMITONE = new Map(
 /** Semitones-in-octave that are accidental (black) keys. */
 const BLACK_PCS = new Set([1, 3, 6, 8, 10]);
 
+const scrollRef = ref<HTMLElement | null>(null);
+const fittedOctaves = ref(2);
+let resizeObserver: ResizeObserver | null = null;
+
+function fitOctaves(widthPx: number): number {
+  const octaveWidth = 7 * KEY_GEOMETRY.whiteMaxPx;
+  return Math.min(5, Math.max(2, Math.floor((widthPx - KEY_GEOMETRY.whiteMaxPx) / octaveWidth)));
+}
+
+const octaveSpan = computed(() => props.octaves ?? (props.fit ? fittedOctaves.value : null));
+
 /** The key layout to render: the fixed one, or a generated wide-range keybed. */
 const layout = computed<KeyDef[]>(() => {
-  if (props.octaves == null) return KEY_LAYOUT;
+  if (octaveSpan.value == null) return KEY_LAYOUT;
   const out: KeyDef[] = [];
   // Inclusive of the final top C, so the keybed reads as full octaves.
-  for (let s = 0; s <= props.octaves * 12; ++s) {
+  for (let s = 0; s <= octaveSpan.value * 12; ++s) {
     out.push({ semitone: s, black: BLACK_PCS.has(s % 12), pc: PC_BY_SEMITONE.get(s) });
   }
   return out;
@@ -112,55 +129,64 @@ function releaseAllPressed(): void {
 }
 
 onMounted(() => {
+  if (props.fit && scrollRef.value) {
+    resizeObserver = new ResizeObserver(([entry]) => {
+      fittedOctaves.value = fitOctaves(entry.contentRect.width);
+    });
+    resizeObserver.observe(scrollRef.value);
+  }
   window.addEventListener('pointerup', releaseAllPressed);
   window.addEventListener('pointercancel', releaseAllPressed);
 });
 
 onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
   window.removeEventListener('pointerup', releaseAllPressed);
   window.removeEventListener('pointercancel', releaseAllPressed);
 });
 </script>
 
 <template>
-  <div class="synth-keyboard" :style="{ '--white-count': whiteCount }">
-    <div class="synth-keyboard__rail" aria-hidden="true"></div>
-    <div class="synth-keyboard__bed">
-      <button
-        v-for="key in whiteKeys"
-        :key="key.note"
-        type="button"
-        class="synth-keyboard__white"
-        :class="{ 'is-active': isActive(key.note) }"
-        :aria-label="`Note ${key.note}`"
-        :aria-pressed="isActive(key.note)"
-        @pointerdown="press(key.note, $event)"
-        @pointerenter="glide(key.note, $event)"
-        @pointerup="release(key.note)"
-        @pointerleave="release(key.note)"
-        @pointercancel="release(key.note)"
-      >
-        <span v-if="key.name" class="synth-keyboard__name" aria-hidden="true">{{ key.name }}</span>
-        <span v-if="key.pc" class="synth-keyboard__hint" aria-hidden="true">{{ key.pc.toUpperCase() }}</span>
-      </button>
+  <div ref="scrollRef" class="synth-keyboard-scroll">
+    <div class="synth-keyboard" :style="{ ...KEY_GEOMETRY_STYLE, '--white-count': whiteCount }">
+      <div class="synth-keyboard__rail" aria-hidden="true"></div>
+      <div class="synth-keyboard__bed">
+        <button
+          v-for="key in whiteKeys"
+          :key="key.note"
+          type="button"
+          class="synth-keyboard__white"
+          :class="{ 'is-active': isActive(key.note) }"
+          :aria-label="formatNoteName(key.note)"
+          :aria-pressed="isActive(key.note)"
+          @pointerdown="press(key.note, $event)"
+          @pointerenter="glide(key.note, $event)"
+          @pointerup="release(key.note)"
+          @pointerleave="release(key.note)"
+          @pointercancel="release(key.note)"
+        >
+          <span v-if="key.name" class="synth-keyboard__name" aria-hidden="true">{{ key.name }}</span>
+          <span v-if="key.pc" class="synth-keyboard__hint" aria-hidden="true">{{ key.pc.toUpperCase() }}</span>
+        </button>
 
-      <button
-        v-for="key in blackKeys"
-        :key="key.note"
-        type="button"
-        class="synth-keyboard__black"
-        :class="{ 'is-active': isActive(key.note) }"
-        :style="{ left: `calc(${blackLeft(key)} * (100% / var(--white-count)))` }"
-        :aria-label="`Note ${key.note}`"
-        :aria-pressed="isActive(key.note)"
-        @pointerdown="press(key.note, $event)"
-        @pointerenter="glide(key.note, $event)"
-        @pointerup="release(key.note)"
-        @pointerleave="release(key.note)"
-        @pointercancel="release(key.note)"
-      >
-        <span v-if="key.pc" class="synth-keyboard__hint synth-keyboard__hint--black">{{ key.pc.toUpperCase() }}</span>
-      </button>
+        <button
+          v-for="key in blackKeys"
+          :key="key.note"
+          type="button"
+          class="synth-keyboard__black"
+          :class="{ 'is-active': isActive(key.note) }"
+          :style="{ left: `calc(${blackLeft(key)} * (100% / var(--white-count)))` }"
+          :aria-label="formatNoteName(key.note)"
+          :aria-pressed="isActive(key.note)"
+          @pointerdown="press(key.note, $event)"
+          @pointerenter="glide(key.note, $event)"
+          @pointerup="release(key.note)"
+          @pointerleave="release(key.note)"
+          @pointercancel="release(key.note)"
+        >
+          <span v-if="key.pc" class="synth-keyboard__hint synth-keyboard__hint--black">{{ key.pc.toUpperCase() }}</span>
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -178,9 +204,22 @@ onBeforeUnmount(() => {
   --kb-black-pressed: linear-gradient(180deg, #6d57c4 0%, #50409a 60%, #3d3175 100%);
 
   position: relative;
-  width: 100%;
+  /* White keys stay inside the shared width range (keyGeometry.ts); a keybed
+     narrower than its minimum scrolls instead of shrinking the keys. */
+  width: clamp(
+    calc(var(--white-count) * var(--key-white-min)),
+    100%,
+    calc(var(--white-count) * var(--key-white-max))
+  );
+  margin-inline: auto;
+  container-type: inline-size;
   user-select: none;
   touch-action: none;
+}
+
+.synth-keyboard-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
 }
 
 html:not(.dark) .synth-keyboard {
@@ -208,7 +247,7 @@ html:not(.dark) .synth-keyboard__rail {
 .synth-keyboard__bed {
   position: relative;
   display: flex;
-  height: 140px;
+  height: calc(100cqw / var(--white-count) * var(--key-white-aspect));
   border-radius: 0 0 8px 8px;
   background: var(--kb-bed);
   padding: 0 1px 4px;
@@ -234,7 +273,7 @@ html:not(.dark) .synth-keyboard__rail {
   gap: 4px;
   padding-bottom: 8px;
   transform-origin: top center;
-  transition: transform 0.04s ease, background 0.05s ease;
+  transition: transform var(--demo-dur-instant) var(--demo-ease-standard), background var(--demo-dur-instant) var(--demo-ease-standard);
 }
 
 /* Inset ring: an outer ring would be clipped between adjacent keys. */
@@ -255,8 +294,8 @@ html:not(.dark) .synth-keyboard__rail {
 .synth-keyboard__black {
   position: absolute;
   top: 0;
-  width: calc((100% / var(--white-count)) * 0.6);
-  height: 60%;
+  width: calc((100% / var(--white-count)) * var(--key-black-width));
+  height: calc(var(--key-black-length) * 100%);
   margin: 0;
   padding: 0 0 6px;
   transform: translateX(-50%);
@@ -274,7 +313,7 @@ html:not(.dark) .synth-keyboard__rail {
   align-items: flex-end;
   justify-content: center;
   transform-origin: top center;
-  transition: transform 0.04s ease, background 0.05s ease;
+  transition: transform var(--demo-dur-instant) var(--demo-ease-standard), background var(--demo-dur-instant) var(--demo-ease-standard);
 }
 
 /* Inset ring: an outer ring would be clipped between adjacent keys. */
@@ -327,7 +366,7 @@ html:not(.dark) .synth-keyboard__rail {
 @media (prefers-reduced-motion: reduce) {
   .synth-keyboard__white,
   .synth-keyboard__black {
-    transition: background 0.05s ease;
+    transition: background var(--demo-dur-instant) var(--demo-ease-standard);
   }
 
   .synth-keyboard__white.is-active {

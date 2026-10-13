@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import ToolShell from '@/components/ToolShell.vue';
-import { RotaryKnob, StatusIndicator, Tooltip } from '@/components/ui';
+import ToolStatusBar, { type ToolStatusField } from '@/components/ToolStatusBar.vue';
+import { DemoNotice, RotaryKnob, Tooltip } from '@/components/ui';
 import ChannelStrip from '@/components/ui/ChannelStrip.vue';
 import { useI18n } from '@/composables/useI18n';
 import StepRow from '@/demos/studio/StepRow.vue';
@@ -54,6 +55,18 @@ const statusLabel = computed(() => {
   if (isStarting.value) return copy.value.status.starting;
   if (isReady.value) return copy.value.status.ready;
   return copy.value.status.idle;
+});
+
+const statusFields = computed<ToolStatusField[]>(() => {
+  const keys = copy.value.statusbar;
+  const armed = pattern.value.flat(2).filter(Boolean).length;
+  const muted = trackMutes.value.filter(Boolean).length;
+  return [
+    { key: keys.pos, value: positionLabel.value },
+    { key: keys.bpm, value: String(bpm.value) },
+    { key: keys.steps, value: String(armed) },
+    { key: keys.muted, value: `${muted}/${STUDIO_TRACKS.length}` },
+  ];
 });
 
 const activeStep = computed(() =>
@@ -164,6 +177,36 @@ function scheduleRebuild() {
   }, 120);
 }
 
+// One tab stop for the whole grid: rows are numbered across every lane.
+const GRID_ROWS = STUDIO_TRACKS.flatMap((track, t) => track.rows.map((_, r) => ({ t, r })));
+const cursor = ref({ row: 0, step: 0 });
+const rowRefs = ref<(InstanceType<typeof StepRow> | null)[]>([]);
+
+function gridRow(t: number, r: number): number {
+  return GRID_ROWS.findIndex((cell) => cell.t === t && cell.r === r);
+}
+
+function setRowRef(t: number, r: number, el: unknown) {
+  rowRefs.value[gridRow(t, r)] = el as InstanceType<typeof StepRow> | null;
+}
+
+function onPadKey(event: KeyboardEvent, t: number, r: number, step: number) {
+  const row = gridRow(t, r);
+  const moves: Record<string, [number, number]> = {
+    ArrowLeft: [row, Math.max(0, step - 1)],
+    ArrowRight: [row, Math.min(STEP_COUNT - 1, step + 1)],
+    ArrowUp: [Math.max(0, row - 1), step],
+    ArrowDown: [Math.min(GRID_ROWS.length - 1, row + 1), step],
+    Home: [row, 0],
+    End: [row, STEP_COUNT - 1],
+  };
+  const next = moves[event.key];
+  if (!next) return;
+  event.preventDefault();
+  cursor.value = { row: next[0], step: next[1] };
+  void nextTick(() => rowRefs.value[next[0]]?.focusStep(next[1]));
+}
+
 function toggleStep(track: number, row: number, step: number) {
   const next = pattern.value.map((t) => t.map((r) => r.slice()));
   const on = !next[track][row][step];
@@ -242,13 +285,10 @@ function downloadMidi() {
     :opposite-locale-path="oppositeLocalePath"
   >
     <template #statusbar>
-      <div class="st-statusbar">
-        <StatusIndicator :status="statusKind" :label="statusLabel" :pulse="isPlaying || isStarting" />
-        <span class="st-statusbar__field"><b>{{ copy.statusbar.pos }}</b>{{ positionLabel }}</span>
-        <span class="st-statusbar__field"><b>{{ copy.statusbar.bpm }}</b>{{ bpm }}</span>
-        <span v-if="engine.error.value" class="st-error">{{ copy.errors.start }}</span>
-      </div>
+      <ToolStatusBar :status="statusKind" :label="statusLabel" :pulse="isPlaying || isStarting" :fields="statusFields" />
     </template>
+
+    <DemoNotice v-if="engine.error.value" tone="error" class="st-error">{{ copy.errors.start }}</DemoNotice>
 
     <div class="st-deck demo-deck">
       <!-- ===== TRANSPORT ===== -->
@@ -263,7 +303,7 @@ function downloadMidi() {
           <button
             type="button"
             class="st-play"
-            :class="{ 'st-play--on': isPlaying }"
+            :class="{ 'st-play--on': isPlaying, 'demo-anim-loop': isPlaying }"
             :aria-label="isPlaying ? copy.transport.stop : copy.transport.play"
             :disabled="!isReady"
             @click="togglePlay"
@@ -278,7 +318,8 @@ function downloadMidi() {
         </Tooltip>
 
         <Tooltip v-bind="term('position')">
-        <div class="st-lcd" role="status" tabindex="0">
+        <template #default="{ describedBy }">
+        <div class="st-lcd" role="group" tabindex="0" :aria-label="term('position').title" :aria-describedby="describedBy">
           <div class="st-lcd__cell">
             <span class="st-lcd__key">{{ copy.statusbar.bpm }}</span>
             <span class="st-lcd__value st-lcd__value--big">{{ bpm }}</span>
@@ -290,6 +331,7 @@ function downloadMidi() {
           </div>
           <i class="st-lcd__dot" :class="{ 'st-lcd__dot--on': isPlaying }"></i>
         </div>
+        </template>
         </Tooltip>
 
         <RotaryKnob
@@ -319,7 +361,7 @@ function downloadMidi() {
           <Tooltip v-bind="term('bounce')">
             <button
               type="button"
-              class="st-bounce"
+              class="demo-btn demo-btn--primary"
               :disabled="downloading || !isReady || !hasExportableNotes"
               @click="downloadWav"
             >
@@ -332,7 +374,7 @@ function downloadMidi() {
           <Tooltip v-bind="term('midi')">
             <button
               type="button"
-              class="st-bounce st-bounce--ghost"
+              class="demo-btn"
               :disabled="!isReady || !hasExportableNotes"
               @click="downloadMidi"
             >
@@ -351,11 +393,7 @@ function downloadMidi() {
       <div class="st-deck__seq">
         <div class="st-sec-head">
           <h3 class="st-sec-title">{{ copy.sections.sequencer }}</h3>
-          <Tooltip v-bind="term('step')">
-            <button type="button" class="st-sec-info" :aria-label="term('step').title">
-              <span aria-hidden="true">i</span>
-            </button>
-          </Tooltip>
+          <Tooltip v-bind="term('step')" />
         </div>
         <div class="st-ruler" aria-hidden="true">
           <span class="st-ruler__gutter"></span>
@@ -389,33 +427,41 @@ function downloadMidi() {
               <i
                 v-if="isPlaying"
                 class="st-lane__playhead"
-                :style="{ left: `${engine.position.value * 100}%` }"
+                :style="{ transform: `translateX(${engine.position.value * 100}%)` }"
               ></i>
             </div>
           </div>
-          <div class="st-lane__grid">
+          <div class="st-lane__grid" role="group" :aria-label="`${copy.grid.label} · ${copy.tracks[track.id]}`">
             <StepRow
               v-for="(row, r) in track.rows"
               :key="row.note"
+              :ref="(el) => setRowRef(t, r, el)"
               :label="row.label"
               :cells="pattern[t][r]"
               :active-step="activeStep"
+              :cursor-step="cursor.row === gridRow(t, r) ? cursor.step : -1"
+              :cell-label="copy.grid.cell"
               @toggle="(step) => toggleStep(t, r, step)"
+              @navigate="(event, step) => onPadKey(event, t, r, step)"
+              @cursor="(step) => (cursor = { row: gridRow(t, r), step })"
             />
           </div>
         </div>
-        <p class="st-hint">{{ copy.hint }}</p>
+        <DemoNotice tone="hint" class="st-hint">
+          <p>{{ copy.hint }}</p>
+          <div class="st-keys">
+            <span><kbd class="demo-kbd">←</kbd><kbd class="demo-kbd">→</kbd><kbd class="demo-kbd">↑</kbd><kbd class="demo-kbd">↓</kbd> {{ copy.keys.move }}</span>
+            <span><kbd class="demo-kbd">Enter</kbd> {{ copy.keys.toggle }}</span>
+            <span><kbd class="demo-kbd">Space</kbd> {{ copy.keys.play }}</span>
+          </div>
+        </DemoNotice>
       </div>
 
       <!-- ===== MIXER ===== -->
       <div class="st-deck__mixer">
         <div class="st-sec-head">
           <h3 class="st-sec-title">{{ copy.sections.mixer }}</h3>
-          <Tooltip v-bind="term('mixer')">
-            <button type="button" class="st-sec-info" :aria-label="term('mixer').title">
-              <span aria-hidden="true">i</span>
-            </button>
-          </Tooltip>
+          <Tooltip v-bind="term('mixer')" />
         </div>
         <div class="st-mix-row">
           <div class="st-strips">
@@ -452,20 +498,16 @@ function downloadMidi() {
           />
           </div>
 
-          <!-- Decorative hardware "master section": real master level on a dB scale. -->
-          <div class="st-vu" aria-hidden="true">
+          <!-- Hardware "master section": the real master level on a dB scale; the strips carry the accessible meters. -->
+          <div class="st-vu">
             <div class="st-vu__head">
               <span class="st-vu__title">
-                MASTER OUT
-                <Tooltip v-bind="term('vu')">
-                  <button type="button" class="st-sec-info" :aria-label="term('vu').title">
-                    <span aria-hidden="true">i</span>
-                  </button>
-                </Tooltip>
+                {{ copy.vu.title }}
+                <Tooltip v-bind="term('vu')" />
               </span>
-              <span class="st-vu__legend">REALTIME ENGINE · LANE MIXER · MIDI CLIPS</span>
+              <span class="st-vu__legend" aria-hidden="true">{{ copy.vu.legend }}</span>
             </div>
-            <div class="st-vu__meter">
+            <div class="st-vu__meter" aria-hidden="true">
               <i
                 v-for="mark in VU_MARKS.slice(1, -1)"
                 :key="mark.db"
@@ -477,7 +519,7 @@ function downloadMidi() {
                 :style="{ clipPath: `inset(0 ${100 - masterVuPercent}% 0 0)` }"
               ></div>
             </div>
-            <div class="st-vu__scale">
+            <div class="st-vu__scale" aria-hidden="true">
               <span
                 v-for="mark in VU_MARKS"
                 :key="mark.db"

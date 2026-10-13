@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import ToolShell from '@/components/ToolShell.vue';
-import { MetricItem, StatusIndicator, TechPanel, TermLabel } from '@/components/ui';
+import ToolStatusBar, { type ToolStatusField } from '@/components/ToolStatusBar.vue';
+import { DemoNotice, MetricItem, SegmentedControl, TechPanel, TermLabel } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { useWasmBoot } from '@/composables/useWasmBoot';
 import { enCopy, jaCopy } from '@/demos/realtime-fx/realtimeFxCopy';
 import {
+  absoluteFormantInReach,
+  type FormantMode,
   isVoicePresetId,
   useRealtimeFx,
   VOICE_PRESET_MACROS,
@@ -27,6 +30,7 @@ const pitchSemitones = ref(0);
 const formant = ref(1);
 const brightness = ref(0.1);
 const formantEngaged = ref(false);
+const formantMode = ref<FormantMode>('relative');
 const wet = ref(1);
 const outputGain = ref(0.85);
 const bypass = ref(false);
@@ -65,6 +69,7 @@ type TermKey = keyof typeof enCopy.terms.items;
 const TERM_SLUGS: Record<TermKey, string | undefined> = {
   pitch: 'concepts/audio-basics',
   formant: 'editing/voice-formant',
+  formantMode: 'editing/voice-formant',
   brightness: 'editing/voice-formant',
   wet: undefined,
   output: 'concepts/gain-staging',
@@ -116,6 +121,26 @@ const presets = computed(() =>
   VOICE_PRESET_ORDER.map((id) => ({ id, label: copy.value.presets[id].label })),
 );
 const activePresetHint = computed(() => copy.value.presets[selectedPreset.value].hint);
+
+const statusFields = computed<ToolStatusField[]>(() => {
+  const keys = copy.value.statusFields;
+  return [
+    { key: keys.character, value: copy.value.presets[selectedPreset.value].label, wide: true },
+    { key: keys.input, value: inputPeakDb.value, divider: true },
+    { key: keys.output, value: outputPeakDb.value },
+    { key: keys.latency, value: latencyMs.value ? `${latencyMs.value} ms` : '-' },
+  ];
+});
+
+const formantModeOptions = computed(() => [
+  { id: 'relative', label: copy.value.formantModes.relative },
+  { id: 'absolute', label: copy.value.formantModes.absolute },
+]);
+const formantOutOfReach = computed(
+  () =>
+    formantMode.value === 'absolute' &&
+    !absoluteFormantInReach(pitchSemitones.value, formant.value),
+);
 
 onMounted(() => {
   restorePreset();
@@ -183,6 +208,7 @@ function applyParams() {
     formant: formant.value,
     brightness: brightness.value,
     formantEngaged: formantEngaged.value,
+    formantMode: formantMode.value,
     wet: wet.value,
     outputGain: outputGain.value,
     bypass: bypass.value,
@@ -191,6 +217,11 @@ function applyParams() {
 
 function applyFormantParams() {
   formantEngaged.value = true;
+  applyParams();
+}
+
+function setFormantMode(mode: string) {
+  formantMode.value = mode as FormantMode;
   applyParams();
 }
 </script>
@@ -204,34 +235,36 @@ function applyFormantParams() {
     :status="statusKind"
     :status-label="copy.localOnly"
     :docs-path="docsPath"
-    :guide-title="copy.safety.title"
-    :guide-body="copy.safety.body"
+    :guide-title="copy.guide.title"
+    :guide-body="copy.guide.body"
     :guide-link-label="copy.help.docs"
     :opposite-locale-path="oppositeLocalePath"
   >
     <template #statusbar>
-      <div class="rt-statusbar">
-        <StatusIndicator :status="statusKind" :label="statusLabel" :pulse="isStarting || isMonitoring" />
-        <span class="rt-statusbar__field"><b>IN</b>{{ inputPeakDb }}</span>
-        <span class="rt-statusbar__field"><b>OUT</b>{{ outputPeakDb }}</span>
-        <span class="rt-statusbar__field"><b>LAT</b>{{ latencyMs || '-' }} ms</span>
-      </div>
+      <ToolStatusBar
+        :status="statusKind"
+        :label="statusLabel"
+        :pulse="isStarting || isMonitoring"
+        :fields="statusFields"
+      />
     </template>
 
     <div class="rt-lab">
       <aside class="rt-lab__left">
         <TechPanel :title="copy.panels.input">
           <div class="rt-input">
-            <div class="rt-input__badge">MIC</div>
+            <DemoNotice tone="warn" :title="copy.safety.title">{{ copy.safety.body }}</DemoNotice>
+            <div class="rt-input__badge" aria-hidden="true">MIC</div>
             <div class="rt-actions">
-              <button class="rt-button rt-button--primary" :disabled="isStarting || isReady" @click="startEngine">{{ copy.actions.start }}</button>
-              <button class="rt-button" :disabled="!isReady && !isStarting" @click="stopEngine">{{ copy.actions.stop }}</button>
+              <button type="button" class="demo-btn demo-btn--primary" :disabled="isStarting || isReady" @click="startEngine">{{ copy.actions.start }}</button>
+              <button type="button" class="demo-btn" :disabled="!isReady && !isStarting" @click="stopEngine">{{ copy.actions.stop }}</button>
             </div>
             <button
-              class="rt-monitor"
-              :class="{ 'rt-monitor--active': isMonitoring }"
+              type="button"
+              class="demo-btn rt-monitor"
+              :class="{ 'rt-monitor--active demo-anim-loop': isMonitoring }"
               :disabled="isStarting"
-              :aria-label="isMonitoring ? copy.actions.monitorOff : copy.actions.monitorOn"
+              :aria-pressed="isMonitoring"
               @click="toggleMonitor"
             >
               <svg v-if="isMonitoring" class="rt-monitor__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -244,9 +277,9 @@ function applyFormantParams() {
                 <path d="m16 9 5 5" />
                 <path d="m21 9-5 5" />
               </svg>
-              {{ isMonitoring ? copy.actions.monitorOff : copy.actions.monitorOn }}
+              {{ copy.actions.speaker }}
             </button>
-            <p v-if="localError" class="rt-error">{{ localError }}</p>
+            <DemoNotice v-if="localError" tone="error">{{ localError }}</DemoNotice>
           </div>
         </TechPanel>
 
@@ -255,14 +288,17 @@ function applyFormantParams() {
             <button
               v-for="preset in presets"
               :key="preset.id"
-              class="rt-preset"
-              :class="{ 'rt-preset--active': selectedPreset === preset.id }"
+              type="button"
+              class="demo-btn rt-preset"
+              :aria-pressed="selectedPreset === preset.id"
               @click="applyPreset(preset.id)"
             >
               {{ preset.label }}
             </button>
           </div>
-          <p class="rt-preset-hint">{{ activePresetHint }}</p>
+          <div class="rt-preset-hint">
+            <DemoNotice :key="selectedPreset" tone="hint">{{ activePresetHint }}</DemoNotice>
+          </div>
         </TechPanel>
       </aside>
 
@@ -271,23 +307,35 @@ function applyFormantParams() {
           <div class="rt-controls">
             <label class="rt-slider">
               <span><TermLabel v-bind="term('pitch')">{{ copy.controls.pitch }}</TermLabel> <b>{{ pitchSemitones.toFixed(1) }} st</b></span>
-              <input v-model.number="pitchSemitones" type="range" min="-12" max="12" step="0.1" @input="applyParams">
+              <input v-model.number="pitchSemitones" class="demo-range" type="range" min="-12" max="12" step="0.1" @input="applyParams">
             </label>
             <label class="rt-slider">
               <span><TermLabel v-bind="term('formant')">{{ copy.controls.formant }}</TermLabel> <b>{{ formant.toFixed(2) }}</b></span>
-              <input v-model.number="formant" type="range" min="0.55" max="1.65" step="0.01" @input="applyFormantParams">
+              <input v-model.number="formant" class="demo-range" type="range" min="0.55" max="1.65" step="0.01" @input="applyFormantParams">
             </label>
+            <div class="rt-mode">
+              <TermLabel v-bind="term('formantMode')">{{ copy.formantModes.label }}</TermLabel>
+              <SegmentedControl
+                :model-value="formantMode"
+                :options="formantModeOptions"
+                :ariaLabel="copy.formantModes.label"
+                size="sm"
+                fill
+                @update:model-value="setFormantMode"
+              />
+              <DemoNotice v-if="formantOutOfReach" tone="warn">{{ copy.notes.outOfReach }}</DemoNotice>
+            </div>
             <label class="rt-slider">
               <span><TermLabel v-bind="term('brightness')">{{ copy.controls.brightness }}</TermLabel> <b>{{ brightness.toFixed(2) }}</b></span>
-              <input v-model.number="brightness" type="range" min="-1" max="1" step="0.01" @input="applyFormantParams">
+              <input v-model.number="brightness" class="demo-range" type="range" min="-1" max="1" step="0.01" @input="applyFormantParams">
             </label>
             <label class="rt-slider">
               <span><TermLabel v-bind="term('wet')">{{ copy.controls.wet }}</TermLabel> <b>{{ Math.round(wet * 100) }}%</b></span>
-              <input v-model.number="wet" type="range" min="0" max="1" step="0.01" @input="applyParams">
+              <input v-model.number="wet" class="demo-range" type="range" min="0" max="1" step="0.01" @input="applyParams">
             </label>
             <label class="rt-slider">
               <span><TermLabel v-bind="term('output')">{{ copy.controls.output }}</TermLabel> <b>{{ Math.round(outputGain * 100) }}%</b></span>
-              <input v-model.number="outputGain" type="range" min="0" max="1" step="0.01" @input="applyParams">
+              <input v-model.number="outputGain" class="demo-range" type="range" min="0" max="1" step="0.01" @input="applyParams">
             </label>
             <label class="rt-bypass">
               <input v-model="bypass" type="checkbox" @change="applyParams">
@@ -305,29 +353,27 @@ function applyFormantParams() {
             </div>
             <div class="rt-meter">
               <div class="rt-meter__track">
-                <div class="rt-meter__fill" :style="{ height: `${meterFillPercent(meter.inputRms)}%` }">
-                  <span class="rt-meter__zones"></span>
-                </div>
+                <div class="rt-meter__fill" :style="{ clipPath: `inset(${100 - meterFillPercent(meter.inputRms)}% 0 0 0)` }"></div>
                 <i v-if="meter.inputPeak > 0" class="rt-meter__peak" :style="{ bottom: `${meterFillPercent(meter.inputPeak)}%` }"></i>
                 <i v-if="inputHold > 0" class="rt-meter__hold" :style="{ bottom: `${meterFillPercent(inputHold)}%` }"></i>
               </div>
-              <b>IN</b>
+              <b>{{ copy.meters.input }}</b>
             </div>
             <div class="rt-meter">
               <div class="rt-meter__track">
                 <button
+                  type="button"
                   class="rt-clip"
                   :class="{ 'rt-clip--lit': clipped }"
-                  :title="copy.metrics.clip"
+                  :disabled="!clipped"
+                  :aria-label="copy.metrics.clip"
                   @click="clipped = false"
-                >CLIP</button>
-                <div class="rt-meter__fill" :style="{ height: `${meterFillPercent(meter.outputRms)}%` }">
-                  <span class="rt-meter__zones"></span>
-                </div>
+                >{{ copy.meters.clip }}</button>
+                <div class="rt-meter__fill" :style="{ clipPath: `inset(${100 - meterFillPercent(meter.outputRms)}% 0 0 0)` }"></div>
                 <i v-if="meter.outputPeak > 0" class="rt-meter__peak" :style="{ bottom: `${meterFillPercent(meter.outputPeak)}%` }"></i>
                 <i v-if="outputHold > 0" class="rt-meter__hold" :style="{ bottom: `${meterFillPercent(outputHold)}%` }"></i>
               </div>
-              <b>OUT</b>
+              <b>{{ copy.meters.output }}</b>
             </div>
           </div>
           <div class="rt-metric-list">

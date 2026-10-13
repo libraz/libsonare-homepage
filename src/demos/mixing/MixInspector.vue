@@ -1,17 +1,17 @@
 <script setup lang="ts">
 /**
  * Everything about the selected strip that does not fit on it: the EQ graph,
- * the dynamics in detail, routing (pan mode and law, dual pan, channel delay,
- * polarity, solo safe) and the clip's position, trim and fades.
+ * the dynamics in detail, routing (output bus, pan mode and law, dual pan,
+ * channel delay, polarity, solo safe) and the clip's position, trim and fades.
  */
 import { computed } from 'vue';
-import { TermLabel } from '@/components/ui';
+import { DemoEmpty, SegmentedControl, TermLabel } from '@/components/ui';
 import MixDynamicsEditor from '@/demos/mixing/MixDynamicsEditor.vue';
 import MixEqEditor from '@/demos/mixing/MixEqEditor.vue';
 import MixParam from '@/demos/mixing/MixParam.vue';
 import { MAX_DURATION_SECONDS } from '@/demos/mixing/mixingConstants';
 import { useMixingCopy } from '@/demos/mixing/mixingCopy';
-import { clipPlayedSec } from '@/demos/mixing/mixingState';
+import { clipPlayedSec, GROUP_BUSES, type GroupBusName } from '@/demos/mixing/mixingState';
 import { useMixingTerm } from '@/demos/mixing/mixingTerms';
 import {
   CHANNEL_DELAY_CONTROL,
@@ -50,12 +50,28 @@ const lengthControl = computed(() =>
 );
 const fadeControl = computed(() => seconds('fadeSec', Math.min(10, played.value / 2)));
 
-function setPanMode(mode: number): void {
-  if (track.value) m.edit('setPanMode', track.value.id, mode);
+const MASTER_OUT = 'master';
+const outputOptions = computed(() => [
+  { id: MASTER_OUT, label: copy.value.console.outputMaster, disabled: editLocked.value },
+  ...GROUP_BUSES.map((id) => ({ id, label: copy.value.groups[id], disabled: editLocked.value })),
+]);
+const indexOptions = (labels: readonly string[]) =>
+  labels.map((label, i) => ({ id: String(i), label, disabled: editLocked.value }));
+const panModeOptions = computed(() => indexOptions(copy.value.panModes));
+const panLawOptions = computed(() => indexOptions(copy.value.panLaws));
+
+function setOutput(id: string): void {
+  if (track.value) {
+    m.edit('setOutputBus', track.value.id, id === MASTER_OUT ? null : (id as GroupBusName));
+  }
 }
 
-function setPanLaw(law: number): void {
-  if (track.value) m.edit('setPanLaw', track.value.id, law);
+function setPanMode(mode: string): void {
+  if (track.value) m.edit('setPanMode', track.value.id, Number(mode));
+}
+
+function setPanLaw(law: string): void {
+  if (track.value) m.edit('setPanLaw', track.value.id, Number(law));
 }
 
 function trim(start: number, length: number | null): void {
@@ -72,9 +88,11 @@ function fades(fadeIn: number, fadeOut: number): void {
     <header class="inspector__head">
       <h3>{{ copy.inspector.title }}</h3>
       <span v-if="track" class="inspector__name">{{ track.name }}</span>
-      <button type="button" class="inspector__close" :aria-label="copy.header.closeInspector" @click="emit('close')">×</button>
+      <button type="button" class="demo-btn demo-btn--ghost demo-btn--icon demo-btn--sm inspector__close" :aria-label="copy.header.closeInspector" @click="emit('close')">×</button>
     </header>
-    <p v-if="!track" class="inspector__empty">{{ copy.inspector.none }}</p>
+    <DemoEmpty v-if="!track" compact :title="copy.inspector.noneTitle">
+      <p>{{ copy.inspector.none }}</p>
+    </DemoEmpty>
     <template v-else>
       <p class="inspector__meta">
         <span>{{ info?.fileName ?? copy.arrange.noAudio }}</span>
@@ -92,32 +110,36 @@ function fades(fadeIn: number, fadeOut: number): void {
       </div>
 
       <div class="inspector__section">
-        <h4>{{ copy.inspector.routing }}</h4>
+        <h4><TermLabel v-bind="term('routing')">{{ copy.inspector.routing }}</TermLabel></h4>
+        <div class="inspector__field">
+          <TermLabel v-bind="term('group')">{{ copy.inspector.output }}</TermLabel>
+          <SegmentedControl
+            :model-value="track.outputBus ?? MASTER_OUT"
+            :options="outputOptions"
+            :ariaLabel="copy.inspector.output"
+            size="sm"
+            @update:model-value="setOutput"
+          />
+        </div>
         <div class="inspector__field">
           <TermLabel v-bind="term('panMode')">{{ term('panMode').title }}</TermLabel>
-          <div class="inspector__segment" role="group" :aria-label="term('panMode').title">
-            <button
-              v-for="(label, mode) in copy.panModes"
-              :key="label"
-              type="button"
-              :aria-pressed="track.panMode === mode"
-              :disabled="editLocked"
-              @click="setPanMode(mode)"
-            >{{ label }}</button>
-          </div>
+          <SegmentedControl
+            :model-value="String(track.panMode)"
+            :options="panModeOptions"
+            :ariaLabel="term('panMode').title"
+            size="sm"
+            @update:model-value="setPanMode"
+          />
         </div>
         <div class="inspector__field">
           <TermLabel v-bind="term('panLaw')">{{ term('panLaw').title }}</TermLabel>
-          <div class="inspector__segment" role="group" :aria-label="term('panLaw').title">
-            <button
-              v-for="(label, law) in copy.panLaws"
-              :key="label"
-              type="button"
-              :aria-pressed="track.panLaw === law"
-              :disabled="editLocked"
-              @click="setPanLaw(law)"
-            >{{ label }}</button>
-          </div>
+          <SegmentedControl
+            :model-value="String(track.panLaw)"
+            :options="panLawOptions"
+            :ariaLabel="term('panLaw').title"
+            size="sm"
+            @update:model-value="setPanLaw"
+          />
         </div>
         <div v-if="track.panMode === 2" class="inspector__grid">
           <MixParam
@@ -152,21 +174,25 @@ function fades(fadeIn: number, fadeOut: number): void {
             @begin="m.begin"
             @end="m.end"
           />
-          <div class="inspector__toggles">
+          <div class="inspector__toggles" role="group" :aria-label="term('polarity').title">
+            <TermLabel class="inspector__toggles-label" v-bind="term('polarity', true)">{{ term('polarity').title }}</TermLabel>
             <button
               type="button"
+              class="demo-btn demo-btn--sm"
               :aria-pressed="track.polarityLeft"
               :disabled="editLocked"
               @click="m.edit('setPolarity', track.id, 'left', !track.polarityLeft)"
             >{{ copy.inspector.polarityLeft }}</button>
             <button
               type="button"
+              class="demo-btn demo-btn--sm"
               :aria-pressed="track.polarityRight"
               :disabled="editLocked"
               @click="m.edit('setPolarity', track.id, 'right', !track.polarityRight)"
             >{{ copy.inspector.polarityRight }}</button>
             <button
               type="button"
+              class="demo-btn demo-btn--sm"
               :aria-pressed="track.soloSafe"
               :disabled="editLocked"
               @click="m.edit('setSoloSafe', track.id, !track.soloSafe)"
@@ -176,7 +202,7 @@ function fades(fadeIn: number, fadeOut: number): void {
       </div>
 
       <div class="inspector__section">
-        <h4>{{ copy.inspector.clip }}</h4>
+        <h4><TermLabel v-bind="term('clip')">{{ copy.inspector.clip }}</TermLabel></h4>
         <div class="inspector__grid">
           <MixParam
             :model-value="track.clip.startSec"
@@ -230,7 +256,7 @@ function fades(fadeIn: number, fadeOut: number): void {
           />
           <button
             type="button"
-            class="inspector__full"
+            class="demo-btn demo-btn--sm inspector__full"
             :disabled="editLocked || track.clip.lengthSec === null"
             @click="trim(track.clip.trimStartSec, null)"
           >{{ copy.inspector.full }}</button>
@@ -248,7 +274,7 @@ function fades(fadeIn: number, fadeOut: number): void {
   min-width: 0;
   padding: 10px 12px 14px;
   border: 1px solid var(--demo-border);
-  border-radius: 6px;
+  border-radius: var(--demo-radius-md);
   background: var(--demo-bg-elevated);
 }
 
@@ -281,22 +307,12 @@ function fades(fadeIn: number, fadeOut: number): void {
 
 .inspector__close {
   display: none;
-  padding: 0 6px;
-  border: 0;
-  background: transparent;
-  color: var(--demo-text-muted);
-  font-size: 18px;
-  cursor: pointer;
+  font-size: 16px;
 }
 
-.inspector__empty,
 .inspector__meta {
   margin: 0;
   color: var(--demo-text-muted);
-  font-size: 12px;
-}
-
-.inspector__meta {
   display: grid;
   gap: 2px;
   font-family: var(--font-mono);
@@ -316,37 +332,6 @@ function fades(fadeIn: number, fadeOut: number): void {
   gap: 4px;
 }
 
-.inspector__segment {
-  display: flex;
-  width: 100%;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.inspector__segment button {
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 4px 2px;
-  border: 0;
-  border-left: 1px solid var(--demo-border);
-  background: var(--demo-control-bg);
-  color: var(--demo-text-muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  cursor: pointer;
-}
-
-.inspector__segment button:first-child {
-  border-left: 0;
-}
-
-.inspector__segment button[aria-pressed='true'] {
-  background: var(--demo-accent-subtle);
-  color: var(--demo-accent);
-  font-weight: 600;
-}
-
 .inspector__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -360,32 +345,24 @@ function fades(fadeIn: number, fadeOut: number): void {
   gap: 3px;
 }
 
-.inspector__toggles button,
-.inspector__full {
-  padding: 4px 0;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 3px;
-  background: var(--demo-control-bg);
-  color: var(--demo-text-muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  cursor: pointer;
+.inspector__toggles-label {
+  grid-column: 1 / -1;
 }
 
-.inspector__toggles button[aria-pressed='true'] {
+.inspector__toggles .demo-btn {
+  padding: 0;
+}
+
+.inspector__toggles .demo-btn[aria-pressed='true'],
+.inspector__toggles .demo-btn[aria-pressed='true']:hover:not(:disabled) {
   border-color: var(--demo-accent);
   background: var(--demo-accent);
   color: var(--demo-on-accent);
 }
 
-.inspector button:disabled {
-  cursor: not-allowed;
-  opacity: var(--demo-disabled-opacity);
-}
-
 @media (max-width: 959px) {
   .inspector__close {
-    display: block;
+    display: inline-flex;
   }
 }
 </style>

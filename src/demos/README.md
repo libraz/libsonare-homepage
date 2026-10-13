@@ -7,17 +7,18 @@ here directly from their header.
 
 | Directory | Page | Entry |
 | --- | --- | --- |
-| [`analyzer/`](analyzer) | `/analyzer` | `AnalyzerDemo.vue` |
 | [`mastering/`](mastering) | `/mastering` | `MasteringDemo.vue` |
 | [`music-analysis/`](music-analysis) | `/music-analysis` | `MusicAnalysisStudio.vue` |
+| [`transcribe/`](transcribe) | `/transcribe` | `TranscribeDemo.vue` |
 | [`mixing/`](mixing) | `/mixing` | `MixingStudio.vue` |
 | [`realtime-fx/`](realtime-fx) | `/realtime-fx` | `RealtimeFxLab.vue` |
-| [`spatial/`](spatial) | `/spatial` | `SpatialScanner.vue` |
+| [`analyzer/`](analyzer) | `/analyzer` | `AnalyzerDemo.vue` |
 | [`synth/`](synth) | `/synth` | `SynthDemo.vue` |
 | [`studio/`](studio) | `/studio` | `StudioDemo.vue` |
 | [`practice/`](practice) | `/practice` | `PianoPracticeDemo.vue` |
-| [`gs-module/`](gs-module) | `/gs-module` | `GsModuleDemo.vue` |
 | [`step-bass/`](step-bass) | `/step-bass` | `StepBassDemo.vue` |
+| [`gs-module/`](gs-module) | `/gs-module` | `GsModuleDemo.vue` |
+| [`spatial/`](spatial) | `/spatial` | `SpatialScanner.vue` |
 | [`inline/`](inline) | `<SonareDemo>` widgets in the docs | `SonareDemo.vue` |
 
 `manifest.ts` is the one table binding an id to its route and its directory.
@@ -52,6 +53,12 @@ lists.
 | `components/ui/EngineTransport.vue` | Transport bar for the engine (play, stop, seek, loop range); `AudioTransport.vue` is the `<audio>` counterpart |
 | `utils/template.ts` | `fill`, the `{name}` placeholder substitution for copy strings |
 | `utils/audio.ts` | WAV encoding; `WAV_FORMATS`, `WAV_DITHERS` and `wavBounceOptions` give every export menu the same format and dither choices |
+| `components/ui/SegmentedControl.vue` | Single-choice picker: a radiogroup of equal-width segments with arrow keys and a sliding indicator |
+| `components/ui/DemoNotice.vue` | The one callout, toned `hint` / `info` / `warn` / `error` / `success`; errors are announced as alerts |
+| `components/ui/DemoEmpty.vue` | Empty state for a panel with nothing to show yet |
+| `components/keyboard/keyGeometry.ts` | The one key-size definition: white-key width range, length/width ratio and black-key proportions. Every on-screen keyboard and keyboard-aligned canvas derives from it |
+| `components/ui/InfoDot.vue` | The "i" help trigger; `Tooltip` renders it when no trigger is slotted |
+| `.vitepress/theme/styles/demo-controls.css` | `.demo-btn`, `.demo-field`, `.demo-range`, `.demo-kbd`, `.demo-sr-only` and the `demo-rise` / `demo-fade` transitions; the motion, state, radius and z-index tokens they use are in `demo-tokens.css` |
 
 Routes are wired in `.vitepress/theme/Layout.vue`, which selects a demo from the
 page's `layout:` frontmatter and loads it as its own chunk.

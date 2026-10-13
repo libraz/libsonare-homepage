@@ -496,6 +496,39 @@ html:not(.dark) .demo-grid__fall-key {
   100% { transform: translateY(50px); opacity: 1; }
 }
 
+/* Waveform over a piano roll */
+.demo-grid__roll-wave {
+  fill: none;
+  stroke: var(--demo-text-faint, rgba(255, 255, 255, 0.28));
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+}
+.demo-grid__roll-axis {
+  stroke: var(--demo-border-strong, rgba(139, 92, 246, 0.25));
+  stroke-width: 1;
+}
+.demo-grid__roll-note {
+  animation: demo-grid-roll-in 0.5s ease-out both;
+  animation-delay: var(--d);
+}
+.demo-grid__roll-note--kept {
+  fill: var(--demo-accent, #8b5cf6);
+}
+.demo-grid__roll-note--added {
+  fill: var(--demo-cyan, #22d3ee);
+}
+.demo-grid__roll-note--removed {
+  fill: none;
+  stroke: var(--demo-danger, #fca5a5);
+  stroke-width: 0.8;
+  stroke-dasharray: 2 1.5;
+}
+
+@keyframes demo-grid-roll-in {
+  from { opacity: 0; transform: translateX(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
 .demo-grid__title {
   margin: 2px 0 0;
   font-family: var(--font-body);
@@ -618,6 +651,7 @@ html:not(.dark) .demo-grid__visual {
   .demo-grid__fall-key--lit,
   .demo-grid__part-fill,
   .demo-grid__filter-curve,
+  .demo-grid__roll-note,
   .demo-grid__status-dot {
     animation: none;
   }

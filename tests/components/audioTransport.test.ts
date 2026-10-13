@@ -2,6 +2,8 @@ import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AudioTransport from '@/components/ui/AudioTransport.vue';
 
+vi.mock('vitepress', () => ({ useData: () => ({ lang: { value: 'en' } }) }));
+
 describe('AudioTransport', () => {
   let playSpy: ReturnType<typeof vi.spyOn>;
   let pauseSpy: ReturnType<typeof vi.spyOn>;

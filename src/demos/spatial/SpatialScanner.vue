@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import ToolShell from '@/components/ToolShell.vue';
+import ToolStatusBar, { type ToolStatusField } from '@/components/ToolStatusBar.vue';
 import {
   AudioSource,
+  DemoEmpty,
+  DemoNotice,
   MetricItem,
-  StatusIndicator,
   TechPanel,
   TermLabel,
   Tooltip,
@@ -63,12 +65,6 @@ function term(key: SpatialTermKey) {
   };
 }
 
-const sceneColors = computed(() =>
-  isDark.value
-    ? { accent: '#8B5CF6', cyan: '#22D3EE', amber: '#F59E0B', truth: '#34D399' }
-    : { accent: '#7C3AED', cyan: '#0891B2', amber: '#B45309', truth: '#059669' },
-);
-
 const statusKind = computed<'idle' | 'active' | 'warning' | 'error'>(() => {
   if (status.value === 'error') return 'error';
   if (status.value === 'ready') return 'active';
@@ -81,6 +77,31 @@ const hasUploadedSource = computed(() => !!fileName.value);
 const canMorph = computed(() => !!sceneResult.value && !busy.value && !audio.isMorphing.value);
 const canSaveAudio = computed(() => !!audio.renderedKind.value && !audio.isMorphing.value);
 const canSaveReport = computed(() => !!sceneResult.value && !busy.value);
+
+const statusFields = computed<ToolStatusField[]>(() => {
+  const r = sceneResult.value;
+  const fields: ToolStatusField[] = [
+    fileName.value
+      ? { key: 'FILE', value: fileName.value, wide: true }
+      : {
+          key: 'ROOM',
+          value: activePreset.value ? copy.value.rooms[activePreset.value].label : '-',
+        },
+    {
+      key: 'MODE',
+      value: result.value
+        ? result.value.isBlind
+          ? copy.value.metrics.modeBlind
+          : copy.value.metrics.modeIr
+        : '-',
+    },
+    { key: 'VOL', value: r ? fmtVol(r.room.volume) : '-', divider: true },
+    { key: 'RT60', value: r ? fmtS(r.acoustic.rt60) : '-' },
+    { key: 'CONF', value: r ? fmtPct(r.confidence) : '-' },
+  ];
+  if (busy.value) fields.push({ key: 'SCAN', value: `${Math.round(progress.value * 100)}%` });
+  return fields;
+});
 
 const rooms = computed(() =>
   PRESET_ORDER.map((id) => ({
@@ -222,27 +243,21 @@ function morphGeometry() {
   if (!sceneResult.value) return null;
   if (activePreset.value) return PRESET_GEOMETRY[activePreset.value];
   const r = sceneResult.value;
-  const absorptions = r.bands.map((band) => band.absorption).filter((v) => v > 0);
-  const absorption =
-    absorptions.length > 0
-      ? absorptions.reduce((sum, value) => sum + value, 0) / absorptions.length
-      : 0.18;
-  const dspSource = r.dspSource ?? {
-    x: Math.min(Math.max(r.source.x, 0.05), r.room.length - 0.05),
-    y: Math.min(Math.max(r.source.y, 0.05), r.room.width - 0.05),
-    z: Math.min(Math.max(r.source.z, 0.05), r.room.height - 0.05),
-  };
+  // The worker rebuilds the room with roomGeometryFromEstimate; the page keeps
+  // the source placement, which encodes the estimated distance.
   return {
-    lengthM: r.room.length,
-    widthM: r.room.width,
-    heightM: r.room.height,
-    absorption,
-    sourceX: dspSource.x,
-    sourceY: dspSource.y,
-    sourceZ: dspSource.z,
-    listenerX: r.listener.x,
-    listenerY: r.listener.y,
-    listenerZ: r.listener.z,
+    estimate: {
+      lengthM: r.room.length,
+      widthM: r.room.width,
+      heightM: r.room.height,
+      bandAbsorption: r.bands.map((band) => band.absorption),
+    },
+    source: r.dspSource ?? {
+      x: Math.min(Math.max(r.source.x, 0.05), r.room.length - 0.05),
+      y: Math.min(Math.max(r.source.y, 0.05), r.room.width - 0.05),
+      z: Math.min(Math.max(r.source.z, 0.05), r.room.height - 0.05),
+    },
+    listener: r.listener,
   };
 }
 </script>
@@ -262,17 +277,7 @@ function morphGeometry() {
     :opposite-locale-path="oppositeLocalePath"
   >
     <template #statusbar>
-      <div class="sp-statusbar">
-        <StatusIndicator :status="statusKind" :label="statusLabel" :pulse="busy" />
-        <span v-if="fileName" class="sp-statusbar__field"><b>FILE</b>{{ fileName }}</span>
-        <span v-else-if="activePreset" class="sp-statusbar__field"><b>ROOM</b>{{ copy.rooms[activePreset].label }}</span>
-        <span v-if="result" class="sp-statusbar__field">
-          <b>MODE</b>{{ result.isBlind ? copy.metrics.modeBlind : copy.metrics.modeIr }}
-        </span>
-        <span v-if="busy" class="sp-statusbar__progress" aria-hidden="true">
-          <i :style="{ width: `${Math.round(progress * 100)}%` }"></i>
-        </span>
-      </div>
+      <ToolStatusBar :status="statusKind" :label="statusLabel" :pulse="busy" :fields="statusFields" />
     </template>
 
     <div class="sp-lab">
@@ -305,17 +310,18 @@ function morphGeometry() {
           </label>
           <button
             type="button"
-            class="sp-morph"
+            class="demo-btn demo-btn--primary sp-morph"
             :disabled="!canMorph"
+            :aria-busy="audio.isMorphing.value"
             @click="onMorph"
           >
             <span>{{ audio.isMorphing.value ? copy.actions.morphing : hasUploadedSource ? copy.actions.morphUpload : copy.actions.morph }}</span>
-            <i :style="{ width: `${Math.round(audio.morphProgress.value * 100)}%` }" aria-hidden="true"></i>
+            <i :style="{ transform: `scaleX(${audio.morphProgress.value})` }" aria-hidden="true"></i>
           </button>
           <div class="sp-exports">
             <button
               type="button"
-              class="sp-export"
+              class="demo-btn sp-export"
               :disabled="!canSaveAudio"
               @click="onSaveAudio"
             >
@@ -326,7 +332,7 @@ function morphGeometry() {
             </button>
             <button
               type="button"
-              class="sp-export"
+              class="demo-btn sp-export"
               :disabled="!canSaveReport"
               @click="onSaveReport"
             >
@@ -336,19 +342,23 @@ function morphGeometry() {
               <span>{{ copy.actions.saveReport }}</span>
             </button>
           </div>
-          <p v-if="sceneResult" class="sp-hint">{{ copy.notes.morph }}</p>
-          <p v-if="audio.renderedKind.value === 'impulse'" class="sp-hint">{{ copy.notes.exports }}</p>
-          <p v-for="note in renderNoteText" :key="note" class="sp-hint sp-hint--warn">{{ note }}</p>
-          <p v-if="localError" class="sp-error">{{ localError }}</p>
+          <div class="sp-notices">
+            <DemoNotice v-if="localError" tone="error">{{ localError }}</DemoNotice>
+            <DemoNotice v-for="note in renderNoteText" :key="note" tone="warn">{{ note }}</DemoNotice>
+            <DemoNotice v-if="sceneResult" tone="hint">{{ copy.notes.morph }}</DemoNotice>
+            <DemoNotice v-if="audio.renderedKind.value === 'impulse'" tone="hint">{{ copy.notes.exports }}</DemoNotice>
+          </div>
         </TechPanel>
 
         <TechPanel :title="copy.panels.rooms">
-          <div class="sp-rooms">
+          <div class="sp-rooms" role="group" :aria-label="copy.panels.rooms">
             <button
               v-for="room in rooms"
               :key="room.id"
+              type="button"
               class="sp-room"
               :class="{ 'sp-room--active': activePreset === room.id }"
+              :aria-pressed="activePreset === room.id"
               :disabled="busy"
               @click="onPreset(room.id)"
             >
@@ -374,13 +384,9 @@ function morphGeometry() {
               :is-dark="isDark"
               :auto-rotate="autoRotate"
               :level="audio.level.value"
-              :accent="sceneColors.accent"
-              :cyan="sceneColors.cyan"
-              :amber="sceneColors.amber"
-              :truth="sceneColors.truth"
             />
             <div v-if="!result" class="sp-scene__placeholder">
-              <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <svg class="demo-anim-loop" viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M12 2 2 7l10 5 10-5-10-5Z" />
                 <path d="m2 17 10 5 10-5" />
                 <path d="m2 12 10 5 10-5" />
@@ -395,10 +401,12 @@ function morphGeometry() {
               <p>{{ copy.notes.invalid }}</p>
             </div>
             <div v-if="sceneResult" class="sp-scene__hud" aria-hidden="true">{{ copy.scene.drag }}</div>
-            <div v-if="busy" class="sp-scene__scan" aria-hidden="true">
-              <span class="sp-scene__scan-line"></span>
-              <span class="sp-scene__scan-label">{{ statusLabel }}</span>
-            </div>
+            <Transition name="demo-fade">
+              <div v-if="busy" class="sp-scene__scan" aria-hidden="true">
+                <span class="sp-scene__scan-line demo-anim-loop"></span>
+                <span class="sp-scene__scan-label demo-anim-loop">{{ statusLabel }}</span>
+              </div>
+            </Transition>
           </div>
 
           <ul class="sp-legend">
@@ -408,8 +416,8 @@ function morphGeometry() {
             <li><i class="sp-dot sp-dot--ring" style="--c: var(--demo-amber)"></i>{{ copy.legend.shell }}</li>
             <li><i class="sp-dot sp-dot--ring" style="--c: var(--demo-cyan)"></i>{{ copy.legend.critical }}</li>
             <template v-if="result?.truth">
-              <li><i class="sp-dot sp-dot--ring" :style="{ '--c': sceneColors.truth }"></i>{{ copy.legend.truthRoom }}</li>
-              <li><i class="sp-dot" :style="{ '--c': sceneColors.truth }"></i>{{ copy.legend.truthSource }}</li>
+              <li><i class="sp-dot sp-dot--ring" style="--c: var(--demo-success)"></i>{{ copy.legend.truthRoom }}</li>
+              <li><i class="sp-dot" style="--c: var(--demo-success)"></i>{{ copy.legend.truthSource }}</li>
             </template>
           </ul>
         </TechPanel>
@@ -420,79 +428,93 @@ function morphGeometry() {
         <TechPanel :title="copy.panels.geometry">
           <template #header-right>
             <Tooltip v-if="sceneResult" v-bind="term('confidence')">
-              <span class="sp-conf" :class="{ 'sp-conf--low': sceneResult.confidence < 0.35 }">
-                <i aria-hidden="true"></i>{{ copy.metrics.confidence }} {{ fmtPct(sceneResult.confidence) }}
-              </span>
+              <template #default="{ describedBy, expanded, controls }">
+                <button
+                  type="button"
+                  class="sp-conf"
+                  :class="{ 'sp-conf--low': sceneResult.confidence < 0.35 }"
+                  :aria-describedby="describedBy"
+                  :aria-expanded="expanded"
+                  :aria-controls="controls"
+                >
+                  <i aria-hidden="true"></i>{{ copy.metrics.confidence }} {{ fmtPct(sceneResult.confidence) }}
+                </button>
+              </template>
             </Tooltip>
           </template>
-          <div v-if="sceneResult" class="sp-metrics">
-            <MetricItem :value="`${result.room.length.toFixed(1)} × ${result.room.width.toFixed(1)} × ${result.room.height.toFixed(1)} m`" variant="accent">
-              <template #label><TermLabel v-bind="term('dimensions')">{{ copy.metrics.dimensions }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="fmtVol(result.room.volume)">
-              <template #label><TermLabel v-bind="term('volume')">{{ copy.metrics.volume }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="fmtM(result.sourceDistance)" variant="accent">
-              <template #label><TermLabel v-bind="term('sourceDistance')">{{ copy.metrics.sourceDistance }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="fmtM(result.criticalDistance)">
-              <template #label><TermLabel v-bind="term('criticalDistance')">{{ copy.metrics.criticalDistance }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="fmtDb(result.drrDb)">
-              <template #label><TermLabel v-bind="term('drr')">{{ copy.metrics.drr }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="result.isBlind ? copy.metrics.modeBlind : copy.metrics.modeIr" variant="muted">
-              <template #label><TermLabel v-bind="term('mode')">{{ copy.metrics.mode }}</TermLabel></template>
-            </MetricItem>
-          </div>
-          <p v-else-if="invalid" class="sp-empty">{{ copy.notes.invalid }}</p>
-          <p v-else class="sp-empty">{{ copy.scene.placeholder }}</p>
-        </TechPanel>
-
-        <TechPanel v-if="sceneResult" :title="copy.panels.acoustics">
-          <div class="sp-metrics">
-            <MetricItem :value="fmtS(result.acoustic.rt60)" variant="accent">
-              <template #label><TermLabel v-bind="term('rt60')">{{ copy.metrics.rt60 }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="fmtS(result.acoustic.edt)">
-              <template #label><TermLabel v-bind="term('edt')">{{ copy.metrics.edt }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="fmtDb(result.acoustic.c50)">
-              <template #label><TermLabel v-bind="term('c50')">{{ copy.metrics.c50 }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="fmtDb(result.acoustic.c80)">
-              <template #label><TermLabel v-bind="term('c80')">{{ copy.metrics.c80 }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="fmtPct(result.acoustic.d50)">
-              <template #label><TermLabel v-bind="term('d50')">{{ copy.metrics.d50 }}</TermLabel></template>
-            </MetricItem>
-          </div>
-        </TechPanel>
-
-        <TechPanel v-if="sceneResult && sceneResult.bands.length" :title="copy.panels.bands">
-          <div class="sp-bands">
-            <div class="sp-bands__head">
-              <span><TermLabel v-bind="term('band')">{{ copy.bands.freq }}</TermLabel></span>
-              <span><TermLabel v-bind="term('rt60')">{{ copy.bands.rt60 }}</TermLabel></span>
-              <span><TermLabel v-bind="term('absorption')">{{ copy.bands.absorption }}</TermLabel></span>
+          <Transition name="demo-fade" mode="out-in">
+            <div v-if="sceneResult" :key="sceneResult.room.volume" class="sp-metrics">
+              <MetricItem :value="`${sceneResult.room.length.toFixed(1)} × ${sceneResult.room.width.toFixed(1)} × ${sceneResult.room.height.toFixed(1)} m`" variant="accent">
+                <template #label><TermLabel v-bind="term('dimensions')">{{ copy.metrics.dimensions }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="fmtVol(sceneResult.room.volume)">
+                <template #label><TermLabel v-bind="term('volume')">{{ copy.metrics.volume }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="fmtM(sceneResult.sourceDistance)" variant="accent">
+                <template #label><TermLabel v-bind="term('sourceDistance')">{{ copy.metrics.sourceDistance }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="fmtM(sceneResult.criticalDistance)">
+                <template #label><TermLabel v-bind="term('criticalDistance')">{{ copy.metrics.criticalDistance }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="fmtDb(sceneResult.drrDb)">
+                <template #label><TermLabel v-bind="term('drr')">{{ copy.metrics.drr }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="sceneResult.isBlind ? copy.metrics.modeBlind : copy.metrics.modeIr" variant="muted">
+                <template #label><TermLabel v-bind="term('mode')">{{ copy.metrics.mode }}</TermLabel></template>
+              </MetricItem>
             </div>
-            <div v-for="band in result.bands" :key="band.freq" class="sp-band">
-              <span class="sp-band__freq">{{ band.label }}<small>{{ copy.bands.hz }}</small></span>
-              <span class="sp-band__bar">
-                <span class="sp-band__track">
-                  <i :style="{ width: `${Math.min(100, (band.rt60 / maxBandRt60) * 100)}%` }"></i>
+            <DemoEmpty v-else-if="invalid" compact :title="copy.scene.noRoom" />
+            <DemoEmpty v-else compact :title="copy.scene.noRoom">{{ copy.scene.placeholder }}</DemoEmpty>
+          </Transition>
+        </TechPanel>
+
+        <Transition name="demo-rise">
+          <TechPanel v-if="sceneResult" :title="copy.panels.acoustics">
+            <div class="sp-metrics">
+              <MetricItem :value="fmtS(sceneResult.acoustic.rt60)" variant="accent">
+                <template #label><TermLabel v-bind="term('rt60')">{{ copy.metrics.rt60 }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="fmtS(sceneResult.acoustic.edt)">
+                <template #label><TermLabel v-bind="term('edt')">{{ copy.metrics.edt }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="fmtDb(sceneResult.acoustic.c50)">
+                <template #label><TermLabel v-bind="term('c50')">{{ copy.metrics.c50 }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="fmtDb(sceneResult.acoustic.c80)">
+                <template #label><TermLabel v-bind="term('c80')">{{ copy.metrics.c80 }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="fmtPct(sceneResult.acoustic.d50)">
+                <template #label><TermLabel v-bind="term('d50')">{{ copy.metrics.d50 }}</TermLabel></template>
+              </MetricItem>
+            </div>
+          </TechPanel>
+        </Transition>
+
+        <Transition name="demo-rise">
+          <TechPanel v-if="sceneResult && sceneResult.bands.length" :title="copy.panels.bands">
+            <div class="sp-bands">
+              <div class="sp-bands__head">
+                <span><TermLabel v-bind="term('band')">{{ copy.bands.freq }}</TermLabel></span>
+                <span><TermLabel v-bind="term('rt60')">{{ copy.bands.rt60 }}</TermLabel></span>
+                <span><TermLabel v-bind="term('absorption')">{{ copy.bands.absorption }}</TermLabel></span>
+              </div>
+              <div v-for="band in sceneResult.bands" :key="band.freq" class="sp-band">
+                <span class="sp-band__freq">{{ band.label }}<small>{{ copy.bands.hz }}</small></span>
+                <span class="sp-band__bar">
+                  <span class="sp-band__track">
+                    <i :style="{ transform: `scaleX(${Math.min(1, band.rt60 / maxBandRt60)})` }"></i>
+                  </span>
+                  <em>{{ band.rt60.toFixed(2) }}</em>
                 </span>
-                <em>{{ band.rt60.toFixed(2) }}</em>
-              </span>
-              <span class="sp-band__abs">{{ fmtPct(band.absorption) }}</span>
+                <span class="sp-band__abs">{{ fmtPct(band.absorption) }}</span>
+              </div>
             </div>
-          </div>
-        </TechPanel>
+          </TechPanel>
+        </Transition>
 
-        <div v-if="invalid" class="sp-note sp-note--warn">{{ copy.notes.invalid }}</div>
-        <div v-else-if="result?.truth" class="sp-note sp-note--info">{{ copy.notes.truth }}</div>
-        <div v-else-if="showLowConfidence" class="sp-note sp-note--warn">{{ copy.notes.lowConfidence }}</div>
-        <div v-else-if="result?.isBlind" class="sp-note">{{ copy.notes.blind }}</div>
+        <DemoNotice v-if="result?.truth" tone="info">{{ copy.notes.truth }}</DemoNotice>
+        <DemoNotice v-else-if="showLowConfidence" tone="warn">{{ copy.notes.lowConfidence }}</DemoNotice>
+        <DemoNotice v-else-if="sceneResult?.isBlind" tone="hint">{{ copy.notes.blind }}</DemoNotice>
       </aside>
     </div>
   </ToolShell>

@@ -14,8 +14,10 @@
  * synthesized on-device — nothing is uploaded.
  */
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue';
+import { KEY_GEOMETRY } from '@/components/keyboard/keyGeometry';
 import ToolShell from '@/components/ToolShell.vue';
-import { SignalLoader, StatusIndicator } from '@/components/ui';
+import ToolStatusBar, { type ToolStatusField } from '@/components/ToolStatusBar.vue';
+import { DemoNotice, SignalLoader } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { useMidiInput } from '@/composables/useMidiInput';
 import { useUrlState } from '@/composables/useUrlState';
@@ -38,6 +40,7 @@ import { LEAD_IN_SEC } from '@/demos/practice/rollConfig';
 import { paintPracticeRoll, sameSet } from '@/demos/practice/rollPainter';
 import { type Judgment, useRhythmGame } from '@/demos/practice/useRhythmGame';
 import { formatNoteName } from '@/utils/pitch';
+import { fill } from '@/utils/template';
 
 const { locale, localizedPath, alternateLocalePath, localizedValue } = useI18n();
 const copy = computed(() => localizedValue({ en: enCopy, ja: jaCopy }));
@@ -205,12 +208,11 @@ const statusLabel = computed(() => {
 });
 
 // ---- piece metadata ---------------------------------------------------------
-const lengthLabel = computed(() => {
-  const sec = baseDuration.value;
-  const mm = Math.floor(sec / 60);
-  const ss = Math.round(sec % 60);
-  return `${mm}:${String(ss).padStart(2, '0')}`;
-});
+function formatClock(sec: number): string {
+  const whole = Math.max(0, Math.round(sec));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+}
+const lengthLabel = computed(() => formatClock(baseDuration.value));
 const rangeLabel = computed(() => {
   const m = midi.value;
   return m ? `${formatNoteName(m.lowestMidi)}–${formatNoteName(m.highestMidi)}` : '—';
@@ -232,10 +234,38 @@ const tempoLabel = computed(() => {
 const showCountIn = computed(() => isPlaying.value && posBase.value < 0);
 const countInNum = computed(() => Math.max(1, Math.min(3, Math.ceil(-posBase.value))));
 const showClock = computed(() => isPlaying.value && !gameMode.value && posBase.value >= 0);
-const clockLabel = computed(() => {
-  const sec = Math.max(0, Math.floor(posBase.value));
-  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} / ${lengthLabel.value}`;
+const positionLabel = computed(() => formatClock(Math.floor(Math.max(0, posBase.value))));
+const clockLabel = computed(() => `${positionLabel.value} / ${lengthLabel.value}`);
+const seekValueText = computed(() =>
+  fill(copy.value.controls.seekValue, { position: positionLabel.value, length: lengthLabel.value }),
+);
+
+const statusFields = computed<ToolStatusField[]>(() => {
+  const fields: ToolStatusField[] = [
+    { key: 'MVT', value: movementLabel.value, wide: true },
+    { key: 'POS', value: midi.value ? clockLabel.value : '--:--' },
+    { key: 'SPD', value: `${speed.value}×` },
+    {
+      key: 'SRC',
+      value:
+        soundSource.value === 'sf2'
+          ? copy.value.controls.sourceSampled
+          : copy.value.controls.sourceSynth,
+    },
+  ];
+  if (gameMode.value) {
+    fields.push(
+      { key: 'SCORE', value: gameView.value.score.toLocaleString(), divider: true },
+      { key: 'ACC', value: `${gameView.value.accuracy.toFixed(1)}%` },
+    );
+  }
+  return fields;
 });
+
+// Roll and keyboard share one width, capped so no white key grows past the shared maximum.
+const stageStyle = computed(() => ({
+  '--stage-max': `${layout.value.whiteCount * KEY_GEOMETRY.whiteMaxPx}px`,
+}));
 
 // ---- canvas ----------------------------------------------------------------
 const canvas = ref<HTMLCanvasElement | null>(null);
@@ -589,6 +619,23 @@ function onSeekClick(e: MouseEvent): void {
   seekToRatio((e.clientX - rect.left) / rect.width);
 }
 
+/** Arrow keys step 5 s, Page keys 30 s, Home/End jump to the ends. */
+function onSeekKey(e: KeyboardEvent): void {
+  const total = baseDuration.value;
+  if (total === 0) return;
+  const now = Math.max(0, posBase.value);
+  let target: number;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowUp') target = now + 5;
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') target = now - 5;
+  else if (e.key === 'PageUp') target = now + 30;
+  else if (e.key === 'PageDown') target = now - 30;
+  else if (e.key === 'Home') target = 0;
+  else if (e.key === 'End') target = total;
+  else return;
+  e.preventDefault();
+  seekToRatio(target / total);
+}
+
 // ---- movement loading -------------------------------------------------------
 function applyMidi(parsed: ParsedMidi): void {
   // Reset playback for the new movement.
@@ -792,7 +839,7 @@ const otherLocalePath = computed(() => alternateLocalePath('/practice'));
         <p class="practice__lead">{{ copy.intro }}</p>
       </div>
 
-      <div ref="stage" class="practice__stage" @pointerdown="prefetchEngine">
+      <div ref="stage" class="practice__stage" :style="stageStyle" @pointerdown="prefetchEngine">
         <div class="practice__roll">
           <canvas ref="canvas" class="practice__canvas"></canvas>
           <PracticeRollFx ref="rollFx" :layout="layout" :midi="midi" />
@@ -854,21 +901,26 @@ const otherLocalePath = computed(() => alternateLocalePath('/practice'));
         @connect-midi="connectMidi"
       />
 
-      <p v-if="gameMode && !gameFinished" class="practice__game-hint">{{ copy.game.hint }}</p>
+      <DemoNotice v-if="gameMode && !gameFinished" tone="hint">{{ copy.game.hint }}</DemoNotice>
 
       <!-- Seek / progress -->
       <div
         ref="progressTrack"
         class="practice__seek"
         role="slider"
+        :tabindex="midi ? 0 : -1"
         :aria-valuenow="Math.round(progressRatio * 100)"
         aria-valuemin="0"
         aria-valuemax="100"
-        :aria-label="copy.meta.length"
+        :aria-valuetext="seekValueText"
+        :aria-label="copy.controls.seek"
+        :aria-disabled="!midi"
+        :style="{ '--seek-ratio': progressRatio }"
         @click="onSeekClick"
+        @keydown="onSeekKey"
       >
-        <div class="practice__seek-fill" :style="{ width: `${progressRatio * 100}%` }"></div>
-        <div class="practice__seek-head" :style="{ left: `${progressRatio * 100}%` }"></div>
+        <div class="practice__seek-fill"></div>
+        <div class="practice__seek-rail"><div class="practice__seek-head"></div></div>
       </div>
 
       <!-- Transport -->
@@ -890,7 +942,7 @@ const otherLocalePath = computed(() => alternateLocalePath('/practice'));
         @volume="onVolume"
       />
 
-      <p v-if="status === 'error'" class="practice__error" role="alert">{{ errorMsg }}</p>
+      <DemoNotice v-if="status === 'error'" tone="error">{{ errorMsg }}</DemoNotice>
 
       <!-- Piece metadata -->
       <dl class="practice__meta">
@@ -917,11 +969,11 @@ const otherLocalePath = computed(() => alternateLocalePath('/practice'));
           <dd>{{ tempoLabel }}</dd>
         </div>
       </dl>
+      <p class="practice__credit">{{ copy.attribution }}</p>
     </div>
 
     <template #statusbar>
-      <StatusIndicator :status="statusKind" :label="statusLabel" />
-      <span class="practice__statusnote">{{ copy.attribution }}</span>
+      <ToolStatusBar :status="statusKind" :label="statusLabel" :pulse="isBusy" :fields="statusFields" />
     </template>
   </ToolShell>
 </template>

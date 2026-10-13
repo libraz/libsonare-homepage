@@ -1,39 +1,21 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import ToolShell from '@/components/ToolShell.vue';
+import ToolStatusBar from '@/components/ToolStatusBar.vue';
 import { useI18n } from '@/composables/useI18n';
 import { useWasmBoot } from '@/composables/useWasmBoot';
-import AudioAnalyzer from '@/demos/analyzer/AudioAnalyzer.vue';
+import AudioAnalyzer, { type AnalyzerStatus } from '@/demos/analyzer/AudioAnalyzer.vue';
+import { enCopy, jaCopy } from '@/demos/analyzer/analyzerCopy';
 
 const { localizedPath, alternateLocalePath, localizedValue } = useI18n();
 
 const { version: libVersion, error: initError } = useWasmBoot();
 const initFailed = computed(() => Boolean(initError.value));
 
-const copy = computed(() =>
-  localizedValue({
-    en: {
-      title: 'Visual Player',
-      subtitle: 'Audio player with real-time chroma & spectrum visualization',
-      localOnly: 'LOCAL',
-      initError: 'ENGINE ERROR',
-      guideTitle: 'Visual player',
-      guideBody:
-        'Runs entirely in your browser via WebAssembly. Visualizes chroma and spectrum in real time as it plays; BPM and key are live reference values. For full analysis, see Analysis.',
-      guideDocs: 'Open docs',
-    },
-    ja: {
-      title: 'ビジュアルプレイヤー',
-      subtitle: 'クロマ・スペクトルをリアルタイム可視化するオーディオプレイヤー',
-      localOnly: 'ローカル実行',
-      initError: 'エンジンエラー',
-      guideTitle: 'ビジュアルプレイヤー',
-      guideBody:
-        'WebAssembly でブラウザ内完結。再生に合わせてクロマ・スペクトルをリアルタイム可視化します。BPM・キーは再生中の参考値です。詳しい解析は「楽曲分析」へ。',
-      guideDocs: 'ドキュメント',
-    },
-  }),
-);
+const copy = computed(() => localizedValue({ en: enCopy, ja: jaCopy }).page);
+
+/** The player reports its state; this page renders it in the shell's status bar. */
+const analyzerStatus = ref<AnalyzerStatus | null>(null);
 
 const statusKind = computed<'active' | 'error'>(() => (initFailed.value ? 'error' : 'active'));
 const statusLabel = computed(() =>
@@ -57,6 +39,15 @@ const oppositeLocalePath = computed(() => alternateLocalePath('/analyzer'));
     :guide-link-label="copy.guideDocs"
     :opposite-locale-path="oppositeLocalePath"
   >
-    <AudioAnalyzer :lib-version="libVersion" />
+    <template #statusbar>
+      <ToolStatusBar
+        v-if="analyzerStatus"
+        :status="analyzerStatus.status"
+        :label="analyzerStatus.label"
+        :pulse="analyzerStatus.pulse"
+        :fields="analyzerStatus.fields"
+      />
+    </template>
+    <AudioAnalyzer :lib-version="libVersion" @status="analyzerStatus = $event" />
   </ToolShell>
 </template>

@@ -33,6 +33,10 @@ const StepBassDemo = defineDemoPageAsync(
   'step-bass',
   () => import('@/demos/step-bass/StepBassDemo.vue'),
 );
+const TranscribeDemo = defineDemoPageAsync(
+  'transcribe',
+  () => import('@/demos/transcribe/TranscribeDemo.vue'),
+);
 const PianoPracticeDemo = defineDemoPageAsync(
   'practice',
   () => import('@/demos/practice/PianoPracticeDemo.vue'),
@@ -70,6 +74,7 @@ const isStudio = computed(() => frontmatter.value.layout === 'studio');
 const isPractice = computed(() => frontmatter.value.layout === 'practice');
 const isGsModule = computed(() => frontmatter.value.layout === 'gs-module');
 const isStepBass = computed(() => frontmatter.value.layout === 'step-bass');
+const isTranscribe = computed(() => frontmatter.value.layout === 'transcribe');
 </script>
 
 <template>
@@ -86,6 +91,7 @@ const isStepBass = computed(() => frontmatter.value.layout === 'step-bass');
   <PianoPracticeDemo v-else-if="isPractice" />
   <GsModuleDemo v-else-if="isGsModule" />
   <StepBassDemo v-else-if="isStepBass" />
+  <TranscribeDemo v-else-if="isTranscribe" />
   <DefaultLayout v-else>
     <template #nav-bar-content-before>
       <NavSearch />

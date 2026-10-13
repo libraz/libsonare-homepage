@@ -15,7 +15,6 @@ import {
   type MasteringAudio,
   type MasteringClip,
   type MasteringRenderVariant,
-  masteringLatencySamples,
   renderMasteringState,
 } from '@/demos/mastering/masteringEngine';
 import {
@@ -25,7 +24,7 @@ import {
   type MasteringState,
   masteringMutators as m,
 } from '@/demos/mastering/masteringState';
-import { MASTERING_GR_SLOTS } from '@/demos/mastering/masteringUi';
+import { MASTERING_GR_SLOTS, MASTERING_PARAM_ORDER } from '@/demos/mastering/masteringUi';
 import type { MasteringPresetId, MasteringVenueId } from '@/demos/mastering/useMastering';
 import { AFTER_METER_TARGET } from '@/demos/mastering/useMasteringMetering';
 import { applyOps, createFacadeTarget, createRawTarget, type EngineOp } from '@/utils/engineApply';
@@ -136,6 +135,21 @@ function concat(a: StereoBuffer, b: StereoBuffer): StereoBuffer {
 const maxDiff = (a: StereoBuffer, b: StereoBuffer) =>
   Math.max(maxAbsDiff(a.left, b.left), maxAbsDiff(a.right, b.right));
 
+/**
+ * Lane 1's plugin delay summed insert by insert, bypassed ones included. The
+ * export reads the engine's own figure; this independent sum is what the
+ * alignment below holds it to.
+ */
+async function insertLatencySum(state: MasteringState): Promise<number> {
+  const wasm = await loadIndexModule();
+  return MASTERING_INSERT_LAYOUT.reduce(
+    (sum, entry, slot) =>
+      sum +
+      wasm.masteringInsertTiming(entry.processor, state.inserts[slot].params, SR).latencySamples,
+    0,
+  );
+}
+
 describe('the rtSafe table matches the engine', () => {
   it('every layout parameter exists on its processor and agrees on rtSafe', async () => {
     const wasm = await loadIndexModule();
@@ -154,6 +168,24 @@ describe('the rtSafe table matches the engine', () => {
       for (const name of MASTERING_NON_RT_PARAMS[entry.processor]) {
         expect(info.get(name), `${entry.processor}.${name} is construction-only`).toBe(false);
       }
+    }
+  });
+
+  it('the parameter orderings mirror the engine dependsOn among the layout parameters', async () => {
+    const wasm = await loadIndexModule();
+    for (const entry of MASTERING_INSERT_LAYOUT) {
+      const published: Record<string, { key: string; relation: string }[]> = {};
+      for (const info of wasm.masteringInsertParamInfo(entry.processor)) {
+        if (!(info.name in entry.params)) continue;
+        const orders = (info.dependsOn ?? [])
+          .filter((dep: { key: string }) => dep.key in entry.params)
+          .map((dep: { key: string; relation: string }) => ({
+            key: dep.key,
+            relation: dep.relation,
+          }));
+        if (orders.length > 0) published[info.name] = orders;
+      }
+      expect(MASTERING_PARAM_ORDER[entry.processor] ?? {}, entry.processor).toEqual(published);
     }
   });
 
@@ -282,7 +314,7 @@ describe('facade and raw adapters render the same mastering state', () => {
       if (variant === 'export') {
         // The export renders lane 1 alone on a fresh engine, latency removed.
         const wasm = await loadIndexModule();
-        const latency = masteringLatencySamples(wasm, next, SR);
+        const latency = await insertLatencySum(next);
         const total = frames(SECONDS + latency / SR);
         const live = await renderFacade(buildFull(next, audio, 'export'), total);
         expect(live.syncErrors).toEqual([]);

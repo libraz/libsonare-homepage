@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { CornerBrackets } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 
@@ -58,6 +58,9 @@ const copyByLocale = {
 
 const showOverlay = ref(false);
 const mounted = ref(false);
+const panelRef = ref<HTMLElement | null>(null);
+const confirmRef = ref<HTMLButtonElement | null>(null);
+let returnFocus: HTMLElement | null = null;
 
 const copy = computed(() => localizedValue(copyByLocale));
 
@@ -72,6 +75,38 @@ function dismiss() {
 
 function reopen() {
   showOverlay.value = true;
+}
+
+// Modal focus: move in on open, return to the opener on close.
+watch(showOverlay, async (open) => {
+  if (open) {
+    returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    await nextTick();
+    confirmRef.value?.focus();
+  } else if (returnFocus?.isConnected) {
+    returnFocus.focus();
+    returnFocus = null;
+  }
+});
+
+function onOverlayKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    dismiss();
+    return;
+  }
+  if (event.key !== 'Tab') return;
+  const focusables = panelRef.value?.querySelectorAll<HTMLElement>('button, a[href]');
+  if (!focusables?.length) return;
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 onMounted(() => {
@@ -104,8 +139,9 @@ onMounted(() => {
         aria-modal="true"
         :aria-label="copy.kicker"
         @click.self="dismiss"
+        @keydown="onOverlayKeydown"
       >
-        <div class="demo-disclaimer__panel">
+        <div ref="panelRef" class="demo-disclaimer__panel">
           <CornerBrackets size="lg" offset="lg" />
           <div class="demo-disclaimer__scan" aria-hidden="true"></div>
 
@@ -130,9 +166,9 @@ onMounted(() => {
           </ul>
 
           <div class="demo-disclaimer__actions">
-            <button type="button" class="demo-disclaimer__confirm" @click="dismiss">
+            <button ref="confirmRef" type="button" class="demo-disclaimer__confirm" @click="dismiss">
               {{ copy.dismiss }}
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M20 6 9 17l-5-5" />
               </svg>
             </button>
@@ -240,7 +276,9 @@ html:not(.dark) .demo-disclaimer__banner {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: border-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    color var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .demo-disclaimer__reopen:hover {
@@ -271,7 +309,7 @@ html:not(.dark) .demo-disclaimer__banner {
 
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: var(--demo-z-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -306,7 +344,7 @@ html:not(.dark) .demo-disclaimer__overlay {
     0 30px 80px -20px rgba(0, 0, 0, 0.7),
     0 0 60px -16px color-mix(in srgb, var(--demo-accent, #8B5CF6) 50%, transparent);
   overflow: hidden;
-  animation: demo-disclaimer-rise 0.42s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: demo-disclaimer-rise var(--demo-dur-slow) var(--demo-ease-enter);
 }
 
 html:not(.dark) .demo-disclaimer__panel {
@@ -394,8 +432,8 @@ html:not(.dark) .demo-disclaimer__scan {
   border-radius: 8px;
   background: var(--demo-accent-subtle, rgba(139, 92, 246, 0.06));
   opacity: 0;
-  animation: demo-disclaimer-row 0.4s ease forwards;
-  animation-delay: calc(0.12s + var(--i) * 0.07s);
+  animation: demo-disclaimer-row var(--demo-dur-slow) var(--demo-ease-enter) forwards;
+  animation-delay: calc(var(--demo-dur-fast) + var(--i) * var(--demo-stagger));
 }
 
 .demo-disclaimer__point-key {
@@ -433,7 +471,10 @@ html:not(.dark) .demo-disclaimer__scan {
   font-weight: 600;
   letter-spacing: 0.02em;
   cursor: pointer;
-  transition: background-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+  transition:
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    transform var(--demo-dur-fast) var(--demo-ease-standard),
+    box-shadow var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .demo-disclaimer__confirm:hover {
@@ -443,7 +484,7 @@ html:not(.dark) .demo-disclaimer__scan {
 }
 
 .demo-disclaimer__confirm svg {
-  transition: transform var(--transition-fast);
+  transition: transform var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .demo-disclaimer__confirm:hover svg {
@@ -458,7 +499,7 @@ html:not(.dark) .demo-disclaimer__scan {
   text-transform: uppercase;
   text-decoration: none;
   color: var(--demo-text-muted, rgba(255, 255, 255, 0.45));
-  transition: color var(--transition-fast);
+  transition: color var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .demo-disclaimer__source:hover {
@@ -489,7 +530,7 @@ html:not(.dark) .demo-disclaimer__scan {
 
 .demo-disclaimer-fade-enter-active,
 .demo-disclaimer-fade-leave-active {
-  transition: opacity 0.28s ease;
+  transition: opacity var(--demo-dur-base) var(--demo-ease-standard);
 }
 
 .demo-disclaimer-fade-enter-from,

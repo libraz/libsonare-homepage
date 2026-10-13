@@ -98,5 +98,27 @@
       "emptyHint": "より短い語で試すか、別のセクションを検索してください。",
       "idle": "入力するとサイト内を検索します。"
     }
+  },
+  "ui": {
+    "loadingDemo": "デモを読み込み中…",
+    "dismiss": "閉じる",
+    "moreInfo": "詳しく",
+    "tooltip": {
+      "tipLabel": "使う場面",
+      "defaultLabel": "初期値",
+      "linkLabel": "ドキュメントを読む"
+    },
+    "transport": {
+      "play": "再生",
+      "pause": "一時停止",
+      "seek": "再生位置"
+    },
+    "audioSource": {
+      "dropTitle": "ここに音声ファイルをドロップ",
+      "dropHint": "またはクリックして選択",
+      "supported": "対応形式",
+      "demoLabel": "デモ音源",
+      "clear": "音源をクリア"
+    }
   }
 }

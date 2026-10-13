@@ -39,6 +39,10 @@ export const MIXING_TERM_SLUGS: Record<MixingTermKey, string | undefined> = {
   dither: 'concepts/audio-basics',
   budget: 'concepts/browser-local-processing',
   assistant: 'concepts/mixing-basics',
+  group: 'concepts/mixing-basics',
+  routing: 'concepts/mixing-basics',
+  clip: 'arrangement/clips-and-tracks',
+  bounce: 'arrangement/bounce-and-rendering',
 };
 
 /** Props for `TermLabel` / `Tooltip`: the term's help text and its glossary link. */

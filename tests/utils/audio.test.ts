@@ -12,7 +12,6 @@ import {
   formatDb,
   formatDuration,
   formatSampleRate,
-  mixToMono,
 } from '@/utils/audio';
 
 function audioBuffer(channels: Float32Array[], sampleRate = 48_000): AudioBuffer {
@@ -127,18 +126,6 @@ describe('amplitudeToDb', () => {
   it('floors non-positive amplitude at -120 dB', () => {
     expect(amplitudeToDb(0)).toBe(-120);
     expect(amplitudeToDb(-0.5)).toBe(-120);
-  });
-});
-
-describe('mixToMono', () => {
-  it('averages the two channels sample-by-sample', () => {
-    const left = new Float32Array([1, 0, -1, 0.5]);
-    const right = new Float32Array([1, 1, 1, -0.5]);
-    const mono = mixToMono(left, right);
-    expect(Array.from(mono)).toEqual([1, 0.5, 0, 0]);
-  });
-  it('clamps to the shorter channel length', () => {
-    expect(mixToMono(new Float32Array([1, 1, 1]), new Float32Array([1])).length).toBe(1);
   });
 });
 

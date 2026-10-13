@@ -154,12 +154,12 @@ const jaKnobs: Record<KnobHelpKey, KnobHelp> = {
 
 export const enCopy = {
   title: 'Step Bass',
-  subtitle: 'Sixteen steps, one voice, nothing on the panel that does not move the sound',
+  subtitle: 'A 16-step bass sequencer with a resonant filter, accents and slides',
   localOnly: 'LOCAL',
 
-  guideTitle: 'The sequencer runs inside the audio thread',
+  guideTitle: 'Press RUN, then turn the knobs',
   guideBody:
-    'Nothing is uploaded and nothing is pre-rendered. The engine holds the pattern and the transport, so a turn of CUTOFF, RESONANCE or ENV MOD reaches the note already sounding.',
+    'Press RUN to start the bass line, edit the steps in the grid, then turn CUTOFF, RESONANCE or ENV MOD: the note already sounding changes as you turn. The engine holds the pattern and the transport in your browser, and nothing is uploaded.',
   guideLink: 'Read about the synthesizer',
 
   sections: {
@@ -193,11 +193,20 @@ export const enCopy = {
     exportFailed: 'The download could not be rendered.',
   },
 
+  statusbar: {
+    pattern: 'PATTERN',
+    tempo: 'TEMPO',
+    step: 'STEP',
+    rate: 'RATE',
+  },
+
   status: {
     booting: 'Starting',
     stopped: 'Stopped',
     running: 'Running',
     suspended: 'Waiting for RUN',
+    unsupportedShort: 'Unsupported',
+    failedShort: 'Engine stopped',
     unsupported: 'This browser has no Web Audio support, so the instrument cannot run here.',
     failed: 'The audio engine stopped. Reload the page to start it again.',
   },
@@ -208,8 +217,12 @@ export const enCopy = {
     ruler: 'Step',
     step: 'Step {n}',
     cell: 'Step {n}, {lane}',
-    keyHint:
-      'Arrow keys move between cells. Space changes the cell under the cursor; on a note cell, plus and minus move the pitch by a semitone and Page Up and Page Down by an octave.',
+    keyHint: {
+      move: 'move between cells',
+      change: 'changes the cell under the cursor',
+      semitone: 'move a note a semitone,',
+      octave: 'an octave.',
+    },
     lanes: {
       note: 'note',
       gate: 'gate',
@@ -264,12 +277,12 @@ export const enCopy = {
 
 export const jaCopy: typeof enCopy = {
   title: 'ステップベース',
-  subtitle: '16 ステップ、1 ボイス。パネルに音が変わらないつまみはありません',
+  subtitle: '共鳴フィルター、アクセント、スライド付きの 16 ステップ・ベースシーケンサー',
   localOnly: 'ローカル',
 
-  guideTitle: 'シーケンサーはオーディオスレッドの中で回っています',
+  guideTitle: 'RUN を押して、つまみを回します',
   guideBody:
-    'アップロードも事前レンダリングもありません。パターンもトランスポートもエンジン側で管理しているので、CUTOFF・RESONANCE・ENV MOD を回すと、いま鳴っている音がその場で変わります。',
+    'RUN でベースラインを鳴らし、グリッドでステップを編集して、CUTOFF・RESONANCE・ENV MOD を回します。いま鳴っている音がその場で変わります。パターンもトランスポートもブラウザ内のエンジンが管理していて、アップロードはありません。',
   guideLink: 'シンセサイザーについて読む',
 
   sections: {
@@ -303,11 +316,20 @@ export const jaCopy: typeof enCopy = {
     exportFailed: '書き出しに失敗しました。',
   },
 
+  statusbar: {
+    pattern: 'パターン',
+    tempo: 'テンポ',
+    step: 'ステップ',
+    rate: 'レート',
+  },
+
   status: {
     booting: '起動中',
     stopped: '停止中',
     running: '再生中',
     suspended: 'RUN 待ち',
+    unsupportedShort: '非対応',
+    failedShort: 'エンジン停止',
     unsupported: 'このブラウザは Web Audio に対応していないため、この楽器は動きません。',
     failed: 'オーディオエンジンが停止しました。ページを再読み込みすると起動し直します。',
   },
@@ -318,8 +340,12 @@ export const jaCopy: typeof enCopy = {
     ruler: 'ステップ',
     step: '{n} ステップ目',
     cell: '{n} ステップ目、{lane}',
-    keyHint:
-      '矢印キーでセルの間を移動します。スペースキーでカーソル下のセルを変更し、音符のセルではプラスとマイナスで半音、Page Up と Page Down で 1 オクターブ動きます。',
+    keyHint: {
+      move: 'でセル間を移動',
+      change: 'でカーソル下のセルを変更',
+      semitone: 'で音符を半音、',
+      octave: 'で 1 オクターブ動かします。',
+    },
     lanes: {
       note: '音の高さ',
       gate: 'ゲート',

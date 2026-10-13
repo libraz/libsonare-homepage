@@ -8,9 +8,9 @@ describe('demo card data helpers', () => {
 
     expect(cards).toHaveLength(LISTED_DEMOS.length);
     expect(cards[0]).toMatchObject({
-      id: 'analyzer',
-      path: '/ja/analyzer',
-      title: 'Visual Player',
+      id: 'mastering',
+      path: '/ja/mastering',
+      title: 'Mastering Studio',
       cta: 'Open demo',
     });
     expect(cards.map((card) => card.id)).toContain('practice');

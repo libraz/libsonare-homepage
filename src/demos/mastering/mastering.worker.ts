@@ -1,7 +1,7 @@
 /**
- * The /mastering Worker: repair preprocess, loudness fit, export bounce, the
- * lane loudness the A/B match needs, the assistant, reference analysis and the
- * platform preview, off the main thread. The clips a job needs arrive transferred (the page holds no copy
+ * The /mastering Worker: repair detection and preprocess, loudness fit, export
+ * bounce, the lane loudness the A/B match needs, the assistant, reference
+ * analysis and the platform preview, off the main thread. The clips a job needs arrive transferred (the page holds no copy
  * meanwhile) and go back transferred in every terminal message — finished,
  * failed or cancelled — together with any clip the job produced.
  *
@@ -22,14 +22,20 @@ import {
 import type { LoudnessFitResult } from '@/demos/mastering/masteringLoudnessFit';
 import { fitMatchEqPeaks, type MatchEqFit } from '@/demos/mastering/masteringPresetMap';
 import {
+  type MasteringParams,
   type MasteringRepair,
+  type MasteringRepairStage,
   type MasteringState,
   masteringMutators,
   unmappedChainParams,
 } from '@/demos/mastering/masteringState';
 import type { MasteringAssistantPreset } from '@/demos/mastering/useMastering';
 import type { WavBounceOptions } from '@/utils/audio';
-import type { StreamingPlatform } from '@/wasm/index.js';
+import type {
+  MasteringAudioProfileDefects,
+  MasteringRepairStage as MasteringRepairRequest,
+  StreamingPlatform,
+} from '@/wasm/index.js';
 
 type Wasm = typeof import('@/wasm/index.js');
 
@@ -46,9 +52,19 @@ export type MasteringWorkerStage =
   | 'measuring'
   | 'analyzing';
 
+/** What `masteringRepairAnalyze` found in the source and which stages it recommends. */
+export interface MasteringRepairDetection {
+  /** Recommended stages with every setting, as the project state stores them. */
+  recommended: Partial<Record<MasteringRepairStage, MasteringParams>>;
+  /** The channels' defects, aggregated as the stereo profile aggregates them. */
+  defects: MasteringAudioProfileDefects;
+  /** False when clipping was found but a declip at its level would rewrite unclipped audio. */
+  declipThresholdSafe: boolean;
+}
+
 export interface MasteringPrepareResult {
   /** Repair stages that ran, in chain order; empty when the program is the source. */
-  stages: string[];
+  stages: MasteringRepairStage[];
 }
 
 export interface MasteringExportResult {
@@ -92,6 +108,7 @@ export interface MasteringPlatformPreviewRow extends Record<string, unknown> {
 }
 
 export type MasteringWorkerRequest =
+  | { type: 'detectRepair'; id: number; audio: MasteringAudioTransfer }
   | { type: 'prepare'; id: number; audio: MasteringAudioTransfer; repair: MasteringRepair }
   | { type: 'fit'; id: number; audio: MasteringAudioTransfer; state: MasteringState }
   | { type: 'measure'; id: number; audio: MasteringAudioTransfer; state: MasteringState }
@@ -123,6 +140,12 @@ type JobRequest = Exclude<MasteringWorkerRequest, { type: 'cancel' }>;
 
 export type MasteringWorkerResponse =
   | { type: 'progress'; id: number; progress: number; stage: MasteringWorkerStage }
+  | {
+      type: 'repairDetected';
+      id: number;
+      result: MasteringRepairDetection;
+      audio: MasteringAudioTransfer;
+    }
   | { type: 'prepared'; id: number; result: MasteringPrepareResult; audio: MasteringAudioTransfer }
   | { type: 'fitted'; id: number; result: LoudnessFitResult; audio: MasteringAudioTransfer }
   | { type: 'measured'; id: number; result: MasteringMeasureResult; audio: MasteringAudioTransfer }
@@ -228,6 +251,40 @@ function parseJson(raw: string): unknown {
   }
 }
 
+/**
+ * A recommended stage's settings as numbers and switches: an enum the engine
+ * names by choice is stored as the choice's wire value, which it also takes.
+ */
+function repairParams(wasm: Wasm, recommended: MasteringRepairRequest): MasteringParams {
+  const { stage, ...settings } = recommended;
+  const catalog = wasm.capabilityCatalog();
+  const processor = catalog.chain.stages.find((entry) => entry.prefix === `repair.${stage}`);
+  const params = catalog.processors.find((entry) => entry.id === processor?.processor)?.params;
+  const wireValue = (name: string, choice: string) =>
+    Number(params?.find((p) => p.name === name)?.choices?.find((c) => c.name === choice)?.value);
+  return Object.fromEntries(
+    Object.entries(settings).map(([name, value]) => [
+      name,
+      typeof value === 'string' ? wireValue(name, value) : value,
+    ]),
+  );
+}
+
+/** The engine's repair measurement of the source and the stages it recommends. */
+export function detectRepair(wasm: Wasm, source: MasteringClip): MasteringRepairDetection {
+  const analysis = wasm.masteringRepairAnalyze({
+    channels: [source.left, source.right],
+    sampleRate: source.sampleRate,
+  });
+  return {
+    recommended: Object.fromEntries(
+      analysis.recommended.map((entry) => [entry.stage, repairParams(wasm, entry)]),
+    ),
+    defects: analysis.defects,
+    declipThresholdSafe: analysis.declipThresholdSafe,
+  };
+}
+
 /** Profile, suggestion and flat chain suggestion of the program. */
 export function assistProgram(
   wasm: Wasm,
@@ -277,51 +334,48 @@ function mixToMono(left: Float32Array, right: Float32Array): Float32Array {
   return mono;
 }
 
-/** The reference at the program's rate, with its loudness measured. */
-export function conformReference(
-  wasm: Wasm,
-  reference: MasteringClip,
-  sampleRate: number,
-): MasteringClip {
-  const resample = (samples: Float32Array) =>
-    reference.sampleRate === sampleRate || samples.length === 0
-      ? samples
-      : wasm.resample(samples, reference.sampleRate, sampleRate);
-  const left = resample(reference.left);
-  const right = resample(reference.right);
+/** The reference with its loudness measured at its own rate. */
+export function measureReference(wasm: Wasm, reference: MasteringClip): MasteringClip {
   return {
-    left,
-    right,
-    sampleRate,
-    integratedLufs: measureLufs(wasm, left, right, sampleRate),
+    ...reference,
+    integratedLufs: measureLufs(wasm, reference.left, reference.right, reference.sampleRate),
   };
 }
 
-/** Loudness, tonal balance, mono compatibility and the match-EQ fit of program vs reference. */
+/**
+ * Loudness, tonal balance, mono compatibility and the match-EQ fit of program
+ * vs reference. The pair analyses take each track whole and at its own rate;
+ * the engine brings the reference onto the program's rate.
+ */
 export function analyzeReference(
   wasm: Wasm,
   program: MasteringClip,
   reference: MasteringClip,
   onProgress: (progress: number) => void = () => {},
 ): MasteringReferenceResult {
-  const sourceMono = mixToMono(program.left, program.right);
-  const referenceMono = mixToMono(reference.left, reference.right);
-  const pair = Math.min(sourceMono.length, referenceMono.length);
-  if (pair <= 0) throw new Error('reference analysis requires non-empty audio');
-  const source = sourceMono.subarray(0, pair);
-  const target = referenceMono.subarray(0, pair);
+  const source = mixToMono(program.left, program.right);
+  const target = mixToMono(reference.left, reference.right);
+  if (source.length === 0 || target.length === 0) {
+    throw new Error('reference analysis requires non-empty audio');
+  }
+  const pair = (analysisName: 'match.tonalBalance' | 'match.matchEqCurve') =>
+    parseJson(
+      wasm.masteringPairAnalyze({
+        analysisName,
+        source,
+        reference: target,
+        sampleRate: program.sampleRate,
+        referenceSampleRate: reference.sampleRate,
+      }),
+    );
   const sourceLufs = Number.isFinite(program.integratedLufs)
     ? program.integratedLufs
     : measureLufs(wasm, program.left, program.right, program.sampleRate);
   const referenceLufs = reference.integratedLufs;
   onProgress(0.4);
-  const tonalBalance = parseJson(
-    wasm.masteringPairAnalyze('match.tonalBalance', source, target, program.sampleRate),
-  );
+  const tonalBalance = pair('match.tonalBalance');
   onProgress(0.6);
-  const curve = parseJson(
-    wasm.masteringPairAnalyze('match.matchEqCurve', source, target, program.sampleRate),
-  ) as { frequencies: number[]; gainDb: number[] };
+  const curve = pair('match.matchEqCurve') as { frequencies: number[]; gainDb: number[] };
   onProgress(0.8);
   const stereoLength = Math.min(reference.left.length, reference.right.length);
   const monoCompatibility = parseJson(
@@ -329,7 +383,7 @@ export function analyzeReference(
       'stereo.monoCompatCheck',
       reference.left.subarray(0, stereoLength),
       reference.right.subarray(0, stereoLength),
-      program.sampleRate,
+      reference.sampleRate,
       { correlationThreshold: 0 },
     ),
   );
@@ -421,6 +475,11 @@ async function run(
   await checkpoint('loading', 0.02);
   const wasm = await loadWasm();
   switch (request.type) {
+    case 'detectRepair': {
+      await checkpoint('analyzing', 0.1);
+      const result = detectRepair(wasm, requireClip(audio, 'source'));
+      return { type: 'repairDetected', id, result, audio };
+    }
     case 'prepare': {
       await checkpoint('repairing', 0.05);
       const { program, stages } = prepareProgram(
@@ -471,7 +530,7 @@ async function run(
     case 'reference': {
       await checkpoint('analyzing', 0.1);
       const program = requireClip(audio, 'program');
-      audio.reference = conformReference(wasm, requireClip(audio, 'reference'), program.sampleRate);
+      audio.reference = measureReference(wasm, requireClip(audio, 'reference'));
       await checkpoint('analyzing', 0.3);
       const result = analyzeReference(wasm, program, audio.reference, (p) =>
         post({ type: 'progress', id, progress: p, stage: 'analyzing' }),

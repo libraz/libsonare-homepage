@@ -4,9 +4,14 @@
  * The falling-note canvas and the on-screen keyboard must line up pixel for
  * pixel, so both derive every horizontal coordinate from the SAME layout: white
  * keys are equal-width columns across the full range, and black keys straddle
- * the boundary after their preceding white key (60% of a column wide). Returning
- * ratios (0..1 of the inner width) lets each surface multiply by its own width.
+ * the boundary after their preceding white key, as wide as the shared
+ * {@link KEY_GEOMETRY} says. Returning ratios (0..1 of the inner width) lets each
+ * surface multiply by its own width.
  */
+import { KEY_GEOMETRY } from '@/components/keyboard/keyGeometry';
+
+/** Share of a white column a white key's falling-note lane fills, leaving a gap. */
+const WHITE_LANE_FILL = 0.92;
 
 /** Pitch classes that render as black (accidental) keys. */
 const BLACK_PCS = new Set([1, 3, 6, 8, 10]);
@@ -68,5 +73,5 @@ export function keyCenterRatio(key: KeyGeom, whiteCount: number): number {
 
 /** Width of a key (or its falling-note lane) as a 0..1 ratio of the inner width. */
 export function keyWidthRatio(key: KeyGeom, whiteCount: number): number {
-  return (key.black ? 0.62 : 0.92) / whiteCount;
+  return (key.black ? KEY_GEOMETRY.blackWidthRatio : WHITE_LANE_FILL) / whiteCount;
 }

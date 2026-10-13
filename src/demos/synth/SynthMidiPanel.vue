@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Tooltip } from '@/components/ui';
+import { DemoNotice, Tooltip } from '@/components/ui';
 import type { WebMidiInputInfo } from '@/wasm/index';
 
 interface TermTooltip {
@@ -42,26 +42,22 @@ defineEmits<{
     <span class="sy-midi__title">
       <i class="sy-led" :class="{ 'sy-led--on': connected && inputs.length > 0 }"></i>
       {{ title }}
-      <Tooltip v-bind="midiTerm">
-        <button type="button" class="sy-sec__info" :aria-label="midiTerm.title">
-          <span aria-hidden="true">i</span>
-        </button>
-      </Tooltip>
+      <Tooltip v-bind="midiTerm" />
     </span>
-    <p v-if="supported === false" class="sy-midi__note">{{ unavailableLabel }}</p>
+    <DemoNotice v-if="supported === false" tone="warn">{{ unavailableLabel }}</DemoNotice>
     <template v-else>
       <button
         v-if="!connected"
         type="button"
-        class="sy-chipbtn"
+        class="demo-btn demo-btn--sm"
         :disabled="connecting || !wasmReady"
         @click="$emit('connect')"
       >
         {{ connecting ? connectingLabel : connectLabel }}
       </button>
-      <p v-if="hasError" class="sy-error">{{ errorLabel }}</p>
+      <DemoNotice v-if="hasError" tone="error">{{ errorLabel }}</DemoNotice>
       <template v-if="connected">
-        <p v-if="inputs.length === 0" class="sy-midi__note">{{ emptyLabel }}</p>
+        <DemoNotice v-if="inputs.length === 0" tone="hint">{{ emptyLabel }}</DemoNotice>
         <span v-for="input in inputs" :key="input.id" class="sy-midi__device">
           <i class="sy-led" :class="{ 'sy-led--on': input.state === 'connected' }"></i>
           {{ input.name || input.id }}

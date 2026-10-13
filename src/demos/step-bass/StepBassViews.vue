@@ -12,7 +12,7 @@
  * separately in engine meter telemetry.
  */
 import { computed, onMounted, ref, watch } from 'vue';
-import { MetricItem } from '@/components/ui';
+import { DemoNotice, MetricItem } from '@/components/ui';
 import ScopeDisplay from '@/components/ui/ScopeDisplay.vue';
 import { useCanvasRedraw } from '@/composables/useCanvasRedraw';
 import { useTheme } from '@/composables/useTheme';
@@ -219,7 +219,7 @@ function meterPercent(db: number): number {
           <span class="step-views__legend">{{ SILKSCREEN.scope }}</span>
         </header>
         <ScopeDisplay class="step-views__scope" :analyser="analyser" />
-        <p class="step-views__caption">{{ copy.views.scope.caption }}</p>
+        <DemoNotice tone="hint">{{ copy.views.scope.caption }}</DemoNotice>
       </article>
 
       <article v-if="visible('filter')" class="step-views__panel">
@@ -237,7 +237,7 @@ function meterPercent(db: number): number {
         <div class="step-views__screen">
           <canvas ref="curveCanvas" class="step-views__canvas" aria-hidden="true"></canvas>
         </div>
-        <p class="step-views__caption">{{ copy.views.filter.caption }}</p>
+        <DemoNotice tone="hint">{{ copy.views.filter.caption }}</DemoNotice>
       </article>
 
       <article v-if="visible('output')" class="step-views__panel">
@@ -262,7 +262,7 @@ function meterPercent(db: number): number {
             <span
               class="step-views__meter-ceiling"
               :style="{ left: `${ceilingPercent}%` }"
-              :title="copy.views.output.ceiling"
+              aria-hidden="true"
             ></span>
           </div>
           <div class="step-views__scale" aria-hidden="true">
@@ -286,7 +286,7 @@ function meterPercent(db: number): number {
             />
           </div>
         </div>
-        <p class="step-views__caption">{{ copy.views.output.caption }}</p>
+        <DemoNotice tone="hint">{{ copy.views.output.caption }}</DemoNotice>
       </article>
     </div>
   </section>

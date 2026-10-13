@@ -1,10 +1,49 @@
 /**
- * Help-tooltip copy for the audio analyzer. The demo's visible labels come from
- * the shared i18n bundle (`demo.panel.*`); this file holds only the richer term
- * explanations surfaced through the info tooltips, mirroring the other demos.
+ * Copy for the visual player. Metric labels come from the shared i18n bundle
+ * (`demo.panel.*`); this file holds the page text, the player's own controls and
+ * messages, and the term explanations behind the info tooltips.
  */
 
 export const enCopy = {
+  page: {
+    title: 'Visual Player',
+    subtitle: 'Audio player with real-time chroma & spectrum visualization',
+    localOnly: 'LOCAL',
+    initError: 'ENGINE ERROR',
+    guideTitle: 'Load a file and press play',
+    guideBody:
+      'Drop in an audio file and press play. The colors and bars follow the music live: chroma shows which notes are sounding, the spectrum shows where the energy sits. BPM and key are live reference values; for a full report, use Music Analysis. Everything runs in your browser.',
+    guideDocs: 'Open docs',
+  },
+  status: {
+    idle: 'No file',
+    loading: 'Loading',
+    ready: 'Ready',
+    playing: 'Playing',
+    error: 'Error',
+  },
+  stages: {
+    starting: 'Starting signal processor',
+    decoding: 'Decoding audio',
+    initializing: 'Initializing analyzer',
+    extracting: 'Extracting samples',
+    rms: 'Computing RMS',
+    beats: 'Detecting beats',
+    chroma: 'Computing chroma',
+    spectrogram: 'Computing spectrogram',
+    finalizing: 'Finalizing',
+  },
+  controls: {
+    rewind: 'Rewind',
+    file: 'File',
+    changeFile: 'Change file',
+  },
+  errors: {
+    decode: 'Could not decode this audio file. Try a different WAV, MP3, or FLAC file.',
+    processing:
+      'The audio decoded, but its visualization data could not be generated. Try a shorter file.',
+    init: 'The analysis engine could not be loaded. Reload the page and try again.',
+  },
   eyebrow: 'Analysis',
   tipLabel: 'How to read it',
   linkLabel: 'Open glossary',
@@ -63,6 +102,46 @@ export const enCopy = {
 };
 
 export const jaCopy: typeof enCopy = {
+  page: {
+    title: 'ビジュアルプレイヤー',
+    subtitle: 'クロマ・スペクトルをリアルタイム可視化するオーディオプレイヤー',
+    localOnly: 'ローカル実行',
+    initError: 'エンジンエラー',
+    guideTitle: '音声ファイルを読み込んで再生します',
+    guideBody:
+      '音声ファイルを読み込んで再生すると、色とバーが音楽に合わせてリアルタイムに動きます。クロマは鳴っている音の高さ、スペクトルはエネルギーが集まる周波数帯を示します。BPM とキーは再生中の参考値です。全体の解析は「楽曲解析」で行えます。処理はすべてブラウザ内で行います。',
+    guideDocs: 'ドキュメント',
+  },
+  status: {
+    idle: 'ファイルなし',
+    loading: '読み込み中',
+    ready: '準備完了',
+    playing: '再生中',
+    error: 'エラー',
+  },
+  stages: {
+    starting: '信号処理を起動中',
+    decoding: '音声をデコード中',
+    initializing: '解析器を初期化中',
+    extracting: 'サンプルを取り出し中',
+    rms: 'RMS を計算中',
+    beats: 'ビートを検出中',
+    chroma: 'クロマを計算中',
+    spectrogram: 'スペクトログラムを計算中',
+    finalizing: '仕上げ中',
+  },
+  controls: {
+    rewind: '先頭へ戻る',
+    file: 'ファイル',
+    changeFile: 'ファイルを変更',
+  },
+  errors: {
+    decode:
+      'この音声ファイルをデコードできませんでした。別の WAV・MP3・FLAC ファイルをお試しください。',
+    processing:
+      '音声はデコードできましたが、可視化データを生成できませんでした。より短いファイルをお試しください。',
+    init: '解析エンジンを読み込めませんでした。ページを再読み込みしてからもう一度お試しください。',
+  },
   eyebrow: '解析',
   tipLabel: '読み方',
   linkLabel: '用語集を開く',

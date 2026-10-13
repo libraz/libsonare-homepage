@@ -1,22 +1,33 @@
 <script setup lang="ts">
 /**
- * The offline repair stages. Each change reruns the preprocess over the whole
- * file, so a dragged value is applied once, on release.
+ * The offline repair stages. Detect asks the engine which stages the source
+ * needs (`masteringRepairAnalyze`) and shows what it measured per stage; Apply
+ * turns on exactly those, with their settings. Each change reruns the
+ * preprocess over the whole file, so a dragged value is applied once, on release.
  */
-import { reactive } from 'vue';
+import { computed, reactive } from 'vue';
+import { DemoNotice } from '@/components/ui';
 import MasterKnob from '@/demos/mastering/MasterKnob.vue';
+import type { MasteringRepairDetection } from '@/demos/mastering/mastering.worker';
 import { useMasteringCopy } from '@/demos/mastering/masteringCopy';
 import {
   MASTERING_REPAIR_STAGES,
   type MasteringRepair,
   type MasteringRepairStage,
 } from '@/demos/mastering/masteringState';
+import { formatNumber } from '@/demos/mastering/masteringUi';
+import { fill } from '@/utils/template';
 
 const props = defineProps<{
   repair: MasteringRepair;
   /** Progress 0..1 while the preprocess runs, else null. */
   progress: number | null;
   failed: boolean;
+  /** The last detection of the current source, or null. */
+  detection: MasteringRepairDetection | null;
+  detecting: boolean;
+  /** A source is loaded, so there is something to detect on. */
+  canDetect: boolean;
   disabled?: boolean;
 }>();
 
@@ -25,6 +36,8 @@ const emit = defineEmits<{
   param: [stage: MasteringRepairStage, name: string, value: number];
   retry: [];
   cancel: [];
+  detect: [];
+  applySuggestion: [];
 }>();
 
 const copy = useMasteringCopy();
@@ -67,22 +80,86 @@ function onEnd(stage: MasteringRepairStage): void {
   delete drafts[stage];
   if (control && value !== undefined) emit('param', stage, control.name, value);
 }
+
+const hasSuggestion = computed(
+  () => props.detection !== null && Object.keys(props.detection.recommended).length > 0,
+);
+
+/** What the detection measured for `stage`, in the stage's own terms. */
+function finding(stage: MasteringRepairStage): string {
+  const detection = props.detection;
+  if (!detection) return '';
+  const d = detection.defects;
+  const text = copy.value.repair.detect;
+  if (stage === 'declip' && !detection.declipThresholdSafe && d.clipFlatRunCount > 0) {
+    return text.withheld;
+  }
+  const n = {
+    declip: String(d.clipRunCount),
+    declick: formatNumber(d.clickPerSecond, 1),
+    decrackle: formatNumber(d.crackleSampleFraction * 100, 2),
+    dehum: d.humFundamentalHz > 0 ? formatNumber(d.humFundamentalHz, 0) : '—',
+    denoise: formatNumber(d.noiseFloorDbfs, 0),
+    dereverb: formatNumber(d.lateDecayRatioDb, 1),
+  }[stage];
+  return fill(text.figures[stage], { n });
+}
+
+const suggested = (stage: MasteringRepairStage) =>
+  props.detection?.recommended[stage] !== undefined;
 </script>
 
 <template>
   <div class="repair-editor">
-    <p class="repair-editor__note">{{ copy.repair.note }}</p>
-    <div v-if="progress !== null" class="repair-editor__progress" role="status">
-      <span>{{ copy.jobs.prepare }} {{ Math.round(progress * 100) }}%</span>
-      <span class="repair-editor__bar" aria-hidden="true"><i :style="{ width: `${progress * 100}%` }"></i></span>
-      <button type="button" @click="emit('cancel')">{{ copy.jobs.cancel }}</button>
+    <DemoNotice tone="hint">{{ copy.repair.note }} {{ copy.repair.detect.hint }}</DemoNotice>
+    <div class="repair-editor__detect">
+      <button
+        type="button"
+        class="demo-btn demo-btn--sm"
+        :disabled="!canDetect || detecting || disabled"
+        @click="emit('detect')"
+      >
+        {{ detection ? copy.repair.detect.again : copy.repair.detect.button }}
+      </button>
+      <span class="repair-editor__detecting" role="status">{{ detecting ? copy.jobs.detect : '' }}</span>
+      <Transition name="demo-rise">
+        <button
+          v-if="hasSuggestion"
+          type="button"
+          class="demo-btn demo-btn--sm demo-btn--primary"
+          :disabled="disabled"
+          @click="emit('applySuggestion')"
+        >
+          {{ copy.repair.detect.apply }}
+        </button>
+      </Transition>
     </div>
-    <p v-else-if="failed" class="repair-editor__failed" role="alert">
+    <DemoNotice v-if="detection && !hasSuggestion" tone="success">{{ copy.repair.detect.none }}</DemoNotice>
+    <div v-if="progress !== null" class="repair-editor__progress">
+      <span>{{ copy.jobs.prepare }} {{ Math.round(progress * 100) }}%</span>
+      <span
+        class="repair-editor__bar"
+        role="progressbar"
+        :aria-label="copy.jobs.prepare"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        :aria-valuenow="Math.round(progress * 100)"
+      ><i :style="{ transform: `scaleX(${progress})` }"></i></span>
+      <button type="button" class="demo-btn demo-btn--sm" @click="emit('cancel')">{{ copy.jobs.cancel }}</button>
+    </div>
+    <DemoNotice v-else-if="failed" tone="error">
       {{ copy.repair.failed }}
-      <button type="button" :disabled="disabled" @click="emit('retry')">{{ copy.repair.retry }}</button>
-    </p>
+      <template #action>
+        <button type="button" class="demo-btn demo-btn--sm" :disabled="disabled" @click="emit('retry')">{{ copy.repair.retry }}</button>
+      </template>
+    </DemoNotice>
     <ul class="repair-editor__stages">
-      <li v-for="stage in MASTERING_REPAIR_STAGES" :key="stage" class="repair-stage">
+      <li
+        v-for="stage in MASTERING_REPAIR_STAGES"
+        :key="stage"
+        class="repair-stage"
+        :class="{ 'is-suggested': suggested(stage) }"
+      >
         <label class="repair-stage__toggle">
           <input
             type="checkbox"
@@ -92,6 +169,12 @@ function onEnd(stage: MasteringRepairStage): void {
           >
           <span>{{ copy.repair.stages[stage] }}</span>
         </label>
+        <Transition name="demo-rise">
+          <p v-if="detection" class="repair-stage__finding">
+            <span class="repair-stage__verdict">{{ suggested(stage) ? copy.repair.detect.suggested : copy.repair.detect.clean }}</span>
+            {{ finding(stage) }}
+          </p>
+        </Transition>
         <MasterKnob
           v-if="CONTROLS[stage] && repair[stage].enabled"
           :model-value="stageValue(stage)"
@@ -118,24 +201,17 @@ function onEnd(stage: MasteringRepairStage): void {
   gap: 12px;
 }
 
-.repair-editor__note,
-.repair-editor__failed {
-  margin: 0;
-  color: var(--demo-text);
-  font-size: 12.5px;
-  line-height: 1.55;
-}
-
-.repair-editor__failed {
+.repair-editor__detect {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border: 1px solid var(--demo-warn-border);
-  border-radius: 6px;
-  background: var(--demo-warn-bg);
-  color: var(--demo-warn-text);
+  gap: 8px;
+}
+
+.repair-editor__detecting {
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
 }
 
 .repair-editor__progress {
@@ -159,23 +235,8 @@ function onEnd(stage: MasteringRepairStage): void {
   display: block;
   height: 100%;
   background: var(--demo-accent);
-}
-
-.repair-editor button {
-  padding: 4px 10px;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.repair-editor button:focus-visible,
-.repair-stage__toggle input:focus-visible {
-  outline: 2px solid var(--demo-accent);
-  outline-offset: 2px;
+  transform-origin: left;
+  transition: transform var(--demo-dur-base) var(--demo-ease-standard);
 }
 
 .repair-editor__stages {
@@ -193,7 +254,12 @@ function onEnd(stage: MasteringRepairStage): void {
   align-content: start;
   padding: 10px;
   border: 1px solid var(--demo-border);
-  border-radius: 6px;
+  border-radius: var(--demo-radius-sm);
+  transition: border-color var(--demo-dur-base) var(--demo-ease-standard);
+}
+
+.repair-stage.is-suggested {
+  border-color: var(--demo-accent-border);
 }
 
 .repair-stage__toggle {
@@ -208,5 +274,34 @@ function onEnd(stage: MasteringRepairStage): void {
 
 .repair-stage__toggle input {
   accent-color: var(--demo-accent);
+}
+
+.repair-stage__toggle input:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 2px;
+}
+
+.repair-stage__finding {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0;
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+
+.repair-stage__verdict {
+  color: var(--demo-text-faint);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.is-suggested .repair-stage__verdict {
+  color: var(--demo-accent);
 }
 </style>

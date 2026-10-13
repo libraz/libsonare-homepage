@@ -10,6 +10,7 @@ import SpectrumView, {
   type SpectrumBandUpdate,
   type SpectrumOverlayPoint,
 } from '@/components/meters/SpectrumView.vue';
+import { DemoNotice } from '@/components/ui';
 import MasterKnob from '@/demos/mastering/MasterKnob.vue';
 import { useMasteringCopy } from '@/demos/mastering/masteringCopy';
 import {
@@ -132,10 +133,12 @@ const spectrumLabels = computed(() => ({
       @band-drag-start="emit('begin')"
       @band-drag-end="emit('end')"
     />
-    <p v-if="matchEq" class="eq-editor__match">
-      <span>{{ matchText }}</span>
-      <button type="button" :disabled="disabled" @click="emit('clearMatch')">{{ copy.eq.clearMatch }}</button>
-    </p>
+    <DemoNotice v-if="matchEq" tone="info">
+      {{ matchText }}
+      <template #action>
+        <button type="button" class="demo-btn demo-btn--sm" :disabled="disabled" @click="emit('clearMatch')">{{ copy.eq.clearMatch }}</button>
+      </template>
+    </DemoNotice>
     <div class="eq-editor__bands" role="group" :aria-label="copy.modules.eq">
       <fieldset
         v-for="(band, index) in bands"
@@ -214,28 +217,6 @@ const spectrumLabels = computed(() => ({
   min-height: 240px;
 }
 
-.eq-editor__match {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin: 0;
-  color: var(--demo-text);
-  font-size: 12px;
-}
-
-.eq-editor__match button {
-  padding: 4px 10px;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--demo-text);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  cursor: pointer;
-}
-
 .eq-editor__bands {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -249,7 +230,10 @@ const spectrumLabels = computed(() => ({
   margin: 0;
   padding: 8px 10px 10px;
   border: 1px solid var(--demo-border);
-  border-radius: 6px;
+  border-radius: var(--demo-radius-sm);
+  transition:
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    opacity var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .eq-band--match {
@@ -275,8 +259,7 @@ const spectrumLabels = computed(() => ({
   accent-color: var(--demo-accent);
 }
 
-.eq-band__head input:focus-visible,
-.eq-editor__match button:focus-visible {
+.eq-band__head input:focus-visible {
   outline: 2px solid var(--demo-accent);
   outline-offset: 2px;
 }

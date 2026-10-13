@@ -9,7 +9,11 @@ type WasmModule = typeof import('@/wasm/index.js');
 export const EXPORT_SAMPLE_RATE = 48000;
 /** The export repeats the one-bar pattern this many times. */
 export const EXPORT_BARS = 2;
-/** Room after the last bar for the instruments' release tails. */
+/**
+ * Room after the last bar for the instruments' release tails. Measured, not
+ * `tailSamples()`: that is a conservative bound (~2.4 s for the closed hat),
+ * while the mix is below −100 dBFS within 0.8 s.
+ */
 export const EXPORT_TAIL_SECONDS = 1.6;
 /** Render block size of the offline export engine. */
 const EXPORT_BLOCK_SIZE = 128;

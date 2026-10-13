@@ -66,7 +66,10 @@ describe('voice changer worklet heap views', () => {
   async function blockRunner(changer: ReturnType<typeof fakeChanger>) {
     const processor = await load(
       voiceSource('/sonare.js'),
-      { createRealtimeVoiceChanger: () => changer },
+      {
+        createRealtimeVoiceChanger: () => changer,
+        realtimeVoiceChangerPresetJson: () => JSON.stringify({ dsp: { formant: {} } }),
+      },
       {},
     );
     return (input: number) => {

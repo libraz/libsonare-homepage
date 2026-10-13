@@ -8,9 +8,12 @@ describe('buildProcessorSource', () => {
     expect(source).toContain("import createModule from '/wasm/sonare.js';");
   });
 
-  it('creates and prepares the native RealtimeVoiceChanger', () => {
-    expect(source).toContain('mod.createRealtimeVoiceChanger(this.preset)');
-    expect(source).toContain('this.vc.prepare(sampleRate, MAX_BLOCK, 1)');
+  it('creates and prepares the native RealtimeVoiceChanger with the formant mode set first', () => {
+    expect(source).toContain('this.mod.createRealtimeVoiceChanger(this.preset)');
+    expect(source).toContain('config.dsp.formant.mode = this.formantMode');
+    expect(source).toContain(
+      'vc.setConfig(this.presetConfig());\n    vc.prepare(sampleRate, MAX_BLOCK, 1)',
+    );
     expect(source).not.toContain('createStreamingRetune');
   });
 
@@ -48,14 +51,20 @@ describe('buildProcessorSource', () => {
 
   it('switches the full preset chain when the preset id changes', () => {
     expect(source).toContain('p.preset !== this.preset');
-    expect(source).toContain('this.vc.setConfig(this.preset); this.loadBase()');
+    expect(source).toContain('this.vc.setConfig(this.presetConfig()); this.loadBase()');
   });
 
-  it('records the preset id even when params arrive before the engine exists', () => {
-    // The preset guard no longer requires this.vc, so a preset chosen during
-    // startup still seeds createRealtimeVoiceChanger once init completes.
-    expect(source).toContain('if (p.preset && p.preset !== this.preset)');
-    expect(source).not.toContain('if (this.vc && p.preset && p.preset !== this.preset)');
+  it('rebuilds the changer when the formant mode changes', () => {
+    expect(source).toContain('if (this.vc && modeChanged)');
+    expect(source).toContain(
+      "this.port.postMessage({ type: 'latency', latencySamples: this.vc.latencySamples() })",
+    );
+  });
+
+  it('records preset and mode even when params arrive before the engine exists', () => {
+    // createChanger reads both, so a choice made during startup still seeds it.
+    expect(source).toContain('if (presetChanged) this.preset = p.preset');
+    expect(source).toContain('if (modeChanged) this.formantMode = p.formantMode');
   });
 
   it('reports worklet readiness with latency and module initialization failures', () => {

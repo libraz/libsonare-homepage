@@ -14,7 +14,6 @@ import {
   laneMatchGains,
   type MasteringAudio,
   type MasteringClip,
-  masteringLatencySamples,
   renderMasteringState,
 } from '@/demos/mastering/masteringEngine';
 import {
@@ -102,6 +101,17 @@ async function withMeasuredAfter(
   });
 }
 
+/** Lane 1's plugin delay, which every lane is compensated to, as the engine reports it. */
+async function laneLatency(state: MasteringState): Promise<number> {
+  const raw = await createRawEngine(SR);
+  try {
+    applyOps(createRawTarget(raw), buildFull(state, { program: null, reference: null }, 'export'));
+    return Math.round(raw.graphLatencySamplesQ8() / 256);
+  } finally {
+    raw.destroy();
+  }
+}
+
 describe('lane match gains', () => {
   const state = defaultMasteringState();
   const fake = (integratedLufs: number): MasteringClip => ({
@@ -165,7 +175,6 @@ describe('matched lanes play at the same integrated loudness', () => {
     ['a quiet programme (After is turned down)', 0.25],
     ['a hot programme (Before is turned down)', 3],
   ])('%s', { timeout: 120_000 }, async (_label, programGain) => {
-    const wasm = await loadIndexModule();
     const program = await clip(31, programGain);
     const reference = await clip(47, 0.7, 1.5);
     const audio: MasteringAudio = { program, reference };
@@ -174,7 +183,7 @@ describe('matched lanes play at the same integrated loudness', () => {
     const gains = laneMatchGains(state, audio);
     for (const lane of MASTERING_LANES) expect(gains[lane]).toBeLessThanOrEqual(0);
 
-    const latency = masteringLatencySamples(wasm, state, SR);
+    const latency = await laneLatency(state);
     const total = Math.ceil((SECONDS * SR + latency) / RENDER_QUANTUM) * RENDER_QUANTUM;
     const heard: Record<MasteringLane, number> = { after: 0, before: 0, reference: 0 };
     for (const lane of MASTERING_LANES) {
@@ -207,7 +216,6 @@ describe('switching lanes while playing', () => {
   it('never drops a 128-frame block below -60 dBFS while the source is above -20 dBFS', {
     timeout: 120_000,
   }, async () => {
-    const wasm = await loadIndexModule();
     const program = await clip(5, 0.8);
     const reference = await clip(9, 0.5, 1.5);
     const audio: MasteringAudio = { program, reference };
@@ -215,7 +223,7 @@ describe('switching lanes while playing', () => {
       m.setReference(defaultMasteringState(), refAudio(reference)),
       program,
     );
-    const latency = masteringLatencySamples(wasm, state, SR);
+    const latency = await laneLatency(state);
 
     const f = await createFacadeLoopback({ sampleRate: SR });
     facades.push(f);

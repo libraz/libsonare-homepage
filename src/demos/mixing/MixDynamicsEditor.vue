@@ -2,24 +2,24 @@
 /**
  * Gate, compressor, de-esser and ducker of the selected strip, one at a time.
  * A parameter the engine only takes at construction rebuilds every insert on
- * the strip, so it is held while dragging and applied once on release.
+ * the strip, so it is held while dragging and applied once on release. Ranges
+ * that depend on a sibling (the gate's open and close thresholds) follow the
+ * engine catalogue's `dependsOn`, so they wait for the catalogue to load.
  */
 import { computed, reactive, ref } from 'vue';
 import GainReductionMeter from '@/components/meters/GainReductionMeter.vue';
-import { TermLabel } from '@/components/ui';
+import { SegmentedControl, TermLabel } from '@/components/ui';
 import MixParam from '@/demos/mixing/MixParam.vue';
 import { useMixingCopy } from '@/demos/mixing/mixingCopy';
 import { TRACK_SLOT_INDEX } from '@/demos/mixing/mixingEngine';
-import {
-  defaultTrackSlots,
-  duckKeyClosesCycle,
-  type MixTrackState,
-} from '@/demos/mixing/mixingState';
+import { defaultTrackSlots, type MixTrackState } from '@/demos/mixing/mixingState';
 import { type MixingTermKey, useMixingTerm } from '@/demos/mixing/mixingTerms';
 import {
+  boundedControl,
   DYNAMICS_SLOTS,
   type DynamicsSlot,
   isDiscreteParam,
+  type ParamControl,
   TRACK_SLOT_CONTROLS,
   trackSlotProcessor,
 } from '@/demos/mixing/mixingUi';
@@ -41,8 +41,20 @@ const SLOT_TERMS: Record<DynamicsSlot, MixingTermKey> = {
 };
 
 const slot = ref<DynamicsSlot>('comp');
+const slotOptions = computed(() =>
+  DYNAMICS_SLOTS.map((id) => ({ id, label: copy.value.slots[id] })),
+);
 const state = computed(() => props.track.slots[slot.value]);
-const controls = computed(() => TRACK_SLOT_CONTROLS[slot.value]);
+const catalogue = computed(() => m.paramInfo(trackSlotProcessor(slot.value)));
+const controls = computed<ParamControl[]>(() =>
+  TRACK_SLOT_CONTROLS[slot.value].map((control) =>
+    boundedControl(
+      control,
+      state.value.params,
+      catalogue.value?.find((param) => param.name === control.name)?.dependsOn ?? [],
+    ),
+  ),
+);
 const grDb = computed(
   () => metering.frame.value.tracks[props.track.id]?.insertGrDb[TRACK_SLOT_INDEX[slot.value]] ?? 0,
 );
@@ -50,9 +62,7 @@ const grLabels = computed(() => ({
   name: `${copy.value.slots[slot.value]} ${copy.value.console.gr}`,
 }));
 const keyOptions = computed(() =>
-  view.value.tracks.filter(
-    (t) => t.id !== props.track.id && !duckKeyClosesCycle(view.value.tracks, props.track.id, t.id),
-  ),
+  view.value.tracks.filter((t) => t.id !== props.track.id && m.canDuckKey(props.track.id, t.id)),
 );
 
 /** Values of construction-only parameters while their drag is in progress. */
@@ -92,18 +102,13 @@ function setKey(event: Event): void {
 
 <template>
   <div class="dyn">
-    <div class="dyn__tabs" role="tablist" :aria-label="copy.inspector.dynamics">
-      <button
-        v-for="name in DYNAMICS_SLOTS"
-        :key="name"
-        type="button"
-        role="tab"
-        class="dyn__tab"
-        :class="{ 'dyn__tab--on': !track.slots[name].bypassed }"
-        :aria-selected="slot === name"
-        @click="slot = name"
-      >{{ copy.slots[name] }}</button>
-    </div>
+    <SegmentedControl
+      :model-value="slot"
+      :options="slotOptions"
+      :ariaLabel="copy.inspector.dynamics"
+      size="sm"
+      @update:model-value="(id) => (slot = id as DynamicsSlot)"
+    />
     <div class="dyn__head">
       <TermLabel v-bind="term(SLOT_TERMS[slot])">{{ copy.slots[slot] }}</TermLabel>
       <GainReductionMeter
@@ -115,7 +120,7 @@ function setKey(event: Event): void {
       />
       <button
         type="button"
-        class="dyn__power"
+        class="demo-btn demo-btn--sm dyn__power"
         :aria-pressed="!state.bypassed"
         :disabled="editLocked"
         @click="m.edit('setSlotBypass', track.id, slot, !state.bypassed)"
@@ -129,7 +134,7 @@ function setKey(event: Event): void {
         :control="control"
         :label="label(control.name)"
         :default-value="defaults[slot].params[control.name]"
-        :disabled="editLocked"
+        :disabled="editLocked || !catalogue"
         :deferred="deferred(control.name)"
         :hint="deferred(control.name) ? copy.inspector.discrete : undefined"
         @update:model-value="(v) => onUpdate(control.name, v)"
@@ -139,7 +144,7 @@ function setKey(event: Event): void {
     </div>
     <label v-if="slot === 'duck'" class="dyn__key">
       <span>{{ copy.inspector.key }}</span>
-      <select :value="track.duckKeyTrackId ?? ''" :disabled="editLocked" @change="setKey">
+      <select class="demo-field" :value="track.duckKeyTrackId ?? ''" :disabled="editLocked" @change="setKey">
         <option value="">{{ copy.inspector.keySelf }}</option>
         <option v-for="option in keyOptions" :key="option.id" :value="option.id">{{ option.name }}</option>
       </select>
@@ -151,33 +156,6 @@ function setKey(event: Event): void {
 .dyn {
   display: grid;
   gap: 8px;
-}
-
-.dyn__tabs {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 3px;
-}
-
-.dyn__tab {
-  padding: 5px 0;
-  border: 1px solid var(--demo-border);
-  border-radius: 4px;
-  background: var(--demo-control-bg);
-  color: var(--demo-text-muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  cursor: pointer;
-}
-
-.dyn__tab--on {
-  color: var(--demo-accent);
-}
-
-.dyn__tab[aria-selected='true'] {
-  border-color: var(--demo-accent-border);
-  background: var(--demo-accent-subtle);
-  color: var(--demo-text-strong);
 }
 
 .dyn__head {
@@ -193,26 +171,13 @@ function setKey(event: Event): void {
 
 .dyn__power {
   min-width: 38px;
-  padding: 2px 8px;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 3px;
-  background: var(--demo-control-bg);
-  color: var(--demo-text-muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  cursor: pointer;
 }
 
-.dyn__power[aria-pressed='true'] {
+.dyn__power[aria-pressed='true'],
+.dyn__power[aria-pressed='true']:hover:not(:disabled) {
   border-color: var(--demo-accent);
   background: var(--demo-accent);
   color: var(--demo-on-accent);
-}
-
-.dyn__power:disabled,
-.dyn__key select:disabled {
-  cursor: not-allowed;
-  opacity: var(--demo-disabled-opacity);
 }
 
 .dyn__params {
@@ -232,12 +197,6 @@ function setKey(event: Event): void {
 }
 
 .dyn__key select {
-  padding: 3px 4px;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 3px;
-  background: var(--demo-control-bg);
-  color: var(--demo-text-strong);
-  font-family: var(--font-body);
-  font-size: 12px;
+  height: 26px;
 }
 </style>

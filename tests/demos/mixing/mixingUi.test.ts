@@ -94,13 +94,15 @@ describe('rebuilt strips', () => {
 });
 
 describe('meter targets', () => {
-  it('maps master, lanes in declaration order and both buses', () => {
+  it('maps master, lanes in declaration order and every bus', () => {
     const sources = meterSources([7, 3]);
     expect(sources.get(MASTER_METER_TARGET)).toEqual({ kind: 'master' });
     expect(sources.get(1)).toEqual({ kind: 'track', trackId: 7 });
     expect(sources.get(2)).toEqual({ kind: 'track', trackId: 3 });
     expect(sources.get(33)).toEqual({ kind: 'bus', bus: 'reverb' });
     expect(sources.get(34)).toEqual({ kind: 'bus', bus: 'delay' });
+    expect(sources.get(35)).toEqual({ kind: 'bus', bus: 'group1' });
+    expect(sources.get(36)).toEqual({ kind: 'bus', bus: 'group2' });
   });
 
   it('folds a snapshot into the strip it belongs to', () => {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useI18n } from '@/composables/useI18n';
 
 const props = defineProps<{
   src: string | null;
@@ -8,6 +9,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   progress: [fraction: number];
 }>();
+
+const { t } = useI18n();
+const labels = computed(() => ({ play: t('ui.transport.play'), pause: t('ui.transport.pause') }));
 
 const audioElement = ref<HTMLAudioElement | null>(null);
 const isPlaying = ref(false);
@@ -116,7 +120,7 @@ defineExpose({ setVolume, togglePlayback, seekFraction });
       type="button"
       class="transport__play"
       :disabled="!src"
-      :aria-label="isPlaying ? 'Pause' : 'Play'"
+      :aria-label="isPlaying ? labels.pause : labels.play"
       @click="togglePlayback"
     >
       <svg v-if="isPlaying" viewBox="0 0 24 24" aria-hidden="true">
@@ -143,7 +147,7 @@ defineExpose({ setVolume, togglePlayback, seekFraction });
         step="0.01"
         :value="currentTime"
         :disabled="!src"
-        aria-label="Seek"
+        :aria-label="t('ui.transport.seek')"
         @input="onSeek"
       >
     </div>
@@ -184,7 +188,10 @@ defineExpose({ setVolume, togglePlayback, seekFraction });
   background: color-mix(in srgb, var(--demo-accent) 16%, transparent);
   color: var(--demo-text-strong);
   cursor: pointer;
-  transition: background-color 0.16s ease, border-color 0.16s ease, transform 0.1s ease;
+  transition:
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    transform var(--demo-dur-instant) var(--demo-ease-standard);
 }
 
 .transport__play:not(:disabled):hover {

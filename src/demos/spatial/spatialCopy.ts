@@ -126,6 +126,7 @@ export const enCopy = {
   },
   scene: {
     placeholder: 'Pick a sample room or drop a recording to reconstruct the space.',
+    noRoom: 'No room to show',
     autoRotate: 'Auto-rotate',
     drag: 'Drag to orbit · scroll to zoom',
     truth: 'Ground truth',
@@ -170,8 +171,8 @@ export const enCopy = {
     hz: 'Hz',
   },
   guide: {
-    title: 'How the estimate works',
-    body: 'libsonare solves an inverse acoustics problem: from the decay tail it estimates an equivalent shoebox room (volume, dimensions, per-band absorption) and the direct-to-reverberant ratio. The DRR plus the critical distance places the source at an estimated distance — a single channel reveals how far, not which direction, so the source is drawn as a full shell around the listener.',
+    title: 'Pick a room or drop a recording',
+    body: 'Pick a sample room, or drop in a recording made in a room (a clap or an impulse response works best). libsonare estimates the room\u2019s size, its absorption per band and how far away the source is, and draws the result in 3D. One channel gives distance but not direction, so the source appears as a shell around the listener. Everything is estimated in your browser.',
     docs: 'Room Acoustics docs',
   },
   notes: {
@@ -184,7 +185,7 @@ export const enCopy = {
     invalid:
       'No clear room or decay was found in this recording. Room estimation needs audible reverberation — pick a sample room, or upload an impulse response (a clap, balloon pop, or deconvolved sweep IR).',
     morph:
-      'Room morph renders the playable audio through the estimated shoebox model. It is a creative audition of the room, not a corrective dereverb pass.',
+      'Room morph renders the playable audio through the estimated shoebox model, heard by two microphones half a metre apart, so each channel carries its own reverb tail. It is a creative audition of the room, not a corrective dereverb pass.',
     exports:
       'The saved impulse response is a convolution IR — load it into any reverb to play anything at all through this room.',
   },
@@ -337,6 +338,7 @@ export const jaCopy: typeof enCopy = {
   },
   scene: {
     placeholder: 'サンプルルームを選ぶか録音をドロップすると空間を再構成します。',
+    noRoom: '表示できる部屋はありません',
     autoRotate: '自動回転',
     drag: 'ドラッグで回転・スクロールでズーム',
     truth: '正解値',
@@ -381,8 +383,8 @@ export const jaCopy: typeof enCopy = {
     hz: 'Hz',
   },
   guide: {
-    title: '推定の仕組み',
-    body: 'libsonare は逆問題として音響を解きます。減衰の尾から等価なシューボックス型の部屋（容積・寸法・帯域別の吸音率）と直接音／残響音比（DRR）を推定します。DRR と臨界距離から音源までの距離を求めますが、1 チャンネルでは「どれだけ遠いか」は分かっても「どの方向か」は分からないため、音源はリスナーを囲むシェルとして描画されます。',
+    title: '部屋を選ぶか、録音をドロップします',
+    body: 'サンプルの部屋を選ぶか、部屋で録った音（手拍手やインパルス応答が最適です）をドロップします。libsonare が部屋の大きさ、帯域ごとの吸音率、音源までの距離を推定し、3D で表示します。1 チャンネルでは距離は分かっても方向は分からないため、音源はリスナーを囲むシェルとして描かれます。推定はすべてブラウザ内で行います。',
     docs: 'ルーム音響のドキュメント',
   },
   notes: {
@@ -395,7 +397,7 @@ export const jaCopy: typeof enCopy = {
     invalid:
       'この録音からは明確な部屋の響きや減衰を検出できませんでした。ルーム推定には聞き取れる残響が必要です。サンプルルームを選ぶか、インパルス応答（拍手・風船の破裂音・逆畳み込み済みのスイープ由来 IR）をアップロードしてください。',
     morph:
-      'ルームモーフは、再生対象の音声を推定されたシューボックスモデルの部屋に通してレンダーします。補正用のデリバーブではなく、部屋の響きを試聴するためのクリエイティブ処理です。',
+      'ルームモーフは、再生対象の音声を推定されたシューボックスモデルの部屋に通し、50 cm 離した 2 本のマイクで受けた音としてレンダーします。左右のチャンネルにはそれぞれ別の残響が乗ります。補正用のデリバーブではなく、部屋の響きを試聴するためのクリエイティブ処理です。',
     exports:
       '保存したインパルス応答はコンボリューション IR です。任意のリバーブに読み込めば、どんな音源でもこの部屋に通せます。',
   },

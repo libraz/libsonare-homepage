@@ -10,6 +10,7 @@ import SpectrumView, {
   type SpectrumBand,
   type SpectrumBandUpdate,
 } from '@/components/meters/SpectrumView.vue';
+import { SegmentedControl } from '@/components/ui';
 import MixParam from '@/demos/mixing/MixParam.vue';
 import { useMixingCopy } from '@/demos/mixing/mixingCopy';
 import { defaultEqBands, type MixTrackState, type StripEqBand } from '@/demos/mixing/mixingState';
@@ -38,6 +39,9 @@ const Q: ParamControl = { name: 'q', min: 0.1, max: 10, step: 0.01, unit: '', sc
 
 const selected = ref(2);
 const band = computed(() => props.track.eq[selected.value]);
+const bandOptions = computed(() =>
+  copy.value.inspector.bandShort.map((label, index) => ({ id: String(index), label })),
+);
 const passBand = (b: StripEqBand) => b.type === 'HighPass' || b.type === 'LowPass';
 
 const overlay = computed(() => m.eqCurve(props.track.eq));
@@ -90,30 +94,23 @@ const spectrumLabels = computed(() => copy.value.inspector.spectrum);
       @band-drag-start="m.begin"
       @band-drag-end="m.end"
     />
-    <div class="eq__bands" role="tablist" :aria-label="copy.inspector.eq">
-      <div
-        v-for="(b, index) in track.eq"
-        :key="index"
-        class="eq__band"
-        :class="{ 'eq__band--selected': index === selected, 'eq__band--on': b.enabled }"
-      >
-        <button
-          type="button"
-          class="eq__power"
-          :aria-pressed="b.enabled"
-          :aria-label="`${fill(copy.inspector.band, { n: index + 1 })} ${b.enabled ? copy.common.on : copy.common.off}`"
-          :disabled="editLocked"
-          @click="setBand(index, { enabled: !b.enabled })"
-        ></button>
-        <button
-          type="button"
-          role="tab"
-          class="eq__select"
-          :aria-selected="index === selected"
-          :title="copy.inspector.bandTypes[b.type]"
-          @click="selected = index"
-        >{{ copy.inspector.bandShort[index] }}</button>
-      </div>
+    <SegmentedControl
+      :model-value="String(selected)"
+      :options="bandOptions"
+      :ariaLabel="copy.inspector.eq"
+      size="sm"
+      @update:model-value="(id) => (selected = Number(id))"
+    />
+    <div v-if="band" class="eq__head">
+      <span class="eq__type">{{ fill(copy.inspector.band, { n: selected + 1 }) }} · {{ copy.inspector.bandTypes[band.type] }}</span>
+      <button
+        type="button"
+        class="demo-btn demo-btn--sm eq__power"
+        :aria-pressed="band.enabled"
+        :aria-label="`${fill(copy.inspector.band, { n: selected + 1 })} ${band.enabled ? copy.common.on : copy.common.off}`"
+        :disabled="editLocked"
+        @click="setBand(selected, { enabled: !band.enabled })"
+      >{{ band.enabled ? copy.common.on : copy.common.off }}</button>
     </div>
     <div v-if="band" class="eq__params">
       <MixParam
@@ -160,61 +157,29 @@ const spectrumLabels = computed(() => copy.value.inspector.spectrum);
   min-height: 170px;
 }
 
-.eq__bands {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 3px;
-}
-
-.eq__band {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+.eq__head {
+  display: flex;
   align-items: center;
-  border: 1px solid var(--demo-border);
-  border-radius: 4px;
-  background: var(--demo-control-bg);
+  justify-content: space-between;
+  gap: 8px;
 }
 
-.eq__band--selected {
-  border-color: var(--demo-accent-border);
-  background: var(--demo-accent-subtle);
+.eq__type {
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
 }
 
 .eq__power {
-  width: 14px;
-  height: 14px;
-  margin-left: 4px;
-  padding: 0;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 50%;
-  background: transparent;
-  cursor: pointer;
+  min-width: 38px;
 }
 
-.eq__power[aria-pressed='true'] {
+.eq__power[aria-pressed='true'],
+.eq__power[aria-pressed='true']:hover:not(:disabled) {
   border-color: var(--demo-accent);
   background: var(--demo-accent);
-}
-
-.eq__power:disabled {
-  cursor: not-allowed;
-}
-
-.eq__select {
-  overflow: hidden;
-  padding: 5px 4px;
-  border: 0;
-  background: transparent;
-  color: var(--demo-text-muted);
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.eq__band--on .eq__select {
-  color: var(--demo-text-strong);
+  color: var(--demo-on-accent);
 }
 
 .eq__params {

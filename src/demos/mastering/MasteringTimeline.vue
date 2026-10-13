@@ -84,7 +84,10 @@ watch(
 );
 
 const toFraction = (seconds: number) => (span.value ? (seconds - viewStart.value) / span.value : 0);
-const playheadLeft = computed(() => `${(toFraction(props.position) * 100).toFixed(3)}%`);
+/** The playhead layer spans the body, so a translate by its own width moves it along the time axis. */
+const playheadTransform = computed(
+  () => `translateX(${(toFraction(props.position) * 100).toFixed(3)}%)`,
+);
 const playheadVisible = computed(
   () => props.duration > 0 && props.position >= viewStart.value && props.position <= viewEnd.value,
 );
@@ -264,10 +267,10 @@ const targetLabel = computed(
     />
     <div class="timeline__view">
       <div class="timeline__zoom" role="group" :aria-label="copy.timeline.name">
-        <button type="button" :disabled="zoomIndex === 0" :aria-label="copy.timeline.zoomOut" @click="setZoom(zoomIndex - 1)">−</button>
+        <button type="button" class="demo-btn demo-btn--sm demo-btn--icon" :disabled="zoomIndex === 0" :aria-label="copy.timeline.zoomOut" @click="setZoom(zoomIndex - 1)">−</button>
         <span>{{ zoom }}×</span>
-        <button type="button" :disabled="zoomIndex === ZOOMS.length - 1" :aria-label="copy.timeline.zoomIn" @click="setZoom(zoomIndex + 1)">+</button>
-        <button type="button" :disabled="zoomIndex === 0" @click="setZoom(0)">{{ copy.timeline.zoomFit }}</button>
+        <button type="button" class="demo-btn demo-btn--sm demo-btn--icon" :disabled="zoomIndex === ZOOMS.length - 1" :aria-label="copy.timeline.zoomIn" @click="setZoom(zoomIndex + 1)">+</button>
+        <button type="button" class="demo-btn demo-btn--sm" :disabled="zoomIndex === 0" @click="setZoom(0)">{{ copy.timeline.zoomFit }}</button>
       </div>
       <div
         ref="bodyRef"
@@ -283,7 +286,7 @@ const targetLabel = computed(
           <canvas ref="laneRef" role="img" :aria-label="copy.timeline.loudness"></canvas>
         </div>
         <span v-if="loop.enabled && loop.end > loop.start" class="timeline__loop" :style="loopStyle" aria-hidden="true"></span>
-        <span v-if="playheadVisible" class="timeline__playhead" :style="{ left: playheadLeft }" aria-hidden="true"></span>
+        <span v-if="playheadVisible" class="timeline__playhead" :style="{ transform: playheadTransform }" aria-hidden="true"></span>
       </div>
       <div class="timeline__caption">
         <span>{{ shortTerm ? copy.timeline.loudness : copy.timeline.noRender }}</span>
@@ -321,36 +324,13 @@ const targetLabel = computed(
   text-align: center;
 }
 
-.timeline__zoom button {
-  min-width: 22px;
-  height: 22px;
-  padding: 0 6px;
-  border: 1px solid var(--demo-border);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--demo-text);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.timeline__zoom button:disabled {
-  opacity: var(--demo-disabled-opacity);
-  cursor: default;
-}
-
-.timeline__zoom button:focus-visible {
-  outline: 2px solid var(--demo-accent);
-  outline-offset: 1px;
-}
-
 .timeline__body {
   position: relative;
   display: grid;
   grid-template-rows: 96px 44px;
   overflow: hidden;
   border: 1px solid var(--demo-border);
-  border-radius: 6px;
+  border-radius: var(--demo-radius-sm);
   background: var(--demo-screen-bg-alpha);
   cursor: text;
   touch-action: none;
@@ -395,9 +375,16 @@ const targetLabel = computed(
 
 .timeline__playhead {
   position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.timeline__playhead::before {
+  content: '';
+  position: absolute;
   inset-block: 0;
+  left: 0;
   width: 1px;
   background: var(--demo-playhead);
-  pointer-events: none;
 }
 </style>

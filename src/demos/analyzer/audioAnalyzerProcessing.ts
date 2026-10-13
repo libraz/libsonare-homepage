@@ -20,36 +20,6 @@ export function calculateNormalizationGain(buffer: AudioBuffer): number {
   return maxPeak > threshold ? targetPeak / maxPeak : 1;
 }
 
-export function mixToMono(audioBuffer: AudioBuffer, maxLength?: number): Float32Array {
-  const length = maxLength ? Math.min(audioBuffer.length, maxLength) : audioBuffer.length;
-  const channels = audioBuffer.numberOfChannels;
-  const channelData: Float32Array[] = [];
-  for (let channel = 0; channel < channels; channel++) {
-    channelData.push(audioBuffer.getChannelData(channel));
-  }
-
-  if (channels === 2) {
-    const left = channelData[0];
-    const right = channelData[1];
-    const mono = new Float32Array(length);
-    for (let i = 0; i < length; i++) {
-      mono[i] = (left[i] + right[i]) * 0.5;
-    }
-    return mono;
-  }
-
-  const mono = new Float32Array(length);
-  const scale = 1 / channels;
-  for (let i = 0; i < length; i++) {
-    let sum = 0;
-    for (let channel = 0; channel < channels; channel++) {
-      sum += channelData[channel][i];
-    }
-    mono[i] = sum * scale;
-  }
-  return mono;
-}
-
 /**
  * Collapse a mel power spectrogram into low- and high-band RMS envelopes.
  *
@@ -77,16 +47,4 @@ export function splitMelBands(mel: MelSpectrogramLike): { low: Float32Array; hig
   }
 
   return { low, high };
-}
-
-/** Concert pitch the analyzer assumes when nothing says otherwise. */
-const CONCERT_A4_HZ = 440;
-
-/**
- * The A4 reference a recording sits at, from `estimateTuning`'s offset in
- * fractions of a semitone. The stream analyzer takes the reference in hertz.
- */
-export function tuningReference(offsetSemitones: number): { refHz: number; cents: number } {
-  const offset = Number.isFinite(offsetSemitones) ? offsetSemitones : 0;
-  return { refHz: CONCERT_A4_HZ * 2 ** (offset / 12), cents: Math.round(offset * 100) };
 }

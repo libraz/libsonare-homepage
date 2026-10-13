@@ -162,7 +162,9 @@ const repairSummary = computed(() => {
           @click="emit('select', row.id)"
         >
           <span class="rack__name">{{ row.name }}</span>
-          <span class="rack__summary" :title="row.fixed ? copy.rack.driveNote : undefined">{{ row.summary }}</span>
+          <span class="rack__summary">
+            {{ row.summary }}<small v-if="row.fixed" class="rack__note"> · {{ copy.rack.driveNote }}</small>
+          </span>
         </button>
         <GainReductionMeter
           v-if="row.reportsGr"
@@ -204,7 +206,7 @@ const repairSummary = computed(() => {
   grid-template-rows: auto 1fr auto;
   min-width: 0;
   border: 1px solid var(--demo-border);
-  border-radius: 6px;
+  border-radius: var(--demo-radius-md);
   background: var(--demo-bg-elevated);
 }
 
@@ -251,7 +253,7 @@ const repairSummary = computed(() => {
   min-height: 30px;
   padding: 0 8px 0 10px;
   border-top: 1px solid transparent;
-  transition: background-color 0.4s ease;
+  transition: background-color var(--demo-dur-slow) var(--demo-ease-standard);
 }
 
 .rack__row + .rack__row {
@@ -301,6 +303,7 @@ const repairSummary = computed(() => {
 .rack__name {
   overflow: hidden;
   color: var(--demo-text-strong);
+  transition: color var(--demo-dur-fast) var(--demo-ease-standard);
   font-family: var(--font-body);
   font-size: 12.5px;
   font-weight: 600;
@@ -310,6 +313,15 @@ const repairSummary = computed(() => {
 
 .is-selected .rack__name {
   color: var(--demo-accent);
+}
+
+.rack__select:hover .rack__name {
+  color: var(--demo-accent);
+}
+
+.rack__note {
+  color: var(--demo-text-faint);
+  font-size: 9.5px;
 }
 
 .is-bypassed .rack__name,
@@ -349,6 +361,13 @@ const repairSummary = computed(() => {
   border-radius: 50%;
   background: transparent;
   cursor: pointer;
+  transition:
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    transform var(--demo-dur-instant) var(--demo-ease-standard);
+}
+
+.rack__power:active:not(:disabled) {
+  transform: scale(0.9);
 }
 
 .rack__power span {
@@ -356,6 +375,7 @@ const repairSummary = computed(() => {
   height: 6px;
   border-radius: 50%;
   background: var(--demo-text-faint);
+  transition: background-color var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .rack__power[aria-pressed='true'] {
@@ -393,11 +413,5 @@ const repairSummary = computed(() => {
   font-family: var(--font-mono);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rack__row {
-    transition: none;
-  }
 }
 </style>

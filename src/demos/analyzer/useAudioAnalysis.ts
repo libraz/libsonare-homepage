@@ -104,8 +104,7 @@ export function useAudioAnalysis() {
 
     try {
       // Convert to mono Float32Array
-      const samples =
-        audioBuffer.numberOfChannels > 1 ? mixToMono(audioBuffer) : audioBuffer.getChannelData(0);
+      const samples = monoSamples(audioBuffer);
 
       const sampleRate = audioBuffer.sampleRate;
 
@@ -141,8 +140,7 @@ export function useAudioAnalysis() {
       await initWasm();
     }
 
-    const samples =
-      audioBuffer.numberOfChannels > 1 ? mixToMono(audioBuffer) : audioBuffer.getChannelData(0);
+    const samples = monoSamples(audioBuffer);
 
     return wasmModule.detectBpm(samples, audioBuffer.sampleRate);
   }
@@ -152,26 +150,17 @@ export function useAudioAnalysis() {
       await initWasm();
     }
 
-    const samples =
-      audioBuffer.numberOfChannels > 1 ? mixToMono(audioBuffer) : audioBuffer.getChannelData(0);
+    const samples = monoSamples(audioBuffer);
 
     return wasmModule.detectBeats(samples, audioBuffer.sampleRate);
   }
 
-  function mixToMono(audioBuffer: AudioBuffer): Float32Array {
-    const length = audioBuffer.length;
-    const mono = new Float32Array(length);
-    const channels = audioBuffer.numberOfChannels;
-
-    for (let i = 0; i < length; i++) {
-      let sum = 0;
-      for (let ch = 0; ch < channels; ch++) {
-        sum += audioBuffer.getChannelData(ch)[i];
-      }
-      mono[i] = sum / channels;
-    }
-
-    return mono;
+  /** One channel to analyze, folded by the engine's ITU-R BS.775 downmix. */
+  function monoSamples(audioBuffer: AudioBuffer): Float32Array {
+    const channels = Array.from({ length: audioBuffer.numberOfChannels }, (_, channel) =>
+      audioBuffer.getChannelData(channel),
+    );
+    return wasmModule.downmix(channels, 0)[0];
   }
 
   return {

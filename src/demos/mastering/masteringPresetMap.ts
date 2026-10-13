@@ -17,6 +17,10 @@
  *
  * Slot numbers are the lane-1 insert layout in `masteringState.ts`. The Quick
  * presets are the earlier chain builder's values at neutral fine-tune.
+ *
+ * The table mirrors `capabilityCatalog().chain` (stage processors and the
+ * multiband key aliases) because presets apply before the engine boots;
+ * `tests/demos/mastering/masteringPresetMap.test.ts` pins it to the catalog.
  */
 import type { MasteringRepairStage } from '@/demos/mastering/masteringState';
 import type { MasteringPresetId, MasteringVenueId } from '@/demos/mastering/useMastering';
@@ -64,22 +68,35 @@ const REPAIR_STAGES: readonly MasteringRepairStage[] = [
   'dereverb',
 ];
 
+const MULTIBAND = 'dynamics.multibandComp';
 const MULTIBAND_BANDS: Readonly<Record<string, number>> = { low: 0, mid: 1, high: 2 };
 const MULTIBAND_CROSSOVERS: Readonly<Record<string, string>> = {
   lowCutoffHz: 'cutoff0Hz',
   highCutoffHz: 'cutoff1Hz',
 };
 
-/** `dynamics.multibandComp` leaf → `multiband.compressor` parameter. */
+/**
+ * `dynamics.multibandComp` leaf → `multiband.compressor` parameter, in every
+ * spelling the catalog lists: `lowRatio`, `band0.ratio`, `bands.0.ratio`,
+ * `lowCutoffHz`, `cutoff0Hz`, `crossover.cutoffsHz.0`, `crossover.slope`.
+ */
 function multibandParam(leaf: string): string | undefined {
   if (MULTIBAND_CROSSOVERS[leaf]) return MULTIBAND_CROSSOVERS[leaf];
-  const match = leaf.match(/^(low|mid|high)([A-Z]\w*)$/);
-  if (!match) return undefined;
-  const field = match[2][0].toLowerCase() + match[2].slice(1);
-  return `band${MULTIBAND_BANDS[match[1]]}.${field}`;
+  const cutoff = leaf.match(/^(?:cutoff(\d+)Hz|crossover\.cutoffsHz\.(\d+))$/);
+  if (cutoff) return `cutoff${cutoff[1] ?? cutoff[2]}Hz`;
+  const indexed = leaf.match(/^bands?\.?(\d+)\.(\w+)$/);
+  if (indexed) return `band${indexed[1]}.${indexed[2]}`;
+  const named = leaf.match(/^(low|mid|high)([A-Z]\w*)$/);
+  if (named)
+    return `band${MULTIBAND_BANDS[named[1]]}.${named[2][0].toLowerCase()}${named[2].slice(1)}`;
+  if (leaf.startsWith('crossover.')) return leaf.slice('crossover.'.length);
+  return leaf.includes('.') ? undefined : leaf;
 }
 
+/** A multiband leaf can itself hold dots, so its stage is matched by prefix. */
 function splitKey(key: string): { stage: string; leaf: string } {
+  if (key.startsWith(`${MULTIBAND}.`))
+    return { stage: MULTIBAND, leaf: key.slice(MULTIBAND.length + 1) };
   const dot = key.lastIndexOf('.');
   return { stage: key.slice(0, dot), leaf: key.slice(dot + 1) };
 }
@@ -134,7 +151,7 @@ export function chainParamTargets(flat: Readonly<ChainParams>): ChainParamTarget
       targets.push({ kind: 'insertBypass', key, slot, bypassed: !value });
       continue;
     }
-    const param = stage === 'dynamics.multibandComp' ? multibandParam(leaf) : leaf;
+    const param = stage === MULTIBAND ? multibandParam(leaf) : leaf;
     if (param === undefined || !(typeof value === 'boolean' || finite(value))) {
       targets.push({ kind: 'unmapped', key });
     } else {

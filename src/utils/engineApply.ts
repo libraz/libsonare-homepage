@@ -11,6 +11,7 @@
  * edits only: the engine rebuilds every insert on a strip when any insert in
  * its JSON changes. This module is the only place that sends strip JSON.
  */
+import { MASTER_FADER_PARAM_ID, MASTER_PAN_PARAM_ID } from '@/utils/masterLimiter';
 import type {
   EngineAutomationPoint,
   EngineBus,
@@ -103,6 +104,7 @@ export type EngineOp =
   | { type: 'stripScalars'; trackId: number; scalars: TrackStripScalars }
   | { type: 'soloMute'; trackId: number; solo: boolean; mute: boolean }
   | { type: 'sends'; trackId: number; sends: readonly LaneSend[] }
+  | { type: 'outputBus'; trackId: number; busId: number }
   | { type: 'busGain'; busId: number; db: number }
   | { type: 'eqBand'; strip: StripRef; bandIndex: number; band: EqBand }
   | { type: 'insertBypass'; strip: StripRef; insertIndex: number; bypassed: boolean }
@@ -126,6 +128,8 @@ export interface EngineTarget {
   setTrackStripScalars(trackId: number, scalars: TrackStripScalars): void;
   setSoloMute(trackId: number, solo: boolean, mute: boolean): void;
   setTrackSends(trackId: number, sends: readonly LaneSend[]): void;
+  /** Sums a lane into a declared bus; `0` restores the master mix. */
+  setTrackOutputBus(trackId: number, busId: number): void;
   setBusGain(busId: number, db: number): void;
   setEqBand(strip: StripRef, bandIndex: number, band: EqBand): void;
   setInsertBypassed(strip: StripRef, insertIndex: number, bypassed: boolean): void;
@@ -195,6 +199,9 @@ export function applyOps(target: EngineTarget, ops: readonly EngineOp[]): void {
         break;
       case 'sends':
         target.setTrackSends(op.trackId, op.sends);
+        break;
+      case 'outputBus':
+        target.setTrackOutputBus(op.trackId, op.busId);
         break;
       case 'busGain':
         target.setBusGain(op.busId, op.db);
@@ -325,6 +332,7 @@ export function createFacadeTarget(engine: SonareEngine): EngineTarget {
     setTrackStripScalars: (trackId, scalars) => applyScalars(engine, trackId, scalars),
     setSoloMute: (trackId, solo, mute) => void engine.setSoloMute(trackId, solo, mute),
     setTrackSends: (trackId, sends) => engine.setTrackSends(trackId, toEngineSends(sends)),
+    setTrackOutputBus: (trackId, busId) => engine.setTrackOutputBus(trackId, busId),
     setBusGain: (busId, db) => void engine.setBusGain(busId, db),
     setEqBand(strip, bandIndex, band) {
       if (strip.kind === 'track') engine.setTrackStripEqBand(strip.trackId, bandIndex, band);
@@ -370,11 +378,6 @@ export function createFacadeTarget(engine: SonareEngine): EngineTarget {
   return target;
 }
 
-// The master strip's reserved mixer parameter ids; tracks and buses resolve
-// theirs through the engine, since those ids name the strip.
-const MASTER_FADER_ID = 0x4d58ff01;
-const MASTER_PAN_ID = 0x4d58ff02;
-
 /**
  * Adapter over a plain `RealtimeEngine` (the export Worker's). It keeps the
  * topology so solo/mute can take the lane index; fader, pan and bus gain are smoothed sets of the reserved mixer ids
@@ -397,7 +400,7 @@ export function createRawTarget(engine: RealtimeEngine): EngineTarget {
     return index;
   };
   const stripParamId = (t: FaderTarget, kind: 'faderDb' | 'pan'): number => {
-    if (t === 'master') return kind === 'faderDb' ? MASTER_FADER_ID : MASTER_PAN_ID;
+    if (t === 'master') return kind === 'faderDb' ? MASTER_FADER_PARAM_ID : MASTER_PAN_PARAM_ID;
     const id = engine.resolveTrackLaneAutomationId(t, kind);
     if (id < 0) throw new RangeError(`track ${t} is not in the topology`);
     return id;
@@ -435,6 +438,7 @@ export function createRawTarget(engine: RealtimeEngine): EngineTarget {
     setTrackStripScalars: (trackId, scalars) => applyScalars(engine, trackId, scalars),
     setSoloMute: (trackId, solo, mute) => engine.setSoloMute(laneIndex(trackId), solo, mute),
     setTrackSends: (trackId, sends) => engine.setTrackSends(trackId, toEngineSends(sends)),
+    setTrackOutputBus: (trackId, busId) => engine.setTrackOutputBus(trackId, busId),
     setBusGain(busId, db) {
       buses[busIndex(busId)] = { ...buses[busIndex(busId)], gainDb: db };
       engine.setParameterSmoothed(busGainId(busId), db);

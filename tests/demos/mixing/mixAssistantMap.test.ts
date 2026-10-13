@@ -132,7 +132,6 @@ describe('mix assistant proposal on a real analysis', () => {
       name: 'dynamics.transientShaper',
       reason: 'noSlot',
     });
-    expect(unapplied).toContainEqual({ source: 'drumBus', name: 'bus', reason: 'subgroupBus' });
     expect(unapplied).toContainEqual({
       source: 'drumBusVca',
       name: 'vcaGroup',
@@ -164,6 +163,18 @@ describe('mix assistant proposal on a real analysis', () => {
     // The kick's parametric peak lands in the first Peak slot.
     expect(kickPatch.eq?.[2]?.type).toBe('Peak');
     expect(kickPatch.eq?.[2]?.enabled).toBe(true);
+  });
+
+  it('sums the strips of a subgroup into a group bus', () => {
+    const { patch, unapplied } = suggested.suggestion;
+    const drumBus = wasmResult().scene.buses.find((b) => b.id === 'drumBus');
+    expect(drumBus?.role).toBe('subgroup');
+    const members = wasmResult()
+      .scene.connections.filter((c) => c.destination === 'drumBus')
+      .map((c) => Number(c.source));
+    expect(members.length).toBeGreaterThanOrEqual(2);
+    for (const id of members) expect(patch.tracks[id].outputBus).toBe('group1');
+    expect(unapplied.some((u) => u.source === 'drumBus' && u.reason === 'subgroupBus')).toBe(false);
   });
 
   it('follows aux buses through their return strips', () => {
@@ -371,5 +382,36 @@ describe('mix assistant mapping edge cases', () => {
     expect(within.patch.tracks[1].duckKeyTrackId).toBe(2);
     expect(within.patch.tracks[2].duckKeyTrackId).toBeUndefined();
     expect(() => applyMixPatch(two, within.patch)).not.toThrow();
+  });
+
+  it('lists a subgroup past the two group buses and sends its strip to the master', () => {
+    let s = base();
+    s = addTrack(addTrack(s, 'two', 10), 'three', 10);
+    const subgroup = (id: string) => ({ id, role: 'subgroup', inserts: [] });
+    const scene = result(['1', '2', '3'].map((id) => strip({ id }))).scene;
+    const mapped = mapMixSuggestion(
+      {
+        ...result([]),
+        scene: {
+          ...scene,
+          buses: [subgroup('drumBus'), subgroup('bassBus'), subgroup('voxBus')],
+          connections: [
+            { source: '1', destination: 'drumBus' },
+            { source: '2', destination: 'bassBus' },
+            { source: '3', destination: 'voxBus' },
+          ],
+        },
+      },
+      s,
+      info,
+    );
+    expect(mapped.patch.tracks[1].outputBus).toBe('group1');
+    expect(mapped.patch.tracks[2].outputBus).toBe('group2');
+    expect(mapped.patch.tracks[3].outputBus).toBeNull();
+    expect(mapped.unapplied).toContainEqual({
+      source: 'voxBus',
+      name: 'bus',
+      reason: 'subgroupBus',
+    });
   });
 });

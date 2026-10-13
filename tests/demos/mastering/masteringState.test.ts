@@ -144,6 +144,9 @@ const CASES: Record<MasteringMutatorName, Case> = {
   setCustomLufs: { run: (s) => m.setCustomLufs(s, -11) },
   setMacro: { run: (s) => m.setMacro(s, 'tone', 1.5) },
   applyAssistant: { run: (s) => m.applyAssistant(s, { 'dynamics.compressor.ratio': 3.5 }) },
+  applyRepairSuggestion: {
+    run: (s) => m.applyRepairSuggestion(s, { dehum: { fundamentalHz: 60, harmonics: 4 } }),
+  },
 };
 
 describe('mutators', () => {

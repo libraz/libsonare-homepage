@@ -2,7 +2,8 @@
 
 An eight-track console on libsonare's realtime engine: arrangement with clip
 edits and automation, channel strips with EQ, dynamics, sends, pan, width and
-VCA groups, Reverb and Delay returns, a master section with live loudness
+VCA groups, Reverb and Delay returns, two subgroup buses a track can sum into
+(`setTrackOutputBus`), a master section with live loudness
 metering, a mix assistant to A/B against, and a bounce that renders exactly
 what plays.
 

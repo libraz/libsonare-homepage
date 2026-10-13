@@ -27,11 +27,11 @@ const { canvas } = useSynesthesiaVisualizer(props);
       </div>
       <div class="scope__indicators">
         <div class="scope__indicator scope__indicator--drums">
-          <span class="scope__indicator-dot"></span>
+          <span class="scope__indicator-dot demo-anim-loop"></span>
           <span class="scope__indicator-label">LOW</span>
         </div>
         <div class="scope__indicator scope__indicator--melody">
-          <span class="scope__indicator-dot"></span>
+          <span class="scope__indicator-dot demo-anim-loop"></span>
           <span class="scope__indicator-label">HIGH</span>
         </div>
       </div>

@@ -82,7 +82,7 @@ function term() {
       <span class="sb-run__legend" aria-hidden="true">{{ SILKSCREEN.run }} / {{ SILKSCREEN.stop }}</span>
     </div>
 
-    <div class="sb-lcd" role="status">
+    <div class="sb-lcd">
       <div class="sb-lcd__cell">
         <span class="sb-lcd__key">{{ SILKSCREEN.tempo }}</span>
         <span class="sb-lcd__value sb-lcd__value--big">{{ Math.round(bpm) }}</span>
@@ -129,7 +129,7 @@ function term() {
     <div class="sb-exports">
       <button
         type="button"
-        class="sb-export"
+        class="demo-btn"
         :disabled="exporting"
         :aria-label="copy.transport.exportWavLabel"
         @click="emit('exportWav')"
@@ -141,7 +141,7 @@ function term() {
       </button>
       <button
         type="button"
-        class="sb-export sb-export--ghost"
+        class="demo-btn demo-btn--ghost"
         :aria-label="copy.transport.exportMidiLabel"
         @click="emit('exportMidi')"
       >{{ copy.transport.exportMidi }}</button>

@@ -6,14 +6,17 @@
  * profile pass through for display: the classes are estimates.
  *
  * Topology: an aux bus is followed through its return strip to the REVERB or
- * DELAY bus by the processor the return carries; a subgroup bus and a VCA group
- * have no counterpart. The master bus's input trim lands on the master fader.
+ * DELAY bus by the processor the return carries; subgroup buses take the two
+ * group buses in scene order, and a strip connected to one sums into it; a VCA
+ * group has no counterpart. The master bus's input trim lands on the master fader.
  * The plate's construction-only `decaySec` is converted to its live `decay`.
  */
 import {
   AUX_BUS_PROCESSORS,
   type AuxBusName,
   duckKeyClosesCycle,
+  GROUP_BUSES,
+  type GroupBusName,
   type MixingState,
   type MixPatch,
   plateDecayFromSeconds,
@@ -40,7 +43,7 @@ export type UnappliedReason =
   | 'notRealtimeSafe'
   /** Every strip EQ slot for this band type is taken. */
   | 'eqBandsFull'
-  /** Group routing: the mix has no subgroup buses. */
+  /** A subgroup past the two group buses the mix has. */
   | 'subgroupBus'
   /** The mix has three fixed VCA groups the assistant does not address. */
   | 'vcaGroup'
@@ -231,6 +234,13 @@ export function mapMixSuggestion(
     }
   }
 
+  // Subgroup bus -> the group bus it takes, in scene order while group buses last.
+  const groupOfBus = new Map<string, GroupBusName>();
+  for (const bus of scene.buses.filter((b) => b.role === 'subgroup')) {
+    const group = GROUP_BUSES[groupOfBus.size];
+    if (group) groupOfBus.set(bus.id, group);
+  }
+
   const patch: MixPatch = { tracks: {} };
   for (const strip of scene.strips) {
     const aux = returnStrips.get(strip.id);
@@ -257,6 +267,12 @@ export function mapMixSuggestion(
       width: { bypassed: false, params: { width: strip.width } },
     };
     const trackPatch: TrackMixPatch = { faderDb: strip.faderDb, pan: strip.pan, slots };
+    // A strip the scene sums anywhere but a mapped group feeds the master.
+    trackPatch.outputBus =
+      scene.connections
+        .filter((connection) => connection.source === strip.id)
+        .map((connection) => groupOfBus.get(connection.destination))
+        .find((name) => name !== undefined) ?? null;
     mapper.nonLiveSettings(strip, trackId);
     if (strip.eq?.bands.length) {
       mapper.placeBands(
@@ -332,7 +348,8 @@ export function mapMixSuggestion(
       }
       for (const insert of bus.inserts) mapper.skip(bus.id, insert.processor, 'noSlot');
     } else if (bus.role === 'subgroup') {
-      mapper.skip(bus.id, 'bus', 'subgroupBus');
+      if (!groupOfBus.has(bus.id)) mapper.skip(bus.id, 'bus', 'subgroupBus');
+      for (const insert of bus.inserts) mapper.skip(bus.id, insert.processor, 'noSlot');
     } else if (!auxOfBus.has(bus.id)) {
       mapper.skip(bus.id, 'bus', 'noSlot');
     }

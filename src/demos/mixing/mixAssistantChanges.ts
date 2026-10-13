@@ -5,6 +5,7 @@
  */
 import {
   type AuxBusName,
+  type GroupBusName,
   type MixingState,
   type MixPatch,
   SEND_OFF_DB,
@@ -33,6 +34,7 @@ export type MixChange =
       gainDb: number;
     }
   | { kind: 'send'; trackId: number; bus: AuxBusName; levelDb: number }
+  | { kind: 'output'; trackId: number; bus: GroupBusName | null }
   | { kind: 'master'; deltaDb: number };
 
 /** Differences below these round to nothing in the readouts. */
@@ -114,6 +116,10 @@ export function describeMixChanges(patch: MixPatch, state: MixingState): MixChan
       if (!bothOff && differs(send.levelDb, current, DB_EPS)) {
         items.push({ kind: 'send', trackId, bus, levelDb: send.levelDb });
       }
+    }
+
+    if (p.outputBus !== undefined && p.outputBus !== track.outputBus) {
+      items.push({ kind: 'output', trackId, bus: p.outputBus });
     }
   }
   if (

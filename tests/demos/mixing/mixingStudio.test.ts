@@ -18,6 +18,7 @@ vi.mock('@/wasm/index.js', () => ({
   init: vi.fn(async () => undefined),
   version: vi.fn(() => 'test-wasm'),
   StreamingEqualizer: undefined,
+  masteringInsertParamInfo: vi.fn(() => []),
 }));
 
 vi.mock('@/composables/useSonareEngine', async () => {
@@ -29,6 +30,7 @@ vi.mock('@/composables/useSonareEngine', async () => {
         setTempo: vi.fn(),
         setLoop: vi.fn(),
         resetMasterLoudnessMeter: vi.fn(),
+        canSetLaneSidechain: vi.fn(() => ({ ok: true, reason: null })),
       };
       const context = {
         sampleRate: 48000,
@@ -261,6 +263,32 @@ describe('useMixingStudio', () => {
     expect(m.state.value.tracks[0].faderDb).toBe(-4.5);
   });
 
+  it('routes a track into a group bus with its own setter', async () => {
+    const { m, stop } = await loaded();
+    stops.push(stop);
+    m.edit('setOutputBus', 1, 'group1');
+    m.edit('setGroupGain', 'group1', -4);
+    expect(harness.calls).toEqual([
+      ['setTrackOutputBus', 1, 3],
+      ['setBusGain', 3, -4],
+    ]);
+  });
+
+  it('asks the engine about a duck key once it holds the mix', async () => {
+    const { m, stop } = await loaded();
+    stops.push(stop);
+    const live = harness.engine.engine.value;
+    expect(m.canDuckKey(2, 1)).toBe(true);
+    expect(live.canSetLaneSidechain).toHaveBeenLastCalledWith(2, 4, 1);
+    live.canSetLaneSidechain.mockReturnValue({ ok: false, reason: 'tableFull' });
+    expect(m.canDuckKey(2, 1)).toBe(false);
+    // A cycle is refused from the state alone, without asking.
+    m.edit('setDuckKey', 2, 1);
+    live.canSetLaneSidechain.mockClear();
+    expect(m.canDuckKey(1, 2)).toBe(false);
+    expect(live.canSetLaneSidechain).not.toHaveBeenCalled();
+  });
+
   it('rebuilds a strip for a construction-only parameter and flags it', async () => {
     const { m, stop } = await loaded();
     stops.push(stop);
@@ -479,12 +507,12 @@ describe('MixingStudio page', () => {
     localStorage.setItem(MIXING_STATE_STORAGE_KEY, serializeMixingState(saved));
     const wrapper = mount(MixingStudio);
     await nextTick();
-    expect(wrapper.find('.mix-page__banner--restore').exists()).toBe(true);
+    expect(wrapper.find('.mix-page__restore').exists()).toBe(true);
     await wrapper
       .find('.mix-page__main')
       .trigger('drop', { dataTransfer: { files: [file('Kick.wav')] } });
     await flushPromises();
-    expect(wrapper.find('.mix-page__banner--restore').exists()).toBe(false);
+    expect(wrapper.find('.mix-page__restore').exists()).toBe(false);
     wrapper.unmount();
   });
 });

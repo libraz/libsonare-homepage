@@ -9,6 +9,9 @@ import TechPanel from '@/components/ui/TechPanel.vue';
 import TermLabel from '@/components/ui/TermLabel.vue';
 import Tooltip from '@/components/ui/Tooltip.vue';
 
+const { lang } = vi.hoisted(() => ({ lang: { value: 'en' } }));
+vi.mock('vitepress', () => ({ useData: () => ({ lang }) }));
+
 afterEach(() => {
   vi.useRealTimers();
   document.body.innerHTML = '';
@@ -121,6 +124,46 @@ describe('Tooltip', () => {
   });
 });
 
+describe('Tooltip semantics', () => {
+  it('describes its trigger as a tooltip and localizes default labels', async () => {
+    lang.value = 'ja';
+    const wrapper = mount(Tooltip, {
+      attachTo: document.body,
+      props: { title: 'Ratio', body: 'Compression ratio.', tip: 'Start at 2:1.' },
+    });
+    const dot = wrapper.find('button.info-dot');
+    expect(dot.attributes('aria-label')).toBe('Ratio');
+    expect(dot.attributes('aria-describedby')).toBeUndefined();
+
+    await wrapper.find('.tt-trigger').trigger('click');
+    await flushPromises();
+    const popover = document.body.querySelector('.tt-popover') as HTMLElement;
+    expect(popover.getAttribute('role')).toBe('tooltip');
+    expect(dot.attributes('aria-describedby')).toBe(popover.id);
+    expect(popover.textContent).toContain('使う場面');
+    expect(popover.querySelector('.tt-popover__tip')?.textContent).not.toContain('Use when');
+    lang.value = 'en';
+  });
+
+  it('becomes a non-modal dialog the keyboard can enter when it holds a link', async () => {
+    const wrapper = mount(Tooltip, {
+      attachTo: document.body,
+      props: { title: 'Ceiling', body: 'True-peak limit.', href: '/docs/ceiling' },
+    });
+    const dot = wrapper.find('button.info-dot');
+    await wrapper.find('.tt-trigger').trigger('click');
+    await flushPromises();
+    const popover = document.body.querySelector('.tt-popover') as HTMLElement;
+    expect(popover.getAttribute('role')).toBe('dialog');
+    expect(popover.getAttribute('aria-label')).toBe('Ceiling');
+    expect(dot.attributes('aria-expanded')).toBe('true');
+    expect(dot.attributes('aria-controls')).toBe(popover.id);
+
+    await dot.trigger('keydown', { key: 'Tab' });
+    expect(document.activeElement).toBe(popover.querySelector('a'));
+  });
+});
+
 describe('shared UI primitives', () => {
   it('renders MetricItem variants, slots and fallback values', () => {
     const wrapper = mount(MetricItem, {
@@ -211,7 +254,7 @@ describe('shared UI primitives', () => {
 
     expect(wrapper.find('.term-label').classes()).toContain('term-label--strong');
     expect(wrapper.find('.term-label').classes()).not.toContain('term-label--mono');
-    expect(wrapper.find('.term-label__dot').exists()).toBe(false);
+    expect(wrapper.find('.info-dot').exists()).toBe(false);
 
     await wrapper.find('.tt-trigger').trigger('mouseenter');
     await vi.advanceTimersByTimeAsync(80);

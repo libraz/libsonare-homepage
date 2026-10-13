@@ -52,7 +52,7 @@ defineProps<{
   width: var(--bracket-size);
   height: var(--bracket-size);
   border: var(--bracket-width) solid var(--bracket-color);
-  transition: border-color 0.25s ease;
+  transition: border-color var(--demo-dur-base) var(--demo-ease-standard);
 }
 
 .corner-brackets__bracket--tl {

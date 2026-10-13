@@ -3,13 +3,13 @@ import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 import SynthKeyboard from '@/components/keyboard/SynthKeyboard.vue';
 import { useSynthKeyboardInput } from '@/components/keyboard/useSynthKeyboardInput';
 import ToolShell from '@/components/ToolShell.vue';
-import { RotaryKnob, Tooltip } from '@/components/ui';
+import ToolStatusBar, { type ToolStatusField } from '@/components/ToolStatusBar.vue';
+import { DemoNotice, RotaryKnob, SegmentedControl, TermLabel, Tooltip } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { useUrlState } from '@/composables/useUrlState';
 import { bootWasm } from '@/composables/useWasmBoot';
 import SynthDeckDisplay from '@/demos/synth/SynthDeckDisplay.vue';
 import SynthMidiPanel from '@/demos/synth/SynthMidiPanel.vue';
-import SynthStatusBar from '@/demos/synth/SynthStatusBar.vue';
 import {
   DEFAULT_PRESET,
   enCopy,
@@ -21,19 +21,33 @@ import { createSynthMidiEngine } from '@/demos/synth/synthMidiEngine';
 import {
   ATTACK_MAX_MS,
   ATTACK_MIN_MS,
+  activeModelFields,
+  baseVoiceEngine,
+  baseVoiceId,
   buildSynthPatch,
   CUTOFF_MAX_HZ,
   CUTOFF_MIN_HZ,
   controlsFromPreset,
   type EngineGroup,
+  fieldDefault,
+  formatModelValue,
+  GLIDE_MAX_MS,
+  groupModelFields,
   groupPresetsByEngine,
+  hasBaseVoice,
   inertTweaks,
+  initPatchValues,
+  LIVE_TWEAKS,
   logKnobHz,
+  modelFieldStep,
   msLabel,
   RELEASE_MAX_MS,
   RELEASE_MIN_MS,
+  RESONANCE_MAX,
+  RESONANCE_MIN,
   type SynthPatchControls,
   type SynthTweakKey,
+  tweakValue,
 } from '@/demos/synth/synthPatchState';
 import {
   SYNTH_OUTPUT_GAIN_DEFAULT,
@@ -42,7 +56,12 @@ import {
 } from '@/demos/synth/useSynthEngine';
 import { formatNoteName } from '@/utils/pitch';
 import { decayPeakHold, meterFillPercent } from '@/utils/scale';
-import type { WebMidiBinding, WebMidiInputInfo } from '@/wasm/index';
+import type {
+  SynthEngineMode,
+  SynthParamInfo,
+  WebMidiBinding,
+  WebMidiInputInfo,
+} from '@/wasm/index';
 import sonareJsUrl from '@/wasm/sonare.js?url';
 import sonareWasmUrl from '@/wasm/sonare.wasm?url';
 
@@ -68,9 +87,16 @@ const presetParam = computed<string>({
   get: () => selectedPreset.value,
   set: (name) => {
     if (Object.keys(presetEngines.value).length === 0) presetFromUrl = name;
-    else if (name in presetEngines.value) selectPreset(name);
+    else if (isKnownProgram(name)) selectPreset(name);
   },
 });
+
+/** A catalog preset, or the base voice of an engine this build lists. */
+function isKnownProgram(name: string): boolean {
+  const engine = baseVoiceEngine(name);
+  if (engine === null) return name in presetEngines.value;
+  return engineModes.value.includes(engine) && hasBaseVoice(engine);
+}
 
 const url = useUrlState([
   {
@@ -89,12 +115,19 @@ const clipped = ref(false);
 const CLIP_THRESHOLD = 0.997; // ≈ -0.03 dBFS
 
 const MIN_BASE_NOTE = 24; // C1
-const MAX_BASE_NOTE = 84; // C6 (top key reaches B7)
+// C5: the fitted keybed shows up to four octaves in the deck, so its top C is 120.
+const MAX_BASE_NOTE = 72;
+const MAX_MIDI_NOTE = 127;
 
 const wasmModule = shallowRef<WasmModule | null>(null);
 
 /** Patch keys the user has touched; only these are sent as preset overrides. */
 const dirtyTweaks = ref<Set<SynthTweakKey>>(new Set());
+/** The patch wrapper fields as the engine describes them (`synthPatchParamInfo`). */
+const patchInfo = shallowRef<SynthParamInfo[]>([]);
+/** Model-section fields the user has moved, by `engineParams` key. */
+const modelValues = ref<Record<string, number>>({});
+const modelGroupId = ref('');
 const waveforms = ref<string[]>(['default', 'sine', 'saw', 'square', 'triangle', 'noise']);
 const filterModels = ref<string[]>(['default', 'svf', 'moog-ladder', 'diode-ladder', 'sallen-key']);
 const waveform = ref('default');
@@ -123,15 +156,6 @@ const WAVE_ICONS: Record<string, string> = {
   square: 'M1 10 V2 H9 V10 H17 V2 H25',
   triangle: 'M1 10 L7 2 L13 10 L19 2 L25 10',
   noise: 'M1 6 L3 3 L5 9 L7 2 L9 8 L11 4 L13 10 L15 3 L17 8 L19 5 L21 9 L23 3 L25 6',
-};
-
-/** Short silk-screen labels for the filter models. */
-const FILTER_LABELS: Record<string, string> = {
-  default: 'AUTO',
-  svf: 'SVF',
-  'moog-ladder': 'MOOG',
-  'diode-ladder': 'DIODE',
-  'sallen-key': 'S-KEY',
 };
 
 // MIDI state
@@ -165,11 +189,23 @@ const statusLabel = computed(() => {
   if (isStarting.value) return copy.value.status.starting;
   return copy.value.status.idle;
 });
+const statusFields = computed<ToolStatusField[]>(() => {
+  const keys = copy.value.statusbar;
+  return [
+    { key: keys.program, value: programLabel(selectedPreset.value), wide: true },
+    { key: keys.engine, value: currentEngine.value || '-' },
+    { key: keys.octave, value: octaveLabel.value, divider: true },
+    { key: keys.peak, value: peakDb.value },
+    { key: keys.rate, value: sampleRateLabel.value },
+  ];
+});
 
 const octaveLabel = computed(() => formatNoteName(baseNote.value));
+/** Below this the decaying tail is numerically present but inaudible; it reads as silence. */
+const PEAK_FLOOR_DB = -96;
 const peakDb = computed(() => {
-  const peak = meter.value.peak;
-  return peak > 0 ? `${(20 * Math.log10(peak)).toFixed(1)} dB` : '-∞ dB';
+  const db = 20 * Math.log10(meter.value.peak);
+  return db > PEAK_FLOOR_DB ? `${db.toFixed(1)} dB` : '-∞ dB';
 });
 const sampleRateLabel = computed(() => {
   const ctx = engine.context.value;
@@ -207,7 +243,10 @@ const engineGroups = computed(() =>
     engineModes.value,
   ),
 );
-const currentEngine = computed(() => presetEngines.value[selectedPreset.value] ?? '');
+const currentEngine = computed(
+  () => baseVoiceEngine(selectedPreset.value) ?? presetEngines.value[selectedPreset.value] ?? '',
+);
+const isBaseVoice = computed(() => baseVoiceEngine(selectedPreset.value) !== null);
 const currentGroup = computed(
   () => engineGroups.value.find((group) => group.engine === currentEngine.value) ?? null,
 );
@@ -217,6 +256,48 @@ const engineNote = computed(() => {
   if (inert.value.has('cutoffHz')) return copy.value.engineNotes.kit;
   return copy.value.engineNotes.noOscillator.replace('{engine}', currentEngine.value);
 });
+
+/** The selected engine's own section, as the engine describes it. */
+const modelGroups = computed(() => {
+  const wasm = wasmModule.value;
+  if (!wasm || !currentEngine.value) return [];
+  try {
+    const info = wasm.synthEngineParamInfo(currentEngine.value as SynthEngineMode);
+    return groupModelFields(activeModelFields(info, modelValues.value));
+  } catch {
+    return [];
+  }
+});
+const modelGroup = computed(
+  () => modelGroups.value.find((group) => group.id === modelGroupId.value) ?? modelGroups.value[0],
+);
+const modelGroupOptions = computed(() =>
+  modelGroups.value.map((group) => ({
+    id: group.id,
+    label: `${group.id || copy.value.model.main} (${group.fields.length})`,
+  })),
+);
+watch(currentEngine, () => {
+  modelGroupId.value = '';
+});
+
+/** A field's value: the user's, else the engine base preset's (booleans arrive as true/false). */
+function modelValue(field: SynthParamInfo): number {
+  return modelValues.value[field.name] ?? fieldDefault(field);
+}
+
+function programLabel(name: string): string {
+  const engine = baseVoiceEngine(name);
+  return engine === null ? name : `${engine} ${copy.value.patch.baseVoice}`;
+}
+
+const filterOptions = computed(() =>
+  filterModels.value.map((id) => ({
+    id,
+    label: copy.value.patch.filterLabels[id] ?? id,
+    disabled: inert.value.has('filterModel'),
+  })),
+);
 
 const glossaryBase = computed(() => localizedPath('/docs/glossary'));
 
@@ -281,16 +362,17 @@ async function initWasmMeta() {
     presetEngines.value = Object.fromEntries(
       names.map((name) => [name, String(wasm.synthPresetPatch(name).engineMode ?? '')]),
     );
+    const tables = wasm.synthEnumTables();
+    if (tables.waveforms?.length) waveforms.value = [...tables.waveforms];
+    if (tables.filterModels?.length) filterModels.value = [...tables.filterModels];
+    if (tables.engineModes?.length) engineModes.value = [...tables.engineModes];
+    patchInfo.value = wasm.synthPatchParamInfo();
     if (presetFromUrl) {
       presetParam.value = presetFromUrl;
       presetFromUrl = null;
       // A name the catalog does not have was dropped; stop the URL claiming it.
       url.replaceInUrl();
     }
-    const tables = wasm.synthEnumTables();
-    if (tables.waveforms?.length) waveforms.value = [...tables.waveforms];
-    if (tables.filterModels?.length) filterModels.value = [...tables.filterModels];
-    if (tables.engineModes?.length) engineModes.value = [...tables.engineModes];
     midiSupported.value = wasm.isWebMidiAvailable();
     loadPresetBase(selectedPreset.value);
   } catch (error) {
@@ -298,12 +380,16 @@ async function initWasmMeta() {
   }
 }
 
-/** Seed the tweak controls from the preset's resolved base patch. */
+/** Seed the tweak controls from the program's base patch: the preset's, or the init patch's for a base voice. */
 function loadPresetBase(preset: string) {
   const wasm = wasmModule.value;
   if (!wasm) return;
   try {
-    const { controls, baseValues } = controlsFromPreset(wasm.synthPresetPatch(preset));
+    const base =
+      baseVoiceEngine(preset) === null
+        ? wasm.synthPresetPatch(preset)
+        : initPatchValues(patchInfo.value);
+    const { controls, baseValues } = controlsFromPreset(base);
     waveform.value = controls.waveform;
     filterModel.value = controls.filterModel;
     cutoffNorm.value = controls.cutoffNorm;
@@ -318,9 +404,8 @@ function loadPresetBase(preset: string) {
   }
 }
 
-/** Send the preset plus only the user-touched overrides to the audio thread. */
-function sendPatch() {
-  const controls: SynthPatchControls = {
+function currentControls(): SynthPatchControls {
+  return {
     waveform: waveform.value,
     filterModel: filterModel.value,
     cutoffNorm: cutoffNorm.value,
@@ -330,21 +415,36 @@ function sendPatch() {
     glideMs: glideMs.value,
     stereoSpread: stereoSpread.value,
   };
-  engine.setPatch(buildSynthPatch(selectedPreset.value, dirtyTweaks.value, controls));
 }
 
-/**
- * Apply the patch and retrigger held notes: rebinding the synth instrument
- * cuts its sounding voices, so without the retrigger a held key goes silent.
- */
-function sendPatchNow() {
-  sendPatch();
-  for (const note of activeNotes.value) engine.noteOn(note, 100);
+/** The program plus only the user-touched overrides, as the engine takes it. */
+function currentPatch() {
+  return buildSynthPatch(
+    selectedPreset.value,
+    dirtyTweaks.value,
+    currentControls(),
+    modelValues.value,
+  );
+}
+
+function sendPatch() {
+  engine.setPatch(currentPatch());
 }
 
 let patchSendTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** Debounce knob drags so a drag becomes one rebind+retrigger, not dozens. */
+/**
+ * Rebind the instrument and strike held notes again: the engine fades out the
+ * voices of the patch it replaces, so without the retrigger a held key goes silent.
+ */
+function sendPatchNow() {
+  if (patchSendTimer) clearTimeout(patchSendTimer);
+  patchSendTimer = null;
+  sendPatch();
+  for (const note of activeNotes.value) engine.noteOn(note, 100);
+}
+
+/** Debounce model-knob drags so a drag becomes one rebind+retrigger, not dozens. */
 function schedulePatchSend() {
   if (patchSendTimer) clearTimeout(patchSendTimer);
   patchSendTimer = setTimeout(() => {
@@ -353,11 +453,16 @@ function schedulePatchSend() {
   }, 90);
 }
 
+/**
+ * Mark a control as touched and send it. A continuous field moves the sounding
+ * voices through its automation id; a structural one rebinds the instrument.
+ */
 function tweak(key: SynthTweakKey) {
   const next = new Set(dirtyTweaks.value);
   next.add(key);
   dirtyTweaks.value = next;
-  schedulePatchSend();
+  if (LIVE_TWEAKS.has(key)) engine.setParam(key, tweakValue(key, currentControls()) as number);
+  else sendPatchNow();
 }
 
 /** Knob value refs by tweak key (template args auto-unwrap refs, so look up here). */
@@ -386,8 +491,14 @@ function selectFilterModel(value: string) {
   tweak('filterModel');
 }
 
+function setModelParam(name: string, value: number) {
+  modelValues.value = { ...modelValues.value, [name]: value };
+  schedulePatchSend();
+}
+
 function resetTweaks() {
   dirtyTweaks.value = new Set();
+  modelValues.value = {};
   loadPresetBase(selectedPreset.value);
   sendPatchNow();
 }
@@ -424,16 +535,16 @@ async function connectMidi() {
 /** Boot the worklet at mount; the context stays suspended until a gesture. */
 async function startEngine() {
   clipped.value = false;
-  const bootPreset = selectedPreset.value;
-  const ok = await engine.start(bootPreset);
+  const bootPatch = currentPatch();
+  const ok = await engine.start(bootPatch);
   if (!ok) return;
   engine.setGain(outputGain.value);
   // A program or tweak chosen while the engine was booting had no node to reach.
-  if (selectedPreset.value !== bootPreset || dirtyTweaks.value.size > 0) sendPatch();
+  if (JSON.stringify(currentPatch()) !== JSON.stringify(bootPatch)) sendPatch();
 }
 
 function noteOn(note: number, velocity = 100) {
-  if (!isReady.value) return;
+  if (!isReady.value || note > MAX_MIDI_NOTE) return;
   engine.noteOn(note, velocity);
   const next = new Set(activeNotes.value);
   next.add(note);
@@ -487,8 +598,9 @@ function panic() {
 function selectPreset(name: string) {
   if (selectedPreset.value === name) return;
   selectedPreset.value = name;
-  lastPresetByEngine.set(presetEngines.value[name] ?? '', name);
+  lastPresetByEngine.set(baseVoiceEngine(name) ?? presetEngines.value[name] ?? '', name);
   dirtyTweaks.value = new Set();
+  modelValues.value = {};
   loadPresetBase(name);
   sendPatchNow();
 }
@@ -517,19 +629,12 @@ function applyGain() {
     :opposite-locale-path="oppositeLocalePath"
   >
     <template #statusbar>
-      <SynthStatusBar
-        :status="statusKind"
-        :label="statusLabel"
-        :pulse="isStarting"
-        :peak-label="copy.output.peak"
-        :peak-db="peakDb"
-        :rate-label="copy.output.rate"
-        :sample-rate-label="sampleRateLabel"
-        :error-message="engine.error.value ? copy.errors.start : undefined"
-      />
+      <ToolStatusBar :status="statusKind" :label="statusLabel" :pulse="isStarting" :fields="statusFields" />
     </template>
 
-    <div class="sy-deck">
+    <DemoNotice v-if="engine.error.value" tone="error" class="sy-alert">{{ copy.errors.start }}</DemoNotice>
+
+    <div class="sy-deck demo-deck">
       <!-- ===== DISPLAY ROW ===== -->
       <SynthDeckDisplay
         :model="copy.deck.model"
@@ -537,7 +642,7 @@ function applyGain() {
         :power-label="copy.deck.power"
         :is-running="isRunning"
         :analyser="engine.analyser.value"
-        :selected-preset="selectedPreset"
+        :selected-preset="programLabel(selectedPreset)"
         :peak-db="peakDb"
       />
 
@@ -546,11 +651,7 @@ function applyGain() {
         <section class="sy-sec sy-sec--program">
           <div class="sy-sec__head">
             <h3 class="sy-sec__title">{{ copy.sections.program }}</h3>
-            <Tooltip v-bind="term('program')">
-              <button type="button" class="sy-sec__info" :aria-label="term('program').title">
-                <span aria-hidden="true">i</span>
-              </button>
-            </Tooltip>
+            <Tooltip v-bind="term('program')" />
           </div>
           <div class="sy-programs">
             <ul class="sy-engines" :aria-label="copy.patch.engine">
@@ -572,55 +673,52 @@ function applyGain() {
                 <button
                   type="button"
                   class="sy-program"
-                  :class="{ 'sy-program--active': name === selectedPreset }"
+                  :class="{
+                    'sy-program--active': name === selectedPreset,
+                    'sy-program--base': baseVoiceEngine(name) !== null,
+                  }"
                   :aria-pressed="name === selectedPreset"
                   @click="selectPreset(name)"
                 >
-                  <span class="sy-program__name">{{ name }}</span>
+                  <span class="sy-program__name">{{ baseVoiceEngine(name) === null ? name : copy.patch.baseVoice }}</span>
                 </button>
               </li>
             </ul>
           </div>
         </section>
 
-        <section class="sy-sec">
+        <section class="sy-sec sy-sec--osc">
           <div class="sy-sec__head">
             <h3 class="sy-sec__title">{{ copy.sections.osc }}</h3>
-            <Tooltip v-bind="term('waveform')">
-              <button type="button" class="sy-sec__info" :aria-label="term('waveform').title">
-                <span aria-hidden="true">i</span>
-              </button>
-            </Tooltip>
+            <Tooltip v-bind="term('waveform')" />
           </div>
-          <div class="sy-waves">
+          <div class="sy-waves" role="group" :aria-label="copy.patch.waveform">
             <button
               v-for="w in waveforms"
               :key="w"
               type="button"
               class="sy-wave"
               :class="{ 'sy-wave--active': !inert.has('waveform') && w === waveform }"
-              :title="w"
+              :aria-pressed="!inert.has('waveform') && w === waveform"
               :disabled="inert.has('waveform')"
               @click="selectWaveform(w)"
             >
               <svg v-if="WAVE_ICONS[w]" viewBox="0 0 26 12" aria-hidden="true">
                 <path :d="WAVE_ICONS[w]" />
               </svg>
-              <span v-else class="sy-wave__auto">AUTO</span>
-              <span class="sy-wave__label">{{ w === 'default' ? 'auto' : w }}</span>
+              <span v-else class="sy-wave__auto" aria-hidden="true">{{ copy.patch.auto }}</span>
+              <span class="sy-wave__label">{{ w === 'default' ? copy.patch.auto : w }}</span>
             </button>
           </div>
-          <p class="sy-engine-note" aria-live="polite">{{ engineNote }}</p>
+          <div class="sy-engine-note">
+            <DemoNotice v-if="engineNote" tone="hint">{{ engineNote }}</DemoNotice>
+          </div>
         </section>
 
-        <section class="sy-sec">
+        <section class="sy-sec sy-sec--filter">
           <div class="sy-sec__head">
             <h3 class="sy-sec__title">{{ copy.sections.filter }}</h3>
-            <Tooltip v-bind="term('filterModel')">
-              <button type="button" class="sy-sec__info" :aria-label="term('filterModel').title">
-                <span aria-hidden="true">i</span>
-              </button>
-            </Tooltip>
+            <Tooltip v-bind="term('filterModel')" />
           </div>
           <div class="sy-knob-row">
             <RotaryKnob
@@ -637,7 +735,7 @@ function applyGain() {
             <RotaryKnob
               v-bind="term('resonance')"
               :model-value="resonanceQ"
-              :min="0.5" :max="12" :step="0.05"
+              :min="RESONANCE_MIN" :max="RESONANCE_MAX" :step="0.05"
               :label="copy.patch.resonance"
               :display="resonanceQ.toFixed(2)"
               :default-value="baseVals.resonanceQ"
@@ -646,22 +744,22 @@ function applyGain() {
               @update:model-value="(v) => setTweak('resonanceQ', v)"
             />
           </div>
-          <div class="sy-filter-models">
-            <button
-              v-for="f in filterModels"
-              :key="f"
-              type="button"
-              class="sy-chipbtn"
-              :class="{ 'sy-chipbtn--active': !inert.has('filterModel') && f === filterModel }"
-              :title="f"
-              :disabled="inert.has('filterModel')"
-              @click="selectFilterModel(f)"
-            >{{ FILTER_LABELS[f] ?? f }}</button>
-          </div>
+          <SegmentedControl
+            :model-value="inert.has('filterModel') ? '' : filterModel"
+            :options="filterOptions"
+            :ariaLabel="copy.patch.filterModel"
+            :fill="false"
+            size="sm"
+            class="sy-filter-models"
+            @update:model-value="selectFilterModel"
+          />
         </section>
 
         <section class="sy-sec">
-          <h3 class="sy-sec__title">{{ copy.sections.envelope }}</h3>
+          <div class="sy-sec__head">
+            <h3 class="sy-sec__title">{{ copy.sections.envelope }}</h3>
+            <Tooltip v-bind="term('envelope')" />
+          </div>
           <div class="sy-knob-row">
             <RotaryKnob
               v-bind="term('attack')"
@@ -699,12 +797,15 @@ function applyGain() {
         </section>
 
         <section class="sy-sec">
-          <h3 class="sy-sec__title">{{ copy.sections.voice }}</h3>
+          <div class="sy-sec__head">
+            <h3 class="sy-sec__title">{{ copy.sections.voice }}</h3>
+            <Tooltip v-bind="term('voice')" />
+          </div>
           <div class="sy-knob-row">
             <RotaryKnob
               v-bind="term('glide')"
               :model-value="glideMs"
-              :min="0" :max="300" :step="1"
+              :min="0" :max="GLIDE_MAX_MS" :step="1"
               :label="copy.patch.glide"
               :display="`${Math.round(glideMs)} ms`"
               :default-value="baseVals.glideMs"
@@ -726,8 +827,8 @@ function applyGain() {
           </div>
           <button
             type="button"
-            class="sy-chipbtn sy-reset"
-            :disabled="dirtyTweaks.size === 0"
+            class="demo-btn demo-btn--sm sy-reset"
+            :disabled="dirtyTweaks.size === 0 && Object.keys(modelValues).length === 0"
             @click="resetTweaks"
           >
             {{ copy.patch.reset }}
@@ -735,7 +836,10 @@ function applyGain() {
         </section>
 
         <section class="sy-sec sy-sec--output">
-          <h3 class="sy-sec__title">{{ copy.sections.output }}</h3>
+          <div class="sy-sec__head">
+            <h3 class="sy-sec__title">{{ copy.sections.output }}</h3>
+            <Tooltip v-bind="term('output')" />
+          </div>
           <div class="sy-output">
             <RotaryKnob
               v-bind="term('gain')"
@@ -748,66 +852,136 @@ function applyGain() {
               accent="var(--demo-amber)"
               @update:model-value="(v) => { outputGain = v; applyGain(); }"
             />
-            <Tooltip v-bind="term('peak')">
-              <div class="sy-vmeter" :aria-label="copy.output.peak" tabindex="0">
-                <button
-                  type="button"
-                  class="sy-clip"
-                  :class="{ 'sy-clip--lit': clipped }"
-                  :title="copy.output.clip"
-                  @click.stop="clipped = false"
-                >CLIP</button>
-                <div class="sy-vmeter__track">
-                  <div class="sy-vmeter__fill" :style="{ height: `${meterFillPercent(meter.peak)}%` }"></div>
-                  <i
-                    v-if="peakHold > 0"
-                    class="sy-vmeter__hold"
-                    :style="{ bottom: `${meterFillPercent(peakHold)}%` }"
-                  ></i>
-                </div>
+            <div class="sy-vmeter">
+              <button
+                type="button"
+                class="sy-clip"
+                :class="{ 'sy-clip--lit': clipped }"
+                :aria-label="copy.output.clip"
+                :title="copy.output.clip"
+                @click="clipped = false"
+              >CLIP</button>
+              <div
+                class="sy-vmeter__track"
+                aria-hidden="true"
+                :style="{ '--fill': `${meterFillPercent(meter.peak)}%`, '--hold': meterFillPercent(peakHold) / 100 }"
+              >
+                <div class="sy-vmeter__fill"></div>
+                <i v-if="peakHold > 0" class="sy-vmeter__hold"></i>
               </div>
-            </Tooltip>
+              <TermLabel v-bind="term('peak')" :label="copy.output.peak" compact />
+            </div>
           </div>
           <Tooltip v-bind="term('panic')">
-            <button type="button" class="sy-chipbtn sy-panic" @click="panic">
+            <button type="button" class="demo-btn demo-btn--sm demo-btn--danger sy-panic" @click="panic">
               {{ copy.controls.panic }}
             </button>
           </Tooltip>
         </section>
       </div>
 
+      <!-- ===== MODEL ROW: the engine's own section, from synthEngineParamInfo() ===== -->
+      <section class="sy-model">
+        <div class="sy-model__head">
+          <div class="sy-sec__head">
+            <h3 class="sy-sec__title">{{ copy.sections.model }}<span class="sy-model__engine">{{ currentEngine }}</span></h3>
+            <Tooltip v-bind="term('model')" />
+          </div>
+          <SegmentedControl
+            v-if="isBaseVoice && modelGroups.length > 1"
+            :model-value="modelGroup?.id ?? ''"
+            :options="modelGroupOptions"
+            :ariaLabel="copy.model.group"
+            :fill="false"
+            size="sm"
+            class="sy-model__groups"
+            @update:model-value="(id) => (modelGroupId = id)"
+          />
+        </div>
+        <DemoNotice v-if="modelGroups.length === 0" tone="hint">{{ copy.model.none }}</DemoNotice>
+        <DemoNotice v-else-if="!isBaseVoice" tone="hint">
+          {{ copy.model.locked }}
+          <template v-if="hasBaseVoice(currentEngine)" #action>
+            <button type="button" class="demo-btn demo-btn--sm" @click="selectPreset(baseVoiceId(currentEngine))">
+              {{ copy.model.openBase }}
+            </button>
+          </template>
+        </DemoNotice>
+        <template v-else-if="modelGroup">
+          <Transition name="demo-fade" mode="out-in">
+            <div :key="`${currentEngine}/${modelGroup.id}`">
+              <!-- Fields the engine gates on other values rise in as those values open them. -->
+              <TransitionGroup name="demo-rise" tag="div" class="sy-model__knobs">
+                <template v-for="field in modelGroup.fields" :key="field.info.name">
+                <div v-if="field.info.type === 'boolean'" class="sy-model__switch">
+                  <span class="sy-model__switch-label">{{ field.label }}</span>
+                  <button
+                    type="button"
+                    class="demo-btn demo-btn--sm"
+                    :class="{ 'demo-btn--primary': modelValue(field.info) !== 0 }"
+                    :aria-label="field.info.name"
+                    :aria-pressed="modelValue(field.info) !== 0"
+                    @click="setModelParam(field.info.name, modelValue(field.info) !== 0 ? 0 : 1)"
+                  >
+                    {{ modelValue(field.info) !== 0 ? copy.model.on : copy.model.off }}
+                  </button>
+                </div>
+                <RotaryKnob
+                  v-else
+                  :model-value="modelValue(field.info)"
+                  :min="field.info.min ?? 0"
+                  :max="field.info.max ?? 1"
+                  :step="modelFieldStep(field.info)"
+                  :label="field.label"
+                  :aria-label="field.info.name"
+                  :display="formatModelValue(modelValue(field.info), field.info)"
+                  :default-value="fieldDefault(field.info)"
+                  :size="40"
+                  accent="var(--demo-cyan)"
+                  label-wrap
+                  @update:model-value="(v) => setModelParam(field.info.name, field.info.integer ? Math.round(v) : v)"
+                />
+                </template>
+              </TransitionGroup>
+            </div>
+          </Transition>
+          <DemoNotice v-if="currentEngine === 'percussion'" tone="hint">{{ copy.model.kit }}</DemoNotice>
+          <DemoNotice tone="hint">{{ copy.model.rebind }}</DemoNotice>
+        </template>
+      </section>
+
       <!-- ===== KEYBED ROW ===== -->
       <div class="sy-deck__keys">
-        <div class="sy-cheek">
-          <span class="sy-cheek__label">
-            {{ copy.controls.octave }}
-            <Tooltip v-bind="term('octave')">
-              <button type="button" class="sy-sec__info" :aria-label="term('octave').title">
-                <span aria-hidden="true">i</span>
-              </button>
-            </Tooltip>
-          </span>
-          <div class="sy-cheek__row">
+        <div class="sy-keys__bar">
+          <div class="sy-keys__octave">
+            <span class="sy-sec__title">{{ copy.controls.octave }}</span>
+            <Tooltip v-bind="term('octave')" />
             <button
               type="button"
-              class="sy-chipbtn sy-cheek__btn"
+              class="demo-btn demo-btn--sm demo-btn--icon"
               :disabled="baseNote <= MIN_BASE_NOTE"
               :aria-label="copy.controls.octaveDown"
               @click="shiftOctave(-1)"
             >−</button>
-            <span class="sy-cheek__value">{{ octaveLabel }}</span>
+            <span class="sy-keys__value">{{ octaveLabel }}</span>
             <button
               type="button"
-              class="sy-chipbtn sy-cheek__btn"
+              class="demo-btn demo-btn--sm demo-btn--icon"
               :disabled="baseNote >= MAX_BASE_NOTE"
               :aria-label="copy.controls.octaveUp"
               @click="shiftOctave(1)"
             >+</button>
           </div>
-          <span class="sy-cheek__zx">Z / X</span>
+          <DemoNotice tone="hint" class="sy-keys__hint">
+            {{ copy.keyboard.touch }}
+            {{ copy.keyboard.play }}
+            <span class="sy-keys__kbds"><kbd v-for="key in copy.keyboard.keys.split(' ')" :key="key" class="demo-kbd">{{ key }}</kbd></span>
+            · <kbd class="demo-kbd">Z</kbd> / <kbd class="demo-kbd">X</kbd> {{ copy.keyboard.octave }}
+          </DemoNotice>
         </div>
         <div class="sy-keybed">
           <SynthKeyboard
+            fit
             :base-note="baseNote"
             :active="activeNotes"
             @note-on="noteOn"
@@ -815,7 +989,6 @@ function applyGain() {
           />
         </div>
       </div>
-      <p class="sy-keyboard-hint">{{ copy.keyboardHint }}</p>
 
       <!-- ===== MIDI ROW ===== -->
       <SynthMidiPanel

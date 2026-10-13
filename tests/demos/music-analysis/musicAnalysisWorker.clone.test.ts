@@ -48,8 +48,8 @@ describe('music analysis worker — posted result is structured-cloneable (real 
     Object.defineProperty(globalThis, 'self', {
       configurable: true,
       value: {
-        postMessage: (message: Posted['message'], transfer?: Transferable[]) => {
-          posted.push({ message, transfer });
+        postMessage: (message: Posted['message'], options?: { transfer?: Transferable[] }) => {
+          posted.push({ message, transfer: options?.transfer });
         },
       },
     });
@@ -120,6 +120,39 @@ describe('music analysis worker — posted result is structured-cloneable (real 
       const finite = series.filter((point) => Number.isFinite(point.value));
       expect(finite.length).toBeGreaterThan(0);
       expect(finite.at(-1)!.value).toBeGreaterThan(mono.integratedLufs + 2);
+    }
+    expect(() => structuredClone(result)).not.toThrow();
+  }, 30_000);
+
+  it('carries the engine tempo curve, measured tuning and Roman numerals', async () => {
+    const left = tone(8, 'left');
+    const right = tone(8, 'right');
+    const done = await analyze({
+      type: 'analyze',
+      id: 4,
+      sourceLeft: left,
+      sourceRight: right,
+      sampleRate: SR,
+    });
+    expect(done.message.type).toBe('done');
+    const result = done.message.result as {
+      beats: number[];
+      tempoCurve: Array<{ time: number; bpm: number }>;
+      summary: { tuning: number; referenceHz: number };
+      chords: Array<{ name: string; romanNumeral: string }>;
+    };
+    expect(result.tempoCurve.length).toBeGreaterThan(1);
+    expect(result.tempoCurve.map((point) => point.time)).toEqual(
+      result.beats.slice(0, result.tempoCurve.length),
+    );
+    for (const point of result.tempoCurve) expect(point.bpm).toBeGreaterThan(0);
+    expect(result.summary.tuning).toBeGreaterThanOrEqual(-0.5);
+    expect(result.summary.tuning).toBeLessThan(0.5);
+    expect(result.summary.referenceHz).toBeCloseTo(440 * 2 ** (result.summary.tuning / 12), 3);
+    expect(result.chords.length).toBeGreaterThan(0);
+    for (const chord of result.chords) {
+      expect(typeof chord.romanNumeral).toBe('string');
+      if (chord.name !== 'N.C.') expect(chord.romanNumeral).not.toBe('');
     }
     expect(() => structuredClone(result)).not.toThrow();
   }, 30_000);

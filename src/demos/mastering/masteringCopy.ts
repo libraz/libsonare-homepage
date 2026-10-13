@@ -13,7 +13,19 @@ export const enCopy = {
     modeLabel: 'Mastering mode',
     undo: 'Undo',
     redo: 'Redo',
-    keys: 'Space play · Home start · L loop · A B R monitor · {mod}Z undo · {shift}{mod}Z redo',
+    shortcutsLabel: 'Keyboard shortcuts',
+    shortcuts: {
+      play: 'play',
+      start: 'start',
+      loop: 'loop',
+      monitor: 'monitor',
+      undo: 'undo',
+      redo: 'redo',
+    },
+    guideTitle: 'Load a mix, describe it, then fit and export',
+    guideBody:
+      'Load a stereo mix or the demo clip, then pick how it was recorded, its genre and where it is going. Every choice plays live; Fit reaches the loudness target and Export writes the render you hear. Studio opens every module of the chain.',
+    guideLink: 'Mastering glossary',
   },
   modes: { quick: 'Quick', studio: 'Studio' },
   status: {
@@ -57,6 +69,7 @@ export const enCopy = {
     assist: 'Analysing source',
     reference: 'Analysing reference',
     preview: 'Estimating delivery',
+    detect: 'Detecting defects',
     cancel: 'Cancel',
   },
   source: {
@@ -100,9 +113,7 @@ export const enCopy = {
     match: 'Loudness match',
     matchHint: 'Brings every lane down to the quietest one. A lane is never raised.',
     matching: 'Matching…',
-    matchingHint:
-      'Measuring the loudness of the current settings; the lanes match when it is done.',
-    noReference: 'Load a reference to monitor it.',
+    unavailable: 'not loaded',
   },
   rack: {
     title: 'Signal chain',
@@ -205,7 +216,8 @@ export const enCopy = {
     discrete: 'Applied on release. Rebuilds every insert in the chain.',
     driveValue: 'Drive',
     guide: 'Guide',
-    knobHint: 'Drag, wheel or arrow keys. Shift for fine steps. Double-click resets.',
+    knobHint:
+      'Drag, wheel or arrow keys; Shift for fine steps; double-click resets. Amber sliders apply on release.',
     on: 'On',
     off: 'Off',
   },
@@ -241,6 +253,24 @@ export const enCopy = {
     params: { reductionDb: 'Reduction', threshold: 'Threshold', attenuation: 'Attenuation' },
     failed: 'The repair settings are not applied to what you hear.',
     retry: 'Run again',
+    detect: {
+      button: 'Detect',
+      again: 'Detect again',
+      hint: 'Detect measures the source and suggests which stages to turn on. Dereverb is never suggested.',
+      apply: 'Apply suggestion',
+      suggested: 'Suggested',
+      clean: 'Not needed',
+      none: 'Nothing stood out: no repair is suggested for this source.',
+      withheld: 'clipping found; repairing it would rewrite unclipped audio',
+      figures: {
+        declip: '{n} clipped runs',
+        declick: '{n} clicks/s',
+        decrackle: '{n}% crackle',
+        dehum: '{n} Hz hum',
+        denoise: 'floor {n} dBFS',
+        dereverb: 'late decay {n} dB',
+      },
+    },
   },
   meters: {
     title: 'Meters',
@@ -458,6 +488,7 @@ export const enCopy = {
     fitFailed: 'The loudness fit failed. A silent program has no loudness to fit.',
     exportFailed: 'Export failed.',
     referenceFailed: 'The reference could not be analysed.',
+    detectFailed: 'The repair detection failed on this file.',
   },
 };
 
@@ -470,7 +501,19 @@ export const jaCopy: MasteringCopy = {
     modeLabel: 'マスタリングモード',
     undo: '元に戻す',
     redo: 'やり直す',
-    keys: 'Space 再生 · Home 先頭 · L ループ · A B R モニター · {mod}Z 元に戻す · {shift}{mod}Z やり直す',
+    shortcutsLabel: 'キーボードショートカット',
+    shortcuts: {
+      play: '再生',
+      start: '先頭',
+      loop: 'ループ',
+      monitor: 'モニター',
+      undo: '元に戻す',
+      redo: 'やり直す',
+    },
+    guideTitle: 'ミックスを読み込み、条件を選び、適合して書き出す',
+    guideBody:
+      'ステレオミックスかデモ音源を読み込み、録音条件、ジャンル、配信先を選びます。どの選択もそのまま鳴ります。適合でラウドネスをターゲットに合わせ、書き出しは聴いているとおりのレンダーを WAV にします。スタジオではチェーンの全モジュールを開けます。',
+    guideLink: 'マスタリング用語集',
   },
   modes: { quick: 'クイック', studio: 'スタジオ' },
   status: {
@@ -514,6 +557,7 @@ export const jaCopy: MasteringCopy = {
     assist: '音源を解析中',
     reference: 'リファレンスを解析中',
     preview: '配信時を推定中',
+    detect: '不具合を検出中',
     cancel: 'キャンセル',
   },
   source: {
@@ -557,8 +601,7 @@ export const jaCopy: MasteringCopy = {
     match: 'ラウドネス一致',
     matchHint: 'すべてのレーンを最も小さいレーンに揃えます。レーンを持ち上げることはありません。',
     matching: '測定中…',
-    matchingHint: 'いまの設定のラウドネスを測っています。測り終えるとレーンが揃います。',
-    noReference: 'リファレンスを読み込むとモニターできます。',
+    unavailable: '未読込',
   },
   rack: {
     title: 'シグナルチェーン',
@@ -662,7 +705,7 @@ export const jaCopy: MasteringCopy = {
     driveValue: 'ドライブ',
     guide: 'ガイド',
     knobHint:
-      'ドラッグ、ホイール、矢印キーで調整。Shift で細かく、ダブルクリックでリセットします。',
+      'ドラッグ、ホイール、矢印キーで調整。Shift で細かく、ダブルクリックでリセットします。琥珀色のスライダーは指を離したときに適用します。',
     on: 'オン',
     off: 'オフ',
   },
@@ -698,6 +741,24 @@ export const jaCopy: MasteringCopy = {
     params: { reductionDb: '低減量', threshold: 'スレッショルド', attenuation: '減衰量' },
     failed: 'リペア設定は、いま聴いている音に適用されていません。',
     retry: '再実行',
+    detect: {
+      button: '検出',
+      again: '再検出',
+      hint: '検出は音源を測定し、オンにすべき段を提案します。デリバーブは提案しません。',
+      apply: '提案を適用',
+      suggested: '提案',
+      clean: '不要',
+      none: '目立つ不具合はありません。この音源にはリペアを提案しません。',
+      withheld: 'クリップはありますが、修復するとクリップしていない部分まで書き換えます',
+      figures: {
+        declip: 'クリップ {n} 箇所',
+        declick: 'クリック {n} 回/秒',
+        decrackle: 'クラックル {n}%',
+        dehum: 'ハム {n} Hz',
+        denoise: 'ノイズフロア {n} dBFS',
+        dereverb: '後部残響 {n} dB',
+      },
+    },
   },
   meters: {
     title: 'メーター',
@@ -729,7 +790,7 @@ export const jaCopy: MasteringCopy = {
     report: 'レポート（JSON）',
     results: {
       integrated: 'Integrated',
-      truePeak: 'True Peak',
+      truePeak: 'True Peak ',
       lra: 'LRA',
       plr: 'PLR',
       maxMomentary: '最大 M',
@@ -886,7 +947,7 @@ export const jaCopy: MasteringCopy = {
       bpm: 'BPM',
       integrated: 'Integrated LUFS',
       lra: 'ラウドネスレンジ',
-      truePeak: 'True Peak',
+      truePeak: 'True Peak ',
       crest: 'クレストファクター',
     },
   },
@@ -916,6 +977,7 @@ export const jaCopy: MasteringCopy = {
       'ラウドネス合わせに失敗しました。無音のプログラムには合わせるラウドネスがありません。',
     exportFailed: '書き出しに失敗しました。',
     referenceFailed: 'リファレンスを解析できませんでした。',
+    detectFailed: 'このファイルではリペアの検出に失敗しました。',
   },
 };
 

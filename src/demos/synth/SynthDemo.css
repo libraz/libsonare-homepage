@@ -1,70 +1,14 @@
-.sy-statusbar {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 8px 18px;
-  border-bottom: 1px solid var(--demo-border);
-  background: var(--demo-bg-overlay);
-  backdrop-filter: blur(16px);
+.sy-alert {
+  max-width: 1120px;
+  margin: 0 auto 12px;
 }
 
-.sy-statusbar__field {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  color: var(--demo-text-muted);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-variant-numeric: tabular-nums;
-}
-
-.sy-statusbar__field b {
-  color: var(--demo-text-faint);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-}
-
-.sy-error {
-  margin: 0;
-  color: var(--demo-danger);
-  font-size: 12px;
-}
-
-/* ===== THE INSTRUMENT BODY ===== */
+/* ===== THE INSTRUMENT BODY =====
+   The face is the shared `.demo-deck` chassis; this adds the width and clip. */
 .sy-deck {
   max-width: 1120px;
   margin: 0 auto;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 14px;
-  background:
-    linear-gradient(180deg, var(--demo-bg-header) 0%, var(--demo-bg-elevated) 22%, var(--demo-bg-elevated) 100%);
-  box-shadow:
-    0 24px 48px -24px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
   overflow: hidden;
-  /* Subtle rise as the deck mounts. */
-  animation: sy-deck-rise 0.45s ease-out both;
-}
-
-html:not(.dark) .sy-deck {
-  box-shadow:
-    0 20px 40px -24px rgba(80, 60, 140, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
-}
-
-@keyframes sy-deck-rise {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: none; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sy-deck {
-    animation: none;
-  }
 }
 
 /* ===== DISPLAY ROW ===== */
@@ -129,6 +73,9 @@ html:not(.dark) .sy-deck {
   background: var(--demo-text-faint);
   opacity: 0.5;
   flex: 0 0 auto;
+  transition:
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    opacity var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .sy-led--on {
@@ -186,7 +133,7 @@ html:not(.dark) .sy-deck {
 }
 
 .sy-sec--program {
-  flex: 1 1 250px;
+  flex: 1 1 200px;
 }
 
 .sy-sec__title {
@@ -204,39 +151,7 @@ html:not(.dark) .sy-deck {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-.sy-sec__info {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  padding: 0;
-  border: 1px solid var(--demo-border);
-  border-radius: 50%;
-  background: var(--demo-bg);
-  color: var(--demo-text-muted);
-  cursor: pointer;
-  vertical-align: middle;
-  transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
-}
-
-.sy-sec__info > span {
-  font-family: var(--font-body);
-  font-size: 8px;
-  font-style: italic;
-  font-weight: 700;
-  line-height: 1;
-  transform: translateY(-0.5px);
-}
-
-.sy-sec__info:hover,
-.sy-sec__info:focus-visible {
-  color: var(--demo-accent);
-  border-color: var(--demo-accent);
-  background: var(--demo-accent-subtle);
-  outline: none;
+  min-height: 16px;
 }
 
 .sy-knob-row {
@@ -245,7 +160,6 @@ html:not(.dark) .sy-deck {
   justify-content: center;
 }
 
-/* Program memory grid */
 /* Engine list beside the programs it plays. The engine column fixes the
    section's height, so switching engines never resizes the panel. */
 .sy-programs {
@@ -279,17 +193,30 @@ html:not(.dark) .sy-deck {
   padding: 4px 7px;
   line-height: 1.2;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--demo-radius-sm);
   background: transparent;
   cursor: pointer;
   font-family: var(--font-mono);
   text-align: left;
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition:
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    transform var(--demo-dur-instant) var(--demo-ease-standard);
+}
+
+.sy-engine:active,
+.sy-program:active {
+  transform: scale(0.97);
 }
 
 .sy-program {
   border-color: var(--demo-border);
   background: var(--demo-control-bg);
+}
+
+/* The engine on its own reads as the list's header entry. */
+.sy-program--base {
+  border-style: dashed;
 }
 
 .sy-engine:hover,
@@ -311,6 +238,7 @@ html:not(.dark) .sy-deck {
 
 .sy-program--active {
   border-color: var(--demo-accent);
+  border-style: solid;
   background: var(--demo-accent-subtle);
   box-shadow: inset 0 0 10px var(--demo-accent-subtle), 0 0 8px var(--demo-accent-dim);
 }
@@ -332,6 +260,11 @@ html:not(.dark) .sy-deck {
 
 .sy-program__name {
   color: var(--demo-text);
+}
+
+.sy-program--base .sy-program__name {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .sy-engine--active .sy-engine__name,
@@ -364,14 +297,21 @@ html:not(.dark) .sy-deck {
   justify-items: center;
   padding: 5px 5px 4px;
   border: 1px solid var(--demo-border);
-  border-radius: 6px;
+  border-radius: var(--demo-radius-sm);
   background: var(--demo-control-bg);
   cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition:
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    transform var(--demo-dur-instant) var(--demo-ease-standard);
 }
 
 .sy-wave:hover:not(:disabled) {
   border-color: var(--demo-accent-border);
+}
+
+.sy-wave:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .sy-wave:disabled {
@@ -379,15 +319,10 @@ html:not(.dark) .sy-deck {
   cursor: default;
 }
 
-/* Says why the controls beside it are dimmed; empty on an engine that uses them all.
-   Wraps to the section instead of widening it: the deck's row layout must not
-   change with the engine. */
+/* Says why the controls beside it are dimmed. Wraps to the section instead of
+   widening it: the deck's row layout must not change with the engine. */
 .sy-engine-note {
   contain: inline-size;
-  margin: 0;
-  color: var(--demo-text-muted);
-  font-size: 10.5px;
-  line-height: 1.5;
 }
 
 .sy-wave--active {
@@ -434,59 +369,22 @@ html:not(.dark) .sy-deck {
   text-transform: uppercase;
 }
 
-/* Filter model chips */
 .sy-filter-models {
-  display: grid;
-  grid-template-columns: repeat(3, auto);
-  gap: 3px;
-  justify-content: center;
+  align-self: center;
 }
 
-.sy-chipbtn {
-  padding: 4px 8px;
-  border: 1px solid var(--demo-border);
-  border-radius: 5px;
-  background: var(--demo-control-bg);
-  color: var(--demo-text-muted);
-  font-family: var(--font-mono);
-  font-size: 8.5px;
-  line-height: 1.3;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-  transition: all 0.12s ease;
-}
-
-.sy-chipbtn:hover:not(:disabled) {
-  border-color: var(--demo-accent-border);
-  color: var(--demo-text);
-}
-
-.sy-chipbtn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.sy-chipbtn--active {
-  border-color: var(--demo-accent);
-  background: var(--demo-accent-subtle);
-  color: var(--demo-accent-light);
-  box-shadow: 0 0 8px var(--demo-accent-dim);
-}
-
-/* Envelope shape readout */
-/* The silhouette draws the envelope knobs, so it dims with them. */
-.sy-env--inert {
-  opacity: var(--demo-disabled-opacity);
-}
-
+/* Envelope shape readout; it draws the envelope knobs, so it dims with them. */
 .sy-env {
   width: 116px;
   height: 34px;
   margin: 0 auto;
   border: 1px solid var(--demo-border);
-  border-radius: 5px;
+  border-radius: var(--demo-radius-sm);
   background: var(--demo-control-bg);
+}
+
+.sy-env--inert {
+  opacity: var(--demo-disabled-opacity);
 }
 
 .sy-env__curve {
@@ -495,7 +393,6 @@ html:not(.dark) .sy-deck {
   stroke-width: 1.6;
   stroke-linecap: round;
   filter: drop-shadow(0 0 3px var(--demo-cyan));
-  transition: d 0.08s ease;
 }
 
 .sy-reset {
@@ -530,6 +427,10 @@ html:not(.dark) .sy-deck {
   font-weight: 700;
   letter-spacing: 0.1em;
   line-height: 1.4;
+  transition:
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    color var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .sy-clip:hover:not(:disabled) {
@@ -543,12 +444,13 @@ html:not(.dark) .sy-deck {
 }
 
 .sy-clip--lit {
-  border-color: var(--demo-danger);
-  background: var(--demo-danger);
-  color: #fff;
-  box-shadow: 0 0 8px var(--demo-danger);
+  border-color: var(--demo-error-fg);
+  background: var(--demo-error-fg);
+  color: var(--demo-on-accent);
+  box-shadow: 0 0 8px var(--demo-error-fg);
 }
 
+/* --fill is the lit height (percent), --hold the hold line (0..1). */
 .sy-vmeter__track {
   position: relative;
   width: 12px;
@@ -560,107 +462,129 @@ html:not(.dark) .sy-deck {
 
 .sy-vmeter__fill {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  inset: 0;
   background: linear-gradient(0deg, var(--demo-success) 0%, var(--demo-success) 60%, var(--demo-amber) 82%, var(--demo-clip) 96%);
   /* LED segments */
   -webkit-mask-image: repeating-linear-gradient(0deg, #000 0 4px, transparent 4px 6px);
   mask-image: repeating-linear-gradient(0deg, #000 0 4px, transparent 4px 6px);
-  transition: height 0.05s linear;
+  clip-path: inset(calc(100% - var(--fill, 0%)) 0 0 0);
 }
 
 .sy-vmeter__hold {
   position: absolute;
   left: 0;
   right: 0;
+  bottom: 0;
   height: 2px;
   background: var(--demo-amber);
+  transform: translateY(calc(var(--hold, 0) * -62px));
 }
 
 .sy-panic {
   margin: 0 auto;
-  border-color: var(--demo-warn-border);
-  color: var(--demo-warn-text);
 }
 
-.sy-panic:hover:not(:disabled) {
-  border-color: var(--demo-warn);
-  color: var(--demo-warn);
-}
-
-/* ===== KEYBED ROW ===== */
-.sy-deck__keys {
-  display: flex;
-  gap: 12px;
-  align-items: stretch;
-  padding: 8px 16px 4px;
+/* ===== MODEL ROW ===== */
+.sy-model {
+  display: grid;
+  gap: 10px;
+  padding: 10px 16px 12px;
   border-top: 1px solid var(--demo-border);
 }
 
-.sy-cheek {
-  display: grid;
-  align-content: center;
-  gap: 6px;
-  justify-items: center;
-  min-width: 104px;
-  padding: 8px;
-  border: 1px solid var(--demo-border);
-  border-radius: 8px;
-  background: var(--demo-control-bg);
+.sy-model__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
 }
 
-.sy-cheek__label {
-  color: var(--demo-text-faint);
+.sy-model__engine {
+  margin-left: 8px;
+  color: var(--demo-accent-light);
+  letter-spacing: 0.08em;
+  text-transform: none;
+}
+
+.sy-model__groups {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* Two knob rows are reserved, so switching between short and long sections
+   does not move the keybed. */
+.sy-model__knobs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  align-content: start;
+  gap: 10px 8px;
+  min-block-size: 176px;
+}
+
+.sy-model__switch {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 6px;
+  min-width: 56px;
+}
+
+.sy-model__switch-label {
+  color: var(--demo-text-muted);
   font-family: var(--font-mono);
-  font-size: 8.5px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
+  font-size: var(--demo-label-size);
+  font-weight: var(--demo-label-weight);
+  letter-spacing: var(--demo-label-tracking);
   text-transform: uppercase;
 }
 
-.sy-cheek__row {
+/* ===== KEYBED ROW =====
+   The octave controls sit in a bar above the keybed, so the keyboard has the
+   deck's full width to fit whole octaves into and centres on the deck. */
+.sy-deck__keys {
+  display: grid;
+  gap: 8px;
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--demo-border);
+}
+
+.sy-keys__bar {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.sy-keys__octave {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
-.sy-cheek__btn {
-  width: 26px;
-  padding: 5px 0;
-  text-align: center;
-  font-size: 12px;
-  line-height: 1;
-}
-
-.sy-cheek__value {
+.sy-keys__value {
   min-width: 34px;
   color: var(--demo-accent-light);
   font-family: var(--font-mono);
   font-size: 15px;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
   text-align: center;
 }
 
-.sy-cheek__zx {
-  color: var(--demo-text-faint);
-  font-family: var(--font-mono);
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
+.sy-keys__hint {
+  flex: 1 1 360px;
+}
+
+.sy-keys__kbds {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  vertical-align: middle;
 }
 
 .sy-keybed {
-  flex: 1;
   min-width: 0;
-}
-
-.sy-keyboard-hint {
-  margin: 0;
-  padding: 4px 16px 6px;
-  color: var(--demo-text-faint);
-  font-size: 10.5px;
-  line-height: 1.45;
 }
 
 /* ===== MIDI ROW ===== */
@@ -686,20 +610,13 @@ html:not(.dark) .sy-deck {
   text-transform: uppercase;
 }
 
-.sy-midi__note {
-  margin: 0;
-  color: var(--demo-text-faint);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
 .sy-midi__device {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   padding: 4px 10px;
   border: 1px solid var(--demo-border);
-  border-radius: 5px;
+  border-radius: var(--demo-radius-sm);
   background: var(--demo-control-bg);
   color: var(--demo-text);
   font-size: 11px;
@@ -714,6 +631,7 @@ html:not(.dark) .sy-deck {
   letter-spacing: 0.08em;
   text-decoration: none;
   text-transform: uppercase;
+  transition: color var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .sy-midi__docs:hover {
@@ -743,16 +661,6 @@ html:not(.dark) .sy-deck {
   .sy-brand__power {
     grid-column: 1 / -1;
     margin-top: 2px;
-  }
-
-  .sy-deck__keys {
-    flex-direction: column;
-  }
-
-  .sy-cheek {
-    grid-template-columns: auto auto auto;
-    justify-content: start;
-    align-items: center;
   }
 
   .sy-midi__docs {

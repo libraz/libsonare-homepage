@@ -29,19 +29,11 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 const props = withDefaults(
   defineProps<{
     result: ScanResult | null;
-    accent?: string;
-    cyan?: string;
-    amber?: string;
-    truth?: string;
     isDark?: boolean;
     autoRotate?: boolean;
     level?: number;
   }>(),
   {
-    accent: '#8B5CF6',
-    cyan: '#22D3EE',
-    amber: '#F59E0B',
-    truth: '#34D399',
     isDark: true,
     autoRotate: true,
     level: 0,
@@ -78,6 +70,12 @@ let lastY = 0;
 
 function color(hex: string) {
   return new THREE.Color(hex);
+}
+
+/** A demo colour token read off the scene host at draw time, opaque for three.js. */
+function token(name: string): string {
+  const value = host.value ? getComputedStyle(host.value).getPropertyValue(name).trim() : '';
+  return value.replace(/^rgba\(([^,]+),([^,]+),([^,]+),[^)]*\)$/, 'rgb($1,$2,$3)');
 }
 
 // libsonare coords (x∈len, y∈width, z∈height, z up) → three (x-left, z up, y-depth).
@@ -221,11 +219,18 @@ function buildScene() {
   const listener = toScene(res.listener, room);
   const source = toScene(res.source, room);
 
+  const palette = {
+    accent: token('--demo-accent'),
+    cyan: token('--demo-cyan'),
+    amber: token('--demo-amber'),
+    truth: token('--demo-success'),
+    ink: token('--demo-text-strong'),
+  };
   // On the light demo panel the brand purple washes out against the lavender
-  // background, so the room is recoloured to a deep violet with stronger fills.
-  // Dark mode keeps the flagship brand-purple look.
-  const lineColor = props.isDark ? props.accent : '#4C1D95';
-  const wallColor = props.isDark ? props.accent : '#5B21B6';
+  // background, so the room is drawn in a darkened accent with stronger fills.
+  const deepAccent = `#${color(palette.accent).multiplyScalar(0.62).getHexString()}`;
+  const lineColor = props.isDark ? palette.accent : deepAccent;
+  const wallColor = props.isDark ? palette.accent : deepAccent;
 
   // Wall opacity scales with absorption: damped rooms read as more solid.
   const meanAbs = res.bands.length
@@ -254,14 +259,14 @@ function buildScene() {
       res.truth.room.length,
       res.truth.room.width,
       res.truth.room.height,
-      props.truth,
+      palette.truth,
       0.5,
       true,
     );
     addMarker(
       roomGroup,
       toScene(res.truth.source, res.truth.room),
-      props.truth,
+      palette.truth,
       sizeFor(room, 0.05),
     );
   }
@@ -272,7 +277,7 @@ function buildScene() {
     roomGroup,
     listener,
     res.criticalDistance,
-    props.cyan,
+    palette.cyan,
     0.0,
     props.isDark ? 0.1 : 0.08,
   );
@@ -281,19 +286,19 @@ function buildScene() {
     roomGroup,
     listener,
     res.sourceDistance,
-    props.amber,
+    palette.amber,
     props.isDark ? 0.05 : 0.04,
     props.isDark ? 0.16 : 0.12,
   );
 
-  addMarker(roomGroup, listener, props.isDark ? '#ffffff' : '#1E1B4B', markerR);
-  addMarker(roomGroup, source, props.amber, markerR * 1.05, 1);
+  addMarker(roomGroup, listener, palette.ink, markerR);
+  addMarker(roomGroup, source, palette.amber, markerR * 1.05, 1);
 
   // Wavefront emitters from the source.
   for (let i = 0; i < 3; i++) {
     const geo = new THREE.SphereGeometry(1, 28, 18);
     const mat = new THREE.MeshBasicMaterial({
-      color: color(props.amber),
+      color: color(palette.amber),
       transparent: true,
       opacity: 0.0,
       wireframe: true,

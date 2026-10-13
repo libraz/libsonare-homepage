@@ -1,6 +1,6 @@
 import type {
+  AnalysisChord,
   AnalysisResult,
-  Chord,
   ClippingReport,
   CqtResult,
   KeyCandidate,
@@ -48,13 +48,25 @@ const LOUDNESS_HOP_SEC = 0.1;
 const MOMENTARY_WINDOW_SEC = 0.4;
 const SHORT_TERM_WINDOW_SEC = 3;
 
+// The tempo curve follows a moving tempo only when beat tracking adapts its
+// prior too; `tuning: 'auto'` builds key and chord chroma on the recording's own
+// pitch grid and reports the offset it measured.
+const ANALYZE_OPTIONS = {
+  computeTempoCurve: true,
+  adaptiveTempo: true,
+  tuning: 'auto',
+} as const;
+
 type WasmModule = {
   init: () => Promise<void>;
   resample: (samples: Float32Array, srcSr: number, targetSr: number) => Float32Array;
+  downmix: (channels: Float32Array[], targetLayout: number) => Float32Array[];
+  tuningToReferenceHz: (tuning: number, a4?: number) => number;
   analyzeWithProgress: (
     samples: Float32Array,
     sampleRate: number,
     onProgress: (progress: number, stage: string) => void,
+    options?: typeof ANALYZE_OPTIONS,
   ) => AnalysisResult;
   detectKeyCandidates: (
     samples: Float32Array,
@@ -132,6 +144,9 @@ export interface MusicAnalysisWorkerResult {
     bpmConfidence: number;
     keyName: string;
     keyConfidence: number;
+    /** Measured tuning offset in fractions of a semitone, and the A4 it implies. */
+    tuning: number;
+    referenceHz: number;
     timeSignature: string;
     integratedLufs: number;
     loudnessRange: number;
@@ -157,9 +172,13 @@ export interface MusicAnalysisWorkerResult {
     start: number;
     end: number;
     confidence: number;
+    /** Relative to the detected key; empty for N.C. */
+    romanNumeral: string;
   }>;
   beats: number[];
   downbeats: number[];
+  /** Smoothed local tempo at each beat. */
+  tempoCurve: Array<{ time: number; bpm: number }>;
   melody: {
     pitchRangeOctaves: number;
     pitchStability: number;
@@ -240,11 +259,13 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         id: request.id,
         result,
       },
-      [
-        result.heatmaps.chroma.values.buffer,
-        result.heatmaps.mel.values.buffer,
-        result.heatmaps.cqt.values.buffer,
-      ],
+      {
+        transfer: [
+          result.heatmaps.chroma.values.buffer,
+          result.heatmaps.mel.values.buffer,
+          result.heatmaps.cqt.values.buffer,
+        ],
+      },
     );
   } catch (error) {
     if (error instanceof CancelledError) {
@@ -280,9 +301,14 @@ function runAnalysis(request: AnalyzeRequest): MusicAnalysisWorkerResult {
   }
 
   postProgress(request.id, 0.1, 'Running musical analysis');
-  const analysis = wasmModule.analyzeWithProgress(samples, sampleRate, (progress, stage) => {
-    postProgress(request.id, 0.1 + progress * 0.22, stage);
-  });
+  const analysis = wasmModule.analyzeWithProgress(
+    samples,
+    sampleRate,
+    (progress, stage) => {
+      postProgress(request.id, 0.1 + progress * 0.22, stage);
+    },
+    ANALYZE_OPTIONS,
+  );
 
   ensureNotCancelled(request.id);
   postProgress(request.id, 0.35, 'Finding alternate keys');
@@ -344,6 +370,9 @@ function runAnalysis(request: AnalyzeRequest): MusicAnalysisWorkerResult {
   const cqt = wasmModule.cqt(samples, sampleRate, spectralHop, undefined, 72, 12);
 
   postProgress(request.id, 0.96, 'Finalizing report');
+  const beats = Array.from(analysis.beatTimes || []).slice(0, MAX_BEATS);
+  const localBpm = Array.from(analysis.beatLocalBpm || []);
+  const tuning = analysis.tuning ?? 0;
   return {
     version: wasmModule.version(),
     duration,
@@ -354,6 +383,8 @@ function runAnalysis(request: AnalyzeRequest): MusicAnalysisWorkerResult {
       bpmConfidence: analysis.bpmConfidence,
       keyName: analysis.key?.name || '-',
       keyConfidence: analysis.key?.confidence ?? 0,
+      tuning,
+      referenceHz: wasmModule.tuningToReferenceHz(tuning),
       timeSignature: `${analysis.timeSignature?.numerator || 4}/${analysis.timeSignature?.denominator || 4}`,
       integratedLufs: loudness.integratedLufs,
       loudnessRange: loudness.loudnessRange,
@@ -369,8 +400,11 @@ function runAnalysis(request: AnalyzeRequest): MusicAnalysisWorkerResult {
     })),
     sections: sections.map(serializeSection),
     chords: analysis.chords.map(serializeChord).slice(0, 400),
-    beats: Array.from(analysis.beatTimes || []).slice(0, 1200),
+    beats,
     downbeats: downbeats.slice(0, 600),
+    tempoCurve: beats
+      .slice(0, localBpm.length)
+      .map((time, index) => ({ time, bpm: localBpm[index] })),
     melody: {
       pitchRangeOctaves: melody.pitchRangeOctaves,
       pitchStability: melody.pitchStability,
@@ -391,6 +425,7 @@ function runAnalysis(request: AnalyzeRequest): MusicAnalysisWorkerResult {
   };
 }
 
+const MAX_BEATS = 1200;
 const VECTORSCOPE_POINTS = 640;
 
 function buildMetering(
@@ -470,11 +505,10 @@ function serializeClipping(clipping: ClippingReport): DeliveryMetering['clipping
 }
 
 function mixChannels(left?: Float32Array, right?: Float32Array): Float32Array {
+  if (!wasmModule) throw new Error('WASM module is not initialized');
   if (!left?.length) throw new Error('Audio samples are missing');
   if (!right || right.length !== left.length) return new Float32Array(left);
-  const mono = new Float32Array(left.length);
-  for (let i = 0; i < left.length; i++) mono[i] = (left[i] + right[i]) * 0.5;
-  return mono;
+  return wasmModule.downmix([left, right], 0)[0];
 }
 
 function interleaveStereo(left: Float32Array, right: Float32Array): Float32Array {
@@ -501,6 +535,7 @@ function strideToArray(values: Float32Array, target: number): number[] {
 function prepareSamplesForAnalysis(samples: Float32Array, sampleRate: number) {
   if (!wasmModule) throw new Error('WASM module is not initialized');
   const duration = samples.length / sampleRate;
+  // Past two minutes the pass runs at 22.05 kHz to keep the wait short.
   const targetSampleRate = duration > 120 && sampleRate > 22_050 ? 22_050 : sampleRate;
   if (targetSampleRate === sampleRate) {
     return { samples, sampleRate, resampled: false };
@@ -523,12 +558,13 @@ function serializeSection(section: Section) {
   };
 }
 
-function serializeChord(chord: Chord) {
+function serializeChord(chord: AnalysisChord) {
   return {
     name: chord.name,
     start: chord.start,
     end: chord.end,
     confidence: chord.confidence,
+    romanNumeral: chord.romanNumeral ?? '',
   };
 }
 

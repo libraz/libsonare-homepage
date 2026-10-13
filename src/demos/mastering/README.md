@@ -14,7 +14,7 @@ operations, so what you hear is what the WAV contains. Nothing is uploaded.
 | `masteringState.ts` | The project state, its mutators, session JSON and the earlier preset format |
 | `masteringEngine.ts` | State → engine ops: three lanes (After, Before, Reference), the 13-slot insert column, the export render and the loudness fit |
 | `masteringPresetMap.ts`, `masteringMacros.ts` | Quick genre × venue presets and the Tone / Width / Dynamics / Ceiling macros |
-| `mastering.worker.ts`, `masteringWorkerClient.ts` | Repair preprocess, loudness fit, export, the lane loudness for the A/B match, assistant, reference analysis |
+| `mastering.worker.ts`, `masteringWorkerClient.ts` | Repair detection (`masteringRepairAnalyze`) and preprocess (`masteringRepairApply`), loudness fit, export, the lane loudness for the A/B match, assistant, reference analysis at the reference's own rate |
 | `useMastering.ts` | Page controller: history, engine apply, audio registry, Worker jobs |
 | `useMasteringMetering.ts` | Engine meter telemetry plus the analyser tap for spectrum and goniometer |
 | `useMasteringSession.ts` | localStorage persistence |

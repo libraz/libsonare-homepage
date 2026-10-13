@@ -14,7 +14,7 @@
  * lanes still read with the colours removed.
  */
 import { computed, nextTick, ref, watch } from 'vue';
-import { TransportButton } from '@/components/ui';
+import { DemoNotice, TransportButton } from '@/components/ui';
 import type { StepBassCopy } from '@/demos/step-bass/stepBassCopy';
 import { STEP_COUNT } from '@/demos/step-bass/stepBassPatch';
 import { STEP_NOTE_MAX, STEP_NOTE_MIN } from '@/demos/step-bass/stepBassPatterns';
@@ -549,8 +549,14 @@ const reasons = computed(() => {
         </span>
       </div>
 
-      <p v-for="reason in reasons" :key="reason" class="step-grid__reason">{{ reason }}</p>
-      <p class="step-grid__keyhint">{{ copy.grid.keyHint }}</p>
+      <DemoNotice v-for="reason in reasons" :key="reason" tone="hint">{{ reason }}</DemoNotice>
+      <DemoNotice tone="hint">
+        <kbd class="demo-kbd">←</kbd> <kbd class="demo-kbd">→</kbd> <kbd class="demo-kbd">↑</kbd>
+        <kbd class="demo-kbd">↓</kbd> {{ copy.grid.keyHint.move }} ·
+        <kbd class="demo-kbd">Space</kbd> {{ copy.grid.keyHint.change }} ·
+        <kbd class="demo-kbd">+</kbd> <kbd class="demo-kbd">−</kbd> {{ copy.grid.keyHint.semitone }}
+        <kbd class="demo-kbd">PgUp</kbd> <kbd class="demo-kbd">PgDn</kbd> {{ copy.grid.keyHint.octave }}
+      </DemoNotice>
     </div>
   </div>
 </template>

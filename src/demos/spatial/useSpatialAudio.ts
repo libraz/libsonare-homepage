@@ -1,15 +1,8 @@
 import { computed, onBeforeUnmount, ref } from 'vue';
 import type { RenderNote } from '@/demos/spatial/renderNotes';
-import type { RoomGeometry } from '@/demos/spatial/spatial.worker';
+import type { MorphGeometry } from '@/demos/spatial/spatial.worker';
 import { createSpatialRpc } from '@/demos/spatial/spatialWorkerClient';
 import { decodeAudioBuffer, wavBlob } from '@/utils/audio';
-
-type MorphGeometry = Partial<RoomGeometry> & {
-  lengthM: number;
-  widthM: number;
-  heightM: number;
-  absorption?: number;
-};
 
 /** How much of the loaded content is sent through the target room. */
 const MORPH_EXCERPT_SECONDS = 15;

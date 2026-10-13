@@ -13,17 +13,18 @@ Bilingual throughout: English under `src/docs/`, Japanese mirrored under
 
 | Demo | What it does |
 | --- | --- |
-| [Visual Player](https://libsonare.libraz.net/analyzer) | Audio player with real-time chroma and spectrum visualization |
 | [Mastering Studio](https://libsonare.libraz.net/mastering) | Hit streaming loudness targets with presets, and export a WAV |
 | [Music Analysis Studio](https://libsonare.libraz.net/music-analysis) | Structure, harmony, melody, loudness and spectral views |
+| [Piano Transcription](https://libsonare.libraz.net/transcribe) | A piano recording turned into MIDI on a roll under its waveform, played back on the built-in piano |
 | [Mixing Studio](https://libsonare.libraz.net/mixing) | Up to eight stem tracks, a scene as JSON, and a WAV bounce |
 | [Realtime Voice Changer](https://libsonare.libraz.net/realtime-fx) | Local microphone voice changer with character presets |
-| [Spatial Room Scanner](https://libsonare.libraz.net/spatial) | Estimate room geometry, reverb and source distance from a recording |
+| [Visual Player](https://libsonare.libraz.net/analyzer) | Audio player with real-time chroma and spectrum visualization |
 | [Synth Playground](https://libsonare.libraz.net/synth) | Play the built-in polyphonic synth from a keyboard or a USB MIDI device |
 | [Studio Mini](https://libsonare.libraz.net/studio) | Step-sequence three tracks, mix them, bounce the loop |
 | [Piano Practice](https://libsonare.libraz.net/practice) | Falling notes, a lit keyboard and MIDI-input scoring |
-| [GS Sound Module](https://libsonare.libraz.net/gs-module) | Sixteen parts, one insertion effect, and your own `.mid` through them |
 | [Step Bass](https://libsonare.libraz.net/step-bass) | Sixteen steps, one voice, a diode-ladder lowpass with per-step accent and slide |
+| [GS Sound Module](https://libsonare.libraz.net/gs-module) | Sixteen parts, one insertion effect, and your own `.mid` through them |
+| [Spatial Room Scanner](https://libsonare.libraz.net/spatial) | Estimate room geometry, reverb and source distance from a recording |
 
 `src/demos/manifest.ts` is the one table binding a demo's id to its route and
 its directory; `tests/readme.test.ts` fails if this list drifts from it.

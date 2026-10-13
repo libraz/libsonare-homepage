@@ -5,6 +5,7 @@
  * estimate of the last export.
  */
 import { computed } from 'vue';
+import { DemoEmpty, DemoNotice, Tooltip } from '@/components/ui';
 import { useMasteringCopy } from '@/demos/mastering/masteringCopy';
 import { assistantNoteText, unmappedLabels } from '@/demos/mastering/masteringInsightLabels';
 import { formatNumber } from '@/demos/mastering/masteringUi';
@@ -37,53 +38,58 @@ const unmappedText = computed(() => unmappedLabels(props.unmapped, copy.value));
     <header class="insights__head">
       <span class="insights__state" role="status">{{ analyzing ? copy.insights.analyzing : '' }}</span>
       <span class="insights__actions">
-        <button type="button" :disabled="!hasProgram || analyzing" @click="emit('refresh')">
+        <button type="button" class="demo-btn demo-btn--sm" :disabled="!hasProgram || analyzing" @click="emit('refresh')">
           {{ copy.insights.refresh }}
         </button>
-        <button type="button" class="is-primary" :disabled="!canApply || disabled" @click="emit('apply')">
+        <button type="button" class="demo-btn demo-btn--sm demo-btn--primary" :disabled="!canApply || disabled" @click="emit('apply')">
           {{ copy.insights.apply }}
         </button>
       </span>
     </header>
-    <p v-if="!hasProgram" class="insights__empty">{{ copy.insights.empty }}</p>
-    <template v-else>
-      <dl class="insights__profile">
-        <div v-for="item in profileItems" :key="item.label">
-          <dt>{{ item.label }}</dt>
-          <dd>{{ item.value }}</dd>
+    <Transition name="demo-fade" mode="out-in">
+      <DemoEmpty v-if="!hasProgram" :title="copy.status.idle" compact>{{ copy.insights.empty }}</DemoEmpty>
+      <div v-else class="insights__body">
+        <dl class="insights__profile">
+          <div v-for="item in profileItems" :key="item.label">
+            <dt>{{ item.label }}</dt>
+            <dd>{{ item.value }}</dd>
+          </div>
+        </dl>
+        <div class="insights__block">
+          <h4>{{ copy.insights.suggestions }}</h4>
+          <ul v-if="notes.length">
+            <li v-for="note in notes" :key="note">{{ note }}</li>
+          </ul>
+          <DemoNotice v-else tone="hint">{{ copy.insights.suggestionHint }}</DemoNotice>
+          <p v-if="unmappedText.length" class="insights__unmapped">
+            <span class="insights__unmapped-label">
+              {{ copy.insights.unmapped }}
+              <Tooltip :title="copy.insights.unmapped" :body="copy.insights.unmappedHint" :aria-label="copy.insights.unmapped" />
+            </span>
+            <span v-for="label in unmappedText" :key="label" class="insights__unmapped-item">{{ label }}</span>
+          </p>
         </div>
-      </dl>
-      <div class="insights__block">
-        <h4>{{ copy.insights.suggestions }}</h4>
-        <ul v-if="notes.length">
-          <li v-for="note in notes" :key="note">{{ note }}</li>
-        </ul>
-        <p v-else class="insights__empty">{{ copy.insights.suggestionHint }}</p>
-        <p v-if="unmappedText.length" class="insights__unmapped" :title="copy.insights.unmappedHint">
-          <span>{{ copy.insights.unmapped }}</span>
-          <span v-for="label in unmappedText" :key="label" class="insights__unmapped-item">{{ label }}</span>
-        </p>
+        <div class="insights__block">
+          <h4>{{ copy.insights.delivery }}</h4>
+          <table v-if="preview.length" class="insights__table">
+            <caption>{{ copy.insights.previewHint }}</caption>
+            <tbody>
+              <tr v-for="row in preview" :key="row.name" :class="{ 'is-risk': row.ceilingRisk }">
+                <th scope="row">{{ row.name }}</th>
+                <td>{{ formatNumber(row.normalizationGainDb, 1, true) }} dB</td>
+                <td>
+                  {{ row.ceilingRisk ? copy.insights.ceilingRisk : '' }}
+                  <small v-if="row.ceilingRisk && Number.isFinite(row.safeCeilingDb)">
+                    {{ fill(copy.insights.safeCeiling, { value: `${formatNumber(row.safeCeilingDb, 1)} dBTP` }) }}
+                  </small>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <DemoNotice v-else tone="hint">{{ copy.insights.previewEmpty }}</DemoNotice>
+        </div>
       </div>
-      <div class="insights__block">
-        <h4>{{ copy.insights.delivery }}</h4>
-        <table v-if="preview.length" class="insights__table">
-          <caption>{{ copy.insights.previewHint }}</caption>
-          <tbody>
-            <tr v-for="row in preview" :key="row.name" :class="{ 'is-risk': row.ceilingRisk }">
-              <th scope="row">{{ row.name }}</th>
-              <td>{{ formatNumber(row.normalizationGainDb, 1, true) }} dB</td>
-              <td>
-                {{ row.ceilingRisk ? copy.insights.ceilingRisk : '' }}
-                <small v-if="row.ceilingRisk && Number.isFinite(row.safeCeilingDb)">
-                  {{ fill(copy.insights.safeCeiling, { value: `${formatNumber(row.safeCeilingDb, 1)} dBTP` }) }}
-                </small>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <p v-else class="insights__empty">{{ copy.insights.previewEmpty }}</p>
-      </div>
-    </template>
+    </Transition>
   </section>
 </template>
 
@@ -112,37 +118,9 @@ const unmappedText = computed(() => unmappedLabels(props.unmapped, copy.value));
   gap: 6px;
 }
 
-.insights button {
-  padding: 5px 10px;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--demo-text);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.insights button.is-primary {
-  border-color: var(--demo-accent-border);
-  color: var(--demo-accent);
-}
-
-.insights button:disabled {
-  opacity: var(--demo-disabled-opacity);
-  cursor: not-allowed;
-}
-
-.insights button:focus-visible {
-  outline: 2px solid var(--demo-accent);
-  outline-offset: 2px;
-}
-
-.insights__empty {
-  margin: 0;
-  color: var(--demo-text-muted);
-  font-size: 12px;
-  line-height: 1.5;
+.insights__body {
+  display: grid;
+  gap: 12px;
 }
 
 .insights__profile {
@@ -194,7 +172,10 @@ const unmappedText = computed(() => unmappedLabels(props.unmapped, copy.value));
   font-size: 11px;
 }
 
-.insights__unmapped > span:first-child {
+.insights__unmapped-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: var(--demo-warn-text);
   font-family: var(--font-mono);
 }
@@ -202,7 +183,7 @@ const unmappedText = computed(() => unmappedLabels(props.unmapped, copy.value));
 .insights__unmapped-item {
   padding: 0 6px;
   border: 1px solid var(--demo-border);
-  border-radius: 3px;
+  border-radius: calc(var(--demo-radius-sm) - 2px);
   color: var(--demo-text-muted);
 }
 

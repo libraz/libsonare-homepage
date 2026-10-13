@@ -10,7 +10,7 @@ import type {
   MixWorkerRequest,
   MixWorkerResponse,
 } from '@/demos/mixing/mixing.worker';
-import { exportFrames } from '@/demos/mixing/mixingEngine';
+import { buildFull, exportFrames, MIX_TEMPO_BPM } from '@/demos/mixing/mixingEngine';
 import {
   addTrack,
   createMixingState,
@@ -18,7 +18,8 @@ import {
   setMasterSlotBypass,
   setSend,
 } from '@/demos/mixing/mixingState';
-import { loadIndexModule, noise, sine } from '../../wasm/support/engineHarness';
+import { applyOps, createRawTarget } from '@/utils/engineApply';
+import { createRawEngine, noise, sine } from '../../wasm/support/engineHarness';
 
 const SR = 48_000;
 
@@ -86,10 +87,11 @@ describe('mixing worker', () => {
     expect(reply.type).toBe('bounced');
     if (reply.type !== 'bounced') return;
 
-    const wasm = await loadIndexModule();
-    const frames = exportFrames(state, SR, (p, params, rate) =>
-      wasm.masteringInsertTiming(p, params, rate),
-    );
+    const raw = await createRawEngine(SR);
+    raw.setTempo(MIX_TEMPO_BPM);
+    applyOps(createRawTarget(raw), buildFull(state, new Map(audio.map((t) => [t.trackId, t])), SR));
+    const frames = exportFrames(state, SR, raw);
+    raw.destroy();
     expect(reply.result.left.length).toBe(frames);
     expect(reply.result.right.length).toBe(frames);
     expect(reply.result.integratedLufs).toBeGreaterThan(-40);

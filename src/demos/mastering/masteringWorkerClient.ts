@@ -3,7 +3,7 @@
  * from the page's audio registry into the Worker, so while it runs those
  * arrays are detached (byteLength 0) and the page must not edit; when the job
  * settles, however it settles, the returned clips — and any the job produced
- * (the repaired program, the conformed reference, the rendered master) — are
+ * (the repaired program, the measured reference, the rendered master) — are
  * put back into the same registry.
  */
 
@@ -16,6 +16,7 @@ import type {
   MasteringPlatformPreviewRow,
   MasteringPrepareResult,
   MasteringReferenceResult,
+  MasteringRepairDetection,
   MasteringWorkerRequest,
   MasteringWorkerResponse,
   MasteringWorkerStage,
@@ -37,6 +38,11 @@ export type MasteringProgress = (progress: number, stage: MasteringWorkerStage) 
 export type MasteringJob<T> = WorkerJob<T>;
 
 export interface MasteringWorkerClient {
+  /** Measures the defects of `source` and recommends repair stages. */
+  detectRepair(
+    registry: MasteringAudioRegistry,
+    onProgress?: MasteringProgress,
+  ): MasteringJob<MasteringRepairDetection>;
   /** Runs the repair stages over `source`; the registry gains `program`. */
   prepare(
     registry: MasteringAudioRegistry,
@@ -69,7 +75,7 @@ export interface MasteringWorkerClient {
     preset?: MasteringAssistantPreset,
     onProgress?: MasteringProgress,
   ): MasteringJob<MasteringAssistantResult>;
-  /** Conforms `reference` to the program rate and compares the two. */
+  /** Measures `reference` at its own rate and compares it with the program. */
   analyzeReference(
     registry: MasteringAudioRegistry,
     onProgress?: MasteringProgress,
@@ -128,6 +134,10 @@ export function createMasteringWorkerClient(): MasteringWorkerClient {
   }
 
   return {
+    detectRepair: (registry, onProgress) =>
+      run({ type: 'detectRepair' }, registry, ['source'], onProgress, (message) =>
+        message.type === 'repairDetected' ? message.result : undefined,
+      ),
     prepare: (registry, repair, onProgress) =>
       run({ type: 'prepare', repair }, registry, ['source'], onProgress, (message) =>
         message.type === 'prepared' ? message.result : undefined,

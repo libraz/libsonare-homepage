@@ -3,9 +3,16 @@
   max-width: 1400px;
   margin: 0 auto;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 12px;
   font-family: var(--font-mono);
+}
+
+.analyzer__error {
+  width: 100%;
+  max-width: 500px;
 }
 
 /* ===== PROGRESS ===== */

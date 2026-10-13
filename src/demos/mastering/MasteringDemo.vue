@@ -4,10 +4,10 @@
  * EQ and 13 fixed inserts on lane 1, with Before and Reference lanes for
  * A/B/R), in a Quick flow and a Studio view over the same project state.
  */
-import { computed, onMounted, onUnmounted, provide } from 'vue';
-import ToolModeTabs, { type ToolModeOption } from '@/components/ToolModeTabs.vue';
+import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import ToolShell from '@/components/ToolShell.vue';
 import ToolStatusBar, { type ToolStatusField } from '@/components/ToolStatusBar.vue';
+import SegmentedControl, { type SegmentedOption } from '@/components/ui/SegmentedControl.vue';
 import { useI18n } from '@/composables/useI18n';
 import { isMacPlatform, useShortcuts } from '@/composables/useShortcuts';
 import { useUrlState } from '@/composables/useUrlState';
@@ -50,7 +50,7 @@ const mode = computed<MasteringMode>({
     if (next !== state.value.mode) m.edit('setMode', next);
   },
 });
-const modeOptions = computed<ToolModeOption[]>(() => [
+const modeOptions = computed<SegmentedOption[]>(() => [
   { id: 'quick', label: copy.value.modes.quick },
   { id: 'studio', label: copy.value.modes.studio },
 ]);
@@ -65,10 +65,27 @@ const modeUrl = useUrlState([
   },
 ]);
 
+// Holds the page height across a Quick/Studio switch, so the crossfade does not scroll the page.
+const viewRef = ref<HTMLElement | null>(null);
+const reservedHeight = ref<number | null>(null);
+watch(mode, () => {
+  reservedHeight.value = viewRef.value?.offsetHeight ?? null;
+});
+
 const mac = isMacPlatform();
-const keysHint = computed(() =>
-  fill(copy.value.header.keys, { mod: mac ? '⌘' : 'Ctrl+', shift: mac ? '⇧' : 'Shift+' }),
-);
+const shortcuts = computed(() => {
+  const label = copy.value.header.shortcuts;
+  const mod = mac ? '⌘' : 'Ctrl';
+  const shift = mac ? '⇧' : 'Shift';
+  return [
+    { keys: ['Space'], label: label.play },
+    { keys: ['Home'], label: label.start },
+    { keys: ['L'], label: label.loop },
+    { keys: ['A', 'B', 'R'], label: label.monitor },
+    { keys: [mod, 'Z'], label: label.undo },
+    { keys: [shift, mod, 'Z'], label: label.redo },
+  ];
+});
 
 useShortcuts({
   Space: () => m.togglePlay(),
@@ -130,7 +147,7 @@ const statusFields = computed<ToolStatusField[]>(() => {
       value: `${platformName.value} · ${formatNumber(m.targetLufs.value, 1)} LUFS`,
     },
     { key: keys.fit, value: fitField.value },
-    { key: keys.prep, value: prepField.value },
+    { key: keys.prep, value: prepField.value, divider: true },
     { key: keys.render, value: renderField.value },
   ];
 });
@@ -173,21 +190,24 @@ onUnmounted(() => {
     status="active"
     :status-label="copy.header.privacy"
     :docs-path="docsPath"
+    :guide-title="copy.header.guideTitle"
+    :guide-body="copy.header.guideBody"
+    :guide-link-label="copy.header.guideLink"
     :opposite-locale-path="otherLocalePath"
   >
     <template #modes>
       <div class="master-page master-page__chrome">
-        <ToolModeTabs
+        <SegmentedControl
           :model-value="mode"
           :ariaLabel="copy.header.modeLabel"
           :options="modeOptions"
           @update:model-value="(next: string) => (mode = next as MasteringMode)"
         />
         <div class="master-page__history">
-          <button type="button" :disabled="!m.canUndo.value" :aria-keyshortcuts="mac ? 'Meta+Z' : 'Control+Z'" @click="m.undo">
+          <button type="button" class="demo-btn demo-btn--sm" :disabled="!m.canUndo.value" :aria-keyshortcuts="mac ? 'Meta+Z' : 'Control+Z'" @click="m.undo">
             {{ copy.header.undo }}
           </button>
-          <button type="button" :disabled="!m.canRedo.value" :aria-keyshortcuts="mac ? 'Meta+Shift+Z' : 'Control+Shift+Z'" @click="m.redo">
+          <button type="button" class="demo-btn demo-btn--sm" :disabled="!m.canRedo.value" :aria-keyshortcuts="mac ? 'Meta+Shift+Z' : 'Control+Shift+Z'" @click="m.redo">
             {{ copy.header.redo }}
           </button>
         </div>
@@ -206,14 +226,35 @@ onUnmounted(() => {
     </template>
 
     <div class="master-page master-page__main">
-      <div v-if="backgroundJob" class="master-page__job" role="status">
-        <span>{{ copy.jobs[backgroundJob.kind] }} {{ Math.round(backgroundJob.progress * 100) }}%</span>
-        <span class="master-page__bar" aria-hidden="true"><i :style="{ width: `${backgroundJob.progress * 100}%` }"></i></span>
-        <button type="button" @click="m.cancelJob">{{ copy.jobs.cancel }}</button>
+      <Transition name="demo-rise">
+        <div v-if="backgroundJob" class="master-page__job">
+          <span>{{ copy.jobs[backgroundJob.kind] }} {{ Math.round(backgroundJob.progress * 100) }}%</span>
+          <span
+            class="master-page__bar"
+            role="progressbar"
+            :aria-label="copy.jobs[backgroundJob.kind]"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            :aria-valuenow="Math.round(backgroundJob.progress * 100)"
+          ><i :style="{ transform: `scaleX(${backgroundJob.progress})` }"></i></span>
+          <button type="button" class="demo-btn demo-btn--sm" @click="m.cancelJob">{{ copy.jobs.cancel }}</button>
+        </div>
+      </Transition>
+      <div
+        ref="viewRef"
+        :style="reservedHeight === null ? undefined : { minBlockSize: `${reservedHeight}px` }"
+      >
+        <Transition name="demo-fade" mode="out-in" @after-enter="reservedHeight = null">
+          <MasteringQuick v-if="mode === 'quick'" :m="m" />
+          <MasteringStudio v-else :m="m" :glossary-base="glossaryBase" />
+        </Transition>
       </div>
-      <MasteringQuick v-if="mode === 'quick'" :m="m" />
-      <MasteringStudio v-else :m="m" :glossary-base="glossaryBase" />
-      <p class="master-page__keys">{{ keysHint }}</p>
+      <p class="master-page__keys" :aria-label="copy.header.shortcutsLabel">
+        <span v-for="shortcut in shortcuts" :key="shortcut.label" class="master-page__key">
+          <kbd v-for="key in shortcut.keys" :key="key" class="demo-kbd">{{ key }}</kbd>
+          {{ shortcut.label }}
+        </span>
+      </p>
     </div>
   </ToolShell>
 </template>

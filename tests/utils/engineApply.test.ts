@@ -337,7 +337,7 @@ function parityOps(): EngineOp[] {
   return [
     {
       type: 'topology',
-      buses: [{ busId: REVERB_BUS }],
+      buses: [{ busId: REVERB_BUS }, { busId: PLAIN_BUS, gainDb: -6 }],
       lanes: [
         { trackId: 1, sends: [{ busId: REVERB_BUS, levelDb: -8, sendTiming: 'postFader' }] },
         { trackId: 2, sends: [{ busId: REVERB_BUS, levelDb: -12, sendTiming: 'preFader' }] },
@@ -440,6 +440,7 @@ function parityEditOps(): EngineOp[] {
       sends: [{ busId: REVERB_BUS, levelDb: -4, sendTiming: 'postFader' }],
     },
     { type: 'fader', target: 2, db: -9 },
+    { type: 'outputBus', trackId: 1, busId: PLAIN_BUS },
     { type: 'insertBypass', strip: parityLane, insertIndex: 1, bypassed: true },
     {
       type: 'stripScalars',

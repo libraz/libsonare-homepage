@@ -105,51 +105,26 @@
   color: var(--demo-text-strong);
 }
 
-.heatmap-tabs {
-  display: flex;
-  gap: 6px;
-}
-
-.heatmap-tabs__button {
-  border: 1px solid var(--demo-border);
-  border-radius: 5px;
-  background: transparent;
-  color: var(--demo-text-muted);
-  cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.heatmap-tabs__button {
-  transition: border-color var(--transition-fast), color var(--transition-fast);
-}
-
-.heatmap-tabs__button:not(.heatmap-tabs__button--active):hover {
-  border-color: var(--demo-border-strong);
-  color: var(--demo-text);
-}
-
-.heatmap-tabs__button:focus-visible {
-  outline: 2px solid var(--demo-accent);
-  outline-offset: 2px;
-}
-
-.heatmap-tabs__button--active {
-  border-color: var(--demo-accent);
-  color: var(--demo-accent-light);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .heatmap-tabs__button {
-    transition: none;
-  }
+.heatmap-picker {
+  width: auto;
 }
 
 .analysis-table {
   display: grid;
   padding: 12px;
+}
+
+.analysis-table__head {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 0 6px;
+  border-bottom: 1px solid var(--demo-border);
+  color: var(--demo-text-faint);
+  font-family: var(--font-mono);
+  font-size: var(--demo-label-size);
+  font-weight: var(--demo-label-weight);
+  letter-spacing: var(--demo-label-tracking);
+  text-transform: uppercase;
 }
 
 .analysis-table__row {
@@ -179,18 +154,13 @@
 
 .analysis-table__meter i {
   position: absolute;
-  inset: 0 auto 0 0;
+  inset: 0;
   display: block;
   border-radius: 3px;
   /* Colour comes from the .is-high/.is-mid/.is-low tone class on the element. */
   background: var(--demo-accent);
-  transition: width 0.45s ease;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .analysis-table__meter i {
-    transition: none;
-  }
+  transform-origin: left center;
+  transition: transform var(--demo-dur-slow) var(--demo-ease-enter);
 }
 
 .analysis-table__meter i.is-high { background: var(--demo-success); }
@@ -202,6 +172,7 @@
   min-width: 34px;
   text-align: right;
   color: var(--demo-accent-light);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Confidence tone scale shared by the BPM chip and the harmony meter bars. */
@@ -223,7 +194,8 @@
   line-height: 1;
   padding: 2px 4px;
   border-radius: 3px;
-  color: var(--demo-bg, #0b0b12);
+  color: var(--demo-bg);
+  font-variant-numeric: tabular-nums;
 }
 
 .conf-chip.is-low {

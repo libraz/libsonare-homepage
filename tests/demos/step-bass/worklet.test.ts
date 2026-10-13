@@ -4,7 +4,6 @@ import { runInThisContext } from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyCompiled } from '@/demos/step-bass/stepBassApply';
 import {
-  MASTER_FADER_PARAM_ID,
   STEP_BASS_ARTICULATION,
   STEP_BASS_BASE_PATCH,
   STEP_BASS_CHANNEL,
@@ -17,7 +16,7 @@ import {
 } from '@/demos/step-bass/stepBassProcessor';
 import type { CompiledPattern } from '@/demos/step-bass/stepBassTypes';
 import { useStepBassEngine } from '@/demos/step-bass/useStepBassEngine';
-import { masterLimiterStripJson } from '@/utils/masterLimiter';
+import { MASTER_FADER_PARAM_ID, masterLimiterStripJson } from '@/utils/masterLimiter';
 import { noteOffWord, noteOnWord } from '@/utils/ump';
 
 const SAMPLE_RATE = 48_000;

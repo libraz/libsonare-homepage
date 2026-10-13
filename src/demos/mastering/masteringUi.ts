@@ -159,7 +159,11 @@ export const MASTERING_SLOT_CONTROLS: Readonly<Record<MasteringSlotId, Mastering
     },
     {
       group: 'detail',
-      params: [ms('attackMs', 0.1, 20), ms('releaseMs', 10, 400, 1), amount('bandpassQ', 4)],
+      params: [
+        ms('attackMs', 0.1, 20),
+        ms('releaseMs', 10, 400, 1),
+        { name: 'bandpassQ', min: 0.5, max: 4, step: 0.05, unit: '' },
+      ],
     },
   ],
   transient: [
@@ -199,7 +203,7 @@ export const MASTERING_SLOT_CONTROLS: Readonly<Record<MasteringSlotId, Mastering
     bandGroup(0),
     bandGroup(1),
     bandGroup(2),
-    { group: 'crossover', params: [hz('cutoff0Hz', 40, 1000), hz('cutoff1Hz', 1000, 12000)] },
+    { group: 'crossover', params: [hz('cutoff0Hz', 40, 12000), hz('cutoff1Hz', 40, 12000)] },
   ],
   tape: [
     {
@@ -265,6 +269,26 @@ export const MASTERING_SLOT_CONTROLS: Readonly<Record<MasteringSlotId, Mastering
     },
     { group: 'detail', params: [ms('lookaheadMs', 0.5, 10)] },
   ],
+};
+
+/** A parameter that must stay strictly below (`lt`) or above (`gt`) a sibling. */
+export interface MasteringParamOrder {
+  key: string;
+  relation: 'lt' | 'gt';
+}
+
+/**
+ * The `dependsOn` orderings `masteringInsertParamInfo` publishes among the
+ * parameters the layout carries, per processor. Mirrored so the controls are
+ * right before the engine boots; `enginePlayback.test.ts` pins it.
+ */
+export const MASTERING_PARAM_ORDER: Readonly<
+  Record<string, Readonly<Record<string, readonly MasteringParamOrder[]>>>
+> = {
+  'multiband.compressor': {
+    cutoff0Hz: [{ key: 'cutoff1Hz', relation: 'lt' }],
+    cutoff1Hz: [{ key: 'cutoff0Hz', relation: 'gt' }],
+  },
 };
 
 /** Rows of the Studio rack: the repair preprocess, the strip EQ, then the 13 inserts. */

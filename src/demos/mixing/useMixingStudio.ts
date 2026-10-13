@@ -33,6 +33,7 @@ import {
   MIX_TEMPO_BPM,
   type MixAudio,
   secondsToPpq,
+  TRACK_SLOT_INDEX,
 } from '@/demos/mixing/mixingEngine';
 import {
   createEqResponder,
@@ -47,6 +48,7 @@ import {
   arrangementEndSec,
   checkAudioBudget,
   createMixingState,
+  duckKeyClosesCycle,
   type LoopState,
   MIXING_MUTATORS,
   type MixingState,
@@ -57,9 +59,11 @@ import { type MixingMetering, useMixingMetering } from '@/demos/mixing/useMixing
 import { useMixingSession } from '@/demos/mixing/useMixingSession';
 import {
   AudioInputBudgetError,
+  channelPlanes,
   decodeAudioBuffer,
   downloadBlob,
   downsampleWaveform,
+  foldToStereo,
   jsonBlob,
   triggerDownload,
   type WavDither,
@@ -70,6 +74,7 @@ import {
 } from '@/utils/audio';
 import { applyOps, createFacadeTarget, type EngineTarget } from '@/utils/engineApply';
 import { WorkerJobCancelled } from '@/utils/workerRpc';
+import type { MasteringInsertParamInfo } from '@/wasm/index.js';
 
 type Wasm = typeof import('@/wasm/index.js');
 type Mutators = typeof MIXING_MUTATORS;
@@ -380,13 +385,13 @@ export function useMixingStudio(options: MixingStudioOptions) {
 
   async function decode(file: File): Promise<Decoded | null> {
     const context = sonare.context.value;
-    if (!context) return null;
+    const module = wasm.value;
+    if (!context || !module) return null;
     try {
       const buffer = await decodeAudioBuffer(file, context, {
         maxDurationSeconds: MAX_DURATION_SECONDS,
       });
-      const left = buffer.getChannelData(0).slice();
-      const right = buffer.numberOfChannels > 1 ? buffer.getChannelData(1).slice() : left.slice();
+      const [left, right] = foldToStereo(module, channelPlanes(buffer));
       return decodedFrom(left, right, {
         fileName: file.name,
         sampleRate: buffer.sampleRate,
@@ -558,6 +563,24 @@ export function useMixingStudio(options: MixingStudioOptions) {
       seek(0);
     }
   });
+
+  /** The engine's parameter catalogue for `processor`; null until the WASM module is up. */
+  function paramInfo(processor: string): readonly MasteringInsertParamInfo[] | null {
+    return wasm.value?.masteringInsertParamInfo(processor) ?? null;
+  }
+
+  /**
+   * Whether `keyTrackId` may key the duck slot of `trackId`. The pure check
+   * covers a state the engine does not hold yet; once it does, the engine's own
+   * `canSetLaneSidechain` answers as well.
+   */
+  function canDuckKey(trackId: number, keyTrackId: number): boolean {
+    const audible = view.value;
+    if (duckKeyClosesCycle(audible.tracks, trackId, keyTrackId)) return false;
+    const engine = sonare.engine.value;
+    if (!engine || engineApplied.value !== audible) return true;
+    return engine.canSetLaneSidechain(trackId, TRACK_SLOT_INDEX.duck, keyTrackId).ok;
+  }
 
   function toggleSelected(field: 'muted' | 'soloed'): void {
     const track = selectedTrack.value;
@@ -791,6 +814,8 @@ export function useMixingStudio(options: MixingStudioOptions) {
     setLoop,
     toggleLoop,
     toggleSelected,
+    paramInfo,
+    canDuckKey,
     exportMix,
     downloadRender,
     exportProject,

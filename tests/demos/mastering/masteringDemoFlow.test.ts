@@ -113,6 +113,14 @@ describe('MasteringDemo', () => {
     expect(wrapper.find('.export__primary').attributes('disabled')).toBeDefined();
   });
 
+  it('opens with a page guide and lists its shortcuts as keys', async () => {
+    const wrapper = mount(MasteringDemo, { attachTo: document.body });
+    await flushPromises();
+    expect(wrapper.find('.tool-page__guide').text()).toContain('Load a mix, describe it');
+    const keys = wrapper.findAll('.master-page__keys kbd').map((node) => node.text());
+    expect(keys).toEqual(expect.arrayContaining(['Space', 'Home', 'L', 'A', 'B', 'R', 'Z']));
+  });
+
   it('edits through history: a genre pick, a monitor key and undo', async () => {
     const wrapper = mount(MasteringDemo, { attachTo: document.body });
     await flushPromises();
@@ -136,13 +144,13 @@ describe('MasteringDemo', () => {
   it('switches to Studio and back, reflecting the mode in the URL', async () => {
     const wrapper = mount(MasteringDemo, { attachTo: document.body });
     await flushPromises();
-    const studioTab = wrapper.findAll('.tool-mode-tabs__button')[1];
+    const studioTab = wrapper.findAll('.segmented__option')[1];
     await studioTab.trigger('click');
     await flushPromises();
     expect(wrapper.find('.studio').exists()).toBe(true);
     expect(wrapper.findAll('.rack__row')).toHaveLength(15);
     expect(window.location.search).toBe('?mode=studio');
-    await wrapper.findAll('.tool-mode-tabs__button')[0].trigger('click');
+    await wrapper.findAll('.segmented__option')[0].trigger('click');
     await flushPromises();
     expect(wrapper.find('.quick').exists()).toBe(true);
   });

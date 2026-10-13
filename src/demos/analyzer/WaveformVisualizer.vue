@@ -15,42 +15,20 @@ const emit = defineEmits<(e: 'seek', time: number) => void>();
 const { isDark } = useTheme();
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 
-// Canvas colors track the global demo tokens so the waveform recolors with the
-// theme; read them off the live element (tokens flip on html.dark) instead of
-// hard-coding per-theme RGBA. The bg uses the screen surface; the bars/progress
-// derive from the accent at fixed alphas.
-const bgColor = ref('rgb(6, 8, 12)');
-const barCol = ref('rgba(139, 92, 246, 0.25)');
-const progCol = ref('rgba(139, 92, 246, 0.85)');
-
-/**
- * Resolves a CSS color into "r, g, b" channels via a probe element so the
- * accent (any format) can be re-emitted at custom alphas.
- */
-function rgbChannels(color: string): string {
-  const probe = document.createElement('span');
-  probe.style.color = color;
-  probe.style.display = 'none';
-  document.body.appendChild(probe);
-  const resolved = getComputedStyle(probe).color;
-  probe.remove();
-  const match = resolved.match(/rgba?\(([^)]+)\)/);
-  if (!match) return '139, 92, 246';
-  const [r, g, b] = match[1].split(',');
-  return `${r.trim()}, ${g.trim()}, ${b.trim()}`;
-}
+// Canvas colors are the demo tokens, read off the live element when it mounts
+// and whenever the theme flips: the screen surface behind, the accent at two
+// strengths for the bars before and after the playhead.
+const bgColor = ref('');
+const barCol = ref('');
+const progCol = ref('');
 
 function syncColors() {
   if (!canvasRef.value) return;
   const styles = getComputedStyle(canvasRef.value);
-  const screen = styles.getPropertyValue('--demo-screen-bg').trim();
   const accent = styles.getPropertyValue('--demo-accent').trim();
-  if (screen) bgColor.value = screen;
-  if (accent) {
-    const ch = rgbChannels(accent);
-    barCol.value = `rgba(${ch}, 0.28)`;
-    progCol.value = `rgba(${ch}, 0.85)`;
-  }
+  bgColor.value = styles.getPropertyValue('--demo-screen-bg').trim();
+  barCol.value = `color-mix(in srgb, ${accent} 28%, transparent)`;
+  progCol.value = `color-mix(in srgb, ${accent} 85%, transparent)`;
 }
 
 const { setAudioBuffer, setBeats, setProgress, draw } = useWaveform(canvasRef, {
@@ -110,8 +88,10 @@ onMounted(() => {
 <template>
   <div class="waveform" @click="handleClick">
     <canvas ref="canvasRef" class="waveform__canvas"></canvas>
-    <!-- Playhead indicator -->
-    <div class="waveform__playhead" :style="{ left: `${((currentTime || 0) / (duration || 1)) * 100}%` }"></div>
+    <!-- Playhead: a full-width layer slid by transform, cursor at its left edge -->
+    <div class="waveform__playhead-track" :style="{ transform: `translateX(${((currentTime || 0) / (duration || 1)) * 100}%)` }">
+      <div class="waveform__playhead"></div>
+    </div>
     <!-- Grid overlay -->
     <div class="waveform__grid"></div>
   </div>
@@ -122,10 +102,11 @@ onMounted(() => {
   position: relative;
   width: 100%;
   height: 100px;
-  background: var(--demo-screen-bg, rgba(6, 8, 12, 1));
-  border: 1px solid var(--demo-border-strong, rgba(139, 92, 246, 0.15));
+  background: var(--demo-screen-bg);
+  border: 1px solid var(--demo-border-strong);
   overflow: hidden;
   cursor: pointer;
+  transition: border-color var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .waveform::before {
@@ -134,10 +115,10 @@ onMounted(() => {
   inset: 0;
   background: linear-gradient(
     180deg,
-    rgba(139, 92, 246, 0.02) 0%,
+    color-mix(in srgb, var(--demo-accent) 2%, transparent) 0%,
     transparent 30%,
     transparent 70%,
-    rgba(139, 92, 246, 0.02) 100%
+    color-mix(in srgb, var(--demo-accent) 2%, transparent) 100%
   );
   pointer-events: none;
   z-index: 1;
@@ -149,18 +130,24 @@ onMounted(() => {
   display: block;
 }
 
+.waveform__playhead-track {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
 .waveform__playhead {
   position: absolute;
   top: 0;
   bottom: 0;
+  left: 0;
   width: 2px;
+  margin-left: -1px;
   background: var(--demo-playhead);
   box-shadow:
     0 0 12px color-mix(in srgb, var(--demo-playhead) 80%, transparent),
     0 0 24px color-mix(in srgb, var(--demo-playhead) 40%, transparent);
-  z-index: 3;
-  pointer-events: none;
-  transition: left 0.03s linear;
 }
 
 .waveform__playhead::before {
@@ -197,15 +184,15 @@ onMounted(() => {
   background-image:
     repeating-linear-gradient(
       90deg,
-      rgba(139, 92, 246, 0.03) 0px,
-      rgba(139, 92, 246, 0.03) 1px,
+      color-mix(in srgb, var(--demo-accent) 3%, transparent) 0px,
+      color-mix(in srgb, var(--demo-accent) 3%, transparent) 1px,
       transparent 1px,
       transparent 10%
     ),
     repeating-linear-gradient(
       0deg,
-      rgba(139, 92, 246, 0.03) 0px,
-      rgba(139, 92, 246, 0.03) 1px,
+      color-mix(in srgb, var(--demo-accent) 3%, transparent) 0px,
+      color-mix(in srgb, var(--demo-accent) 3%, transparent) 1px,
       transparent 1px,
       transparent 50%
     );
@@ -214,7 +201,7 @@ onMounted(() => {
 }
 
 .waveform:hover {
-  border-color: var(--demo-accent-dim, rgba(139, 92, 246, 0.25));
+  border-color: var(--demo-accent-dim);
 }
 
 .waveform:hover .waveform__playhead {

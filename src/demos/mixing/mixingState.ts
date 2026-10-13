@@ -6,7 +6,8 @@
  *
  * Every strip has the fixed layout the engine is built with: six strip EQ bands
  * and six pre-fader insert slots (trim, gate, comp, de-ess, duck, width), two
- * aux buses (REVERB, DELAY) and a master with Glue and Limiter. Positions are
+ * aux buses (REVERB, DELAY), two subgroup buses a track can sum into instead of
+ * the master, and a master with Glue and Limiter. Positions are
  * seconds; the engine runs at 60 bpm so a quarter note is one second.
  *
  * The UI changes the state only through the mutators listed in
@@ -27,6 +28,7 @@ export type VcaGroupId = (typeof VCA_GROUP_IDS)[number];
 export type AutomationParam = 'fader' | 'pan' | 'width';
 export type AutomationCurve = 'linear' | 'exponential' | 'hold' | 's-curve';
 export type AuxBusName = 'reverb' | 'delay';
+export type GroupBusName = 'group1' | 'group2';
 export type TrackSlotName = 'trim' | 'gate' | 'comp' | 'deess' | 'duck' | 'width';
 export type MasterSlotName = 'glue' | 'limiter';
 
@@ -47,6 +49,7 @@ export const TRACK_SLOTS: readonly TrackSlotName[] = [
 ];
 export const MASTER_SLOTS: readonly MasterSlotName[] = ['glue', 'limiter'];
 export const AUX_BUSES: readonly AuxBusName[] = ['reverb', 'delay'];
+export const GROUP_BUSES: readonly GroupBusName[] = ['group1', 'group2'];
 
 /** Processor of each fixed slot. */
 export const TRACK_SLOT_PROCESSORS: Readonly<Record<TrackSlotName, string>> = {
@@ -129,12 +132,19 @@ export interface MixTrackState {
   /** Track whose signal keys the duck slot; `null` keys it from its own input. */
   duckKeyTrackId: number | null;
   sends: Record<AuxBusName, TrackSend>;
+  /** Subgroup bus the track sums into; `null` feeds the master directly. */
+  outputBus: GroupBusName | null;
   automation: Record<AutomationParam, AutomationPoint[]>;
 }
 
 export interface AuxBusState {
   gainDb: number;
   params: Record<string, number>;
+}
+
+/** A subgroup bus: a summing fader with no inserts. */
+export interface GroupBusState {
+  gainDb: number;
 }
 
 export interface MasterState {
@@ -152,6 +162,7 @@ export interface MixingState {
   version: typeof MIXING_PROJECT_VERSION;
   tracks: MixTrackState[];
   buses: Record<AuxBusName, AuxBusState>;
+  groups: Record<GroupBusName, GroupBusState>;
   master: MasterState;
   vcaGains: Record<VcaGroupId, number>;
   loop: LoopState;
@@ -291,6 +302,7 @@ export function createTrackState(
       reverb: { levelDb: SEND_OFF_DB, timing: 'postFader' },
       delay: { levelDb: SEND_OFF_DB, timing: 'postFader' },
     },
+    outputBus: null,
     automation: { fader: [], pan: [], width: [] },
   };
 }
@@ -300,6 +312,7 @@ export function createMixingState(): MixingState {
     version: MIXING_PROJECT_VERSION,
     tracks: [],
     buses: defaultBuses(),
+    groups: { group1: { gainDb: 0 }, group2: { gainDb: 0 } },
     master: { faderDb: 0, slots: defaultMasterSlots() },
     vcaGains: Object.fromEntries(VCA_GROUP_IDS.map((id) => [id, 0])) as Record<VcaGroupId, number>,
     loop: { enabled: false, startSec: 0, endSec: 0 },
@@ -613,6 +626,14 @@ export function setSend(
   }));
 }
 
+export function setOutputBus(
+  state: MixingState,
+  trackId: number,
+  bus: GroupBusName | null,
+): MixingState {
+  return mapTrack(state, trackId, (track) => ({ ...track, outputBus: bus }));
+}
+
 export function addAutomationPoint(
   state: MixingState,
   trackId: number,
@@ -716,6 +737,10 @@ export function setBusParam(
   };
 }
 
+export function setGroupGain(state: MixingState, group: GroupBusName, db: number): MixingState {
+  return { ...state, groups: { ...state.groups, [group]: { gainDb: db } } };
+}
+
 export function setMasterFader(state: MixingState, db: number): MixingState {
   return { ...state, master: { ...state.master, faderDb: db } };
 }
@@ -770,6 +795,7 @@ export interface TrackMixPatch {
   slots?: Partial<Record<TrackSlotName, Partial<InsertSlot>>>;
   duckKeyTrackId?: number | null;
   sends?: Partial<Record<AuxBusName, TrackSend>>;
+  outputBus?: GroupBusName | null;
 }
 
 /** A whole-mix proposal; tracks not named keep their settings. */
@@ -801,6 +827,7 @@ export function applyMixPatch(state: MixingState, patch: MixPatch): MixingState 
       slots,
       duckKeyTrackId: p.duckKeyTrackId === undefined ? track.duckKeyTrackId : p.duckKeyTrackId,
       sends: { ...track.sends, ...p.sends },
+      outputBus: p.outputBus === undefined ? track.outputBus : p.outputBus,
     };
   });
   const buses = { ...state.buses };
@@ -844,6 +871,7 @@ export const MIXING_MUTATORS = {
   setSlotParam,
   setDuckKey,
   setSend,
+  setOutputBus,
   addAutomationPoint,
   moveAutomationPoint,
   setAutomationCurve,
@@ -851,6 +879,7 @@ export const MIXING_MUTATORS = {
   clearAutomation,
   setBusGain,
   setBusParam,
+  setGroupGain,
   setMasterFader,
   setMasterSlotBypass,
   setMasterSlotParam,
@@ -971,6 +1000,10 @@ function readTrack(source: unknown, path: string): MixTrackState {
   if (vca !== null && !VCA_GROUP_IDS.includes(vca as VcaGroupId)) invalid(`${path}.vcaGroup`);
   const duckKey = source.duckKeyTrackId ?? null;
   if (duckKey !== null && !Number.isSafeInteger(duckKey)) invalid(`${path}.duckKeyTrackId`);
+  const outputBus = source.outputBus ?? null;
+  if (outputBus !== null && !GROUP_BUSES.includes(outputBus as GroupBusName)) {
+    invalid(`${path}.outputBus`);
+  }
   return {
     ...defaults,
     clip: {
@@ -1019,6 +1052,7 @@ function readTrack(source: unknown, path: string): MixTrackState {
         ];
       }),
     ) as Record<AuxBusName, TrackSend>,
+    outputBus: outputBus as GroupBusName | null,
     automation: Object.fromEntries(
       AUTOMATION_PARAMS.map((param) => {
         const points = automation[param] ?? [];
@@ -1073,6 +1107,7 @@ export function parseMixingState(value: unknown): MixingState | null {
       }
     }
     const busesSource = record(source, 'buses', '');
+    const groupsSource = record(source, 'groups', '');
     const master = record(source, 'master', '');
     const masterSlots = record(master, 'slots', 'master');
     const vca = record(source, 'vcaGains', '');
@@ -1094,6 +1129,12 @@ export function parseMixingState(value: unknown): MixingState | null {
           ];
         }),
       ) as Record<AuxBusName, AuxBusState>,
+      groups: Object.fromEntries(
+        GROUP_BUSES.map((group) => [
+          group,
+          { gainDb: num(record(groupsSource, group, 'groups'), 'gainDb', 0, `groups.${group}`) },
+        ]),
+      ) as Record<GroupBusName, GroupBusState>,
       master: {
         faderDb: num(master, 'faderDb', 0, 'master'),
         slots: Object.fromEntries(

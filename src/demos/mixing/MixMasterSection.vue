@@ -12,7 +12,7 @@ import Goniometer from '@/components/meters/Goniometer.vue';
 import LoudnessMeter from '@/components/meters/LoudnessMeter.vue';
 import PeakMeter from '@/components/meters/PeakMeter.vue';
 import SpectrumView from '@/components/meters/SpectrumView.vue';
-import { TermLabel } from '@/components/ui';
+import { DemoNotice, TermLabel } from '@/components/ui';
 import MixFader from '@/demos/mixing/MixFader.vue';
 import MixParam from '@/demos/mixing/MixParam.vue';
 import { useMixingCopy } from '@/demos/mixing/mixingCopy';
@@ -56,7 +56,7 @@ const paramLabel = (name: string) =>
 <template>
   <section class="master" :aria-label="copy.master.title">
     <header class="master__head">
-      <h3>{{ copy.master.title }}</h3>
+      <h3><TermLabel v-bind="term('masterFader')" tone="strong">{{ copy.master.title }}</TermLabel></h3>
     </header>
 
     <div class="master__chain">
@@ -64,7 +64,7 @@ const paramLabel = (name: string) =>
         <div class="master__slot-head">
           <button
             type="button"
-            class="master__power"
+            class="demo-btn demo-btn--sm master__power"
             :aria-pressed="!view.master.slots[slot].bypassed"
             :disabled="editLocked"
             @click="m.edit('setMasterSlotBypass', slot, !view.master.slots[slot].bypassed)"
@@ -145,10 +145,10 @@ const paramLabel = (name: string) =>
         :labels="copy.master.loudness"
       />
     </div>
-    <p class="master__note">
+    <DemoNotice tone="hint">
       <TermLabel v-bind="term('lufs', true)">LUFS</TermLabel>
-      <span>{{ copy.master.lraNote }}</span>
-    </p>
+      {{ copy.master.lraNote }}
+    </DemoNotice>
 
     <CorrelationMeter :correlation="master.correlation" :labels="copy.master.correlation" />
     <div class="master__scopes">
@@ -171,7 +171,7 @@ const paramLabel = (name: string) =>
   min-width: 0;
   padding: 10px 12px 12px;
   border: 1px solid var(--demo-border-strong);
-  border-radius: 6px;
+  border-radius: var(--demo-radius-md);
   background: var(--demo-bg-elevated);
 }
 
@@ -209,25 +209,13 @@ const paramLabel = (name: string) =>
 
 .master__power {
   min-width: 34px;
-  padding: 2px 6px;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 3px;
-  background: var(--demo-control-bg);
-  color: var(--demo-text-muted);
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  cursor: pointer;
 }
 
-.master__power[aria-pressed='true'] {
+.master__power[aria-pressed='true'],
+.master__power[aria-pressed='true']:hover:not(:disabled) {
   border-color: var(--demo-accent);
   background: var(--demo-accent);
   color: var(--demo-on-accent);
-}
-
-.master__power:disabled {
-  cursor: not-allowed;
-  opacity: var(--demo-disabled-opacity);
 }
 
 .master__details summary {
@@ -282,15 +270,6 @@ const paramLabel = (name: string) =>
 
 .master__loudness {
   min-width: 0;
-}
-
-.master__note {
-  display: flex;
-  gap: 8px;
-  margin: 0;
-  color: var(--demo-text-muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
 }
 
 .master__scopes {

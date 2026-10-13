@@ -324,7 +324,10 @@ function onPointerUp(event: PointerEvent): void {
   background: var(--demo-control-bg);
   color: var(--demo-text);
   cursor: pointer;
-  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+  transition:
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    color var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .engine-transport__button:not(:disabled):hover {

@@ -25,10 +25,7 @@ export interface RequestedTail {
   rt60: number;
 }
 
-/**
- * Notes worth showing for one render. A stereo render reports the same
- * diagnostics once per channel, so each kind appears once.
- */
+/** Notes worth showing for one render, each kind once. */
 export function renderNotes(
   diagnostics: readonly RirDiagnostic[],
   tail: RequestedTail,

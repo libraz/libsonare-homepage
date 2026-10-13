@@ -15,6 +15,7 @@ import type {
   MasteringExportResult,
   MasteringMeasureResult,
   MasteringReferenceResult,
+  MasteringRepairDetection,
 } from '@/demos/mastering/mastering.worker';
 import type { MasteringCopy } from '@/demos/mastering/masteringCopy';
 import {
@@ -26,7 +27,7 @@ import {
   MASTERING_LANE_TRACK,
   type MasteringAudio,
   type MasteringClip,
-  repairChainConfig,
+  repairStages,
 } from '@/demos/mastering/masteringEngine';
 import { createMasteringReport } from '@/demos/mastering/masteringReport';
 import {
@@ -57,8 +58,10 @@ import {
 import { useMasteringSession } from '@/demos/mastering/useMasteringSession';
 import {
   AudioInputBudgetError,
+  channelPlanes,
   decodeAudioBuffer,
   downsampleWaveform,
+  foldToStereo,
   jsonBlob,
   triggerDownload,
   type WavDither,
@@ -108,7 +111,14 @@ export interface MasteringFileInfo {
   channels: number;
 }
 
-export type MasteringJobKind = 'prepare' | 'fit' | 'export' | 'assist' | 'reference' | 'preview';
+export type MasteringJobKind =
+  | 'detect'
+  | 'prepare'
+  | 'fit'
+  | 'export'
+  | 'assist'
+  | 'reference'
+  | 'preview';
 
 /** The Worker job in flight. */
 export interface MasteringJobState {
@@ -149,12 +159,6 @@ function newAudioId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function stereoOf(buffer: AudioBuffer): { left: Float32Array; right: Float32Array } {
-  const left = buffer.getChannelData(0).slice();
-  const right = buffer.numberOfChannels > 1 ? buffer.getChannelData(1).slice() : left.slice();
-  return { left, right };
-}
-
 /** Everything that changes what lane 1 renders; a measured After loudness is valid for one key. */
 function afterKey(state: MasteringState): string {
   return JSON.stringify([state.source?.id ?? null, state.repair, state.eq, state.inserts]);
@@ -182,6 +186,8 @@ export function useMastering(options: { copy: ComputedRef<MasteringCopy> }) {
   const referenceInfo = shallowRef<MasteringFileInfo | null>(null);
   const referenceReady = ref(false);
   const referenceAnalysis = shallowRef<MasteringReferenceResult | null>(null);
+  /** The engine's repair measurement of the current source, once asked for. */
+  const repairDetection = shallowRef<MasteringRepairDetection | null>(null);
   const programLufs = ref(Number.NaN);
   /** Loudness of lane 1's output and the {@link afterKey} it was measured on. */
   const afterLoudness = shallowRef<{ key: string; lufs: number } | null>(null);
@@ -362,11 +368,11 @@ export function useMastering(options: { copy: ComputedRef<MasteringCopy> }) {
    */
   async function runPrepare(): Promise<boolean> {
     if (!registry.has('source')) return false;
-    if (!repairChainConfig(state.value.repair)) {
+    if (repairStages(state.value.repair).length === 0) {
       // Queued, so no running job can put an older program back over this one.
       const copied = await enqueue(async () => {
         const source = registry.get('source');
-        if (!source || repairChainConfig(state.value.repair)) return false;
+        if (!source || repairStages(state.value.repair).length > 0) return false;
         registry.set('program', {
           left: source.left.slice(),
           right: source.right.slice(),
@@ -481,12 +487,13 @@ export function useMastering(options: { copy: ComputedRef<MasteringCopy> }) {
     file: File,
   ): Promise<{ clip: MasteringClip; info: MasteringFileInfo } | null> {
     const context = sonare.context.value;
-    if (!context) return null;
+    const api = wasm.value;
+    if (!context || !api) return null;
     try {
       const buffer = await decodeAudioBuffer(file, context, {
         maxDurationSeconds: MASTERING_MAX_SECONDS,
       });
-      const { left, right } = stereoOf(buffer);
+      const [left, right] = foldToStereo(api, channelPlanes(buffer));
       return {
         clip: { left, right, sampleRate: buffer.sampleRate, integratedLufs: Number.NaN },
         info: {
@@ -524,6 +531,7 @@ export function useMastering(options: { copy: ComputedRef<MasteringCopy> }) {
       referenceReady.value = false;
       referenceInfo.value = null;
       referenceAnalysis.value = null;
+      repairDetection.value = null;
       lastRender.value = null;
       waveform.value = null;
       sourceInfo.value = decoded.info;
@@ -582,8 +590,8 @@ export function useMastering(options: { copy: ComputedRef<MasteringCopy> }) {
       history.commit(masteringMutators.setReference(state.value, null));
       return;
     }
-    const conformed = registry.get('reference');
-    if (!conformed) return;
+    const measured = registry.get('reference');
+    if (!measured) return;
     referenceReady.value = true;
     refreshLanes(['reference']);
     // Not a user edit: written even while another job holds the edit lock.
@@ -591,8 +599,8 @@ export function useMastering(options: { copy: ComputedRef<MasteringCopy> }) {
       masteringMutators.setReference(state.value, {
         id: newAudioId(),
         fileName: decoded.info.fileName,
-        sampleRate: conformed.sampleRate,
-        frames: conformed.left.length,
+        sampleRate: measured.sampleRate,
+        frames: measured.left.length,
         channels: decoded.info.channels,
       }),
     );
@@ -781,6 +789,22 @@ export function useMastering(options: { copy: ComputedRef<MasteringCopy> }) {
     if (params) edit('applyAssistant', params);
   }
 
+  async function detectRepair(): Promise<void> {
+    if (!registry.has('source') || editLocked.value) return;
+    try {
+      repairDetection.value = await runJob('detect', (progress) =>
+        worker.detectRepair(registry, progress),
+      );
+    } catch (cause) {
+      if (!(cause instanceof WorkerJobCancelled)) error.value = 'detectFailed';
+    }
+  }
+
+  function applyRepairSuggestion(): void {
+    const detection = repairDetection.value;
+    if (detection) edit('applyRepairSuggestion', detection.recommended);
+  }
+
   function applyMatchEq(): void {
     const analysis = referenceAnalysis.value;
     const reference = state.value.reference;
@@ -841,6 +865,7 @@ export function useMastering(options: { copy: ComputedRef<MasteringCopy> }) {
     referenceInfo,
     referenceReady,
     referenceAnalysis,
+    repairDetection,
     canMonitorReference,
     programLufs,
     waveform,
@@ -875,6 +900,8 @@ export function useMastering(options: { copy: ComputedRef<MasteringCopy> }) {
     setLoop,
     toggleLoop,
     applyAssistant,
+    detectRepair,
+    applyRepairSuggestion,
     applyMatchEq,
     restore,
     dispose,

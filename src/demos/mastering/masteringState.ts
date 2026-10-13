@@ -599,6 +599,29 @@ function setRepairParam(
   };
 }
 
+/**
+ * Turns on exactly the stages a repair detection recommends, each with the
+ * settings it came with; every other stage goes off.
+ */
+function applyRepairSuggestion(
+  state: MasteringState,
+  recommended: Readonly<Partial<Record<MasteringRepairStage, MasteringParams>>>,
+): MasteringState {
+  const repair = { ...state.repair };
+  for (const stage of MASTERING_REPAIR_STAGES) {
+    const params = recommended[stage];
+    if (params) {
+      for (const [name, value] of Object.entries(params)) {
+        if (typeof value === 'number') requireFinite(value, `repair.${stage}.${name}`);
+      }
+    }
+    repair[stage] = params
+      ? { enabled: true, params: { ...params } }
+      : { ...state.repair[stage], enabled: false };
+  }
+  return { ...state, repair };
+}
+
 function setEqBand(
   state: MasteringState,
   index: number,
@@ -757,6 +780,7 @@ export const masteringMutators = {
   setReference,
   setRepairStageEnabled,
   setRepairParam,
+  applyRepairSuggestion,
   setEqBand,
   setInsertParam,
   setInsertBypassed,
@@ -780,6 +804,7 @@ export {
   applyAssistant,
   applyLoudnessFit,
   applyMatchEq,
+  applyRepairSuggestion,
   clearMatchEq,
   resetInsert,
   selectPlatform,

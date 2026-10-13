@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { enCopy as masteringEn, jaCopy as masteringJa } from '@/demos/mastering/masteringCopy';
 import { enCopy as mixingEn, jaCopy as mixingJa } from '@/demos/mixing/mixingCopy';
@@ -97,9 +99,12 @@ describe('demo copy parity', () => {
     expect(mixingJa.automationCurves).toHaveLength(mixingEn.automationCurves.length);
 
     expect(Object.keys(MIXING_TERM_SLUGS).sort()).toEqual(Object.keys(mixingEn.terms.items).sort());
+    // Every glossary link lands on a page that exists in both locales.
     for (const slug of Object.values(MIXING_TERM_SLUGS)) {
-      if (slug !== undefined) {
-        expect(slug).toMatch(/^concepts\/[a-z0-9-]+$/);
+      if (slug === undefined) continue;
+      expect(slug).toMatch(/^[a-z0-9-]+\/[a-z0-9-]+$/);
+      for (const root of ['src/docs/glossary', 'src/ja/docs/glossary']) {
+        expect(fs.existsSync(path.join(root, `${slug}.md`)), `${root}/${slug}.md`).toBe(true);
       }
     }
   });

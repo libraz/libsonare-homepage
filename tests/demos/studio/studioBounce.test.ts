@@ -1,12 +1,20 @@
 // @vitest-environment node
 import { beforeAll, describe, expect, it } from 'vitest';
-import { exportFrames, renderStudioMix } from '@/demos/studio/studioBounce';
+import {
+  barFrames,
+  buildStudioOps,
+  EXPORT_BARS,
+  EXPORT_SAMPLE_RATE,
+  exportFrames,
+  renderStudioMix,
+} from '@/demos/studio/studioBounce';
 import {
   defaultPattern,
   STUDIO_FADER_MAX,
   STUDIO_MASTER_GAIN,
   STUDIO_TRACKS,
 } from '@/demos/studio/studioCopy';
+import { applyOps, createRawTarget } from '@/utils/engineApply';
 import { MASTER_LIMITER_CEILING } from '@/utils/masterLimiter';
 import * as wasm from '@/wasm/index.js';
 
@@ -58,6 +66,36 @@ describe('renderStudioMix', () => {
     expect(mix.length).toBe(exportFrames(BPM) * 2);
     // 2 bars at 120 BPM is 4 s; the tail keeps the file well under 10 s.
     expect(exportFrames(BPM) / 48_000).toBeLessThan(6);
+  });
+
+  it('the fixed release tail outlasts what the instruments actually ring', () => {
+    // tailSamples() is a conservative upper bound (~2.4 s for the closed hat
+    // against a decay under 0.8 s), so the export keeps its own tail; this pins
+    // that the render is silent to −100 dBFS before the file ends.
+    const engine = new wasm.RealtimeEngine(EXPORT_SAMPLE_RATE, 128);
+    const end = barFrames(EXPORT_SAMPLE_RATE, BPM) * EXPORT_BARS;
+    try {
+      engine.setTempoSegments([{ startPpq: 0, bpm: BPM }]);
+      applyOps(
+        createRawTarget(engine),
+        buildStudioOps(defaultPattern(), BPM, defaults(), EXPORT_SAMPLE_RATE, EXPORT_BARS),
+      );
+      engine.play();
+      const long = engine.bounceOffline({
+        totalFrames: end + EXPORT_SAMPLE_RATE * 4,
+        blockSize: 128,
+        numChannels: 2,
+        dither: 0,
+      }).interleaved;
+      let last = 0;
+      for (let i = 0; i < long.length; i++) if (Math.abs(long[i]) > 1e-5) last = i >> 1;
+      expect(last).toBeGreaterThan(end);
+      expect(last).toBeLessThan(exportFrames(BPM));
+      // The engine's bound never truncates what actually rings.
+      expect(engine.tailSamples()).toBeGreaterThanOrEqual(last - end);
+    } finally {
+      engine.destroy();
+    }
   });
 
   it('mixes at the defaults without clipping and at a usable level', () => {

@@ -13,7 +13,8 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ToolShell from '@/components/ToolShell.vue';
-import { StatusIndicator, TransportButton } from '@/components/ui';
+import ToolStatusBar, { type ToolStatusField } from '@/components/ToolStatusBar.vue';
+import { DemoNotice, TransportButton } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { useUrlState } from '@/composables/useUrlState';
 import { bootWasm, useWasmBoot } from '@/composables/useWasmBoot';
@@ -326,12 +327,34 @@ const statusKind = computed<'idle' | 'active' | 'warning' | 'error'>(() => {
 
 const statusText = computed(() => {
   const status = copy.value.status;
-  if (!supported.value) return status.unsupported;
-  if (engine.error.value) return status.failed;
+  if (!supported.value) return status.unsupportedShort;
+  if (engine.error.value) return status.failedShort;
   if (!engine.ready.value) return status.booting;
   if (!engine.running.value) return status.suspended;
   return transportOn.value ? status.running : status.stopped;
 });
+
+const statusFields = computed<ToolStatusField[]>(() => {
+  const keys = copy.value.statusbar;
+  return [
+    { key: keys.pattern, value: patternName.value, wide: true },
+    { key: keys.tempo, value: `${Math.round(bpm.value)} BPM` },
+    {
+      key: keys.step,
+      value:
+        playhead.value < 0 ? '--' : `${String(playhead.value + 1).padStart(2, '0')}/${STEP_COUNT}`,
+    },
+    { key: keys.rate, value: `${(sampleRate.value / 1000).toFixed(1)} kHz`, divider: true },
+  ];
+});
+
+const gestureNeeded = computed(
+  () => supported.value && engine.ready.value && !engine.running.value,
+);
+const hasNotice = computed(
+  () =>
+    !supported.value || Boolean(engine.error.value) || exportFailed.value || gestureNeeded.value,
+);
 
 const docsPath = computed(() => localizedPath('/docs/native-synth'));
 const oppositeLocalePath = computed(() => alternateLocalePath('/step-bass'));
@@ -380,7 +403,12 @@ onBeforeUnmount(() => {
     :opposite-locale-path="oppositeLocalePath"
   >
     <template #statusbar>
-      <StatusIndicator :status="statusKind" :label="statusText" />
+      <ToolStatusBar
+        :status="statusKind"
+        :label="statusText"
+        :pulse="!engine.ready.value && supported"
+        :fields="statusFields"
+      />
     </template>
 
     <div class="step-bass demo-deck">
@@ -400,12 +428,16 @@ onBeforeUnmount(() => {
         @export-midi="onExportMidi"
       />
 
-      <p v-if="!supported || exportFailed" class="step-bass__notice" role="status">
-        {{ supported ? copy.transport.exportFailed : copy.status.unsupported }}
-      </p>
-      <p v-else-if="!engine.running.value && engine.ready.value" class="step-bass__notice">
-        {{ copy.transport.gesture }}
-      </p>
+      <div v-if="hasNotice" class="step-bass__notices">
+        <DemoNotice v-if="!supported" tone="error">{{ copy.status.unsupported }}</DemoNotice>
+        <DemoNotice v-else-if="engine.error.value" tone="error">{{ copy.status.failed }}</DemoNotice>
+        <DemoNotice v-if="exportFailed" tone="error" dismissible @dismiss="exportFailed = false">
+          {{ copy.transport.exportFailed }}
+        </DemoNotice>
+        <DemoNotice v-if="gestureNeeded" tone="hint">
+          {{ copy.transport.gesture }}
+        </DemoNotice>
+      </div>
 
       <StepBassPanel
         :knobs="knobs"
@@ -420,7 +452,7 @@ onBeforeUnmount(() => {
           <label class="step-bass__field">
             <span class="step-bass__field-label">{{ copy.transport.patterns }}</span>
             <select
-              class="step-bass__select"
+              class="demo-field step-bass__select"
               :value="patternId"
               :aria-label="copy.transport.patternsLabel"
               @change="onPatternSelect"
@@ -431,8 +463,8 @@ onBeforeUnmount(() => {
               </option>
             </select>
           </label>
-          <TransportButton size="sm" @click="onRandomise">
-            <span :aria-label="copy.transport.randomiseLabel">{{ copy.transport.randomise }}</span>
+          <TransportButton size="sm" :aria-label="copy.transport.randomiseLabel" @click="onRandomise">
+            {{ copy.transport.randomise }}
           </TransportButton>
         </div>
 

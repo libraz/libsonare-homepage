@@ -165,8 +165,23 @@ export const enCopy = {
     master: 'Master',
   },
   statusbar: {
-    pos: 'Pos',
+    pos: 'POS',
     bpm: 'BPM',
+    steps: 'STEPS',
+    muted: 'MUTED',
+  },
+  grid: {
+    label: 'Step grid',
+    cell: '{row}, step {n}',
+  },
+  keys: {
+    move: 'move between pads',
+    toggle: 'toggle',
+    play: 'play / stop',
+  },
+  vu: {
+    title: 'Master out',
+    legend: 'Realtime engine · lane mixer · MIDI clips',
   },
   hint: 'Click the grid to toggle steps — pads you arm are auditioned while the transport is stopped. Edits swap the engine\u2019s MIDI clip schedule in place, so the loop keeps playing through every change.',
   errors: {
@@ -174,7 +189,7 @@ export const enCopy = {
   },
   guide: {
     title: 'A headless DAW, running live in your browser',
-    body: 'The pattern is compiled into looping MIDI clips on libsonare\u2019s realtime engine: three NativeSynth destinations mixed through the engine\u2019s per-track lane mixer, with faders, mutes, meters and a true-peak limiter on the master strip all living engine-side. Edits replace the clip schedule in place — playback never stops to re-render. The WAV you download is the same arrangement rendered deterministically offline through the same lane mixer, and the MIDI export writes the pattern itself as a Standard MIDI File for any DAW. This is a deliberately small session; the engine API goes much further.',
+    body: 'Press Play to hear a one-bar pattern, then click the grid to change it and use the level faders to balance lead, bass and drums. Bounce the result as a WAV, or export the pattern as a MIDI file for any DAW. It all runs in your browser on libsonare\u2019s realtime engine.',
     docs: 'Project docs',
   },
   terms: {
@@ -281,6 +296,21 @@ export const jaCopy: typeof enCopy = {
   statusbar: {
     pos: '位置',
     bpm: 'BPM',
+    steps: 'ステップ',
+    muted: 'ミュート',
+  },
+  grid: {
+    label: 'ステップグリッド',
+    cell: '{row}・ステップ {n}',
+  },
+  keys: {
+    move: 'パッド間を移動',
+    toggle: '切り替え',
+    play: '再生／停止',
+  },
+  vu: {
+    title: 'マスター出力',
+    legend: 'リアルタイムエンジン · レーンミキサー · MIDI クリップ',
   },
   hint: 'グリッドをクリックしてステップを切り替えます。停止中はオンにしたパッドの音をその場で試聴できます。編集はエンジンの MIDI クリップスケジュールをその場で差し替えるので、再生は止まりません。',
   errors: {
@@ -288,8 +318,8 @@ export const jaCopy: typeof enCopy = {
   },
   guide: {
     title: 'ブラウザ内でリアルタイムに動くヘッドレス DAW',
-    body: 'パターンは libsonare のリアルタイムエンジン上のループ MIDI クリップへコンパイルされます。3 つの NativeSynth デスティネーションをエンジン内蔵のトラックレーンミキサーがミックスし、フェーダー・ミュート・メーター、そしてマスターストリップのトゥルーピークリミッターもエンジン側で動きます。編集はクリップスケジュールをその場で置き換えるため、再生を止めて再レンダーすることはありません。ダウンロードする WAV は同じアレンジを同じレーンミキサーで決定的にオフラインレンダーしたもので、MIDI 書き出しはパターンそのものをスタンダード MIDI ファイルとして保存し、どの DAW でも開けます。これは意図的に小さなセッションで、エンジン API 自体にはさらに多くの機能があります。',
-    docs: 'Project ドキュメント',
+    body: '再生すると 1 小節のパターンが鳴ります。グリッドをクリックして音を変え、レベルフェーダーでリード・ベース・ドラムのバランスを取ります。結果は WAV にバウンスでき、パターンは MIDI ファイルとして書き出せます。処理はすべてブラウザ内の libsonare リアルタイムエンジンで動きます。',
+    docs: 'Project のドキュメント',
   },
   terms: {
     eyebrow: 'スタジオ',
@@ -299,12 +329,12 @@ export const jaCopy: typeof enCopy = {
     items: {
       step: {
         title: 'ステップシーケンサー',
-        body: '各レーンが 1 つの NativeSynth トラックで、行は固定の音程、列は 16 分音符のステップです。セルをクリックするとそのノートのオン／オフを切り替えられます。パターンはループする 4/4 の 1 小節です。',
+        body: '各レーンが 1 つの内蔵シンセ（NativeSynth）トラックで、行は固定の音程、列は 16 分音符のステップです。セルをクリックするとそのノートのオン／オフを切り替えられます。パターンはループする 4/4 の 1 小節です。',
         tip: '停止中はオンにしたパッドの音をその場で試聴できるので、再生前に耳で組み立てられます。',
       },
       mixer: {
         title: 'ミキサー',
-        body: '3 本のエンジンレーンストリップがマスターストリップへ送られ、そのトゥルーピークリミッターが出力を −1 dBTP に抑えます。フェーダーとミュートはリアルタイムエンジン内で動き、バウンスする WAV も同じストリップと同じリミッターを通ります。',
+        body: '3 本のエンジンレーンストリップがマスターストリップへ送られ、その True Peak リミッターが出力を −1 dBTP に抑えます。フェーダーとミュートはリアルタイムエンジン内で動き、バウンスする WAV も同じストリップと同じリミッターを通ります。',
         tip: 'ここでトラックのバランスを取ります。下げたりミュートしたりして、アレンジの変化を確認しましょう。',
       },
       tempo: {
@@ -341,7 +371,7 @@ export const jaCopy: typeof enCopy = {
       },
       master: {
         title: 'マスターレベル',
-        body: 'マスターバスとバウンスへ送る最終出力フェーダーです。チャンネルストリップの後段で、すべてがここを通り、さらにマスターストリップのトゥルーピークリミッターが出力を −1 dBTP に抑えます。',
+        body: 'マスターバスとバウンスへ送る最終出力フェーダーです。チャンネルストリップの後段で、すべてがここを通り、さらにマスターストリップの True Peak リミッターが出力を −1 dBTP に抑えます。',
         tip: '上げすぎるとクリップする代わりにリミッターがトランジェントを潰します。メーターが上限に張り付かなくなるところまで戻します。',
         defaultRationale: 'フェーダーをダブルクリックするとレベルがリセットされます。',
       },

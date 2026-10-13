@@ -4,9 +4,11 @@
  * header naming the module, its place in the chain and its bypass state.
  */
 import { computed } from 'vue';
+import { DemoNotice } from '@/components/ui';
 import MasteringEqEditor from '@/demos/mastering/MasteringEqEditor.vue';
 import MasteringParamGrid from '@/demos/mastering/MasteringParamGrid.vue';
 import MasteringRepairEditor from '@/demos/mastering/MasteringRepairEditor.vue';
+import type { MasteringRepairDetection } from '@/demos/mastering/mastering.worker';
 import { useMasteringCopy } from '@/demos/mastering/masteringCopy';
 import {
   MASTERING_SLOT,
@@ -35,6 +37,9 @@ const props = defineProps<{
   sampleRate: number;
   repairProgress: number | null;
   repairFailed: boolean;
+  repairDetection: MasteringRepairDetection | null;
+  repairDetecting: boolean;
+  canDetect: boolean;
   disabled?: boolean;
 }>();
 
@@ -51,6 +56,8 @@ const emit = defineEmits<{
   repairParam: [stage: MasteringRepairStage, name: string, value: number];
   retryRepair: [];
   cancelRepair: [];
+  detectRepair: [];
+  applyRepairSuggestion: [];
   begin: [];
   end: [];
 }>();
@@ -85,22 +92,23 @@ const driveText = computed(() =>
       <div v-if="insert && slot !== null && module !== 'drive'" class="module-editor__actions">
         <button
           type="button"
-          class="module-editor__bypass"
+          class="demo-btn demo-btn--sm module-editor__bypass"
           :aria-pressed="!insert.bypassed"
           :disabled="disabled"
           @click="emit('bypass', slot, !insert.bypassed)"
         >
           {{ insert.bypassed ? copy.editor.off : copy.editor.on }}
         </button>
-        <button type="button" class="module-editor__reset" :disabled="disabled" @click="emit('reset', slot)">
+        <button type="button" class="demo-btn demo-btn--sm module-editor__reset" :disabled="disabled" @click="emit('reset', slot)">
           {{ copy.editor.reset }}
         </button>
       </div>
     </header>
-    <p class="module-editor__note">
+    <DemoNotice tone="hint">
       {{ copy.moduleNotes[module] }}
-      <strong v-if="insert?.bypassed" class="module-editor__bypassed">{{ copy.editor.bypassed }}</strong>
-    </p>
+      <template v-if="slot !== null && module !== 'drive'"> {{ copy.editor.knobHint }}</template>
+    </DemoNotice>
+    <DemoNotice v-if="insert?.bypassed" tone="warn">{{ copy.editor.bypassed }}</DemoNotice>
 
     <MasteringEqEditor
       v-if="module === 'eq'"
@@ -122,11 +130,16 @@ const driveText = computed(() =>
       :repair="state.repair"
       :progress="repairProgress"
       :failed="repairFailed"
+      :detection="repairDetection"
+      :detecting="repairDetecting"
+      :can-detect="canDetect"
       :disabled="disabled"
       @enabled="(stage, on) => emit('repairEnabled', stage, on)"
       @param="(stage, name, value) => emit('repairParam', stage, name, value)"
       @retry="emit('retryRepair')"
       @cancel="emit('cancelRepair')"
+      @detect="emit('detectRepair')"
+      @apply-suggestion="emit('applyRepairSuggestion')"
     />
     <div v-else-if="module === 'drive'" class="module-editor__drive">
       <span>{{ copy.editor.driveValue }}</span>
@@ -154,7 +167,7 @@ const driveText = computed(() =>
   min-width: 0;
   padding: 12px 14px 16px;
   border: 1px solid var(--demo-border);
-  border-radius: 6px;
+  border-radius: var(--demo-radius-md);
   background: var(--demo-bg-elevated);
 }
 
@@ -204,45 +217,14 @@ const driveText = computed(() =>
   gap: 6px;
 }
 
-.module-editor__actions button {
-  padding: 4px 10px;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--demo-text);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  cursor: pointer;
-}
-
 .module-editor__bypass[aria-pressed='true'] {
   border-color: color-mix(in srgb, var(--demo-success) 55%, var(--demo-border));
   color: var(--demo-success);
 }
 
-.module-editor__actions button:disabled {
-  opacity: var(--demo-disabled-opacity);
-  cursor: not-allowed;
-}
-
-.module-editor__actions button:focus-visible,
 .module-editor__guide:focus-visible {
   outline: 2px solid var(--demo-accent);
   outline-offset: 2px;
-}
-
-.module-editor__note {
-  margin: 0;
-  color: var(--demo-text);
-  font-size: 12.5px;
-  line-height: 1.55;
-}
-
-.module-editor__bypassed {
-  display: block;
-  margin-top: 4px;
-  color: var(--demo-warn-text);
-  font-weight: 600;
 }
 
 .module-editor__drive {

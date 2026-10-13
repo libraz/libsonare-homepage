@@ -9,6 +9,7 @@
  * so a learner can noodle along with the audio muted.
  */
 import { computed } from 'vue';
+import { KEY_GEOMETRY_STYLE } from '@/components/keyboard/keyGeometry';
 import { formatNoteName } from '@/utils/pitch';
 import type { KeyboardLayout } from './keyboard';
 
@@ -65,7 +66,7 @@ function release(midi: number): void {
 </script>
 
 <template>
-  <div class="pk" :style="{ '--white-count': whiteCount }">
+  <div class="pk" :style="{ ...KEY_GEOMETRY_STYLE, '--white-count': whiteCount }">
     <div class="pk__rail" aria-hidden="true"></div>
     <div class="pk__bed">
       <button
@@ -117,6 +118,7 @@ function release(midi: number): void {
 
   position: relative;
   width: 100%;
+  container-type: inline-size;
   user-select: none;
   touch-action: none;
 }
@@ -141,10 +143,15 @@ html:not(.dark) .pk__rail {
   box-shadow: 0 1px 3px rgba(80, 60, 140, 0.25);
 }
 
+/* Key lengths follow the white-key width the bed gives each column. */
 .pk__bed {
+  --key-white-w: calc(100cqw / var(--white-count));
+  --key-white-len: calc(var(--key-white-w) * var(--key-white-aspect));
+
   position: relative;
   display: flex;
-  height: 132px;
+  box-sizing: content-box;
+  height: var(--key-white-len);
   border-radius: 0 0 8px 8px;
   background: var(--kb-bed);
   /* No horizontal padding: white keys must tile the full width exactly so the
@@ -170,7 +177,9 @@ html:not(.dark) .pk__rail {
   align-items: center;
   justify-content: flex-end;
   transform-origin: top center;
-  transition: transform 0.04s ease, background 0.05s ease;
+  transition:
+    transform var(--demo-dur-instant) var(--demo-ease-standard),
+    background var(--demo-dur-instant) var(--demo-ease-standard);
 }
 
 .pk__white:focus-visible {
@@ -210,8 +219,8 @@ html:not(.dark) .pk__rail {
 .pk__black {
   position: absolute;
   top: 0;
-  width: calc((100% / var(--white-count)) * 0.62);
-  height: 60%;
+  width: calc(var(--key-white-w) * var(--key-black-width));
+  height: calc(var(--key-white-len) * var(--key-black-length));
   margin: 0;
   padding: 0;
   transform: translateX(-50%);
@@ -226,7 +235,9 @@ html:not(.dark) .pk__rail {
   cursor: pointer;
   z-index: 2;
   transform-origin: top center;
-  transition: transform 0.04s ease, background 0.05s ease;
+  transition:
+    transform var(--demo-dur-instant) var(--demo-ease-standard),
+    background var(--demo-dur-instant) var(--demo-ease-standard);
 }
 
 .pk__black:focus-visible {
@@ -255,7 +266,7 @@ html:not(.dark) .pk__rail {
 @media (prefers-reduced-motion: reduce) {
   .pk__white,
   .pk__black {
-    transition: background 0.05s ease;
+    transition: background var(--demo-dur-instant) var(--demo-ease-standard);
   }
   .pk__white.is-active {
     transform: none;

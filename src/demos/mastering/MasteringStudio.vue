@@ -2,8 +2,9 @@
 /**
  * Studio: transport and timeline on top; the signal-chain rack, the selected
  * module's editor and the meter bridge below. Reference, assistant and export
- * sit under the editor so the centre column runs as long as the meters. Every control edits the one project state through the
- * controller, so it plays live and renders the same on export.
+ * sit under the editor so the centre column runs as long as the meters.
+ * Every control edits the one project state through the controller, so it
+ * plays live and renders the same on export.
  */
 import { computed, ref } from 'vue';
 import MasteringExportPanel from '@/demos/mastering/MasteringExportPanel.vue';
@@ -35,6 +36,7 @@ const {
   referenceInfo,
   referenceReady,
   referenceAnalysis,
+  repairDetection,
   canMonitorReference,
   loading,
   pendingRestore,
@@ -140,6 +142,9 @@ const sampleRate = computed(
           :sample-rate="sampleRate"
           :repair-progress="repairProgress"
           :repair-failed="prepareFailed"
+          :repair-detection="repairDetection"
+          :repair-detecting="job?.kind === 'detect'"
+          :can-detect="sourceInfo !== null"
           :disabled="editLocked"
           @param="(slot, name, value) => m.edit('setInsertParam', slot, name, value)"
           @bypass="(slot, bypassed) => m.edit('setInsertBypassed', slot, bypassed)"
@@ -150,6 +155,8 @@ const sampleRate = computed(
           @repair-param="(stage, name, value) => m.edit('setRepairParam', stage, name, value)"
           @retry-repair="m.runPrepare"
           @cancel-repair="m.cancelJob"
+          @detect-repair="m.detectRepair"
+          @apply-repair-suggestion="m.applyRepairSuggestion"
           @begin="m.begin"
           @end="m.end"
         />
@@ -228,7 +235,7 @@ const sampleRate = computed(
   gap: 10px;
   padding: 12px 14px;
   border: 1px solid var(--demo-border);
-  border-radius: 8px;
+  border-radius: var(--demo-radius-md);
   background: var(--demo-bg-elevated);
 }
 

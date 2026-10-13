@@ -40,7 +40,9 @@ export const SYNTH_OUTPUT_GAIN_DEFAULT = 0.9;
  * the audio thread with its own WASM heap (SAB-free): the emscripten module is
  * built from a transferred wasm binary, a raw `RealtimeEngine` is bound to the
  * patch-driven synth behind the master-strip limiter, and note/CC/patch
- * commands arrive over the port. The render path is allocation-free
+ * commands arrive over the port. A `param` command moves one continuous patch
+ * field on the sounding voices; a `patch` command rebinds the instrument,
+ * which fades the voices it replaces. The render path is allocation-free
  * (`processPrepared` over prepared scratch).
  *
  * Mirrors the proven `useRealtimeFx` wiring: static-import the emscripten
@@ -75,6 +77,8 @@ class LibsonareSynthProcessor extends AudioWorkletProcessor {
     this.seq = 0;
     this.outputGain = ${SYNTH_OUTPUT_GAIN_DEFAULT};
     this.pendingPatch = o.patch || 'e-piano';
+    // Automation ids by patch field; an id survives a rebind of the destination.
+    this.paramIds = {};
 
     this.port.onmessage = (e) => this.onMessage(e.data);
     createModule({ wasmBinary: o.wasmBinary, locateFile: () => 'sonare.wasm' })
@@ -112,6 +116,16 @@ class LibsonareSynthProcessor extends AudioWorkletProcessor {
       if (this.engine) {
         try { this.engine.setSynthInstrument(DEST, msg.patch); this.engine.setMidiInputSource(DEST); }
         catch (err) { this.port.postMessage({ type: 'error', error: String(err) }); }
+      }
+    } else if (msg.type === 'param') {
+      // A continuous field reaches the sounding voices; no rebind, no retrigger.
+      if (this.engine) {
+        let id = this.paramIds[msg.name];
+        if (id === undefined) {
+          id = this.engine.resolveInstrumentAutomationId(DEST, msg.name);
+          this.paramIds[msg.name] = id;
+        }
+        if (id >= 0) this.engine.setParameterSmoothed(id, msg.value);
       }
     } else if (msg.type === 'gain') {
       this.outputGain = Math.min(GAIN_MAX, Math.max(0, Number(msg.value) || 0));
@@ -316,8 +330,14 @@ export function useSynthEngine(sonareUrl: string, wasmUrl: string) {
     node?.port.postMessage({ type: 'panic' });
   }
 
+  /** Rebind the instrument; the engine fades the voices it replaces over 10 ms. */
   function setPatch(patch: SynthPatch | string): void {
     node?.port.postMessage({ type: 'patch', patch });
+  }
+
+  /** Move one continuous patch field (see `LIVE_TWEAKS`) on the voices already sounding. */
+  function setParam(name: string, value: number): void {
+    node?.port.postMessage({ type: 'param', name, value });
   }
 
   function setGain(value: number): void {
@@ -387,6 +407,7 @@ export function useSynthEngine(sonareUrl: string, wasmUrl: string) {
     pushMidi,
     panic,
     setPatch,
+    setParam,
     setGain,
     dispose,
   };

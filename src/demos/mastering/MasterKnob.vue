@@ -5,6 +5,7 @@
  * one history entry; keys and the wheel emit single updates.
  */
 import { computed, nextTick, ref } from 'vue';
+import { Tooltip } from '@/components/ui';
 import { formatParam, type ParamScale } from '@/demos/mastering/masteringUi';
 
 const props = withDefaults(
@@ -19,7 +20,7 @@ const props = withDefaults(
     /** Double-click target; the bipolar centre or the minimum when absent. */
     default?: number;
     disabled?: boolean;
-    /** Help shown as the control's title. */
+    /** Help behind an info dot beside the label. */
     hint?: string;
     /** Marks a parameter applied on release. */
     deferred?: boolean;
@@ -184,7 +185,10 @@ function finishEditing(apply: boolean): void {
     :class="{ 'knob--dragging': dragging, 'knob--disabled': disabled, 'knob--deferred': deferred }"
   >
     <div class="knob__head">
-      <span class="knob__label" :title="hint">{{ label }}</span>
+      <span class="knob__label">
+        <span class="knob__label-text">{{ label }}</span>
+        <Tooltip v-if="hint" :title="label" :body="hint" :aria-label="label" />
+      </span>
       <input
         v-if="editing"
         ref="inputRef"
@@ -218,7 +222,6 @@ function finishEditing(apply: boolean): void {
       :aria-valuenow="modelValue"
       :aria-valuetext="valueText"
       :aria-disabled="disabled || undefined"
-      :title="hint"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
@@ -253,14 +256,21 @@ function finishEditing(apply: boolean): void {
 }
 
 .knob__label {
-  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
   color: var(--demo-text-muted);
   font-family: var(--font-mono);
   font-size: var(--demo-label-size);
   font-weight: var(--demo-label-weight);
   letter-spacing: var(--demo-label-tracking);
-  text-overflow: ellipsis;
   text-transform: uppercase;
+}
+
+.knob__label-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -341,6 +351,13 @@ function finishEditing(apply: boolean): void {
   border-radius: 1px;
   background: var(--demo-text-strong);
   transform: translateX(-50%);
+  transition:
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    transform var(--demo-dur-instant) var(--demo-ease-standard);
+}
+
+.knob--dragging .knob__thumb {
+  transform: translateX(-50%) scaleY(1.25);
 }
 
 .knob--dragging .knob__thumb,

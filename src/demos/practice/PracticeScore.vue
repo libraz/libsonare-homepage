@@ -9,7 +9,7 @@
  * the max combo, a judgment breakdown, and a Full-Combo badge. All motion is
  * CSS-driven and disabled under `prefers-reduced-motion`.
  */
-import { ref, watch } from 'vue';
+import { nextTick, ref, watch } from 'vue';
 import type { Judgment } from './useRhythmGame';
 
 interface ScoreLabels {
@@ -66,6 +66,15 @@ watch(
   },
 );
 
+// Retry takes focus when the results card opens, so the keyboard lands on it.
+const retryButton = ref<HTMLButtonElement | null>(null);
+watch(
+  () => props.finished,
+  (finished) => {
+    if (finished) void nextTick(() => retryButton.value?.focus({ preventScroll: true }));
+  },
+);
+
 /** Combo color tier — the counter heats up as the streak grows. */
 function comboTier(combo: number): number {
   if (combo >= 100) return 4;
@@ -77,11 +86,11 @@ function comboTier(combo: number): number {
 </script>
 
 <template>
-  <div class="ps" :class="{ 'is-on': visible }" aria-hidden="true">
-    <div v-if="flashClass" :key="flashKey" class="ps__flash" :class="flashClass"></div>
+  <div class="ps" :class="{ 'is-on': visible }">
+    <div v-if="flashClass" :key="flashKey" class="ps__flash" :class="flashClass" aria-hidden="true"></div>
 
-    <!-- Live HUD -->
-    <div v-show="visible && !finished" class="ps__hud">
+    <!-- Live HUD; the status bar carries score and accuracy for assistive tech. -->
+    <div v-show="visible && !finished" class="ps__hud" aria-hidden="true">
       <div class="ps__stat ps__stat--score">
         <span class="ps__stat-label">{{ labels.score }}</span>
         <span class="ps__stat-val">{{ score.toLocaleString() }}</span>
@@ -103,19 +112,20 @@ function comboTier(combo: number): number {
       :key="popupKey"
       class="ps__judge"
       :class="`is-${popupKind}`"
+      aria-hidden="true"
     >
       {{ labels.judge[popupKind] }}
     </div>
 
     <!-- Results card -->
-    <Transition name="ps-results">
-      <div v-if="finished" class="ps__results">
-        <span class="ps__results-title">{{ labels.results }}</span>
+    <Transition name="demo-fade">
+      <div v-if="finished" class="ps__results" role="group" :aria-label="labels.results">
+        <span class="ps__results-title" aria-hidden="true">{{ labels.results }}</span>
         <div class="ps__rank" :data-rank="rank.charAt(0)">
           <span class="ps__rank-letter">{{ rank }}</span>
           <span class="ps__rank-label">{{ labels.rankLabel }}</span>
         </div>
-        <div v-if="fullCombo" class="ps__fc">{{ labels.fullCombo }}</div>
+        <div v-if="fullCombo" class="ps__fc demo-anim-loop">{{ labels.fullCombo }}</div>
         <div class="ps__scoreline">{{ score.toLocaleString() }}</div>
         <dl class="ps__breakdown">
           <div class="ps__bd-row is-perfect">
@@ -136,10 +146,10 @@ function comboTier(combo: number): number {
           <span>{{ labels.maxCombo }} <b>{{ maxCombo }}</b></span>
         </div>
         <div class="ps__results-actions">
-          <button type="button" class="ps__btn ps__btn--primary" @click="$emit('retry')">
+          <button ref="retryButton" type="button" class="demo-btn demo-btn--primary ps__btn" @click="$emit('retry')">
             {{ labels.retry }}
           </button>
-          <button type="button" class="ps__btn" @click="$emit('exit')">{{ labels.exit }}</button>
+          <button type="button" class="demo-btn ps__btn" @click="$emit('exit')">{{ labels.exit }}</button>
         </div>
       </div>
     </Transition>
@@ -147,7 +157,13 @@ function comboTier(combo: number): number {
 </template>
 
 <style scoped>
+/* Game palette: one colour per judgment and combo tier, all from demo tokens. */
 .ps {
+  --ps-perfect: var(--demo-amber);
+  --ps-great: var(--demo-cyan);
+  --ps-good: var(--demo-success);
+  --ps-miss: var(--demo-error-fg);
+
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -163,13 +179,13 @@ function comboTier(combo: number): number {
   opacity: 0;
 }
 .ps__flash.is-gold {
-  background: radial-gradient(120% 90% at 50% 100%, rgba(255, 205, 90, 0.5), transparent 70%);
-  animation: ps-flash 0.5s ease-out forwards;
+  background: radial-gradient(120% 90% at 50% 100%, color-mix(in srgb, var(--ps-perfect) 50%, transparent), transparent 70%);
+  animation: ps-flash calc(var(--demo-dur-base) * 2.2) var(--demo-ease-exit) forwards;
 }
 .ps__flash.is-fail {
-  background: radial-gradient(120% 100% at 50% 100%, rgba(255, 60, 60, 0.42), transparent 72%);
-  box-shadow: inset 0 0 0 3px rgba(255, 60, 60, 0.55);
-  animation: ps-flash 0.32s ease-out forwards;
+  background: radial-gradient(120% 100% at 50% 100%, color-mix(in srgb, var(--ps-miss) 42%, transparent), transparent 72%);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--ps-miss) 55%, transparent);
+  animation: ps-flash calc(var(--demo-dur-fast) * 2.3) var(--demo-ease-exit) forwards;
 }
 @keyframes ps-flash {
   0% { opacity: 1; }
@@ -187,7 +203,7 @@ function comboTier(combo: number): number {
   display: flex;
   flex-direction: column;
   line-height: 1;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 6px var(--demo-screen-bg);
 }
 .ps__stat--score {
   left: 14px;
@@ -200,29 +216,28 @@ function comboTier(combo: number): number {
   gap: 4px;
 }
 .ps__stat-label {
-  font-size: 0.58rem;
+  font-size: 9px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--demo-text-muted);
 }
 .ps__stat-val {
-  font-size: 1.4rem;
+  font-size: 22px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: #fff;
-}
-html:not(.dark) .ps__stat-val {
   color: var(--demo-text-strong);
 }
 .ps__stat--acc .ps__stat-val i {
-  font-size: 0.8rem;
+  font-size: 13px;
   font-style: normal;
   opacity: 0.7;
   margin-left: 1px;
 }
 
-/* --- combo counter --- */
+/* --- combo counter: heats up through the palette as the streak grows --- */
 .ps__combo {
+  --c-glow: var(--demo-accent);
+
   position: absolute;
   top: 26%;
   left: 50%;
@@ -231,27 +246,25 @@ html:not(.dark) .ps__stat-val {
   flex-direction: column;
   align-items: center;
   line-height: 0.9;
-  animation: ps-combo-pop 0.26s cubic-bezier(0.2, 1.5, 0.4, 1);
-  --c-glow: var(--demo-accent);
+  animation: ps-combo-pop var(--demo-dur-base) var(--demo-ease-enter);
 }
-.ps__combo[data-tier="1"] { --c-glow: #7cc6ff; }
-.ps__combo[data-tier="2"] { --c-glow: #67e8c3; }
-.ps__combo[data-tier="3"] { --c-glow: #ffd36b; }
-.ps__combo[data-tier="4"] { --c-glow: #ff8ad4; }
+.ps__combo[data-tier="1"] { --c-glow: var(--ps-great); }
+.ps__combo[data-tier="2"] { --c-glow: var(--ps-good); }
+.ps__combo[data-tier="3"] { --c-glow: var(--ps-perfect); }
+.ps__combo[data-tier="4"] { --c-glow: var(--ps-miss); }
 .ps__combo-num {
-  font-size: clamp(2.6rem, 1.5rem + 6vw, 4.2rem);
+  font-size: clamp(42px, 24px + 6vw, 68px);
   font-weight: 800;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
-  color: #fff;
+  color: var(--demo-text-strong);
   text-shadow:
     0 0 18px var(--c-glow),
-    0 0 40px var(--c-glow),
-    0 2px 4px rgba(0, 0, 0, 0.5);
+    0 0 40px var(--c-glow);
 }
 .ps__combo-label {
   margin-top: 2px;
-  font-size: 0.66rem;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.42em;
   text-indent: 0.42em;
@@ -267,22 +280,26 @@ html:not(.dark) .ps__stat-val {
 
 /* --- judgment pop --- */
 .ps__judge {
+  --j: var(--demo-accent);
+
   position: absolute;
   top: 56%;
   left: 50%;
-  font-size: clamp(1.5rem, 1rem + 3vw, 2.4rem);
+  font-size: clamp(24px, 16px + 3vw, 38px);
   font-weight: 800;
   font-style: italic;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   transform: translate(-50%, -50%);
-  animation: ps-judge 0.62s ease-out forwards;
+  color: color-mix(in srgb, var(--j) 70%, var(--demo-text-strong));
+  text-shadow: 0 0 16px var(--j);
+  animation: ps-judge calc(var(--demo-dur-slow) * 1.6) var(--demo-ease-exit) forwards;
   white-space: nowrap;
 }
-.ps__judge.is-perfect { color: #ffe08a; text-shadow: 0 0 16px #ffbf3f, 0 0 36px #ff9d00; }
-.ps__judge.is-great { color: #aee2ff; text-shadow: 0 0 14px #4db4ff; }
-.ps__judge.is-good { color: #b6f3c7; text-shadow: 0 0 12px #46d27a; }
-.ps__judge.is-miss { color: #ff9a9a; text-shadow: 0 0 14px #ff3b3b; }
+.ps__judge.is-perfect { --j: var(--ps-perfect); }
+.ps__judge.is-great { --j: var(--ps-great); }
+.ps__judge.is-good { --j: var(--ps-good); }
+.ps__judge.is-miss { --j: var(--ps-miss); }
 @keyframes ps-judge {
   0% { opacity: 0; transform: translate(-50%, -30%) scale(0.7); }
   18% { opacity: 1; transform: translate(-50%, -55%) scale(1.12); }
@@ -304,49 +321,41 @@ html:not(.dark) .ps__stat-val {
   padding: 18px;
   text-align: center;
   background:
-    radial-gradient(90% 70% at 50% 30%, rgba(20, 12, 40, 0.55), transparent 75%),
-    rgba(8, 6, 16, 0.72);
+    radial-gradient(90% 70% at 50% 30%, color-mix(in srgb, var(--demo-accent) 16%, transparent), transparent 75%),
+    color-mix(in srgb, var(--demo-screen-bg) 80%, transparent);
   backdrop-filter: blur(5px);
 }
-html:not(.dark) .ps__results {
-  background:
-    radial-gradient(90% 70% at 50% 30%, rgba(124, 58, 237, 0.16), transparent 75%),
-    rgba(248, 246, 255, 0.82);
-}
 .ps__results-title {
-  font-size: 0.66rem;
+  font-size: 11px;
   letter-spacing: 0.4em;
   text-indent: 0.4em;
   text-transform: uppercase;
   color: var(--demo-text-muted);
 }
 .ps__rank {
+  --rank-glow: var(--ps-perfect);
+
   display: flex;
   flex-direction: column;
   align-items: center;
   line-height: 0.86;
-  --rank-glow: #ffd36b;
 }
-.ps__rank[data-rank="S"] { --rank-glow: #ffd36b; }
-.ps__rank[data-rank="A"] { --rank-glow: #8affc1; }
-.ps__rank[data-rank="B"] { --rank-glow: #7cc6ff; }
-.ps__rank[data-rank="C"] { --rank-glow: #c4a6ff; }
-.ps__rank[data-rank="D"] { --rank-glow: #ff9a9a; }
+.ps__rank[data-rank="A"] { --rank-glow: var(--ps-good); }
+.ps__rank[data-rank="B"] { --rank-glow: var(--ps-great); }
+.ps__rank[data-rank="C"] { --rank-glow: var(--demo-accent-light); }
+.ps__rank[data-rank="D"] { --rank-glow: var(--ps-miss); }
 .ps__rank-letter {
-  font-size: clamp(4rem, 2rem + 14vw, 7rem);
+  font-size: clamp(64px, 32px + 14vw, 112px);
   font-weight: 900;
   letter-spacing: -0.04em;
-  color: #fff;
+  color: var(--demo-text-strong);
   text-shadow:
     0 0 24px var(--rank-glow),
     0 0 60px var(--rank-glow);
-  animation: ps-rank 0.6s cubic-bezier(0.18, 1.4, 0.4, 1) both;
-}
-html:not(.dark) .ps__rank-letter {
-  color: var(--demo-text-strong);
+  animation: ps-rank calc(var(--demo-dur-slow) * 1.6) var(--demo-ease-enter) both;
 }
 .ps__rank-label {
-  font-size: 0.6rem;
+  font-size: 10px;
   letter-spacing: 0.36em;
   text-indent: 0.36em;
   text-transform: uppercase;
@@ -359,27 +368,25 @@ html:not(.dark) .ps__rank-letter {
 }
 .ps__fc {
   padding: 3px 12px;
+  border: 1px solid var(--ps-perfect);
   border-radius: 999px;
-  font-size: 0.64rem;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: #1a1226;
-  background: linear-gradient(90deg, #ffd36b, #ff9ad8);
-  box-shadow: 0 0 18px rgba(255, 180, 90, 0.6);
-  animation: ps-fc 1.6s ease-in-out infinite;
+  color: var(--demo-text-strong);
+  background: color-mix(in srgb, var(--ps-perfect) 22%, transparent);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--ps-perfect) 45%, transparent);
+  animation: ps-fc 1.6s var(--demo-ease-standard) infinite;
 }
 @keyframes ps-fc {
-  0%, 100% { box-shadow: 0 0 16px rgba(255, 180, 90, 0.45); }
-  50% { box-shadow: 0 0 26px rgba(255, 154, 216, 0.8); }
+  0%, 100% { box-shadow: 0 0 12px color-mix(in srgb, var(--ps-perfect) 35%, transparent); }
+  50% { box-shadow: 0 0 26px color-mix(in srgb, var(--ps-perfect) 75%, transparent); }
 }
 .ps__scoreline {
-  font-size: 1.7rem;
+  font-size: 27px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  color: #fff;
-}
-html:not(.dark) .ps__scoreline {
   color: var(--demo-text-strong);
 }
 .ps__breakdown {
@@ -395,25 +402,25 @@ html:not(.dark) .ps__scoreline {
   align-items: center;
 }
 .ps__bd-row dt {
-  font-size: 0.54rem;
+  font-size: 9px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 .ps__bd-row dd {
   margin: 0;
-  font-size: 1rem;
+  font-size: 16px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--demo-text-strong);
 }
-.ps__bd-row.is-perfect dt { color: #ffce6b; }
-.ps__bd-row.is-great dt { color: #7cc6ff; }
-.ps__bd-row.is-good dt { color: #67e8a0; }
-.ps__bd-row.is-miss dt { color: #ff8a8a; }
+.ps__bd-row.is-perfect dt { color: var(--ps-perfect); }
+.ps__bd-row.is-great dt { color: var(--ps-great); }
+.ps__bd-row.is-good dt { color: var(--ps-good); }
+.ps__bd-row.is-miss dt { color: var(--ps-miss); }
 .ps__results-meta {
   display: flex;
   gap: 18px;
-  font-size: 0.74rem;
+  font-size: 12px;
   color: var(--demo-text-muted);
 }
 .ps__results-meta b {
@@ -426,40 +433,17 @@ html:not(.dark) .ps__scoreline {
   margin-top: 6px;
 }
 .ps__btn {
-  height: 36px;
+  --demo-btn-h: 36px;
+
   padding: 0 18px;
-  border: 1px solid var(--demo-border);
-  border-radius: 8px;
-  background: var(--demo-control-bg);
-  color: var(--demo-text-strong);
-  font-family: var(--font-mono);
-  font-size: 0.74rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-  transition: border-color var(--transition-fast), background var(--transition-fast);
-}
-.ps__btn:hover {
-  border-color: var(--demo-accent);
-}
-.ps__btn--primary {
-  border: none;
-  background: var(--demo-accent);
-  color: var(--demo-on-accent);
-}
-.ps-results-enter-active {
-  transition: opacity 0.3s ease;
-}
-.ps-results-enter-from {
-  opacity: 0;
+  font-size: 11px;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .ps__flash,
   .ps__combo,
   .ps__judge,
-  .ps__rank-letter,
-  .ps__fc {
+  .ps__rank-letter {
     animation: none;
   }
   .ps__flash { opacity: 0; }

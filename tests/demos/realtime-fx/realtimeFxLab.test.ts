@@ -20,8 +20,10 @@ vi.mock('@/wasm/index.js', () => ({
   version: vi.fn(() => 'test-wasm'),
 }));
 
-vi.mock('@/demos/realtime-fx/useRealtimeFx', async () => {
+vi.mock('@/demos/realtime-fx/useRealtimeFx', async (importOriginal) => {
   const { ref } = await vi.importActual<typeof import('vue')>('vue');
+  const { absoluteFormantInReach } =
+    await importOriginal<typeof import('@/demos/realtime-fx/useRealtimeFx')>();
   const VOICE_PRESET_MACROS = {
     'neutral-monitor': { pitchSemitones: 0, formant: 1.0, brightness: 0.1, wet: 1 },
     'bright-idol': { pitchSemitones: 4, formant: 1.18, brightness: 0.7, wet: 1 },
@@ -38,6 +40,7 @@ vi.mock('@/demos/realtime-fx/useRealtimeFx', async () => {
   const meter = ref({ inputPeak: 0, outputPeak: 0, inputRms: 0, outputRms: 0 });
   fxMock.state = { ready, monitoring, error, latencyMs, meter };
   return {
+    absoluteFormantInReach,
     VOICE_PRESET_MACROS,
     VOICE_PRESET_ORDER,
     isVoicePresetId: (value: unknown) =>
@@ -81,15 +84,16 @@ describe('RealtimeFxLab', () => {
     const wrapper = mount(RealtimeFxLab);
 
     await nextTick();
-    expect(wrapper.findAll('.rt-preset--active').map((button) => button.text())).toEqual([
-      'Dark Villain',
-    ]);
+    expect(
+      wrapper.findAll('.rt-preset[aria-pressed="true"]').map((button) => button.text()),
+    ).toEqual(['Dark Villain']);
     expect(fxMock.setParams).toHaveBeenLastCalledWith({
       preset: 'dark-villain',
       pitchSemitones: -9,
       formant: 0.72,
       brightness: -0.7,
       formantEngaged: false,
+      formantMode: 'relative',
       wet: 1,
       outputGain: 0.85,
       bypass: false,
@@ -106,6 +110,7 @@ describe('RealtimeFxLab', () => {
       formant: 1.3,
       brightness: 0.75,
       formantEngaged: false,
+      formantMode: 'relative',
       wet: 1,
       outputGain: 0.85,
       bypass: false,
@@ -127,7 +132,7 @@ describe('RealtimeFxLab', () => {
     fxMock.state.ready.value = true;
     await nextTick();
     await buttons()
-      .find((button) => button.text() === 'Speaker on')!
+      .find((button) => button.text() === 'Speaker')!
       .trigger('click');
     expect(fxMock.toggleMonitor).toHaveBeenCalledTimes(1);
 
@@ -187,7 +192,7 @@ describe('RealtimeFxLab', () => {
 
     await wrapper
       .findAll('button')
-      .find((button) => button.text() === 'Speaker on')!
+      .find((button) => button.text() === 'Speaker')!
       .trigger('click');
 
     expect(fxMock.start).toHaveBeenCalledTimes(1);
@@ -201,9 +206,9 @@ describe('RealtimeFxLab', () => {
     localStorage.setItem('libsonare:fx:preset', 'not-a-preset');
     const wrapper = mount(RealtimeFxLab);
 
-    expect(wrapper.findAll('.rt-preset--active').map((button) => button.text())).toEqual([
-      'Neutral Monitor',
-    ]);
+    expect(
+      wrapper.findAll('.rt-preset[aria-pressed="true"]').map((button) => button.text()),
+    ).toEqual(['Neutral Monitor']);
     expect(fxMock.setParams).not.toHaveBeenCalled();
 
     wrapper.unmount();
@@ -235,7 +240,7 @@ describe('RealtimeFxLab', () => {
     fxMock.state.error.value = 'no-mic-api';
     const wrapper = mount(RealtimeFxLab);
 
-    expect(wrapper.find('.rt-error').text()).toContain(
+    expect(wrapper.find('[role="alert"]').text()).toContain(
       'This browser does not expose microphone input.',
     );
 
@@ -245,13 +250,13 @@ describe('RealtimeFxLab', () => {
   it('renders localized copy for permission denial and generic start failures', async () => {
     fxMock.state.error.value = 'mic-denied';
     const wrapper = mount(RealtimeFxLab);
-    expect(wrapper.find('.rt-error').text()).toContain('Microphone access was blocked');
+    expect(wrapper.find('[role="alert"]').text()).toContain('Microphone access was blocked');
 
     // Any unrecognized error code falls back to the generic start-failure copy,
     // so a raw browser message is never shown to the visitor.
     fxMock.state.error.value = 'start-failed';
     await nextTick();
-    expect(wrapper.find('.rt-error').text()).toContain(
+    expect(wrapper.find('[role="alert"]').text()).toContain(
       'Could not start the realtime audio engine.',
     );
 
@@ -281,6 +286,47 @@ describe('RealtimeFxLab', () => {
     releaseStart(true);
     await nextTick();
     await nextTick();
+    wrapper.unmount();
+  });
+
+  it('shows the speaker state as a pressed toggle', async () => {
+    fxMock.state.ready.value = true;
+    const wrapper = mount(RealtimeFxLab);
+    const speaker = () => wrapper.findAll('button').find((button) => button.text() === 'Speaker')!;
+    expect(speaker().attributes('aria-pressed')).toBe('false');
+    fxMock.state.monitoring.value = true;
+    await nextTick();
+    expect(speaker().attributes('aria-pressed')).toBe('true');
+    wrapper.unmount();
+  });
+
+  it('sends the formant mode and warns when keep-size cannot reach the setting', async () => {
+    const wrapper = mount(RealtimeFxLab);
+    const keepSize = wrapper
+      .findAll('[role="radio"]')
+      .find((radio) => radio.text() === 'Keep size')!;
+    await keepSize.trigger('click');
+    expect(fxMock.setParams).toHaveBeenLastCalledWith(
+      expect.objectContaining({ formantMode: 'absolute' }),
+    );
+    expect(wrapper.text()).not.toContain('out of reach');
+
+    const pitch = wrapper
+      .findAll('input')
+      .find((input) => input.attributes('type') === 'range' && input.attributes('min') === '-12')!;
+    await pitch.setValue('12');
+    expect(wrapper.find('.rt-mode .demo-notice--warn').text()).toContain('out of reach');
+    wrapper.unmount();
+  });
+
+  it('reports status through the shared status bar', async () => {
+    const wrapper = mount(RealtimeFxLab);
+    fxMock.state.latencyMs.value = 41;
+    await nextTick();
+    const bar = wrapper.find('.tool-statusbar');
+    expect(bar.text()).toContain('CHAR');
+    expect(bar.text()).toContain('Neutral Monitor');
+    expect(bar.text()).toContain('41 ms');
     wrapper.unmount();
   });
 });

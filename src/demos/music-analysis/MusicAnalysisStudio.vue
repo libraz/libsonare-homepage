@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, shallowRef } from 'vue';
 import ToolShell from '@/components/ToolShell.vue';
+import ToolStatusBar, { type ToolStatusField } from '@/components/ToolStatusBar.vue';
 import {
   AudioTransport,
+  DemoEmpty,
+  DemoNotice,
   MetricItem,
   ScanLine,
-  StatusIndicator,
+  SegmentedControl,
   TechPanel,
   TermLabel,
 } from '@/components/ui';
@@ -26,6 +29,9 @@ import {
   decimateStereo,
   mergeChordSegments,
   formatSectionName as resolveSectionName,
+  spanAt,
+  tempoAt,
+  tempoLane,
 } from '@/demos/music-analysis/musicAnalysisViewModel';
 import {
   createMusicAnalysisClient,
@@ -107,6 +113,9 @@ const TERM_SLUGS: Record<TermKey, string | undefined> = {
   chroma: 'concepts/mir-overview',
   mel: 'concepts/mir-overview',
   cqt: 'concepts/mir-overview',
+  tuning: 'analysis/key-detection',
+  tempoCurve: 'analysis/tempo-bpm',
+  romanNumeral: 'analysis/chord-recognition',
 };
 
 function term(key: TermKey) {
@@ -124,6 +133,7 @@ function term(key: TermKey) {
 }
 
 const statusLabel = computed(() => {
+  if (localError.value) return copy.value.status.failed;
   if (isAnalyzing.value) return copy.value.status.analyzing;
   if (decoded.value) return copy.value.status.ready;
   return copy.value.status.idle;
@@ -215,18 +225,67 @@ const loudnessChart = computed(() => {
   };
 });
 
-const statusFields = computed(() => {
+const statusFields = computed<ToolStatusField[]>(() => {
   const audio = decoded.value;
+  const summary = result.value?.summary;
   return [
-    { key: 'SRC', value: audio?.fileName || '-' },
+    { key: 'SRC', value: audio?.fileName || '-', wide: true },
     { key: 'LEN', value: audio ? formatDuration(audio.duration) : '--:--' },
     { key: 'SR', value: audio ? formatSampleRate(audio.sampleRate) : '-' },
-    { key: 'CH', value: audio ? String(audio.channels) : '-' },
-    { key: 'BPM', value: result.value ? result.value.summary.bpm.toFixed(1) : '-' },
-    { key: 'KEY', value: result.value?.summary.keyName || '-' },
-    { key: 'LUFS', value: result.value ? result.value.summary.integratedLufs.toFixed(1) : '-' },
+    { key: 'BPM', value: summary ? summary.bpm.toFixed(1) : '-', divider: true },
+    { key: 'KEY', value: summary?.keyName || '-' },
+    { key: 'LUFS', value: summary ? summary.integratedLufs.toFixed(1) : '-' },
   ];
 });
+
+const heatmapOptions = computed(() =>
+  (['chroma', 'mel', 'cqt'] as const).map((id) => ({ id, label: copy.value.heatmaps[id] })),
+);
+
+const tuningReadout = computed(() => {
+  const summary = result.value?.summary;
+  if (!summary) return null;
+  const cents = Math.round(summary.tuning * 100);
+  return {
+    cents: `${cents > 0 ? '+' : ''}${cents} ¢`,
+    reference: `${summary.referenceHz.toFixed(1)} Hz`,
+  };
+});
+
+const tempoChart = computed(() => {
+  const analysis = result.value;
+  if (!analysis) return null;
+  return tempoLane(analysis.tempoCurve, analysis.duration, analysis.summary.bpm);
+});
+
+// The readout under the lanes follows the pointer while it is over the
+// timeline, and the playhead otherwise.
+const hoverFraction = ref<number | null>(null);
+
+const readout = computed(() => {
+  const analysis = result.value;
+  if (!analysis) return null;
+  const time = (hoverFraction.value ?? playFraction.value) * analysis.duration;
+  const section = spanAt(analysis.sections, time);
+  const chord = spanAt(chordSegments.value, time);
+  const bpm = tempoAt(analysis.tempoCurve, time);
+  return {
+    position: formatDuration(time),
+    section: section
+      ? `${formatSectionName(section.name)} · ${confidencePct(section.confidence)}% · ${copy.value.timeline.energy} ${confidencePct(section.energyLevel)}%`
+      : '-',
+    chord: chord ? `${chord.name} · ${confidencePct(chord.confidence)}%` : '-',
+    roman: chord?.romanNumeral || '-',
+    tempo: bpm === null ? '-' : `${bpm.toFixed(1)} BPM`,
+  };
+});
+
+function trackHover(event: MouseEvent) {
+  const el = event.currentTarget as HTMLElement;
+  const rect = el.getBoundingClientRect();
+  if (rect.width <= 0) return;
+  hoverFraction.value = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+}
 
 const hasPlayback = computed(() => Boolean(mediaUrl.value));
 
@@ -406,7 +465,7 @@ function baseName(fileName: string): string {
 }
 
 function formatStage(stage: string): string {
-  return copy.value.stages[stage] || stage;
+  return copy.value.stages[stage as keyof typeof enCopy.stages] || stage;
 }
 
 function formatSectionName(name: string): string {
@@ -496,9 +555,16 @@ function chordStyleRich(chord: { start: number; end: number; confidence: number 
 }
 
 // Only label chord blocks wide enough to hold the text; narrower blocks stay as
-// coloured segments (the name is still in the hover title) so labels never collide.
+// coloured segments (the readout names them) so labels never collide.
 function chordLabel(chord: { start: number; end: number; name: string }): string {
   return buildChordLabel(chord, result.value?.duration || 1);
+}
+
+function romanLabel(chord: { start: number; end: number; romanNumeral?: string }): string {
+  return buildChordLabel(
+    { start: chord.start, end: chord.end, name: chord.romanNumeral ?? '' },
+    result.value?.duration || 1,
+  );
 }
 
 function waveformPath(): string {
@@ -527,30 +593,24 @@ function formatLu(value: number): string {
     :opposite-locale-path="oppositeLocalePath"
   >
     <template #statusbar>
-      <div class="analysis-statusbar" role="status" aria-live="polite">
-        <StatusIndicator :status="statusKind" :label="statusLabel" :pulse="isAnalyzing" />
-        <span v-for="field in statusFields" :key="field.key" class="analysis-statusbar__field">
-          <span class="analysis-statusbar__key">{{ field.key }}</span>
-          <span class="analysis-statusbar__value">{{ field.value }}</span>
-        </span>
-      </div>
+      <ToolStatusBar :status="statusKind" :label="statusLabel" :pulse="isAnalyzing" :fields="statusFields" />
     </template>
 
     <div class="analysis-studio" @drop="handleDrop" @dragover.prevent>
       <aside class="analysis-studio__left">
         <TechPanel :title="copy.import.title">
-          <div class="analysis-drop" @click="chooseFile">
-            <input ref="fileInput" class="analysis-drop__input" type="file" accept="audio/*" @change="handleInput">
-            <span class="analysis-drop__icon">MIR</span>
+          <input ref="fileInput" class="analysis-drop__input" type="file" accept="audio/*" @change="handleInput">
+          <button type="button" class="analysis-drop" :disabled="isLoading || isAnalyzing" @click="chooseFile">
+            <span class="analysis-drop__icon" aria-hidden="true">MIR</span>
             <strong>{{ decoded?.fileName || copy.import.dropTitle }}</strong>
             <span>{{ copy.import.dropBody }}</span>
             <ScanLine />
-          </div>
+          </button>
           <div class="analysis-actions">
-            <button class="analysis-button analysis-button--primary" :disabled="isLoading || isAnalyzing" @click="chooseFile">
+            <button type="button" class="demo-btn demo-btn--primary" :disabled="isLoading || isAnalyzing" @click="chooseFile">
               {{ copy.import.choose }}
             </button>
-            <button class="analysis-button" :disabled="isLoading || isAnalyzing" @click="loadDemo">
+            <button type="button" class="demo-btn" :disabled="isLoading || isAnalyzing" @click="loadDemo">
               {{ copy.import.demo }}
             </button>
           </div>
@@ -575,10 +635,10 @@ function formatLu(value: number): string {
               :style="playheadStyle"
               @click="seekFromEvent"
             >
-              <svg viewBox="0 0 100 72" preserveAspectRatio="none" aria-label="Waveform">
+              <svg viewBox="0 0 100 72" preserveAspectRatio="none" role="img" :aria-label="copy.aria.waveform">
                 <path :d="waveformPath()" />
               </svg>
-              <div v-if="hasPlayback" class="playhead playhead--wave" aria-hidden="true"></div>
+              <div v-if="hasPlayback" class="playhead" aria-hidden="true"></div>
             </div>
           </div>
         </TechPanel>
@@ -598,9 +658,11 @@ function formatLu(value: number): string {
               <template #label><TermLabel v-bind="term('stereoWidth')">{{ copy.metrics.stereoWidth }}</TermLabel></template>
             </MetricItem>
           </div>
-          <p v-if="meteringSummary" class="panel-note">{{ copy.notes.metering }}</p>
+          <div v-if="meteringSummary" class="analysis-note">
+            <DemoNotice tone="hint">{{ copy.notes.metering }}</DemoNotice>
+          </div>
           <div v-if="vectorscope" class="vectorscope">
-            <svg class="vectorscope__svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" :aria-label="copy.terms.items.vectorscope.title">
+            <svg class="vectorscope__svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" role="img" :aria-label="copy.terms.items.vectorscope.title">
               <g class="vectorscope__grid">
                 <circle cx="50" cy="50" r="46" />
                 <line x1="50" y1="4" x2="50" y2="96" />
@@ -626,67 +688,75 @@ function formatLu(value: number): string {
               <TermLabel v-bind="term('vectorscope')" tone="strong">{{ copy.terms.items.vectorscope.title }}</TermLabel>
             </p>
           </div>
-          <div v-else-if="!result" class="analysis-empty analysis-empty--compact">{{ copy.empty.metering }}</div>
+          <DemoEmpty v-else-if="!result" compact :title="copy.empty.metering" />
         </TechPanel>
       </aside>
 
       <section class="analysis-studio__center">
-        <div v-if="isAnalyzing || isLoading" class="analysis-progress">
-          <div class="analysis-progress__top">
-            <span>{{ progressStage }}</span>
-            <span>{{ Math.round(progress * 100) }}%</span>
+        <Transition name="demo-rise">
+          <div
+            v-if="isAnalyzing || isLoading"
+            class="analysis-progress"
+            role="progressbar"
+            :aria-label="progressStage"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            :aria-valuenow="Math.round(progress * 100)"
+          >
+            <div class="analysis-progress__top">
+              <span>{{ progressStage }}</span>
+              <span>{{ Math.round(progress * 100) }}%</span>
+            </div>
+            <div class="analysis-progress__bar"><span :style="{ transform: `scaleX(${progress})` }"></span></div>
           </div>
-          <div class="analysis-progress__bar"><span :style="{ width: `${progress * 100}%` }"></span></div>
-        </div>
+        </Transition>
 
-        <div v-if="localError" class="analysis-message analysis-message--error">{{ localError }}</div>
-        <div v-else-if="warning" class="analysis-message analysis-message--warning">{{ warning }}</div>
+        <DemoNotice v-if="localError" tone="error">{{ localError }}</DemoNotice>
+        <DemoNotice v-else-if="warning" tone="warn">{{ warning }}</DemoNotice>
 
         <TechPanel :title="copy.panels.overview">
-          <div v-if="result" class="analysis-metrics">
-            <MetricItem layout="column" variant="accent">
-              <template #label><TermLabel v-bind="term('bpm')">{{ copy.metrics.bpm }}</TermLabel></template>
-              <span class="metric-inline">
-                {{ result.summary.bpm.toFixed(1) }}
-                <i
-                  class="conf-chip"
-                  :class="confidenceTone(result.summary.bpmConfidence)"
-                  :title="`${copy.metrics.bpmConfidence}: ${confidencePct(result.summary.bpmConfidence)}%`"
-                >{{ confidencePct(result.summary.bpmConfidence) }}%</i>
-              </span>
-            </MetricItem>
-            <MetricItem :value="result.summary.keyName" layout="column" variant="accent">
-              <template #label><TermLabel v-bind="term('key')">{{ copy.metrics.key }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="`${Math.round(result.summary.keyConfidence * 100)}%`" layout="column">
-              <template #label><TermLabel v-bind="term('keyConfidence')">{{ copy.metrics.keyConfidence }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="result.summary.timeSignature" layout="column">
-              <template #label><TermLabel v-bind="term('time')">{{ copy.metrics.time }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="result.summary.integratedLufs.toFixed(1)" layout="column" variant="success">
-              <template #label><TermLabel v-bind="term('lufs')">{{ copy.metrics.lufs }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="formatLu(result.summary.loudnessRange)" layout="column">
-              <template #label><TermLabel v-bind="term('lra')">{{ copy.metrics.lra }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="formatDb(result.summary.dynamicRangeDb)" layout="column">
-              <template #label><TermLabel v-bind="term('dynamicRange')">{{ copy.metrics.dynamicRange }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="formatDb(result.summary.crestFactor)" layout="column">
-              <template #label><TermLabel v-bind="term('crest')">{{ copy.metrics.crest }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="result.summary.brightness.toFixed(2)" layout="column">
-              <template #label><TermLabel v-bind="term('brightness')">{{ copy.metrics.brightness }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="result.summary.warmth.toFixed(2)" layout="column">
-              <template #label><TermLabel v-bind="term('warmth')">{{ copy.metrics.warmth }}</TermLabel></template>
-            </MetricItem>
-          </div>
-          <div v-else class="analysis-empty">
-            <strong>{{ copy.empty.title }}</strong>
-            <span>{{ copy.empty.body }}</span>
-          </div>
+          <Transition name="demo-fade" mode="out-in">
+            <div v-if="result" class="analysis-metrics">
+              <MetricItem layout="column" variant="accent">
+                <template #label><TermLabel v-bind="term('bpm')">{{ copy.metrics.bpm }}</TermLabel></template>
+                <span class="metric-inline">
+                  {{ result.summary.bpm.toFixed(1) }}
+                  <span class="conf-chip" :class="confidenceTone(result.summary.bpmConfidence)">
+                    <span class="demo-sr-only">{{ copy.metrics.bpmConfidence }}</span>
+                    {{ confidencePct(result.summary.bpmConfidence) }}%
+                  </span>
+                </span>
+              </MetricItem>
+              <MetricItem :value="result.summary.keyName" layout="column" variant="accent">
+                <template #label><TermLabel v-bind="term('key')">{{ copy.metrics.key }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="`${Math.round(result.summary.keyConfidence * 100)}%`" layout="column">
+                <template #label><TermLabel v-bind="term('keyConfidence')">{{ copy.metrics.keyConfidence }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="result.summary.timeSignature" layout="column">
+                <template #label><TermLabel v-bind="term('time')">{{ copy.metrics.time }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="result.summary.integratedLufs.toFixed(1)" layout="column" variant="success">
+                <template #label><TermLabel v-bind="term('lufs')">{{ copy.metrics.lufs }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="formatLu(result.summary.loudnessRange)" layout="column">
+                <template #label><TermLabel v-bind="term('lra')">{{ copy.metrics.lra }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="formatDb(result.summary.dynamicRangeDb)" layout="column">
+                <template #label><TermLabel v-bind="term('dynamicRange')">{{ copy.metrics.dynamicRange }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="formatDb(result.summary.crestFactor)" layout="column">
+                <template #label><TermLabel v-bind="term('crest')">{{ copy.metrics.crest }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="result.summary.brightness.toFixed(2)" layout="column">
+                <template #label><TermLabel v-bind="term('brightness')">{{ copy.metrics.brightness }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="result.summary.warmth.toFixed(2)" layout="column">
+                <template #label><TermLabel v-bind="term('warmth')">{{ copy.metrics.warmth }}</TermLabel></template>
+              </MetricItem>
+            </div>
+            <DemoEmpty v-else :title="copy.empty.title">{{ copy.empty.body }}</DemoEmpty>
+          </Transition>
         </TechPanel>
 
         <TechPanel :title="copy.panels.timeline">
@@ -711,6 +781,8 @@ function formatLu(value: number): string {
               :aria-valuenow="hasPlayback ? playSeconds : undefined"
               @click="seekFromEvent"
               @keydown="seekFromKey"
+              @mousemove="trackHover"
+              @mouseleave="hoverFraction = null"
             >
               <div class="timeline-row timeline-row--sections">
                 <span
@@ -718,10 +790,10 @@ function formatLu(value: number): string {
                   :key="`${section.name}-${section.start}`"
                   class="timeline-section"
                   :style="sectionStyleRich(section)"
-                  :title="`${formatSectionName(section.name)} ${formatDuration(section.start)} - ${formatDuration(section.end)} · ${copy.timeline.confidence} ${confidencePct(section.confidence)}% · ${copy.timeline.energy} ${confidencePct(section.energyLevel)}%`"
                 >
                   {{ formatSectionName(section.name) }}
                 </span>
+                <span class="timeline-row__tag" aria-hidden="true">{{ copy.timeline.lanes.sections }}</span>
               </div>
               <div class="timeline-row timeline-row--chords">
                 <span
@@ -729,155 +801,215 @@ function formatLu(value: number): string {
                   :key="`${chord.name}-${chord.start}`"
                   class="timeline-chord"
                   :style="chordStyleRich(chord)"
-                  :title="`${chord.name} ${formatDuration(chord.start)} – ${formatDuration(chord.end)} · ${copy.timeline.confidence} ${confidencePct(chord.confidence)}%`"
                 >
                   {{ chordLabel(chord) }}
                 </span>
+                <span class="timeline-row__tag" aria-hidden="true">{{ copy.timeline.lanes.chords }}</span>
+              </div>
+              <div class="timeline-row timeline-row--thin timeline-row--roman">
+                <span
+                  v-for="chord in chordSegments"
+                  :key="`r-${chord.name}-${chord.start}`"
+                  class="timeline-roman"
+                  :style="chordStyleRich(chord)"
+                >
+                  {{ romanLabel(chord) }}
+                </span>
+                <span class="timeline-row__tag" aria-hidden="true">{{ copy.timeline.lanes.roman }}</span>
               </div>
               <div class="timeline-row timeline-row--beats">
                 <span v-for="beat in result.beats.slice(0, 260)" :key="beat" class="timeline-beat" :style="markerStyle(beat)"></span>
                 <span v-for="beat in result.downbeats.slice(0, 80)" :key="`d-${beat}`" class="timeline-downbeat" :style="markerStyle(beat)"></span>
+                <span class="timeline-row__tag" aria-hidden="true">{{ copy.timeline.lanes.beats }}</span>
               </div>
-              <div v-if="hasPlayback" class="playhead playhead--timeline" aria-hidden="true"></div>
+              <div v-if="tempoChart" class="timeline-row timeline-row--tempo">
+                <svg class="timeline-tempo" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" :aria-label="copy.aria.tempo">
+                  <line class="timeline-tempo__ref" x1="0" :y1="tempoChart.referenceY" x2="100" :y2="tempoChart.referenceY" />
+                  <path class="timeline-tempo__curve" :d="tempoChart.path" />
+                </svg>
+                <span class="timeline-row__tag" aria-hidden="true">
+                  {{ copy.timeline.lanes.tempo }} {{ tempoChart.min.toFixed(1) }}–{{ tempoChart.max.toFixed(1) }}
+                </span>
+              </div>
+              <div v-if="hasPlayback" class="playhead" aria-hidden="true"></div>
             </div>
+            <dl v-if="readout" class="timeline-readout">
+              <div class="timeline-readout__item timeline-readout__item--pos">
+                <dt>{{ copy.timeline.readout.position }}</dt>
+                <dd>{{ readout.position }}</dd>
+              </div>
+              <div class="timeline-readout__item">
+                <dt>{{ copy.timeline.readout.section }}</dt>
+                <dd>{{ readout.section }}</dd>
+              </div>
+              <div class="timeline-readout__item">
+                <dt>{{ copy.timeline.readout.chord }}</dt>
+                <dd>{{ readout.chord }}</dd>
+              </div>
+              <div class="timeline-readout__item">
+                <dt><TermLabel v-bind="term('romanNumeral')">{{ copy.timeline.readout.roman }}</TermLabel></dt>
+                <dd>{{ readout.roman }}</dd>
+              </div>
+              <div class="timeline-readout__item">
+                <dt><TermLabel v-bind="term('tempoCurve')">{{ copy.timeline.readout.tempo }}</TermLabel></dt>
+                <dd>{{ readout.tempo }}</dd>
+              </div>
+            </dl>
           </div>
-          <div v-else class="analysis-empty analysis-empty--compact">{{ copy.empty.timeline }}</div>
+          <DemoEmpty v-else compact :title="copy.empty.timeline" />
         </TechPanel>
 
-        <TechPanel v-if="loudnessChart" :title="copy.panels.loudness">
-          <div class="loudness-chart">
-            <div class="loudness-scale" aria-hidden="true">
-              <span v-for="t in loudnessTicks" :key="t.lufs" class="loudness-scale__tick" :style="{ top: `${t.top}%` }">{{ t.lufs }}</span>
+        <Transition name="demo-rise">
+          <TechPanel v-if="loudnessChart" :title="copy.panels.loudness">
+            <div class="loudness-chart">
+              <div class="loudness-scale" aria-hidden="true">
+                <span v-for="t in loudnessTicks" :key="t.lufs" class="loudness-scale__tick" :style="{ top: `${t.top}%` }">{{ t.lufs }}</span>
+              </div>
+              <div
+                class="loudness-plot"
+                :class="{ 'is-seekable': hasPlayback }"
+                :style="playheadStyle"
+                @click="seekFromEvent"
+              >
+                <svg class="loudness-chart__svg" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" :aria-label="copy.aria.loudness">
+                  <line
+                    v-if="loudnessChart.integratedY !== null"
+                    class="loudness-chart__ref"
+                    x1="0"
+                    :y1="loudnessChart.integratedY"
+                    x2="100"
+                    :y2="loudnessChart.integratedY"
+                  />
+                  <path class="loudness-chart__short" :d="loudnessChart.shortTerm" />
+                  <path class="loudness-chart__moment" :d="loudnessChart.momentary" />
+                </svg>
+                <div v-if="hasPlayback" class="playhead" aria-hidden="true"></div>
+              </div>
             </div>
-            <div
-              class="loudness-plot"
-              :class="{ 'is-seekable': hasPlayback }"
-              :style="playheadStyle"
-              @click="seekFromEvent"
-            >
-              <svg class="loudness-chart__svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Loudness timeline">
-                <line
-                  v-if="loudnessChart.integratedY !== null"
-                  class="loudness-chart__ref"
-                  x1="0"
-                  :y1="loudnessChart.integratedY"
-                  x2="100"
-                  :y2="loudnessChart.integratedY"
-                />
-                <path class="loudness-chart__short" :d="loudnessChart.shortTerm" />
-                <path class="loudness-chart__moment" :d="loudnessChart.momentary" />
-              </svg>
-              <div v-if="hasPlayback" class="playhead playhead--loud" aria-hidden="true"></div>
+            <div class="loudness-legend">
+              <span class="loudness-legend__item loudness-legend__item--moment">
+                <TermLabel v-bind="term('momentary')">{{ copy.loudness.momentary }}</TermLabel>
+              </span>
+              <span class="loudness-legend__item loudness-legend__item--short">
+                <TermLabel v-bind="term('shortTerm')">{{ copy.loudness.shortTerm }}</TermLabel>
+              </span>
+              <span class="loudness-legend__item loudness-legend__item--int">
+                {{ copy.loudness.integrated }}
+                <b>{{ Number.isFinite(loudnessChart.integrated) ? `${loudnessChart.integrated.toFixed(1)} LUFS` : '-' }}</b>
+              </span>
             </div>
-          </div>
-          <div class="loudness-legend">
-            <span class="loudness-legend__item loudness-legend__item--moment">
-              <TermLabel v-bind="term('momentary')">{{ copy.loudness.momentary }}</TermLabel>
-            </span>
-            <span class="loudness-legend__item loudness-legend__item--short">
-              <TermLabel v-bind="term('shortTerm')">{{ copy.loudness.shortTerm }}</TermLabel>
-            </span>
-            <span class="loudness-legend__item loudness-legend__item--int">
-              {{ copy.loudness.integrated }}
-              <b>{{ Number.isFinite(loudnessChart.integrated) ? `${loudnessChart.integrated.toFixed(1)} LUFS` : '-' }}</b>
-            </span>
-          </div>
-        </TechPanel>
+          </TechPanel>
+        </Transition>
 
         <TechPanel :title="copy.panels.spectrum">
           <template #header-right>
-            <div class="heatmap-tabs">
-              <button
-                v-for="key in (['chroma', 'mel', 'cqt'] as HeatmapKey[])"
-                :key="key"
-                :class="{ 'heatmap-tabs__button--active': activeHeatmap === key }"
-                class="heatmap-tabs__button"
-                @click="activeHeatmap = key"
-              >
-                {{ copy.heatmaps[key] }}
-              </button>
-            </div>
+            <SegmentedControl
+              :model-value="activeHeatmap"
+              class="heatmap-picker"
+              size="sm"
+              :fill="false"
+              :options="heatmapOptions"
+              :ariaLabel="copy.aria.heatmapPicker"
+              @update:model-value="activeHeatmap = $event as HeatmapKey"
+            />
           </template>
-          <MatrixHeatmap
-            v-if="activeHeatmapData"
-            :rows="activeHeatmapData.rows"
-            :columns="activeHeatmapData.columns"
-            :values="activeHeatmapData.values"
-            :min="activeHeatmapData.min"
-            :max="activeHeatmapData.max"
-            :label="copy.heatmaps[activeHeatmap]"
-          />
-          <p v-if="activeHeatmapData" class="heatmap-caption">
-            <TermLabel v-bind="term(activeHeatmap)" tone="strong">{{ copy.terms.items[activeHeatmap].title }}</TermLabel>
-            <span>{{ copy.terms.items[activeHeatmap].body }}</span>
-          </p>
-          <div v-if="!activeHeatmapData" class="analysis-empty analysis-empty--compact">{{ copy.empty.spectrum }}</div>
+          <template v-if="activeHeatmapData">
+            <MatrixHeatmap
+              :rows="activeHeatmapData.rows"
+              :columns="activeHeatmapData.columns"
+              :values="activeHeatmapData.values"
+              :min="activeHeatmapData.min"
+              :max="activeHeatmapData.max"
+              :label="copy.heatmaps[activeHeatmap]"
+            />
+            <p class="heatmap-caption">
+              <TermLabel v-bind="term(activeHeatmap)" tone="strong">{{ copy.terms.items[activeHeatmap].title }}</TermLabel>
+              <span>{{ copy.terms.items[activeHeatmap].body }}</span>
+            </p>
+          </template>
+          <DemoEmpty v-else compact :title="copy.empty.spectrum" />
         </TechPanel>
       </section>
 
       <aside class="analysis-studio__right">
         <TechPanel :title="copy.panels.harmony">
-          <div v-if="result" class="analysis-table">
-            <div
-              v-for="candidate in result.keyCandidates"
-              :key="candidate.name"
-              class="analysis-table__row"
-              :title="`${candidate.name} · ${copy.metrics.keyMatch} ${confidencePct(candidate.correlation)}%`"
-            >
-              <span class="analysis-table__name">{{ candidate.name }}</span>
-              <span class="analysis-table__meter">
-                <i :class="confidenceTone(candidate.correlation)" :style="{ width: `${confidencePct(candidate.correlation)}%` }"></i>
-              </span>
-              <strong>{{ confidencePct(candidate.correlation) }}%</strong>
+          <template v-if="result">
+            <div class="analysis-list">
+              <MetricItem :value="tuningReadout?.cents || '-'">
+                <template #label><TermLabel v-bind="term('tuning')">{{ copy.metrics.tuning }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="tuningReadout?.reference || '-'">
+                <template #label>{{ copy.metrics.reference }}</template>
+              </MetricItem>
             </div>
-          </div>
-          <div v-else class="analysis-empty analysis-empty--compact">{{ copy.empty.harmony }}</div>
+            <div class="analysis-table">
+              <div class="analysis-table__head">
+                <span>{{ copy.metrics.key }}</span>
+                <span>{{ copy.metrics.keyMatch }}</span>
+              </div>
+              <div
+                v-for="candidate in result.keyCandidates"
+                :key="candidate.name"
+                class="analysis-table__row"
+              >
+                <span class="analysis-table__name">{{ candidate.name }}</span>
+                <span class="analysis-table__meter" aria-hidden="true">
+                  <i :class="confidenceTone(candidate.correlation)" :style="{ transform: `scaleX(${confidencePct(candidate.correlation) / 100})` }"></i>
+                </span>
+                <strong>{{ confidencePct(candidate.correlation) }}%</strong>
+              </div>
+            </div>
+          </template>
+          <DemoEmpty v-else compact :title="copy.empty.harmony" />
         </TechPanel>
 
         <TechPanel :title="copy.panels.melody">
-          <div v-if="result" class="analysis-list">
-            <MetricItem :value="`${result.melody.pitchRangeOctaves.toFixed(2)} oct`">
-              <template #label><TermLabel v-bind="term('pitchRange')">{{ copy.metrics.pitchRange }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="`${Math.round(result.melody.pitchStability * 100)}%`">
-              <template #label><TermLabel v-bind="term('pitchStability')">{{ copy.metrics.pitchStability }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="`${result.melody.meanFrequency.toFixed(1)} Hz`">
-              <template #label><TermLabel v-bind="term('meanPitch')">{{ copy.metrics.meanPitch }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="`${result.melody.vibratoRate.toFixed(1)} Hz`">
-              <template #label><TermLabel v-bind="term('vibrato')">{{ copy.metrics.vibrato }}</TermLabel></template>
-            </MetricItem>
-          </div>
-          <p v-if="result" class="panel-note">{{ copy.notes.melody }}</p>
-          <div
-            v-if="result"
-            class="melody-cloud"
-            :class="{ 'is-seekable': hasPlayback }"
-            :style="playheadStyle"
-            @click="seekFromEvent"
-          >
-            <span
-              v-for="point in result.melody.points"
-              :key="`${point.time}-${point.frequency}`"
-              class="melody-cloud__point"
-              :style="{
-                left: `${(point.time / result.duration) * 100}%`,
-                bottom: `${Math.min(100, Math.max(0, (Math.log2(point.frequency / 55) / 6) * 100))}%`,
-                opacity: `${Math.max(0.25, point.confidence)}`,
-              }"
-            ></span>
-            <div v-if="hasPlayback" class="playhead playhead--melody" aria-hidden="true"></div>
-          </div>
-          <div v-if="!result" class="analysis-empty analysis-empty--compact">{{ copy.empty.melody }}</div>
+          <template v-if="result">
+            <div class="analysis-list">
+              <MetricItem :value="`${result.melody.pitchRangeOctaves.toFixed(2)} oct`">
+                <template #label><TermLabel v-bind="term('pitchRange')">{{ copy.metrics.pitchRange }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="`${Math.round(result.melody.pitchStability * 100)}%`">
+                <template #label><TermLabel v-bind="term('pitchStability')">{{ copy.metrics.pitchStability }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="`${result.melody.meanFrequency.toFixed(1)} Hz`">
+                <template #label><TermLabel v-bind="term('meanPitch')">{{ copy.metrics.meanPitch }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="`${result.melody.vibratoRate.toFixed(1)} Hz`">
+                <template #label><TermLabel v-bind="term('vibrato')">{{ copy.metrics.vibrato }}</TermLabel></template>
+              </MetricItem>
+            </div>
+            <div class="analysis-note">
+              <DemoNotice tone="hint">{{ copy.notes.melody }}</DemoNotice>
+            </div>
+            <div
+              class="melody-cloud"
+              :class="{ 'is-seekable': hasPlayback }"
+              :style="playheadStyle"
+              @click="seekFromEvent"
+            >
+              <span
+                v-for="point in result.melody.points"
+                :key="`${point.time}-${point.frequency}`"
+                class="melody-cloud__point"
+                :style="{
+                  left: `${(point.time / result.duration) * 100}%`,
+                  bottom: `${Math.min(100, Math.max(0, (Math.log2(point.frequency / 55) / 6) * 100))}%`,
+                  opacity: `${Math.max(0.25, point.confidence)}`,
+                }"
+              ></span>
+              <div v-if="hasPlayback" class="playhead" aria-hidden="true"></div>
+            </div>
+          </template>
+          <DemoEmpty v-else compact :title="copy.empty.melody" />
         </TechPanel>
 
-        <TechPanel title="EXPORT">
+        <TechPanel :title="copy.panels.export">
           <div class="analysis-actions analysis-actions--stack">
-            <button class="analysis-button analysis-button--primary" :disabled="!result" @click="exportReport">
+            <button type="button" class="demo-btn demo-btn--primary" :disabled="!result" @click="exportReport">
               {{ copy.actions.export }}
             </button>
-            <button class="analysis-button" :disabled="!decoded || isAnalyzing" @click="analyzeCurrent">
+            <button type="button" class="demo-btn" :disabled="!decoded || isAnalyzing" @click="analyzeCurrent">
               {{ copy.actions.rerun }}
             </button>
           </div>

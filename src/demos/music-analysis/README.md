@@ -6,10 +6,13 @@ spectrogram views.
 
 - Page: `/music-analysis` — https://libsonare.libraz.net/music-analysis
 - Entry: `MusicAnalysisStudio.vue`
-- Engine: `analyze`, `melSpectrogram`, `lufsInterleaved`, `momentaryLufs`,
-  `shortTermLufs`, and the `metering*` family for true peak, clipping, DC
-  offset, stereo width and correlation.
+- Engine: `analyzeWithProgress` (with `computeTempoCurve`, `adaptiveTempo` and
+  `tuning: 'auto'`, so the result carries `beatLocalBpm`, `tuning` and a
+  `romanNumeral` on every chord), `tuningToReferenceHz`, `downmix`,
+  `melSpectrogram`, `lufsInterleaved`, `momentaryLufs`, `shortTermLufs`, and the
+  `metering*` family for true peak, clipping, DC offset, stereo width and
+  correlation.
 
 `music-analysis.worker.ts` does the analysis and downsamples long or high-rate
 files first; `musicAnalysisViewModel.ts` turns the raw report into the rows the
-timeline and the heatmaps render.
+timeline and the heatmaps render, including the local-tempo lane.

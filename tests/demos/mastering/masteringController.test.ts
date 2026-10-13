@@ -154,6 +154,15 @@ vi.mock('@/demos/mastering/masteringWorkerClient', async () => {
           ),
         ),
         analyzeReference: vi.fn(),
+        detectRepair: vi.fn(() =>
+          job(
+            Promise.resolve({
+              recommended: { dehum: { fundamentalHz: 50, harmonics: 4 } },
+              defects: {},
+              declipThresholdSafe: true,
+            }),
+          ),
+        ),
         previewPlatforms: vi.fn(() => job(Promise.resolve([]))),
         dispose: vi.fn(),
       };
@@ -364,6 +373,26 @@ describe('useMastering', () => {
     expect(m.state.value.source?.fileName).toBe('old.wav');
     m.edit('setMode', 'studio');
     expect(harness.calls).toEqual([]);
+    stop();
+  });
+
+  it('detects repair needs on the source and applies the suggestion as one edit', async () => {
+    const { m, stop } = await loaded();
+    m.edit('setRepairStageEnabled', 'dereverb', true);
+    await m.detectRepair();
+    expect(harness.worker.detectRepair).toHaveBeenCalledTimes(1);
+    expect(m.repairDetection.value?.recommended).toEqual({
+      dehum: { fundamentalHz: 50, harmonics: 4 },
+    });
+    m.applyRepairSuggestion();
+    expect(m.state.value.repair.dehum).toEqual({
+      enabled: true,
+      params: { fundamentalHz: 50, harmonics: 4 },
+    });
+    expect(m.state.value.repair.dereverb.enabled).toBe(false);
+    m.undo();
+    expect(m.state.value.repair.dehum.enabled).toBe(false);
+    expect(m.state.value.repair.dereverb.enabled).toBe(true);
     stop();
   });
 

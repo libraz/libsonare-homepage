@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+import { SegmentedControl, TermLabel } from '@/components/ui';
 import { type PracticeCopy, type SoundSource, SPEED_OPTIONS } from '@/demos/practice/practiceCopy';
 
-defineProps<{
+const props = defineProps<{
   copy: PracticeCopy;
   isBusy: boolean;
   hasMidi: boolean;
@@ -21,6 +23,18 @@ defineEmits<{
   mute: [];
   volume: [event: Event];
 }>();
+
+const speedOptions = computed(() =>
+  SPEED_OPTIONS.map((option) => ({
+    id: String(option),
+    label: `${option}×`,
+    disabled: props.isBusy,
+  })),
+);
+const sourceOptions = computed(() => [
+  { id: 'sf2', label: props.copy.controls.sourceSampled, disabled: props.isBusy },
+  { id: 'synth', label: props.copy.controls.sourceSynth, disabled: props.isBusy },
+]);
 </script>
 
 <template>
@@ -28,7 +42,7 @@ defineEmits<{
     <div class="practice__transport">
       <button
         type="button"
-        class="practice__play"
+        class="demo-btn demo-btn--primary practice__play"
         :class="{ 'is-busy': isBusy }"
         :disabled="isBusy || !hasMidi"
         :aria-label="isBusy ? copy.controls.preparing : isPlaying ? copy.controls.pause : copy.controls.play"
@@ -62,7 +76,7 @@ defineEmits<{
       </button>
       <button
         type="button"
-        class="practice__icon-btn"
+        class="demo-btn demo-btn--icon practice__icon-btn"
         :aria-label="copy.controls.restart"
         :title="copy.controls.restart"
         :disabled="!hasMidi || isBusy"
@@ -86,55 +100,32 @@ defineEmits<{
     </div>
 
     <div class="practice__group">
-      <span class="practice__group-label demo-label">{{ copy.controls.speed }}</span>
-      <div class="practice__speeds" role="group" :aria-label="copy.controls.speed">
-        <button
-          v-for="option in SPEED_OPTIONS"
-          :key="option"
-          type="button"
-          class="practice__speed"
-          :class="{ 'is-active': speed === option }"
-          :aria-pressed="speed === option"
-          :disabled="isBusy"
-          @click="$emit('speed', option)"
-        >
-          {{ option === 1 ? '1×' : `${option}×` }}
-        </button>
-      </div>
+      <TermLabel :label="copy.controls.speed" :title="copy.help.speed.title" :body="copy.help.speed.body" />
+      <SegmentedControl
+        :model-value="String(speed)"
+        :options="speedOptions"
+        :ariaLabel="copy.controls.speed"
+        :fill="false"
+        @update:model-value="$emit('speed', Number($event))"
+      />
     </div>
 
     <div class="practice__group">
-      <span class="practice__group-label demo-label">{{ copy.controls.sound }}</span>
-      <div class="practice__sources" role="group" :aria-label="copy.controls.sourceAria">
-        <button
-          type="button"
-          class="practice__source"
-          :class="{ 'is-active': source === 'sf2' }"
-          :aria-pressed="source === 'sf2'"
-          :disabled="isBusy"
-          @pointerenter="$emit('prefetch')"
-          @click="$emit('source', 'sf2')"
-        >
-          {{ copy.controls.sourceSampled }}
-        </button>
-        <button
-          type="button"
-          class="practice__source"
-          :class="{ 'is-active': source === 'synth' }"
-          :aria-pressed="source === 'synth'"
-          :disabled="isBusy"
-          @pointerenter="$emit('prefetch')"
-          @click="$emit('source', 'synth')"
-        >
-          {{ copy.controls.sourceSynth }}
-        </button>
-      </div>
+      <TermLabel :label="copy.controls.sound" :title="copy.help.sound.title" :body="copy.help.sound.body" />
+      <SegmentedControl
+        :model-value="source"
+        :options="sourceOptions"
+        :ariaLabel="copy.controls.sourceAria"
+        :fill="false"
+        @pointerenter="$emit('prefetch')"
+        @update:model-value="$emit('source', $event as SoundSource)"
+      />
     </div>
 
     <div class="practice__group practice__group--volume">
       <button
         type="button"
-        class="practice__icon-btn"
+        class="demo-btn demo-btn--icon practice__icon-btn"
         :aria-label="muted ? copy.controls.unmute : copy.controls.mute"
         :title="muted ? copy.controls.unmute : copy.controls.mute"
         @click="$emit('mute')"
@@ -173,7 +164,7 @@ defineEmits<{
         </svg>
       </button>
       <input
-        class="practice__volume"
+        class="demo-range practice__volume"
         type="range"
         min="0"
         max="1"

@@ -131,7 +131,9 @@ describe('analysis visualizer components', () => {
       },
     });
 
-    expect(wrapper.find('.waveform__playhead').attributes('style')).toContain('left: 25%');
+    expect(wrapper.find('.waveform__playhead-track').attributes('style')).toContain(
+      'translateX(25%)',
+    );
     expect(calls.some((call) => call.method === 'roundRect')).toBe(true);
 
     await wrapper.setProps({
@@ -148,6 +150,8 @@ describe('analysis visualizer components', () => {
     expect(wrapper.emitted('seek')).toEqual([[6]]);
 
     await wrapper.setProps({ currentTime: 4 });
-    expect(wrapper.find('.waveform__playhead').attributes('style')).toContain('left: 50%');
+    expect(wrapper.find('.waveform__playhead-track').attributes('style')).toContain(
+      'translateX(50%)',
+    );
   });
 });

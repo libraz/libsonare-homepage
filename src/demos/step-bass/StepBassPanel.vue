@@ -10,7 +10,7 @@
  * under it.
  */
 import { computed } from 'vue';
-import { RotaryKnob, Tooltip } from '@/components/ui';
+import { RotaryKnob, TermLabel } from '@/components/ui';
 import { type KnobHelpKey, SILKSCREEN, type StepBassCopy } from '@/demos/step-bass/stepBassCopy';
 import { KNOB_RANGES, STEP_BASS_DEFAULT_KNOBS } from '@/demos/step-bass/stepBassPatch';
 import type { Knobs, StepBassWaveform } from '@/demos/step-bass/stepBassTypes';
@@ -105,9 +105,7 @@ function term(key: KnobHelpKey) {
               <span>{{ shape === 'saw' ? SILKSCREEN.saw : SILKSCREEN.square }}</span>
             </button>
           </div>
-          <Tooltip v-bind="term('vco')">
-            <span class="sb-wave__legend" tabindex="0">{{ SILKSCREEN.vco }}</span>
-          </Tooltip>
+          <TermLabel v-bind="term('vco')" :label="SILKSCREEN.vco" compact />
         </div>
 
         <RotaryKnob

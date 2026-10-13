@@ -14,15 +14,14 @@
   --sb-key-edge: rgba(80, 60, 140, 0.18);
   --sb-key-beat: rgba(124, 58, 237, 0.06);
   --sb-ink-faint: rgba(0, 0, 0, 0.26);
-  --sb-note: #6D28D9;
-  --sb-accent-ink: #B45309;
-  --sb-slide-ink: #0E7490;
+  --sb-note: var(--demo-accent);
+  --sb-accent-ink: var(--demo-amber);
+  --sb-slide-ink: var(--demo-cyan);
   --sb-column: rgba(124, 58, 237, 0.1);
 
   max-width: 1120px;
   margin: 0 auto;
   overflow: hidden;
-  animation: sb-deck-rise 0.45s ease-out both;
 }
 
 .dark .step-bass {
@@ -30,15 +29,8 @@
   --sb-key-edge: rgba(139, 92, 246, 0.2);
   --sb-key-beat: rgba(139, 92, 246, 0.07);
   --sb-ink-faint: rgba(255, 255, 255, 0.26);
-  --sb-note: #C4B5FD;
-  --sb-accent-ink: #FBBF24;
-  --sb-slide-ink: #67E8F9;
+  --sb-note: var(--demo-accent-light);
   --sb-column: rgba(139, 92, 246, 0.14);
-}
-
-@keyframes sb-deck-rise {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: none; }
 }
 
 /* --- head: badge, transport, readout, exports ------------------------ */
@@ -104,7 +96,14 @@ html:not(.dark) .sb-brand__model {
   background: var(--demo-accent-subtle);
   color: var(--demo-accent-light);
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition:
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    transform var(--demo-dur-instant) var(--demo-ease-standard);
+}
+
+.sb-run__key:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 html:not(.dark) .sb-run__key:not(.sb-run__key--on) {
@@ -243,7 +242,9 @@ html:not(.dark) .sb-lcd__value {
   border: 1px solid var(--demo-border);
   border-radius: 2px;
   background: var(--demo-track-bg);
-  transition: background-color 0.05s linear, box-shadow 0.05s linear;
+  transition:
+    background-color var(--demo-dur-instant) linear,
+    box-shadow var(--demo-dur-instant) linear;
 }
 
 .sb-runlights__led--beat:not(:first-child) {
@@ -266,51 +267,6 @@ html:not(.dark) .sb-lcd__value {
   align-items: center;
   gap: 8px;
   margin-left: auto;
-}
-
-.sb-export {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 9px 14px;
-  border: 1px solid var(--demo-accent-border);
-  border-radius: 6px;
-  background: var(--demo-accent-subtle);
-  color: var(--demo-text);
-  cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.sb-export:hover:not(:disabled) {
-  border-color: var(--demo-accent);
-  background: var(--demo-accent-dim);
-  color: var(--demo-accent);
-}
-
-.sb-export:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.sb-export--ghost {
-  border-color: var(--demo-border);
-  background: transparent;
-  color: var(--demo-text-muted);
-}
-
-.step-bass__notice {
-  margin: 0;
-  padding: 8px 22px;
-  border-top: 1px solid var(--demo-border);
-  background: var(--demo-warn-bg);
-  color: var(--demo-warn-text);
-  font-family: var(--font-body);
-  font-size: 11px;
-  line-height: 1.5;
 }
 
 /* --- control strip ----------------------------------------------------- */
@@ -379,7 +335,11 @@ html:not(.dark) .sb-lcd__value {
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.12em;
-  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition:
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    color var(--demo-dur-fast) var(--demo-ease-standard),
+    transform var(--demo-dur-instant) var(--demo-ease-standard);
 }
 
 .sb-wave__key svg {
@@ -392,6 +352,10 @@ html:not(.dark) .sb-lcd__value {
   color: var(--demo-text);
 }
 
+.sb-wave__key:active {
+  transform: scale(0.97);
+}
+
 .sb-wave__key--on,
 .sb-wave__key--on:hover {
   border-color: var(--demo-accent);
@@ -402,17 +366,6 @@ html:not(.dark) .sb-lcd__value {
 
 html:not(.dark) .sb-wave__key--on {
   color: var(--demo-accent);
-}
-
-.sb-wave__legend {
-  color: var(--demo-text-muted);
-  cursor: help;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-decoration: underline dotted var(--demo-text-faint);
-  text-underline-offset: 3px;
 }
 
 /* --- sequencer --------------------------------------------------------- */
@@ -452,15 +405,13 @@ html:not(.dark) .sb-wave__key--on {
 }
 
 .step-bass__select {
-  height: 30px;
   min-width: 150px;
-  padding: 0 8px;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: var(--sb-radius);
-  background: var(--demo-control-bg-strong);
-  color: var(--demo-text-strong);
-  font-family: var(--font-mono);
-  font-size: 11px;
+}
+
+.step-bass__notices {
+  display: grid;
+  gap: 8px;
+  padding: 0 22px 14px;
 }
 
 .step-grid {
@@ -542,7 +493,9 @@ html:not(.dark) .sb-wave__key--on {
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-  transition: background-color 0.1s ease, border-color 0.1s ease;
+  transition:
+    background-color var(--demo-dur-instant) var(--demo-ease-standard),
+    border-color var(--demo-dur-instant) var(--demo-ease-standard);
 }
 
 .step-grid__button:hover:not(.step-grid__button--unavailable) {
@@ -683,22 +636,6 @@ html:not(.dark) .step-grid__value {
   text-transform: uppercase;
 }
 
-.step-grid__reason {
-  margin: 0;
-  color: var(--demo-text-muted);
-  font-family: var(--font-body);
-  font-size: 11px;
-  line-height: 1.55;
-}
-
-.step-grid__keyhint {
-  margin: 0;
-  color: var(--demo-text-faint);
-  font-family: var(--font-body);
-  font-size: 10px;
-  line-height: 1.5;
-}
-
 /* --- displays --------------------------------------------------------- */
 
 .step-views {
@@ -827,14 +764,6 @@ html:not(.dark) .step-views__meter {
 
 .step-views__scope {
   min-block-size: 140px;
-}
-
-.step-views__caption {
-  margin: 0;
-  color: var(--demo-text-faint);
-  font-family: var(--font-body);
-  font-size: 10.5px;
-  line-height: 1.5;
 }
 
 .step-views__meter {
@@ -981,10 +910,6 @@ html:not(.dark) .step-views__peak-value {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .step-bass {
-    animation: none;
-  }
-
   .sb-runlights__led {
     transition: none;
   }

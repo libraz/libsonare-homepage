@@ -6,7 +6,7 @@
  * the reason; source classes are shown as the estimates they are.
  */
 import { computed } from 'vue';
-import { TermLabel } from '@/components/ui';
+import { DemoEmpty, DemoNotice, SegmentedControl, TermLabel } from '@/components/ui';
 import { describeMixChanges, type MixChange } from '@/demos/mixing/mixAssistantChanges';
 import { useMixingCopy } from '@/demos/mixing/mixingCopy';
 import { SEND_OFF_DB } from '@/demos/mixing/mixingState';
@@ -95,10 +95,19 @@ function changeText(item: MixChange): string {
         ? fill(c.sendOff, { bus })
         : fill(c.send, { bus, value: formatNumber(item.levelDb, 1) });
     }
+    case 'output':
+      return fill(c.output, {
+        bus: item.bus ? copy.value.groups[item.bus] : copy.value.console.outputMaster,
+      });
     case 'master':
       return fill(c.master, { value: formatNumber(item.deltaDb, 1, true) });
   }
 }
+
+const abOptions = computed(() => [
+  { id: 'a', label: copy.value.assistant.a },
+  { id: 'b', label: copy.value.assistant.b },
+]);
 
 const changes = computed(() =>
   result.value
@@ -124,33 +133,49 @@ const unapplied = computed(() =>
       <h3><TermLabel v-bind="term('assistant')">{{ copy.assistant.title }}</TermLabel></h3>
       <button
         type="button"
-        class="assist__run"
+        class="demo-btn demo-btn--primary demo-btn--sm"
         :disabled="!hasAudio || (editLocked && ab !== 'b') || running"
         @click="m.suggest"
       >{{ result ? copy.assistant.rerun : copy.assistant.run }}</button>
     </header>
 
-    <p v-if="!result && !running" class="assist__empty">{{ copy.assistant.empty }}</p>
-    <div v-if="(running || matching) && job" class="assist__job" role="status">
-      <span>{{ copy.jobs.stages[job.stage] }} {{ Math.round(job.progress * 100) }}%</span>
-      <span class="assist__bar" aria-hidden="true"><i :style="{ width: `${job.progress * 100}%` }"></i></span>
-      <button type="button" @click="m.cancelJob">{{ copy.common.cancel }}</button>
-    </div>
-
-    <template v-if="result">
-      <div class="assist__ab" role="group" :aria-label="copy.assistant.compare">
-        <button type="button" :aria-pressed="ab === 'a'" @click="m.setAb('a')">{{ copy.assistant.a }}</button>
-        <button type="button" :aria-pressed="ab === 'b'" @click="m.setAb('b')">{{ copy.assistant.b }}</button>
+    <DemoEmpty v-if="!result && !running" compact :title="copy.assistant.emptyTitle">
+      <p>{{ copy.assistant.empty }}</p>
+    </DemoEmpty>
+    <Transition name="demo-fade">
+      <div v-if="(running || matching) && job" class="assist__job">
+        <span class="assist__stage" role="status">{{ copy.jobs.stages[job.stage] }}</span>
+        <span
+          class="assist__bar"
+          role="progressbar"
+          :aria-label="copy.jobs[job.kind]"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-valuenow="Math.round(job.progress * 100)"
+        ><i :style="{ transform: `scaleX(${job.progress})` }"></i></span>
+        <span class="assist__percent" aria-hidden="true">{{ Math.round(job.progress * 100) }}%</span>
+        <button type="button" class="demo-btn demo-btn--sm" @click="m.cancelJob">{{ copy.common.cancel }}</button>
       </div>
+    </Transition>
+
+    <Transition name="demo-rise">
+    <div v-if="result" class="assist__result">
+      <SegmentedControl
+        :model-value="ab"
+        :options="abOptions"
+        :ariaLabel="copy.assistant.compare"
+        :fill="true"
+        @update:model-value="(side) => m.setAb(side as 'a' | 'b')"
+      />
       <div class="assist__actions">
-        <button type="button" class="assist__adopt" @click="m.adoptSuggestion">{{ copy.assistant.adopt }}</button>
-        <button type="button" @click="m.discardSuggestion">{{ copy.assistant.discard }}</button>
+        <button type="button" class="demo-btn demo-btn--primary demo-btn--sm" @click="m.adoptSuggestion">{{ copy.assistant.adopt }}</button>
+        <button type="button" class="demo-btn demo-btn--sm" @click="m.discardSuggestion">{{ copy.assistant.discard }}</button>
       </div>
       <p v-if="matching || matchText" class="assist__match" role="status">
         {{ matching ? copy.assistant.matching : matchText }}
       </p>
       <p class="assist__meta">{{ copy.assistant.matchHint }}</p>
-      <p v-if="ab === 'b'" class="assist__note" role="status">{{ copy.assistant.auditioning }}</p>
+      <DemoNotice v-if="ab === 'b'" tone="warn">{{ copy.assistant.auditioning }}</DemoNotice>
       <p class="assist__meta">{{ fill(copy.assistant.analysed, { sec: suggestion?.analyzedSec ?? 0 }) }}</p>
 
       <div class="assist__block">
@@ -203,7 +228,8 @@ const unapplied = computed(() =>
           </li>
         </ul>
       </details>
-    </template>
+    </div>
+    </Transition>
   </section>
 </template>
 
@@ -215,7 +241,7 @@ const unapplied = computed(() =>
   min-width: 0;
   padding: 10px 12px 12px;
   border: 1px solid var(--demo-border);
-  border-radius: 6px;
+  border-radius: var(--demo-radius-md);
   background: var(--demo-bg-elevated);
 }
 
@@ -242,49 +268,25 @@ const unapplied = computed(() =>
   cursor: pointer;
 }
 
-.assist button {
-  padding: 4px 10px;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 4px;
-  background: var(--demo-control-bg);
-  color: var(--demo-text);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  cursor: pointer;
+.assist__result {
+  display: grid;
+  gap: 10px;
 }
 
-.assist button:disabled {
-  cursor: not-allowed;
-  opacity: var(--demo-disabled-opacity);
-}
-
-.assist button.assist__run,
-.assist button.assist__adopt {
-  border-color: var(--demo-accent);
-  background: var(--demo-accent);
-  color: var(--demo-on-accent);
-}
-
-.assist__empty,
 .assist__meta,
-.assist__match,
-.assist__note {
+.assist__match {
   margin: 0;
   color: var(--demo-text-muted);
   font-size: 12px;
 }
 
-.assist__note {
-  padding: 6px 8px;
-  border: 1px solid var(--demo-warn-border);
-  border-radius: 4px;
-  background: var(--demo-warn-bg);
-  color: var(--demo-warn-text);
+.assist__match {
+  font-variant-numeric: tabular-nums;
 }
 
 .assist__job {
   display: grid;
-  grid-template-columns: auto minmax(60px, 1fr) auto;
+  grid-template-columns: auto minmax(60px, 1fr) auto auto;
   align-items: center;
   gap: 10px;
   font-family: var(--font-mono);
@@ -303,31 +305,8 @@ const unapplied = computed(() =>
   display: block;
   height: 100%;
   background: var(--demo-accent);
-}
-
-.assist__ab {
-  display: flex;
-  width: 100%;
-}
-
-.assist__ab button {
-  flex: 1 1 0;
-  border-radius: 0;
-}
-
-.assist__ab button:first-child {
-  border-radius: 4px 0 0 4px;
-}
-
-.assist__ab button:last-child {
-  border-left: 0;
-  border-radius: 0 4px 4px 0;
-}
-
-.assist__ab button[aria-pressed='true'] {
-  background: var(--demo-accent-subtle);
-  color: var(--demo-accent);
-  font-weight: 600;
+  transform-origin: left;
+  transition: transform var(--demo-dur-fast) linear;
 }
 
 .assist__actions {

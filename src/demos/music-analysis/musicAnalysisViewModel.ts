@@ -1,10 +1,12 @@
 import type { WaveformPeak } from '@/utils/audio';
+import { buildTimeSeriesPath } from '@/utils/scale';
 
 export interface ChordFrame {
   name: string;
   start: number;
   end: number;
   confidence: number;
+  romanNumeral?: string;
 }
 
 export interface SectionFrame {
@@ -73,7 +75,10 @@ export function sectionStyleRich(section: SectionFrame, duration: number) {
   };
 }
 
-export function chordStyleRich(chord: ChordFrame, duration: number) {
+export function chordStyleRich(
+  chord: Pick<ChordFrame, 'start' | 'end' | 'confidence'>,
+  duration: number,
+) {
   return {
     ...sectionStyle(chord.start, chord.end, duration),
     opacity: `${Math.max(0.35, Math.min(1, chord.confidence))}`,
@@ -119,4 +124,54 @@ export function waveformPath(waveform: WaveformPeak[]): string {
       return `${(index * step).toFixed(3)},${(mid - point.min * mid).toFixed(3)}`;
     });
   return `M ${upper.join(' L ')} L ${lower.join(' L ')} Z`;
+}
+
+/** The span covering `time`, or null between spans. */
+export function spanAt<T extends { start: number; end: number }>(
+  spans: T[],
+  time: number,
+): T | null {
+  return spans.find((span) => time >= span.start && time < span.end) ?? null;
+}
+
+/** Local tempo of the last beat at or before `time`. */
+export function tempoAt(curve: Array<{ time: number; bpm: number }>, time: number): number | null {
+  let found: number | null = null;
+  for (const point of curve) {
+    if (point.time > time) break;
+    found = point.bpm;
+  }
+  return found ?? curve[0]?.bpm ?? null;
+}
+
+// A steady tempo still wobbles by a fraction of a percent; a floor on the
+// vertical span keeps that from filling the lane as if it were drift.
+const TEMPO_LANE_MIN_SPAN = 0.04;
+
+/** SVG path (viewBox 0..100) of the local tempo curve, centred on the global tempo. */
+export function tempoLane(
+  curve: Array<{ time: number; bpm: number }>,
+  duration: number,
+  bpm: number,
+) {
+  if (curve.length < 2) return null;
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  for (const point of curve) {
+    if (point.bpm < min) min = point.bpm;
+    if (point.bpm > max) max = point.bpm;
+  }
+  const centre = Number.isFinite(bpm) && bpm > 0 ? bpm : (min + max) / 2;
+  const half = Math.max(max - centre, centre - min, (centre * TEMPO_LANE_MIN_SPAN) / 2);
+  const y = (value: number) => 50 - ((value - centre) / half) * 42;
+  return {
+    path: buildTimeSeriesPath(
+      curve.map((point) => ({ time: point.time, value: point.bpm })),
+      duration,
+      y,
+    ),
+    referenceY: y(centre),
+    min,
+    max,
+  };
 }

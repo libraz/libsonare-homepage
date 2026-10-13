@@ -89,7 +89,7 @@ const meterLabels = computed(() => ({
       <button
         v-if="bus === 'delay'"
         type="button"
-        class="bus__toggle"
+        class="demo-btn demo-btn--sm bus__toggle"
         :aria-pressed="pingPong"
         :disabled="editLocked"
         @click="m.edit('setBusParam', 'delay', 'pingPong', pingPong ? 0 : 1)"
@@ -119,7 +119,7 @@ const meterLabels = computed(() => ({
   width: 104px;
   padding: 8px 7px 9px;
   border: 1px solid var(--demo-border);
-  border-radius: 6px;
+  border-radius: var(--demo-radius-sm);
   background: var(--demo-bg-elevated);
 }
 
@@ -139,24 +139,14 @@ const meterLabels = computed(() => ({
 }
 
 .bus__toggle {
-  padding: 3px 0;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 3px;
-  background: var(--demo-control-bg);
-  color: var(--demo-text-muted);
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  cursor: pointer;
+  padding: 0;
 }
 
-.bus__toggle[aria-pressed='true'] {
+.bus__toggle[aria-pressed='true'],
+.bus__toggle[aria-pressed='true']:hover:not(:disabled) {
   border-color: var(--demo-cyan);
+  background: transparent;
   color: var(--demo-cyan);
-}
-
-.bus__toggle:disabled {
-  cursor: not-allowed;
-  opacity: var(--demo-disabled-opacity);
 }
 
 .bus__fader {

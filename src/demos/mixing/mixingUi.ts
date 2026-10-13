@@ -10,6 +10,8 @@ import {
   AUX_BUSES,
   type AutomationPoint,
   type AuxBusName,
+  GROUP_BUSES,
+  type GroupBusName,
   MASTER_SLOT_PROCESSORS,
   MAX_TOTAL_TRACK_SECONDS,
   type MasterSlotName,
@@ -19,6 +21,7 @@ import {
   type TrackSlotName,
 } from '@/demos/mixing/mixingState';
 import type { EngineOp } from '@/utils/engineApply';
+import type { MasteringInsertParamDependency } from '@/wasm/index.js';
 
 // ---------------------------------------------------------------------------
 // Fader taper
@@ -117,14 +120,14 @@ export type DynamicsSlot = 'gate' | 'comp' | 'deess' | 'duck';
 export const DYNAMICS_SLOTS: readonly DynamicsSlot[] = ['gate', 'comp', 'deess', 'duck'];
 
 export const TRACK_SLOT_CONTROLS: Readonly<Record<DynamicsSlot, readonly ParamControl[]>> = {
-  // Construction bounds from the engine catalogue: threshold ≥ −50 dB, close threshold ≤ −50 dB.
+  // Open and close thresholds bound each other; see boundedControl.
   gate: [
     db('thresholdDb', -50, 0),
     db('rangeDb', -80, 0, 1),
     ms('attackMs', 0.1, 50),
     ms('releaseMs', 5, 1000),
     { name: 'holdMs', min: 0, max: 500, step: 1, unit: 'ms' },
-    db('closeThresholdDb', -80, -50),
+    db('closeThresholdDb', -80, 0),
     { name: 'keyHpfHz', min: 0, max: 500, step: 1, unit: 'Hz' },
   ],
   comp: COMPRESSOR_CONTROLS,
@@ -203,6 +206,25 @@ export function plateSecondsFromDecay(decay: number): number {
   return (-Math.log(1000) * PLATE_TANK_LOOP_SECONDS) / (4 * Math.log(feedback));
 }
 
+/**
+ * `control` with its travel narrowed by the siblings the engine catalogue says
+ * bound it (`dependsOn`, read as `this <relation> factor * sibling`), at their
+ * values in `params`.
+ */
+export function boundedControl(
+  control: ParamControl,
+  params: Readonly<Record<string, number>>,
+  dependsOn: readonly MasteringInsertParamDependency[],
+): ParamControl {
+  let { min, max } = control;
+  for (const { key, relation, factor } of dependsOn) {
+    const bound = factor * params[key];
+    if (relation === 'ge' || relation === 'gt') min = Math.max(min, bound);
+    else max = Math.min(max, bound);
+  }
+  return min === control.min && max === control.max ? control : { ...control, min, max };
+}
+
 /** Whether a parameter only takes effect by rebuilding its strip. */
 export function isDiscreteParam(processor: string, name: string): boolean {
   return (DISCRETE_PARAMS[processor] ?? []).includes(name);
@@ -274,10 +296,14 @@ const LANE_METER_BASE = 1;
 /** Buses report as 33 + bus index, after the 32 lane targets. */
 const BUS_METER_BASE = 33;
 
+/** Every metered bus, in the order the topology declares them: aux returns, then groups. */
+export type MixBusName = AuxBusName | GroupBusName;
+export const METERED_BUSES: readonly MixBusName[] = [...AUX_BUSES, ...GROUP_BUSES];
+
 export type MeterSource =
   | { kind: 'master' }
   | { kind: 'track'; trackId: number }
-  | { kind: 'bus'; bus: AuxBusName };
+  | { kind: 'bus'; bus: MixBusName };
 
 /** Which strip each meter target id belongs to, for lanes declared in `trackIds` order. */
 export function meterSources(trackIds: readonly number[]): Map<number, MeterSource> {
@@ -285,7 +311,7 @@ export function meterSources(trackIds: readonly number[]): Map<number, MeterSour
   trackIds.forEach((trackId, i) => {
     map.set(LANE_METER_BASE + i, { kind: 'track', trackId });
   });
-  AUX_BUSES.forEach((bus, i) => {
+  METERED_BUSES.forEach((bus, i) => {
     map.set(BUS_METER_BASE + i, { kind: 'bus', bus });
   });
   return map;

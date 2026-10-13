@@ -46,7 +46,7 @@ describe('demo components mount in their empty state', () => {
     lang.value = 'ja';
     const wrapper = mount(MusicAnalysisStudio);
     const labels = wrapper.findAll('a').map((a) => a.text());
-    expect(labels).toEqual(expect.arrayContaining(['楽曲分析']));
+    expect(labels).toEqual(expect.arrayContaining(['楽曲解析']));
     wrapper.unmount();
   });
 });

@@ -5,6 +5,7 @@
  * exports. The steps edit the same project state Studio shows in detail.
  */
 import { computed } from 'vue';
+import { DemoNotice } from '@/components/ui';
 import MasteringChoiceGrid, {
   type MasteringChoice,
 } from '@/demos/mastering/MasteringChoiceGrid.vue';
@@ -86,7 +87,7 @@ const lra = computed(() => lastRender.value?.result.loudnessRange ?? Number.NaN)
         />
       </MasteringPanel>
       <MasteringPanel :title="copy.quick.steps.venue" :step="2">
-        <p class="quick__hint">{{ copy.quick.venueHint }}</p>
+        <DemoNotice class="quick__hint" tone="hint">{{ copy.quick.venueHint }}</DemoNotice>
         <MasteringChoiceGrid
           :model-value="state.quick.venue"
           :options="venues"
@@ -146,7 +147,7 @@ const lra = computed(() => lastRender.value?.result.loudnessRange ?? Number.NaN)
     <aside class="quick__result">
       <MasteringPanel :title="copy.quick.result">
         <div class="quick__result-body">
-          <p class="quick__hint">{{ copy.quick.liveNote }}</p>
+          <DemoNotice tone="hint">{{ copy.quick.liveNote }}</DemoNotice>
           <MasteringTimeline
             :peaks="waveform"
             :duration="duration"
@@ -179,7 +180,7 @@ const lra = computed(() => lastRender.value?.result.loudnessRange ?? Number.NaN)
             :lane="state.monitor.lane"
             :target-lufs="targetLufs"
             :lra="lra"
-              :scope-mid="null"
+            :scope-mid="null"
             :scope-side="null"
             :freqs="null"
             :output-db="null"
@@ -230,14 +231,7 @@ const lra = computed(() => lastRender.value?.result.loudnessRange ?? Number.NaN)
 }
 
 .quick__hint {
-  margin: 0 0 10px;
-  color: var(--demo-text-muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.quick__result-body .quick__hint {
-  margin: 0;
+  margin-bottom: 10px;
 }
 
 @media (max-width: 959px) {

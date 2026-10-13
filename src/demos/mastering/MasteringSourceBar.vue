@@ -4,6 +4,7 @@
  * facts, and the notes a restored session leaves until its audio is back.
  */
 import { computed, ref } from 'vue';
+import { DemoNotice } from '@/components/ui';
 import { useMasteringCopy } from '@/demos/mastering/masteringCopy';
 import { formatNumber } from '@/demos/mastering/masteringUi';
 import type { MasteringFileInfo } from '@/demos/mastering/useMastering';
@@ -71,19 +72,18 @@ function onDrop(event: DragEvent): void {
         {{ loading ? copy.source.loading : (info?.fileName ?? copy.source.drop) }}
       </span>
       <span class="source__facts">{{ info ? facts : copy.source.dropHint }}</span>
-      <span class="source__cta">{{ info ? copy.source.replace : copy.source.choose }}</span>
+      <span class="demo-btn demo-btn--sm source__cta" aria-hidden="true">{{ info ? copy.source.replace : copy.source.choose }}</span>
     </label>
-    <button v-if="!info" type="button" class="source__demo" :disabled="disabled || loading" @click="emit('demo')">
+    <button v-if="!info" type="button" class="demo-btn source__demo" :disabled="disabled || loading" @click="emit('demo')">
       {{ copy.source.demo }}
     </button>
-    <p v-if="pendingRestore" class="source__note" role="status">
+    <DemoNotice v-if="pendingRestore" class="source__notice" tone="info">
       {{ copy.source.restored }}<template v-if="restoredName"> ({{ restoredName }})</template>
-    </p>
-    <p v-if="notices.length" class="source__note" role="status">
+    </DemoNotice>
+    <DemoNotice v-if="notices.length" class="source__notice" tone="warn" dismissible @dismiss="emit('dismissNotices')">
       {{ fill(copy.source.notices, { list: notices.join(', ') }) }}
-      <button type="button" @click="emit('dismissNotices')">{{ copy.source.dismiss }}</button>
-    </p>
-    <p v-if="error" class="source__error" role="alert">{{ error }}</p>
+    </DemoNotice>
+    <DemoNotice v-if="error" class="source__notice" tone="error">{{ error }}</DemoNotice>
   </section>
 </template>
 
@@ -104,9 +104,16 @@ function onDrop(event: DragEvent): void {
   align-items: center;
   padding: 10px 14px;
   border: 1px dashed var(--demo-border-strong);
-  border-radius: 6px;
+  border-radius: var(--demo-radius-sm);
   background: var(--demo-dropzone-bg);
   cursor: pointer;
+  transition:
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    background-color var(--demo-dur-fast) var(--demo-ease-standard);
+}
+
+.source__drop:hover:not(.is-disabled) {
+  border-color: var(--demo-accent);
 }
 
 .source__drop.is-loaded {
@@ -158,54 +165,15 @@ function onDrop(event: DragEvent): void {
 .source__cta {
   grid-column: 2;
   grid-row: 1 / span 2;
-  padding: 5px 10px;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 4px;
-  color: var(--demo-text);
-  font-family: var(--font-mono);
-  font-size: 11px;
+  pointer-events: none;
 }
 
-.source__demo,
-.source__note button {
-  padding: 6px 12px;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--demo-text);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  cursor: pointer;
+.source__demo {
+  min-height: 100%;
 }
 
-.source__demo:focus-visible,
-.source__note button:focus-visible {
-  outline: 2px solid var(--demo-accent);
-  outline-offset: 2px;
-}
-
-.source__note,
-.source__error {
+.source__notice {
   grid-column: 1 / -1;
-  margin: 0;
-  padding: 8px 12px;
-  border: 1px solid var(--demo-accent-border);
-  border-radius: 6px;
-  background: var(--demo-accent-subtle);
-  color: var(--demo-text);
-  font-size: 12.5px;
-  line-height: 1.5;
-}
-
-.source__note button {
-  margin-left: 8px;
-  padding: 2px 8px;
-}
-
-.source__error {
-  border-color: var(--demo-warn-border);
-  background: var(--demo-warn-bg);
-  color: var(--demo-warn-text);
 }
 
 .source--compact .source__drop {

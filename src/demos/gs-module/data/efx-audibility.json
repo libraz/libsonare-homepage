@@ -1,11 +1,11 @@
 {
   "_sources": {
-    "src/wasm/sonare.wasm": "67f6926c4c34d8f5023158c415f34f9a"
+    "src/wasm/sonare.wasm": "9d0c2571f1767ccaa7f5691348cf0afd"
   },
   "measured_against": {
-    "version": "1.8.2",
-    "md5": "67f6926c4c34d8f5023158c415f34f9a",
-    "buildDate": "2026-10-10T20:35:42.293Z"
+    "version": "1.9.0",
+    "md5": "9d0c2571f1767ccaa7f5691348cf0afd",
+    "buildDate": "2026-10-12T08:24:40.648Z"
   },
   "probe": {
     "chord": [

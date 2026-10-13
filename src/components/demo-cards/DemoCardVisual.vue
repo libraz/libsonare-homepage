@@ -22,6 +22,22 @@ const filterCurves = [
   'M4,21 L98,21 C112,21 115,9 122,9 C130,9 136,32 150,43 C166,54 190,57 214,57',
   'M4,21 L98,21 C112,21 116,13 123,13 C133,13 142,33 160,44 C178,54 196,57 214,57',
 ];
+/** Waveform over the notes found in it; one note is new, one is gone. */
+const rollWave =
+  'M4,12 L14,6 L22,17 L30,4 L40,15 L52,9 L60,13 L72,5 L82,16 L94,8 L104,12 L116,3 L128,17 L138,7 L150,13 L162,6 L172,16 L184,9 L196,12 L206,5 L216,12';
+const rollNotes = [
+  { x: 6, y: 44, w: 26, kind: 'kept' },
+  { x: 8, y: 34, w: 22, kind: 'kept' },
+  { x: 40, y: 50, w: 30, kind: 'kept' },
+  { x: 44, y: 30, w: 18, kind: 'added' },
+  { x: 78, y: 40, w: 34, kind: 'kept' },
+  { x: 84, y: 26, w: 16, kind: 'removed' },
+  { x: 120, y: 46, w: 24, kind: 'kept' },
+  { x: 124, y: 34, w: 28, kind: 'kept' },
+  { x: 160, y: 52, w: 22, kind: 'kept' },
+  { x: 164, y: 38, w: 20, kind: 'added' },
+  { x: 190, y: 44, w: 26, kind: 'kept' },
+];
 const fallingNotes = [
   { x: 14, y: -8, h: 16 },
   { x: 60, y: 6, h: 12 },
@@ -197,6 +213,25 @@ const fallingNotes = [
             :class="{ 'demo-grid__fall-key--lit': i === 2 || i === 5 }"
           />
         </g>
+      </g>
+    </svg>
+
+    <svg v-else-if="visual === 'roll'" viewBox="0 0 220 60" preserveAspectRatio="none">
+      <g class="demo-grid__roll">
+        <path :d="rollWave" class="demo-grid__roll-wave" />
+        <line x1="0" y1="22" x2="220" y2="22" class="demo-grid__roll-axis" />
+        <rect
+          v-for="(note, i) in rollNotes"
+          :key="i"
+          class="demo-grid__roll-note"
+          :class="`demo-grid__roll-note--${note.kind}`"
+          :x="note.x"
+          :y="note.y"
+          :width="note.w"
+          height="4"
+          rx="1"
+          :style="{ '--d': `${i * 90}ms` }"
+        />
       </g>
     </svg>
 

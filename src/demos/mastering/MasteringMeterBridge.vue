@@ -104,7 +104,7 @@ const spectrumLabels = computed(() => copy.value.meters.spectrum);
   min-width: 0;
   padding: 10px 12px 12px;
   border: 1px solid var(--demo-border);
-  border-radius: 6px;
+  border-radius: var(--demo-radius-md);
   background: var(--demo-bg-elevated);
 }
 

@@ -2,7 +2,7 @@
 /**
  * A single-choice card grid for the Quick axes (recording condition, genre).
  * Each card names the choice and its one-line intent; the details sit behind
- * the info button.
+ * the info dot. Arrow keys move the choice, as in any radiogroup.
  */
 import { Tooltip } from '@/components/ui';
 import { useMasteringCopy } from '@/demos/mastering/masteringCopy';
@@ -16,7 +16,7 @@ export interface MasteringChoice<Id extends string> {
   tip: string;
 }
 
-defineProps<{
+const props = defineProps<{
   modelValue: T;
   options: MasteringChoice<T>[];
   label: string;
@@ -26,34 +26,51 @@ defineProps<{
 const emit = defineEmits<{ 'update:modelValue': [value: T] }>();
 
 const copy = useMasteringCopy();
+const cards: (HTMLButtonElement | null)[] = [];
+
+function onKeydown(event: KeyboardEvent, index: number): void {
+  const delta =
+    event.key === 'ArrowRight' || event.key === 'ArrowDown'
+      ? 1
+      : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+        ? -1
+        : 0;
+  if (delta === 0) return;
+  event.preventDefault();
+  const next = (index + delta + props.options.length) % props.options.length;
+  emit('update:modelValue', props.options[next].id);
+  cards[next]?.focus();
+}
 </script>
 
 <template>
   <div class="choices" role="radiogroup" :aria-label="label">
-    <div v-for="option in options" :key="option.id" class="choice">
+    <div v-for="(option, index) in options" :key="option.id" class="choice">
       <button
+        :ref="(el) => (cards[index] = el as HTMLButtonElement | null)"
         type="button"
         role="radio"
         class="choice__card"
         :aria-checked="modelValue === option.id"
+        :tabindex="modelValue === option.id ? 0 : -1"
         :disabled="disabled"
         @click="emit('update:modelValue', option.id)"
+        @keydown="onKeydown($event, index)"
       >
         <span class="choice__icon">{{ option.icon }}</span>
         <span class="choice__name">{{ option.name }}</span>
         <span class="choice__tagline">{{ option.tagline }}</span>
       </button>
-      <Tooltip
-        :eyebrow="label"
-        :title="option.name"
-        :body="option.description"
-        :tip="option.tip"
-        :tip-label="copy.tips.useWhen"
-      >
-        <button type="button" class="choice__info" :aria-label="`${option.name}: ${option.description}`" @click.stop.prevent>
-          <span aria-hidden="true">i</span>
-        </button>
-      </Tooltip>
+      <span class="choice__info">
+        <Tooltip
+          :eyebrow="label"
+          :title="option.name"
+          :body="option.description"
+          :tip="option.tip"
+          :tip-label="copy.tips.useWhen"
+          :aria-label="option.name"
+        />
+      </span>
     </div>
   </div>
 </template>
@@ -78,16 +95,23 @@ const copy = useMasteringCopy();
   min-height: 96px;
   padding: 10px 12px;
   border: 1px solid var(--demo-border);
-  border-radius: 6px;
+  border-radius: var(--demo-radius-sm);
   background: transparent;
   color: var(--demo-text);
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition:
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    transform var(--demo-dur-instant) var(--demo-ease-standard);
 }
 
-.choice__card:hover {
+.choice__card:hover:not(:disabled) {
   border-color: var(--demo-border-strong);
+}
+
+.choice__card:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .choice__card[aria-checked='true'] {
@@ -100,8 +124,7 @@ const copy = useMasteringCopy();
   cursor: not-allowed;
 }
 
-.choice__card:focus-visible,
-.choice__info:focus-visible {
+.choice__card:focus-visible {
   outline: 2px solid var(--demo-accent);
   outline-offset: 2px;
 }
@@ -112,6 +135,7 @@ const copy = useMasteringCopy();
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
+  transition: color var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 [aria-checked='true'] .choice__icon {
@@ -133,25 +157,8 @@ const copy = useMasteringCopy();
 
 .choice__info {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  display: grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 1px solid var(--demo-border);
-  border-radius: 50%;
-  background: var(--demo-bg-elevated);
-  color: var(--demo-text-muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  cursor: help;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .choice__card {
-    transition: none;
-  }
+  top: 9px;
+  right: 9px;
+  display: inline-flex;
 }
 </style>

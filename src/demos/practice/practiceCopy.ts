@@ -7,7 +7,7 @@
 
 export const enCopy = {
   title: 'Piano Practice',
-  subtitle: 'Falling notes · built-in piano engine',
+  subtitle: 'Learn a piece with falling notes, or play it as a game on a MIDI keyboard',
   eyebrow: 'PLAY · LEARN',
   heading: 'Watch the notes fall, follow the keys',
   intro:
@@ -36,6 +36,29 @@ export const enCopy = {
     volume: 'Guide volume',
     mute: 'Mute',
     unmute: 'Unmute',
+    seek: 'Playback position',
+    seekValue: '{position} of {length}',
+  },
+
+  // Section help, opened from the info dot beside each control label.
+  help: {
+    movement: {
+      title: 'Movement',
+      body: 'Each movement is a single-track MIDI file parsed in the browser; the roll and the keyboard range follow the notes it holds.',
+    },
+    speed: {
+      title: 'Practice speed',
+      body: 'The engine renders the score again with every tempo segment scaled, so a slower pass plays the same notes later at the same pitch. Nothing is time-stretched.',
+    },
+    sound: {
+      title: 'Piano source',
+      body: "Built-in plays the engine's synthesized piano preset with no download. Sampled loads a public-domain SoundFont on first use and plays it through the engine's SoundFont player.",
+    },
+    game: {
+      title: 'Scoring',
+      body: 'Each note is judged by how far your press lands from the strike line: Perfect within ±{perfect} ms, Great within ±{great} ms, Good within ±{good} ms. A note that passes unplayed is a Miss; a Miss or a wrong note breaks the combo. Accuracy weights Perfect, Great and Good at {perfectWeight}, {greatWeight} and {goodWeight}%.',
+      aria: 'How game mode scores',
+    },
   },
 
   // Movement selector (the full Goldberg set).
@@ -88,9 +111,9 @@ export const enCopy = {
   composer: 'J.S. Bach',
   work: 'Goldberg Variations · BWV 988',
 
-  guideTitle: 'How it works',
+  guideTitle: 'Press play and follow the keys',
   guideBody:
-    'The roll, strike line, and audio share one clock, so the lit keys match what you hear. Slow a passage down to learn it without changing pitch, then switch on game mode and connect a MIDI keyboard to be scored on your timing.',
+    'Press play and follow the lit keys as the notes fall onto them. Slow a passage down to learn it without changing pitch, then switch on game mode and connect a MIDI keyboard to be scored on your timing. The piano is rendered in your browser.',
   guideLink: 'SoundFont player',
 
   errors: {
@@ -108,7 +131,7 @@ export const enCopy = {
 
 export const jaCopy: typeof enCopy = {
   title: 'ピアノ練習',
-  subtitle: 'ノート落下 · 内蔵ピアノ音源',
+  subtitle: '落ちてくる音符で曲を練習。MIDI キーボードがあればゲームとしても遊べます',
   eyebrow: 'PLAY · LEARN',
   heading: '落ちてくる音符を見て、鍵盤を追う',
   intro:
@@ -137,6 +160,28 @@ export const jaCopy: typeof enCopy = {
     volume: 'ガイド音量',
     mute: 'ミュート',
     unmute: 'ミュート解除',
+    seek: '再生位置',
+    seekValue: '{length} 中 {position}',
+  },
+
+  help: {
+    movement: {
+      title: '楽章',
+      body: '各楽章は 1 トラックの MIDI ファイルで、ブラウザ内で解析します。ピアノロールと鍵盤の音域は、そのファイルに含まれる音に合わせて変わります。',
+    },
+    speed: {
+      title: '練習速度',
+      body: 'テンポ区間をすべて同じ倍率で変えて、エンジンが楽譜からレンダリングし直します。遅くしても同じ音を後ろにずらして鳴らすだけなので、音の高さは変わりません。タイムストレッチは使っていません。',
+    },
+    sound: {
+      title: 'ピアノの音源',
+      body: '内蔵合成はエンジンの合成ピアノのプリセットで、ダウンロードは不要です。サンプルは初回にパブリックドメインの SoundFont を読み込み、エンジンの SoundFont プレイヤーで鳴らします。',
+    },
+    game: {
+      title: '採点',
+      body: '判定ラインと打鍵のずれで判定します。±{perfect} ms 以内が Perfect、±{great} ms 以内が Great、±{good} ms 以内が Good です。弾かずに通り過ぎた音は Miss になり、Miss と違う音の打鍵はコンボが途切れます。正確さは Perfect・Great・Good をそれぞれ {perfectWeight}・{greatWeight}・{goodWeight}% として計算します。',
+      aria: 'ゲームモードの採点方法',
+    },
   },
 
   selector: {
@@ -187,9 +232,9 @@ export const jaCopy: typeof enCopy = {
   composer: 'J.S. バッハ',
   work: 'ゴルトベルク変奏曲 · BWV 988',
 
-  guideTitle: '仕組み',
+  guideTitle: '再生して、光る鍵盤を追います',
   guideBody:
-    'ピアノロール・判定ライン・音声は同じクロックで動くので、光る鍵盤と聞こえる音が一致します。速度を落として音の高さを変えずに練習し、ゲームモードで MIDI キーボードをつなぐとタイミングを採点できます。',
+    '再生すると音符が鍵盤に向かって落ちてきます。光る鍵盤を追って弾きます。速度を落とせば音の高さを変えずに練習でき、ゲームモードで MIDI キーボードをつなぐとタイミングを採点できます。ピアノの音はブラウザ内で生成されます。',
   guideLink: 'SoundFont プレイヤー',
 
   errors: {

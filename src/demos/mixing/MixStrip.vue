@@ -3,13 +3,14 @@
  * One channel strip in signal order: input meter, trim, EQ curve, the four
  * dynamics slots with the strip's gain reduction, two sends with their tap
  * point, pan, width, fader with its post-fader meter, then mute, solo,
- * solo-safe, polarity and VCA assignment. An automated control follows its
- * lane at the playhead and takes no edits.
+ * solo-safe, polarity, output bus and VCA assignment. An automated control
+ * follows its lane at the playhead and takes no edits.
  */
 import { computed } from 'vue';
 import GainReductionMeter from '@/components/meters/GainReductionMeter.vue';
 import { METER_FLOOR_DB } from '@/components/meters/meterBallistics';
 import PeakMeter from '@/components/meters/PeakMeter.vue';
+import { Tooltip } from '@/components/ui';
 import MixEqCurve from '@/demos/mixing/MixEqCurve.vue';
 import MixFader from '@/demos/mixing/MixFader.vue';
 import MixKnob from '@/demos/mixing/MixKnob.vue';
@@ -18,12 +19,13 @@ import { useMixingCopy } from '@/demos/mixing/mixingCopy';
 import {
   AUX_BUSES,
   type AuxBusName,
+  GROUP_BUSES,
+  type GroupBusName,
   isTrackSilenced,
   type MixTrackState,
   SEND_OFF_DB,
   type VcaGroupId,
 } from '@/demos/mixing/mixingState';
-import { useMixingTerm } from '@/demos/mixing/mixingTerms';
 import {
   automationValueAt,
   DYNAMICS_SLOTS,
@@ -50,7 +52,6 @@ const props = defineProps<{
 const FLOOR: [number, number] = [METER_FLOOR_DB, METER_FLOOR_DB];
 
 const copy = useMixingCopy();
-const term = useMixingTerm();
 const { m } = props;
 const { view, editLocked, selectedId, rebuilt, sonare } = m;
 
@@ -140,6 +141,11 @@ function rename(event: Event): void {
 function setVca(event: Event): void {
   const value = (event.target as HTMLSelectElement).value;
   m.edit('setVcaGroup', id.value, value ? (value as VcaGroupId) : null);
+}
+
+function setOutput(event: Event): void {
+  const value = (event.target as HTMLSelectElement).value;
+  m.edit('setOutputBus', id.value, value ? (value as GroupBusName) : null);
 }
 </script>
 
@@ -296,7 +302,6 @@ function setVca(event: Event): void {
         :label="`${name} ${copy.params.fader}`"
         :disabled="editLocked"
         :locked="faderAuto"
-        :locked-hint="copy.console.automated"
         :scale="false"
         @update:model-value="(v) => m.edit('setFader', id, v)"
         @begin="m.begin"
@@ -309,7 +314,14 @@ function setVca(event: Event): void {
         :labels="meterLabels"
       />
     </div>
-    <output class="strip__readout">{{ formatFader(faderValue) }}</output>
+    <div class="strip__readout">
+      <output>{{ formatFader(faderValue) }}</output>
+      <Tooltip
+        v-if="faderAuto"
+        :title="`${name} ${copy.params.fader}`"
+        :body="copy.console.automated"
+      />
+    </div>
 
     <div class="strip__buttons">
       <button
@@ -341,21 +353,29 @@ function setVca(event: Event): void {
         class="strip__btn"
         :aria-pressed="polarity"
         :aria-label="fill(copy.console.polarityPressed, { name })"
-        :title="term('polarity').body"
         :disabled="editLocked"
         @click="togglePolarity"
       >{{ copy.console.polarity }}</button>
     </div>
 
-    <label class="strip__vca">
+    <label class="strip__select">
+      <span class="strip__tag">{{ copy.console.output }}</span>
+      <select class="demo-field" :value="track.outputBus ?? ''" :disabled="editLocked" @change="setOutput">
+        <option value="">{{ copy.console.outputMaster }}</option>
+        <option v-for="group in GROUP_BUSES" :key="group" :value="group">{{ copy.groups[group] }}</option>
+      </select>
+    </label>
+    <label class="strip__select">
       <span class="strip__tag">{{ copy.console.vca }}</span>
-      <select :value="track.vcaGroup ?? ''" :disabled="editLocked" @change="setVca">
+      <select class="demo-field" :value="track.vcaGroup ?? ''" :disabled="editLocked" @change="setVca">
         <option value="">{{ copy.console.vcaNone }}</option>
         <option v-for="group in VCA_GROUP_IDS" :key="group" :value="group">{{ group }}</option>
       </select>
     </label>
 
-    <p v-if="rebuilt.has(id)" class="strip__flash" role="status">{{ copy.console.rebuilt }}</p>
+    <Transition name="demo-fade">
+      <p v-if="rebuilt.has(id)" class="strip__flash" role="status">{{ copy.console.rebuilt }}</p>
+    </Transition>
   </section>
 </template>
 
@@ -369,9 +389,12 @@ function setVca(event: Event): void {
   width: 104px;
   padding: 8px 7px 9px;
   border: 1px solid var(--demo-border);
-  border-radius: 6px;
+  border-radius: var(--demo-radius-sm);
   background: var(--demo-bg-elevated);
-  transition: background-color 0.5s ease, border-color 0.2s ease;
+  transition:
+    background-color var(--demo-dur-slow) var(--demo-ease-standard),
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    opacity var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .strip--selected {
@@ -490,6 +513,32 @@ function setVca(event: Event): void {
   font-size: 9.5px;
   letter-spacing: 0.02em;
   cursor: pointer;
+  transition:
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    color var(--demo-dur-fast) var(--demo-ease-standard),
+    transform var(--demo-dur-instant) var(--demo-ease-standard);
+}
+
+.strip__slot:hover:not(:disabled),
+.strip__btn:hover:not(:disabled),
+.strip__tap:hover:not(:disabled) {
+  border-color: var(--demo-accent);
+}
+
+.strip__slot:active:not(:disabled),
+.strip__btn:active:not(:disabled),
+.strip__tap:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.strip__slot:focus-visible,
+.strip__btn:focus-visible,
+.strip__tap:focus-visible,
+.strip__eq:focus-visible,
+.strip__remove:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 1px;
 }
 
 .strip__slot--on {
@@ -561,11 +610,14 @@ function setVca(event: Event): void {
 }
 
 .strip__readout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   color: var(--demo-text-strong);
   font-family: var(--font-mono);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-  text-align: center;
 }
 
 .strip__buttons {
@@ -590,26 +642,21 @@ function setVca(event: Event): void {
   background: var(--demo-status-ok);
 }
 
-.strip__vca {
+.strip__select {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: 26px minmax(0, 1fr);
   align-items: center;
   gap: 4px;
 }
 
-.strip__vca select {
-  min-width: 0;
-  padding: 1px 2px;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 3px;
-  background: var(--demo-control-bg);
-  color: var(--demo-text-strong);
-  font-family: var(--font-mono);
-  font-size: 10px;
+.strip__select .demo-field {
+  height: 22px;
+  padding: 0 18px 0 4px;
+  font-size: 9.5px;
+  background-position: calc(100% - 10px) 50%, calc(100% - 6px) 50%;
 }
 
-.strip button:disabled,
-.strip select:disabled {
+.strip button:disabled {
   cursor: not-allowed;
   opacity: var(--demo-disabled-opacity);
 }
@@ -627,9 +674,4 @@ function setVca(event: Event): void {
   text-align: center;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .strip {
-    transition: none;
-  }
-}
 </style>

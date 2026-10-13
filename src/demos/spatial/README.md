@@ -7,12 +7,14 @@ measured impulse response is used directly when there is one.
 - Page: `/spatial` — https://libsonare.libraz.net/spatial
 - Entry: `SpatialScanner.vue`
 - Engine: `detectAcoustic` and `estimateRoom` for blind estimates,
-  `analyzeImpulseResponse` for a measured IR, `synthesizeRir` and `roomMorph`
-  for the audition path.
+  `analyzeImpulseResponse` for a measured IR, `synthesizeRir` and
+  `roomMorphStereo` for the audition path.
 
 `spatial.worker.ts` does the estimation and the morph render; `RoomScene.vue`
 draws the room. A mono source carries no bearing, so the estimated position is
-shown as a distance shell rather than a point.
+shown as a distance shell rather than a point. The morph is heard by two
+receivers half a metre apart, so the room's tail reaches each ear with its own
+reflection pattern rather than as one tail copied to both channels.
 
 Response length follows the room's own Sabine reverberation time rather than a
 fixed number, so a large room is not heard with its decay cut short. An

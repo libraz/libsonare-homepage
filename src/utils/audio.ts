@@ -1,3 +1,5 @@
+import { bootWasm } from '@/composables/useWasmBoot';
+
 export interface DecodedStereoAudio {
   fileName: string;
   sampleRate: number;
@@ -57,17 +59,44 @@ export interface WaveformPeak {
   rms: number;
 }
 
+/** Copies of a decoded buffer's channel planes. */
+export function channelPlanes(buffer: AudioBuffer): Float32Array[] {
+  return Array.from({ length: buffer.numberOfChannels }, (_, c) =>
+    buffer.getChannelData(c).slice(),
+  );
+}
+
+/**
+ * Decoded planes as a stereo pair. Mono is doubled; a 5.1 or 7.1 bed folds
+ * through the engine's BS.775 `downmix` so its centre and surrounds stay in the
+ * pair, and any other count above two folds to mono on both sides.
+ */
+export function foldToStereo(
+  module: Pick<typeof import('@/wasm/index.js'), 'downmix'>,
+  planes: Float32Array[],
+): [Float32Array, Float32Array] {
+  if (planes.length <= 2) return [planes[0], planes[1] ?? planes[0].slice()];
+  if (planes.length === 6 || planes.length === 8) {
+    const [left, right] = module.downmix(planes, 1);
+    return [left, right];
+  }
+  const [mono] = module.downmix(planes, 0);
+  return [mono, mono.slice()];
+}
+
+/** Decodes a file to a copied stereo pair, folded by `foldToStereo`. */
 export async function decodeAudioFile(
   file: File,
   audioContext: AudioContext,
   budget: AudioInputBudget = {},
 ): Promise<DecodedStereoAudio> {
   const buffer = await decodeAudioBuffer(file, audioContext, budget);
-  const left = new Float32Array(buffer.getChannelData(0));
-  const right =
-    buffer.numberOfChannels > 1
-      ? new Float32Array(buffer.getChannelData(1))
-      : new Float32Array(buffer.getChannelData(0));
+  const planes = channelPlanes(buffer);
+  // Only a fold needs the engine, so a mono or stereo file decodes without booting it.
+  const [left, right] =
+    planes.length > 2
+      ? foldToStereo(await bootWasm(), planes)
+      : [planes[0], planes[1] ?? planes[0].slice()];
 
   return {
     fileName: file.name,
@@ -77,15 +106,6 @@ export async function decodeAudioFile(
     left,
     right,
   };
-}
-
-export function mixToMono(left: Float32Array, right: Float32Array): Float32Array {
-  const length = Math.min(left.length, right.length);
-  const mono = new Float32Array(length);
-  for (let i = 0; i < length; i++) {
-    mono[i] = (left[i] + right[i]) * 0.5;
-  }
-  return mono;
 }
 
 export function downsampleWaveform(

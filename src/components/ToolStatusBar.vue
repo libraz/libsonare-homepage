@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { StatusIndicator } from '@/components/ui';
+import StatusIndicator from '@/components/ui/StatusIndicator.vue';
 
 export interface ToolStatusField {
   key: string;
   value: string;
   wide?: boolean;
+  /** Draws a divider before this field, opening a new group. */
+  divider?: boolean;
 }
 
 const props = defineProps<{
-  status: 'idle' | 'active' | 'warning' | 'error';
+  status: 'online' | 'offline' | 'idle' | 'active' | 'warning' | 'error';
   label: string;
   pulse?: boolean;
   fields: ToolStatusField[];
@@ -49,7 +51,7 @@ watch(
 </script>
 
 <template>
-  <div class="tool-statusbar" role="status" aria-live="polite">
+  <div class="tool-statusbar">
     <div
       ref="scrollerRef"
       class="tool-statusbar__inner"
@@ -63,10 +65,12 @@ watch(
         :label="label"
         :pulse="pulse"
         class="tool-statusbar__status"
+        role="status"
+        aria-live="polite"
       />
       <span class="tool-statusbar__divider" aria-hidden="true"></span>
-      <template v-for="(field, index) in fields" :key="field.key">
-        <span v-if="index === 5" class="tool-statusbar__divider" aria-hidden="true"></span>
+      <template v-for="field in fields" :key="field.key">
+        <span v-if="field.divider" class="tool-statusbar__divider" aria-hidden="true"></span>
         <span class="tool-statusbar__field">
           <span class="tool-statusbar__key">{{ field.key }}</span>
           <span class="tool-statusbar__value" :class="{ 'tool-statusbar__value--wide': field.wide }">
@@ -91,7 +95,7 @@ watch(
   align-items: center;
   gap: 14px;
   min-width: 0;
-  padding: 7px 24px;
+  padding: 7px var(--tool-gutter, 16px);
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -146,6 +150,7 @@ watch(
   color: var(--demo-text-strong);
   font-family: var(--font-mono);
   font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 
 .tool-statusbar__value--wide {
@@ -158,7 +163,6 @@ watch(
 
 @media (max-width: 720px) {
   .tool-statusbar__inner {
-    padding: 7px 16px;
     gap: 12px;
   }
 }

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import type { ToolStatusField } from '@/components/ToolStatusBar.vue';
 import {
+  DemoNotice,
   MetricItem,
   SignalLoader,
   TechPanel,
@@ -17,9 +19,7 @@ import {
 } from '@/demos/analyzer/analyzerCopy';
 import {
   calculateNormalizationGain,
-  mixToMono,
   splitMelBands,
-  tuningReference,
 } from '@/demos/analyzer/audioAnalyzerProcessing';
 import { useAudioPlayer } from '@/demos/analyzer/useAudioPlayer';
 import { useStreamAnalyzer } from '@/demos/analyzer/useStreamAnalyzer';
@@ -32,14 +32,27 @@ defineProps<{
   libVersion?: string;
 }>();
 
-const { t, locale, localizedPath, alternateLocalePath, localizedValue } = useI18n();
+/** What the page's status bar shows; the shell owning that slot renders it. */
+export interface AnalyzerStatus {
+  status: 'idle' | 'active' | 'warning' | 'error';
+  label: string;
+  pulse: boolean;
+  fields: ToolStatusField[];
+}
 
-const termCopy = computed(() => localizedValue({ en: analyzerEnCopy, ja: analyzerJaCopy }));
+const emit = defineEmits<{ status: [status: AnalyzerStatus] }>();
+
+const { t, localizedPath, localizedValue } = useI18n();
+
+const copy = computed(() => localizedValue({ en: analyzerEnCopy, ja: analyzerJaCopy }));
 const glossaryBase = computed(() => localizedPath('/docs/glossary'));
+
+type WasmModule = typeof import('@/wasm/index.js');
+type StageKey = keyof typeof analyzerEnCopy.stages;
 
 /** Build rich-tooltip props for a metric from the copy + slug tables. */
 function term(key: AnalyzerTermKey) {
-  const c = termCopy.value;
+  const c = copy.value;
   const item = c.items[key];
   const slug = ANALYZER_TERM_SLUGS[key];
   return {
@@ -55,25 +68,6 @@ function term(key: AnalyzerTermKey) {
 const isLoadingDemo = ref(false);
 const hasVisualization = ref(false);
 const analysisError = ref<string | null>(null);
-
-const decodeErrorMessage = computed(() =>
-  localizedValue({
-    en: 'Could not decode this audio file. Try a different WAV, MP3, or FLAC file.',
-    ja: 'この音声ファイルをデコードできませんでした。別の WAV・MP3・FLAC ファイルをお試しください。',
-  }),
-);
-const processingErrorMessage = computed(() =>
-  localizedValue({
-    en: 'The audio decoded, but its visualization data could not be generated. Try a shorter file.',
-    ja: '音声はデコードできましたが、可視化データを生成できませんでした。より短いファイルをお試しください。',
-  }),
-);
-const initErrorMessage = computed(() =>
-  localizedValue({
-    en: 'The analysis engine could not be loaded. Reload the page and try again.',
-    ja: '解析エンジンを読み込めませんでした。ページを再読み込みしてからもう一度お試しください。',
-  }),
-);
 
 const {
   audioBuffer,
@@ -126,7 +120,7 @@ const tuningCents = ref<number | null>(null);
 
 const isLoadingFile = ref(false);
 const fileProgress = ref(0);
-const fileProgressStage = ref('');
+const fileProgressStage = ref<StageKey>('decoding');
 
 // Every load (the bundled demo or a dropped file) runs under the generation it
 // captured at its start. A newer load or the unmount bumps the counter, and each
@@ -147,10 +141,18 @@ function clearLoaded() {
 }
 
 /** Point the live key and chord readings at the reference pitch the recording sits at. */
-function applyTuning(offsetSemitones: number) {
-  const { refHz, cents } = tuningReference(offsetSemitones);
-  setTuningRefHz(refHz);
-  tuningCents.value = cents;
+function applyTuning(wasm: WasmModule, offsetSemitones: number) {
+  const offset = Number.isFinite(offsetSemitones) ? offsetSemitones : 0;
+  setTuningRefHz(wasm.tuningToReferenceHz(offset));
+  tuningCents.value = Math.round(offset * 100);
+}
+
+/** One channel to analyze, folded by the engine's ITU-R BS.775 downmix. */
+function monoSamples(wasm: WasmModule, buffer: AudioBuffer): Float32Array {
+  const channels = Array.from({ length: buffer.numberOfChannels }, (_, channel) =>
+    buffer.getChannelData(channel),
+  );
+  return wasm.downmix(channels, 0)[0];
 }
 
 /** Supersede any in-flight load and clear the previous source before any
@@ -168,7 +170,7 @@ async function handleFile(file: File) {
   fileName.value = file.name;
   isLoadingFile.value = true;
   fileProgress.value = 0;
-  fileProgressStage.value = 'DECODING AUDIO';
+  fileProgressStage.value = 'decoding';
   let failurePhase: 'init' | 'decode' | 'processing' = 'init';
 
   try {
@@ -181,7 +183,7 @@ async function handleFile(file: File) {
     if (generation !== loadGeneration) return;
 
     fileProgress.value = 15;
-    fileProgressStage.value = 'DECODING AUDIO';
+    fileProgressStage.value = 'decoding';
     const buffer = await decodeAudio(file);
     if (generation !== loadGeneration) return;
     failurePhase = 'processing';
@@ -189,7 +191,7 @@ async function handleFile(file: File) {
     if (generation !== loadGeneration) return;
 
     fileProgress.value = 35;
-    fileProgressStage.value = 'INITIALIZING ANALYZER';
+    fileProgressStage.value = 'initializing';
     // Reinitialize stream analyzer with AudioContext sample rate
     const ctx = getAudioContext();
     sampleRate.value = ctx.sampleRate;
@@ -211,42 +213,41 @@ async function handleFile(file: File) {
     if (generation !== loadGeneration) return;
 
     fileProgress.value = 45;
-    fileProgressStage.value = 'EXTRACTING SAMPLES';
+    fileProgressStage.value = 'extracting';
     // Pre-compute visualization data
     const wasm = await import('@/wasm/index.js');
     if (generation !== loadGeneration) return;
-    const samples =
-      buffer.numberOfChannels > 1 ? mixToMono(buffer) : buffer.getChannelData(0).slice();
-    applyTuning(wasm.estimateTuning(samples, buffer.sampleRate));
+    const samples = monoSamples(wasm, buffer);
+    applyTuning(wasm, wasm.estimateTuning(samples, buffer.sampleRate));
     await yieldToMain();
     if (generation !== loadGeneration) return;
 
     fileProgress.value = 55;
-    fileProgressStage.value = 'COMPUTING RMS';
+    fileProgressStage.value = 'rms';
     const rms = wasm.rmsEnergy(samples, buffer.sampleRate, 2048, 1024);
     await yieldToMain();
     if (generation !== loadGeneration) return;
 
     fileProgress.value = 62;
-    fileProgressStage.value = 'DETECTING BEATS';
+    fileProgressStage.value = 'beats';
     const beatTimes = wasm.detectBeats(samples, buffer.sampleRate);
     await yieldToMain();
     if (generation !== loadGeneration) return;
 
     fileProgress.value = 70;
-    fileProgressStage.value = 'COMPUTING CHROMA';
+    fileProgressStage.value = 'chroma';
     const chromaResult = wasm.chroma(samples, buffer.sampleRate, 2048, 1024);
     await yieldToMain();
     if (generation !== loadGeneration) return;
 
     fileProgress.value = 85;
-    fileProgressStage.value = 'COMPUTING SPECTROGRAM';
+    fileProgressStage.value = 'spectrogram';
     const melResult = wasm.melSpectrogram(samples, buffer.sampleRate, 2048, 1024, 128);
     await yieldToMain();
     if (generation !== loadGeneration) return;
 
     fileProgress.value = 95;
-    fileProgressStage.value = 'FINALIZING';
+    fileProgressStage.value = 'finalizing';
     const bands = splitMelBands(melResult);
 
     setAudioBuffer(buffer);
@@ -271,10 +272,10 @@ async function handleFile(file: File) {
     // reappears with an explanation instead of silently showing a bare zone.
     analysisError.value =
       failurePhase === 'init'
-        ? initErrorMessage.value
+        ? copy.value.errors.init
         : failurePhase === 'decode'
-          ? decodeErrorMessage.value
-          : processingErrorMessage.value;
+          ? copy.value.errors.decode
+          : copy.value.errors.processing;
     fileName.value = '';
     clearLoaded();
   } finally {
@@ -324,11 +325,49 @@ const displayTuning = computed(() => {
   return `${cents > 0 ? '+' : cents < 0 ? '−' : '±'}${Math.abs(cents)}¢`;
 });
 
+const playLabel = computed(() => t(isPlaying.value ? 'demo.player.pause' : 'demo.player.play'));
+
 const displayVotedPattern = computed(() => streamEstimate.value.votedPattern);
 const displayDetectedPatternName = computed(() => streamEstimate.value.detectedPatternName);
 const displayDetectedPatternScore = computed(() =>
   Math.round(streamEstimate.value.detectedPatternScore * 100),
 );
+
+const analyzerStatus = computed<AnalyzerStatus>(() => {
+  const loading = isLoadingDemo.value || isLoadingFile.value;
+  const c = copy.value;
+  let status: AnalyzerStatus['status'] = 'idle';
+  let label = c.status.idle;
+  if (analysisError.value) {
+    status = 'error';
+    label = c.status.error;
+  } else if (loading) {
+    status = 'warning';
+    label = c.status.loading;
+  } else if (isPlaying.value) {
+    status = 'active';
+    label = c.status.playing;
+  } else if (audioBuffer.value) {
+    status = 'active';
+    label = c.status.ready;
+  }
+  const loaded = Boolean(audioBuffer.value) && !loading;
+  return {
+    status,
+    label,
+    pulse: loading || isPlaying.value,
+    fields: [
+      { key: 'SRC', value: loaded ? fileName.value : '-', wide: true },
+      { key: 'LEN', value: loaded ? formatTime(duration.value) : '--:--' },
+      { key: 'RATE', value: loaded ? `${(sampleRate.value / 1000).toFixed(1)} kHz` : '-' },
+      { key: 'BPM', value: displayBpm.value ? String(displayBpm.value) : '-', divider: true },
+      { key: 'KEY', value: displayKey.value },
+      { key: 'TUNE', value: displayTuning.value },
+    ],
+  };
+});
+
+watch(analyzerStatus, (value) => emit('status', value), { immediate: true });
 
 // Yield to main thread for animation
 const yieldToMain = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -387,9 +426,8 @@ async function loadDemoFile() {
     // (streaming will update this in real-time during playback)
     const wasm = await import('@/wasm/index.js');
     if (generation !== loadGeneration) return;
-    const samples =
-      buffer.numberOfChannels > 1 ? mixToMono(buffer) : buffer.getChannelData(0).slice();
-    applyTuning(wasm.estimateTuning(samples, buffer.sampleRate));
+    const samples = monoSamples(wasm, buffer);
+    applyTuning(wasm, wasm.estimateTuning(samples, buffer.sampleRate));
     await yieldToMain();
     if (generation !== loadGeneration) return;
 
@@ -452,10 +490,12 @@ onUnmounted(() => {
 
 <template>
   <div class="analyzer">
+    <DemoNotice v-if="analysisError" tone="error" class="analyzer__error">{{ analysisError }}</DemoNotice>
+
     <SignalLoader
       v-if="isLoadingDemo || isLoadingFile"
       class="analyzer__loading"
-      :stage="isLoadingFile ? fileProgressStage : 'INITIALIZING SIGNAL PROCESSOR...'"
+      :stage="isLoadingFile ? copy.stages[fileProgressStage] : copy.stages.starting"
       :progress="isLoadingFile ? fileProgress : undefined"
     />
 
@@ -463,179 +503,156 @@ onUnmounted(() => {
     <DropZone v-else-if="!audioBuffer" @file="handleFile" />
 
     <!-- Main Interface -->
-    <div v-else-if="hasVisualization" class="analyzer__main">
-      <!-- Central Oscilloscope Area -->
-      <div class="analyzer__center">
-        <!-- Oscilloscope Hero -->
-        <div class="analyzer__scope-container">
-          <SynesthesiaVisualizer
+    <Transition v-else name="demo-fade" appear>
+      <div v-if="hasVisualization" class="analyzer__main">
+        <!-- Left Panel: Metrics -->
+        <aside class="analyzer__sidebar analyzer__sidebar--left">
+          <TechPanel :title="t('demo.panel.title')" class="analyzer__metrics">
+            <div class="analyzer__metrics-body">
+              <!-- Primary Analysis Results -->
+              <div class="analyzer__metric-hero">
+                <span class="analyzer__metric-hero-label">
+                  {{ t('demo.panel.bpm') }}
+                  <Tooltip v-bind="term('bpm')" />
+                </span>
+                <span class="analyzer__metric-hero-value">
+                  <span v-if="bpmPending" class="analyzer__metric-pending" role="status" :aria-label="t('demo.analyzing')">
+                    <i class="demo-anim-loop"></i><i class="demo-anim-loop"></i><i class="demo-anim-loop"></i>
+                  </span>
+                  <template v-else>{{ displayBpm || '-' }}</template>
+                </span>
+                <span v-if="bpmPending" class="analyzer__metric-hero-conf analyzer__metric-hero-conf--pending demo-anim-loop">{{ t('demo.analyzing') }}</span>
+                <span v-else-if="displayBpmConfidence > 0" class="analyzer__metric-hero-conf">{{ displayBpmConfidence }}%</span>
+              </div>
+              <div class="analyzer__metric-hero">
+                <span class="analyzer__metric-hero-label">
+                  {{ t('demo.panel.key') }}
+                  <Tooltip v-bind="term('key')" />
+                </span>
+                <span class="analyzer__metric-hero-value">
+                  <span v-if="keyPending" class="analyzer__metric-pending" role="status" :aria-label="t('demo.analyzing')">
+                    <i class="demo-anim-loop"></i><i class="demo-anim-loop"></i><i class="demo-anim-loop"></i>
+                  </span>
+                  <template v-else>{{ displayKey }}</template>
+                </span>
+                <span v-if="keyPending" class="analyzer__metric-hero-conf analyzer__metric-hero-conf--pending demo-anim-loop">{{ t('demo.analyzing') }}</span>
+                <span v-else-if="displayKeyConfidence > 0" class="analyzer__metric-hero-conf">{{ displayKeyConfidence }}%</span>
+              </div>
+              <!-- Chord progression pattern voted by the engine -->
+              <Transition name="demo-rise">
+                <div v-if="displayVotedPattern.length >= 4" class="analyzer__pattern">
+                  <div class="analyzer__pattern-header">
+                    <span class="analyzer__pattern-label">
+                      {{ t('demo.panel.pattern') }}
+                      <Tooltip v-bind="term('pattern')" />
+                    </span>
+                    <span v-if="displayDetectedPatternName" class="analyzer__pattern-name">{{ displayDetectedPatternName }}</span>
+                  </div>
+                  <div class="analyzer__pattern-chords">
+                    {{ displayVotedPattern.join('→') }}
+                  </div>
+                  <span v-if="displayDetectedPatternName && displayDetectedPatternScore > 0" class="analyzer__pattern-score">{{ displayDetectedPatternScore }}%</span>
+                </div>
+              </Transition>
+              <div class="analyzer__metrics-divider"></div>
+              <!-- Secondary Info -->
+              <MetricItem :value="formatTime(duration)">
+                <template #label><TermLabel v-bind="term('duration')">{{ t('demo.panel.duration') }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="`${(sampleRate / 1000).toFixed(1)}kHz`">
+                <template #label><TermLabel v-bind="term('rate')">{{ t('demo.panel.rate') }}</TermLabel></template>
+              </MetricItem>
+              <MetricItem :value="displayTuning">
+                <template #label><TermLabel v-bind="term('tuning')">{{ t('demo.panel.tuning') }}</TermLabel></template>
+              </MetricItem>
+              <div class="analyzer__metrics-divider"></div>
+              <!-- Source -->
+              <MetricItem :value="fileName" variant="success">
+                <template #label><TermLabel v-bind="term('source')">{{ t('demo.panel.source') }}</TermLabel></template>
+              </MetricItem>
+            </div>
+          </TechPanel>
+        </aside>
+
+        <!-- Central Oscilloscope Area -->
+        <div class="analyzer__center">
+          <div class="analyzer__scope-container">
+            <SynesthesiaVisualizer
+              :chroma-data="chromaData"
+              :rms-data="rmsData"
+              :band-data="bandData"
+              :current-time="currentTime"
+              :duration="duration"
+              :is-playing="isPlaying"
+            />
+            <Tooltip v-bind="term('visualizer')" class="analyzer__overlay-tip" />
+          </div>
+
+          <!-- Waveform & Transport -->
+          <div class="analyzer__transport">
+            <Tooltip v-bind="term('waveform')" class="analyzer__overlay-tip" />
+            <WaveformVisualizer
+              :audio-buffer="audioBuffer"
+              :beats="beats ?? undefined"
+              :current-time="currentTime"
+              :duration="duration"
+              @seek="handleSeek"
+            />
+
+            <div class="analyzer__controls">
+              <div class="analyzer__controls-left">
+                <TransportButton size="sm" :aria-label="copy.controls.rewind" @click="rewind">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"/>
+                  </svg>
+                </TransportButton>
+                <TransportButton variant="primary" round :aria-label="playLabel" @click="togglePlayback">
+                  <svg v-if="!isPlaying" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                  <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                  </svg>
+                </TransportButton>
+                <TransportButton size="sm" :aria-label="t('demo.player.stop')" @click="stop">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M6 6h12v12H6z"/>
+                  </svg>
+                </TransportButton>
+              </div>
+
+              <div class="analyzer__time">
+                <span class="analyzer__time-current">{{ formatTime(currentTime) }}</span>
+                <span class="analyzer__time-sep">/</span>
+                <span class="analyzer__time-total">{{ formatTime(duration) }}</span>
+              </div>
+
+              <div class="analyzer__controls-right">
+                <TransportButton size="sm" :aria-label="copy.controls.changeFile" @click="resetFile">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 002-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                  </svg>
+                  <span>{{ copy.controls.file }}</span>
+                </TransportButton>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Panel: Data Console -->
+        <aside class="analyzer__sidebar analyzer__sidebar--right">
+          <DataConsole
             :chroma-data="chromaData"
             :rms-data="rmsData"
             :band-data="bandData"
             :current-time="currentTime"
             :duration="duration"
             :is-playing="isPlaying"
+            :sample-rate="sampleRate"
           />
-          <Tooltip v-bind="term('visualizer')" class="analyzer__overlay-tip">
-            <button type="button" class="analyzer__info" :aria-label="term('visualizer').title">
-              <span aria-hidden="true">i</span>
-            </button>
-          </Tooltip>
-        </div>
-
-        <!-- Waveform & Transport -->
-        <div class="analyzer__transport">
-          <Tooltip v-bind="term('waveform')" class="analyzer__overlay-tip">
-            <button type="button" class="analyzer__info" :aria-label="term('waveform').title">
-              <span aria-hidden="true">i</span>
-            </button>
-          </Tooltip>
-          <WaveformVisualizer
-            :audio-buffer="audioBuffer"
-            :beats="beats ?? undefined"
-            :current-time="currentTime"
-            :duration="duration"
-            @seek="handleSeek"
-          />
-
-          <div class="analyzer__controls">
-            <div class="analyzer__controls-left">
-              <TransportButton size="sm" @click="rewind" aria-label="Rewind">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"/>
-                </svg>
-              </TransportButton>
-              <TransportButton variant="primary" round @click="togglePlayback" :aria-label="isPlaying ? 'Pause' : 'Play'">
-                <svg v-if="!isPlaying" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M8 5v14l11-7z"/>
-                </svg>
-                <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
-                </svg>
-              </TransportButton>
-              <TransportButton size="sm" @click="stop" aria-label="Stop">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M6 6h12v12H6z"/>
-                </svg>
-              </TransportButton>
-            </div>
-
-            <div class="analyzer__time">
-              <span class="analyzer__time-current">{{ formatTime(currentTime) }}</span>
-              <span class="analyzer__time-sep">/</span>
-              <span class="analyzer__time-total">{{ formatTime(duration) }}</span>
-            </div>
-
-            <div class="analyzer__controls-right">
-              <TransportButton size="sm" @click="resetFile">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 002-2v-4M17 8l-5-5-5 5M12 3v12"/>
-                </svg>
-                <span>FILE</span>
-              </TransportButton>
-            </div>
-          </div>
-        </div>
+        </aside>
       </div>
-
-      <!-- Right Panel: Data Console -->
-      <aside class="analyzer__sidebar analyzer__sidebar--right">
-        <DataConsole
-          :chroma-data="chromaData"
-          :rms-data="rmsData"
-          :band-data="bandData"
-          :current-time="currentTime"
-          :duration="duration"
-          :is-playing="isPlaying"
-          :sample-rate="sampleRate"
-        />
-      </aside>
-
-      <!-- Left Panel: Metrics -->
-      <aside class="analyzer__sidebar analyzer__sidebar--left">
-        <TechPanel :title="t('demo.panel.title')" class="analyzer__metrics">
-          <div class="analyzer__metrics-body">
-            <!-- Primary Analysis Results -->
-            <div class="analyzer__metric-hero">
-              <span class="analyzer__metric-hero-label">
-                {{ t('demo.panel.bpm') }}
-                <Tooltip v-bind="term('bpm')">
-                  <button type="button" class="analyzer__info" :aria-label="term('bpm').title">
-                    <span aria-hidden="true">i</span>
-                  </button>
-                </Tooltip>
-              </span>
-              <span class="analyzer__metric-hero-value">
-                <span v-if="bpmPending" class="analyzer__metric-pending" role="status" :aria-label="t('demo.analyzing')">
-                  <i></i><i></i><i></i>
-                </span>
-                <template v-else>{{ displayBpm || '-' }}</template>
-              </span>
-              <span v-if="bpmPending" class="analyzer__metric-hero-conf analyzer__metric-hero-conf--pending">{{ t('demo.analyzing') }}</span>
-              <span v-else-if="displayBpmConfidence > 0" class="analyzer__metric-hero-conf">{{ displayBpmConfidence }}%</span>
-            </div>
-            <div class="analyzer__metric-hero">
-              <span class="analyzer__metric-hero-label">
-                {{ t('demo.panel.key') }}
-                <Tooltip v-bind="term('key')">
-                  <button type="button" class="analyzer__info" :aria-label="term('key').title">
-                    <span aria-hidden="true">i</span>
-                  </button>
-                </Tooltip>
-              </span>
-              <span class="analyzer__metric-hero-value">
-                <span v-if="keyPending" class="analyzer__metric-pending" role="status" :aria-label="t('demo.analyzing')">
-                  <i></i><i></i><i></i>
-                </span>
-                <template v-else>{{ displayKey }}</template>
-              </span>
-              <span v-if="keyPending" class="analyzer__metric-hero-conf analyzer__metric-hero-conf--pending">{{ t('demo.analyzing') }}</span>
-              <span v-else-if="displayKeyConfidence > 0" class="analyzer__metric-hero-conf">{{ displayKeyConfidence }}%</span>
-            </div>
-            <!-- Chord Progression Pattern (C++ computed) -->
-            <div v-if="displayVotedPattern.length >= 4" class="analyzer__pattern">
-              <div class="analyzer__pattern-header">
-                <span class="analyzer__pattern-label">
-                  {{ t('demo.panel.pattern') }}
-                  <Tooltip v-bind="term('pattern')">
-                    <button type="button" class="analyzer__info" :aria-label="term('pattern').title">
-                      <span aria-hidden="true">i</span>
-                    </button>
-                  </Tooltip>
-                </span>
-                <span v-if="displayDetectedPatternName" class="analyzer__pattern-name">{{ displayDetectedPatternName }}</span>
-              </div>
-              <div class="analyzer__pattern-chords">
-                {{ displayVotedPattern.join('→') }}
-              </div>
-              <span v-if="displayDetectedPatternName && displayDetectedPatternScore > 0" class="analyzer__pattern-score">{{ displayDetectedPatternScore }}%</span>
-            </div>
-            <div class="analyzer__metrics-divider"></div>
-            <!-- Secondary Info -->
-            <MetricItem :value="formatTime(duration)">
-              <template #label><TermLabel v-bind="term('duration')">{{ t('demo.panel.duration') }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="`${(sampleRate / 1000).toFixed(1)}kHz`">
-              <template #label><TermLabel v-bind="term('rate')">{{ t('demo.panel.rate') }}</TermLabel></template>
-            </MetricItem>
-            <MetricItem :value="displayTuning">
-              <template #label><TermLabel v-bind="term('tuning')">{{ t('demo.panel.tuning') }}</TermLabel></template>
-            </MetricItem>
-            <div class="analyzer__metrics-divider"></div>
-            <!-- Source -->
-            <MetricItem :value="fileName" variant="success">
-              <template #label><TermLabel v-bind="term('source')">{{ t('demo.panel.source') }}</TermLabel></template>
-            </MetricItem>
-          </div>
-        </TechPanel>
-      </aside>
-    </div>
-
-    <!-- Error State -->
-    <div v-if="analysisError" class="analyzer__error">
-      <span class="analyzer__error-icon">!</span>
-      <span>{{ analysisError }}</span>
-    </div>
+    </Transition>
   </div>
 </template>
 

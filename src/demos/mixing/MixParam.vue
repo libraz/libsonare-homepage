@@ -6,6 +6,7 @@
  * parameter the strip only takes on release.
  */
 import { computed, ref } from 'vue';
+import { Tooltip } from '@/components/ui';
 import { formatParam, type ParamControl } from '@/demos/mixing/mixingUi';
 
 const props = withDefaults(
@@ -16,6 +17,7 @@ const props = withDefaults(
     defaultValue: number;
     disabled?: boolean;
     deferred?: boolean;
+    /** Help shown from an info dot beside the label. */
     hint?: string;
   }>(),
   { disabled: false, deferred: false, hint: undefined },
@@ -141,9 +143,11 @@ function reset(): void {
   <div
     class="param"
     :class="{ 'param--dragging': dragging, 'param--disabled': disabled, 'param--deferred': deferred }"
-    :title="hint"
   >
-    <span class="param__label">{{ label }}</span>
+    <span class="param__label">
+      <span class="param__label-text">{{ label }}</span>
+      <Tooltip v-if="hint" :title="label" :body="hint" />
+    </span>
     <span class="param__value">{{ readout }}<small v-if="unit">{{ unit }}</small></span>
     <div
       ref="trackRef"
@@ -182,11 +186,18 @@ function reset(): void {
 }
 
 .param__label {
-  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
   color: var(--demo-text-muted);
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.04em;
+}
+
+.param__label-text {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

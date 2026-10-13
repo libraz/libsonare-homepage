@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   ATTACK_MAX_MS,
   ATTACK_MIN_MS,
+  baseVoiceEngine,
+  baseVoiceId,
   buildSynthPatch,
   controlsFromPreset,
+  formatModelValue,
+  groupModelFields,
   groupPresetsByEngine,
   hzToNorm,
   inertTweaks,
@@ -89,21 +93,84 @@ describe('engine grouping', () => {
   };
   const engineOf = (name: string) => engines[name];
 
-  it("orders groups by the engine's own mode order, presets by catalog order", () => {
+  it("orders groups by the engine's own mode order, each led by its base voice", () => {
     const groups = groupPresetsByEngine(['violin', 'saw', 'cello', 'sine'], engineOf, [
+      'default',
       'subtractive',
       'fm',
       'bowed-string',
+      'sample',
     ]);
     expect(groups).toEqual([
-      { engine: 'subtractive', presets: ['saw', 'sine'] },
-      { engine: 'bowed-string', presets: ['violin', 'cello'] },
+      { engine: 'subtractive', presets: ['base:subtractive', 'saw', 'sine'] },
+      { engine: 'fm', presets: ['base:fm'] },
+      { engine: 'bowed-string', presets: ['base:bowed-string', 'violin', 'cello'] },
     ]);
   });
 
   it('keeps an engine the order does not know, after the known ones', () => {
     const groups = groupPresetsByEngine(['oddity', 'saw'], engineOf, ['subtractive']);
     expect(groups.map((group) => group.engine)).toEqual(['subtractive', 'future-engine']);
+  });
+});
+
+describe('base voices', () => {
+  it('round-trips an engine through its program id', () => {
+    expect(baseVoiceEngine(baseVoiceId('modal'))).toBe('modal');
+    expect(baseVoiceEngine('e-piano')).toBeNull();
+  });
+
+  it('sends a base voice as an engine mode, with the touched fields and model keys', () => {
+    const controls = controlsFromPreset({ cutoffHz: 1000 }).controls;
+    expect(buildSynthPatch('base:fm', new Set(), controls)).toEqual({ engineMode: 'fm' });
+    expect(
+      buildSynthPatch('base:fm', new Set<SynthTweakKey>(['cutoffHz']), controls, { algorithm: 2 }),
+    ).toEqual({ engineMode: 'fm', cutoffHz: 1000, engineParams: { algorithm: 2 } });
+  });
+
+  it('adds model keys to a named preset only once one is moved', () => {
+    const controls = controlsFromPreset({}).controls;
+    expect(buildSynthPatch('bell', new Set(), controls, {})).toBe('bell');
+    expect(buildSynthPatch('bell', new Set(), controls, { decayS: 2 })).toEqual({
+      preset: 'bell',
+      engineParams: { decayS: 2 },
+    });
+  });
+});
+
+describe('model fields', () => {
+  const field = (name: string, extra: object = {}) => ({
+    name,
+    type: 'number' as const,
+    min: 0,
+    max: 1,
+    default: 0,
+    unit: 'none' as const,
+    ...extra,
+  });
+
+  it('splits a section into its top level, dotted and indexed sub-sections', () => {
+    const groups = groupModelFields([
+      field('algorithm', { integer: true, max: 5 }),
+      field('ops0.ratio'),
+      field('ops0.env.attackMs'),
+      field('drawbars0'),
+      field('drawbars1'),
+      field('open', { min: undefined, max: undefined }),
+      { name: 'stopped', type: 'boolean' as const, default: 0, unit: 'none' as const },
+    ]);
+    expect(groups.map((group) => [group.id, group.fields.map((f) => f.label)])).toEqual([
+      ['', ['algorithm', 'stopped']],
+      ['ops0', ['ratio', 'env.attackMs']],
+      ['drawbars', ['0', '1']],
+    ]);
+  });
+
+  it('reads a value in the unit the engine reports', () => {
+    expect(formatModelValue(2.5, field('r', { unit: 'ratio' }))).toBe('×2.50');
+    expect(formatModelValue(1500, field('t', { unit: 'ms' }))).toBe('1.5 s');
+    expect(formatModelValue(-30, field('c', { unit: 'cents' }))).toBe('-30 ct');
+    expect(formatModelValue(3.4, field('n', { integer: true }))).toBe('3');
   });
 });
 

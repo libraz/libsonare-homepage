@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { KEY_GEOMETRY } from '@/components/keyboard/keyGeometry';
 import {
   buildKeyboard,
   isBlackKey,
@@ -62,6 +63,7 @@ describe('practice keyboard geometry', () => {
     const c4 = layout.keys.find((k) => k.midi === 60)!;
     const cs4 = layout.keys.find((k) => k.midi === 61)!;
     expect(keyWidthRatio(c4, layout.whiteCount)).toBeCloseTo(0.92 / 7);
-    expect(keyWidthRatio(cs4, layout.whiteCount)).toBeCloseTo(0.62 / 7);
+    // Black lanes are exactly as wide as the shared black key.
+    expect(keyWidthRatio(cs4, layout.whiteCount)).toBeCloseTo(KEY_GEOMETRY.blackWidthRatio / 7);
   });
 });

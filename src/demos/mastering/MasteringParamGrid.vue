@@ -14,6 +14,7 @@ import {
   type MasteringParamValue,
 } from '@/demos/mastering/masteringState';
 import {
+  MASTERING_PARAM_ORDER,
   MASTERING_SLOT_CONTROLS,
   type MasteringParamControl,
   type MasteringParamSpec,
@@ -75,6 +76,17 @@ function onEnd(name: string): void {
 function defaultOf(spec: MasteringParamControl): number {
   return entry.value.params[spec.name] as number;
 }
+
+/** The control's travel, narrowed to keep it on its side of a sibling it is ordered against. */
+function rangeOf(spec: MasteringParamControl): { min: number; max: number } {
+  let { min, max } = spec;
+  for (const order of MASTERING_PARAM_ORDER[entry.value.processor]?.[spec.name] ?? []) {
+    const sibling = currentValue(order.key);
+    if (order.relation === 'lt') max = Math.min(max, sibling - spec.step);
+    else min = Math.max(min, sibling + spec.step);
+  }
+  return { min, max };
+}
 </script>
 
 <template>
@@ -100,15 +112,15 @@ function defaultOf(spec: MasteringParamControl): number {
           <MasterKnob
             v-else
             :model-value="currentValue(spec.name)"
-            :min="spec.min"
-            :max="spec.max"
+            :min="rangeOf(spec).min"
+            :max="rangeOf(spec).max"
             :step="spec.step"
             :unit="spec.unit"
             :scale="spec.scale"
             :label="label(spec.name)"
             :default="defaultOf(spec)"
             :deferred="deferred(spec.name)"
-            :hint="deferred(spec.name) ? copy.editor.discrete : copy.editor.knobHint"
+            :hint="deferred(spec.name) ? copy.editor.discrete : undefined"
             :disabled="disabled"
             @begin="onBegin(spec.name)"
             @end="onEnd(spec.name)"

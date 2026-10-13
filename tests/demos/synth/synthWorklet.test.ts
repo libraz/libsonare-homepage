@@ -45,6 +45,11 @@ describe('buildSynthProcessorSource', () => {
     expect(source).toContain('this.engine.setMidiInputSource(DEST)');
   });
 
+  it('moves a continuous field through its automation id instead of rebinding', () => {
+    expect(source).toContain('this.engine.resolveInstrumentAutomationId(DEST, msg.name)');
+    expect(source).toContain('if (id >= 0) this.engine.setParameterSmoothed(id, msg.value)');
+  });
+
   it('forwards MIDI commands through the native input queue', () => {
     expect(source).toContain(
       'this.engine.pushMidiInputNoteOn(GROUP, CHANNEL, msg.note, msg.velocity, 0)',

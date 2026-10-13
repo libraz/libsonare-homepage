@@ -34,6 +34,8 @@ const demoRoutes = [
   'ja/gs-module.html',
   'step-bass.html',
   'ja/step-bass.html',
+  'transcribe.html',
+  'ja/transcribe.html',
 ];
 
 const siteUrl = 'https://libsonare.libraz.net';
@@ -370,11 +372,11 @@ describe('check-built-routes script helpers', () => {
     );
   });
 
-  it('keeps built JS and WASM assets inside explicit budgets', () => {
+  it('keeps built JS assets inside explicit budgets', () => {
     const { dist } = createWorkspace();
     writeBytes(dist, 'assets/app.js', 100 * 1024);
     writeBytes(dist, 'assets/chunks/vexflow.hash.js', 1024 * 1024);
-    writeBytes(dist, 'assets/sonare.hash.wasm', 6_949_147);
+    writeBytes(dist, 'assets/sonare.hash.wasm', 8 * 1024 * 1024);
 
     const failures: string[] = [];
     checkBuiltAssetBudgets(dist, failures);
@@ -386,7 +388,6 @@ describe('check-built-routes script helpers', () => {
     const { dist } = createWorkspace();
     writeBytes(dist, 'assets/app.js', 760 * 1024);
     writeBytes(dist, 'assets/chunks/vexflow.hash.js', 2 * 1024 * 1024);
-    writeBytes(dist, 'assets/sonare.hash.wasm', 7 * 1024 * 1024);
 
     const failures: string[] = [];
     checkBuiltAssetBudgets(dist, failures);
@@ -394,7 +395,6 @@ describe('check-built-routes script helpers', () => {
     expect(failures).toEqual([
       'assets/app.js: built asset 760.0 KiB exceeds budget 750.0 KiB',
       'assets/chunks/vexflow.hash.js: built asset 2.00 MiB exceeds budget 1.25 MiB',
-      'assets/sonare.hash.wasm: built asset 7.00 MiB exceeds budget 6.63 MiB',
     ]);
   });
 

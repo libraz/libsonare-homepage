@@ -51,13 +51,6 @@ function handleClick() {
   fileInput.value?.click();
 }
 
-function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
-    e.preventDefault();
-    fileInput.value?.click();
-  }
-}
-
 function handleFileSelect(e: Event) {
   const input = e.target as HTMLInputElement;
   const files = input.files;
@@ -78,55 +71,44 @@ function isValidAudioFile(file: File): boolean {
 </script>
 
 <template>
-  <div
+  <input
+    ref="fileInput"
+    type="file"
+    accept="audio/*"
+    class="dropzone__input"
+    @change="handleFileSelect"
+  />
+  <button
+    type="button"
     class="dropzone"
     :class="{ 'dropzone--dragging': isDragging, 'dropzone--hover': isHovering }"
-    role="button"
-    tabindex="0"
-    :aria-label="t('demo.dropzone.title')"
     @dragenter="handleDragEnter"
     @dragleave="handleDragLeave"
     @dragover="handleDragOver"
     @drop="handleDrop"
     @click="handleClick"
-    @keydown="handleKeydown"
     @mouseenter="isHovering = true"
     @mouseleave="isHovering = false"
   >
-    <input
-      ref="fileInput"
-      type="file"
-      accept="audio/*"
-      class="dropzone__input"
-      @change="handleFileSelect"
-    />
+    <CornerBrackets :color="isDragging ? 'var(--demo-accent)' : undefined" />
 
-    <!-- Corner brackets using shared component -->
-    <CornerBrackets :color="isDragging ? '#8B5CF6' : undefined" />
+    <span class="dropzone__grid" aria-hidden="true"></span>
 
-    <!-- Grid background -->
-    <div class="dropzone__grid"></div>
-
-    <!-- Content -->
-    <div class="dropzone__content">
-      <div class="dropzone__icon">
+    <span class="dropzone__content">
+      <span class="dropzone__icon" aria-hidden="true">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 002-2v-4M17 8l-5-5-5 5M12 3v12" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-      </div>
-      <div class="dropzone__text">
+      </span>
+      <span class="dropzone__text">
         <span class="dropzone__title">{{ t('demo.dropzone.title') }}</span>
         <span class="dropzone__subtitle">{{ t('demo.dropzone.subtitle') }}</span>
-      </div>
-      <div class="dropzone__formats">
-        <span class="dropzone__format-label">SUPPORTED:</span>
-        <span class="dropzone__format-list">MP3 WAV FLAC OGG</span>
-      </div>
-    </div>
+      </span>
+      <span class="dropzone__formats">{{ t('demo.dropzone.formats') }}</span>
+    </span>
 
-    <!-- Scan line effect using shared component -->
     <ScanLine :active="isHovering || isDragging" :duration="3" />
-  </div>
+  </button>
 </template>
 
 <style scoped>
@@ -146,19 +128,29 @@ function isValidAudioFile(file: File): boolean {
   padding: 2.5rem 2rem;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--demo-radius-lg);
+  color: inherit;
   cursor: pointer;
-  transition: all var(--transition-default);
+  transition:
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    box-shadow var(--demo-dur-base) var(--demo-ease-standard),
+    transform var(--demo-dur-base) var(--demo-ease-standard);
   font-family: var(--font-mono);
   overflow: hidden;
+}
+
+.dropzone:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 3px;
 }
 
 .dropzone__grid {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(var(--demo-grid-minor, rgba(139, 92, 246, 0.02)) 1px, transparent 1px),
-    linear-gradient(90deg, var(--demo-grid-minor, rgba(139, 92, 246, 0.02)) 1px, transparent 1px);
+    linear-gradient(var(--demo-grid-minor) 1px, transparent 1px),
+    linear-gradient(90deg, var(--demo-grid-minor) 1px, transparent 1px);
   background-size: 20px 20px;
   opacity: 0.5;
   pointer-events: none;
@@ -166,7 +158,7 @@ function isValidAudioFile(file: File): boolean {
 
 .dropzone:hover {
   border-color: var(--accent-dim);
-  box-shadow: var(--demo-shadow-glow, 0 0 40px -10px rgba(139, 92, 246, 0.2));
+  box-shadow: var(--demo-shadow-glow);
 }
 
 .dropzone:hover .dropzone__icon {
@@ -175,9 +167,9 @@ function isValidAudioFile(file: File): boolean {
 
 .dropzone--dragging {
   border-color: var(--accent);
-  background: var(--demo-dropzone-dragging-bg, rgba(139, 92, 246, 0.08));
+  background: color-mix(in srgb, var(--demo-accent) 8%, var(--demo-dropzone-bg));
   transform: scale(1.01);
-  box-shadow: 0 0 60px -10px rgba(139, 92, 246, 0.3);
+  box-shadow: 0 0 60px -10px var(--demo-accent-dim);
 }
 
 .dropzone--dragging .dropzone__icon {
@@ -190,6 +182,16 @@ function isValidAudioFile(file: File): boolean {
 }
 
 /* Content */
+.dropzone__grid,
+.dropzone__content,
+.dropzone__icon,
+.dropzone__text,
+.dropzone__title,
+.dropzone__subtitle,
+.dropzone__formats {
+  display: block;
+}
+
 .dropzone__content {
   position: relative;
   z-index: 1;
@@ -201,8 +203,10 @@ function isValidAudioFile(file: File): boolean {
 }
 
 .dropzone__icon {
-  color: rgba(139, 92, 246, 0.7);
-  transition: all 0.3s ease;
+  color: color-mix(in srgb, var(--demo-accent) 70%, transparent);
+  transition:
+    color var(--demo-dur-base) var(--demo-ease-standard),
+    transform var(--demo-dur-base) var(--demo-ease-enter);
 }
 
 .dropzone__text {
@@ -227,27 +231,16 @@ function isValidAudioFile(file: File): boolean {
 }
 
 .dropzone__formats {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  max-width: 36ch;
   padding: 6px 12px;
-  background: var(--demo-accent-subtle, rgba(139, 92, 246, 0.1));
+  background: var(--demo-accent-subtle);
   border: 1px solid var(--border);
   border-radius: 4px;
-}
-
-.dropzone__format-label {
-  font-size: 8px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  color: var(--demo-text-faint);
-}
-
-.dropzone__format-list {
+  color: var(--accent);
   font-size: 9px;
   font-weight: 500;
-  letter-spacing: 0.15em;
-  color: var(--accent);
+  letter-spacing: 0.04em;
+  line-height: 1.5;
 }
 
 @media (max-width: 600px) {

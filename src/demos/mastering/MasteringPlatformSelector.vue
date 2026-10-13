@@ -4,7 +4,7 @@
  * recommendation and warns when the target is louder than it.
  */
 import { computed } from 'vue';
-import { Tooltip } from '@/components/ui';
+import { DemoNotice, Tooltip } from '@/components/ui';
 import MasterKnob from '@/demos/mastering/MasterKnob.vue';
 import { useMasteringCopy } from '@/demos/mastering/masteringCopy';
 import {
@@ -36,51 +36,74 @@ const copy = useMasteringCopy();
 const louder = computed(
   () => props.targetLufs - props.recommendedLufs >= MASTERING_LOUD_WARNING_LU,
 );
+
+const options: (HTMLButtonElement | null)[] = [];
+
+function onKeydown(event: KeyboardEvent, index: number): void {
+  const delta =
+    event.key === 'ArrowRight' || event.key === 'ArrowDown'
+      ? 1
+      : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+        ? -1
+        : 0;
+  if (delta === 0) return;
+  event.preventDefault();
+  const next = (index + delta + MASTERING_PLATFORMS.length) % MASTERING_PLATFORMS.length;
+  emit('platform', MASTERING_PLATFORMS[next].id);
+  options[next]?.focus();
+}
 </script>
 
 <template>
   <div class="platforms">
     <div class="platforms__grid" role="radiogroup" :aria-label="copy.quick.steps.platform">
-      <div v-for="option in MASTERING_PLATFORMS" :key="option.id" class="platforms__item">
+      <div v-for="(option, index) in MASTERING_PLATFORMS" :key="option.id" class="platforms__item">
         <button
+          :ref="(el) => (options[index] = el as HTMLButtonElement | null)"
           type="button"
           role="radio"
           class="platforms__option"
           :aria-checked="platform === option.id"
+          :tabindex="platform === option.id ? 0 : -1"
           :disabled="disabled"
           @click="emit('platform', option.id)"
+          @keydown="onKeydown($event, index)"
         >
           <span>{{ copy.platforms.names[option.id] }}</span>
           <strong>{{ formatNumber(option.id === 'custom' ? customLufs : option.lufs, 1) }} LUFS</strong>
         </button>
-        <Tooltip :title="copy.platforms.names[option.id]" :body="copy.platforms.descriptions[option.id]">
-          <button type="button" class="platforms__info" :aria-label="copy.platforms.descriptions[option.id]" @click.stop.prevent>
-            <span aria-hidden="true">i</span>
-          </button>
-        </Tooltip>
+        <span class="platforms__info">
+          <Tooltip
+            :title="copy.platforms.names[option.id]"
+            :body="copy.platforms.descriptions[option.id]"
+            :aria-label="copy.platforms.names[option.id]"
+          />
+        </span>
       </div>
     </div>
-    <MasterKnob
-      v-if="platform === 'custom'"
-      class="platforms__custom"
-      :model-value="customLufs"
-      :min="-24"
-      :max="-8"
-      :step="0.5"
-      unit="LUFS"
-      :default="-14"
-      :label="copy.quick.customTarget"
-      :disabled="disabled"
-      @begin="emit('begin')"
-      @end="emit('end')"
-      @update:model-value="emit('customLufs', $event)"
-    />
-    <p class="platforms__rec">
+    <Transition name="demo-rise">
+      <MasterKnob
+        v-if="platform === 'custom'"
+        class="platforms__custom"
+        :model-value="customLufs"
+        :min="-24"
+        :max="-8"
+        :step="0.5"
+        unit="LUFS"
+        :default="-14"
+        :label="copy.quick.customTarget"
+        :disabled="disabled"
+        @begin="emit('begin')"
+        @end="emit('end')"
+        @update:model-value="emit('customLufs', $event)"
+      />
+    </Transition>
+    <DemoNotice tone="hint">
       {{ fill(copy.platforms.recommended, { preset: presetName, lufs: formatNumber(recommendedLufs, 0) }) }}
-    </p>
-    <p v-if="louder" class="platforms__warn" role="note">
+    </DemoNotice>
+    <DemoNotice v-if="louder" tone="warn">
       {{ fill(copy.platforms.loudWarning, { preset: presetName }) }}
-    </p>
+    </DemoNotice>
   </div>
 </template>
 
@@ -105,13 +128,25 @@ const louder = computed(
   display: grid;
   gap: 2px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 8px 26px 8px 10px;
   border: 1px solid var(--demo-border);
-  border-radius: 6px;
+  border-radius: var(--demo-radius-sm);
   background: transparent;
   color: var(--demo-text);
   text-align: left;
   cursor: pointer;
+  transition:
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    transform var(--demo-dur-instant) var(--demo-ease-standard);
+}
+
+.platforms__option:hover:not(:disabled) {
+  border-color: var(--demo-border-strong);
+}
+
+.platforms__option:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .platforms__option span {
@@ -141,53 +176,20 @@ const louder = computed(
   cursor: not-allowed;
 }
 
-.platforms__option:focus-visible,
-.platforms__info:focus-visible {
+.platforms__option:focus-visible {
   outline: 2px solid var(--demo-accent);
   outline-offset: 2px;
 }
 
 .platforms__info {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  display: grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: 1px solid var(--demo-border);
-  border-radius: 50%;
-  background: var(--demo-bg-elevated);
-  color: var(--demo-text-muted);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  cursor: help;
+  top: 7px;
+  right: 7px;
+  display: inline-flex;
 }
 
 .platforms__custom {
   max-width: 320px;
-}
-
-.platforms__rec,
-.platforms__warn {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.platforms__rec {
-  color: var(--demo-text-muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-
-.platforms__warn {
-  padding: 8px 10px;
-  border: 1px solid var(--demo-warn-border);
-  border-radius: 6px;
-  background: var(--demo-warn-bg);
-  color: var(--demo-warn-text);
 }
 
 @media (max-width: 720px) {

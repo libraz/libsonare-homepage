@@ -18,7 +18,6 @@ import {
   accentVelocity,
   DEFAULT_BPM,
   KNOB_RANGES,
-  MASTER_FADER_PARAM_ID,
   STEP_BASS_DEFAULT_KNOBS,
   STEP_BASS_TRACK_ID,
   STEP_COUNT,
@@ -33,7 +32,7 @@ import type {
   Step,
   StepBassWaveform,
 } from '@/demos/step-bass/stepBassTypes';
-import { masterLimiterStripJson } from '@/utils/masterLimiter';
+import { MASTER_FADER_PARAM_ID, masterLimiterStripJson } from '@/utils/masterLimiter';
 import * as wasm from '@/wasm/index.js';
 
 const SAMPLE_RATE = 48_000;

@@ -1,57 +1,15 @@
-.st-statusbar {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 8px 18px;
-  border-bottom: 1px solid var(--demo-border);
-  background: var(--demo-bg-overlay);
-  backdrop-filter: blur(16px);
-}
-
-.st-statusbar__field {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  color: var(--demo-text-muted);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-variant-numeric: tabular-nums;
-}
-
-.st-statusbar__field b {
-  color: var(--demo-text-faint);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-}
-
 .st-error {
-  color: var(--demo-danger);
-  font-size: 11px;
+  max-width: 1120px;
+  margin: 0 auto 12px;
 }
 
 /* ===== THE GROOVEBOX BODY =====
    The face itself is the shared `.demo-deck` chassis; this is the machine's
-   own size and its entrance. */
+   own size. */
 .st-deck {
   max-width: 1120px;
   margin: 0 auto;
   overflow: hidden;
-  /* Subtle rise as the deck mounts. */
-  animation: st-deck-rise 0.45s ease-out both;
-}
-
-@keyframes st-deck-rise {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: none; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .st-deck {
-    animation: none;
-  }
 }
 
 /* ===== TRANSPORT ===== */
@@ -110,7 +68,15 @@ html:not(.dark) .st-brand__model {
   background: var(--demo-accent-subtle);
   color: var(--demo-accent-light);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition:
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    color var(--demo-dur-fast) var(--demo-ease-standard),
+    transform var(--demo-dur-instant) var(--demo-ease-standard);
+}
+
+.st-play:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 html:not(.dark) .st-play:not(.st-play--on) {
@@ -129,8 +95,8 @@ html:not(.dark) .st-play:not(.st-play--on) {
 }
 
 .st-play:disabled {
-  opacity: 0.5;
-  cursor: default;
+  opacity: var(--demo-disabled-opacity);
+  cursor: not-allowed;
 }
 
 .st-play--on {
@@ -152,12 +118,6 @@ html:not(.dark) .st-play:not(.st-play--on) {
 @keyframes st-play-pulse {
   0%, 100% { box-shadow: 0 0 10px var(--demo-accent-dim); }
   50% { box-shadow: 0 0 22px var(--demo-accent-dim); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .st-play--on {
-    animation: none;
-  }
 }
 
 .st-lcd {
@@ -248,7 +208,10 @@ html:not(.dark) .st-lcd__value {
   border: 1px solid var(--demo-border);
   border-radius: 2px;
   background: var(--demo-track-bg);
-  transition: background-color 0.05s linear, box-shadow 0.05s linear, border-color 0.05s linear;
+  transition:
+    background-color var(--demo-dur-instant) linear,
+    box-shadow var(--demo-dur-instant) linear,
+    border-color var(--demo-dur-instant) linear;
 }
 
 .st-runlights__led--beat {
@@ -265,12 +228,6 @@ html:not(.dark) .st-lcd__value {
   box-shadow: 0 0 8px var(--demo-accent-dim);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .st-runlights__led {
-    transition: none;
-  }
-}
-
 @media (max-width: 1060px) {
   .st-runlights {
     display: none;
@@ -282,45 +239,6 @@ html:not(.dark) .st-lcd__value {
   align-items: center;
   gap: 8px;
   margin-left: auto;
-}
-
-.st-bounce {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 16px;
-  border: 1px solid var(--demo-accent-border);
-  border-radius: 6px;
-  background: var(--demo-accent-subtle);
-  color: var(--demo-text);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.st-bounce:hover:not(:disabled) {
-  border-color: var(--demo-accent);
-  color: var(--demo-accent);
-  background: var(--demo-accent-dim);
-}
-
-.st-bounce:focus-visible {
-  outline: 2px solid var(--demo-accent);
-  outline-offset: 2px;
-}
-
-.st-bounce:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-/* Secondary export: quiet next to the primary bounce, accent on hover. */
-.st-bounce--ghost {
-  border-color: var(--demo-border);
-  background: transparent;
-  color: var(--demo-text-muted);
 }
 
 /* ===== SEQUENCER ===== */
@@ -344,38 +262,6 @@ html:not(.dark) .st-lcd__value {
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-}
-
-.st-sec-info {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  padding: 0;
-  border: 1px solid var(--demo-border);
-  border-radius: 50%;
-  background: var(--demo-bg);
-  color: var(--demo-text-muted);
-  cursor: pointer;
-  transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
-}
-
-.st-sec-info > span {
-  font-family: var(--font-body);
-  font-size: 8px;
-  font-style: italic;
-  font-weight: 700;
-  line-height: 1;
-  transform: translateY(-0.5px);
-}
-
-.st-sec-info:hover,
-.st-sec-info:focus-visible {
-  color: var(--demo-accent);
-  border-color: var(--demo-accent);
-  background: var(--demo-accent-subtle);
-  outline: none;
 }
 
 /* Step-number ruler. Mirrors StepRow's metrics (34px gutter + 10px gap,
@@ -487,10 +373,19 @@ html:not(.dark) .st-lcd__value {
   color: var(--track-hue, var(--demo-accent));
 }
 
+/* A full-width layer translated by the loop phase; its left edge is the line. */
 .st-lane__playhead {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.st-lane__playhead::before {
+  content: '';
   position: absolute;
   top: 0;
   bottom: 0;
+  left: 0;
   width: 1.5px;
   background: var(--demo-text-strong);
   opacity: 0.7;
@@ -502,10 +397,18 @@ html:not(.dark) .st-lcd__value {
 }
 
 .st-hint {
-  margin: 12px 0 0;
-  color: var(--demo-text-faint);
-  font-size: 11px;
-  line-height: 1.5;
+  margin-top: 12px;
+}
+
+.st-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 4px;
+}
+
+.st-keys .demo-kbd + .demo-kbd {
+  margin-left: 2px;
 }
 
 /* ===== MIXER ===== */
@@ -555,6 +458,7 @@ html:not(.dark) .st-lcd__value {
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
 .st-vu__legend {
@@ -565,6 +469,7 @@ html:not(.dark) .st-lcd__value {
   font-weight: 700;
   letter-spacing: 0.12em;
   text-overflow: ellipsis;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -599,7 +504,7 @@ html:not(.dark) .st-vu__meter {
   background: linear-gradient(90deg, var(--demo-accent) 0%, var(--demo-accent) 80%, var(--demo-amber) 90%, var(--demo-clip) 98%);
   -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 6px);
   mask-image: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 6px);
-  transition: clip-path 0.06s linear;
+  transition: clip-path var(--demo-dur-instant) linear;
 }
 
 .st-vu__scale {

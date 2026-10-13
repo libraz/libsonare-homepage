@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import InfoDot from './InfoDot.vue';
 import Tooltip from './Tooltip.vue';
 
 withDefaults(
@@ -48,17 +49,21 @@ withDefaults(
     :link-label="linkLabel"
     :placement="placement"
     :max-width="maxWidth"
-    :aria-label="title || label"
   >
-    <span
-      class="term-label"
-      :class="[`term-label--${tone}`, { 'term-label--mono': mono }]"
-      tabindex="0"
-      role="button"
-    >
-      <span class="term-label__text"><slot>{{ label }}</slot></span>
-      <span v-if="!compact" class="term-label__dot" aria-hidden="true">i</span>
-    </span>
+    <template #default="{ describedBy, expanded, controls }">
+      <span
+        class="term-label"
+        :class="[`term-label--${tone}`, { 'term-label--mono': mono }]"
+        tabindex="0"
+        role="button"
+        :aria-describedby="describedBy"
+        :aria-expanded="expanded"
+        :aria-controls="controls"
+      >
+        <span class="term-label__text"><slot>{{ label }}</slot></span>
+        <InfoDot v-if="!compact" decorative size="sm" />
+      </span>
+    </template>
   </Tooltip>
 </template>
 
@@ -73,7 +78,9 @@ withDefaults(
 
 .term-label__text {
   border-bottom: 1px dotted color-mix(in srgb, var(--demo-accent, #8B5CF6) 55%, transparent);
-  transition: border-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    color var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .term-label--mono .term-label__text {
@@ -92,38 +99,9 @@ withDefaults(
   color: var(--demo-text-strong, rgba(255, 255, 255, 0.85));
 }
 
-.term-label__dot {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 12px;
-  height: 12px;
-  border: 1px solid color-mix(in srgb, var(--demo-accent, #8B5CF6) 45%, transparent);
-  border-radius: 50%;
-  color: var(--demo-accent-light, #A78BFA);
-  font-family: var(--font-mono);
-  font-size: 8px;
-  font-weight: 700;
-  font-style: italic;
-  line-height: 1;
-  transition: background-color var(--transition-fast), color var(--transition-fast),
-    border-color var(--transition-fast);
-}
-
 .term-label:hover .term-label__text,
 .term-label:focus-visible .term-label__text {
   color: var(--demo-accent-light, #A78BFA);
   border-bottom-color: var(--demo-accent, #8B5CF6);
-}
-
-.term-label:hover .term-label__dot,
-.term-label:focus-visible .term-label__dot {
-  background: var(--demo-accent, #8B5CF6);
-  border-color: var(--demo-accent, #8B5CF6);
-  color: var(--demo-on-accent, #fff);
-}
-
-html:not(.dark) .term-label__dot {
-  color: var(--demo-accent, #7C3AED);
 }
 </style>

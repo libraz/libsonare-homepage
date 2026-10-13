@@ -4,6 +4,7 @@
  * program, and fit the strip EQ's four Peak bands to the tonal difference.
  */
 import { computed } from 'vue';
+import { DemoNotice } from '@/components/ui';
 import type { MasteringReferenceResult } from '@/demos/mastering/mastering.worker';
 import { useMasteringCopy } from '@/demos/mastering/masteringCopy';
 import { formatNumber } from '@/demos/mastering/masteringUi';
@@ -82,53 +83,58 @@ function onFile(event: Event): void {
 <template>
   <section class="reference" :aria-label="copy.reference.title">
     <div class="reference__row">
-      <label class="reference__file" :class="{ 'is-disabled': !hasProgram || disabled }">
+      <label class="demo-btn demo-btn--sm reference__file" :class="{ 'is-disabled': !hasProgram || disabled }">
         <input type="file" accept="audio/*" :disabled="!hasProgram || disabled" @change="onFile">
         <span>{{ info ? copy.reference.replace : copy.reference.load }}</span>
       </label>
-      <span v-if="info" class="reference__name" :title="info.fileName">{{ info.fileName }}</span>
-      <span v-else class="reference__hint">{{ hasProgram ? copy.reference.hint : copy.reference.needSource }}</span>
-      <button v-if="info" type="button" class="reference__clear" :disabled="disabled" @click="emit('clear')">
+      <span v-if="info" class="reference__name">{{ info.fileName }}</span>
+      <button v-if="info" type="button" class="demo-btn demo-btn--sm demo-btn--ghost" :disabled="disabled" @click="emit('clear')">
         {{ copy.reference.clear }}
       </button>
+      <span class="reference__status" role="status">{{ analyzing ? copy.jobs.reference : '' }}</span>
     </div>
-    <p v-if="analyzing" class="reference__status" role="status">{{ copy.jobs.reference }}</p>
-    <template v-if="analysis && ready">
-      <dl class="reference__facts">
-        <div>
-          <dt>{{ copy.reference.loudness }}</dt>
-          <dd>{{ loudnessDelta }}</dd>
-        </div>
-        <div>
-          <dt>{{ copy.reference.mono }}</dt>
-          <dd>{{ mono }}</dd>
-        </div>
-      </dl>
-      <figure v-if="bands.length" class="reference__tonal">
-        <figcaption>{{ copy.reference.tonal }}</figcaption>
-        <ol>
-          <li v-for="band in bands" :key="band.lowHz">
-            <span class="reference__bar" aria-hidden="true">
-              <i
-                :class="{ 'is-cut': band.deviationDb < 0 }"
-                :style="{ height: `${Math.min(1, Math.abs(band.deviationDb) / BAR_RANGE_DB) * 50}%` }"
-              ></i>
-            </span>
-            <span class="reference__band">{{ hz(band.lowHz) }}</span>
-            <span class="reference__dev">{{ formatNumber(band.deviationDb, 1, true) }}</span>
-          </li>
-        </ol>
-      </figure>
-      <div class="reference__match">
-        <p>{{ copy.reference.matchHint }}</p>
-        <button type="button" :disabled="disabled" @click="emit('applyMatch')">{{ copy.reference.apply }}</button>
+    <DemoNotice v-if="!info" tone="hint">{{ hasProgram ? copy.reference.hint : copy.reference.needSource }}</DemoNotice>
+    <Transition name="demo-rise">
+      <div v-if="analysis && ready" class="reference__result">
+        <dl class="reference__facts">
+          <div>
+            <dt>{{ copy.reference.loudness }}</dt>
+            <dd>{{ loudnessDelta }}</dd>
+          </div>
+          <div>
+            <dt>{{ copy.reference.mono }}</dt>
+            <dd>{{ mono }}</dd>
+          </div>
+        </dl>
+        <figure v-if="bands.length" class="reference__tonal">
+          <figcaption>{{ copy.reference.tonal }}</figcaption>
+          <ol>
+            <li v-for="band in bands" :key="band.lowHz">
+              <span class="reference__bar" aria-hidden="true">
+                <i
+                  :class="{ 'is-cut': band.deviationDb < 0 }"
+                  :style="{ height: `${Math.min(1, Math.abs(band.deviationDb) / BAR_RANGE_DB) * 50}%` }"
+                ></i>
+              </span>
+              <span class="reference__band">{{ hz(band.lowHz) }}</span>
+              <span class="reference__dev">{{ formatNumber(band.deviationDb, 1, true) }}</span>
+            </li>
+          </ol>
+        </figure>
+        <DemoNotice tone="hint">
+          {{ copy.reference.matchHint }}
+          <template #action>
+            <button type="button" class="demo-btn demo-btn--sm demo-btn--primary" :disabled="disabled" @click="emit('applyMatch')">{{ copy.reference.apply }}</button>
+          </template>
+        </DemoNotice>
       </div>
-    </template>
+    </Transition>
   </section>
 </template>
 
 <style scoped>
-.reference {
+.reference,
+.reference__result {
   display: grid;
   gap: 10px;
   min-width: 0;
@@ -143,13 +149,6 @@ function onFile(event: Event): void {
 
 .reference__file {
   position: relative;
-  padding: 5px 10px;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 4px;
-  color: var(--demo-text);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  cursor: pointer;
 }
 
 .reference__file input {
@@ -166,45 +165,18 @@ function onFile(event: Event): void {
 
 .reference__file.is-disabled {
   opacity: var(--demo-disabled-opacity);
+  cursor: not-allowed;
 }
 
 .reference__name {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
   color: var(--demo-text);
   font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.reference__hint {
-  flex: 1 1 180px;
-  min-width: 0;
-  color: var(--demo-text-muted);
-  font-size: 11.5px;
-  line-height: 1.5;
-}
-
-.reference__clear,
-.reference__match button {
-  padding: 5px 10px;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--demo-text);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.reference button:focus-visible {
-  outline: 2px solid var(--demo-accent);
-  outline-offset: 2px;
+  overflow-wrap: anywhere;
 }
 
 .reference__status {
-  margin: 0;
   color: var(--demo-text-muted);
   font-family: var(--font-mono);
   font-size: 11px;
@@ -258,7 +230,6 @@ function onFile(event: Event): void {
   position: relative;
   width: 100%;
   height: 56px;
-  border-bottom: 1px solid transparent;
   background: linear-gradient(var(--demo-border), var(--demo-border)) center / 100% 1px no-repeat;
 }
 
@@ -282,21 +253,5 @@ function onFile(event: Event): void {
   font-family: var(--font-mono);
   font-size: 9px;
   font-variant-numeric: tabular-nums;
-}
-
-.reference__match {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.reference__match p {
-  flex: 1 1 200px;
-  margin: 0;
-  color: var(--demo-text-muted);
-  font-size: 11.5px;
-  line-height: 1.5;
 }
 </style>

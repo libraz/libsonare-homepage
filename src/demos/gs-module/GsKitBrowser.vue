@@ -8,6 +8,7 @@
  * exactly what a reader is most likely to mistake for a broken kit.
  */
 import { computed } from 'vue';
+import { DemoEmpty, DemoNotice, Tooltip } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import type { GsDrumKit } from './useGsModule';
 
@@ -24,6 +25,7 @@ const copy = computed(() =>
   localizedValue({
     en: {
       title: 'Rhythm sets',
+      help: 'The rhythm sets the engine defines for the rhythm part, each named by synthGsDrumKitName. Which of them sound different from Standard is asked of the engine too, not listed by hand.',
       loading: 'Asking the engine which sets it defines…',
       fallback: 'Standard',
       count: (defined: number, apart: number) =>
@@ -32,6 +34,7 @@ const copy = computed(() =>
     },
     ja: {
       title: 'リズムセット',
+      help: 'エンジンがリズムパート用に定義しているリズムセットです。名前は synthGsDrumKitName が返します。どのセットが Standard と違う音で鳴るかもエンジンに問い合わせており、手書きの一覧ではありません。',
       loading: 'このビルドが持つセットをエンジンに問い合わせています…',
       fallback: 'Standard と同じ',
       count: (defined: number, apart: number) =>
@@ -47,13 +50,16 @@ const apartCount = computed(() => props.kits.filter((kit) => kit.voicedApart).le
 <template>
   <section class="gs-rack" :aria-label="copy.title">
     <div class="gs-rack__head">
-      <span class="gs-rack__title">{{ copy.title }}</span>
+      <span class="gs-rack__title">
+        {{ copy.title }}
+        <Tooltip :title="copy.title" :body="copy.help" />
+      </span>
       <span v-if="props.kits.length" class="gs-rack__aside">
         {{ copy.count(props.kits.length, apartCount) }}
       </span>
     </div>
 
-    <p v-if="!props.kits.length" class="gs-note">{{ copy.loading }}</p>
+    <DemoEmpty v-if="!props.kits.length" compact :title="copy.loading" />
 
     <ul v-else class="gs-kits">
       <li v-for="kit in props.kits" :key="kit.program">
@@ -73,7 +79,7 @@ const apartCount = computed(() => props.kits.filter((kit) => kit.voicedApart).le
       </li>
     </ul>
 
-    <p class="gs-note gs-kits__note">{{ copy.note }}</p>
+    <DemoNotice tone="hint">{{ copy.note }}</DemoNotice>
   </section>
 </template>
 
@@ -138,9 +144,4 @@ const apartCount = computed(() => props.kits.filter((kit) => kit.voicedApart).le
   font-size: 8.5px;
 }
 
-.gs-kits__note {
-  padding-block-start: 10px;
-  border-block-start: 1px solid var(--demo-border);
-  font-size: 10.5px;
-}
 </style>

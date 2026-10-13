@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { fill } from '@/utils/template';
+
 defineProps<{
   /** Row label (note name or drum voice). */
   label: string;
@@ -6,18 +8,38 @@ defineProps<{
   cells: boolean[];
   /** Step column currently under the playhead, or -1. */
   activeStep: number;
+  /** The grid's one tab stop when it is on this row, else -1. */
+  cursorStep: number;
+  /** Accessible name of a pad, with `{row}` and `{n}` placeholders. */
+  cellLabel: string;
 }>();
 
-const emit = defineEmits<(e: 'toggle', step: number) => void>();
+const emit = defineEmits<{
+  toggle: [step: number];
+  /** Arrow / Home / End on a pad; the grid moves the cursor. */
+  navigate: [event: KeyboardEvent, step: number];
+  /** A pad took focus (click or keyboard), so the cursor follows it. */
+  cursor: [step: number];
+}>();
+
+const pads: (HTMLButtonElement | null)[] = [];
+
+/** Focuses one pad; the grid calls this after moving its cursor here. */
+function focusStep(step: number): void {
+  pads[step]?.focus();
+}
+
+defineExpose({ focusStep });
 </script>
 
 <template>
   <div class="step-row">
-    <span class="step-row__label">{{ label }}</span>
+    <span class="step-row__label" aria-hidden="true">{{ label }}</span>
     <div class="step-row__cells">
       <button
         v-for="(on, step) in cells"
         :key="step"
+        :ref="(el) => (pads[step] = el as HTMLButtonElement | null)"
         type="button"
         class="step-row__cell"
         :class="{
@@ -25,9 +47,12 @@ const emit = defineEmits<(e: 'toggle', step: number) => void>();
           'step-row__cell--beat': step % 4 === 0,
           'step-row__cell--playhead': step === activeStep,
         }"
-        :aria-label="`${label} step ${step + 1}`"
+        :tabindex="step === cursorStep ? 0 : -1"
+        :aria-label="fill(cellLabel, { row: label, n: step + 1 })"
         :aria-pressed="on"
         @click="emit('toggle', step)"
+        @keydown="emit('navigate', $event, step)"
+        @focus="emit('cursor', step)"
       >
         <i class="step-row__led"></i>
       </button>
@@ -79,7 +104,11 @@ const emit = defineEmits<(e: 'toggle', step: number) => void>();
     var(--demo-control-bg);
   box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.14);
   cursor: pointer;
-  transition: border-color 0.08s ease, background 0.08s ease, box-shadow 0.08s ease;
+  transition:
+    border-color var(--demo-dur-instant) var(--demo-ease-standard),
+    background-color var(--demo-dur-instant) var(--demo-ease-standard),
+    box-shadow var(--demo-dur-instant) var(--demo-ease-standard),
+    transform var(--demo-dur-instant) var(--demo-ease-standard);
 }
 
 html:not(.dark) .step-row__cell {
@@ -104,7 +133,7 @@ html:not(.dark) .step-row__cell {
 }
 
 .step-row__cell:active {
-  transform: translateY(1px);
+  transform: scale(0.97);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
@@ -113,7 +142,9 @@ html:not(.dark) .step-row__cell {
   height: 4px;
   border-radius: 2px;
   background: var(--demo-track-bg);
-  transition: background 0.08s ease, box-shadow 0.08s ease;
+  transition:
+    background-color var(--demo-dur-instant) var(--demo-ease-standard),
+    box-shadow var(--demo-dur-instant) var(--demo-ease-standard);
 }
 
 .step-row__cell--on {
@@ -160,16 +191,5 @@ html:not(.dark) .step-row__cell--playhead {
 html:not(.dark) .step-row__cell--on.step-row__cell--playhead .step-row__led {
   background: var(--color-purple-600);
   box-shadow: 0 0 8px var(--color-purple-600);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .step-row__cell,
-  .step-row__led {
-    transition: none;
-  }
-
-  .step-row__cell:active {
-    transform: none;
-  }
 }
 </style>

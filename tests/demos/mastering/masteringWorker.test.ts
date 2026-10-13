@@ -146,7 +146,7 @@ describe('worker jobs', () => {
     const reply = await send({ type: 'prepare', id, audio, repair }, buffersOf(audio));
     if (reply.type !== 'prepared')
       throw new Error(reply.type === 'error' ? reply.error : reply.type);
-    expect(reply.result.stages).toEqual(['repair.denoise']);
+    expect(reply.result.stages).toEqual(['denoise']);
     expect(reply.audio.program?.left).not.toBe(reply.audio.source?.left);
     expect(reply.audio.program?.left.length).toBe(SECONDS * SR);
     expect(
@@ -257,14 +257,14 @@ describe('worker jobs', () => {
     expect(reply.result.suggestions).toHaveProperty('chainConfig');
   });
 
-  it('reference conforms a 44.1 kHz file to the programme rate and fits a match EQ', async () => {
+  it('reference analyses a 44.1 kHz file at its own rate and fits a match EQ', async () => {
     const audio = { program: programPcm(7), reference: programPcm(8, 0.7, 44_100) };
     const reply = await send({ type: 'reference', id: ++nextId, audio }, buffersOf(audio));
     if (reply.type !== 'referenced')
       throw new Error(reply.type === 'error' ? reply.error : reply.type);
     const reference = reply.audio.reference!;
-    expect(reference.sampleRate).toBe(SR);
-    expect(Math.abs(reference.left.length - SECONDS * SR)).toBeLessThanOrEqual(2);
+    expect(reference.sampleRate).toBe(44_100);
+    expect(reference.left.length).toBe(SECONDS * 44_100);
     expect(Number.isFinite(reference.integratedLufs)).toBe(true);
     expect(reply.result.loudness.gainToMatchDb).toBeCloseTo(
       reply.result.loudness.referenceLufs - reply.result.loudness.sourceLufs,

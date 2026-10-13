@@ -1,5 +1,7 @@
 <script setup lang="ts">
-withDefaults(
+import { computed } from 'vue';
+
+const props = withDefaults(
   defineProps<{
     /** Current step, shown under the wordmark. */
     stage: string;
@@ -12,10 +14,23 @@ withDefaults(
 );
 
 const BAR_COUNT = 12;
+
+// Known progress makes this a progressbar named by its stage; otherwise a status line.
+const a11y = computed(() =>
+  props.progress === undefined
+    ? { role: 'status', 'aria-live': 'polite' as const }
+    : {
+        role: 'progressbar',
+        'aria-label': props.stage,
+        'aria-valuemin': 0,
+        'aria-valuemax': 100,
+        'aria-valuenow': Math.round(props.progress),
+      },
+);
 </script>
 
 <template>
-  <div class="signal-loader" :class="{ 'signal-loader--compact': compact }" role="status" aria-live="polite">
+  <div class="signal-loader" :class="{ 'signal-loader--compact': compact }" v-bind="a11y">
     <div class="signal-loader__bars" aria-hidden="true">
       <span
         v-for="i in BAR_COUNT"
@@ -40,7 +55,7 @@ const BAR_COUNT = 12;
 
     <div v-if="progress !== undefined" class="signal-loader__progress">
       <div class="signal-loader__progress-bar">
-        <div class="signal-loader__progress-fill" :style="{ width: `${progress}%` }"></div>
+        <div class="signal-loader__progress-fill" :style="{ transform: `scaleX(${progress / 100})` }"></div>
       </div>
       <span class="signal-loader__progress-text">{{ progress }}%</span>
     </div>
@@ -179,7 +194,8 @@ const BAR_COUNT = 12;
   background: linear-gradient(90deg, var(--demo-accent), var(--demo-accent-light));
   border-radius: 2px;
   box-shadow: 0 0 8px rgba(139, 92, 246, 0.5);
-  transition: width 0.2s ease-out;
+  transform-origin: left center;
+  transition: transform var(--demo-dur-base) var(--demo-ease-standard);
 }
 
 .signal-loader__progress-text {

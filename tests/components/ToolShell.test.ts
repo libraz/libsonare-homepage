@@ -58,7 +58,7 @@ describe('ToolShell', () => {
       expect.arrayContaining([
         'ビジュアルプレイヤー',
         'マスタリング',
-        '楽曲分析',
+        '楽曲解析',
         'ミキシング',
         'リアルタイムFX',
       ]),

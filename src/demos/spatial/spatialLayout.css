@@ -1,53 +1,3 @@
-/* ===== Status bar ===== */
-.sp-statusbar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 8px 18px;
-  border-bottom: 1px solid var(--demo-border);
-  background: var(--demo-bg-overlay);
-  backdrop-filter: blur(16px);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--demo-text-muted);
-}
-
-.sp-statusbar__field {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  letter-spacing: 0.04em;
-  max-width: 42vw;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sp-statusbar__field b {
-  color: var(--demo-text-faint);
-  font-weight: 700;
-  letter-spacing: 0.12em;
-}
-
-.sp-statusbar__progress {
-  position: relative;
-  flex: 1 1 80px;
-  min-width: 60px;
-  max-width: 200px;
-  height: 3px;
-  border-radius: 999px;
-  background: var(--demo-track-bg);
-  overflow: hidden;
-}
-
-.sp-statusbar__progress i {
-  position: absolute;
-  inset: 0 auto 0 0;
-  background: linear-gradient(90deg, var(--demo-accent), var(--demo-cyan));
-  transition: width 0.25s ease;
-}
-
 /* ===== Layout ===== */
 .sp-lab {
   display: grid;
@@ -111,28 +61,13 @@
   line-height: 1.45;
 }
 
+/* The primary action carries the morph's progress along its bottom edge. */
 .sp-morph {
   position: relative;
-  display: grid;
-  place-items: center;
   width: 100%;
   min-height: 38px;
   margin-top: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 8px;
-  background: var(--demo-accent-subtle);
-  color: var(--demo-text-strong);
-  cursor: pointer;
   overflow: hidden;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.sp-morph:disabled {
-  cursor: not-allowed;
-  opacity: 0.48;
 }
 
 .sp-morph span {
@@ -142,10 +77,11 @@
 
 .sp-morph i {
   position: absolute;
-  inset: auto auto 0 0;
+  inset: auto 0 0 0;
   height: 3px;
-  background: linear-gradient(90deg, var(--demo-accent), var(--demo-cyan));
-  transition: width 0.2s ease;
+  background: linear-gradient(90deg, var(--demo-cyan), var(--demo-on-accent));
+  transform-origin: left center;
+  transition: transform var(--demo-dur-base) var(--demo-ease-standard);
 }
 
 /* Saving sits under the action that produced the file, quieter than it so the
@@ -160,28 +96,6 @@
 .sp-export {
   flex: 1 1 0;
   min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 7px 9px;
-  border: 1px solid var(--demo-border);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--demo-text-muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: 10.5px;
-  font-weight: 600;
-  transition:
-    border-color 0.18s ease,
-    color 0.18s ease,
-    background 0.18s ease;
-}
-
-.sp-export svg {
-  flex: none;
 }
 
 /* A long label ellipses rather than widening its half of the row. */
@@ -191,43 +105,14 @@
   white-space: nowrap;
 }
 
-.sp-export:hover:not(:disabled) {
-  border-color: var(--demo-accent);
-  background: var(--demo-accent-subtle);
-  color: var(--demo-accent);
+.sp-notices {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
 }
 
-.sp-export:focus-visible {
-  outline: 2px solid var(--demo-accent);
-  outline-offset: 2px;
-}
-
-.sp-export:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.sp-hint {
-  margin: 9px 0 0;
-  color: var(--demo-text-muted);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-/* What the render had to change is worth reading before the file is saved. */
-.sp-hint--warn {
-  color: var(--demo-warn-text);
-}
-
-.sp-error {
-  margin: 10px 0 0;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: var(--demo-warn-bg);
-  border: 1px solid var(--demo-warn-border);
-  color: var(--demo-warn-text);
-  font-size: 11px;
-  line-height: 1.45;
+.sp-notices:empty {
+  display: none;
 }
 
 /* ===== Sample rooms ===== */
@@ -248,7 +133,11 @@
   background: var(--demo-control-bg);
   color: var(--demo-text);
   cursor: pointer;
-  transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s ease;
+  font: inherit;
+  transition:
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    transform var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .sp-room:hover:not(:disabled) {
@@ -256,8 +145,12 @@
   transform: translateX(2px);
 }
 
-.sp-room:focus-visible,
-.sp-morph:focus-visible {
+.sp-room:active:not(:disabled) {
+  transform: scale(0.97);
+  transition-duration: var(--demo-dur-instant);
+}
+
+.sp-room:focus-visible {
   outline: 2px solid var(--demo-accent);
   outline-offset: 2px;
 }
@@ -269,7 +162,7 @@
 }
 
 .sp-room:disabled {
-  opacity: 0.5;
+  opacity: var(--demo-disabled-opacity);
   cursor: not-allowed;
 }
 
@@ -465,24 +358,6 @@ html:not(.dark) .sp-scene {
   display: flex;
   flex-direction: column;
   gap: 9px;
-  animation: sp-rise 0.4s ease both;
-}
-
-.sp-metrics .metric-item {
-  animation: sp-rise 0.4s ease both;
-}
-
-.sp-metrics .metric-item:nth-child(2) { animation-delay: 0.04s; }
-.sp-metrics .metric-item:nth-child(3) { animation-delay: 0.08s; }
-.sp-metrics .metric-item:nth-child(4) { animation-delay: 0.12s; }
-.sp-metrics .metric-item:nth-child(5) { animation-delay: 0.16s; }
-.sp-metrics .metric-item:nth-child(6) { animation-delay: 0.2s; }
-
-.sp-empty {
-  margin: 0;
-  color: var(--demo-text-muted);
-  font-size: 12px;
-  line-height: 1.5;
 }
 
 .sp-conf {
@@ -496,8 +371,21 @@ html:not(.dark) .sp-scene {
   font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   letter-spacing: 0.06em;
   color: var(--demo-success);
+  cursor: help;
+  transition: border-color var(--demo-dur-fast) var(--demo-ease-standard);
+}
+
+.sp-conf:hover,
+.sp-conf:focus-visible {
+  border-color: currentColor;
+}
+
+.sp-conf:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 2px;
 }
 
 .sp-conf i {
@@ -518,7 +406,6 @@ html:not(.dark) .sp-scene {
   display: flex;
   flex-direction: column;
   gap: 7px;
-  animation: sp-rise 0.4s ease both;
 }
 
 /* The absorption column is sized for its heading, not its "14%" values: the
@@ -575,10 +462,11 @@ html:not(.dark) .sp-scene {
 
 .sp-band__track i {
   position: absolute;
-  inset: 0 auto 0 0;
+  inset: 0;
   border-radius: 4px;
   background: linear-gradient(90deg, var(--demo-accent), var(--demo-accent-light));
-  transition: width 0.4s ease;
+  transform-origin: left center;
+  transition: transform var(--demo-dur-slow) var(--demo-ease-enter);
 }
 
 /* Beside the track rather than floating over it: inside, how much of the number
@@ -596,29 +484,6 @@ html:not(.dark) .sp-scene {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--demo-text-muted);
-}
-
-/* ===== Notes ===== */
-.sp-note {
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--demo-border);
-  background: var(--demo-control-bg);
-  color: var(--demo-text-muted);
-  font-size: 11.5px;
-  line-height: 1.5;
-}
-
-.sp-note--info {
-  border-color: var(--demo-accent-border);
-  background: var(--demo-accent-subtle);
-  color: var(--demo-text);
-}
-
-.sp-note--warn {
-  border-color: var(--demo-warn-border);
-  background: var(--demo-warn-bg);
-  color: var(--demo-warn-text);
 }
 
 /* ===== Motion ===== */
@@ -639,27 +504,7 @@ html:not(.dark) .sp-scene {
   50% { transform: translateY(-6px); }
 }
 
-@keyframes sp-rise {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: none; }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .sp-scene__scan-line,
-  .sp-scene__scan-label,
-  .sp-scene__placeholder svg,
-  .sp-metrics,
-  .sp-metrics .metric-item,
-  .sp-bands {
-    animation: none;
-  }
-
-  .sp-room,
-  .sp-export,
-  .sp-band__track i {
-    transition: none;
-  }
-
   .sp-room:hover:not(:disabled) {
     transform: none;
   }
@@ -693,9 +538,5 @@ html:not(.dark) .sp-scene {
   .sp-scene {
     aspect-ratio: 4 / 3;
     min-height: 300px;
-  }
-
-  .sp-statusbar__field {
-    max-width: 60vw;
   }
 }

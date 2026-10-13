@@ -115,12 +115,7 @@ function bounceInterleaved(
   try {
     engine.setTempo(MIX_TEMPO_BPM);
     applyOps(createRawTarget(engine), buildFull(state, registry(audio), sampleRate));
-    const totalFrames = Math.min(
-      maxFrames,
-      exportFrames(state, sampleRate, (processor, params, rate) =>
-        wasm.masteringInsertTiming(processor, params, rate),
-      ),
-    );
+    const totalFrames = Math.min(maxFrames, exportFrames(state, sampleRate, engine));
     checkpoint('rendering', 0.2);
     engine.play();
     // The bounce settles parameter ramps without advancing processor state.

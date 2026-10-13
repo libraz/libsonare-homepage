@@ -6,7 +6,8 @@
  * every engine surface the mix uses: trimmed and faded clips, strip EQ, gate,
  * compressor, de-esser, keyed ducking, pre- and post-fader sends into the
  * reverb and delay buses, fader/pan/width automation, pan law, pan mode, dual
- * pan, channel delay, a VCA group, polarity, and the master Glue and Limiter.
+ * pan, channel delay, a VCA group, subgroup routing, polarity, and the master
+ * Glue and Limiter.
  */
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { MixAudioTransfer } from '@/demos/mixing/mixing.worker';
@@ -32,9 +33,11 @@ import {
   setDuckKey,
   setEqBand,
   setFader,
+  setGroupGain,
   setMasterFader,
   setMasterSlotBypass,
   setMasterSlotParam,
+  setOutputBus,
   setPan,
   setPanLaw,
   setPanMode,
@@ -142,6 +145,7 @@ function threeTrackState(): MixingState {
   s = setVcaGroup(s, 1, 'A');
   s = setPanLaw(s, 1, 2);
   s = setChannelDelay(s, 1, 0.75);
+  s = setOutputBus(s, 1, 'group1');
 
   // Bass: ducked from the drums; post-fader delay send; automated width; stereo-panned, linear law; in VCA A.
   s = setSlotBypass(s, 2, 'duck', false);
@@ -156,6 +160,7 @@ function threeTrackState(): MixingState {
   s = setPanLaw(s, 2, 3);
   s = setFader(s, 2, -3);
   s = setVcaGroup(s, 2, 'A');
+  s = setOutputBus(s, 2, 'group1');
 
   // Vox: de-esser, left polarity flipped, trim, post-fader reverb send, dual pan, automated pan.
   s = setSlotBypass(s, 3, 'deess', false);
@@ -180,6 +185,7 @@ function threeTrackState(): MixingState {
   s = setMasterSlotParam(s, 'limiter', 'ceilingDb', -1);
   s = setMasterFader(s, -1);
   s = setVcaGain(s, 'A', -3);
+  s = setGroupGain(s, 'group1', -2);
   return s;
 }
 
@@ -203,13 +209,11 @@ describe('mixing preview and export render the same state', () => {
     const state = threeTrackState();
     const registry = audio();
 
-    const frames = exportFrames(state, SR, (processor, params, rate) =>
-      wasm.masteringInsertTiming(processor, params, rate),
-    );
+    const { f } = await facadeWith(state, registry);
+    // The facade answers the export length from its mirror, as the Worker's raw engine does.
+    const frames = exportFrames(state, SR, f.engine);
     const exported = renderMixExport(wasm, state, transfers(registry), SR, { dither: 0 });
     expect(exported.left.length).toBe(frames);
-
-    const { f } = await facadeWith(state, registry);
     f.engine.transport.play();
     f.flush();
     // Bounce adopts lane controls and automation before settling, without rendering
@@ -263,6 +267,8 @@ describe('mixing preview and export render the same state', () => {
     after = setChannelDelay(after, 1, 1.5);
     after = setDualPan(after, 3, 0.1, 0.9);
     after = setPanLaw(after, 2, 1);
+    after = setOutputBus(after, 2, 'group2');
+    after = setGroupGain(after, 'group1', -5);
     const registry = audio();
     const edit = diff(before, after, registry, SR);
     expect(edit.some((op) => op.type === 'strip')).toBe(true);
@@ -379,8 +385,32 @@ describe('page-side folding in the ops', () => {
     expect(ofType(discrete, 'fader')).toHaveLength(1);
   });
 
+  it('a subgroup is a declared bus the lane sums into, moved by its own op', () => {
+    const s = threeTrackState();
+    const [topology] = ofType(ops(s), 'topology');
+    expect(topology.lanes.map((lane) => lane.outputBusId)).toEqual([3, 3, 0]);
+    expect(topology.buses.map((bus) => bus.busId)).toEqual([1, 2, 3, 4]);
+    const moved = diff(s, setOutputBus(s, 1, null), new Map(), SR);
+    expect(moved).toEqual([{ type: 'outputBus', trackId: 1, busId: 0 }]);
+    const fader = diff(s, setGroupGain(s, 'group2', -4), new Map(), SR);
+    expect(fader).toEqual([{ type: 'busGain', busId: 4, db: -4 }]);
+  });
+
   it('an unchanged state diffs to nothing', () => {
     const s = threeTrackState();
     expect(diff(s, structuredClone(s), audio(), SR)).toEqual([]);
+  });
+});
+
+describe('subgroup routing', () => {
+  it('a track summed into a group follows the group fader', async () => {
+    const wasm = await loadIndexModule();
+    const registry = new Map([[1, { channels: [burst(1), burst(2)], sampleRate: SR }]]);
+    const direct = addTrack(createMixingState(), 'a', SOURCE_SEC);
+    const grouped = setGroupGain(setOutputBus(direct, 1, 'group2'), 'group2', -6);
+    const render = (state: MixingState) =>
+      renderMixExport(wasm, state, transfers(registry), SR, { dither: 0 }).left;
+    const ratio = rms(render(grouped)) / rms(render(direct));
+    expect(20 * Math.log10(ratio)).toBeCloseTo(-6, 1);
   });
 });

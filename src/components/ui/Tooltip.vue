@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
+import { useI18n } from '@/composables/useI18n';
+import InfoDot from './InfoDot.vue';
 
 defineOptions({ name: 'InfoTooltip' });
 
@@ -16,13 +18,13 @@ const props = withDefaults(
     defaultValue?: string;
     /** Rationale shown next to the default value chip. */
     defaultRationale?: string;
-    /** Label for the default section (defaults to "Default"). */
+    /** Label for the default section; a localized "Default" when omitted. */
     defaultLabel?: string;
     href?: string;
     linkLabel?: string;
     placement?: 'auto' | Placement;
     maxWidth?: number;
-    /** Adds aria-label to the trigger wrapper. */
+    /** Accessible name of the built-in info dot (used when no trigger is slotted). */
     ariaLabel?: string;
   }>(),
   {
@@ -30,6 +32,8 @@ const props = withDefaults(
     maxWidth: 296,
   },
 );
+
+const { t } = useI18n();
 
 const triggerRef = ref<HTMLSpanElement | null>(null);
 const popoverRef = ref<HTMLDivElement | null>(null);
@@ -39,6 +43,18 @@ const placementState = ref<Placement>('top');
 const styleVars = computed(() => ({ '--tt-max-width': `${props.maxWidth}px` }));
 
 const popoverStyle = ref<Record<string, string>>({});
+
+// A popover holding a link is a non-modal dialog the keyboard can enter;
+// without one it is a plain tooltip that describes its trigger.
+const popoverId = useId();
+const interactive = computed(() => Boolean(props.href));
+const describedBy = computed(() => (open.value && !interactive.value ? popoverId : undefined));
+const expanded = computed(() => (interactive.value ? open.value : undefined));
+const controls = computed(() => (interactive.value && open.value ? popoverId : undefined));
+
+/** Hover intent before opening, and grace period to reach the popover. */
+const SHOW_DELAY_MS = 80;
+const HIDE_DELAY_MS = 100;
 
 let showTimer: number | null = null;
 let hideTimer: number | null = null;
@@ -61,14 +77,39 @@ function show() {
   showTimer = window.setTimeout(() => {
     open.value = true;
     void nextTick(updatePosition);
-  }, 80);
+  }, SHOW_DELAY_MS);
 }
 
 function hide() {
   clearTimers();
   hideTimer = window.setTimeout(() => {
     open.value = false;
-  }, 100);
+  }, HIDE_DELAY_MS);
+}
+
+function onTriggerFocusOut(event: FocusEvent) {
+  if (isInside(popoverRef.value, event.relatedTarget)) return;
+  hide();
+}
+
+function onPopoverFocusOut(event: FocusEvent) {
+  if (isInside(popoverRef.value, event.relatedTarget)) return;
+  if (isInside(triggerRef.value, event.relatedTarget)) return;
+  hide();
+}
+
+function isInside(container: HTMLElement | null, target: EventTarget | null): boolean {
+  return Boolean(container && target instanceof Node && container.contains(target));
+}
+
+// The popover is teleported to <body>, so Tab from the trigger hops into it explicitly.
+function onTriggerKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Tab' || event.shiftKey || !open.value || !interactive.value) return;
+  const link = popoverRef.value?.querySelector<HTMLElement>('a[href]');
+  if (!link) return;
+  event.preventDefault();
+  cancelHide();
+  link.focus();
 }
 
 function cancelHide() {
@@ -140,8 +181,12 @@ function handleScrollOrResize() {
 
 function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape' && open.value) {
+    const focusWasInside = isInside(popoverRef.value, document.activeElement);
     clearTimers();
     open.value = false;
+    if (focusWasInside) {
+      triggerRef.value?.querySelector<HTMLElement>('button, [tabindex], a[href]')?.focus();
+    }
   }
 }
 
@@ -172,14 +217,21 @@ onBeforeUnmount(() => {
   <span
     ref="triggerRef"
     class="tt-trigger"
-    :aria-label="ariaLabel"
     @mouseenter="show"
     @mouseleave="hide"
     @focusin="show"
-    @focusout="hide"
+    @focusout="onTriggerFocusOut"
+    @keydown="onTriggerKeydown"
     @click="toggle"
   >
-    <slot />
+    <slot :described-by="describedBy" :expanded="expanded" :controls="controls">
+      <InfoDot
+        :label="ariaLabel || title || t('ui.moreInfo')"
+        :aria-describedby="describedBy"
+        :aria-expanded="expanded"
+        :aria-controls="controls"
+      />
+    </slot>
 
     <Teleport to="body">
       <Transition name="tt">
@@ -187,11 +239,14 @@ onBeforeUnmount(() => {
           v-if="open"
           ref="popoverRef"
           class="tt-popover"
+          :id="popoverId"
           :class="`tt-popover--${placementState}`"
-          role="tooltip"
+          :role="interactive ? 'dialog' : 'tooltip'"
+          :aria-label="interactive ? title || eyebrow : undefined"
           :style="{ ...popoverStyle, ...styleVars }"
           @mouseenter="cancelHide"
           @mouseleave="hide"
+          @focusout="onPopoverFocusOut"
         >
           <span class="tt-popover__corner tt-popover__corner--tl" aria-hidden="true"></span>
           <span class="tt-popover__corner tt-popover__corner--tr" aria-hidden="true"></span>
@@ -212,13 +267,13 @@ onBeforeUnmount(() => {
           <section v-if="tip" class="tt-popover__tip">
             <span class="tt-popover__tip-label">
               <span class="tt-popover__tip-mark" aria-hidden="true"></span>
-              {{ tipLabel || 'Use when' }}
+              {{ tipLabel || t('ui.tooltip.tipLabel') }}
             </span>
             <p class="tt-popover__tip-body">{{ tip }}</p>
           </section>
 
           <section v-if="defaultValue || defaultRationale" class="tt-popover__default">
-            <span class="tt-popover__default-label">{{ defaultLabel || 'Default' }}</span>
+            <span class="tt-popover__default-label">{{ defaultLabel || t('ui.tooltip.defaultLabel') }}</span>
             <span v-if="defaultValue" class="tt-popover__default-value">{{ defaultValue }}</span>
             <p v-if="defaultRationale" class="tt-popover__default-rationale">{{ defaultRationale }}</p>
           </section>
@@ -228,8 +283,8 @@ onBeforeUnmount(() => {
             class="tt-popover__link"
             :href="href"
           >
-            <span>{{ linkLabel || 'Read in docs' }}</span>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <span>{{ linkLabel || t('ui.tooltip.linkLabel') }}</span>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M7 17L17 7M9 7h8v8" />
             </svg>
           </a>
@@ -246,26 +301,17 @@ onBeforeUnmount(() => {
 }
 
 .tt-popover {
-  --tt-bg: rgba(8, 10, 14, 0.96);
-  --tt-bg-soft: rgba(255, 255, 255, 0.04);
-  --tt-text: rgba(255, 255, 255, 0.78);
-  --tt-text-strong: #ffffff;
-  --tt-text-muted: rgba(255, 255, 255, 0.45);
-  --tt-accent: #8B5CF6;
-  --tt-accent-light: #A78BFA;
-  --tt-accent-subtle: rgba(139, 92, 246, 0.14);
-  --tt-cyan: #22D3EE;
-  --tt-border: rgba(139, 92, 246, 0.28);
+  --tt-border: color-mix(in srgb, var(--demo-accent) 28%, transparent);
 
   position: fixed;
-  z-index: 200;
+  z-index: var(--demo-z-popover);
   display: grid;
   gap: 8px;
   max-width: var(--tt-max-width, 280px);
   padding: 11px 13px 11px 14px;
   border: 1px solid var(--tt-border);
-  border-radius: 8px;
-  background: var(--tt-bg);
+  border-radius: var(--demo-radius-sm);
+  background: var(--demo-bg-overlay);
   backdrop-filter: blur(16px) saturate(1.4);
   box-shadow:
     0 0 0 1px rgba(139, 92, 246, 0.08),
@@ -276,16 +322,6 @@ onBeforeUnmount(() => {
 }
 
 html:not(.dark) .tt-popover {
-  --tt-bg: rgba(252, 250, 255, 0.97);
-  --tt-bg-soft: rgba(0, 0, 0, 0.03);
-  --tt-text: rgba(0, 0, 0, 0.7);
-  --tt-text-strong: #1a1a2e;
-  --tt-text-muted: rgba(0, 0, 0, 0.45);
-  --tt-accent: #7C3AED;
-  --tt-accent-light: #8B5CF6;
-  --tt-accent-subtle: rgba(124, 58, 237, 0.08);
-  --tt-cyan: #0891B2;
-  --tt-border: rgba(124, 58, 237, 0.28);
   box-shadow:
     0 0 0 1px rgba(124, 58, 237, 0.08),
     0 22px 52px -26px rgba(40, 22, 80, 0.28),
@@ -297,7 +333,7 @@ html:not(.dark) .tt-popover {
   position: absolute;
   width: 7px;
   height: 7px;
-  border-color: var(--tt-accent);
+  border-color: var(--demo-accent);
   opacity: 0.85;
   pointer-events: none;
 }
@@ -307,7 +343,7 @@ html:not(.dark) .tt-popover {
   left: 4px;
   border-top: 1px solid currentColor;
   border-left: 1px solid currentColor;
-  color: var(--tt-accent);
+  color: var(--demo-accent);
 }
 
 .tt-popover__corner--tr {
@@ -315,7 +351,7 @@ html:not(.dark) .tt-popover {
   right: 4px;
   border-top: 1px solid currentColor;
   border-right: 1px solid currentColor;
-  color: var(--tt-accent);
+  color: var(--demo-accent);
 }
 
 .tt-popover__corner--bl {
@@ -323,7 +359,7 @@ html:not(.dark) .tt-popover {
   left: 4px;
   border-bottom: 1px solid currentColor;
   border-left: 1px solid currentColor;
-  color: var(--tt-accent);
+  color: var(--demo-accent);
 }
 
 .tt-popover__corner--br {
@@ -331,7 +367,7 @@ html:not(.dark) .tt-popover {
   right: 4px;
   border-bottom: 1px solid currentColor;
   border-right: 1px solid currentColor;
-  color: var(--tt-accent);
+  color: var(--demo-accent);
 }
 
 /* ---- Arrow / notch ---- */
@@ -355,7 +391,7 @@ html:not(.dark) .tt-popover {
 .tt-popover__arrow-fill {
   position: absolute;
   inset: 0;
-  background: var(--tt-bg);
+  background: var(--demo-bg-overlay);
   border: 1px solid var(--tt-border);
   clip-path: polygon(0 0, 100% 0, 50% 100%);
   filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.25));
@@ -373,7 +409,7 @@ html:not(.dark) .tt-popover {
 }
 
 .tt-popover__eyebrow {
-  color: var(--tt-cyan);
+  color: var(--demo-cyan);
   font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 800;
@@ -382,7 +418,7 @@ html:not(.dark) .tt-popover {
 }
 
 .tt-popover__title {
-  color: var(--tt-text-strong);
+  color: var(--demo-text-strong);
   font-size: 14px;
   font-weight: 700;
   letter-spacing: -0.005em;
@@ -391,7 +427,7 @@ html:not(.dark) .tt-popover {
 
 .tt-popover__body {
   margin: 0;
-  color: var(--tt-text);
+  color: var(--demo-text);
   font-size: 12.5px;
   line-height: 1.55;
 }
@@ -408,41 +444,26 @@ html:not(.dark) .tt-popover {
   left: 0;
   width: 22px;
   height: 1px;
-  background: var(--tt-accent);
+  background: var(--demo-accent);
   opacity: 0.7;
 }
 
 /* ---- Tip section ---- */
 .tt-popover__tip {
-  position: relative;
   display: grid;
   gap: 5px;
   margin-top: 2px;
-  padding: 9px 12px 10px 16px;
-  border-radius: 6px;
-  background: var(--tt-bg-soft);
-  border: 1px solid color-mix(in srgb, var(--tt-text-strong) 6%, transparent);
-}
-
-/* Left accent rail — visually anchors the tip block without tinting the surface */
-.tt-popover__tip::before {
-  content: '';
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 6px;
-  width: 2px;
-  border-radius: 1px;
-  background: var(--tt-accent);
-  opacity: 0.85;
-  pointer-events: none;
+  padding: 9px 12px 10px;
+  border-radius: calc(var(--demo-radius-sm) - 2px);
+  background: var(--demo-accent-subtle);
+  border: 1px solid var(--demo-accent-border);
 }
 
 .tt-popover__tip-label {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  color: var(--tt-text-strong);
+  color: var(--demo-text-strong);
   font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 800;
@@ -454,14 +475,14 @@ html:not(.dark) .tt-popover {
   display: inline-block;
   width: 6px;
   height: 6px;
-  background: var(--tt-accent);
+  background: var(--demo-accent);
   transform: rotate(45deg);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tt-accent) 60%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--demo-accent) 60%, transparent);
 }
 
 .tt-popover__tip-body {
   margin: 0;
-  color: var(--tt-text);
+  color: var(--demo-text);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -474,15 +495,15 @@ html:not(.dark) .tt-popover {
   gap: 4px 10px;
   margin-top: 2px;
   padding: 8px 12px 9px 12px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--tt-cyan) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--tt-cyan) 26%, transparent);
+  border-radius: calc(var(--demo-radius-sm) - 2px);
+  background: color-mix(in srgb, var(--demo-cyan) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--demo-cyan) 26%, transparent);
 }
 
 .tt-popover__default-label {
   grid-column: 1;
   grid-row: 1;
-  color: var(--tt-cyan);
+  color: var(--demo-cyan);
   font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 800;
@@ -494,7 +515,7 @@ html:not(.dark) .tt-popover {
   grid-column: 2;
   grid-row: 1;
   justify-self: start;
-  color: var(--tt-text-strong);
+  color: var(--demo-text-strong);
   font-family: var(--font-mono);
   font-size: 11.5px;
   font-weight: 700;
@@ -506,7 +527,7 @@ html:not(.dark) .tt-popover {
   grid-column: 1 / -1;
   grid-row: 2;
   margin: 2px 0 0;
-  color: var(--tt-text);
+  color: var(--demo-text);
   font-size: 11.5px;
   line-height: 1.5;
 }
@@ -519,29 +540,32 @@ html:not(.dark) .tt-popover {
   align-self: start;
   margin-top: 2px;
   padding: 5px 11px 5px 12px;
-  border: 1px solid var(--tt-accent);
+  border: 1px solid var(--demo-accent);
   border-radius: 999px;
   background: transparent;
-  color: var(--tt-accent-light);
+  color: var(--demo-accent-light);
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   text-decoration: none;
-  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  transition:
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    color var(--demo-dur-fast) var(--demo-ease-standard),
+    border-color var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 html:not(.dark) .tt-popover__link {
-  color: var(--tt-accent);
+  color: var(--demo-accent);
 }
 
 .tt-popover__link:hover,
 .tt-popover__link:focus-visible {
-  background: var(--tt-accent);
-  color: #fff;
-  border-color: var(--tt-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tt-accent) 22%, transparent);
+  background: var(--demo-accent);
+  color: var(--demo-on-accent);
+  border-color: var(--demo-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--demo-accent) 22%, transparent);
   outline: none;
 }
 
@@ -552,7 +576,9 @@ html:not(.dark) .tt-popover__link {
 /* ---- Animations ---- */
 .tt-enter-active,
 .tt-leave-active {
-  transition: opacity 140ms ease, transform 180ms cubic-bezier(0.32, 0.72, 0.24, 1);
+  transition:
+    opacity var(--demo-dur-fast) var(--demo-ease-enter),
+    transform var(--demo-dur-fast) var(--demo-ease-enter);
 }
 
 .tt-enter-from {
@@ -576,7 +602,7 @@ html:not(.dark) .tt-popover__link {
 @media (prefers-reduced-motion: reduce) {
   .tt-enter-active,
   .tt-leave-active {
-    transition: opacity 120ms ease;
+    transition: opacity var(--demo-dur-fast) var(--demo-ease-standard);
   }
 
   .tt-enter-from,

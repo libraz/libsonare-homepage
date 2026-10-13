@@ -7,6 +7,12 @@ const wasm = vi.hoisted(() => ({
   analyzeWithProgress: vi.fn(),
   detectBpm: vi.fn(),
   detectBeats: vi.fn(),
+  // The engine folds channels by ITU-R BS.775; a stereo pair is (L + R) / 2.
+  downmix: vi.fn((channels: Float32Array[]) => [
+    channels.length === 1
+      ? channels[0].slice()
+      : channels[0].map((value, index) => (value + channels[1][index]) * 0.5),
+  ]),
 }));
 
 vi.mock('@/wasm/index.js', () => wasm);
@@ -72,7 +78,7 @@ describe('useAudioAnalysis', () => {
     );
   });
 
-  it('mixes multi-channel buffers before calling wasm feature helpers', async () => {
+  it('folds multi-channel buffers with the engine downmix before calling wasm feature helpers', async () => {
     const analysis = useAudioAnalysis();
     const buffer = makeAudioBuffer(
       [new Float32Array([1, -1, 0.5]), new Float32Array([-1, 1, 0.25])],
@@ -80,6 +86,10 @@ describe('useAudioAnalysis', () => {
     );
 
     await expect(analysis.detectBpm(buffer)).resolves.toBe(122);
+    expect(wasm.downmix).toHaveBeenCalledWith(
+      [buffer.getChannelData(0), buffer.getChannelData(1)],
+      0,
+    );
     expect(wasm.detectBpm).toHaveBeenCalledWith(new Float32Array([0, 0, 0.375]), 44100);
 
     await expect(analysis.detectBeats(buffer)).resolves.toEqual(new Float32Array([0, 0.5, 1]));

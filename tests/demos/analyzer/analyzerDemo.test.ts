@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { defineComponent, h, ref } from 'vue';
+import { defineComponent, h, onMounted, ref } from 'vue';
 
 const lang = ref('en');
 const wasm = vi.hoisted(() => ({
@@ -18,7 +18,16 @@ vi.mock('@/demos/analyzer/AudioAnalyzer.vue', () => ({
   default: defineComponent({
     name: 'AudioAnalyzerStub',
     props: { libVersion: String },
-    setup(props) {
+    emits: ['status'],
+    setup(props, { emit }) {
+      onMounted(() =>
+        emit('status', {
+          status: 'active',
+          label: 'Ready',
+          pulse: false,
+          fields: [{ key: 'SRC', value: 'demo.mp3' }],
+        }),
+      );
       return () =>
         h(
           'div',
@@ -59,7 +68,11 @@ describe('AnalyzerDemo shell', () => {
     expect(wrapper.find('.tool-page__title').text()).toBe('Visual Player');
     expect(wrapper.find('.tool-page__version').text()).toBe('v1.2.3-test');
     expect(wrapper.find('.audio-analyzer-stub').attributes('data-version')).toBe('1.2.3-test');
-    expect(wrapper.find('.tool-page__guide').text()).toContain('Visual player');
+    expect(wrapper.find('.tool-page__guide').text()).toContain('Load a file and press play');
+    // The player's reported state is what the page's status bar shows.
+    const statusbar = wrapper.find('.tool-statusbar');
+    expect(statusbar.text()).toContain('Ready');
+    expect(statusbar.text()).toContain('demo.mp3');
 
     wrapper.unmount();
   });

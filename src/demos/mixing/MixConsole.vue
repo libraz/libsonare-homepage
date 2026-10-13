@@ -1,16 +1,20 @@
 <script setup lang="ts">
 /**
  * The console row: the track strips in lane order, a placeholder for each
- * free track slot, the Reverb and Delay returns and the three VCA masters.
- * The row scrolls sideways when the window is narrower than the desk.
+ * free track slot, the Reverb and Delay returns, the two group buses and the
+ * three VCA masters. The row scrolls sideways when the window is narrower
+ * than the desk.
  */
 import { computed } from 'vue';
+import PeakMeter from '@/components/meters/PeakMeter.vue';
+import { Tooltip } from '@/components/ui';
 import MixBusStrip from '@/demos/mixing/MixBusStrip.vue';
 import MixFader from '@/demos/mixing/MixFader.vue';
 import MixStrip from '@/demos/mixing/MixStrip.vue';
 import { MAX_TRACKS, VCA_GROUP_IDS } from '@/demos/mixing/mixingConstants';
 import { useMixingCopy } from '@/demos/mixing/mixingCopy';
-import { AUX_BUSES } from '@/demos/mixing/mixingState';
+import { AUX_BUSES, GROUP_BUSES, type GroupBusName } from '@/demos/mixing/mixingState';
+import { useMixingTerm } from '@/demos/mixing/mixingTerms';
 import { formatFader } from '@/demos/mixing/mixingUi';
 import type { MixingController } from '@/demos/mixing/useMixingStudio';
 import { fill } from '@/utils/template';
@@ -19,11 +23,21 @@ const props = defineProps<{ m: MixingController }>();
 const emit = defineEmits<{ add: [] }>();
 
 const copy = useMixingCopy();
+const term = useMixingTerm();
 const { m } = props;
 const { view, editLocked, metering } = m;
 const { frame } = metering;
 
 const free = computed(() => Math.max(0, MAX_TRACKS - view.value.tracks.length));
+
+function groupMeterLabels(group: GroupBusName) {
+  const name = copy.value.groups[group];
+  return {
+    name: fill(copy.value.console.meter, { name }),
+    clip: copy.value.console.clip,
+    clearClip: copy.value.console.clearClip,
+  };
+}
 </script>
 
 <template>
@@ -52,14 +66,40 @@ const free = computed(() => Math.max(0, MAX_TRACKS - view.value.tracks.length));
       </div>
 
       <div class="console__group console__group--returns">
-        <p class="console__label">{{ copy.console.returns }}</p>
+        <p class="console__label">{{ copy.console.returns }} <Tooltip v-bind="term('send')" /></p>
         <div class="console__row">
           <MixBusStrip v-for="bus in AUX_BUSES" :key="bus" :m="m" :bus="bus" :reading="frame.buses[bus]" />
         </div>
       </div>
 
       <div class="console__group console__group--vca">
-        <p class="console__label">{{ copy.console.vcaMasters }}</p>
+        <p class="console__label">{{ copy.console.groups }} <Tooltip v-bind="term('group')" /></p>
+        <div class="console__row">
+          <section v-for="group in GROUP_BUSES" :key="group" class="console__vca console__bus" :aria-label="copy.groups[group]">
+            <span class="console__vca-name">{{ copy.groups[group] }}</span>
+            <div class="console__bus-fader">
+              <MixFader
+                :model-value="view.groups[group].gainDb"
+                :label="fill(copy.console.groupFader, { name: copy.groups[group] })"
+                :disabled="editLocked"
+                :scale="false"
+                @update:model-value="(v) => m.edit('setGroupGain', group, v)"
+                @begin="m.begin"
+                @end="m.end"
+              />
+              <PeakMeter
+                :peak-db="frame.buses[group].peakDb"
+                :rms-db="frame.buses[group].rmsDb"
+                :labels="groupMeterLabels(group)"
+              />
+            </div>
+            <output>{{ formatFader(view.groups[group].gainDb) }}</output>
+          </section>
+        </div>
+      </div>
+
+      <div class="console__group console__group--vca">
+        <p class="console__label">{{ copy.console.vcaMasters }} <Tooltip v-bind="term('vcaGroup')" /></p>
         <div class="console__row">
           <div v-for="group in VCA_GROUP_IDS" :key="group" class="console__vca">
             <span class="console__vca-name">{{ group }}</span>
@@ -119,6 +159,9 @@ const free = computed(() => Math.max(0, MAX_TRACKS - view.value.tracks.length));
 }
 
 .console__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   margin: 0;
   color: var(--demo-text-muted);
   font-family: var(--font-mono);
@@ -136,7 +179,7 @@ const free = computed(() => Math.max(0, MAX_TRACKS - view.value.tracks.length));
   width: 40px;
   padding: 8px 6px;
   border: 1px dashed var(--demo-border-strong);
-  border-radius: 6px;
+  border-radius: var(--demo-radius-sm);
   background: transparent;
   color: var(--demo-text-faint);
   font-family: var(--font-mono);
@@ -148,6 +191,12 @@ const free = computed(() => Math.max(0, MAX_TRACKS - view.value.tracks.length));
 
 .console__free-label {
   writing-mode: vertical-rl;
+}
+
+.console__free {
+  transition:
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    color var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .console__free:hover:not(:disabled) {
@@ -167,12 +216,32 @@ const free = computed(() => Math.max(0, MAX_TRACKS - view.value.tracks.length));
   width: 54px;
   padding: 8px 4px 9px;
   border: 1px solid var(--demo-border);
-  border-radius: 6px;
+  border-radius: var(--demo-radius-sm);
   background: var(--demo-bg-elevated);
 }
 
 .console__vca :deep(.fader) {
   --fader-height: 220px;
+}
+
+.console__bus {
+  width: 104px;
+}
+
+.console__bus-fader {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 4px;
+  justify-self: stretch;
+  height: 220px;
+}
+
+.console__bus-fader :deep(.fader) {
+  grid-template-columns: 22px;
+}
+
+.console__bus-fader :deep(.peak-meter__readout) {
+  display: none;
 }
 
 .console__vca-name {

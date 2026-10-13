@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useI18n } from '@/composables/useI18n';
 import CornerBrackets from './CornerBrackets.vue';
 import ScanLine from './ScanLine.vue';
 
@@ -22,11 +23,11 @@ const props = withDefaults(
   }>(),
   {
     accept: 'audio/*',
-    dropTitle: 'Drop audio file here',
-    dropHint: 'or click to browse',
+    dropTitle: undefined,
+    dropHint: undefined,
     formats: 'MP3 WAV FLAC OGG',
     showDemo: false,
-    demoLabel: 'Demo audio',
+    demoLabel: undefined,
     demoActive: false,
     sourceName: '',
     playable: false,
@@ -62,7 +63,17 @@ const isHovering = ref(false);
 
 const fillPercent = computed(() => Math.max(0, Math.min(1, props.progress)) * 100);
 const scrubberValue = computed(() => Math.round(Math.max(0, Math.min(1, props.progress)) * 1000));
-const playLabel = computed(() => (props.isPlaying ? 'Pause' : 'Play'));
+const { t } = useI18n();
+
+const title = computed(() => props.dropTitle || t('ui.audioSource.dropTitle'));
+const hint = computed(() => props.dropHint || t('ui.audioSource.dropHint'));
+const transportLabels = computed(() => ({
+  play: t('ui.transport.play'),
+  pause: t('ui.transport.pause'),
+}));
+const playLabel = computed(() =>
+  props.isPlaying ? transportLabels.value.pause : transportLabels.value.play,
+);
 
 function isValidAudioFile(file: File): boolean {
   return (
@@ -142,7 +153,7 @@ function formatTime(seconds: number): string {
       }"
       role="button"
       tabindex="0"
-      :aria-label="dropTitle"
+      :aria-label="title"
       :aria-disabled="busy"
       @click="handleClick"
       @keydown="handleKeydown"
@@ -171,11 +182,11 @@ function formatTime(seconds: number): string {
           </svg>
         </div>
         <div class="audio-source__text">
-          <span class="audio-source__title">{{ dropTitle }}</span>
-          <span class="audio-source__hint">{{ dropHint }}</span>
+          <span class="audio-source__title">{{ title }}</span>
+          <span class="audio-source__hint">{{ hint }}</span>
         </div>
         <div v-if="formats" class="audio-source__formats">
-          <span class="audio-source__formats-label">SUPPORTED:</span>
+          <span class="audio-source__formats-label">{{ t('ui.audioSource.supported') }}:</span>
           <span class="audio-source__formats-list">{{ formats }}</span>
         </div>
       </div>
@@ -197,7 +208,7 @@ function formatTime(seconds: number): string {
         <circle cx="6" cy="18" r="3" />
         <circle cx="18" cy="16" r="3" />
       </svg>
-      {{ demoLabel }}
+      {{ demoLabel || t('ui.audioSource.demoLabel') }}
     </button>
 
     <div v-if="sourceName" class="audio-source__chip">
@@ -211,7 +222,7 @@ function formatTime(seconds: number): string {
         type="button"
         class="audio-source__chip-clear"
         :disabled="busy"
-        aria-label="Clear source"
+        :aria-label="t('ui.audioSource.clear')"
         @click="emit('clear')"
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
@@ -252,7 +263,7 @@ function formatTime(seconds: number): string {
           step="1"
           :value="scrubberValue"
           :disabled="busy"
-          aria-label="Seek"
+          :aria-label="t('ui.transport.seek')"
           @input="handleSeek"
         />
       </div>
@@ -290,8 +301,11 @@ function formatTime(seconds: number): string {
   border-radius: 8px;
   cursor: pointer;
   overflow: hidden;
-  transition: border-color var(--transition-fast), background-color var(--transition-fast),
-    transform var(--transition-fast), box-shadow var(--transition-fast);
+  transition:
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    transform var(--demo-dur-fast) var(--demo-ease-standard),
+    box-shadow var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .audio-source__drop:hover,
@@ -348,7 +362,9 @@ function formatTime(seconds: number): string {
 
 .audio-source__icon {
   color: var(--demo-accent-light);
-  transition: transform 0.3s ease, color 0.3s ease;
+  transition:
+    transform var(--demo-dur-base) var(--demo-ease-standard),
+    color var(--demo-dur-base) var(--demo-ease-standard);
 }
 
 .audio-source__text {
@@ -386,6 +402,7 @@ function formatTime(seconds: number): string {
   font-size: 8px;
   font-weight: 500;
   letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--demo-text-faint);
 }
 
@@ -412,8 +429,10 @@ function formatTime(seconds: number): string {
   border: 1px solid var(--demo-accent-border);
   border-radius: 6px;
   cursor: pointer;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast),
-    color var(--transition-fast);
+  transition:
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    color var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .audio-source__demo:hover:not(:disabled) {
@@ -475,7 +494,9 @@ function formatTime(seconds: number): string {
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  transition: background-color 0.16s ease, color 0.16s ease;
+  transition:
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    color var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .audio-source__chip-clear:hover:not(:disabled) {
@@ -511,7 +532,10 @@ function formatTime(seconds: number): string {
   border: 1px solid var(--demo-accent-border);
   border-radius: 50%;
   cursor: pointer;
-  transition: background-color 0.16s ease, border-color 0.16s ease, transform 0.1s ease;
+  transition:
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    transform var(--demo-dur-instant) var(--demo-ease-standard);
 }
 
 .audio-source__play:hover:not(:disabled) {

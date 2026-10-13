@@ -11,7 +11,8 @@ export type DemoVisual =
   | 'steps'
   | 'fall'
   | 'parts'
-  | 'filter';
+  | 'filter'
+  | 'roll';
 
 export interface DemoEntry {
   id: ListedDemoId;
@@ -115,6 +116,13 @@ const CARD_META: Record<
     eyebrow: 'BASSLINE',
     chips: ['16 STEPS', 'ACCENT · SLIDE', 'DIODE LADDER', 'WAV · MIDI'],
   },
+  transcribe: {
+    visual: 'roll',
+    accent: false,
+    status: 'NEW',
+    eyebrow: 'AUDIO → MIDI',
+    chips: ['POLYPHONIC', 'PIANO ROLL', 'A/B PLAYBACK', '.MID'],
+  },
 };
 
 export const demoCardsCopy = {
@@ -170,6 +178,11 @@ export const demoCardsCopy = {
         tagline:
           'A sixteen-step monophonic bass machine: one oscillator, a diode-ladder lowpass, and per-step accent and slide.',
       },
+      transcribe: {
+        title: 'Piano Transcription',
+        tagline:
+          'Turn a piano recording into MIDI, check it on a roll under the waveform, and hear it on the built-in piano.',
+      },
     },
   },
   ja: {
@@ -186,7 +199,7 @@ export const demoCardsCopy = {
         tagline: 'プリセットで配信向けラウドネスへ。WAV 書き出し対応。',
       },
       analysis: {
-        title: '楽曲分析スタジオ',
+        title: '楽曲解析スタジオ',
         tagline: '構造・ハーモニー・メロディ・ラウドネスとスペクトル表示。',
       },
       mixing: {
@@ -223,6 +236,11 @@ export const demoCardsCopy = {
         title: 'ステップベース',
         tagline:
           '16 ステップのモノフォニック・ベースマシン。1 オシレータをダイオードラダー・ローパスに通し、ステップごとのアクセントとスライドを効かせます。',
+      },
+      transcribe: {
+        title: 'ピアノ採譜',
+        tagline:
+          'ピアノの録音を MIDI に戻し、波形の下のピアノロールで確かめて、内蔵のピアノで鳴らします。',
       },
     },
   },

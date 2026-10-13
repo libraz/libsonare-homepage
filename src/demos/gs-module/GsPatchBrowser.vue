@@ -14,6 +14,7 @@
  * while the part plays another.
  */
 import { computed } from 'vue';
+import { DemoEmpty, DemoNotice, Tooltip } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { GM_FAMILY_NAMES_JA, GM_FAMILY_SIZE, GM_PROGRAM_NAMES_JA, gmFamilyOf } from './gsNames';
 import type { GmProgram } from './useGsModule';
@@ -38,6 +39,7 @@ const copy = computed(() =>
   localizedValue({
     en: {
       title: 'Sound',
+      help: 'The GM program the selected part plays, picked by family, and the bank variations this build voices apart from the capital tone. The English names are the engine’s own (Project.gmInstrumentName).',
       loading: 'Asking the engine for the sound set…',
       families: 'Instrument families',
       programs: 'Programs in this family',
@@ -49,6 +51,7 @@ const copy = computed(() =>
     },
     ja: {
       title: '音色',
+      help: '選択中のパートが鳴らす GM 音色をファミリーから選び、このビルドがキャピタルトーンと鳴らし分けるバンクのバリエーションを切り替えます。英語名はエンジン自身が返す名前（Project.gmInstrumentName）です。',
       loading: 'エンジンに音色一覧を問い合わせています…',
       families: '楽器ファミリー',
       programs: 'このファミリーの音色',
@@ -87,13 +90,16 @@ const bankChoices = computed(() => [0, ...props.variations]);
 <template>
   <section class="gs-rack" :aria-label="copy.title">
     <div class="gs-rack__head">
-      <span class="gs-rack__title">{{ copy.title }}</span>
+      <span class="gs-rack__title">
+        {{ copy.title }}
+        <Tooltip :title="copy.title" :body="copy.help" />
+      </span>
       <span v-if="props.programs.length" class="gs-rack__aside">
         {{ copy.count(props.programs.length) }}
       </span>
     </div>
 
-    <p v-if="!props.programs.length" class="gs-note">{{ copy.loading }}</p>
+    <DemoEmpty v-if="!props.programs.length" compact :title="copy.loading" />
 
     <div v-else class="gs-patch">
       <ul class="gs-patch__families" :aria-label="copy.families">
@@ -137,8 +143,8 @@ const bankChoices = computed(() => [0, ...props.variations]);
               @click="emit('selectBank', bank)"
             >{{ bank === 0 ? copy.capital : bank }}</button>
           </div>
-          <p v-else class="gs-note">{{ copy.none }}</p>
-          <p class="gs-note gs-patch__note">{{ copy.note }}</p>
+          <p v-else class="gs-patch__none">{{ copy.none }}</p>
+          <DemoNotice tone="hint">{{ copy.note }}</DemoNotice>
         </div>
       </div>
     </div>
@@ -245,7 +251,10 @@ const bankChoices = computed(() => [0, ...props.variations]);
   border-color: var(--demo-border-strong);
 }
 
-.gs-patch__note {
-  font-size: 10.5px;
+.gs-patch__none {
+  margin: 0;
+  color: var(--demo-text-muted);
+  font-size: 11px;
+  line-height: 1.5;
 }
 </style>

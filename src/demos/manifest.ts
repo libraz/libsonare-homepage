@@ -8,17 +8,18 @@
  * without hiding its source link.
  */
 export const DEMO_MANIFEST = [
-  { id: 'analyzer', route: '/analyzer', dir: 'src/demos/analyzer', listed: true },
   { id: 'mastering', route: '/mastering', dir: 'src/demos/mastering', listed: true },
   { id: 'analysis', route: '/music-analysis', dir: 'src/demos/music-analysis', listed: true },
+  { id: 'transcribe', route: '/transcribe', dir: 'src/demos/transcribe', listed: true },
   { id: 'mixing', route: '/mixing', dir: 'src/demos/mixing', listed: true },
   { id: 'fx', route: '/realtime-fx', dir: 'src/demos/realtime-fx', listed: true },
-  { id: 'spatial', route: '/spatial', dir: 'src/demos/spatial', listed: true },
+  { id: 'analyzer', route: '/analyzer', dir: 'src/demos/analyzer', listed: true },
   { id: 'synth', route: '/synth', dir: 'src/demos/synth', listed: true },
   { id: 'studio', route: '/studio', dir: 'src/demos/studio', listed: true },
   { id: 'practice', route: '/practice', dir: 'src/demos/practice', listed: true },
-  { id: 'gs-module', route: '/gs-module', dir: 'src/demos/gs-module', listed: true },
   { id: 'step-bass', route: '/step-bass', dir: 'src/demos/step-bass', listed: true },
+  { id: 'gs-module', route: '/gs-module', dir: 'src/demos/gs-module', listed: true },
+  { id: 'spatial', route: '/spatial', dir: 'src/demos/spatial', listed: true },
 ] as const;
 
 export type DemoManifestEntry = (typeof DEMO_MANIFEST)[number];

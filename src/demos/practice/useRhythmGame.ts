@@ -18,11 +18,18 @@ import type { ParsedMidi } from './midiSmf';
 export type Judgment = 'perfect' | 'great' | 'good' | 'miss';
 
 /** Absolute timing windows (seconds) from the strike line, best → worst. */
-const PERFECT_SEC = 0.05;
-const GREAT_SEC = 0.1;
-const GOOD_SEC = 0.16;
+export const PERFECT_SEC = 0.05;
+export const GREAT_SEC = 0.1;
+export const GOOD_SEC = 0.16;
 /** A press within this of a target of the same pitch counts as a hit. */
 const HIT_WINDOW_SEC = GOOD_SEC;
+
+/** Share of a note each hit judgment contributes to accuracy. */
+export const ACCURACY_WEIGHTS: Record<Exclude<Judgment, 'miss'>, number> = {
+  perfect: 1,
+  great: 0.65,
+  good: 0.3,
+};
 
 /** Base points per judgment, before the combo multiplier. */
 const POINTS: Record<Exclude<Judgment, 'miss'>, number> = {
@@ -64,7 +71,10 @@ export function useRhythmGame(options: RhythmGameOptions) {
   /** Weighted accuracy as a 0–100 percentage over every chart target. */
   function accuracy(): number {
     if (total.value === 0) return 100;
-    const weighted = counts.perfect * 1 + counts.great * 0.65 + counts.good * 0.3;
+    const weighted =
+      counts.perfect * ACCURACY_WEIGHTS.perfect +
+      counts.great * ACCURACY_WEIGHTS.great +
+      counts.good * ACCURACY_WEIGHTS.good;
     return Math.max(0, Math.min(100, (weighted / total.value) * 100));
   }
 

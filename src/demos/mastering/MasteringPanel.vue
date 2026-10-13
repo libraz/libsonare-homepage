@@ -23,7 +23,7 @@ defineProps<{
 .panel {
   min-width: 0;
   border: 1px solid var(--demo-border);
-  border-radius: 8px;
+  border-radius: var(--demo-radius-md);
   background: var(--demo-bg-elevated);
 }
 

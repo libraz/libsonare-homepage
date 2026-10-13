@@ -7,6 +7,7 @@ export const enCopy = {
     idle: 'Idle',
     ready: 'Loaded',
     analyzing: 'Analyzing',
+    failed: 'Error',
   },
   import: {
     title: 'Source',
@@ -30,7 +31,14 @@ export const enCopy = {
     melody: 'Melody',
     source: 'Source Metrics',
     metering: 'Metering',
+    export: 'Export',
     help: 'How to read this',
+  },
+  aria: {
+    waveform: 'Waveform',
+    loudness: 'Loudness over time',
+    heatmapPicker: 'Matrix view',
+    tempo: 'Local tempo over time',
   },
   loudness: {
     momentary: 'Momentary',
@@ -71,7 +79,7 @@ export const enCopy = {
     peak: 'Peak',
     rms: 'RMS',
     correlation: 'Correlation',
-    truePeak: 'True Peak',
+    truePeak: 'True Peak ',
     dcOffset: 'DC Offset',
     clipping: 'Clipping',
     stereoWidth: 'Stereo Width',
@@ -83,10 +91,26 @@ export const enCopy = {
     pitchStability: 'Pitch Stability',
     meanPitch: 'Mean Pitch',
     vibrato: 'Vibrato',
+    tuning: 'Tuning',
+    reference: 'A4 Reference',
   },
   timeline: {
     confidence: 'Confidence',
     energy: 'Energy',
+    lanes: {
+      sections: 'Sections',
+      chords: 'Chords',
+      roman: 'Function',
+      beats: 'Beats',
+      tempo: 'Tempo',
+    },
+    readout: {
+      position: 'At',
+      section: 'Section',
+      chord: 'Chord',
+      roman: 'In key',
+      tempo: 'Local tempo',
+    },
   },
   heatmaps: {
     chroma: 'Chroma',
@@ -274,19 +298,35 @@ export const enCopy = {
         body: 'A spectrum with log-spaced bins aligned to musical pitches.',
         tip: 'Reads bass notes and harmony better than a linear FFT.',
       },
+      tuning: {
+        title: 'Tuning',
+        body: 'How far the recording sits from concert pitch (A4 = 440 Hz), in cents. Key, chords and sections are read on this measured pitch grid.',
+        tip: 'A few cents is normal. A large offset usually means a detuned instrument or a varispeed transfer.',
+      },
+      tempoCurve: {
+        title: 'Local Tempo',
+        body: 'The tempo at each beat, smoothed over the beats around it, drawn against the global BPM (dashed line).',
+        tip: 'A flat line is a steady click; a slope or a dip is a tempo that moves. It follows a change a few beats late.',
+      },
+      romanNumeral: {
+        title: 'Roman Numerals',
+        body: 'Each chord named by its scale degree in the detected key: I is the tonic, V the dominant, lower case a minor chord.',
+        tip: 'Numerals let you compare progressions across keys. They change meaning if the key is wrong, so check key confidence first.',
+      },
     },
   },
 };
 
 export const jaCopy: typeof enCopy = {
-  title: '楽曲分析スタジオ',
-  subtitle: '構成、ハーモニー、ラウドネス、スペクトルを分析',
+  title: '楽曲解析スタジオ',
+  subtitle: '構成、ハーモニー、ラウドネス、スペクトルを解析',
   localOnly: 'LOCAL ONLY',
-  docs: '資料',
+  docs: 'ドキュメント',
   status: {
     idle: '待機中',
     ready: '読み込み済み',
     analyzing: '解析中',
+    failed: 'エラー',
   },
   import: {
     title: '音源',
@@ -310,7 +350,14 @@ export const jaCopy: typeof enCopy = {
     melody: 'メロディ',
     source: '音源指標',
     metering: 'メータリング',
+    export: '書き出し',
     help: '読み方',
+  },
+  aria: {
+    waveform: '波形',
+    loudness: 'ラウドネスの推移',
+    heatmapPicker: 'マトリクス表示の切り替え',
+    tempo: 'ローカルテンポの推移',
   },
   loudness: {
     momentary: 'モーメンタリ',
@@ -322,7 +369,7 @@ export const jaCopy: typeof enCopy = {
   },
   notes: {
     metering:
-      'ピーク、トゥルーピーク、クリッピングはデコード後の波形を測った値です。MP3・AAC・Ogg などの非可逆圧縮はデコード時にフルスケールを超えることがあり、その分はマスターではなくコーデックに由来する場合があります。',
+      'ピーク、True Peak、クリッピングはデコード後の波形を測った値です。MP3・AAC・Ogg などの非可逆圧縮はデコード時にフルスケールを超えることがあり、その分はマスターではなくコーデックに由来する場合があります。',
     melody:
       'メロディの追跡は一度に 1 つの音高だけを追います。全体ミックスでは歌ではなく、その時点で最も強い音（多くはベース）を追うことがあります。',
   },
@@ -351,7 +398,7 @@ export const jaCopy: typeof enCopy = {
     peak: 'ピーク',
     rms: 'RMS',
     correlation: '相関',
-    truePeak: 'トゥルーピーク',
+    truePeak: 'True Peak ',
     dcOffset: 'DC オフセット',
     clipping: 'クリッピング',
     stereoWidth: 'ステレオ幅',
@@ -361,10 +408,26 @@ export const jaCopy: typeof enCopy = {
     pitchStability: 'ピッチ安定度',
     meanPitch: '平均ピッチ',
     vibrato: 'ビブラート',
+    tuning: 'チューニング',
+    reference: 'A4 基準',
   },
   timeline: {
     confidence: '信頼度',
     energy: 'エネルギー',
+    lanes: {
+      sections: 'セクション',
+      chords: 'コード',
+      roman: '度数',
+      beats: 'ビート',
+      tempo: 'テンポ',
+    },
+    readout: {
+      position: '位置',
+      section: 'セクション',
+      chord: 'コード',
+      roman: 'キー内の度数',
+      tempo: 'ローカルテンポ',
+    },
   },
   heatmaps: {
     chroma: 'クロマ',
@@ -387,7 +450,7 @@ export const jaCopy: typeof enCopy = {
     spectrum: 'クロマ／メル／CQT のヒートマップがここに表示されます。',
     harmony: 'キーとスケールの候補がここに表示されます。',
     melody: 'ピッチレンジ・安定度・ビブラートがここに表示されます。',
-    metering: 'トゥルーピーク、クリッピング、ステレオフィールドがここに表示されます。',
+    metering: 'True Peak、クリッピング、ステレオフィールドがここに表示されます。',
   },
   warnings: {
     longFile:
@@ -471,7 +534,7 @@ export const jaCopy: typeof enCopy = {
       momentary: {
         title: 'モーメンタリ LUFS',
         body: '400 ms のスライディング窓によるラウドネスを、曲全体にわたって追跡します。',
-        tip: '短い区間のラウドネス変化を確認できます。瞬間的なピークは、ピークレベルとトゥルーピークも併せて確認してください。',
+        tip: '短い区間のラウドネス変化を確認できます。瞬間的なピークは、ピークレベルと True Peak も併せて確認してください。',
       },
       shortTerm: {
         title: 'ショートターム LUFS',
@@ -494,7 +557,7 @@ export const jaCopy: typeof enCopy = {
         tip: '負の値のときは、マスタリングの判断前にモノラル互換性を確認してください。',
       },
       truePeak: {
-        title: 'トゥルーピーク（dBTP）',
+        title: 'True Peak（dBTP）',
         body: '4 倍オーバーサンプリングで、再構成されるサンプル間ピークを推定した値です。サンプルピークより高くなることがあります。',
         tip: '非可逆コーデックの再生でクリップしないよう、概ね −1 dBTP 未満に抑えてください。',
       },
@@ -552,6 +615,21 @@ export const jaCopy: typeof enCopy = {
         title: '定数 Q 変換（CQT）',
         body: '音律に合わせて対数間隔で並んだビンを持つスペクトルです。',
         tip: '線形 FFT より低音やハーモニーが読みやすくなります。',
+      },
+      tuning: {
+        title: 'チューニング',
+        body: '録音が標準ピッチ（A4 = 440 Hz）からどれだけずれているかをセントで表します。キー、コード、セクションはこの実測したピッチ基準で読み取ります。',
+        tip: '数セントのずれは普通です。大きくずれている場合は、楽器のチューニングのずれや再生速度の変化が考えられます。',
+      },
+      tempoCurve: {
+        title: 'ローカルテンポ',
+        body: '各ビートでのテンポを前後のビートでならしたものを、曲全体の BPM（破線）と並べて描きます。',
+        tip: '平らな線は一定のテンポ、傾きやくぼみはテンポの揺れです。変化には数拍遅れて追従します。',
+      },
+      romanNumeral: {
+        title: 'ディグリーネーム（ローマ数字）',
+        body: '各コードを、検出したキーの何度の和音かで表します。I が主和音、V が属和音で、小文字はマイナーコードです。',
+        tip: 'キーが違う曲どうしでも進行を比べられます。キーの検出が外れると意味が変わるため、先にキー信頼度を確認してください。',
       },
     },
   },

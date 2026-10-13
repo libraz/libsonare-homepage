@@ -8,12 +8,6 @@ export interface BarChordInfo {
   confidence: number;
 }
 
-export interface ChordProgressionPattern {
-  key: string; // i18n key for the pattern name
-  degrees: string; // e.g., "I-V-VIm-IV"
-  confidence: number;
-}
-
 export interface StreamEstimate {
   bpm: number;
   bpmConfidence: number;
@@ -22,10 +16,11 @@ export interface StreamEstimate {
   chord: string;
   chordConfidence: number;
   barChordProgression: BarChordInfo[];
-  votedPattern: string[]; // C++ computed voted pattern (e.g., ['C', 'G', 'F', 'F'])
-  detectedPatternName: string; // C++ detected pattern name (e.g., 'royalRoad')
+  /** The engine's voted bar-chord loop, e.g. ['C', 'G', 'Am', 'F']. */
+  votedPattern: string[];
+  /** The engine's name for the matched common pattern, e.g. 'royalRoad'. */
+  detectedPatternName: string;
   detectedPatternScore: number;
-  progressionPattern: ChordProgressionPattern | null; // Fallback JS detection
   currentBar: number;
   barDuration: number;
   accumulatedSeconds: number;
@@ -38,164 +33,6 @@ function barChordToInfo(bc: BarChord): BarChordInfo {
     startTime: bc.startTime,
     confidence: bc.confidence,
   };
-}
-
-// Roman numeral names for scale degrees
-const DEGREE_NAMES = ['I', 'bII', 'II', 'bIII', 'III', 'IV', 'bV', 'V', 'bVI', 'VI', 'bVII', 'VII'];
-
-// Known chord progression patterns (4-bar patterns)
-interface ProgressionDef {
-  key: string; // i18n key (demo.patterns.{key})
-  // Pattern as array of [degree, quality] pairs
-  // degree: 0=I, 1=bII, 2=II, 3=bIII, 4=III, 5=IV, 6=bV, 7=V, 8=bVI, 9=VI, 10=bVII, 11=VII
-  // quality: 0=Major, 1=Minor, 2=Dim
-  pattern: Array<[number, number]>;
-}
-
-const PROGRESSION_PATTERNS: ProgressionDef[] = [
-  {
-    key: 'royalRoad',
-    pattern: [
-      [0, 0],
-      [7, 0],
-      [9, 1],
-      [5, 0],
-    ],
-  }, // I-V-VIm-IV
-  {
-    key: 'komuro',
-    pattern: [
-      [9, 1],
-      [5, 0],
-      [7, 0],
-      [0, 0],
-    ],
-  }, // VIm-IV-V-I
-  {
-    key: 'canon',
-    pattern: [
-      [0, 0],
-      [7, 0],
-      [9, 1],
-      [4, 1],
-    ],
-  }, // I-V-VIm-IIIm
-  {
-    key: 'popPunk',
-    pattern: [
-      [0, 0],
-      [7, 0],
-      [5, 0],
-      [9, 1],
-    ],
-  }, // I-V-IV-VIm
-  {
-    key: 'fifties',
-    pattern: [
-      [0, 0],
-      [9, 1],
-      [5, 0],
-      [7, 0],
-    ],
-  }, // I-VIm-IV-V
-  {
-    key: 'sad',
-    pattern: [
-      [9, 1],
-      [5, 0],
-      [0, 0],
-      [7, 0],
-    ],
-  }, // VIm-IV-I-V
-  {
-    key: 'blues',
-    pattern: [
-      [0, 0],
-      [5, 0],
-      [0, 0],
-      [7, 0],
-    ],
-  }, // I-IV-I-V (simplified)
-];
-
-/**
- * Convert chord root to scale degree based on key
- * @param chordRoot Chord root (0-11, C=0)
- * @param keyRoot Key root (0-11, C=0)
- * @returns Scale degree (0-11, I=0)
- */
-function chordToDegree(chordRoot: number, keyRoot: number): number {
-  return (chordRoot - keyRoot + 12) % 12;
-}
-
-/**
- * Detect chord progression pattern from bar chords
- * @param barChords Array of bar chord info
- * @param keyRoot Key root (0-11)
- * @returns Detected pattern or null
- */
-function detectProgressionPattern(
-  barChords: Array<{ root: number; quality: number }>,
-  keyRoot: number,
-): ChordProgressionPattern | null {
-  if (barChords.length < 4) return null;
-
-  // Convert to degrees (use last 4 or 8 bars for pattern matching)
-  const recentChords = barChords.slice(-8);
-  const degrees = recentChords.map((bc) => ({
-    degree: chordToDegree(bc.root, keyRoot),
-    quality: bc.quality,
-  }));
-
-  // Try to match 4-bar patterns
-  let bestMatch: { pattern: ProgressionDef; confidence: number } | null = null;
-
-  for (const patternDef of PROGRESSION_PATTERNS) {
-    const patternLen = patternDef.pattern.length;
-
-    // Slide through the chord sequence
-    for (let start = 0; start <= degrees.length - patternLen; start++) {
-      let matches = 0;
-      for (let i = 0; i < patternLen; i++) {
-        const [expectedDegree, expectedQuality] = patternDef.pattern[i];
-        const actual = degrees[start + i];
-
-        // Degree match (exact or enharmonic equivalent)
-        if (actual.degree === expectedDegree) {
-          // Quality match (allow some flexibility: major/minor only for simplicity)
-          const qualityMatch =
-            actual.quality === expectedQuality || (expectedQuality <= 1 && actual.quality <= 1); // Allow major/minor flexibility
-          if (qualityMatch) {
-            matches++;
-          } else {
-            matches += 0.5; // Partial credit for correct degree, wrong quality
-          }
-        }
-      }
-
-      const confidence = matches / patternLen;
-      if (confidence >= 0.5 && (!bestMatch || confidence > bestMatch.confidence)) {
-        bestMatch = { pattern: patternDef, confidence };
-      }
-    }
-  }
-
-  if (bestMatch) {
-    const degreeStr = bestMatch.pattern.pattern
-      .map(([deg, qual]) => {
-        const base = DEGREE_NAMES[deg];
-        return qual === 1 ? `${base.toLowerCase()}m` : base;
-      })
-      .join('-');
-
-    return {
-      key: bestMatch.pattern.key,
-      degrees: degreeStr,
-      confidence: bestMatch.confidence,
-    };
-  }
-
-  return null;
 }
 
 export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 }) {
@@ -214,7 +51,6 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
     votedPattern: [],
     detectedPatternName: '',
     detectedPatternScore: 0,
-    progressionPattern: null,
     currentBar: -1,
     barDuration: 0,
     accumulatedSeconds: 0,
@@ -267,10 +103,7 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
       throw new Error('StreamAnalyzer is not initialized');
     }
 
-    // Dispose existing analyzer
-    if (analyzer) {
-      analyzer.dispose();
-    }
+    analyzer?.delete();
 
     // Use the actual sample rate from AudioContext
     // C++ StreamAnalyzer handles resampling internally for high sample rates
@@ -323,16 +156,7 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
     if (!progressiveEstimate.updated) return;
 
     const barChords = progressiveEstimate.barChordProgression || [];
-    const keyRoot = progressiveEstimate.key;
-
-    // Get C++ computed voted pattern
-    const votedPatternFromCpp = (progressiveEstimate.votedPattern || []).map((bc) => bc.name);
-
-    // Fallback: Detect chord progression pattern in JS (if C++ pattern not available)
-    const pattern = detectProgressionPattern(
-      barChords.map((bc) => ({ root: bc.root, quality: bc.quality })),
-      keyRoot,
-    );
+    const votedPattern = (progressiveEstimate.votedPattern || []).map((bc) => bc.name);
 
     estimate.value = {
       bpm: Math.round(progressiveEstimate.bpm * 10) / 10,
@@ -345,10 +169,9 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
       chord: progressiveEstimate.chordConfidence > 0.3 ? progressiveEstimate.chordName : '-',
       chordConfidence: progressiveEstimate.chordConfidence,
       barChordProgression: barChords.map(barChordToInfo),
-      votedPattern: votedPatternFromCpp,
+      votedPattern,
       detectedPatternName: progressiveEstimate.detectedPatternName || '',
       detectedPatternScore: progressiveEstimate.detectedPatternScore || 0,
-      progressionPattern: pattern,
       currentBar: progressiveEstimate.currentBar,
       barDuration: progressiveEstimate.barDuration,
       accumulatedSeconds: progressiveEstimate.accumulatedSeconds,
@@ -391,7 +214,6 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
       votedPattern: [],
       detectedPatternName: '',
       detectedPatternScore: 0,
-      progressionPattern: null,
       currentBar: -1,
       barDuration: 0,
       accumulatedSeconds: 0,
@@ -401,7 +223,7 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
   function destroy(): void {
     // Release the native StreamAnalyzer before dropping the reference so its
     // WASM-heap allocation does not leak on every route leave.
-    analyzer?.dispose();
+    analyzer?.delete();
     analyzer = null;
     wasmModule = null;
     isInitialized.value = false;

@@ -32,6 +32,7 @@ import {
   TRACK_SLOT_PROCESSORS,
   TRACK_SLOTS,
 } from '@/demos/mixing/mixingState';
+import { boundedControl, TRACK_SLOT_CONTROLS } from '@/demos/mixing/mixingUi';
 import {
   createRawEngine,
   loadIndexModule,
@@ -74,6 +75,7 @@ const cases: { [K in keyof Mutators]: Case } = {
   setSlotParam: (s) => MIXING_MUTATORS.setSlotParam(s, 1, 'comp', 'ratio', 4),
   setDuckKey: (s) => MIXING_MUTATORS.setDuckKey(s, 2, 1),
   setSend: (s) => MIXING_MUTATORS.setSend(s, 1, 'delay', { levelDb: -12, timing: 'preFader' }),
+  setOutputBus: (s) => MIXING_MUTATORS.setOutputBus(s, 1, 'group2'),
   addAutomationPoint: (s) =>
     MIXING_MUTATORS.addAutomationPoint(s, 1, 'pan', {
       id: 'p',
@@ -87,6 +89,7 @@ const cases: { [K in keyof Mutators]: Case } = {
   clearAutomation: (s) => MIXING_MUTATORS.clearAutomation(s, 2, 'fader'),
   setBusGain: (s) => MIXING_MUTATORS.setBusGain(s, 'reverb', -4),
   setBusParam: (s) => MIXING_MUTATORS.setBusParam(s, 'delay', 'feedback', 0.4),
+  setGroupGain: (s) => MIXING_MUTATORS.setGroupGain(s, 'group1', -3),
   setMasterFader: (s) => MIXING_MUTATORS.setMasterFader(s, -2),
   setMasterSlotBypass: (s) => MIXING_MUTATORS.setMasterSlotBypass(s, 'limiter', false),
   setMasterSlotParam: (s) => MIXING_MUTATORS.setMasterSlotParam(s, 'limiter', 'ceilingDb', -0.5),
@@ -152,6 +155,8 @@ describe('mixing project v2 file', () => {
     s = setDuckKey(s, 2, 1);
     s = MIXING_MUTATORS.trimClip(s, 1, 2, null);
     s = MIXING_MUTATORS.setLoop(s, { enabled: true, startSec: 1, endSec: 3 });
+    s = MIXING_MUTATORS.setOutputBus(s, 1, 'group1');
+    s = MIXING_MUTATORS.setGroupGain(s, 'group1', -4.5);
     expect(parseMixingState(serializeMixingState(s))).toEqual(s);
     expect(parseMixingState(JSON.parse(serializeMixingState(s)))).toEqual(s);
   });
@@ -161,6 +166,8 @@ describe('mixing project v2 file', () => {
     expect(parsed?.tracks[0].slots).toEqual(defaultTrackSlots());
     expect(parsed?.buses).toEqual(defaultBuses());
     expect(parsed?.master.slots).toEqual(defaultMasterSlots());
+    expect(parsed?.tracks[0].outputBus).toBeNull();
+    expect(parsed?.groups).toEqual(createMixingState().groups);
   });
 
   it.each([
@@ -198,8 +205,28 @@ describe('mixing project v2 file', () => {
       { version: 2, tracks: [{ id: 1, name: 'a', sends: { reverb: { timing: 'pre' } } }] },
     ],
     ['a short EQ', { version: 2, tracks: [{ id: 1, name: 'a', eq: [] }] }],
+    ['an unknown output bus', { version: 2, tracks: [{ id: 1, name: 'a', outputBus: 'reverb' }] }],
   ])('rejects %s', (_label, value) => {
     expect(parseMixingState(value)).toBeNull();
+  });
+});
+
+describe('gate threshold bounds', () => {
+  it('follow the dependencies the engine catalogue publishes', async () => {
+    const wasm = await loadIndexModule();
+    const info = wasm.masteringInsertParamInfo('dynamics.gate');
+    const bounded = (name: string, params: Record<string, number>) => {
+      const control = TRACK_SLOT_CONTROLS.gate.find((c) => c.name === name)!;
+      const dependsOn = info.find((p: { name: string }) => p.name === name)?.dependsOn ?? [];
+      const { min, max } = boundedControl(control, params, dependsOn);
+      return [min, max];
+    };
+    const params = { ...defaultTrackSlots().gate.params, thresholdDb: -30, closeThresholdDb: -40 };
+    expect(bounded('thresholdDb', params)).toEqual([-40, 0]);
+    expect(bounded('closeThresholdDb', params)).toEqual([-80, -30]);
+    // At the defaults the two meet at −50 dB.
+    expect(bounded('thresholdDb', defaultTrackSlots().gate.params)).toEqual([-50, 0]);
+    expect(bounded('closeThresholdDb', defaultTrackSlots().gate.params)).toEqual([-80, -50]);
   });
 });
 

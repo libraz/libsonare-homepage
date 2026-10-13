@@ -6,6 +6,15 @@
  * `RealtimeEngine.setMasterStripJson` (or the worklet facade's).
  */
 
+/**
+ * The master strip's reserved mixer parameter ids. Moving the fader id leaves
+ * the strip and its limiter in place, which re-sending the strip scene would
+ * not. Tracks and buses resolve theirs through the engine, since those ids name
+ * the strip.
+ */
+export const MASTER_FADER_PARAM_ID = 0x4d58ff01;
+export const MASTER_PAN_PARAM_ID = 0x4d58ff02;
+
 /** Master-strip insert processor; realtime-insertable, 129 samples of latency at 48 kHz. */
 export const MASTER_LIMITER_PROCESSOR = 'maximizer.truePeakLimiter';
 /** Output ceiling in dBTP. */

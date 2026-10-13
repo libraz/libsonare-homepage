@@ -146,15 +146,6 @@ export const SLIDE_GLIDE_MS = 60;
  */
 export const SLIDE_LEAD_FRAMES = 128;
 
-// ------------------------------------------------------------------- output
-
-/**
- * Reserved master-fader parameter id: `(1297612800 | (255 << 8) | 1) >>> 0`.
- * Moving it leaves the strip and its limiter in place, which re-sending the
- * strip scene would not.
- */
-export const MASTER_FADER_PARAM_ID = 1297678081;
-
 // ------------------------------------------------------------- knob ranges
 
 export interface KnobRange {

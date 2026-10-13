@@ -12,6 +12,7 @@ import MasteringModuleEditor from '@/demos/mastering/MasteringModuleEditor.vue';
 import MasteringMonitor from '@/demos/mastering/MasteringMonitor.vue';
 import MasteringParamGrid from '@/demos/mastering/MasteringParamGrid.vue';
 import MasteringRack from '@/demos/mastering/MasteringRack.vue';
+import MasteringRepairEditor from '@/demos/mastering/MasteringRepairEditor.vue';
 import MasteringSourceBar from '@/demos/mastering/MasteringSourceBar.vue';
 import MasteringTimeline from '@/demos/mastering/MasteringTimeline.vue';
 import { jaCopy, MASTERING_COPY } from '@/demos/mastering/masteringCopy';
@@ -109,6 +110,16 @@ describe('MasteringParamGrid', () => {
     expect(params).toHaveLength(1);
     expect(params[0][0]).toBe('cutoff0Hz');
     expect(params[0][1]).toBeGreaterThan(220);
+  });
+
+  it('keeps each crossover on its side of the other, as the engine orders them', () => {
+    const wrapper = mount(MasteringParamGrid, {
+      props: { slotIndex: MASTERING_SLOT.multiband, insert: insert() },
+    });
+    const slider = (label: string) =>
+      wrapper.findAll('[role="slider"]').find((node) => node.attributes('aria-label') === label)!;
+    expect(slider('Low / mid').attributes('aria-valuemax')).toBe('4499');
+    expect(slider('Mid / high').attributes('aria-valuemin')).toBe('221');
   });
 
   it('streams a realtime parameter between begin and end', async () => {
@@ -235,6 +246,23 @@ describe('MasteringMonitor', () => {
     await wrapper.find('input[role="switch"]').setValue(false);
     expect(wrapper.emitted('match')?.[0]).toEqual([false]);
   });
+
+  it('keeps one lane in the tab order and moves with arrow keys past an unloaded reference', async () => {
+    const wrapper = mount(MasteringMonitor, {
+      props: {
+        lane: 'before',
+        matchLoudness: false,
+        gains: { after: 0, before: 0, reference: 0 },
+        canReference: false,
+      },
+    });
+    const radios = wrapper.findAll('[role="radio"]');
+    expect(radios.map((radio) => radio.attributes('tabindex'))).toEqual(['-1', '0', '-1']);
+    expect(radios[2].text()).toContain('not loaded');
+    expect(wrapper.find('[title]').exists()).toBe(false);
+    await radios[1].trigger('keydown', { key: 'ArrowRight' });
+    expect(wrapper.emitted('lane')?.[0]).toEqual(['after']);
+  });
 });
 
 describe('MasteringExportPanel', () => {
@@ -250,7 +278,10 @@ describe('MasteringExportPanel', () => {
   it('offers refit-and-export while the fit is stale and drops dither for float', async () => {
     const wrapper = mount(MasteringExportPanel, { props: base });
     expect(wrapper.find('.export__primary').text()).toBe('Refit and export');
-    expect(wrapper.find('.export__badge').text()).toBe('Target not refitted');
+    expect(wrapper.find('.export__badge').text()).toContain('Target not refitted');
+    expect(wrapper.find('.export__badge button').attributes('aria-label')).toBe(
+      'Target not refitted',
+    );
     const [formats, dithers] = wrapper.findAll('[role="radiogroup"]');
     await formats.findAll('button')[0].trigger('click');
     await dithers.findAll('button')[2].trigger('click');
@@ -396,5 +427,109 @@ describe('MasteringChoiceGrid and MasteringSourceBar', () => {
     Object.defineProperty(input.element, 'files', { value: [file] });
     await input.trigger('change');
     expect(wrapper.emitted('file')?.[0]).toEqual([file]);
+  });
+
+  it('announces an error as an alert and lets the visitor dismiss the reset notes', async () => {
+    const wrapper = mount(MasteringSourceBar, {
+      props: {
+        info: null,
+        loading: false,
+        pendingRestore: false,
+        restoredName: null,
+        notices: ['eq.2.q'],
+        error: 'This file could not be decoded.',
+      },
+    });
+    const alert = wrapper.find('[role="alert"]');
+    expect(alert.classes()).toContain('demo-notice--error');
+    expect(alert.text()).toContain('could not be decoded');
+    await wrapper.find('.demo-notice__dismiss').trigger('click');
+    expect(wrapper.emitted('dismissNotices')).toHaveLength(1);
+  });
+});
+
+describe('MasteringRepairEditor', () => {
+  const props = () => ({
+    repair: defaultMasteringState().repair,
+    progress: null,
+    failed: false,
+    detection: null,
+    detecting: false,
+    canDetect: true,
+  });
+  const defects = {
+    measured: true,
+    clickCount: 12,
+    clickRejected: 0,
+    clickLongestRunSamples: 3,
+    clickPerSecond: 3,
+    crackleSampleCount: 0,
+    crackleSampleFraction: 0,
+    cracklePerSecond: 0,
+    clipSampleCount: 40,
+    clipRunCount: 4,
+    clipLongestRunSamples: 12,
+    clipSampleFraction: 0.001,
+    clipFlatRunCount: 4,
+    clipFlatSampleCount: 40,
+    clipLongestFlatRunSamples: 12,
+    clipFlatLevel: 0.42,
+    noiseFloorDbfs: -72,
+    noiseBandPeakDbfs: -60,
+    noiseBandPeakIndex: 3,
+    humFundamentalHz: 60,
+    humFundamentalProminence: 20,
+    humHarmonics: 4,
+    humFundamentalDbfs: -30,
+    humPeakHarmonicDbfs: -30,
+    lateDecayRatioDb: -20,
+  };
+
+  it('asks for a detection and offers no suggestion before one', async () => {
+    const wrapper = mount(MasteringRepairEditor, { props: props() });
+    const detect = wrapper.findAll('button').find((button) => button.text() === 'Detect')!;
+    await detect.trigger('click');
+    expect(wrapper.emitted('detect')).toHaveLength(1);
+    expect(wrapper.text()).not.toContain('Apply suggestion');
+    expect(wrapper.find('.repair-stage__finding').exists()).toBe(false);
+  });
+
+  it('shows what was measured per stage and applies the suggestion', async () => {
+    const wrapper = mount(MasteringRepairEditor, {
+      props: {
+        ...props(),
+        detection: {
+          recommended: { declick: { threshold: 0.8 }, dehum: { fundamentalHz: 60 } },
+          defects,
+          declipThresholdSafe: false,
+        },
+      },
+    });
+    const findings = wrapper.findAll('.repair-stage__finding').map((node) => node.text());
+    expect(findings[0]).toContain('Not needed');
+    expect(findings[0]).toContain('rewrite unclipped audio');
+    expect(findings[1]).toContain('Suggested');
+    expect(findings[1]).toContain('3.0 clicks/s');
+    expect(findings[3]).toContain('60 Hz hum');
+    const apply = wrapper.findAll('button').find((button) => button.text() === 'Apply suggestion')!;
+    await apply.trigger('click');
+    expect(wrapper.emitted('applySuggestion')).toHaveLength(1);
+  });
+
+  it('says so when nothing stands out', () => {
+    const wrapper = mount(MasteringRepairEditor, {
+      props: {
+        ...props(),
+        detection: { recommended: {}, defects, declipThresholdSafe: true },
+      },
+    });
+    expect(wrapper.find('.demo-notice--success').text()).toContain('no repair is suggested');
+  });
+
+  it('reports a failed preprocess as an error with a retry', async () => {
+    const wrapper = mount(MasteringRepairEditor, { props: { ...props(), failed: true } });
+    expect(wrapper.find('[role="alert"]').text()).toContain('not applied');
+    await wrapper.find('[role="alert"] button').trigger('click');
+    expect(wrapper.emitted('retry')).toHaveLength(1);
   });
 });

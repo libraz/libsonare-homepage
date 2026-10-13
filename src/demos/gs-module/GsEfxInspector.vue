@@ -9,6 +9,7 @@
  * model; this panel describes the modern mapping only.
  */
 import { computed } from 'vue';
+import { DemoEmpty, DemoNotice, Tooltip } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { bindingLabels, localizedOrdinalName, localizedStageName } from './gsBindingText';
 import {
@@ -45,6 +46,10 @@ const copy = computed(() =>
   localizedValue({
     en: {
       title: 'Insertion effect',
+      help: 'One insertion effect, shared by every part whose EFX switch is on. Pick a GS effect type; the badge says whether this build changes the sound with it, measured against the dry signal.',
+      slotsHelp:
+        'Each slot is one parameter byte of the type, 0 to 127. A row names the control of the modern insert chain the byte reaches and the law that maps it; a dimmed row did not change the sound in the default-state probe.',
+      heldLabel: 'Why this row is dimmed',
       modernMapping:
         'Modern mapping: targets below name the controls in the modern insert chain. Classic uses a dedicated whole-type model.',
       explain: {
@@ -77,6 +82,10 @@ const copy = computed(() =>
     },
     ja: {
       title: 'インサーションエフェクト',
+      help: 'EFX スイッチがオンのパートすべてが共有する、1 系統のインサーションエフェクトです。GS のエフェクトタイプを選ぶと、そのタイプでこのビルドが音を変えるかどうかを、ドライ信号と比べて測った結果がバッジに出ます。',
+      slotsHelp:
+        '各スロットはタイプのパラメータ 1 バイト（0〜127）です。行には、そのバイトが届くモダンのインサートチェーンの制御先と、値を写す法則を示します。薄く表示された行は、既定状態の試聴で音が変わらなかったものです。',
+      heldLabel: 'この行が薄く表示される理由',
       modernMapping:
         'モダンのマッピング：下のターゲットはモダンのインサートチェーンの制御先です。クラシックはタイプ全体を専用モデルで処理します。',
       explain: {
@@ -119,6 +128,8 @@ function typeName(key: string): string {
 }
 
 const counts = computed(() => efxStandingCounts());
+/** Type 00 00 is the effect bypassed: leaving the sound alone is what it is for. */
+const isThru = computed(() => props.efx.type === 0);
 const current = computed(() => efxType(props.efx.type));
 const standing = computed<GsEfxStanding>(() =>
   current.value ? efxStanding(current.value) : 'inert',
@@ -226,14 +237,17 @@ function ratio(value: number): string {
 <template>
   <section class="gs-rack" :aria-label="copy.title">
     <div class="gs-rack__head">
-      <span class="gs-rack__title">{{ copy.title }}</span>
+      <span class="gs-rack__title">
+        {{ copy.title }}
+        <Tooltip :title="copy.title" :body="copy.help" />
+      </span>
       <span class="gs-rack__aside">
         {{ copy.summary(counts.adjustable, counts.fixed, counts.inert) }}
       </span>
     </div>
 
     <select
-      class="gs-efx__select"
+      class="demo-field gs-efx__select"
       :value="props.efx.type"
       :aria-label="copy.title"
       @change="emit('selectType', Number(($event.target as HTMLSelectElement).value))"
@@ -243,7 +257,7 @@ function ratio(value: number): string {
       </option>
     </select>
 
-    <p class="gs-efx__mapping">{{ copy.modernMapping }}</p>
+    <DemoNotice tone="hint">{{ copy.modernMapping }}</DemoNotice>
 
     <div v-if="current" class="gs-efx__standing">
       <span class="gs-badge" :class="standing === 'adjustable' ? 'gs-badge--on' : 'gs-badge--inert'">
@@ -261,14 +275,19 @@ function ratio(value: number): string {
       </dl>
     </div>
 
-    <p class="gs-note">{{ copy.explain[standing] }}</p>
+    <DemoNotice :key="standing" :tone="standing === 'adjustable' || isThru ? 'hint' : 'warn'">
+      {{ copy.explain[standing] }}
+    </DemoNotice>
 
     <div class="gs-efx__slots-head">
-      <span class="gs-rack__title">{{ copy.slots }}</span>
+      <span class="gs-rack__title">
+        {{ copy.slots }}
+        <Tooltip :title="copy.slots" :body="copy.slotsHelp" />
+      </span>
       <span class="gs-rack__aside">{{ copy.slotCount(namedCount, liveCount) }}</span>
     </div>
 
-    <p v-if="!rows.length" class="gs-note">{{ copy.none }}</p>
+    <DemoEmpty v-if="!rows.length" compact :title="copy.none" />
 
     <ul v-else class="gs-efx__slots">
       <li v-for="row in rows" :key="row.slot" class="gs-efx__slot" :class="{ 'gs-efx__slot--probe-inert': !row.live }">
@@ -289,15 +308,18 @@ function ratio(value: number): string {
             <span class="gs-efx__slot-stage">{{ row.enableStages.join(' / ') }}</span>
             <span class="gs-efx__slot-param">{{ row.enableState }}</span>
           </template>
-          <small class="gs-efx__form">{{ row.form }}</small>
+          <small class="gs-efx__form">
+            {{ row.form }}
+            <Tooltip v-if="!row.live" :title="copy.heldLabel" :body="copy.held" :aria-label="copy.heldLabel" />
+          </small>
         </span>
 
         <input
           type="range"
+          class="demo-range"
           min="0"
           max="127"
           :value="props.efx.params[row.slot]"
-          :title="row.live ? undefined : copy.held"
           :aria-label="row.targets.length ? row.targets.map((target) => `${target.stage} ${target.param}`).join(' / ') : `${copy.slots} ${row.slot}`"
           @input="emit('updateSlot', row.slot, Number(($event.target as HTMLInputElement).value))"
         />
@@ -318,20 +340,6 @@ function ratio(value: number): string {
 <style scoped>
 .gs-efx__select {
   inline-size: 100%;
-  padding: 6px 8px;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 6px;
-  background: var(--demo-control-bg-strong);
-  color: var(--demo-text-strong);
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.gs-efx__mapping {
-  margin: 8px 0 0;
-  color: var(--demo-text-muted);
-  font-size: 10px;
-  line-height: 1.35;
 }
 
 .gs-efx__standing {
@@ -389,8 +397,9 @@ function ratio(value: number): string {
   border-radius: 4px;
 }
 
-.gs-efx__slot--probe-inert {
-  opacity: 0.82;
+.gs-efx__slot--probe-inert .gs-efx__slot-param,
+.gs-efx__slot--probe-inert .gs-efx__slot-value {
+  color: var(--demo-text-muted);
 }
 
 .gs-efx__slot-index {
@@ -450,6 +459,9 @@ function ratio(value: number): string {
 }
 
 .gs-efx__form {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   color: var(--demo-text-faint);
   font-family: var(--font-mono);
   font-size: 8px;

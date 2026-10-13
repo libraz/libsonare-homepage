@@ -1,7 +1,11 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+import { DemoNotice, TermLabel, Tooltip } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import type { GoldbergMovement } from '@/demos/practice/goldberg';
 import type { PracticeCopy } from '@/demos/practice/practiceCopy';
+import { ACCURACY_WEIGHTS, GOOD_SEC, GREAT_SEC, PERFECT_SEC } from '@/demos/practice/useRhythmGame';
+import { fill } from '@/utils/template';
 
 const props = defineProps<{
   copy: PracticeCopy;
@@ -34,6 +38,17 @@ function movementText(movement: GoldbergMovement): string {
   return tag ? `${label} - ${tag}` : label;
 }
 
+const scoringHelp = computed(() =>
+  fill(props.copy.help.game.body, {
+    perfect: Math.round(PERFECT_SEC * 1000),
+    great: Math.round(GREAT_SEC * 1000),
+    good: Math.round(GOOD_SEC * 1000),
+    perfectWeight: Math.round(ACCURACY_WEIGHTS.perfect * 100),
+    greatWeight: Math.round(ACCURACY_WEIGHTS.great * 100),
+    goodWeight: Math.round(ACCURACY_WEIGHTS.good * 100),
+  }),
+);
+
 function onSelect(event: Event): void {
   emit('select', Number((event.target as HTMLSelectElement).value));
 }
@@ -42,11 +57,11 @@ function onSelect(event: Event): void {
 <template>
   <div class="practice__bar">
     <div class="practice__selector">
-      <span class="practice__select-label demo-label">{{ copy.selector.label }}</span>
+      <TermLabel :label="copy.selector.label" :title="copy.help.movement.title" :body="copy.help.movement.body" />
       <div class="practice__selector-row">
         <button
           type="button"
-          class="practice__nav"
+          class="demo-btn demo-btn--icon practice__nav"
           :disabled="isBusy || currentMovement <= 0"
           :aria-label="copy.selector.prev"
           @click="$emit('previous')"
@@ -66,7 +81,7 @@ function onSelect(event: Event): void {
           </svg>
         </button>
         <select
-          class="practice__select"
+          class="demo-field practice__select"
           :value="currentMovement"
           :aria-label="copy.selector.aria"
           :disabled="isBusy"
@@ -78,7 +93,7 @@ function onSelect(event: Event): void {
         </select>
         <button
           type="button"
-          class="practice__nav"
+          class="demo-btn demo-btn--icon practice__nav"
           :disabled="isBusy || currentMovement >= movements.length - 1"
           :aria-label="copy.selector.next"
           @click="$emit('next')"
@@ -103,7 +118,7 @@ function onSelect(event: Event): void {
     <div class="practice__gamebar">
       <button
         type="button"
-        class="practice__game-toggle"
+        class="demo-btn practice__game-toggle"
         :class="{ 'is-on': gameMode }"
         :aria-pressed="gameMode"
         @click="$emit('toggleGame')"
@@ -115,22 +130,22 @@ function onSelect(event: Event): void {
         </svg>
         <span>{{ gameMode ? copy.game.on : copy.game.enable }}</span>
       </button>
+      <Tooltip :title="copy.help.game.title" :body="scoringHelp" :ariaLabel="copy.help.game.aria" />
       <button
         v-if="midiSupported"
         type="button"
-        class="practice__midi"
+        class="demo-btn practice__midi"
         :class="{ 'is-on': midiConnected }"
         :disabled="midiConnecting"
         @click="$emit('connectMidi')"
       >
-        <span class="practice__midi-dot" :class="{ 'is-on': midiConnected }"></span>
+        <span class="practice__midi-dot" :class="{ 'is-on': midiConnected }" aria-hidden="true"></span>
         {{ midiConnected ? copy.midi.connected : copy.midi.connect }}
       </button>
       <span v-else class="practice__midi-note">{{ copy.midi.unsupported }}</span>
-      <span v-if="midiError" class="practice__midi-note practice__midi-note--error" role="alert">
-        {{ copy.midi.denied }}
-      </span>
-      <span v-else-if="midiWaiting" class="practice__midi-note">{{ copy.midi.waiting }}</span>
+      <span v-if="midiWaiting && !midiError" class="practice__midi-note">{{ copy.midi.waiting }}</span>
     </div>
+
+    <DemoNotice v-if="midiError" tone="error" class="practice__bar-notice">{{ copy.midi.denied }}</DemoNotice>
   </div>
 </template>

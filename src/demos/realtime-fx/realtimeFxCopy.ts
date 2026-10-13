@@ -39,8 +39,7 @@ export const enCopy = {
   actions: {
     start: 'Start engine',
     stop: 'Stop',
-    monitorOn: 'Speaker on',
-    monitorOff: 'Speaker off',
+    speaker: 'Speaker',
   },
   controls: {
     pitch: 'Pitch',
@@ -50,15 +49,26 @@ export const enCopy = {
     output: 'Output',
     bypass: 'Bypass',
   },
+  formantModes: { label: 'Formant mode', relative: 'Follow pitch', absolute: 'Keep size' },
+  statusFields: { character: 'CHAR', input: 'IN', output: 'OUT', latency: 'LAT' },
+  meters: { input: 'IN', output: 'OUT', clip: 'CLIP' },
+  notes: {
+    outOfReach:
+      'Keep size can move the formants only 0.55–1.65× away from where the pitch shift puts them. This pitch and formant pair is out of reach, so the engine keeps the last setting.',
+  },
   metrics: {
     inputPeak: 'Input Peak',
     outputPeak: 'Output Peak',
     inputRms: 'Input RMS',
     outputRms: 'Output RMS',
     latency: 'Latency',
-    clip: 'Output clipped — click to reset',
+    clip: 'Output clipped. Reset the clip indicator',
   },
   help: { docs: 'Open realtime docs' },
+  guide: {
+    title: 'Start the engine, then pick a character',
+    body: 'Start the engine and allow the microphone, then choose a character and shape it with the sliders. Bypass compares against your dry voice. The speaker stays off until you turn it on.',
+  },
   safety: {
     title: 'Use headphones before turning speakers on.',
     body: 'The microphone is routed to your default browser output. Speakers can feed back into the mic and become loud quickly. Speaker output starts off by default.',
@@ -85,6 +95,12 @@ export const enCopy = {
         body: 'Scales the resonances that define vocal character, shifting the perceived size of the speaker.',
         tip: 'Below 1 lowers the resonances; above 1 raises them. Adjust while listening to the source voice; changing formants opposite to pitch does not guarantee a natural result.',
         default: '1.00',
+      },
+      formantMode: {
+        title: 'Formant Mode',
+        body: 'Follow pitch lets the pitch shift carry the formants with it, so a higher voice also sounds smaller; Formant then scales them further. Keep size holds the formants where your voice has them and Formant sets them against that, whatever the pitch.',
+        tip: 'Keep size adds one analysis frame of latency. Switch it while shifting pitch to hear the voice keep its size.',
+        default: 'Follow pitch',
       },
       brightness: {
         title: 'Brightness',
@@ -179,8 +195,7 @@ export const jaCopy: typeof enCopy = {
   actions: {
     start: 'エンジン開始',
     stop: '停止',
-    monitorOn: 'スピーカー ON',
-    monitorOff: 'スピーカー OFF',
+    speaker: 'スピーカー',
   },
   controls: {
     pitch: 'ピッチ',
@@ -190,15 +205,30 @@ export const jaCopy: typeof enCopy = {
     output: '出力',
     bypass: 'バイパス',
   },
+  formantModes: {
+    label: 'フォルマント基準',
+    relative: 'ピッチに追従',
+    absolute: '声の大きさを保つ',
+  },
+  statusFields: { character: 'キャラ', input: '入力', output: '出力', latency: '遅延' },
+  meters: { input: '入力', output: '出力', clip: 'CLIP' },
+  notes: {
+    outOfReach:
+      '「声の大きさを保つ」では、フォルマントを動かせるのはピッチシフト後の位置から 0.55〜1.65 倍の範囲です。このピッチとフォルマントの組み合わせは範囲外のため、エンジンは直前の設定を保ちます。',
+  },
   metrics: {
     inputPeak: '入力ピーク',
     outputPeak: '出力ピーク',
     inputRms: '入力 RMS',
     outputRms: '出力 RMS',
     latency: 'レイテンシ',
-    clip: '出力クリップ — クリックでリセット',
+    clip: '出力がクリップしました。クリップ表示をリセット',
   },
-  help: { docs: 'リアルタイム資料を開く' },
+  help: { docs: 'リアルタイムのドキュメントを開く' },
+  guide: {
+    title: 'エンジンを開始し、キャラクターを選ぶ',
+    body: 'エンジンを開始してマイクを許可したら、キャラクターを選んでスライダーで整えます。バイパスで素の声と聴き比べられます。スピーカーは ON にするまで鳴りません。',
+  },
   safety: {
     title: 'スピーカーを ON にする前にヘッドホンを使ってください。',
     body: 'マイク音声はブラウザの既定出力へ戻ります。スピーカー出力はマイクへ回り込み、急に大きなハウリングになる場合があります。初期状態ではスピーカー OFF です。',
@@ -226,6 +256,12 @@ export const jaCopy: typeof enCopy = {
         body: '声のキャラクターを決める共鳴を伸縮させ、話者の体格感を変えます。',
         tip: '1 より下で共鳴周波数が下がり、上で上がります。元の声を聴きながら調整してください。ピッチと逆方向に動かしても、自然な声になるとは限りません。',
         default: '1.00',
+      },
+      formantMode: {
+        title: 'フォルマント基準',
+        body: '「ピッチに追従」ではピッチシフトがフォルマントも一緒に動かすため、声が高いほど小柄に聞こえ、フォルマントはそこからさらに伸縮します。「声の大きさを保つ」ではフォルマントを元の声の位置に留め、ピッチに関係なくそこを基準にフォルマントを決めます。',
+        tip: '「声の大きさを保つ」は解析 1 フレーム分レイテンシが増えます。ピッチを動かしながら切り替えると、声の大きさが保たれるのが聴き取れます。',
+        default: 'ピッチに追従',
       },
       brightness: {
         title: 'ブライトネス',

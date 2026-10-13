@@ -1,7 +1,7 @@
 /**
  * Live metering for /mixing. Engine meter telemetry covers the master (peak,
  * RMS, true peak, M/S/I, correlation, GR), every lane (input peak before trim,
- * post-fader peak/RMS, the deepest and each insert's GR) and both aux buses. Snapshots arrive
+ * post-fader peak/RMS, the deepest and each insert's GR) and every bus. Snapshots arrive
  * at the engine's meter rate and are folded into one frame per animation
  * frame. Spectrum and goniometer come from an analyser tap on the engine
  * output; the selected track's source spectrum at the playhead feeds the EQ.
@@ -20,8 +20,8 @@ import {
   type UseSonareEngine,
 } from '@/composables/useSonareEngine';
 import type { MixAudio } from '@/demos/mixing/mixingEngine';
-import { AUX_BUSES, type AuxBusName, type MixTrackState } from '@/demos/mixing/mixingState';
-import { meterSources } from '@/demos/mixing/mixingUi';
+import type { MixTrackState } from '@/demos/mixing/mixingState';
+import { METERED_BUSES, type MixBusName, meterSources } from '@/demos/mixing/mixingUi';
 
 export interface StripReading {
   /** Strip input before trim, dBFS. */
@@ -50,7 +50,7 @@ export interface MasterReading extends StripReading {
 export interface MixMeterFrame {
   master: MasterReading;
   tracks: Readonly<Record<number, StripReading>>;
-  buses: Readonly<Record<AuxBusName, StripReading>>;
+  buses: Readonly<Record<MixBusName, StripReading>>;
 }
 
 const FLOOR: [number, number] = [METER_FLOOR_DB, METER_FLOOR_DB];
@@ -76,8 +76,8 @@ export function silentFrame(): MixMeterFrame {
       integratedLufs: Number.NEGATIVE_INFINITY,
     },
     tracks: {},
-    buses: Object.fromEntries(AUX_BUSES.map((bus) => [bus, silentStrip()])) as Record<
-      AuxBusName,
+    buses: Object.fromEntries(METERED_BUSES.map((bus) => [bus, silentStrip()])) as Record<
+      MixBusName,
       StripReading
     >,
   };

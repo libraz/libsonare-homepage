@@ -24,11 +24,9 @@ const props = withDefaults(
     defaultValue?: number;
     disabled?: boolean;
     locked?: boolean;
-    /** Help shown while locked. */
-    lockedHint?: string;
     scale?: boolean;
   }>(),
-  { defaultValue: 0, disabled: false, locked: false, lockedHint: undefined, scale: true },
+  { defaultValue: 0, disabled: false, locked: false, scale: true },
 );
 
 const emit = defineEmits<{
@@ -124,7 +122,6 @@ function reset(): void {
   <div
     class="fader"
     :class="{ 'fader--dragging': dragging, 'fader--locked': locked, 'fader--disabled': disabled }"
-    :title="locked ? lockedHint : undefined"
   >
     <div v-if="scale" class="fader__scale" aria-hidden="true">
       <span v-for="mark in marks" :key="mark.db" :style="{ bottom: mark.bottom }">{{ mark.text }}</span>

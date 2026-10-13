@@ -1,6 +1,22 @@
 import { ref, shallowRef } from 'vue';
 import type { VoicePresetId } from '@/wasm/index';
 
+/**
+ * How the Formant control acts. `relative`: the retune carries the formants
+ * with the pitch and Formant scales them afterwards. `absolute`: Formant sets
+ * them against the input's whatever the pitch, one analysis frame later.
+ */
+export type FormantMode = 'relative' | 'absolute';
+
+/** Range of `formant / 2^(pitch / 12)` the engine accepts in absolute mode. */
+export const ABSOLUTE_FORMANT_WARP = { min: 0.55, max: 1.65 } as const;
+
+/** Whether an absolute-mode changer accepts `formant` at `pitchSemitones`. */
+export function absoluteFormantInReach(pitchSemitones: number, formant: number): boolean {
+  const warp = formant / 2 ** (pitchSemitones / 12);
+  return warp >= ABSOLUTE_FORMANT_WARP.min && warp <= ABSOLUTE_FORMANT_WARP.max;
+}
+
 export interface RealtimeFxParams {
   /** Library character preset that supplies the full DSP chain. */
   preset: VoicePresetId;
@@ -12,6 +28,7 @@ export interface RealtimeFxParams {
   brightness: number;
   /** Whether the formant stage is explicitly engaged by the user. */
   formantEngaged: boolean;
+  formantMode: FormantMode;
   /** Wet/dry mix handed to the native chain (0..1). */
   wet: number;
   /** Post-chain monitor gain applied in the worklet, capped at unity to stay
@@ -29,10 +46,10 @@ export interface FxMeterState {
 
 /**
  * Headline macro values for each library character preset, mirrored from
- * `realtimeVoiceChangerPresetJson(...)` so the UI sliders can show truthful
- * starting positions before the audio engine (and its WASM) is even running.
- * The worklet still loads the *full* preset chain by id; these only seed the
- * four live macros the demo exposes.
+ * `realtimeVoiceChangerPresetConfig(...)` so the sliders show truthful
+ * starting positions before the WASM is loaded; fxPresets.test.ts pins the
+ * mirror against the engine. The worklet still loads the full preset chain by
+ * id; these only seed the four live macros the demo exposes.
  */
 export interface VoicePresetMacros {
   pitchSemitones: number;
@@ -87,6 +104,7 @@ class LibsonareVoiceProcessor extends AudioWorkletProcessor {
     this.preset = 'neutral-monitor';
     this.pitch = 0; this.formant = 1; this.brightness = 0.1; this.wet = 1;
     this.formantEngaged = false; this.baseFormantAmount = 0;
+    this.formantMode = 'relative';
     this.outputGain = 0.85; this.bypass = false;
 
     this.vc = null; this.base = null;
@@ -99,14 +117,39 @@ class LibsonareVoiceProcessor extends AudioWorkletProcessor {
       .then((mod) => {
         this.mod = mod;
         if (!mod.createRealtimeVoiceChanger) throw new Error('RealtimeVoiceChanger is not available in this WASM build');
-        this.vc = mod.createRealtimeVoiceChanger(this.preset);
-        this.vc.prepare(sampleRate, MAX_BLOCK, 1);
+        this.vc = this.createChanger();
         this.loadBase();
         this.applyConfig();
         this.ready = true;
         this.port.postMessage({ type: 'ready', latencySamples: this.vc.latencySamples() });
       })
       .catch((err) => this.port.postMessage({ type: 'error', error: String(err) }));
+  }
+
+  // The preset's full chain with the formant mode applied.
+  presetConfig() {
+    const config = JSON.parse(this.mod.realtimeVoiceChangerPresetJson(this.preset));
+    config.dsp.formant.mode = this.formantMode;
+    return config;
+  }
+
+  // The formant mode is fixed once a changer is prepared, so it is set first.
+  createChanger() {
+    const vc = this.mod.createRealtimeVoiceChanger(this.preset);
+    vc.setConfig(this.presetConfig());
+    vc.prepare(sampleRate, MAX_BLOCK, 1);
+    return vc;
+  }
+
+  // A mode switch swaps in a new changer; its latency differs by one analysis frame.
+  replaceChanger() {
+    const next = this.createChanger();
+    this.vc.delete();
+    this.vc = next;
+    this.inView = null; this.outView = null; this.viewGeneration = -1;
+    this.wasProcessing = false;
+    this.loadBase();
+    this.port.postMessage({ type: 'latency', latencySamples: this.vc.latencySamples() });
   }
 
   loadBase() {
@@ -140,15 +183,18 @@ class LibsonareVoiceProcessor extends AudioWorkletProcessor {
   onMessage(msg) {
     if (msg.type === 'params') {
       const p = msg.params;
-      // Record the preset id even before the engine exists: params can arrive
-      // ahead of module init, and the stored id seeds createRealtimeVoiceChanger
-      // so a preset chosen during startup is never dropped.
-      if (p.preset && p.preset !== this.preset) {
-        this.preset = p.preset;
-        if (this.vc) {
-          try { this.vc.setConfig(this.preset); this.loadBase(); }
-          catch (e) { /* preset id rejected; keep current */ }
-        }
+      // Record preset and mode even before the engine exists: params can arrive
+      // ahead of module init, and createChanger reads both, so a choice made
+      // during startup is never dropped.
+      const presetChanged = p.preset && p.preset !== this.preset;
+      const modeChanged = p.formantMode && p.formantMode !== this.formantMode;
+      if (presetChanged) this.preset = p.preset;
+      if (modeChanged) this.formantMode = p.formantMode;
+      if (this.vc && modeChanged) {
+        this.replaceChanger();
+      } else if (this.vc && presetChanged) {
+        try { this.vc.setConfig(this.presetConfig()); this.loadBase(); }
+        catch (e) { /* preset rejected; keep current */ }
       }
       this.pitch = p.pitchSemitones; this.formant = p.formant;
       this.brightness = p.brightness; this.wet = p.wet;
@@ -302,6 +348,12 @@ function toErrorCode(err: unknown): string {
   return 'start-failed';
 }
 
+/** Native processing latency (grain warmup) plus the device output buffer, in ms. */
+function outputLatencyMs(ctx: AudioContext, latencySamples: number | undefined): number {
+  const procSeconds = (latencySamples || 0) / ctx.sampleRate;
+  return Math.round((procSeconds + (ctx.baseLatency || 0)) * 1000);
+}
+
 export function useRealtimeFx(sonareUrl: string, wasmUrl: string) {
   const ready = ref(false);
   const monitoring = ref(false);
@@ -394,10 +446,10 @@ export function useRealtimeFx(sonareUrl: string, wasmUrl: string) {
           const msg = event.data;
           if (msg?.type === 'ready') {
             ready.value = true;
-            // Native processing latency (grain warmup) plus the device output buffer.
-            const procSeconds = (msg.latencySamples || 0) / ctx.sampleRate;
-            latencyMs.value = Math.round((procSeconds + (ctx.baseLatency || 0)) * 1000);
+            latencyMs.value = outputLatencyMs(ctx, msg.latencySamples);
             finishStartup(true);
+          } else if (msg?.type === 'latency') {
+            latencyMs.value = outputLatencyMs(ctx, msg.latencySamples);
           } else if (msg?.type === 'meter') meter.value = msg;
           else if (msg?.type === 'error') {
             error.value = 'engine-error';

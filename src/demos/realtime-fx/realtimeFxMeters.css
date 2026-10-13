@@ -38,22 +38,10 @@
   overflow: hidden;
 }
 
+/* Full-height zone gradient revealed from the bottom, as the shared PeakMeter does. */
 .rt-meter__fill {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  overflow: hidden;
-  /* Smooth the RMS bar so frame-to-frame level changes don't jump. */
-  transition: height 0.09s linear;
-}
-
-.rt-meter__zones {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 200px;
+  inset: 0;
   background: linear-gradient(
     to top,
     var(--demo-success) 0%,
@@ -63,6 +51,7 @@
     var(--demo-danger) 96%,
     var(--demo-danger) 100%
   );
+  will-change: clip-path;
 }
 
 .rt-meter__peak {
@@ -72,7 +61,6 @@
   height: 2px;
   transform: translateY(50%);
   background: var(--demo-text-strong);
-  transition: bottom 0.08s linear;
 }
 
 .rt-meter__hold {
@@ -83,7 +71,6 @@
   transform: translateY(50%);
   background: var(--demo-amber);
   box-shadow: 0 0 5px var(--demo-amber);
-  transition: bottom 0.12s linear;
 }
 
 .rt-clip {
@@ -104,6 +91,10 @@
   letter-spacing: 0.12em;
 }
 
+.rt-clip:disabled {
+  cursor: default;
+}
+
 .rt-clip:hover:not(:disabled) {
   border-color: var(--demo-accent);
   color: var(--demo-text);
@@ -117,8 +108,11 @@
 .rt-clip--lit {
   border-color: var(--demo-danger);
   background: var(--demo-danger);
-  color: #fff;
+  color: var(--demo-bg-elevated);
   box-shadow: 0 0 8px var(--demo-danger);
+  transition:
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    box-shadow var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .rt-meter b {
@@ -126,12 +120,3 @@
   font-family: var(--font-mono);
   font-size: 10px;
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .rt-meter__fill,
-  .rt-meter__peak,
-  .rt-meter__hold {
-    transition: none;
-  }
-}
-

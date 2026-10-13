@@ -11,7 +11,9 @@
  * the engine cannot take live (see {@link DISCRETE_PARAMS}) or to polarity is a
  * strip op, which rebuilds the strip, so the strip's live state is re-sent.
  * Channel delay is converted to samples at the track audio's rate, as clip
- * positions are, so it reaches the engine once the audio is loaded.
+ * positions are, so it reaches the engine once the audio is loaded. A subgroup
+ * is a declared bus with no strip: a track's lane sums into it instead of the
+ * master, and its gain is the bus fader.
  */
 import {
   AUTOMATION_CURVES,
@@ -22,6 +24,8 @@ import {
   type AuxBusName,
   arrangementEndSec,
   effectiveFaderDb,
+  GROUP_BUSES,
+  type GroupBusName,
   type InsertSlot,
   isTrackSilenced,
   MASTER_SLOT_PROCESSORS,
@@ -53,6 +57,7 @@ import type { EngineAutomationPoint, EngineBus, EqBand } from '@/wasm/index.js';
 export const MIX_TEMPO_BPM = 60;
 
 export const AUX_BUS_IDS: Readonly<Record<AuxBusName, number>> = { reverb: 1, delay: 2 };
+export const GROUP_BUS_IDS: Readonly<Record<GroupBusName, number>> = { group1: 3, group2: 4 };
 
 /** Insert index of each track slot (all pre-fader, in this order). */
 export const TRACK_SLOT_INDEX: Readonly<Record<TrackSlotName, number>> = {
@@ -156,15 +161,27 @@ function laneSends(track: MixTrackState): LaneSend[] {
   }));
 }
 
+/** Engine bus a track sums into; `0` is the master mix. */
+function outputBusId(track: MixTrackState): number {
+  return track.outputBus ? GROUP_BUS_IDS[track.outputBus] : 0;
+}
+
 function topologyOp(state: MixingState): EngineOp {
-  const buses: EngineBus[] = AUX_BUSES.map((bus) => ({
-    busId: AUX_BUS_IDS[bus],
-    gainDb: state.buses[bus].gainDb,
-  }));
+  const buses: EngineBus[] = [
+    ...AUX_BUSES.map((bus) => ({ busId: AUX_BUS_IDS[bus], gainDb: state.buses[bus].gainDb })),
+    ...GROUP_BUSES.map((group) => ({
+      busId: GROUP_BUS_IDS[group],
+      gainDb: state.groups[group].gainDb,
+    })),
+  ];
   return {
     type: 'topology',
     buses,
-    lanes: state.tracks.map((track) => ({ trackId: track.id, sends: laneSends(track) })),
+    lanes: state.tracks.map((track) => ({
+      trackId: track.id,
+      sends: laneSends(track),
+      outputBusId: outputBusId(track),
+    })),
   };
 }
 
@@ -315,6 +332,9 @@ export function buildFull(
   for (const bus of AUX_BUSES) {
     ops.push({ type: 'busGain', busId: AUX_BUS_IDS[bus], db: state.buses[bus].gainDb });
   }
+  for (const group of GROUP_BUSES) {
+    ops.push({ type: 'busGain', busId: GROUP_BUS_IDS[group], db: state.groups[group].gainDb });
+  }
   ops.push(...masterLiveOps(state));
   return ops;
 }
@@ -456,6 +476,9 @@ export function diff(
     if (sameLanes && !sameJson(laneSends(before), laneSends(track))) {
       ops.push({ type: 'sends', trackId: track.id, sends: laneSends(track) });
     }
+    if (sameLanes && before.outputBus !== track.outputBus) {
+      ops.push({ type: 'outputBus', trackId: track.id, busId: outputBusId(track) });
+    }
     ops.push(...diffTrack(prev, next, before, track, audio, engineRate));
   }
   for (const bus of AUX_BUSES) {
@@ -478,6 +501,11 @@ export function diff(
     }
     if (before.gainDb !== after.gainDb) {
       ops.push({ type: 'busGain', busId: AUX_BUS_IDS[bus], db: after.gainDb });
+    }
+  }
+  for (const group of GROUP_BUSES) {
+    if (prev.groups[group].gainDb !== next.groups[group].gainDb) {
+      ops.push({ type: 'busGain', busId: GROUP_BUS_IDS[group], db: next.groups[group].gainDb });
     }
   }
   const masterDiscrete = (state: MixingState) =>
@@ -513,46 +541,19 @@ export function diff(
   return ops;
 }
 
-/** Latency and tail of one insert, as `masteringInsertTiming` reports them. */
-export type InsertTiming = (
-  processor: string,
-  params: Record<string, number>,
-  sampleRate: number,
-) => { latencySamples: number; tailSamples: number };
-
 /**
- * Frames an export needs: the end of the last clip, the longest aux-bus tail,
- * and the latency of the longest path (track inserts and channel delay, then a
- * bus, then master).
+ * Frames an export needs, read from an engine `buildFull` has set up: the end
+ * of the last clip, the engine's processing latency and the longest tail it
+ * reports for the routes the mix declares.
  */
-export function exportFrames(state: MixingState, sampleRate: number, timing: InsertTiming): number {
-  const chainLatency = (inserts: Array<[string, Record<string, number>]>) =>
-    inserts.reduce(
-      (sum, [processor, params]) => sum + timing(processor, params, sampleRate).latencySamples,
-      0,
-    );
-  const trackLatency = Math.max(
-    0,
-    ...state.tracks.map(
-      (track) =>
-        chainLatency(
-          TRACK_SLOTS.map((name) => [TRACK_SLOT_PROCESSORS[name], track.slots[name].params]),
-        ) + Math.round((track.channelDelayMs / 1000) * sampleRate),
-    ),
-  );
-  const busTimings = AUX_BUSES.map((bus) =>
-    timing(AUX_BUS_PROCESSORS[bus], state.buses[bus].params, sampleRate),
-  );
-  const busLatency = Math.max(0, ...busTimings.map((t) => t.latencySamples));
-  const tail = Math.max(0, ...busTimings.map((t) => t.tailSamples));
-  const masterLatency = chainLatency(
-    MASTER_SLOTS.map((name) => [MASTER_SLOT_PROCESSORS[name], state.master.slots[name].params]),
-  );
+export function exportFrames(
+  state: MixingState,
+  sampleRate: number,
+  engine: { tailSamples(): number; graphLatencySamplesQ8(): number },
+): number {
   return (
     Math.ceil(arrangementEndSec(state) * sampleRate) +
-    tail +
-    trackLatency +
-    busLatency +
-    masterLatency
+    Math.ceil(engine.graphLatencySamplesQ8() / 256) +
+    engine.tailSamples()
   );
 }

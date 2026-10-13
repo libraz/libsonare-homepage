@@ -5,6 +5,7 @@
  * drag emits `begin` / `end` so the page folds it into one history entry.
  */
 import { computed, ref } from 'vue';
+import { Tooltip } from '@/components/ui';
 import type { ParamControl } from '@/demos/mixing/mixingUi';
 
 const props = withDefaults(
@@ -20,6 +21,7 @@ const props = withDefaults(
     defaultValue: number;
     disabled?: boolean;
     locked?: boolean;
+    /** Help shown beside the readout while locked. */
     lockedHint?: string;
   }>(),
   { caption: undefined, disabled: false, locked: false, lockedHint: undefined },
@@ -147,7 +149,6 @@ function reset(): void {
   <div
     class="knob"
     :class="{ 'knob--dragging': dragging, 'knob--locked': locked, 'knob--disabled': disabled }"
-    :title="locked ? lockedHint : undefined"
   >
     <span v-if="caption" class="knob__caption">{{ caption }}</span>
     <div
@@ -176,7 +177,10 @@ function reset(): void {
         <path class="knob__pointer" :d="`M ${pointer.from} L ${pointer.to}`" />
       </svg>
     </div>
-    <span class="knob__display">{{ display }}</span>
+    <span class="knob__display">
+      {{ display }}
+      <Tooltip v-if="locked && lockedHint" :title="label" :body="lockedHint" />
+    </span>
   </div>
 </template>
 
@@ -245,6 +249,9 @@ function reset(): void {
 }
 
 .knob__display {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   color: var(--demo-text);
   font-family: var(--font-mono);
   font-size: 9.5px;

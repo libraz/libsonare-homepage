@@ -14,7 +14,7 @@
  */
 import { computed, onBeforeUnmount, onMounted } from 'vue';
 import ToolShell from '@/components/ToolShell.vue';
-import { StatusIndicator } from '@/components/ui';
+import ToolStatusBar, { type ToolStatusField } from '@/components/ToolStatusBar.vue';
 import { useI18n } from '@/composables/useI18n';
 import { useUrlState } from '@/composables/useUrlState';
 import { useWasmBoot } from '@/composables/useWasmBoot';
@@ -69,11 +69,12 @@ const copy = computed(() =>
   localizedValue({
     en: {
       title: 'GS Sound Module',
-      subtitle: 'Sixteen parts, one insertion effect, and your own .mid through them',
+      subtitle:
+        'A 16-part GM/GS sound module: choose a sound per part, then play the built-in phrase or your own .mid',
       localOnly: 'LOCAL',
-      guideTitle: 'No SoundFont, no sample data',
+      guideTitle: 'A sound module without samples',
       guideBody:
-        'Every note here plays a built-in fallback voice, so the page ships no samples and nothing leaves the browser. Physical models other than piano have not yet been tuned; future patch releases will adjust their sound. Each audition assembles a Standard MIDI File from the panels, imports it and bounces it offline.',
+        'Pick a sound for each of the 16 parts and press Play, or drop in your own .mid. One shared insertion effect can be chosen as well. Every voice is a built-in fallback voice that libsonare synthesizes without a SoundFont, so the page ships no samples and nothing leaves the browser. Only the piano model is calibrated against a reference recording; the other physical models are approximations.',
       guideLink: 'Read about the instruments',
       maker: 'LIBSONARE',
       model: 'GS MODULE',
@@ -84,15 +85,18 @@ const copy = computed(() =>
       realization: 'EFX sound',
       modern: 'Modern',
       classic: 'Classic (32 kHz)',
-      part: 'PART',
+      status: { idle: 'Idle', rendering: 'Rendering', ready: 'Ready', error: 'Error' },
+      fields: { part: 'PART', sound: 'SOUND', efx: 'EFX', source: 'SOURCE' },
+      builtIn: 'built-in phrase',
     },
     ja: {
       title: 'GS 音源モジュール',
-      subtitle: '16 パート、インサーションエフェクト 1 系統、そして手持ちの .mid',
+      subtitle:
+        '16 パートの GM/GS 音源モジュール。パートごとに音色を選び、内蔵フレーズか手持ちの .mid を鳴らします',
       localOnly: 'ローカル',
-      guideTitle: 'SoundFont もサンプルデータもありません',
+      guideTitle: 'サンプルを持たない音源モジュール',
       guideBody:
-        'ここで鳴る音はすべて内蔵のフォールバック音源です。ページはサンプルを一切同梱せず、データはブラウザの外に出ません。ピアノ以外の物理モデルは未調整で、今後のパッチリリースで音を調整する予定です。試聴のたびにパネルの設定から標準 MIDI ファイルを組み立て、読み込んでオフラインでバウンスしています。',
+        '16 パートそれぞれに音色を選んで再生するか、手持ちの .mid を読み込みます。共有のインサーションエフェクトを 1 系統選ぶこともできます。音はすべて、SoundFont なしで libsonare が合成する内蔵フォールバック音源です。ページにサンプルは含まれず、データはブラウザの外に出ません。較正済みの物理モデルはピアノだけで、ほかは近似です。',
       guideLink: '内蔵音源について読む',
       maker: 'LIBSONARE',
       model: 'GS MODULE',
@@ -103,7 +107,9 @@ const copy = computed(() =>
       realization: 'EFX の音作り',
       modern: 'モダン',
       classic: 'クラシック（32 kHz）',
-      part: 'パート',
+      status: { idle: '待機中', rendering: 'レンダリング中', ready: '準備完了', error: 'エラー' },
+      fields: { part: 'パート', sound: '音色', efx: 'EFX', source: 'ソース' },
+      builtIn: '内蔵フレーズ',
     },
   }),
 );
@@ -113,6 +119,26 @@ const statusKind = computed<'idle' | 'active' | 'warning' | 'error'>(() => {
   if (status.value === 'rendering') return 'active';
   return 'idle';
 });
+
+const statusFields = computed<ToolStatusField[]>(() => [
+  { key: copy.value.fields.part, value: `${selectedChannel.value + 1}` },
+  {
+    key: copy.value.fields.sound,
+    value: patchNames.value[selectedChannel.value] || '-',
+    wide: true,
+  },
+  {
+    key: copy.value.fields.efx,
+    value: `${efxKey.value} ${efxName.value}`,
+    wide: true,
+    divider: true,
+  },
+  {
+    key: copy.value.fields.source,
+    value: droppedFile.value?.name ?? copy.value.builtIn,
+    wide: true,
+  },
+]);
 
 /** The name to show for a part: a rhythm set on the rhythm part, a program elsewhere. */
 const patchNames = computed(() =>
@@ -267,15 +293,12 @@ function clearFile() {
     :opposite-locale-path="oppositeLocalePath"
   >
     <template #statusbar>
-      <div class="gs-statusbar">
-        <StatusIndicator :status="statusKind" :label="copy.localOnly" />
-        <span class="gs-statusbar__field">
-          <b>{{ copy.part }}</b>{{ selectedChannel + 1 }}
-        </span>
-        <span class="gs-statusbar__field">
-          <b>EFX</b>{{ efxKey }}
-        </span>
-      </div>
+      <ToolStatusBar
+        :status="statusKind"
+        :label="copy.status[status]"
+        :pulse="status === 'rendering'"
+        :fields="statusFields"
+      />
     </template>
 
     <div class="gs-module demo-deck">
@@ -301,7 +324,7 @@ function clearFile() {
         <div class="gs-transport">
           <label class="gs-realization">
             {{ copy.realization }}
-            <select v-model="efxRealization" :disabled="status === 'rendering'">
+            <select v-model="efxRealization" class="demo-field" :disabled="status === 'rendering'">
               <option value="modern">{{ copy.modern }}</option>
               <option value="classic">{{ copy.classic }}</option>
             </select>
@@ -321,7 +344,7 @@ function clearFile() {
               <path d="M8 5.5v13l11-6.5z" />
             </svg>
           </button>
-          <button type="button" class="gs-button" @click="reset">{{ copy.reset }}</button>
+          <button type="button" class="demo-btn demo-btn--sm" @click="reset">{{ copy.reset }}</button>
         </div>
       </div>
 
@@ -374,27 +397,3 @@ function clearFile() {
     </div>
   </ToolShell>
 </template>
-
-<style scoped>
-.gs-statusbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 14px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-}
-
-.gs-statusbar__field {
-  color: var(--demo-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.gs-statusbar__field b {
-  margin-inline-end: 6px;
-  color: var(--demo-text-faint);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-}
-</style>

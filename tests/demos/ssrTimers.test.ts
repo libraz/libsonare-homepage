@@ -25,6 +25,7 @@ const PAGES: Record<string, () => Promise<{ default: Component }>> = {
   analysis: () => import('@/demos/music-analysis/MusicAnalysisStudio.vue'),
   'gs-module': () => import('@/demos/gs-module/GsModuleDemo.vue'),
   'step-bass': () => import('@/demos/step-bass/StepBassDemo.vue'),
+  transcribe: () => import('@/demos/transcribe/TranscribeDemo.vue'),
   practice: () => import('@/demos/practice/PianoPracticeDemo.vue'),
   fx: () => import('@/demos/realtime-fx/RealtimeFxLab.vue'),
   spatial: () => import('@/demos/spatial/SpatialScanner.vue'),

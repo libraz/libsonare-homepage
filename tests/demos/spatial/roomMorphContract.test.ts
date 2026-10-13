@@ -77,3 +77,73 @@ describe('roomMorph', () => {
     expect(short.diagnostics.map((entry) => entry.code)).toContain('acoustic.rir_length_clamped');
   }, 30_000);
 });
+
+/** Normalized correlation of two signals from `from` on. */
+function correlation(a: Float32Array, b: Float32Array, from: number): number {
+  let ab = 0;
+  let aa = 0;
+  let bb = 0;
+  for (let i = from; i < Math.min(a.length, b.length); i++) {
+    ab += a[i] * b[i];
+    aa += a[i] * a[i];
+    bb += b[i] * b[i];
+  }
+  return ab / Math.sqrt(aa * bb);
+}
+
+/** A decaying broadband burst: a pure tone stays coherent across half a metre. */
+function noiseBurst(seconds: number): Float32Array {
+  const samples = new Float32Array(Math.round(SAMPLE_RATE * seconds));
+  let state = 7;
+  for (let i = 0; i < samples.length; i++) {
+    state = (state * 1103515245 + 12345) & 0x7fffffff;
+    samples[i] = ((state / 0x7fffffff) * 2 - 1) * 0.2 * Math.exp(-i / (SAMPLE_RATE * 0.05));
+  }
+  return samples;
+}
+
+/**
+ * /spatial renders its morph with `roomMorphStereo`. Two mono morphs through one
+ * geometry give both channels the same tail; two receivers give each its own.
+ * The same input on both sides isolates that difference.
+ */
+describe('roomMorphStereo', () => {
+  it('returns both channels, each with the room tail appended', async () => {
+    await wasm.init();
+    const input = probe(0.5);
+    const result = wasm.roomMorphStereo({
+      left: input,
+      right: input,
+      sampleRate: SAMPLE_RATE,
+      ...room,
+      maxSeconds: 2.5,
+      receiverSpacingM: 0.5,
+    });
+
+    expect(result.left).toBeInstanceOf(Float32Array);
+    expect(result.right).toHaveLength(result.left.length);
+    expect(result.left.length).toBeGreaterThan(input.length);
+    expect(result.sampleRate).toBe(SAMPLE_RATE);
+    expect(Array.isArray(result.diagnostics)).toBe(true);
+  });
+
+  it('decorrelates the tail that the per-channel path copies to both sides', async () => {
+    await wasm.init();
+    const input = noiseBurst(0.5);
+    const options = { ...room, maxSeconds: 2.5 };
+
+    const perChannelLeft = wasm.roomMorph(input, SAMPLE_RATE, options).audio;
+    const perChannelRight = wasm.roomMorph(input, SAMPLE_RATE, options).audio;
+    const stereo = wasm.roomMorphStereo({
+      left: input,
+      right: input,
+      sampleRate: SAMPLE_RATE,
+      ...options,
+      receiverSpacingM: 0.5,
+    });
+
+    // Measured: 1.000 per channel, 0.03 with two receivers.
+    expect(correlation(perChannelLeft, perChannelRight, input.length)).toBeGreaterThan(0.9999);
+    expect(Math.abs(correlation(stereo.left, stereo.right, input.length))).toBeLessThan(0.3);
+  });
+});

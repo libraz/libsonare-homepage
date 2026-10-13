@@ -8,7 +8,8 @@
  */
 
 import { applyCompiled } from '@/demos/step-bass/stepBassApply';
-import { MASTER_FADER_PARAM_ID, STEP_BASS_CHANNEL } from '@/demos/step-bass/stepBassPatch';
+import { STEP_BASS_CHANNEL } from '@/demos/step-bass/stepBassPatch';
+import { MASTER_FADER_PARAM_ID } from '@/utils/masterLimiter';
 
 /** AudioWorklet render quantum; the engine scratch is prepared for this size. */
 const BLOCK_SIZE = 128;

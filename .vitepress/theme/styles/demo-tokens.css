@@ -11,6 +11,30 @@
    whole table.
    ========================================= */
 
+/* Theme-independent tokens: motion, radius, stacking. */
+:root {
+  /* Durations: press colour, hover/toggle, indicator/notice, panel enter. */
+  --demo-dur-instant: 80ms;
+  --demo-dur-fast: 140ms;
+  --demo-dur-base: 220ms;
+  --demo-dur-slow: 380ms;
+  --demo-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --demo-ease-enter: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --demo-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --demo-stagger: 60ms;
+
+  /* Radius: control / panel / deck. Nested surfaces step down one size. */
+  --demo-radius-sm: var(--radius-sm, 6px);
+  --demo-radius-md: 10px;
+  --demo-radius-lg: 14px;
+
+  /* Stacking */
+  --demo-z-base: 1;
+  --demo-z-sticky: 10;
+  --demo-z-popover: 200;
+  --demo-z-overlay: 1000;
+}
+
 :root {
   /* Surfaces */
   --demo-bg: #f8f6ff;
@@ -78,6 +102,19 @@
   --demo-warn-text: #92400E;
   --demo-warn-border: rgba(180, 83, 9, 0.34);
   --demo-warn-bg: rgba(245, 158, 11, 0.12);
+
+  /* State sets — info (cyan), success (green), error (red) */
+  --demo-info-fg: #0891B2;
+  --demo-info-text: #155E75;
+  --demo-info-bg: rgba(8, 145, 178, 0.08);
+  --demo-info-border: rgba(8, 145, 178, 0.3);
+  --demo-success-text: #0F6B5A;
+  --demo-success-bg: rgba(16, 132, 110, 0.08);
+  --demo-success-border: rgba(16, 132, 110, 0.3);
+  --demo-error-fg: #DC2626;
+  --demo-error-text: #991B1B;
+  --demo-error-bg: rgba(220, 38, 38, 0.07);
+  --demo-error-border: rgba(220, 38, 38, 0.32);
 
   /* Shadows */
   --demo-shadow: rgba(0, 0, 0, 0.08);
@@ -160,6 +197,19 @@
   --demo-warn-border: rgba(245, 158, 11, 0.4);
   --demo-warn-bg: rgba(245, 158, 11, 0.1);
 
+  /* State sets */
+  --demo-info-fg: #22D3EE;
+  --demo-info-text: #A5F3FC;
+  --demo-info-bg: rgba(34, 211, 238, 0.08);
+  --demo-info-border: rgba(34, 211, 238, 0.32);
+  --demo-success-text: #A7F3D0;
+  --demo-success-bg: rgba(52, 211, 153, 0.08);
+  --demo-success-border: rgba(52, 211, 153, 0.32);
+  --demo-error-fg: #F87171;
+  --demo-error-text: #FECACA;
+  --demo-error-bg: rgba(239, 68, 68, 0.1);
+  --demo-error-border: rgba(239, 68, 68, 0.4);
+
   /* Shadows */
   --demo-shadow: rgba(0, 0, 0, 0.4);
   --demo-shadow-glow: 0 0 40px -10px rgba(139, 92, 246, 0.2);
@@ -184,7 +234,7 @@
    A demo adds its own width, overflow and entrance on top. */
 .demo-deck {
   border: 1px solid var(--demo-border-strong);
-  border-radius: 14px;
+  border-radius: var(--demo-radius-lg);
   background:
     radial-gradient(circle at 13px 13px, var(--demo-border-strong) 0 2px, transparent 3px),
     radial-gradient(circle at calc(100% - 13px) 13px, var(--demo-border-strong) 0 2px, transparent 3px),
@@ -211,4 +261,21 @@ html:not(.dark) .demo-deck {
 .master-page :focus-visible {
   outline: 2px solid var(--demo-accent);
   outline-offset: 2px;
+}
+
+/* --- Reduced motion -------------------------------------------------
+   Collapses every duration token inside a demo page; decorative loops
+   opt in to being stopped with `.demo-anim-loop`. */
+@media (prefers-reduced-motion: reduce) {
+  .tool-page {
+    --demo-dur-instant: 1ms;
+    --demo-dur-fast: 1ms;
+    --demo-dur-base: 1ms;
+    --demo-dur-slow: 1ms;
+    --demo-stagger: 0ms;
+  }
+
+  .tool-page .demo-anim-loop {
+    animation: none !important;
+  }
 }

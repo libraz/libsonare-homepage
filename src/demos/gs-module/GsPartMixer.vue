@@ -13,7 +13,7 @@
  * metered at all.
  */
 import { computed } from 'vue';
-import { ChannelStrip, RotaryKnob } from '@/components/ui';
+import { ChannelStrip, RotaryKnob, Tooltip } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { addressRow } from './gsAddress';
 import { defaultPartState, type GsPartState, RHYTHM_CHANNEL } from './gsState';
@@ -38,6 +38,7 @@ const copy = computed(() =>
   localizedValue({
     en: {
       title: 'Parts',
+      help: 'Sixteen parts, one per MIDI channel; part 10 is the rhythm part. Every control writes one GS address and takes the range the address table declares. Select a part to edit its sound in the racks above.',
       rhythmTab: 'RHY',
       level: 'Level',
       pan: 'Pan',
@@ -48,6 +49,7 @@ const copy = computed(() =>
     },
     ja: {
       title: 'パート',
+      help: 'MIDI チャンネルごとの 16 パートで、10 番がリズムパートです。各コントロールは GS アドレスを 1 つずつ書き込み、範囲はアドレス表の宣言どおりです。パートを選ぶと、上のラックでその音色を編集できます。',
       // The tab is as narrow as the strip; the shorthand fits where a word does not.
       rhythmTab: 'RHY',
       level: 'レベル',
@@ -114,82 +116,90 @@ function set(channel: number, key: keyof GsPartState, value: number) {
 </script>
 
 <template>
-  <div class="gs-parts" role="group" :aria-label="copy.title">
-    <div
-      v-for="part in props.parts"
-      :key="part.channel"
-      class="gs-part"
-      :class="{ 'gs-part--selected': part.channel === props.selectedChannel }"
-      @pointerdown="emit('select', part.channel)"
-    >
-      <ChannelStrip
-        :label="stripLabel(part.channel)"
-        :aria-label="`${copy.level} ${part.channel + 1}`"
-        :gain="part.level"
-        :level="props.activity[part.channel] ?? 0"
-        :min="bounds.level.lo"
-        :max="bounds.level.hi"
-        :default-gain="resting[part.channel].level"
-        :display="`${part.level}`"
-        unit=""
-        :quantum="1"
-        :nudge="1"
-        :coarse="10"
-        @update:gain="set(part.channel, 'level', $event)"
+  <div class="gs-parts-bay">
+    <div class="gs-parts-bay__head">
+      <span class="gs-rack__title">
+        {{ copy.title }}
+        <Tooltip :title="copy.title" :body="copy.help" />
+      </span>
+    </div>
+    <div class="gs-parts" role="group" :aria-label="copy.title">
+      <div
+        v-for="part in props.parts"
+        :key="part.channel"
+        class="gs-part"
+        :class="{ 'gs-part--selected': part.channel === props.selectedChannel }"
+        @pointerdown="emit('select', part.channel)"
       >
-        <template #subtitle>
-          <span class="gs-part__head">
-            <button
-              type="button"
-              class="gs-part__select"
-              :aria-pressed="part.channel === props.selectedChannel"
-              :title="`${copy.select} — ${props.patchNames[part.channel]}`"
-              @click="emit('select', part.channel)"
-            >{{ props.patchNames[part.channel] }}</button>
-          </span>
-        </template>
+        <ChannelStrip
+          :label="stripLabel(part.channel)"
+          :aria-label="`${copy.level} ${part.channel + 1}`"
+          :gain="part.level"
+          :level="props.activity[part.channel] ?? 0"
+          :min="bounds.level.lo"
+          :max="bounds.level.hi"
+          :default-gain="resting[part.channel].level"
+          :display="`${part.level}`"
+          unit=""
+          :quantum="1"
+          :nudge="1"
+          :coarse="10"
+          @update:gain="set(part.channel, 'level', $event)"
+        >
+          <template #subtitle>
+            <span class="gs-part__head">
+              <button
+                type="button"
+                class="gs-part__select"
+                :aria-pressed="part.channel === props.selectedChannel"
+                :aria-label="`${copy.select} ${part.channel + 1} — ${props.patchNames[part.channel]}`"
+                @click="emit('select', part.channel)"
+              >{{ props.patchNames[part.channel] }}</button>
+            </span>
+          </template>
 
-        <template #controls>
-          <div class="gs-part__knobs">
-            <RotaryKnob
-              label="PAN"
-              :model-value="part.pan"
-              :min="bounds.pan.lo"
-              :max="bounds.pan.hi"
-              :step="1"
-              :size="34"
-              :display="panLabel(part.pan)"
-              :default-value="resting[part.channel].pan"
-              :aria-label="`${copy.pan} ${part.channel + 1}`"
-              @update:model-value="set(part.channel, 'pan', $event)"
-            />
-            <div class="gs-part__sends">
+          <template #controls>
+            <div class="gs-part__knobs">
               <RotaryKnob
-                v-for="send in SENDS"
-                :key="send.key"
-                :label="send.short"
-                :model-value="part[send.key]"
-                :min="bounds[send.key].lo"
-                :max="bounds[send.key].hi"
+                label="PAN"
+                :model-value="part.pan"
+                :min="bounds.pan.lo"
+                :max="bounds.pan.hi"
                 :step="1"
-                :size="28"
-                :display="`${part[send.key]}`"
-                :default-value="resting[part.channel][send.key]"
-                :aria-label="`${copy[send.key]} ${part.channel + 1}`"
-                @update:model-value="set(part.channel, send.key, $event)"
+                :size="34"
+                :display="panLabel(part.pan)"
+                :default-value="resting[part.channel].pan"
+                :aria-label="`${copy.pan} ${part.channel + 1}`"
+                @update:model-value="set(part.channel, 'pan', $event)"
               />
+              <div class="gs-part__sends">
+                <RotaryKnob
+                  v-for="send in SENDS"
+                  :key="send.key"
+                  :label="send.short"
+                  :model-value="part[send.key]"
+                  :min="bounds[send.key].lo"
+                  :max="bounds[send.key].hi"
+                  :step="1"
+                  :size="28"
+                  :display="`${part[send.key]}`"
+                  :default-value="resting[part.channel][send.key]"
+                  :aria-label="`${copy[send.key]} ${part.channel + 1}`"
+                  @update:model-value="set(part.channel, send.key, $event)"
+                />
+              </div>
+              <button
+                type="button"
+                class="gs-part__efx"
+                :class="{ 'gs-part__efx--on': part.efxAssigned }"
+                :aria-pressed="part.efxAssigned"
+                :aria-label="`${copy.efx} ${part.channel + 1}`"
+                @click="emit('update', part.channel, { efxAssigned: !part.efxAssigned })"
+              >EFX</button>
             </div>
-            <button
-              type="button"
-              class="gs-part__efx"
-              :class="{ 'gs-part__efx--on': part.efxAssigned }"
-              :aria-pressed="part.efxAssigned"
-              :aria-label="`${copy.efx} ${part.channel + 1}`"
-              @click="emit('update', part.channel, { efxAssigned: !part.efxAssigned })"
-            >EFX</button>
-          </div>
-        </template>
-      </ChannelStrip>
+          </template>
+        </ChannelStrip>
+      </div>
     </div>
   </div>
 </template>

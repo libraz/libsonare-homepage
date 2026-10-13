@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('vitepress', () => ({ useData: () => ({ lang: { value: 'en' } }) }));
@@ -8,6 +10,7 @@ import {
   VOICE_PRESET_ORDER,
 } from '@/demos/realtime-fx/useRealtimeFx';
 import type { VoicePresetId } from '@/wasm/index';
+import * as wasm from '@/wasm/index.js';
 
 const ids: VoicePresetId[] = [
   'neutral-monitor',
@@ -19,6 +22,19 @@ const ids: VoicePresetId[] = [
 ];
 
 describe('VOICE_PRESET_MACROS', () => {
+  it('mirrors the engine presets: order and the four live macros', async () => {
+    await wasm.init({ wasmBinary: readFileSync(join(process.cwd(), 'src/wasm/sonare.wasm')) });
+    expect(VOICE_PRESET_ORDER).toEqual(wasm.realtimeVoiceChangerPresetNames());
+    for (const id of VOICE_PRESET_ORDER) {
+      const config = wasm.realtimeVoiceChangerPresetConfig(id);
+      const macros = VOICE_PRESET_MACROS[id];
+      expect(macros.pitchSemitones, id).toBeCloseTo(config.retuneSemitones, 5);
+      expect(macros.formant, id).toBeCloseTo(config.formantFactor, 5);
+      expect(macros.brightness, id).toBeCloseTo(config.formantBrightness, 5);
+      expect(macros.wet, id).toBeCloseTo(config.wetMix, 5);
+    }
+  }, 30_000);
+
   it('defines macros for every preset in display order', () => {
     expect(VOICE_PRESET_ORDER).toEqual(ids);
     for (const id of ids) expect(VOICE_PRESET_MACROS[id]).toBeDefined();

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import InfoDot from './InfoDot.vue';
 import Tooltip from './Tooltip.vue';
 
 const props = withDefaults(
@@ -204,9 +205,14 @@ function onKeyDown(event: KeyboardEvent): void {
         :href="href"
         :link-label="linkLabel"
       >
-        <button type="button" class="rotary-knob__info" :aria-label="title || label">
-          <span aria-hidden="true">i</span>
-        </button>
+        <template #default="{ describedBy, expanded, controls }">
+          <InfoDot
+            :label="title || label"
+            :aria-describedby="describedBy"
+            :aria-expanded="expanded"
+            :aria-controls="controls"
+          />
+        </template>
       </Tooltip>
     </span>
     <div
@@ -297,40 +303,6 @@ function onKeyDown(event: KeyboardEvent): void {
   line-height: 1.2;
   text-transform: uppercase;
   white-space: nowrap;
-}
-
-.rotary-knob__info {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  padding: 0;
-  border: 1px solid var(--demo-border);
-  border-radius: 50%;
-  background: var(--demo-bg);
-  color: var(--demo-text-muted);
-  cursor: pointer;
-  transition: color var(--transition-fast), border-color var(--transition-fast),
-    background-color var(--transition-fast);
-}
-
-.rotary-knob__info > span {
-  font-family: var(--font-body);
-  font-size: 8px;
-  font-style: italic;
-  font-weight: 700;
-  line-height: 1;
-  transform: translateY(-0.5px);
-}
-
-.rotary-knob__info:hover,
-.rotary-knob__info:focus-visible {
-  color: var(--demo-accent);
-  border-color: var(--demo-accent);
-  background: var(--demo-accent-subtle);
-  outline: none;
 }
 
 .rotary-knob__control {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import InfoDot from '@/components/ui/InfoDot.vue';
 import Tooltip from '@/components/ui/Tooltip.vue';
 import { meterFillPercent } from '@/utils/scale';
 
@@ -148,9 +149,15 @@ function onKeyDown(event: KeyboardEvent): void {
     <span class="channel-strip__name">
       {{ label }}
       <Tooltip v-if="help" v-bind="help">
-        <button type="button" class="channel-strip__info" :aria-label="help.title || label">
-          <span aria-hidden="true">i</span>
-        </button>
+        <template #default="{ describedBy, expanded, controls }">
+          <InfoDot
+            size="sm"
+            :label="help.title || label"
+            :aria-describedby="describedBy"
+            :aria-expanded="expanded"
+            :aria-controls="controls"
+          />
+        </template>
       </Tooltip>
     </span>
     <slot name="subtitle" />
@@ -213,7 +220,7 @@ function onKeyDown(event: KeyboardEvent): void {
   border-radius: 8px;
   background: var(--demo-control-bg);
   min-width: var(--strip-min-width, 74px);
-  transition: opacity 0.15s ease;
+  transition: opacity var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .channel-strip--muted {
@@ -235,40 +242,6 @@ function onKeyDown(event: KeyboardEvent): void {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   white-space: nowrap;
-}
-
-.channel-strip__info {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 13px;
-  height: 13px;
-  padding: 0;
-  border: 1px solid var(--demo-border);
-  border-radius: 50%;
-  background: var(--demo-bg);
-  color: var(--demo-text-muted);
-  cursor: pointer;
-  transition: color var(--transition-fast), border-color var(--transition-fast),
-    background-color var(--transition-fast);
-}
-
-.channel-strip__info > span {
-  font-family: var(--font-body);
-  font-size: 8px;
-  font-style: italic;
-  font-weight: 700;
-  line-height: 1;
-  transform: translateY(-0.5px);
-}
-
-.channel-strip__info:hover,
-.channel-strip__info:focus-visible {
-  color: var(--demo-accent);
-  border-color: var(--demo-accent);
-  background: var(--demo-accent-subtle);
-  outline: none;
 }
 
 .channel-strip__db {
@@ -397,7 +370,10 @@ function onKeyDown(event: KeyboardEvent): void {
   font-size: 10px;
   font-weight: 800;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    border-color var(--demo-dur-fast) var(--demo-ease-standard),
+    color var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .channel-strip__mute:hover {

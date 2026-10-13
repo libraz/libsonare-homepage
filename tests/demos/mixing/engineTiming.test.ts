@@ -6,13 +6,7 @@
  * declaration-index meter target whatever order the keys put them in.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import {
-  buildFull,
-  exportFrames,
-  type InsertTiming,
-  MIX_TEMPO_BPM,
-  type MixAudio,
-} from '@/demos/mixing/mixingEngine';
+import { buildFull, exportFrames, MIX_TEMPO_BPM, type MixAudio } from '@/demos/mixing/mixingEngine';
 import {
   addTrack,
   createMixingState,
@@ -28,7 +22,6 @@ import {
   createFacadeLoopback,
   createRawEngine,
   type FacadeLoopback,
-  loadIndexModule,
   noise,
   RENDER_QUANTUM,
   rms,
@@ -83,20 +76,29 @@ describe('channel delay basis', () => {
   });
 });
 
+/** The export length the engine reports once `state` is built on it. */
+async function framesFor(state: MixingState, audio: Map<number, MixAudio>): Promise<number> {
+  const raw = await createRawEngine(SR);
+  try {
+    raw.setTempo(MIX_TEMPO_BPM);
+    applyOps(createRawTarget(raw), buildFull(state, audio, SR));
+    return exportFrames(state, SR, raw);
+  } finally {
+    raw.destroy();
+  }
+}
+
 describe('export length', () => {
   it('covers the reverb tail of a delayed strip', async () => {
-    const wasm = await loadIndexModule();
-    const timing: InsertTiming = (processor, params, rate) =>
-      wasm.masteringInsertTiming(processor, params, rate);
     const audio = new Map([
       [1, { channels: stereo(noise(SOURCE_SEC, 1, SR, 0.4)), sampleRate: SR }],
     ]);
     const plainState = setSend(addTrack(createMixingState(), 'a', SOURCE_SEC), 1, 'reverb', {
       levelDb: 0,
     });
-    const without = exportFrames(plainState, SR, timing);
+    const without = await framesFor(plainState, audio);
     const state = setChannelDelay(plainState, 1, 50);
-    const withDelay = exportFrames(state, SR, timing);
+    const withDelay = await framesFor(state, audio);
     const delay = Math.round(0.05 * SR);
     expect(withDelay - without).toBe(delay);
     // The delay pushes the whole tail one delay later, and the export length follows it:

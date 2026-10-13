@@ -53,6 +53,8 @@ function analysisResult() {
       bpmConfidence: 0.82,
       keyName: 'D minor',
       keyConfidence: 0.74,
+      tuning: 0.05,
+      referenceHz: 441.3,
       timeSignature: '4/4',
       integratedLufs: -13.7,
       loudnessRange: 6.2,
@@ -70,12 +72,16 @@ function analysisResult() {
       { name: 'Drop', start: 1, end: 4, confidence: 0.9, energyLevel: 0.85 },
     ],
     chords: [
-      { name: 'Dm', start: 0, end: 1, confidence: 0.8 },
-      { name: 'Dm', start: 1, end: 2, confidence: 0.7 },
-      { name: 'Bb', start: 2, end: 4, confidence: 0.65 },
+      { name: 'Dm', start: 0, end: 1, confidence: 0.8, romanNumeral: 'i' },
+      { name: 'Dm', start: 1, end: 2, confidence: 0.7, romanNumeral: 'i' },
+      { name: 'Bb', start: 2, end: 4, confidence: 0.65, romanNumeral: 'VI' },
     ],
     beats: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5],
     downbeats: [0, 2],
+    tempoCurve: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5].map((time, index) => ({
+      time,
+      bpm: 122 + index * 0.4,
+    })),
     melody: {
       pitchRangeOctaves: 1.5,
       pitchStability: 0.78,
@@ -224,14 +230,23 @@ describe('MusicAnalysisStudio', () => {
     expect(wrapper.find('.matrix-heatmap-stub').attributes('data-label')).toBe('Chroma');
     expect(wrapper.find('.tool-page__version').text()).toContain('9.9.9-test');
 
-    await wrapper
-      .findAll('.heatmap-tabs__button')
+    expect(wrapper.find('.tool-statusbar').text()).toContain('D minor');
+    expect(wrapper.text()).toContain('+5 ¢');
+    expect(wrapper.text()).toContain('441.3 Hz');
+    expect(wrapper.findAll('.timeline-roman').map((node) => node.text())).toEqual(['i', 'VI']);
+    expect(wrapper.find('.timeline-tempo__curve').attributes('d')).toMatch(/^M /);
+    expect(wrapper.find('.timeline-readout').text()).toContain('Dm');
+
+    const picker = wrapper.find('[role="radiogroup"]');
+    expect(picker.attributes('aria-label')).toBe('Matrix view');
+    await picker
+      .findAll('[role="radio"]')
       .find((button) => button.text() === 'Mel')!
       .trigger('click');
     expect(wrapper.find('.matrix-heatmap-stub').attributes('data-label')).toBe('Mel');
 
-    await wrapper
-      .findAll('.heatmap-tabs__button')
+    await picker
+      .findAll('[role="radio"]')
       .find((button) => button.text() === 'CQT')!
       .trigger('click');
     expect(wrapper.find('.matrix-heatmap-stub').attributes('data-label')).toBe('CQT');
@@ -275,6 +290,10 @@ describe('MusicAnalysisStudio', () => {
 
     expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob));
     expect(click).toHaveBeenCalled();
+    const blob = createObjectUrl.mock.calls.at(-1)![0] as Blob;
+    const report = JSON.parse(await blob.text());
+    expect(report.result.summary).toMatchObject({ keyName: 'D minor', tuning: 0.05 });
+    expect(report.result.chords[2]).toMatchObject({ name: 'Bb', romanNumeral: 'VI' });
 
     click.mockRestore();
     wrapper.unmount();
@@ -379,7 +398,9 @@ describe('MusicAnalysisStudio', () => {
         .find((button) => button.text() === 'Load demo')!
         .trigger('click');
       await flushPromises();
-      expect(wrapper.text()).toContain('Analysis failed. Try a shorter file or reload the page.');
+      expect(wrapper.find('[role="alert"]').text()).toContain(
+        'Analysis failed. Try a shorter file or reload the page.',
+      );
       expect(wrapper.text()).toContain('demo.mp3');
 
       MockWorker.mode = 'done';

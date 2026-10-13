@@ -41,6 +41,9 @@ const copy = computed(() =>
       tabListLabel: 'Demo switcher',
       guideLinkLabel: 'Open docs',
       otherLocaleLabel: 'JA',
+      switchLocaleLabel: 'Switch to Japanese',
+      lightModeLabel: 'Switch to light mode',
+      darkModeLabel: 'Switch to dark mode',
       tabs: {
         analyzer: 'Visual Player',
         mastering: 'Mastering',
@@ -53,6 +56,7 @@ const copy = computed(() =>
         practice: 'Piano Practice',
         'gs-module': 'GS Module',
         'step-bass': 'Step Bass',
+        transcribe: 'Transcription',
       },
     },
     ja: {
@@ -62,10 +66,13 @@ const copy = computed(() =>
       tabListLabel: 'デモ切り替え',
       guideLinkLabel: 'ドキュメント',
       otherLocaleLabel: 'EN',
+      switchLocaleLabel: '英語に切り替え',
+      lightModeLabel: 'ライトモードに切り替え',
+      darkModeLabel: 'ダークモードに切り替え',
       tabs: {
         analyzer: 'ビジュアルプレイヤー',
         mastering: 'マスタリング',
-        analysis: '楽曲分析',
+        analysis: '楽曲解析',
         mixing: 'ミキシング',
         fx: 'リアルタイムFX',
         spatial: '空間 3D',
@@ -74,6 +81,7 @@ const copy = computed(() =>
         practice: 'ピアノ練習',
         'gs-module': 'GS 音源',
         'step-bass': 'ステップベース',
+        transcribe: 'ピアノ採譜',
       },
     },
   }),
@@ -187,13 +195,13 @@ function switchLocale(event: Event) {
         <a
           :href="otherLocalePath"
           class="tool-page__lang-switch"
-          :aria-label="`Switch to ${otherLocaleLabel}`"
+          :aria-label="copy.switchLocaleLabel"
           @click.capture.stop.prevent="switchLocale"
         >{{ otherLocaleLabel }}</a>
         <button
           type="button"
           class="tool-page__theme-toggle"
-          :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
+          :aria-label="isDark ? copy.lightModeLabel : copy.darkModeLabel"
           @click="toggleTheme"
         >
           <svg class="tool-page__icon-sun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -235,7 +243,7 @@ function switchLocale(event: Event) {
 
     <DemoDisclaimer />
 
-    <slot name="modes" />
+    <div v-if="$slots.modes" class="tool-page__modes"><slot name="modes" /></div>
     <div class="tool-page__statusbar"><slot name="statusbar" /></div>
 
     <div v-if="guideTitle || guideBody" class="tool-page__guide">
@@ -280,6 +288,10 @@ function switchLocale(event: Event) {
 /* Tokens come from the shared demo token layer
    (.vitepress/theme/styles/demo-tokens.css) — do not re-declare here. */
 .tool-page {
+  /* One horizontal gutter for every row below the header, so the mode row,
+     status bar, guide and demo body share a left edge. */
+  --tool-gutter: 16px;
+
   position: relative;
   min-height: 100vh;
   background: var(--demo-bg);
@@ -312,17 +324,19 @@ html:not(.dark) .tool-page .tool-page__backdrop {
    demo-grid-rise rhythm used by the demo cards. */
 .tool-page__header,
 .tool-page__tabs,
+.tool-page__modes,
 .tool-page__statusbar,
 .tool-page__main {
   opacity: 0;
   transform: translateY(6px);
-  animation: tool-page-rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation: tool-page-rise var(--demo-dur-slow) var(--demo-ease-enter) forwards;
 }
 
 .tool-page__header { animation-delay: 0s; }
-.tool-page__tabs { animation-delay: 0.07s; }
-.tool-page__statusbar { animation-delay: 0.14s; }
-.tool-page__main { animation-delay: 0.21s; }
+.tool-page__tabs { animation-delay: var(--demo-stagger); }
+.tool-page__modes,
+.tool-page__statusbar { animation-delay: calc(var(--demo-stagger) * 2); }
+.tool-page__main { animation-delay: calc(var(--demo-stagger) * 3); }
 
 @keyframes tool-page-rise {
   to {
@@ -334,6 +348,7 @@ html:not(.dark) .tool-page .tool-page__backdrop {
 @media (prefers-reduced-motion: reduce) {
   .tool-page__header,
   .tool-page__tabs,
+  .tool-page__modes,
   .tool-page__statusbar,
   .tool-page__main {
     animation: none;
@@ -378,7 +393,7 @@ html:not(.dark) .tool-page .tool-page__header {
   font-weight: 700;
   letter-spacing: 0.15em;
   text-decoration: none;
-  transition: opacity var(--transition-fast);
+  transition: opacity var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .tool-page__brand:hover {
@@ -444,7 +459,9 @@ html:not(.dark) .tool-page .tool-page__header {
   font-weight: 600;
   letter-spacing: 0.05em;
   text-decoration: none;
-  transition: color var(--transition-fast), background-color var(--transition-fast);
+  transition:
+    color var(--demo-dur-fast) var(--demo-ease-standard),
+    background-color var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .tool-page__docs-link:hover {
@@ -466,7 +483,10 @@ html:not(.dark) .tool-page .tool-page__header {
   background: var(--demo-accent-subtle);
   border: 1px solid var(--demo-accent-border);
   border-radius: 6px;
-  transition: all var(--transition-fast);
+  transition:
+    color var(--demo-dur-fast) var(--demo-ease-standard),
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    border-color var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .tool-page__lang-switch:hover {
@@ -487,7 +507,10 @@ html:not(.dark) .tool-page .tool-page__header {
   background: var(--demo-accent-subtle);
   color: var(--demo-text-muted);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition:
+    color var(--demo-dur-fast) var(--demo-ease-standard),
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    border-color var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .tool-page__theme-toggle:hover {
@@ -511,7 +534,9 @@ html:not(.dark) .tool-page .tool-page__header {
   font-weight: 600;
   letter-spacing: 0.05em;
   text-decoration: none;
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    transform var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .tool-page__cta:hover {
@@ -520,7 +545,7 @@ html:not(.dark) .tool-page .tool-page__header {
 }
 
 .tool-page__cta svg {
-  transition: transform var(--transition-fast);
+  transition: transform var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .tool-page__cta:hover svg {
@@ -572,7 +597,9 @@ html:not(.dark) .tool-page .tool-page__header {
   text-transform: uppercase;
   white-space: nowrap;
   border-bottom: 2px solid transparent;
-  transition: color var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    color var(--demo-dur-fast) var(--demo-ease-standard),
+    border-color var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .tool-page__tab:hover {
@@ -599,7 +626,7 @@ html:not(.dark) .tool-page .tool-page__header {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 10px 18px;
+  padding: 10px var(--tool-gutter);
   border-bottom: 1px solid var(--demo-border);
   background: var(--demo-bg-overlay);
   backdrop-filter: blur(16px);
@@ -648,10 +675,16 @@ html:not(.dark) .tool-page .tool-page__header {
 }
 
 /* ===== MAIN ===== */
+.tool-page__modes {
+  position: relative;
+  z-index: 2;
+  padding: 10px var(--tool-gutter) 0;
+}
+
 .tool-page__main {
   position: relative;
   z-index: 1;
-  padding: 16px;
+  padding: var(--tool-gutter);
 }
 
 /* Per-demo source link — sits under the demo it belongs to and names the
@@ -672,8 +705,10 @@ html:not(.dark) .tool-page .tool-page__header {
   color: var(--demo-text-muted);
   font-size: 11px;
   text-decoration: none;
-  transition: color var(--transition-fast), background-color var(--transition-fast),
-    border-color var(--transition-fast);
+  transition:
+    color var(--demo-dur-fast) var(--demo-ease-standard),
+    background-color var(--demo-dur-fast) var(--demo-ease-standard),
+    border-color var(--demo-dur-fast) var(--demo-ease-standard);
 }
 
 .tool-page__source:hover {
@@ -703,6 +738,10 @@ html:not(.dark) .tool-page .tool-page__header {
 }
 
 @media (max-width: 720px) {
+  .tool-page {
+    --tool-gutter: 12px;
+  }
+
   .tool-page__header {
     padding: 10px 12px;
     gap: 10px;
@@ -720,15 +759,11 @@ html:not(.dark) .tool-page .tool-page__header {
     display: none;
   }
 
-  .tool-page__main {
-    padding: 10px;
-  }
-
   .tool-page__guide {
     align-items: flex-start;
     flex-direction: column;
     gap: 8px;
-    padding: 9px 12px;
+    padding: 9px var(--tool-gutter);
   }
 }
 </style>
@@ -737,88 +772,4 @@ html:not(.dark) .tool-page .tool-page__header {
 /* Global (non-scoped) selectors for html.dark — scoped CSS can't target <html> ancestor reliably */
 html.dark .tool-page__icon-sun { display: block; }
 html.dark .tool-page__icon-moon { display: none; }
-
-/* ===== Shared fader styling for native range inputs =====
-   One hardware-fader look for every demo slider (FX, mixing, mastering,
-   spatial, …). AudioSource / AudioTransport keep their invisible overlay
-   ranges, so they are excluded. Theme-aware via the --demo-* tokens. */
-.tool-page input[type='range']:not(.audio-source__range):not(.transport__range) {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 18px;
-  margin: 0;
-  padding: 0;
-  background: transparent;
-  cursor: pointer;
-}
-
-.tool-page input[type='range']:not(.audio-source__range):not(.transport__range)::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 2px;
-  border: 1px solid var(--demo-border);
-  background: var(--demo-track-bg);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.16);
-}
-
-.tool-page input[type='range']:not(.audio-source__range):not(.transport__range)::-moz-range-track {
-  height: 4px;
-  border-radius: 2px;
-  border: 1px solid var(--demo-border);
-  background: var(--demo-track-bg);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.16);
-}
-
-/* Fader cap: rectangular, with a center indicator groove. */
-.tool-page input[type='range']:not(.audio-source__range):not(.transport__range)::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 12px;
-  height: 16px;
-  margin-top: -6px;
-  border: 1px solid color-mix(in srgb, var(--demo-accent) 55%, #000);
-  border-radius: 3px;
-  background:
-    linear-gradient(90deg, transparent calc(50% - 1px), rgba(255, 255, 255, 0.92) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
-    linear-gradient(180deg, color-mix(in srgb, var(--demo-accent) 78%, #fff) 0%, var(--demo-accent) 52%, color-mix(in srgb, var(--demo-accent) 70%, #000) 100%);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 0 8px var(--demo-accent-subtle);
-  transition: box-shadow var(--transition-fast);
-}
-
-.tool-page input[type='range']:not(.audio-source__range):not(.transport__range)::-moz-range-thumb {
-  width: 12px;
-  height: 16px;
-  border: 1px solid color-mix(in srgb, var(--demo-accent) 55%, #000);
-  border-radius: 3px;
-  background:
-    linear-gradient(90deg, transparent calc(50% - 1px), rgba(255, 255, 255, 0.92) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
-    linear-gradient(180deg, color-mix(in srgb, var(--demo-accent) 78%, #fff) 0%, var(--demo-accent) 52%, color-mix(in srgb, var(--demo-accent) 70%, #000) 100%);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 0 8px var(--demo-accent-subtle);
-  transition: box-shadow var(--transition-fast);
-}
-
-.tool-page input[type='range']:not(.audio-source__range):not(.transport__range):hover:not(:disabled)::-webkit-slider-thumb {
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 0 12px var(--demo-accent-dim);
-}
-
-.tool-page input[type='range']:not(.audio-source__range):not(.transport__range):hover:not(:disabled)::-moz-range-thumb {
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 0 12px var(--demo-accent-dim);
-}
-
-.tool-page input[type='range']:not(.audio-source__range):not(.transport__range):focus-visible {
-  outline: 2px solid var(--demo-accent);
-  outline-offset: 3px;
-  border-radius: 4px;
-}
-
-.tool-page input[type='range']:not(.audio-source__range):not(.transport__range):disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tool-page input[type='range']:not(.audio-source__range):not(.transport__range)::-webkit-slider-thumb,
-  .tool-page input[type='range']:not(.audio-source__range):not(.transport__range)::-moz-range-thumb {
-    transition: none;
-  }
-}
 </style>

@@ -9,7 +9,7 @@
 import { computed, onMounted, onUnmounted, provide, ref } from 'vue';
 import ToolShell from '@/components/ToolShell.vue';
 import ToolStatusBar, { type ToolStatusField } from '@/components/ToolStatusBar.vue';
-import { TermLabel } from '@/components/ui';
+import { DemoNotice, TermLabel } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { isMacPlatform, useShortcuts } from '@/composables/useShortcuts';
 import { useWasmBoot } from '@/composables/useWasmBoot';
@@ -80,9 +80,19 @@ async function onDrop(event: DragEvent): Promise<void> {
 }
 
 const mac = isMacPlatform();
-const keysHint = computed(() =>
-  fill(copy.value.header.keys, { mod: mac ? '⌘' : 'Ctrl+', shift: mac ? '⇧' : 'Shift+' }),
-);
+const mod = mac ? '⌘' : 'Ctrl';
+const shift = mac ? '⇧' : 'Shift';
+const shortcuts = computed(() => {
+  const label = copy.value.header.shortcuts;
+  return [
+    { keys: ['Space'], label: label.play },
+    { keys: ['Home'], label: label.home },
+    { keys: ['L'], label: label.loop },
+    { keys: ['M', 'S'], label: label.muteSolo },
+    { keys: [mod, 'Z'], label: label.undo },
+    { keys: [shift, mod, 'Z'], label: label.redo },
+  ];
+});
 
 useShortcuts({
   Space: () => m.togglePlay(),
@@ -174,13 +184,14 @@ onUnmounted(() => {
         <div class="mix-page__actions">
           <button
             type="button"
-            class="mix-page__primary"
+            class="demo-btn demo-btn--primary"
             :disabled="loading || editLocked || state.tracks.length >= MAX_TRACKS && missingAudio.length === 0"
             @click="chooseFiles"
           >{{ copy.header.addTracks }}</button>
           <button
             v-if="state.tracks.length === 0 || missingAudio.length > 0"
             type="button"
+            class="demo-btn"
             :disabled="loading || editLocked"
             @click="m.loadDemo"
           >{{ copy.header.loadDemo }}</button>
@@ -190,13 +201,13 @@ onUnmounted(() => {
           </span>
         </div>
         <div class="mix-page__history">
-          <button type="button" :disabled="!m.canUndo.value || editLocked" :aria-keyshortcuts="mac ? 'Meta+Z' : 'Control+Z'" @click="m.undo">
+          <button type="button" class="demo-btn demo-btn--sm" :disabled="!m.canUndo.value || editLocked" :aria-keyshortcuts="mac ? 'Meta+Z' : 'Control+Z'" @click="m.undo">
             {{ copy.header.undo }}
           </button>
-          <button type="button" :disabled="!m.canRedo.value || editLocked" :aria-keyshortcuts="mac ? 'Meta+Shift+Z' : 'Control+Shift+Z'" @click="m.redo">
+          <button type="button" class="demo-btn demo-btn--sm" :disabled="!m.canRedo.value || editLocked" :aria-keyshortcuts="mac ? 'Meta+Shift+Z' : 'Control+Shift+Z'" @click="m.redo">
             {{ copy.header.redo }}
           </button>
-          <button type="button" class="mix-page__drawer-toggle" :aria-expanded="inspectorOpen" @click="inspectorOpen = !inspectorOpen">
+          <button type="button" class="demo-btn demo-btn--sm mix-page__drawer-toggle" :aria-expanded="inspectorOpen" @click="inspectorOpen = !inspectorOpen">
             {{ copy.header.inspector }}
           </button>
         </div>
@@ -217,29 +228,27 @@ onUnmounted(() => {
       @dragleave.self="dragOver = false"
       @drop.prevent="onDrop"
     >
-      <div v-if="error" class="mix-page__banner mix-page__banner--error" role="alert">{{ copy.errors[error] }}</div>
-      <div v-if="noticeText.length" class="mix-page__banner" role="status">
-        <ul>
+      <DemoNotice v-if="error" tone="error">{{ copy.errors[error] }}</DemoNotice>
+      <DemoNotice v-if="noticeText.length" tone="warn" dismissible @dismiss="m.dismissNotices">
+        <ul class="mix-page__notices">
           <li v-for="(text, i) in noticeText" :key="i">{{ text }}</li>
         </ul>
-        <button type="button" @click="m.dismissNotices">{{ copy.common.dismiss }}</button>
-      </div>
-      <div v-if="missingAudio.length > 0" class="mix-page__banner mix-page__banner--restore" role="status">
-        <p>
-          <strong>{{ copy.restore.title }}</strong>
-          {{ fill(copy.restore.body, { n: missingAudio.length }) }}
-        </p>
-        <div class="mix-page__banner-actions">
-          <button type="button" :disabled="loading" @click="chooseFiles">{{ copy.header.addTracks }}</button>
-          <button type="button" :disabled="loading" @click="m.loadDemo">{{ copy.header.loadDemo }}</button>
-        </div>
-      </div>
-      <div v-if="job && job.kind === 'export'" class="mix-page__lock" role="status">{{ copy.jobs.locked }}</div>
+      </DemoNotice>
+      <DemoNotice v-if="missingAudio.length > 0" tone="info" class="mix-page__restore" :title="copy.restore.title">
+        {{ fill(copy.restore.body, { n: missingAudio.length }) }}
+        <template #action>
+          <div class="mix-page__notice-actions">
+            <button type="button" class="demo-btn demo-btn--sm" :disabled="loading" @click="chooseFiles">{{ copy.header.addTracks }}</button>
+            <button type="button" class="demo-btn demo-btn--sm" :disabled="loading" @click="m.loadDemo">{{ copy.header.loadDemo }}</button>
+          </div>
+        </template>
+      </DemoNotice>
+      <DemoNotice v-if="job && job.kind === 'export'" tone="info">{{ copy.jobs.locked }}</DemoNotice>
 
-      <div v-if="state.tracks.length === 0" class="mix-page__drop" @click="chooseFiles">
+      <button v-if="state.tracks.length === 0" type="button" class="mix-page__drop" @click="chooseFiles">
         <strong>{{ copy.import.dropTitle }}</strong>
         <span>{{ copy.import.dropBody }}</span>
-      </div>
+      </button>
 
       <MixArrangement :m="m" />
 
@@ -258,7 +267,12 @@ onUnmounted(() => {
         <MixExportPanel :m="m" />
       </div>
 
-      <p class="mix-page__keys">{{ keysHint }}</p>
+      <p class="mix-page__keys">
+        <span v-for="shortcut in shortcuts" :key="shortcut.label" class="mix-page__key">
+          <kbd v-for="key in shortcut.keys" :key="key" class="demo-kbd">{{ key }}</kbd>
+          {{ shortcut.label }}
+        </span>
+      </p>
     </div>
   </ToolShell>
 </template>
