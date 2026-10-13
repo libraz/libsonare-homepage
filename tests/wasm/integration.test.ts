@@ -325,10 +325,10 @@ describe('wasm package integration', () => {
     expect(blindAcoustic.isBlind).toBe(true);
 
     const mel = wasm.melSpectrogram(tone, SAMPLE_RATE, 512, 128, 32);
-    const stftPower = wasm.melToStft(mel.power, mel.nMels, mel.nFrames, SAMPLE_RATE, 512, 128);
-    expect(stftPower.nBins).toBe(257);
-    expect(stftPower.nFrames).toBe(mel.nFrames);
-    expectFiniteArray(stftPower.power);
+    const stftMagnitude = wasm.melToStft(mel.power, mel.nMels, mel.nFrames, SAMPLE_RATE, 512, 128);
+    expect(stftMagnitude.nBins).toBe(257);
+    expect(stftMagnitude.nFrames).toBe(mel.nFrames);
+    expectFiniteArray(stftMagnitude.magnitude);
     expectFiniteArray(wasm.melToAudio(mel.power, mel.nMels, mel.nFrames, SAMPLE_RATE, 512, 128, 2));
 
     const mfcc = wasm.mfcc(tone, SAMPLE_RATE, 512, 128, 32, 13);

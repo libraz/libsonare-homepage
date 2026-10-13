@@ -3,7 +3,9 @@
  * `fieldRecording`, `voiceMemo` and `shellac78` — enable repair stages only and
  * leave level alone. Every other preset carries an integrated-loudness target
  * and a true-peak ceiling, which are not equally binding: the ceiling always
- * holds, while the loudness target is what one normalization pass aims at.
+ * holds, while the loudness target is what one normalization pass aims at. The
+ * ceiling is held on the true peak read at the configured oversampling (4x, the
+ * BS.1770 measure, by default); a finer meter can read up to ~0.15 dB higher.
  *
  * Reaching a target above the input's loudness costs gain the input's peak
  * headroom may not have, so the stage drives its true-peak limiter up to
@@ -30,7 +32,7 @@ export interface StreamingPlatform {
  * Every processor name `masteringProcessorNames()` can return, and therefore
  * every name `masteringProcess` / `masteringProcessStereo` accept.
  */
-export declare const SOLO_PROCESSORS: readonly ["dynamics.brickwallLimiter", "dynamics.compressor", "dynamics.deesser", "dynamics.duckingProcessor", "dynamics.expander", "dynamics.gate", "dynamics.limiter", "dynamics.parallelComp", "dynamics.sidechainRouter", "dynamics.transientShaper", "dynamics.upwardCompressor", "dynamics.upwardExpander", "dynamics.vocalRider", "effects.acoustic.roomMorph", "effects.delay.stereo", "effects.filter.vowel", "effects.gsEfx", "effects.modulation.autoWah", "effects.modulation.chorus", "effects.modulation.ensemble", "effects.modulation.flanger", "effects.modulation.phaser", "effects.modulation.pitchShifter", "effects.modulation.ringModulator", "effects.modulation.rotary", "effects.modulation.wah", "effects.reverb.convolution", "effects.reverb.dattorro", "effects.reverb.fdn", "effects.reverb.plate", "effects.reverb.room", "effects.reverb.velvet", "eq.apiStyle", "eq.bandPass", "eq.cutFilter", "eq.dynamic", "eq.equalizer", "eq.graphic", "eq.linearPhase", "eq.midSide", "eq.minimumPhase", "eq.parametric", "eq.pultec", "eq.shelving", "eq.tilt", "final.bitDepth", "final.dither", "final.outputChain", "maximizer.adaptiveRelease", "maximizer.loudnessOptimize", "maximizer.maximizer", "maximizer.softKneeMax", "maximizer.truePeakLimiter", "multiband.compressor", "multiband.dynamicEq", "multiband.expander", "multiband.imager", "multiband.limiter", "multiband.saturation", "repair.declick", "repair.declip", "repair.decrackle", "repair.dehum", "repair.denoiseClassical", "repair.dereverbClassical", "repair.trimSilence", "saturation.ampSim", "saturation.bitcrusher", "saturation.distortion", "saturation.exciter", "saturation.hardClipper", "saturation.multibandExciter", "saturation.overdrive", "saturation.softClipper", "saturation.tape", "saturation.transformer", "saturation.tube", "saturation.waveshaper", "spectral.airBand", "spectral.lowEndFocus", "spectral.presenceEnhancer", "spectral.spectralShaper", "stereo.autoPan", "stereo.binaural", "stereo.haasEnhancer", "stereo.imager", "stereo.monoMaker", "stereo.phaseAlign", "stereo.stereoBalance", "utility.gain", "voice.changer"];
+export declare const SOLO_PROCESSORS: readonly ["dynamics.brickwallLimiter", "dynamics.compressor", "dynamics.deesser", "dynamics.duckingProcessor", "dynamics.expander", "dynamics.gate", "dynamics.limiter", "dynamics.parallelComp", "dynamics.sidechainRouter", "dynamics.transientShaper", "dynamics.upwardCompressor", "dynamics.upwardExpander", "dynamics.vocalRider", "effects.acoustic.roomMorph", "effects.delay.stereo", "effects.filter.vowel", "effects.gsEfx", "effects.modulation.autoWah", "effects.modulation.chorus", "effects.modulation.ensemble", "effects.modulation.flanger", "effects.modulation.phaser", "effects.modulation.pitchShifter", "effects.modulation.ringModulator", "effects.modulation.rotary", "effects.modulation.wah", "effects.reverb.convolution", "effects.reverb.dattorro", "effects.reverb.fdn", "effects.reverb.plate", "effects.reverb.room", "effects.reverb.velvet", "eq.bandPass", "eq.cutFilter", "eq.dynamic", "eq.equalizer", "eq.graphic", "eq.linearPhase", "eq.midSide", "eq.minimumPhase", "eq.parametric", "eq.passiveTube", "eq.shelving", "eq.steppedProportionalQ", "eq.tilt", "final.bitDepth", "final.dither", "final.outputChain", "maximizer.adaptiveRelease", "maximizer.loudnessOptimize", "maximizer.maximizer", "maximizer.softKneeMax", "maximizer.truePeakLimiter", "multiband.compressor", "multiband.dynamicEq", "multiband.expander", "multiband.imager", "multiband.limiter", "multiband.saturation", "repair.declick", "repair.declip", "repair.decrackle", "repair.dehum", "repair.denoiseClassical", "repair.dereverbClassical", "repair.trimSilence", "saturation.ampSim", "saturation.bitcrusher", "saturation.distortion", "saturation.exciter", "saturation.hardClipper", "saturation.multibandExciter", "saturation.overdrive", "saturation.softClipper", "saturation.tape", "saturation.transformer", "saturation.tube", "saturation.waveshaper", "spectral.airBand", "spectral.lowEndFocus", "spectral.presenceEnhancer", "spectral.spectralShaper", "stereo.autoPan", "stereo.binaural", "stereo.haasEnhancer", "stereo.imager", "stereo.monoMaker", "stereo.phaseAlign", "stereo.stereoBalance", "utility.gain", "voice.changer"];
 export type SoloProcessor = (typeof SOLO_PROCESSORS)[number];
 export type PairProcessor = 'match.applyMatchEq' | 'match.alignReferenceToSource' | 'match.abSwitch' | 'match.abCrossfade';
 /** Pair processors with a stereo entry point. */
@@ -167,11 +169,17 @@ export interface StereoAnalysisResultMap {
 export interface MasteringOptions {
     /** Target integrated LUFS. Default -14. */
     targetLufs?: number;
-    /** True/sample peak ceiling in dBFS. Default -1. */
+    /**
+     * True/sample peak ceiling in dBFS. Default -1. Held on the true peak read at
+     * {@link truePeakOversample}; a finer meter can read up to ~0.15 dB higher.
+     */
     ceilingDb?: number;
     /** Oversampling factor used for peak estimation. Default 4. */
     truePeakOversample?: number;
-    /** Post true-peak limiter release in ms. Default 0 => library default (50 ms). */
+    /**
+     * Post true-peak limiter release in ms: one time constant, about 63% of the way at the set
+     * time. Default 0 => library default (50 ms).
+     */
     releaseMs?: number;
     /** Apply the static loudness gain at the input (pre-oversample) rate. Default false. */
     applyGainAtInputRate?: boolean;
@@ -317,7 +325,9 @@ export type MasteringAssistantParams = Record<string, number | boolean | string>
 export interface MultibandCompressorBand {
     thresholdDb?: number;
     ratio?: number;
+    /** Attack in ms: one time constant, about 63% of the way at the set time. */
     attackMs?: number;
+    /** Release in ms: one time constant, about 63% of the way at the set time. */
     releaseMs?: number;
     kneeDb?: number;
     makeupGainDb?: number;
@@ -434,7 +444,9 @@ export interface MasteringChainConfig {
             enabled?: boolean;
             thresholdDb?: number;
             ratio?: number;
+            /** Attack in ms: one time constant, about 63% of the way at the set time. */
             attackMs?: number;
+            /** Release in ms: one time constant, about 63% of the way at the set time. */
             releaseMs?: number;
             kneeDb?: number;
             makeupGainDb?: number;
@@ -445,7 +457,9 @@ export interface MasteringChainConfig {
             frequencyHz?: number;
             thresholdDb?: number;
             ratio?: number;
+            /** Attack in ms: one time constant, about 63% of the way at the set time. */
             attackMs?: number;
+            /** Release in ms: one time constant, about 63% of the way at the set time. */
             releaseMs?: number;
             rangeDb?: number;
             bandpassQ?: number;
@@ -469,15 +483,21 @@ export interface MasteringChainConfig {
             highCutoffHz?: number;
             lowThresholdDb?: number;
             lowRatio?: number;
+            /** Attack in ms: one time constant, about 63% of the way at the set time. */
             lowAttackMs?: number;
+            /** Release in ms: one time constant, about 63% of the way at the set time. */
             lowReleaseMs?: number;
             midThresholdDb?: number;
             midRatio?: number;
+            /** Attack in ms: one time constant, about 63% of the way at the set time. */
             midAttackMs?: number;
+            /** Release in ms: one time constant, about 63% of the way at the set time. */
             midReleaseMs?: number;
             highThresholdDb?: number;
             highRatio?: number;
+            /** Attack in ms: one time constant, about 63% of the way at the set time. */
             highAttackMs?: number;
+            /** Release in ms: one time constant, about 63% of the way at the set time. */
             highReleaseMs?: number;
             /**
              * Crossover structure. `cutoffsHz` replaces the cutoff list and sets the
@@ -558,6 +578,7 @@ export interface MasteringChainConfig {
             enabled?: boolean;
             ceilingDb?: number;
             lookaheadMs?: number;
+            /** Release in ms: one time constant, about 63% of the way at the set time. */
             releaseMs?: number;
             oversampleFactor?: number;
             applyGainAtInputRate?: boolean;
@@ -568,6 +589,7 @@ export interface MasteringChainConfig {
         targetLufs?: number;
         ceilingDb?: number;
         truePeakOversample?: number;
+        /** Release in ms: one time constant, about 63% of the way at the set time. */
         releaseMs?: number;
         applyGainAtInputRate?: boolean;
         /**

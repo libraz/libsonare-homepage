@@ -3,15 +3,6 @@ var __esm = (fn, res) => function __init() {
   return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
 };
 
-// src/abi.ts
-var EXPECTED_ABI_VERSION;
-var init_abi = __esm({
-  "src/abi.ts"() {
-    "use strict";
-    EXPECTED_ABI_VERSION = 84083207;
-  }
-});
-
 // src/errors.ts
 function isSonareError(value) {
   return value instanceof Error && value.name === "SonareError" && typeof value.code === "number";
@@ -39,6 +30,15 @@ var init_errors = __esm({
         return isSonareError(value);
       }
     };
+  }
+});
+
+// src/abi.ts
+var EXPECTED_ABI_VERSION;
+var init_abi = __esm({
+  "src/abi.ts"() {
+    "use strict";
+    EXPECTED_ABI_VERSION = 84083207;
   }
 });
 
@@ -251,6 +251,2140 @@ var init_module_state = __esm({
   }
 });
 
+// src/request_keys.ts
+var keysOf, AlignTakeToReferenceRequestKeys, DbConversionRequestKeys, MusicAnalyzeRequestKeys, AnalyzeBpmRequestKeys, AnalyzeDynamicsRequestKeys, AnalyzeImpulseResponseRequestKeys, AnalyzeMelodyRequestKeys, AnalyzePolyphonicRequestKeys, AnalyzeRhythmRequestKeys, AnalyzeSectionsRequestKeys, AnalyzeTimbreRequestKeys, AnalyzeWithProgressRequestKeys, MusicAnalyzeOptionsKeys, AssignNoteTargetsRequestKeys, AutoTuneRequestKeys, AutoTuneKeyKeys, BassChromaSpectrogramRequestKeys, ChirpRequestKeys, ChordFunctionalAnalysisRequestKeys, Anon19Keys, SpectrogramRequestKeys, ChromaSpectrogramRequestKeys, ClicksRequestKeys, CqtRequestKeys, CqtToAudioRequestKeys, VocalCreateRequestKeys, VocalSessionLimitsKeys, VocalAnalysisInputKeys, CyclicTempogramRequestKeys, DecomposeRequestKeys, DecomposeNotePitchRequestKeys, DecomposeStemsRequestKeys, DecomposeStemsLinkedRequestKeys, DecomposeWithInitRequestKeys, EmphasisRequestKeys, DetectAcousticRequestKeys, SamplesRequestKeys, DetectBoundariesRequestKeys, DetectChordsRequestKeys, DetectKeyRequestKeys, DetectKeyCandidatesRequestKeys, DetectOnsetsRequestKeys, Ebur128LoudnessRangeRequestKeys, EstimateMeterRequestKeys, EstimateRoomRequestKeys, EstimateTuningRequestKeys, ExtractNotesRequestKeys, ExtractPercussiveEventsRequestKeys, FixFramesRequestKeys, FixLengthRequestKeys, FourierTempogramRequestKeys, FrameSignalRequestKeys, GriffinLimRequestKeys, HarmonicRequestKeys, HpssRequestKeys, HpssWithResidualRequestKeys, LufsRequestKeys, LufsInterleavedRequestKeys, LufsSeriesInterleavedRequestKeys, MasterAudioRequestKeys, MasteringChainConfigKeys, MasterAudioStereoRequestKeys, MasteringRequestKeys, MasteringAbMatchLoudnessRequestKeys, MasteringAbMatchLoudnessStereoRequestKeys, MasteringAssistantParamsRequestKeys, MasteringAssistantStereoParamsRequestKeys, MasteringSamplesParamsRequestKeys, MasteringStereoParamsRequestKeys, MasteringChainRequestKeys, MasteringChainStereoRequestKeys, MasteringDynamicsCompressorRequestKeys, MasteringDynamicsGateRequestKeys, MasteringDynamicsTransientShaperRequestKeys, Anon74Keys, MasteringPairProcessRequestKeys, MasteringPairProcessStereoRequestKeys, MasteringProcessRequestKeys, MasteringProcessStereoRequestKeys, MasteringRepairAnalyzeRequestKeys, MasteringRepairApplyRequestKeys, MasteringRepairDeclickRequestKeys, MasteringRepairDeclickStereoRequestKeys, MasteringRepairDeclipRequestKeys, MasteringRepairDeclipStereoRequestKeys, MasteringRepairDecrackleRequestKeys, MasteringRepairDecrackleStereoRequestKeys, MasteringRepairDehumRequestKeys, MasteringRepairDehumStereoRequestKeys, MasteringRepairDenoiseClassicalRequestKeys, MasteringRepairDenoiseClassicalLinkedRequestKeys, MasteringRepairDenoiseClassicalStereoRequestKeys, MasteringRepairDereverbClassicalRequestKeys, MasteringRepairDereverbClassicalLinkedRequestKeys, MasteringRepairDereverbClassicalStereoRequestKeys, MasteringRepairDetectClicksRequestKeys, MasteringRepairDetectClippingRequestKeys, MasteringRepairDetectCrackleRequestKeys, MasteringRepairDetectHumRequestKeys, MasteringRepairDetectNoiseFloorRequestKeys, MasteringRepairDetectReverbRequestKeys, MasteringRepairDetectTrimRangeRequestKeys, MasteringRepairDetectTrimRangeStereoRequestKeys, MasteringRepairTrimSilenceRequestKeys, MasteringRepairTrimSilenceStereoRequestKeys, Anon105Keys, MasteringStreamingPreviewRequestKeys, MasteringStreamingPreviewStereoRequestKeys, MelDeltaRequestKeys, MelSpectrogramRequestKeys, MergeNotesRequestKeys, MeteringSamplesRequestKeys, MeteringStereoRequestKeys, MeteringDetectClippingRequestKeys, MeteringDynamicRangeRequestKeys, MeteringStereoDecimatedRequestKeys, MeteringSilenceRatioRequestKeys, MeteringSpectrumRequestKeys, MeteringSpectrumFrameRequestKeys, MeteringTruePeakRequestKeys, MfccRequestKeys, MixStereoRequestKeys, NnFilterRequestKeys, NnlsChromaRequestKeys, NormalizeRequestKeys, NormalizeStereoRequestKeys, NoteMoveRequestKeys, NoteSegmentsRequestKeys, NoteStretchRequestKeys, NoteTargetsFromSmfRequestKeys, OnsetBacktrackRequestKeys, OnsetEnvelopeRequestKeys, OnsetStrengthMultiRequestKeys, PadCenterRequestKeys, PcenRequestKeys, PeakPickRequestKeys, PercussiveRequestKeys, PhaseVocoderRequestKeys, PiptrackRequestKeys, PitchCorrectTimevaryingRequestKeys, PitchCorrectToMidiRequestKeys, PitchCorrectToMidiTimevaryingRequestKeys, PitchPyinRequestKeys, PitchShiftRequestKeys, PitchTuningRequestKeys, PitchYinRequestKeys, PlpRequestKeys, PolyFeaturesRequestKeys, ReassignedSpectrogramRequestKeys, RemixRequestKeys, RenderNotesRequestKeys, RenderPercussiveEventsRequestKeys, RenderPlaybackRequestKeys, PlaybackRendererConfigKeys, ResampleRequestKeys, VocalRestoreRequestKeys, ZeroCrossingRateRequestKeys, RoomGeometryFromEstimateRequestKeys, RoomPlacementKeys, RoomMorphRequestKeys, RoomMorphStereoRequestKeys, SegmentAgglomerativeRequestKeys, SegmentCrossSimilarityRequestKeys, SegmentLagToRecurrenceRequestKeys, SegmentPathEnhanceRequestKeys, SegmentRecurrenceMatrixRequestKeys, SegmentRecurrenceToLagRequestKeys, SegmentSubsegmentRequestKeys, Anon168Keys, SpectralFrameRequestKeys, SpectralContrastRequestKeys, SpectralEditRequestKeys, Anon172Keys, SpectralRolloffRequestKeys, SplitNoteRequestKeys, SilenceRequestKeys, SplitSilenceCommonRequestKeys, StreamingLoudnessGainRequestKeys, StreamingLoudnessGainStereoRequestKeys, SuggestMixSceneRequestKeys, MixAssistantOptionsKeys, RirSynthOptionsKeys, TempogramRequestKeys, TempogramRatioRequestKeys, TimeStretchRequestKeys, ToneRequestKeys, TonnetzRequestKeys, TranscribeRequestKeys, TrimRequestKeys, VectorNormalizeRequestKeys, VoiceChangeRequestKeys, VoiceChangeRealtimeRequestKeys, VqtRequestKeys, VqtToAudioRequestKeys, WaveformPeakPyramidRequestKeys, WaveformPeaksRequestKeys, ZeroCrossingsRequestKeys, REQUEST_SHAPES;
+var init_request_keys = __esm({
+  "src/request_keys.ts"() {
+    "use strict";
+    keysOf = () => (keys) => keys;
+    AlignTakeToReferenceRequestKeys = keysOf()([
+      "reference",
+      "take",
+      "sampleRate",
+      "takeSampleRate",
+      "hopLength",
+      "binsPerOctave"
+    ]);
+    DbConversionRequestKeys = keysOf()(["values", "ref", "amin", "topDb"]);
+    MusicAnalyzeRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "validate",
+      "nFft",
+      "hopLength",
+      "bpmMin",
+      "bpmMax",
+      "startBpm",
+      "useTriadsOnly",
+      "useHpss",
+      "chromaHighpassHz",
+      "useBassWeighted",
+      "chromaHopMultiplier",
+      "useChordHmm",
+      "useChordKeyContext",
+      "chordHmmBeamWidth",
+      "detectChordInversions",
+      "adaptiveTempo",
+      "tempoUpdateIntervalBeats",
+      "computeTempoCurve",
+      "meterCandidateNumerators",
+      "meterDenominator",
+      "tuning"
+    ]);
+    AnalyzeBpmRequestKeys = keysOf()([
+      "bpmMin",
+      "bpmMax",
+      "startBpm",
+      "nFft",
+      "hopLength",
+      "maxCandidates",
+      "validate",
+      "samples",
+      "sampleRate"
+    ]);
+    AnalyzeDynamicsRequestKeys = keysOf()([
+      "windowSec",
+      "hopLength",
+      "compressionThreshold",
+      "validate",
+      "samples",
+      "sampleRate"
+    ]);
+    AnalyzeImpulseResponseRequestKeys = keysOf()([
+      "nOctaveBands",
+      "minDecayDb",
+      "samples",
+      "sampleRate",
+      "validate"
+    ]);
+    AnalyzeMelodyRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "fmin",
+      "fmax",
+      "frameLength",
+      "hopLength",
+      "threshold",
+      "usePyin",
+      "center",
+      "validate"
+    ]);
+    AnalyzePolyphonicRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "winLength",
+      "centRefHz",
+      "centsPerBin",
+      "centMaxHz",
+      "tonalityOff",
+      "salienceHarmonics",
+      "f0MinHz",
+      "f0MaxHz",
+      "salienceAlphaHz",
+      "salienceBetaHz",
+      "salienceInharmonicity",
+      "maxPolyphony",
+      "minFramePeakRatio",
+      "minSeparationCents",
+      "subtractionFactor",
+      "maxJumpCents",
+      "minRidgePeakRatio",
+      "minRidgeDurationMs",
+      "reattackRatio",
+      "maskHarmonics",
+      "claimLobes",
+      "inharmonicity",
+      "estimateInharmonicity",
+      "inharmonicityMinPartials",
+      "inharmonicityMaxResidualBins",
+      "inharmonicityMaxStretch",
+      "windowFrames",
+      "minPartialSeparation",
+      "maxFitResidual",
+      "maxWeightModulus",
+      "maxRefineHz",
+      "f0ToleranceCents",
+      "segmentationThresholdCents",
+      "minNoteMs",
+      "referenceHz",
+      "validate"
+    ]);
+    AnalyzeRhythmRequestKeys = keysOf()([
+      "bpmMin",
+      "bpmMax",
+      "startBpm",
+      "nFft",
+      "hopLength",
+      "validate",
+      "samples",
+      "sampleRate"
+    ]);
+    AnalyzeSectionsRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "minSectionSec",
+      "validate"
+    ]);
+    AnalyzeTimbreRequestKeys = keysOf()([
+      "nFft",
+      "hopLength",
+      "nMels",
+      "nMfcc",
+      "windowSec",
+      "validate",
+      "samples",
+      "sampleRate"
+    ]);
+    AnalyzeWithProgressRequestKeys = keysOf()([
+      "onProgress",
+      "cancel",
+      "options",
+      "samples",
+      "sampleRate",
+      "validate",
+      "nFft",
+      "hopLength",
+      "bpmMin",
+      "bpmMax",
+      "startBpm",
+      "useTriadsOnly",
+      "useHpss",
+      "chromaHighpassHz",
+      "useBassWeighted",
+      "chromaHopMultiplier",
+      "useChordHmm",
+      "useChordKeyContext",
+      "chordHmmBeamWidth",
+      "detectChordInversions",
+      "adaptiveTempo",
+      "tempoUpdateIntervalBeats",
+      "computeTempoCurve",
+      "meterCandidateNumerators",
+      "meterDenominator",
+      "tuning"
+    ]);
+    MusicAnalyzeOptionsKeys = keysOf()([
+      "nFft",
+      "hopLength",
+      "bpmMin",
+      "bpmMax",
+      "startBpm",
+      "useTriadsOnly",
+      "useHpss",
+      "chromaHighpassHz",
+      "useBassWeighted",
+      "chromaHopMultiplier",
+      "useChordHmm",
+      "useChordKeyContext",
+      "chordHmmBeamWidth",
+      "detectChordInversions",
+      "adaptiveTempo",
+      "tempoUpdateIntervalBeats",
+      "computeTempoCurve",
+      "meterCandidateNumerators",
+      "meterDenominator",
+      "tuning"
+    ]);
+    AssignNoteTargetsRequestKeys = keysOf()([
+      "notes",
+      "sampleRate",
+      "targets",
+      "unmatchedPolicy",
+      "minOverlapRatio",
+      "maxCorrectionSemitones"
+    ]);
+    AutoTuneRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "key",
+      "strength",
+      "retuneSpeedMs",
+      "vibratoThresholdCents",
+      "maxCorrectionSemitones",
+      "referenceMidi",
+      "validate"
+    ]);
+    AutoTuneKeyKeys = keysOf()(["root", "mode"]);
+    BassChromaSpectrogramRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "hopLength",
+      "nChroma",
+      "validate"
+    ]);
+    ChirpRequestKeys = keysOf()([
+      "fmin",
+      "fmax",
+      "sampleRate",
+      "duration",
+      "linear"
+    ]);
+    ChordFunctionalAnalysisRequestKeys = keysOf()([
+      "keyRoot",
+      "keyMode",
+      "minDuration",
+      "smoothingWindow",
+      "threshold",
+      "useTriadsOnly",
+      "nFft",
+      "hopLength",
+      "useBeatSync",
+      "useHmm",
+      "hmmBeamWidth",
+      "useKeyContext",
+      "detectInversions",
+      "chromaMethod",
+      "tuning",
+      "validate",
+      "samples",
+      "sampleRate"
+    ]);
+    Anon19Keys = keysOf()(["chords", "key"]);
+    SpectrogramRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "validate"
+    ]);
+    ChromaSpectrogramRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "hopLength",
+      "nChroma",
+      "binsPerOctave",
+      "validate"
+    ]);
+    ClicksRequestKeys = keysOf()([
+      "times",
+      "sampleRate",
+      "length",
+      "frequency",
+      "clickDuration"
+    ]);
+    CqtRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "hopLength",
+      "fmin",
+      "nBins",
+      "binsPerOctave",
+      "validate"
+    ]);
+    CqtToAudioRequestKeys = keysOf()([
+      "magnitude",
+      "nBins",
+      "nFrames",
+      "sampleRate",
+      "hopLength",
+      "fmin",
+      "binsPerOctave",
+      "nIter",
+      "validate"
+    ]);
+    VocalCreateRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "outputLengthSamples",
+      "edgeFadeMs",
+      "vibratoCutoffHz",
+      "segmentationThresholdCents",
+      "minNoteMs",
+      "frameLengthSamples",
+      "hopLengthSamples",
+      "fminHz",
+      "fmaxHz",
+      "yinThreshold",
+      "voicedThreshold",
+      "centered",
+      "referenceHz",
+      "limits",
+      "analysis"
+    ]);
+    VocalSessionLimitsKeys = keysOf()([
+      "maxHistoryBytes",
+      "maxCacheBytes",
+      "maxUndoDepth",
+      "maxRenderJobs"
+    ]);
+    VocalAnalysisInputKeys = keysOf()([
+      "frameOriginSample",
+      "samplesPerFrame",
+      "frameLengthSamples",
+      "f0Hz",
+      "voiced",
+      "algorithmId",
+      "algorithmVersion",
+      "fminHz",
+      "fmaxHz",
+      "yinThreshold",
+      "voicedThreshold",
+      "centered",
+      "segmentationThresholdCents",
+      "minNoteMs",
+      "referenceHz"
+    ]);
+    CyclicTempogramRequestKeys = keysOf()([
+      "onsetEnvelope",
+      "sampleRate",
+      "hopLength",
+      "winLength",
+      "bpmMin",
+      "nBins"
+    ]);
+    DecomposeRequestKeys = keysOf()([
+      "s",
+      "nFeatures",
+      "nFrames",
+      "nComponents",
+      "nIter",
+      "beta"
+    ]);
+    DecomposeNotePitchRequestKeys = keysOf()([
+      "f0Hz",
+      "voiced",
+      "frameRate",
+      "medianHz",
+      "vibratoCutoffHz"
+    ]);
+    DecomposeStemsRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nComponents",
+      "nFft",
+      "hopLength",
+      "nIter",
+      "beta",
+      "init",
+      "maskPower"
+    ]);
+    DecomposeStemsLinkedRequestKeys = keysOf()([
+      "channels",
+      "sampleRate",
+      "nComponents",
+      "nFft",
+      "hopLength",
+      "nIter",
+      "beta",
+      "init",
+      "maskPower"
+    ]);
+    DecomposeWithInitRequestKeys = keysOf()([
+      "init",
+      "s",
+      "nFeatures",
+      "nFrames",
+      "nComponents",
+      "nIter",
+      "beta"
+    ]);
+    EmphasisRequestKeys = keysOf()(["samples", "coef", "zi"]);
+    DetectAcousticRequestKeys = keysOf()([
+      "nOctaveBands",
+      "nThirdOctaveSubbands",
+      "minDecayDb",
+      "noiseFloorMarginDb",
+      "validate",
+      "samples",
+      "sampleRate"
+    ]);
+    SamplesRequestKeys = keysOf()(["samples", "sampleRate", "validate"]);
+    DetectBoundariesRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "kernelSize",
+      "threshold",
+      "absoluteThreshold",
+      "nMfcc",
+      "nChroma",
+      "peakDistance",
+      "referenceWindow",
+      "useMfcc",
+      "useChroma",
+      "validate"
+    ]);
+    DetectChordsRequestKeys = keysOf()([
+      "minDuration",
+      "smoothingWindow",
+      "threshold",
+      "useTriadsOnly",
+      "nFft",
+      "hopLength",
+      "useBeatSync",
+      "useHmm",
+      "hmmBeamWidth",
+      "useKeyContext",
+      "keyRoot",
+      "keyMode",
+      "detectInversions",
+      "chromaMethod",
+      "tuning",
+      "validate",
+      "samples",
+      "sampleRate"
+    ]);
+    DetectKeyRequestKeys = keysOf()([
+      "tuning",
+      "nFft",
+      "hopLength",
+      "useHpss",
+      "loudnessWeighted",
+      "highPassHz",
+      "modes",
+      "profile",
+      "genreHint",
+      "validate",
+      "samples",
+      "sampleRate"
+    ]);
+    DetectKeyCandidatesRequestKeys = keysOf()([
+      "nFft",
+      "hopLength",
+      "useHpss",
+      "loudnessWeighted",
+      "highPassHz",
+      "modes",
+      "profile",
+      "genreHint",
+      "validate",
+      "samples",
+      "sampleRate"
+    ]);
+    DetectOnsetsRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "validate",
+      "nFft",
+      "hopLength",
+      "threshold",
+      "preMax",
+      "postMax",
+      "preAvg",
+      "postAvg",
+      "delta",
+      "wait",
+      "backtrack",
+      "backtrackRange"
+    ]);
+    Ebur128LoudnessRangeRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "validate"
+    ]);
+    EstimateMeterRequestKeys = keysOf()([
+      "beatTimes",
+      "beatStrengths",
+      "candidateNumerators",
+      "denominator",
+      "downbeatWeight",
+      "measureWeight",
+      "subdivisionWeight",
+      "compoundSubdivisionThreshold"
+    ]);
+    EstimateRoomRequestKeys = keysOf()([
+      "aspectHintLw",
+      "aspectHintLh",
+      "referenceAbsorption",
+      "preferEyring",
+      "nOctaveBands",
+      "mode",
+      "minDecayDb",
+      "noiseFloorMarginDb",
+      "samples",
+      "sampleRate",
+      "validate"
+    ]);
+    EstimateTuningRequestKeys = keysOf()([
+      "resolution",
+      "binsPerOctave",
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength"
+    ]);
+    ExtractNotesRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "f0Hz",
+      "frameRate",
+      "voiced",
+      "voicedProb",
+      "segmentationThresholdCents",
+      "minNoteMs",
+      "referenceHz",
+      "voicedThreshold",
+      "validate"
+    ]);
+    ExtractPercussiveEventsRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "onsetWait",
+      "onsetDelta",
+      "maxEventMs",
+      "minPercussiveRatio",
+      "nFft",
+      "hopLength",
+      "hpssKernelHarmonic",
+      "hpssKernelPercussive",
+      "validate"
+    ]);
+    FixFramesRequestKeys = keysOf()(["frames", "xMin", "xMax", "pad"]);
+    FixLengthRequestKeys = keysOf()(["values", "targetSize", "padValue"]);
+    FourierTempogramRequestKeys = keysOf()([
+      "onsetEnvelope",
+      "sampleRate",
+      "hopLength",
+      "winLength",
+      "center",
+      "norm",
+      "validate"
+    ]);
+    FrameSignalRequestKeys = keysOf()([
+      "samples",
+      "frameLength",
+      "hopLength"
+    ]);
+    GriffinLimRequestKeys = keysOf()([
+      "magnitude",
+      "nBins",
+      "nFrames",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "nIter",
+      "momentum",
+      "validate"
+    ]);
+    HarmonicRequestKeys = keysOf()(["samples", "sampleRate", "validate"]);
+    HpssRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "kernelHarmonic",
+      "kernelPercussive",
+      "nFft",
+      "hopLength",
+      "hardMask"
+    ]);
+    HpssWithResidualRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "kernelHarmonic",
+      "kernelPercussive",
+      "nFft",
+      "hopLength",
+      "hardMask"
+    ]);
+    LufsRequestKeys = keysOf()(["samples", "sampleRate", "validate"]);
+    LufsInterleavedRequestKeys = keysOf()([
+      "samples",
+      "channels",
+      "sampleRate",
+      "validate"
+    ]);
+    LufsSeriesInterleavedRequestKeys = keysOf()([
+      "samples",
+      "channels",
+      "sampleRate",
+      "validate"
+    ]);
+    MasterAudioRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "preset",
+      "overrides",
+      "onProgress",
+      "cancel"
+    ]);
+    MasteringChainConfigKeys = keysOf()([
+      "repair",
+      "eq",
+      "dynamics",
+      "saturation",
+      "spectral",
+      "stereo",
+      "maximizer",
+      "loudness"
+    ]);
+    MasterAudioStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "preset",
+      "overrides",
+      "onProgress",
+      "cancel"
+    ]);
+    MasteringRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "targetLufs",
+      "ceilingDb",
+      "truePeakOversample",
+      "releaseMs",
+      "applyGainAtInputRate"
+    ]);
+    MasteringAbMatchLoudnessRequestKeys = keysOf()([
+      "source",
+      "reference",
+      "sampleRate",
+      "referenceSampleRate"
+    ]);
+    MasteringAbMatchLoudnessStereoRequestKeys = keysOf()([
+      "sourceLeft",
+      "sourceRight",
+      "referenceLeft",
+      "referenceRight",
+      "sampleRate",
+      "referenceSampleRate"
+    ]);
+    MasteringAssistantParamsRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "params"
+    ]);
+    MasteringAssistantStereoParamsRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "params"
+    ]);
+    MasteringSamplesParamsRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "params"
+    ]);
+    MasteringStereoParamsRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "params"
+    ]);
+    MasteringChainRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "config",
+      "onProgress",
+      "cancel"
+    ]);
+    MasteringChainStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "config",
+      "onProgress",
+      "cancel"
+    ]);
+    MasteringDynamicsCompressorRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "thresholdDb",
+      "ratio",
+      "attackMs",
+      "releaseMs",
+      "kneeDb",
+      "makeupGainDb",
+      "autoMakeup",
+      "detector",
+      "sidechainHpfEnabled",
+      "sidechainHpfHz",
+      "pdrTimeMs",
+      "pdrReleaseScale",
+      "validate"
+    ]);
+    MasteringDynamicsGateRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "thresholdDb",
+      "attackMs",
+      "releaseMs",
+      "rangeDb",
+      "holdMs",
+      "closeThresholdDb",
+      "keyHpfHz",
+      "validate"
+    ]);
+    MasteringDynamicsTransientShaperRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "attackGainDb",
+      "sustainGainDb",
+      "fastAttackMs",
+      "fastReleaseMs",
+      "slowAttackMs",
+      "slowReleaseMs",
+      "sensitivity",
+      "maxGainDb",
+      "gainSmoothingMs",
+      "lookaheadMs",
+      "validate"
+    ]);
+    Anon74Keys = keysOf()([
+      "analysisName",
+      "source",
+      "reference",
+      "sampleRate",
+      "referenceSampleRate",
+      "params"
+    ]);
+    MasteringPairProcessRequestKeys = keysOf()([
+      "processorName",
+      "source",
+      "reference",
+      "sampleRate",
+      "referenceSampleRate",
+      "params"
+    ]);
+    MasteringPairProcessStereoRequestKeys = keysOf()([
+      "processorName",
+      "sourceLeft",
+      "sourceRight",
+      "referenceLeft",
+      "referenceRight",
+      "sampleRate",
+      "referenceSampleRate",
+      "params"
+    ]);
+    MasteringProcessRequestKeys = keysOf()([
+      "processorName",
+      "samples",
+      "sampleRate",
+      "params"
+    ]);
+    MasteringProcessStereoRequestKeys = keysOf()([
+      "processorName",
+      "left",
+      "right",
+      "sampleRate",
+      "params"
+    ]);
+    MasteringRepairAnalyzeRequestKeys = keysOf()([
+      "channels",
+      "sampleRate",
+      "preferStreamingSafe"
+    ]);
+    MasteringRepairApplyRequestKeys = keysOf()([
+      "channels",
+      "sampleRate",
+      "stages",
+      "onProgress",
+      "cancel"
+    ]);
+    MasteringRepairDeclickRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "threshold",
+      "neighborRatio",
+      "maxClickSamples",
+      "lpcOrder",
+      "residualRatio"
+    ]);
+    MasteringRepairDeclickStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "threshold",
+      "neighborRatio",
+      "maxClickSamples",
+      "lpcOrder",
+      "residualRatio"
+    ]);
+    MasteringRepairDeclipRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "clipThreshold",
+      "lpcOrder",
+      "iterations",
+      "lpcBlend"
+    ]);
+    MasteringRepairDeclipStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "clipThreshold",
+      "lpcOrder",
+      "iterations",
+      "lpcBlend"
+    ]);
+    MasteringRepairDecrackleRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "threshold",
+      "mode",
+      "levels"
+    ]);
+    MasteringRepairDecrackleStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "threshold",
+      "mode",
+      "levels"
+    ]);
+    MasteringRepairDehumRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "fundamentalHz",
+      "harmonics",
+      "q",
+      "adaptive",
+      "searchRangeHz",
+      "adaptation",
+      "frameSize",
+      "pllBandwidth",
+      "mode"
+    ]);
+    MasteringRepairDehumStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "fundamentalHz",
+      "harmonics",
+      "q",
+      "adaptive",
+      "searchRangeHz",
+      "adaptation",
+      "frameSize",
+      "pllBandwidth",
+      "mode"
+    ]);
+    MasteringRepairDenoiseClassicalRequestKeys = keysOf()(
+      [
+        "samples",
+        "sampleRate",
+        "mode",
+        "noiseEstimator",
+        "nFft",
+        "hopLength",
+        "ddAlpha",
+        "reductionDb",
+        "overSubtraction",
+        "spectralFloor",
+        "noiseEstimationQuantile",
+        "speechPresenceGain",
+        "gainSmoothing"
+      ]
+    );
+    MasteringRepairDenoiseClassicalLinkedRequestKeys = keysOf()([
+      "channels",
+      "sampleRate",
+      "mode",
+      "noiseEstimator",
+      "nFft",
+      "hopLength",
+      "ddAlpha",
+      "reductionDb",
+      "overSubtraction",
+      "spectralFloor",
+      "noiseEstimationQuantile",
+      "speechPresenceGain",
+      "gainSmoothing"
+    ]);
+    MasteringRepairDenoiseClassicalStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "mode",
+      "noiseEstimator",
+      "nFft",
+      "hopLength",
+      "ddAlpha",
+      "reductionDb",
+      "overSubtraction",
+      "spectralFloor",
+      "noiseEstimationQuantile",
+      "speechPresenceGain",
+      "gainSmoothing"
+    ]);
+    MasteringRepairDereverbClassicalRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "threshold",
+      "attenuation",
+      "nFft",
+      "hopLength",
+      "t60Sec",
+      "lateDelayMs",
+      "overSubtraction",
+      "spectralFloor",
+      "wpeEnabled",
+      "wpeIterations",
+      "wpeTaps",
+      "wpeStrength"
+    ]);
+    MasteringRepairDereverbClassicalLinkedRequestKeys = keysOf()([
+      "channels",
+      "sampleRate",
+      "threshold",
+      "attenuation",
+      "nFft",
+      "hopLength",
+      "t60Sec",
+      "lateDelayMs",
+      "overSubtraction",
+      "spectralFloor",
+      "wpeEnabled",
+      "wpeIterations",
+      "wpeTaps",
+      "wpeStrength"
+    ]);
+    MasteringRepairDereverbClassicalStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "threshold",
+      "attenuation",
+      "nFft",
+      "hopLength",
+      "t60Sec",
+      "lateDelayMs",
+      "overSubtraction",
+      "spectralFloor",
+      "wpeEnabled",
+      "wpeIterations",
+      "wpeTaps",
+      "wpeStrength"
+    ]);
+    MasteringRepairDetectClicksRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "threshold",
+      "neighborRatio",
+      "maxClickSamples",
+      "lpcOrder",
+      "residualRatio"
+    ]);
+    MasteringRepairDetectClippingRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "clipThreshold",
+      "lpcOrder",
+      "iterations",
+      "lpcBlend"
+    ]);
+    MasteringRepairDetectCrackleRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "threshold",
+      "mode",
+      "levels"
+    ]);
+    MasteringRepairDetectHumRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "fundamentalHz",
+      "harmonics",
+      "q",
+      "adaptive",
+      "searchRangeHz",
+      "adaptation",
+      "frameSize",
+      "pllBandwidth",
+      "mode"
+    ]);
+    MasteringRepairDetectNoiseFloorRequestKeys = keysOf()(
+      [
+        "samples",
+        "sampleRate",
+        "mode",
+        "noiseEstimator",
+        "nFft",
+        "hopLength",
+        "ddAlpha",
+        "reductionDb",
+        "overSubtraction",
+        "spectralFloor",
+        "noiseEstimationQuantile",
+        "speechPresenceGain",
+        "gainSmoothing"
+      ]
+    );
+    MasteringRepairDetectReverbRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "threshold",
+      "attenuation",
+      "nFft",
+      "hopLength",
+      "t60Sec",
+      "lateDelayMs",
+      "overSubtraction",
+      "spectralFloor",
+      "wpeEnabled",
+      "wpeIterations",
+      "wpeTaps",
+      "wpeStrength"
+    ]);
+    MasteringRepairDetectTrimRangeRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "threshold",
+      "paddingSamples",
+      "paddingSec",
+      "mode",
+      "gateLufs",
+      "windowMs"
+    ]);
+    MasteringRepairDetectTrimRangeStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "threshold",
+      "paddingSamples",
+      "paddingSec",
+      "mode",
+      "gateLufs",
+      "windowMs"
+    ]);
+    MasteringRepairTrimSilenceRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "threshold",
+      "paddingSamples",
+      "paddingSec",
+      "mode",
+      "gateLufs",
+      "windowMs"
+    ]);
+    MasteringRepairTrimSilenceStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "threshold",
+      "paddingSamples",
+      "paddingSec",
+      "mode",
+      "gateLufs",
+      "windowMs"
+    ]);
+    Anon105Keys = keysOf()([
+      "analysisName",
+      "left",
+      "right",
+      "sampleRate",
+      "params"
+    ]);
+    MasteringStreamingPreviewRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "platforms"
+    ]);
+    MasteringStreamingPreviewStereoRequestKeys = keysOf()(
+      ["left", "right", "sampleRate", "platforms"]
+    );
+    MelDeltaRequestKeys = keysOf()([
+      "features",
+      "nFeatures",
+      "nFrames",
+      "width",
+      "validate"
+    ]);
+    MelSpectrogramRequestKeys = keysOf()([
+      "nMels",
+      "fmin",
+      "fmax",
+      "htk",
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "validate"
+    ]);
+    MergeNotesRequestKeys = keysOf()([
+      "first",
+      "last",
+      "samples",
+      "sampleRate",
+      "f0Hz",
+      "frameRate",
+      "voiced",
+      "voicedProb",
+      "notes",
+      "segmentationThresholdCents",
+      "minNoteMs",
+      "referenceHz",
+      "voicedThreshold",
+      "validate"
+    ]);
+    MeteringSamplesRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "validate"
+    ]);
+    MeteringStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "validate"
+    ]);
+    MeteringDetectClippingRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "threshold",
+      "minRegionSamples",
+      "validate"
+    ]);
+    MeteringDynamicRangeRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "windowSec",
+      "hopSec",
+      "lowPercentile",
+      "highPercentile",
+      "validate"
+    ]);
+    MeteringStereoDecimatedRequestKeys = keysOf()([
+      "maxPoints",
+      "left",
+      "right",
+      "sampleRate",
+      "validate"
+    ]);
+    MeteringSilenceRatioRequestKeys = keysOf()([
+      "thresholdDb",
+      "frameLength",
+      "hopLength",
+      "samples",
+      "sampleRate",
+      "validate"
+    ]);
+    MeteringSpectrumRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nFft",
+      "applyOctaveSmoothing",
+      "octaveFraction",
+      "dbRef",
+      "dbAmin",
+      "validate"
+    ]);
+    MeteringSpectrumFrameRequestKeys = keysOf()([
+      "frameOffset",
+      "samples",
+      "sampleRate",
+      "nFft",
+      "applyOctaveSmoothing",
+      "octaveFraction",
+      "dbRef",
+      "dbAmin",
+      "validate"
+    ]);
+    MeteringTruePeakRequestKeys = keysOf()([
+      "oversampleFactor",
+      "samples",
+      "sampleRate",
+      "validate"
+    ]);
+    MfccRequestKeys = keysOf()([
+      "nMfcc",
+      "lifter",
+      "nMels",
+      "fmin",
+      "fmax",
+      "htk",
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "validate"
+    ]);
+    MixStereoRequestKeys = keysOf()([
+      "leftChannels",
+      "rightChannels",
+      "sampleRate",
+      "inputTrimDb",
+      "faderDb",
+      "pan",
+      "panMode",
+      "width",
+      "muted"
+    ]);
+    NnFilterRequestKeys = keysOf()([
+      "s",
+      "nFeatures",
+      "nFrames",
+      "aggregate",
+      "k",
+      "width"
+    ]);
+    NnlsChromaRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "enableStftBlend",
+      "stftBlendWeight",
+      "stftBlendNFft",
+      "hopLength",
+      "validate"
+    ]);
+    NormalizeRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "targetDb",
+      "mode",
+      "validate"
+    ]);
+    NormalizeStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "targetDb",
+      "mode",
+      "validate"
+    ]);
+    NoteMoveRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "onsetSample",
+      "onsetSec",
+      "offsetSample",
+      "offsetSec",
+      "targetOnsetSample",
+      "targetOnsetSec",
+      "validate"
+    ]);
+    NoteSegmentsRequestKeys = keysOf()([
+      "f0Hz",
+      "voicedProb",
+      "frameRate",
+      "segmentationThresholdCents",
+      "minNoteMs",
+      "referenceHz",
+      "voicedThreshold"
+    ]);
+    NoteStretchRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "onsetSample",
+      "onsetSec",
+      "offsetSample",
+      "offsetSec",
+      "stretchRatio",
+      "validate"
+    ]);
+    NoteTargetsFromSmfRequestKeys = keysOf()(["data", "trackIndex"]);
+    OnsetBacktrackRequestKeys = keysOf()(["events", "energy"]);
+    OnsetEnvelopeRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "nMels",
+      "validate"
+    ]);
+    OnsetStrengthMultiRequestKeys = keysOf()([
+      "nBands",
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "nMels",
+      "validate"
+    ]);
+    PadCenterRequestKeys = keysOf()(["values", "targetSize", "padValue"]);
+    PcenRequestKeys = keysOf()([
+      "values",
+      "nBins",
+      "nFrames",
+      "sampleRate",
+      "hopLength",
+      "timeConstant",
+      "gain",
+      "bias",
+      "power",
+      "eps",
+      "options"
+    ]);
+    PeakPickRequestKeys = keysOf()([
+      "values",
+      "preMax",
+      "postMax",
+      "preAvg",
+      "postAvg",
+      "delta",
+      "wait"
+    ]);
+    PercussiveRequestKeys = keysOf()(["samples", "sampleRate", "validate"]);
+    PhaseVocoderRequestKeys = keysOf()([
+      "rate",
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength"
+    ]);
+    PiptrackRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "fmin",
+      "fmax",
+      "threshold"
+    ]);
+    PitchCorrectTimevaryingRequestKeys = keysOf()([
+      "samples",
+      "f0Hz",
+      "sampleRate",
+      "hopLength",
+      "mode",
+      "targetMidi",
+      "scaleRoot",
+      "scaleModeMask",
+      "referenceMidi",
+      "retuneAmount",
+      "maxCorrectionSemitones",
+      "retuneSpeedMs",
+      "vibratoThresholdCents",
+      "voiced",
+      "voicedProb",
+      "validate"
+    ]);
+    PitchCorrectToMidiRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "currentMidi",
+      "targetMidi",
+      "validate"
+    ]);
+    PitchCorrectToMidiTimevaryingRequestKeys = keysOf()([
+      "samples",
+      "f0Hz",
+      "targetMidi",
+      "sampleRate",
+      "hopLength",
+      "voiced",
+      "voicedProb",
+      "validate"
+    ]);
+    PitchPyinRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "frameLength",
+      "hopLength",
+      "fmin",
+      "fmax",
+      "threshold",
+      "fillNa"
+    ]);
+    PitchShiftRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "semitones",
+      "nFft",
+      "hopLength",
+      "validate"
+    ]);
+    PitchTuningRequestKeys = keysOf()([
+      "frequencies",
+      "resolution",
+      "binsPerOctave"
+    ]);
+    PitchYinRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "frameLength",
+      "hopLength",
+      "fmin",
+      "fmax",
+      "threshold",
+      "fillNa"
+    ]);
+    PlpRequestKeys = keysOf()([
+      "onsetEnvelope",
+      "sampleRate",
+      "hopLength",
+      "tempoMin",
+      "tempoMax",
+      "winLength"
+    ]);
+    PolyFeaturesRequestKeys = keysOf()([
+      "order",
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength"
+    ]);
+    ReassignedSpectrogramRequestKeys = keysOf()([
+      "refPower",
+      "fillNan",
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "validate"
+    ]);
+    RemixRequestKeys = keysOf()([
+      "samples",
+      "intervals",
+      "sampleRate",
+      "alignZeros"
+    ]);
+    RenderNotesRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "notes",
+      "fadeMs",
+      "f0Hz",
+      "voiced",
+      "frameRate",
+      "vibratoCutoffHz",
+      "validate"
+    ]);
+    RenderPercussiveEventsRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "events",
+      "fadeMs",
+      "nFft",
+      "hopLength",
+      "hpssKernelHarmonic",
+      "hpssKernelPercussive",
+      "validate"
+    ]);
+    RenderPlaybackRequestKeys = keysOf()([
+      "samples",
+      "channels",
+      "sampleRate",
+      "config",
+      "hrtf"
+    ]);
+    PlaybackRendererConfigKeys = keysOf()([
+      "input",
+      "target",
+      "lfe_mix_db",
+      "upmix",
+      "dialogue_level_db",
+      "loudness",
+      "night_mode",
+      "room",
+      "head_tracking",
+      "output_limiter"
+    ]);
+    ResampleRequestKeys = keysOf()(["samples", "srcSr", "targetSr"]);
+    VocalRestoreRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "state",
+      "limits"
+    ]);
+    ZeroCrossingRateRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "frameLength",
+      "hopLength"
+    ]);
+    RoomGeometryFromEstimateRequestKeys = keysOf()([
+      "estimate",
+      "source",
+      "listener"
+    ]);
+    RoomPlacementKeys = keysOf()(["x", "y", "z"]);
+    RoomMorphRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "wet",
+      "sourceTailSuppression",
+      "preferEyring",
+      "mixingTimeMs",
+      "crossfadeMs",
+      "lengthM",
+      "widthM",
+      "heightM",
+      "absorption",
+      "bandAbsorption",
+      "bandScattering",
+      "materialPreset",
+      "sourceX",
+      "sourceY",
+      "sourceZ",
+      "listenerX",
+      "listenerY",
+      "listenerZ",
+      "ismOrder",
+      "seed",
+      "maxSeconds",
+      "airAbsorptionEnabled",
+      "airTemperatureC",
+      "airHumidityPercent",
+      "validate"
+    ]);
+    RoomMorphStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "receiverSpacingM",
+      "wet",
+      "sourceTailSuppression",
+      "preferEyring",
+      "mixingTimeMs",
+      "crossfadeMs",
+      "lengthM",
+      "widthM",
+      "heightM",
+      "absorption",
+      "bandAbsorption",
+      "bandScattering",
+      "materialPreset",
+      "sourceX",
+      "sourceY",
+      "sourceZ",
+      "listenerX",
+      "listenerY",
+      "listenerZ",
+      "ismOrder",
+      "seed",
+      "maxSeconds",
+      "airAbsorptionEnabled",
+      "airTemperatureC",
+      "airHumidityPercent",
+      "validate"
+    ]);
+    SegmentAgglomerativeRequestKeys = keysOf()([
+      "data",
+      "rows",
+      "cols",
+      "k",
+      "linkage"
+    ]);
+    SegmentCrossSimilarityRequestKeys = keysOf()([
+      "x",
+      "xRows",
+      "xCols",
+      "y",
+      "yRows",
+      "yCols",
+      "k",
+      "metric",
+      "mode"
+    ]);
+    SegmentLagToRecurrenceRequestKeys = keysOf()([
+      "lag",
+      "rows",
+      "lags"
+    ]);
+    SegmentPathEnhanceRequestKeys = keysOf()([
+      "recurrence",
+      "n",
+      "win",
+      "maxRatio",
+      "minRatio",
+      "nFilters"
+    ]);
+    SegmentRecurrenceMatrixRequestKeys = keysOf()([
+      "data",
+      "rows",
+      "cols",
+      "k",
+      "width",
+      "sym",
+      "metric",
+      "mode"
+    ]);
+    SegmentRecurrenceToLagRequestKeys = keysOf()([
+      "recurrence",
+      "n",
+      "pad"
+    ]);
+    SegmentSubsegmentRequestKeys = keysOf()([
+      "data",
+      "rows",
+      "cols",
+      "boundaries",
+      "nSegments"
+    ]);
+    Anon168Keys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "p"
+    ]);
+    SpectralFrameRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength"
+    ]);
+    SpectralContrastRequestKeys = keysOf()([
+      "nBands",
+      "fmin",
+      "quantile",
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength"
+    ]);
+    SpectralEditRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "ops",
+      "nFft",
+      "hopLength",
+      "window",
+      "healRadiusFrames",
+      "validate"
+    ]);
+    Anon172Keys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "lag"
+    ]);
+    SpectralRolloffRequestKeys = keysOf()([
+      "rollPercent",
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength"
+    ]);
+    SplitNoteRequestKeys = keysOf()([
+      "index",
+      "frame",
+      "samples",
+      "sampleRate",
+      "f0Hz",
+      "frameRate",
+      "voiced",
+      "voicedProb",
+      "notes",
+      "segmentationThresholdCents",
+      "minNoteMs",
+      "referenceHz",
+      "voicedThreshold",
+      "validate"
+    ]);
+    SilenceRequestKeys = keysOf()([
+      "samples",
+      "topDb",
+      "frameLength",
+      "hopLength"
+    ]);
+    SplitSilenceCommonRequestKeys = keysOf()([
+      "signals",
+      "topDb",
+      "frameLength",
+      "hopLength"
+    ]);
+    StreamingLoudnessGainRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "config"
+    ]);
+    StreamingLoudnessGainStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "config"
+    ]);
+    SuggestMixSceneRequestKeys = keysOf()([
+      "tracks",
+      "sampleRate",
+      "options"
+    ]);
+    MixAssistantOptionsKeys = keysOf()([
+      "targetTrackLufs",
+      "suggestionStrength",
+      "eqMaxCutDb",
+      "mixBusHeadroomDbtp",
+      "tempoBpm",
+      "enableStructure",
+      "enableGain",
+      "enableBalance",
+      "enableEq",
+      "enableDynamics",
+      "enableImage",
+      "enableHighPass",
+      "nFft",
+      "hopLength"
+    ]);
+    RirSynthOptionsKeys = keysOf()([
+      "sampleRate",
+      "preferEyring",
+      "mixingTimeMs",
+      "crossfadeMs",
+      "lengthM",
+      "widthM",
+      "heightM",
+      "absorption",
+      "bandAbsorption",
+      "bandScattering",
+      "materialPreset",
+      "sourceX",
+      "sourceY",
+      "sourceZ",
+      "listenerX",
+      "listenerY",
+      "listenerZ",
+      "ismOrder",
+      "seed",
+      "maxSeconds",
+      "airAbsorptionEnabled",
+      "airTemperatureC",
+      "airHumidityPercent"
+    ]);
+    TempogramRequestKeys = keysOf()([
+      "onsetEnvelope",
+      "sampleRate",
+      "hopLength",
+      "winLength",
+      "mode",
+      "center",
+      "norm"
+    ]);
+    TempogramRatioRequestKeys = keysOf()([
+      "tempogramData",
+      "winLength",
+      "sampleRate",
+      "hopLength",
+      "factors",
+      "validate"
+    ]);
+    TimeStretchRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "rate",
+      "nFft",
+      "hopLength",
+      "validate"
+    ]);
+    ToneRequestKeys = keysOf()([
+      "frequency",
+      "sampleRate",
+      "duration",
+      "phase",
+      "amplitude"
+    ]);
+    TonnetzRequestKeys = keysOf()(["chromagram", "nChroma", "nFrames"]);
+    TranscribeRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "tempoBpm",
+      "polyphonic",
+      "referenceHz",
+      "fmin",
+      "fmax",
+      "minNoteMs",
+      "minNoteDivision",
+      "segmentationThresholdCents",
+      "velocityFloorDb",
+      "fixedVelocity",
+      "maxPolyphony",
+      "minFramePeakRatio",
+      "minRidgePeakRatio",
+      "reattackRatio",
+      "group",
+      "channel"
+    ]);
+    TrimRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "thresholdDb",
+      "frameLength",
+      "hopLength",
+      "validate"
+    ]);
+    VectorNormalizeRequestKeys = keysOf()([
+      "values",
+      "normType",
+      "threshold"
+    ]);
+    VoiceChangeRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "pitchSemitones",
+      "formantFactor",
+      "formantMode",
+      "validate"
+    ]);
+    VoiceChangeRealtimeRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "preset",
+      "channels",
+      "blockSize",
+      "validate"
+    ]);
+    VqtRequestKeys = keysOf()([
+      "gamma",
+      "samples",
+      "sampleRate",
+      "hopLength",
+      "fmin",
+      "nBins",
+      "binsPerOctave",
+      "validate"
+    ]);
+    VqtToAudioRequestKeys = keysOf()([
+      "gamma",
+      "magnitude",
+      "nBins",
+      "nFrames",
+      "sampleRate",
+      "hopLength",
+      "fmin",
+      "binsPerOctave",
+      "nIter",
+      "validate"
+    ]);
+    WaveformPeakPyramidRequestKeys = keysOf()([
+      "samples",
+      "channels",
+      "samplesPerBucketLevels",
+      "validate"
+    ]);
+    WaveformPeaksRequestKeys = keysOf()([
+      "samples",
+      "channels",
+      "samplesPerBucket",
+      "validate"
+    ]);
+    ZeroCrossingsRequestKeys = keysOf()([
+      "samples",
+      "threshold",
+      "refMagnitude",
+      "pad",
+      "zeroPos"
+    ]);
+    REQUEST_SHAPES = {
+      alignTakeToReference: { keys: AlignTakeToReferenceRequestKeys },
+      amplitudeToDb: { keys: DbConversionRequestKeys },
+      analyze: { keys: MusicAnalyzeRequestKeys },
+      analyzeBpm: { keys: AnalyzeBpmRequestKeys },
+      analyzeDynamics: { keys: AnalyzeDynamicsRequestKeys },
+      analyzeImpulseResponse: { keys: AnalyzeImpulseResponseRequestKeys },
+      analyzeMelody: { keys: AnalyzeMelodyRequestKeys },
+      analyzePolyphonic: { keys: AnalyzePolyphonicRequestKeys },
+      analyzeRhythm: { keys: AnalyzeRhythmRequestKeys },
+      analyzeSections: { keys: AnalyzeSectionsRequestKeys },
+      analyzeTimbre: { keys: AnalyzeTimbreRequestKeys },
+      analyzeWithProgress: {
+        keys: AnalyzeWithProgressRequestKeys,
+        nested: { options: MusicAnalyzeOptionsKeys }
+      },
+      assignNoteTargets: { keys: AssignNoteTargetsRequestKeys },
+      autoTune: { keys: AutoTuneRequestKeys, hints: { key: AutoTuneKeyKeys } },
+      bassChroma: { keys: BassChromaSpectrogramRequestKeys },
+      chirp: { keys: ChirpRequestKeys },
+      chordFunctionalAnalysis: { keys: ChordFunctionalAnalysisRequestKeys },
+      chordFunctions: { keys: Anon19Keys },
+      chroma: { keys: SpectrogramRequestKeys },
+      chromaCens: { keys: ChromaSpectrogramRequestKeys },
+      chromaCqt: { keys: ChromaSpectrogramRequestKeys },
+      clicks: { keys: ClicksRequestKeys },
+      cqt: { keys: CqtRequestKeys },
+      cqtToAudio: { keys: CqtToAudioRequestKeys },
+      createVocalEditSession: {
+        keys: VocalCreateRequestKeys,
+        nested: { limits: VocalSessionLimitsKeys },
+        hints: { analysis: VocalAnalysisInputKeys }
+      },
+      cyclicTempogram: { keys: CyclicTempogramRequestKeys },
+      decompose: { keys: DecomposeRequestKeys },
+      decomposeNotePitch: { keys: DecomposeNotePitchRequestKeys },
+      decomposeStems: { keys: DecomposeStemsRequestKeys },
+      decomposeStemsLinked: { keys: DecomposeStemsLinkedRequestKeys },
+      decomposeWithInit: { keys: DecomposeWithInitRequestKeys },
+      deemphasis: { keys: EmphasisRequestKeys },
+      detectAcoustic: { keys: DetectAcousticRequestKeys },
+      detectBeats: { keys: SamplesRequestKeys },
+      detectBoundaries: { keys: DetectBoundariesRequestKeys },
+      detectBpm: { keys: SamplesRequestKeys },
+      detectChords: { keys: DetectChordsRequestKeys },
+      detectDownbeats: { keys: SamplesRequestKeys },
+      detectKey: { keys: DetectKeyRequestKeys },
+      detectKeyCandidates: { keys: DetectKeyCandidatesRequestKeys },
+      detectOnsets: { keys: DetectOnsetsRequestKeys },
+      ebur128LoudnessRange: { keys: Ebur128LoudnessRangeRequestKeys },
+      estimateMeter: { keys: EstimateMeterRequestKeys },
+      estimateRoom: { keys: EstimateRoomRequestKeys },
+      estimateTuning: { keys: EstimateTuningRequestKeys },
+      extractNotes: { keys: ExtractNotesRequestKeys },
+      extractPercussiveEvents: { keys: ExtractPercussiveEventsRequestKeys },
+      fixFrames: { keys: FixFramesRequestKeys },
+      fixLength: { keys: FixLengthRequestKeys },
+      fourierTempogram: { keys: FourierTempogramRequestKeys },
+      frameSignal: { keys: FrameSignalRequestKeys },
+      griffinLim: { keys: GriffinLimRequestKeys },
+      harmonic: { keys: HarmonicRequestKeys },
+      hpss: { keys: HpssRequestKeys },
+      hpssWithResidual: { keys: HpssWithResidualRequestKeys },
+      hybridCqt: { keys: CqtRequestKeys },
+      lufs: { keys: LufsRequestKeys },
+      lufsInterleaved: { keys: LufsInterleavedRequestKeys },
+      lufsSeriesInterleaved: { keys: LufsSeriesInterleavedRequestKeys },
+      masterAudio: { keys: MasterAudioRequestKeys, hints: { overrides: MasteringChainConfigKeys } },
+      masterAudioStereo: {
+        keys: MasterAudioStereoRequestKeys,
+        hints: { overrides: MasteringChainConfigKeys }
+      },
+      masterAudioStereoWithProgress: {
+        keys: MasterAudioStereoRequestKeys,
+        hints: { overrides: MasteringChainConfigKeys }
+      },
+      masterAudioWithProgress: {
+        keys: MasterAudioRequestKeys,
+        hints: { overrides: MasteringChainConfigKeys }
+      },
+      mastering: { keys: MasteringRequestKeys },
+      masteringAbMatchLoudness: { keys: MasteringAbMatchLoudnessRequestKeys },
+      masteringAbMatchLoudnessStereo: { keys: MasteringAbMatchLoudnessStereoRequestKeys },
+      masteringAssistantSuggest: { keys: MasteringAssistantParamsRequestKeys },
+      masteringAssistantSuggestChain: { keys: MasteringAssistantParamsRequestKeys },
+      masteringAssistantSuggestChainStereo: { keys: MasteringAssistantStereoParamsRequestKeys },
+      masteringAssistantSuggestStereo: { keys: MasteringAssistantStereoParamsRequestKeys },
+      masteringAudioProfile: { keys: MasteringSamplesParamsRequestKeys },
+      masteringAudioProfileStereo: { keys: MasteringStereoParamsRequestKeys },
+      masteringChain: { keys: MasteringChainRequestKeys, hints: { config: MasteringChainConfigKeys } },
+      masteringChainStereo: {
+        keys: MasteringChainStereoRequestKeys,
+        hints: { config: MasteringChainConfigKeys }
+      },
+      masteringChainStereoWithProgress: {
+        keys: MasteringChainStereoRequestKeys,
+        hints: { config: MasteringChainConfigKeys }
+      },
+      masteringChainWithProgress: {
+        keys: MasteringChainRequestKeys,
+        hints: { config: MasteringChainConfigKeys }
+      },
+      masteringDynamicsCompressor: { keys: MasteringDynamicsCompressorRequestKeys },
+      masteringDynamicsGate: { keys: MasteringDynamicsGateRequestKeys },
+      masteringDynamicsTransientShaper: { keys: MasteringDynamicsTransientShaperRequestKeys },
+      masteringPairAnalyze: { keys: Anon74Keys },
+      masteringPairProcess: { keys: MasteringPairProcessRequestKeys },
+      masteringPairProcessStereo: { keys: MasteringPairProcessStereoRequestKeys },
+      masteringProcess: { keys: MasteringProcessRequestKeys },
+      masteringProcessStereo: { keys: MasteringProcessStereoRequestKeys },
+      masteringRepairAnalyze: { keys: MasteringRepairAnalyzeRequestKeys },
+      masteringRepairApply: { keys: MasteringRepairApplyRequestKeys },
+      masteringRepairDeclick: { keys: MasteringRepairDeclickRequestKeys },
+      masteringRepairDeclickStereo: { keys: MasteringRepairDeclickStereoRequestKeys },
+      masteringRepairDeclip: { keys: MasteringRepairDeclipRequestKeys },
+      masteringRepairDeclipStereo: { keys: MasteringRepairDeclipStereoRequestKeys },
+      masteringRepairDecrackle: { keys: MasteringRepairDecrackleRequestKeys },
+      masteringRepairDecrackleStereo: { keys: MasteringRepairDecrackleStereoRequestKeys },
+      masteringRepairDehum: { keys: MasteringRepairDehumRequestKeys },
+      masteringRepairDehumStereo: { keys: MasteringRepairDehumStereoRequestKeys },
+      masteringRepairDenoiseClassical: { keys: MasteringRepairDenoiseClassicalRequestKeys },
+      masteringRepairDenoiseClassicalLinked: { keys: MasteringRepairDenoiseClassicalLinkedRequestKeys },
+      masteringRepairDenoiseClassicalStereo: { keys: MasteringRepairDenoiseClassicalStereoRequestKeys },
+      masteringRepairDereverbClassical: { keys: MasteringRepairDereverbClassicalRequestKeys },
+      masteringRepairDereverbClassicalLinked: {
+        keys: MasteringRepairDereverbClassicalLinkedRequestKeys
+      },
+      masteringRepairDereverbClassicalStereo: {
+        keys: MasteringRepairDereverbClassicalStereoRequestKeys
+      },
+      masteringRepairDetectClicks: { keys: MasteringRepairDetectClicksRequestKeys },
+      masteringRepairDetectClipping: { keys: MasteringRepairDetectClippingRequestKeys },
+      masteringRepairDetectCrackle: { keys: MasteringRepairDetectCrackleRequestKeys },
+      masteringRepairDetectHum: { keys: MasteringRepairDetectHumRequestKeys },
+      masteringRepairDetectNoiseFloor: { keys: MasteringRepairDetectNoiseFloorRequestKeys },
+      masteringRepairDetectReverb: { keys: MasteringRepairDetectReverbRequestKeys },
+      masteringRepairDetectTrimRange: { keys: MasteringRepairDetectTrimRangeRequestKeys },
+      masteringRepairDetectTrimRangeStereo: { keys: MasteringRepairDetectTrimRangeStereoRequestKeys },
+      masteringRepairTrimSilence: { keys: MasteringRepairTrimSilenceRequestKeys },
+      masteringRepairTrimSilenceStereo: { keys: MasteringRepairTrimSilenceStereoRequestKeys },
+      masteringStereoAnalyze: { keys: Anon105Keys },
+      masteringStreamingPreview: { keys: MasteringStreamingPreviewRequestKeys },
+      masteringStreamingPreviewStereo: { keys: MasteringStreamingPreviewStereoRequestKeys },
+      melDelta: { keys: MelDeltaRequestKeys },
+      melSpectrogram: { keys: MelSpectrogramRequestKeys },
+      mergeNotes: { keys: MergeNotesRequestKeys },
+      meteringCrestFactorDb: { keys: MeteringSamplesRequestKeys },
+      meteringCrestFactorDbStereo: { keys: MeteringStereoRequestKeys },
+      meteringDcOffset: { keys: MeteringSamplesRequestKeys },
+      meteringDetectClipping: { keys: MeteringDetectClippingRequestKeys },
+      meteringDynamicRange: { keys: MeteringDynamicRangeRequestKeys },
+      meteringPeakDb: { keys: MeteringSamplesRequestKeys },
+      meteringPhaseScope: { keys: MeteringStereoDecimatedRequestKeys },
+      meteringPhaseScopeDecimated: { keys: MeteringStereoDecimatedRequestKeys },
+      meteringRmsDb: { keys: MeteringSamplesRequestKeys },
+      meteringSilenceRatio: { keys: MeteringSilenceRatioRequestKeys },
+      meteringSpectrum: { keys: MeteringSpectrumRequestKeys },
+      meteringSpectrumFrame: { keys: MeteringSpectrumFrameRequestKeys },
+      meteringStereoCorrelation: { keys: MeteringStereoRequestKeys },
+      meteringStereoWidth: { keys: MeteringStereoRequestKeys },
+      meteringTruePeakDb: { keys: MeteringTruePeakRequestKeys },
+      meteringVectorscope: { keys: MeteringStereoDecimatedRequestKeys },
+      meteringVectorscopeDecimated: { keys: MeteringStereoDecimatedRequestKeys },
+      mfcc: { keys: MfccRequestKeys },
+      mixStereo: { keys: MixStereoRequestKeys },
+      momentaryLufs: { keys: LufsRequestKeys },
+      nnFilter: { keys: NnFilterRequestKeys },
+      nnlsChroma: { keys: NnlsChromaRequestKeys },
+      normalize: { keys: NormalizeRequestKeys },
+      normalizeStereo: { keys: NormalizeStereoRequestKeys },
+      noteMove: { keys: NoteMoveRequestKeys },
+      noteSegments: { keys: NoteSegmentsRequestKeys },
+      noteStretch: { keys: NoteStretchRequestKeys },
+      noteTargetsFromSmf: { keys: NoteTargetsFromSmfRequestKeys },
+      onsetBacktrack: { keys: OnsetBacktrackRequestKeys },
+      onsetEnvelope: { keys: OnsetEnvelopeRequestKeys },
+      onsetStrengthMulti: { keys: OnsetStrengthMultiRequestKeys },
+      padCenter: { keys: PadCenterRequestKeys },
+      pcen: { keys: PcenRequestKeys },
+      peakPick: { keys: PeakPickRequestKeys },
+      percussive: { keys: PercussiveRequestKeys },
+      phaseVocoder: { keys: PhaseVocoderRequestKeys },
+      piptrack: { keys: PiptrackRequestKeys },
+      pitchCorrectTimevarying: { keys: PitchCorrectTimevaryingRequestKeys },
+      pitchCorrectToMidi: { keys: PitchCorrectToMidiRequestKeys },
+      pitchCorrectToMidiTimevarying: { keys: PitchCorrectToMidiTimevaryingRequestKeys },
+      pitchPyin: { keys: PitchPyinRequestKeys },
+      pitchShift: { keys: PitchShiftRequestKeys },
+      pitchTuning: { keys: PitchTuningRequestKeys },
+      pitchYin: { keys: PitchYinRequestKeys },
+      plp: { keys: PlpRequestKeys },
+      polyFeatures: { keys: PolyFeaturesRequestKeys },
+      powerToDb: { keys: DbConversionRequestKeys },
+      preemphasis: { keys: EmphasisRequestKeys },
+      pseudoCqt: { keys: CqtRequestKeys },
+      reassignedSpectrogram: { keys: ReassignedSpectrogramRequestKeys },
+      remix: { keys: RemixRequestKeys },
+      remixAlignedIntervals: { keys: RemixRequestKeys },
+      renderNotes: { keys: RenderNotesRequestKeys },
+      renderPercussiveEvents: { keys: RenderPercussiveEventsRequestKeys },
+      renderPlayback: {
+        keys: RenderPlaybackRequestKeys,
+        nested: { config: PlaybackRendererConfigKeys }
+      },
+      resample: { keys: ResampleRequestKeys },
+      restoreVocalEditSession: {
+        keys: VocalRestoreRequestKeys,
+        nested: { limits: VocalSessionLimitsKeys }
+      },
+      rmsEnergy: { keys: ZeroCrossingRateRequestKeys },
+      roomGeometryFromEstimate: {
+        keys: RoomGeometryFromEstimateRequestKeys,
+        hints: { source: RoomPlacementKeys, listener: RoomPlacementKeys }
+      },
+      roomMorph: { keys: RoomMorphRequestKeys },
+      roomMorphStereo: { keys: RoomMorphStereoRequestKeys },
+      segmentAgglomerative: { keys: SegmentAgglomerativeRequestKeys },
+      segmentCrossSimilarity: { keys: SegmentCrossSimilarityRequestKeys },
+      segmentLagToRecurrence: { keys: SegmentLagToRecurrenceRequestKeys },
+      segmentPathEnhance: { keys: SegmentPathEnhanceRequestKeys },
+      segmentRecurrenceMatrix: { keys: SegmentRecurrenceMatrixRequestKeys },
+      segmentRecurrenceToLag: { keys: SegmentRecurrenceToLagRequestKeys },
+      segmentSubsegment: { keys: SegmentSubsegmentRequestKeys },
+      shortTermLufs: { keys: LufsRequestKeys },
+      spectralBandwidth: { keys: Anon168Keys },
+      spectralCentroid: { keys: SpectralFrameRequestKeys },
+      spectralContrast: { keys: SpectralContrastRequestKeys },
+      spectralEdit: { keys: SpectralEditRequestKeys },
+      spectralFlatness: { keys: SpectralFrameRequestKeys },
+      spectralFlux: { keys: Anon172Keys },
+      spectralRolloff: { keys: SpectralRolloffRequestKeys },
+      splitNote: { keys: SplitNoteRequestKeys },
+      splitSilence: { keys: SilenceRequestKeys },
+      splitSilenceCommon: { keys: SplitSilenceCommonRequestKeys },
+      splitSilenceCommonWithReport: { keys: SplitSilenceCommonRequestKeys },
+      stft: { keys: SpectrogramRequestKeys },
+      stftDb: { keys: SpectrogramRequestKeys },
+      streamingLoudnessGain: {
+        keys: StreamingLoudnessGainRequestKeys,
+        hints: { config: MasteringChainConfigKeys }
+      },
+      streamingLoudnessGainStereo: {
+        keys: StreamingLoudnessGainStereoRequestKeys,
+        hints: { config: MasteringChainConfigKeys }
+      },
+      suggestMixScene: {
+        keys: SuggestMixSceneRequestKeys,
+        hints: { options: MixAssistantOptionsKeys }
+      },
+      suggestMixSceneJson: {
+        keys: SuggestMixSceneRequestKeys,
+        hints: { options: MixAssistantOptionsKeys }
+      },
+      synthesizeRir: { keys: RirSynthOptionsKeys },
+      tempogram: { keys: TempogramRequestKeys },
+      tempogramRatio: { keys: TempogramRatioRequestKeys },
+      timeStretch: { keys: TimeStretchRequestKeys },
+      tone: { keys: ToneRequestKeys },
+      tonnetz: { keys: TonnetzRequestKeys },
+      transcribe: { keys: TranscribeRequestKeys },
+      trim: { keys: TrimRequestKeys },
+      trimSilence: { keys: SilenceRequestKeys },
+      vectorNormalize: { keys: VectorNormalizeRequestKeys },
+      voiceChange: { keys: VoiceChangeRequestKeys },
+      voiceChangeRealtime: { keys: VoiceChangeRealtimeRequestKeys },
+      vqt: { keys: VqtRequestKeys },
+      vqtToAudio: { keys: VqtToAudioRequestKeys },
+      waveformPeakPyramid: { keys: WaveformPeakPyramidRequestKeys },
+      waveformPeaks: { keys: WaveformPeaksRequestKeys },
+      zeroCrossingRate: { keys: ZeroCrossingRateRequestKeys },
+      zeroCrossings: { keys: ZeroCrossingsRequestKeys }
+    };
+  }
+});
+
 // src/validation.ts
 function assertNonEmptySamples(fnName, samples, argName = "samples") {
   if (samples.length === 0) {
@@ -334,19 +2468,49 @@ function resolveSampleBound(fnName, sampleValue, secValue, sampleRate, sampleNam
   }
   return value === 0 ? 0 : value;
 }
+function assertKnownRequestKeys(fnName, request) {
+  const shape = REQUEST_SHAPES[fnName];
+  if (shape === void 0) {
+    throw new Error(`${fnName}: no request shape is declared`);
+  }
+  for (const key of Object.keys(request)) {
+    if (shape.keys.includes(key)) {
+      continue;
+    }
+    const owner = Object.entries({ ...shape.nested, ...shape.hints }).find(
+      ([, keys]) => keys.includes(key)
+    );
+    const hint = owner === void 0 ? "" : ` ('${key}' belongs under '${owner[0]}')`;
+    throw new TypeError(`${fnName}: unknown request key '${key}'${hint}`);
+  }
+  for (const [field, keys] of Object.entries(shape.nested ?? {})) {
+    const value = request[field];
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      continue;
+    }
+    for (const key of Object.keys(value)) {
+      if (!keys.includes(key)) {
+        throw new TypeError(`${fnName}: unknown option '${key}' in '${field}'`);
+      }
+    }
+  }
+}
 function requestObject(fnName, value, argName = "samples", requestOnly = false) {
   if (typeof value !== "object" || value === null || Array.isArray(value) || ArrayBuffer.isView(value)) {
     if (requestOnly) {
       throw new TypeError(`${fnName}: request must be an object`);
     }
     assertAudioSamples(fnName, value, {}, argName);
+    return value;
   }
+  assertKnownRequestKeys(fnName, value);
   return value;
 }
 var MIN_AUDIO_SAMPLE_RATE, MAX_AUDIO_SAMPLE_RATE;
 var init_validation = __esm({
   "src/validation.ts"() {
     "use strict";
+    init_request_keys();
     MIN_AUDIO_SAMPLE_RATE = 8e3;
     MAX_AUDIO_SAMPLE_RATE = 384e3;
   }
@@ -715,6 +2879,7 @@ function vocalEditAvailable() {
   return typeof raw.vocalEditAvailable === "function" && raw.vocalEditAvailable() !== 0;
 }
 function createVocalEditSession(request) {
+  requestObject("createVocalEditSession", request, "request", true);
   validateCreate(request);
   if (!vocalEditAvailable()) {
     throw new SonareError(

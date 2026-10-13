@@ -178,10 +178,17 @@ export declare function resolveOptionalNonNegative(fnName: string, value: number
  */
 export declare function resolveRenderFrame(fnName: string, renderFrame: number | null | undefined): number;
 /**
+ * The options bag of a positional overload, which becomes part of the request
+ * the entry point reads: it declares the same keys as the request form, and a
+ * key outside them is refused by name rather than dropped.
+ */
+export declare function optionsBag<T extends object>(fnName: string, options: T): T;
+/**
  * The request-object form of a positional entry point: its first argument is
  * either the audio buffer or a request, so anything else (null, a number, an
  * array, another typed array) is a wrong-typed buffer and is reported as one,
  * naming the field, instead of failing on a property read. An entry point that
- * takes only a request (`requestOnly`) reports the request itself instead.
+ * takes only a request (`requestOnly`) reports the request itself instead. A
+ * request carrying a key the entry point does not declare is refused by name.
  */
 export declare function requestObject<T>(fnName: string, value: T, argName?: string, requestOnly?: boolean): T;

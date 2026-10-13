@@ -8,15 +8,6 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
-// src/abi.ts
-var EXPECTED_ABI_VERSION;
-var init_abi = __esm({
-  "src/abi.ts"() {
-    "use strict";
-    EXPECTED_ABI_VERSION = 84083207;
-  }
-});
-
 // src/errors.ts
 function isSonareError(value) {
   return value instanceof Error && value.name === "SonareError" && typeof value.code === "number";
@@ -59,6 +50,15 @@ var init_errors = __esm({
         return isSonareError(value);
       }
     };
+  }
+});
+
+// src/abi.ts
+var EXPECTED_ABI_VERSION;
+var init_abi = __esm({
+  "src/abi.ts"() {
+    "use strict";
+    EXPECTED_ABI_VERSION = 84083207;
   }
 });
 
@@ -367,7 +367,6 @@ var init_codes = __esm({
     };
     PAN_MODE_VALUES = {
       balance: 0,
-      pan: 1,
       stereopan: 1,
       "stereo-pan": 1,
       dualpan: 2,
@@ -387,6 +386,2141 @@ var init_codes = __esm({
       "tableFull",
       "planRefused"
     ];
+  }
+});
+
+// src/request_keys.ts
+var keysOf, AlignTakeToReferenceRequestKeys, DbConversionRequestKeys, MusicAnalyzeRequestKeys, AnalyzeBpmRequestKeys, AnalyzeDynamicsRequestKeys, AnalyzeImpulseResponseRequestKeys, AnalyzeMelodyRequestKeys, AnalyzePolyphonicRequestKeys, AnalyzeRhythmRequestKeys, AnalyzeSectionsRequestKeys, AnalyzeTimbreRequestKeys, AnalyzeWithProgressRequestKeys, MusicAnalyzeOptionsKeys, AssignNoteTargetsRequestKeys, AutoTuneRequestKeys, AutoTuneKeyKeys, BassChromaSpectrogramRequestKeys, ChirpRequestKeys, ChordFunctionalAnalysisRequestKeys, Anon19Keys, SpectrogramRequestKeys, ChromaSpectrogramRequestKeys, ClicksRequestKeys, CqtRequestKeys, CqtToAudioRequestKeys, VocalCreateRequestKeys, VocalSessionLimitsKeys, VocalAnalysisInputKeys, CyclicTempogramRequestKeys, DecomposeRequestKeys, DecomposeNotePitchRequestKeys, DecomposeStemsRequestKeys, DecomposeStemsLinkedRequestKeys, DecomposeWithInitRequestKeys, EmphasisRequestKeys, DetectAcousticRequestKeys, SamplesRequestKeys, DetectBoundariesRequestKeys, DetectChordsRequestKeys, DetectKeyRequestKeys, DetectKeyCandidatesRequestKeys, DetectOnsetsRequestKeys, Ebur128LoudnessRangeRequestKeys, EstimateMeterRequestKeys, EstimateRoomRequestKeys, EstimateTuningRequestKeys, ExtractNotesRequestKeys, ExtractPercussiveEventsRequestKeys, FixFramesRequestKeys, FixLengthRequestKeys, FourierTempogramRequestKeys, FrameSignalRequestKeys, GriffinLimRequestKeys, HarmonicRequestKeys, HpssRequestKeys, HpssWithResidualRequestKeys, LufsRequestKeys, LufsInterleavedRequestKeys, LufsSeriesInterleavedRequestKeys, MasterAudioRequestKeys, MasteringChainConfigKeys, MasterAudioStereoRequestKeys, MasteringRequestKeys, MasteringAbMatchLoudnessRequestKeys, MasteringAbMatchLoudnessStereoRequestKeys, MasteringAssistantParamsRequestKeys, MasteringAssistantStereoParamsRequestKeys, MasteringSamplesParamsRequestKeys, MasteringStereoParamsRequestKeys, MasteringChainRequestKeys, MasteringChainStereoRequestKeys, MasteringDynamicsCompressorRequestKeys, MasteringDynamicsGateRequestKeys, MasteringDynamicsTransientShaperRequestKeys, Anon74Keys, MasteringPairProcessRequestKeys, MasteringPairProcessStereoRequestKeys, MasteringProcessRequestKeys, MasteringProcessStereoRequestKeys, MasteringRepairAnalyzeRequestKeys, MasteringRepairApplyRequestKeys, MasteringRepairDeclickRequestKeys, MasteringRepairDeclickStereoRequestKeys, MasteringRepairDeclipRequestKeys, MasteringRepairDeclipStereoRequestKeys, MasteringRepairDecrackleRequestKeys, MasteringRepairDecrackleStereoRequestKeys, MasteringRepairDehumRequestKeys, MasteringRepairDehumStereoRequestKeys, MasteringRepairDenoiseClassicalRequestKeys, MasteringRepairDenoiseClassicalLinkedRequestKeys, MasteringRepairDenoiseClassicalStereoRequestKeys, MasteringRepairDereverbClassicalRequestKeys, MasteringRepairDereverbClassicalLinkedRequestKeys, MasteringRepairDereverbClassicalStereoRequestKeys, MasteringRepairDetectClicksRequestKeys, MasteringRepairDetectClippingRequestKeys, MasteringRepairDetectCrackleRequestKeys, MasteringRepairDetectHumRequestKeys, MasteringRepairDetectNoiseFloorRequestKeys, MasteringRepairDetectReverbRequestKeys, MasteringRepairDetectTrimRangeRequestKeys, MasteringRepairDetectTrimRangeStereoRequestKeys, MasteringRepairTrimSilenceRequestKeys, MasteringRepairTrimSilenceStereoRequestKeys, Anon105Keys, MasteringStreamingPreviewRequestKeys, MasteringStreamingPreviewStereoRequestKeys, MelDeltaRequestKeys, MelSpectrogramRequestKeys, MergeNotesRequestKeys, MeteringSamplesRequestKeys, MeteringStereoRequestKeys, MeteringDetectClippingRequestKeys, MeteringDynamicRangeRequestKeys, MeteringStereoDecimatedRequestKeys, MeteringSilenceRatioRequestKeys, MeteringSpectrumRequestKeys, MeteringSpectrumFrameRequestKeys, MeteringTruePeakRequestKeys, MfccRequestKeys, MixStereoRequestKeys, NnFilterRequestKeys, NnlsChromaRequestKeys, NormalizeRequestKeys, NormalizeStereoRequestKeys, NoteMoveRequestKeys, NoteSegmentsRequestKeys, NoteStretchRequestKeys, NoteTargetsFromSmfRequestKeys, OnsetBacktrackRequestKeys, OnsetEnvelopeRequestKeys, OnsetStrengthMultiRequestKeys, PadCenterRequestKeys, PcenRequestKeys, PeakPickRequestKeys, PercussiveRequestKeys, PhaseVocoderRequestKeys, PiptrackRequestKeys, PitchCorrectTimevaryingRequestKeys, PitchCorrectToMidiRequestKeys, PitchCorrectToMidiTimevaryingRequestKeys, PitchPyinRequestKeys, PitchShiftRequestKeys, PitchTuningRequestKeys, PitchYinRequestKeys, PlpRequestKeys, PolyFeaturesRequestKeys, ReassignedSpectrogramRequestKeys, RemixRequestKeys, RenderNotesRequestKeys, RenderPercussiveEventsRequestKeys, RenderPlaybackRequestKeys, PlaybackRendererConfigKeys, ResampleRequestKeys, VocalRestoreRequestKeys, ZeroCrossingRateRequestKeys, RoomGeometryFromEstimateRequestKeys, RoomPlacementKeys, RoomMorphRequestKeys, RoomMorphStereoRequestKeys, SegmentAgglomerativeRequestKeys, SegmentCrossSimilarityRequestKeys, SegmentLagToRecurrenceRequestKeys, SegmentPathEnhanceRequestKeys, SegmentRecurrenceMatrixRequestKeys, SegmentRecurrenceToLagRequestKeys, SegmentSubsegmentRequestKeys, Anon168Keys, SpectralFrameRequestKeys, SpectralContrastRequestKeys, SpectralEditRequestKeys, Anon172Keys, SpectralRolloffRequestKeys, SplitNoteRequestKeys, SilenceRequestKeys, SplitSilenceCommonRequestKeys, StreamingLoudnessGainRequestKeys, StreamingLoudnessGainStereoRequestKeys, SuggestMixSceneRequestKeys, MixAssistantOptionsKeys, RirSynthOptionsKeys, TempogramRequestKeys, TempogramRatioRequestKeys, TimeStretchRequestKeys, ToneRequestKeys, TonnetzRequestKeys, TranscribeRequestKeys, TrimRequestKeys, VectorNormalizeRequestKeys, VoiceChangeRequestKeys, VoiceChangeRealtimeRequestKeys, VqtRequestKeys, VqtToAudioRequestKeys, WaveformPeakPyramidRequestKeys, WaveformPeaksRequestKeys, ZeroCrossingsRequestKeys, REQUEST_SHAPES, MUSIC_ANALYZE_OPTION_KEYS;
+var init_request_keys = __esm({
+  "src/request_keys.ts"() {
+    "use strict";
+    keysOf = () => (keys) => keys;
+    AlignTakeToReferenceRequestKeys = keysOf()([
+      "reference",
+      "take",
+      "sampleRate",
+      "takeSampleRate",
+      "hopLength",
+      "binsPerOctave"
+    ]);
+    DbConversionRequestKeys = keysOf()(["values", "ref", "amin", "topDb"]);
+    MusicAnalyzeRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "validate",
+      "nFft",
+      "hopLength",
+      "bpmMin",
+      "bpmMax",
+      "startBpm",
+      "useTriadsOnly",
+      "useHpss",
+      "chromaHighpassHz",
+      "useBassWeighted",
+      "chromaHopMultiplier",
+      "useChordHmm",
+      "useChordKeyContext",
+      "chordHmmBeamWidth",
+      "detectChordInversions",
+      "adaptiveTempo",
+      "tempoUpdateIntervalBeats",
+      "computeTempoCurve",
+      "meterCandidateNumerators",
+      "meterDenominator",
+      "tuning"
+    ]);
+    AnalyzeBpmRequestKeys = keysOf()([
+      "bpmMin",
+      "bpmMax",
+      "startBpm",
+      "nFft",
+      "hopLength",
+      "maxCandidates",
+      "validate",
+      "samples",
+      "sampleRate"
+    ]);
+    AnalyzeDynamicsRequestKeys = keysOf()([
+      "windowSec",
+      "hopLength",
+      "compressionThreshold",
+      "validate",
+      "samples",
+      "sampleRate"
+    ]);
+    AnalyzeImpulseResponseRequestKeys = keysOf()([
+      "nOctaveBands",
+      "minDecayDb",
+      "samples",
+      "sampleRate",
+      "validate"
+    ]);
+    AnalyzeMelodyRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "fmin",
+      "fmax",
+      "frameLength",
+      "hopLength",
+      "threshold",
+      "usePyin",
+      "center",
+      "validate"
+    ]);
+    AnalyzePolyphonicRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "winLength",
+      "centRefHz",
+      "centsPerBin",
+      "centMaxHz",
+      "tonalityOff",
+      "salienceHarmonics",
+      "f0MinHz",
+      "f0MaxHz",
+      "salienceAlphaHz",
+      "salienceBetaHz",
+      "salienceInharmonicity",
+      "maxPolyphony",
+      "minFramePeakRatio",
+      "minSeparationCents",
+      "subtractionFactor",
+      "maxJumpCents",
+      "minRidgePeakRatio",
+      "minRidgeDurationMs",
+      "reattackRatio",
+      "maskHarmonics",
+      "claimLobes",
+      "inharmonicity",
+      "estimateInharmonicity",
+      "inharmonicityMinPartials",
+      "inharmonicityMaxResidualBins",
+      "inharmonicityMaxStretch",
+      "windowFrames",
+      "minPartialSeparation",
+      "maxFitResidual",
+      "maxWeightModulus",
+      "maxRefineHz",
+      "f0ToleranceCents",
+      "segmentationThresholdCents",
+      "minNoteMs",
+      "referenceHz",
+      "validate"
+    ]);
+    AnalyzeRhythmRequestKeys = keysOf()([
+      "bpmMin",
+      "bpmMax",
+      "startBpm",
+      "nFft",
+      "hopLength",
+      "validate",
+      "samples",
+      "sampleRate"
+    ]);
+    AnalyzeSectionsRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "minSectionSec",
+      "validate"
+    ]);
+    AnalyzeTimbreRequestKeys = keysOf()([
+      "nFft",
+      "hopLength",
+      "nMels",
+      "nMfcc",
+      "windowSec",
+      "validate",
+      "samples",
+      "sampleRate"
+    ]);
+    AnalyzeWithProgressRequestKeys = keysOf()([
+      "onProgress",
+      "cancel",
+      "options",
+      "samples",
+      "sampleRate",
+      "validate",
+      "nFft",
+      "hopLength",
+      "bpmMin",
+      "bpmMax",
+      "startBpm",
+      "useTriadsOnly",
+      "useHpss",
+      "chromaHighpassHz",
+      "useBassWeighted",
+      "chromaHopMultiplier",
+      "useChordHmm",
+      "useChordKeyContext",
+      "chordHmmBeamWidth",
+      "detectChordInversions",
+      "adaptiveTempo",
+      "tempoUpdateIntervalBeats",
+      "computeTempoCurve",
+      "meterCandidateNumerators",
+      "meterDenominator",
+      "tuning"
+    ]);
+    MusicAnalyzeOptionsKeys = keysOf()([
+      "nFft",
+      "hopLength",
+      "bpmMin",
+      "bpmMax",
+      "startBpm",
+      "useTriadsOnly",
+      "useHpss",
+      "chromaHighpassHz",
+      "useBassWeighted",
+      "chromaHopMultiplier",
+      "useChordHmm",
+      "useChordKeyContext",
+      "chordHmmBeamWidth",
+      "detectChordInversions",
+      "adaptiveTempo",
+      "tempoUpdateIntervalBeats",
+      "computeTempoCurve",
+      "meterCandidateNumerators",
+      "meterDenominator",
+      "tuning"
+    ]);
+    AssignNoteTargetsRequestKeys = keysOf()([
+      "notes",
+      "sampleRate",
+      "targets",
+      "unmatchedPolicy",
+      "minOverlapRatio",
+      "maxCorrectionSemitones"
+    ]);
+    AutoTuneRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "key",
+      "strength",
+      "retuneSpeedMs",
+      "vibratoThresholdCents",
+      "maxCorrectionSemitones",
+      "referenceMidi",
+      "validate"
+    ]);
+    AutoTuneKeyKeys = keysOf()(["root", "mode"]);
+    BassChromaSpectrogramRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "hopLength",
+      "nChroma",
+      "validate"
+    ]);
+    ChirpRequestKeys = keysOf()([
+      "fmin",
+      "fmax",
+      "sampleRate",
+      "duration",
+      "linear"
+    ]);
+    ChordFunctionalAnalysisRequestKeys = keysOf()([
+      "keyRoot",
+      "keyMode",
+      "minDuration",
+      "smoothingWindow",
+      "threshold",
+      "useTriadsOnly",
+      "nFft",
+      "hopLength",
+      "useBeatSync",
+      "useHmm",
+      "hmmBeamWidth",
+      "useKeyContext",
+      "detectInversions",
+      "chromaMethod",
+      "tuning",
+      "validate",
+      "samples",
+      "sampleRate"
+    ]);
+    Anon19Keys = keysOf()(["chords", "key"]);
+    SpectrogramRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "validate"
+    ]);
+    ChromaSpectrogramRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "hopLength",
+      "nChroma",
+      "binsPerOctave",
+      "validate"
+    ]);
+    ClicksRequestKeys = keysOf()([
+      "times",
+      "sampleRate",
+      "length",
+      "frequency",
+      "clickDuration"
+    ]);
+    CqtRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "hopLength",
+      "fmin",
+      "nBins",
+      "binsPerOctave",
+      "validate"
+    ]);
+    CqtToAudioRequestKeys = keysOf()([
+      "magnitude",
+      "nBins",
+      "nFrames",
+      "sampleRate",
+      "hopLength",
+      "fmin",
+      "binsPerOctave",
+      "nIter",
+      "validate"
+    ]);
+    VocalCreateRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "outputLengthSamples",
+      "edgeFadeMs",
+      "vibratoCutoffHz",
+      "segmentationThresholdCents",
+      "minNoteMs",
+      "frameLengthSamples",
+      "hopLengthSamples",
+      "fminHz",
+      "fmaxHz",
+      "yinThreshold",
+      "voicedThreshold",
+      "centered",
+      "referenceHz",
+      "limits",
+      "analysis"
+    ]);
+    VocalSessionLimitsKeys = keysOf()([
+      "maxHistoryBytes",
+      "maxCacheBytes",
+      "maxUndoDepth",
+      "maxRenderJobs"
+    ]);
+    VocalAnalysisInputKeys = keysOf()([
+      "frameOriginSample",
+      "samplesPerFrame",
+      "frameLengthSamples",
+      "f0Hz",
+      "voiced",
+      "algorithmId",
+      "algorithmVersion",
+      "fminHz",
+      "fmaxHz",
+      "yinThreshold",
+      "voicedThreshold",
+      "centered",
+      "segmentationThresholdCents",
+      "minNoteMs",
+      "referenceHz"
+    ]);
+    CyclicTempogramRequestKeys = keysOf()([
+      "onsetEnvelope",
+      "sampleRate",
+      "hopLength",
+      "winLength",
+      "bpmMin",
+      "nBins"
+    ]);
+    DecomposeRequestKeys = keysOf()([
+      "s",
+      "nFeatures",
+      "nFrames",
+      "nComponents",
+      "nIter",
+      "beta"
+    ]);
+    DecomposeNotePitchRequestKeys = keysOf()([
+      "f0Hz",
+      "voiced",
+      "frameRate",
+      "medianHz",
+      "vibratoCutoffHz"
+    ]);
+    DecomposeStemsRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nComponents",
+      "nFft",
+      "hopLength",
+      "nIter",
+      "beta",
+      "init",
+      "maskPower"
+    ]);
+    DecomposeStemsLinkedRequestKeys = keysOf()([
+      "channels",
+      "sampleRate",
+      "nComponents",
+      "nFft",
+      "hopLength",
+      "nIter",
+      "beta",
+      "init",
+      "maskPower"
+    ]);
+    DecomposeWithInitRequestKeys = keysOf()([
+      "init",
+      "s",
+      "nFeatures",
+      "nFrames",
+      "nComponents",
+      "nIter",
+      "beta"
+    ]);
+    EmphasisRequestKeys = keysOf()(["samples", "coef", "zi"]);
+    DetectAcousticRequestKeys = keysOf()([
+      "nOctaveBands",
+      "nThirdOctaveSubbands",
+      "minDecayDb",
+      "noiseFloorMarginDb",
+      "validate",
+      "samples",
+      "sampleRate"
+    ]);
+    SamplesRequestKeys = keysOf()(["samples", "sampleRate", "validate"]);
+    DetectBoundariesRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "kernelSize",
+      "threshold",
+      "absoluteThreshold",
+      "nMfcc",
+      "nChroma",
+      "peakDistance",
+      "referenceWindow",
+      "useMfcc",
+      "useChroma",
+      "validate"
+    ]);
+    DetectChordsRequestKeys = keysOf()([
+      "minDuration",
+      "smoothingWindow",
+      "threshold",
+      "useTriadsOnly",
+      "nFft",
+      "hopLength",
+      "useBeatSync",
+      "useHmm",
+      "hmmBeamWidth",
+      "useKeyContext",
+      "keyRoot",
+      "keyMode",
+      "detectInversions",
+      "chromaMethod",
+      "tuning",
+      "validate",
+      "samples",
+      "sampleRate"
+    ]);
+    DetectKeyRequestKeys = keysOf()([
+      "tuning",
+      "nFft",
+      "hopLength",
+      "useHpss",
+      "loudnessWeighted",
+      "highPassHz",
+      "modes",
+      "profile",
+      "genreHint",
+      "validate",
+      "samples",
+      "sampleRate"
+    ]);
+    DetectKeyCandidatesRequestKeys = keysOf()([
+      "nFft",
+      "hopLength",
+      "useHpss",
+      "loudnessWeighted",
+      "highPassHz",
+      "modes",
+      "profile",
+      "genreHint",
+      "validate",
+      "samples",
+      "sampleRate"
+    ]);
+    DetectOnsetsRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "validate",
+      "nFft",
+      "hopLength",
+      "threshold",
+      "preMax",
+      "postMax",
+      "preAvg",
+      "postAvg",
+      "delta",
+      "wait",
+      "backtrack",
+      "backtrackRange"
+    ]);
+    Ebur128LoudnessRangeRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "validate"
+    ]);
+    EstimateMeterRequestKeys = keysOf()([
+      "beatTimes",
+      "beatStrengths",
+      "candidateNumerators",
+      "denominator",
+      "downbeatWeight",
+      "measureWeight",
+      "subdivisionWeight",
+      "compoundSubdivisionThreshold"
+    ]);
+    EstimateRoomRequestKeys = keysOf()([
+      "aspectHintLw",
+      "aspectHintLh",
+      "referenceAbsorption",
+      "preferEyring",
+      "nOctaveBands",
+      "mode",
+      "minDecayDb",
+      "noiseFloorMarginDb",
+      "samples",
+      "sampleRate",
+      "validate"
+    ]);
+    EstimateTuningRequestKeys = keysOf()([
+      "resolution",
+      "binsPerOctave",
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength"
+    ]);
+    ExtractNotesRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "f0Hz",
+      "frameRate",
+      "voiced",
+      "voicedProb",
+      "segmentationThresholdCents",
+      "minNoteMs",
+      "referenceHz",
+      "voicedThreshold",
+      "validate"
+    ]);
+    ExtractPercussiveEventsRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "onsetWait",
+      "onsetDelta",
+      "maxEventMs",
+      "minPercussiveRatio",
+      "nFft",
+      "hopLength",
+      "hpssKernelHarmonic",
+      "hpssKernelPercussive",
+      "validate"
+    ]);
+    FixFramesRequestKeys = keysOf()(["frames", "xMin", "xMax", "pad"]);
+    FixLengthRequestKeys = keysOf()(["values", "targetSize", "padValue"]);
+    FourierTempogramRequestKeys = keysOf()([
+      "onsetEnvelope",
+      "sampleRate",
+      "hopLength",
+      "winLength",
+      "center",
+      "norm",
+      "validate"
+    ]);
+    FrameSignalRequestKeys = keysOf()([
+      "samples",
+      "frameLength",
+      "hopLength"
+    ]);
+    GriffinLimRequestKeys = keysOf()([
+      "magnitude",
+      "nBins",
+      "nFrames",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "nIter",
+      "momentum",
+      "validate"
+    ]);
+    HarmonicRequestKeys = keysOf()(["samples", "sampleRate", "validate"]);
+    HpssRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "kernelHarmonic",
+      "kernelPercussive",
+      "nFft",
+      "hopLength",
+      "hardMask"
+    ]);
+    HpssWithResidualRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "kernelHarmonic",
+      "kernelPercussive",
+      "nFft",
+      "hopLength",
+      "hardMask"
+    ]);
+    LufsRequestKeys = keysOf()(["samples", "sampleRate", "validate"]);
+    LufsInterleavedRequestKeys = keysOf()([
+      "samples",
+      "channels",
+      "sampleRate",
+      "validate"
+    ]);
+    LufsSeriesInterleavedRequestKeys = keysOf()([
+      "samples",
+      "channels",
+      "sampleRate",
+      "validate"
+    ]);
+    MasterAudioRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "preset",
+      "overrides",
+      "onProgress",
+      "cancel"
+    ]);
+    MasteringChainConfigKeys = keysOf()([
+      "repair",
+      "eq",
+      "dynamics",
+      "saturation",
+      "spectral",
+      "stereo",
+      "maximizer",
+      "loudness"
+    ]);
+    MasterAudioStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "preset",
+      "overrides",
+      "onProgress",
+      "cancel"
+    ]);
+    MasteringRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "targetLufs",
+      "ceilingDb",
+      "truePeakOversample",
+      "releaseMs",
+      "applyGainAtInputRate"
+    ]);
+    MasteringAbMatchLoudnessRequestKeys = keysOf()([
+      "source",
+      "reference",
+      "sampleRate",
+      "referenceSampleRate"
+    ]);
+    MasteringAbMatchLoudnessStereoRequestKeys = keysOf()([
+      "sourceLeft",
+      "sourceRight",
+      "referenceLeft",
+      "referenceRight",
+      "sampleRate",
+      "referenceSampleRate"
+    ]);
+    MasteringAssistantParamsRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "params"
+    ]);
+    MasteringAssistantStereoParamsRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "params"
+    ]);
+    MasteringSamplesParamsRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "params"
+    ]);
+    MasteringStereoParamsRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "params"
+    ]);
+    MasteringChainRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "config",
+      "onProgress",
+      "cancel"
+    ]);
+    MasteringChainStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "config",
+      "onProgress",
+      "cancel"
+    ]);
+    MasteringDynamicsCompressorRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "thresholdDb",
+      "ratio",
+      "attackMs",
+      "releaseMs",
+      "kneeDb",
+      "makeupGainDb",
+      "autoMakeup",
+      "detector",
+      "sidechainHpfEnabled",
+      "sidechainHpfHz",
+      "pdrTimeMs",
+      "pdrReleaseScale",
+      "validate"
+    ]);
+    MasteringDynamicsGateRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "thresholdDb",
+      "attackMs",
+      "releaseMs",
+      "rangeDb",
+      "holdMs",
+      "closeThresholdDb",
+      "keyHpfHz",
+      "validate"
+    ]);
+    MasteringDynamicsTransientShaperRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "attackGainDb",
+      "sustainGainDb",
+      "fastAttackMs",
+      "fastReleaseMs",
+      "slowAttackMs",
+      "slowReleaseMs",
+      "sensitivity",
+      "maxGainDb",
+      "gainSmoothingMs",
+      "lookaheadMs",
+      "validate"
+    ]);
+    Anon74Keys = keysOf()([
+      "analysisName",
+      "source",
+      "reference",
+      "sampleRate",
+      "referenceSampleRate",
+      "params"
+    ]);
+    MasteringPairProcessRequestKeys = keysOf()([
+      "processorName",
+      "source",
+      "reference",
+      "sampleRate",
+      "referenceSampleRate",
+      "params"
+    ]);
+    MasteringPairProcessStereoRequestKeys = keysOf()([
+      "processorName",
+      "sourceLeft",
+      "sourceRight",
+      "referenceLeft",
+      "referenceRight",
+      "sampleRate",
+      "referenceSampleRate",
+      "params"
+    ]);
+    MasteringProcessRequestKeys = keysOf()([
+      "processorName",
+      "samples",
+      "sampleRate",
+      "params"
+    ]);
+    MasteringProcessStereoRequestKeys = keysOf()([
+      "processorName",
+      "left",
+      "right",
+      "sampleRate",
+      "params"
+    ]);
+    MasteringRepairAnalyzeRequestKeys = keysOf()([
+      "channels",
+      "sampleRate",
+      "preferStreamingSafe"
+    ]);
+    MasteringRepairApplyRequestKeys = keysOf()([
+      "channels",
+      "sampleRate",
+      "stages",
+      "onProgress",
+      "cancel"
+    ]);
+    MasteringRepairDeclickRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "threshold",
+      "neighborRatio",
+      "maxClickSamples",
+      "lpcOrder",
+      "residualRatio"
+    ]);
+    MasteringRepairDeclickStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "threshold",
+      "neighborRatio",
+      "maxClickSamples",
+      "lpcOrder",
+      "residualRatio"
+    ]);
+    MasteringRepairDeclipRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "clipThreshold",
+      "lpcOrder",
+      "iterations",
+      "lpcBlend"
+    ]);
+    MasteringRepairDeclipStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "clipThreshold",
+      "lpcOrder",
+      "iterations",
+      "lpcBlend"
+    ]);
+    MasteringRepairDecrackleRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "threshold",
+      "mode",
+      "levels"
+    ]);
+    MasteringRepairDecrackleStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "threshold",
+      "mode",
+      "levels"
+    ]);
+    MasteringRepairDehumRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "fundamentalHz",
+      "harmonics",
+      "q",
+      "adaptive",
+      "searchRangeHz",
+      "adaptation",
+      "frameSize",
+      "pllBandwidth",
+      "mode"
+    ]);
+    MasteringRepairDehumStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "fundamentalHz",
+      "harmonics",
+      "q",
+      "adaptive",
+      "searchRangeHz",
+      "adaptation",
+      "frameSize",
+      "pllBandwidth",
+      "mode"
+    ]);
+    MasteringRepairDenoiseClassicalRequestKeys = keysOf()(
+      [
+        "samples",
+        "sampleRate",
+        "mode",
+        "noiseEstimator",
+        "nFft",
+        "hopLength",
+        "ddAlpha",
+        "reductionDb",
+        "overSubtraction",
+        "spectralFloor",
+        "noiseEstimationQuantile",
+        "speechPresenceGain",
+        "gainSmoothing"
+      ]
+    );
+    MasteringRepairDenoiseClassicalLinkedRequestKeys = keysOf()([
+      "channels",
+      "sampleRate",
+      "mode",
+      "noiseEstimator",
+      "nFft",
+      "hopLength",
+      "ddAlpha",
+      "reductionDb",
+      "overSubtraction",
+      "spectralFloor",
+      "noiseEstimationQuantile",
+      "speechPresenceGain",
+      "gainSmoothing"
+    ]);
+    MasteringRepairDenoiseClassicalStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "mode",
+      "noiseEstimator",
+      "nFft",
+      "hopLength",
+      "ddAlpha",
+      "reductionDb",
+      "overSubtraction",
+      "spectralFloor",
+      "noiseEstimationQuantile",
+      "speechPresenceGain",
+      "gainSmoothing"
+    ]);
+    MasteringRepairDereverbClassicalRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "threshold",
+      "attenuation",
+      "nFft",
+      "hopLength",
+      "t60Sec",
+      "lateDelayMs",
+      "overSubtraction",
+      "spectralFloor",
+      "wpeEnabled",
+      "wpeIterations",
+      "wpeTaps",
+      "wpeStrength"
+    ]);
+    MasteringRepairDereverbClassicalLinkedRequestKeys = keysOf()([
+      "channels",
+      "sampleRate",
+      "threshold",
+      "attenuation",
+      "nFft",
+      "hopLength",
+      "t60Sec",
+      "lateDelayMs",
+      "overSubtraction",
+      "spectralFloor",
+      "wpeEnabled",
+      "wpeIterations",
+      "wpeTaps",
+      "wpeStrength"
+    ]);
+    MasteringRepairDereverbClassicalStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "threshold",
+      "attenuation",
+      "nFft",
+      "hopLength",
+      "t60Sec",
+      "lateDelayMs",
+      "overSubtraction",
+      "spectralFloor",
+      "wpeEnabled",
+      "wpeIterations",
+      "wpeTaps",
+      "wpeStrength"
+    ]);
+    MasteringRepairDetectClicksRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "threshold",
+      "neighborRatio",
+      "maxClickSamples",
+      "lpcOrder",
+      "residualRatio"
+    ]);
+    MasteringRepairDetectClippingRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "clipThreshold",
+      "lpcOrder",
+      "iterations",
+      "lpcBlend"
+    ]);
+    MasteringRepairDetectCrackleRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "threshold",
+      "mode",
+      "levels"
+    ]);
+    MasteringRepairDetectHumRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "fundamentalHz",
+      "harmonics",
+      "q",
+      "adaptive",
+      "searchRangeHz",
+      "adaptation",
+      "frameSize",
+      "pllBandwidth",
+      "mode"
+    ]);
+    MasteringRepairDetectNoiseFloorRequestKeys = keysOf()(
+      [
+        "samples",
+        "sampleRate",
+        "mode",
+        "noiseEstimator",
+        "nFft",
+        "hopLength",
+        "ddAlpha",
+        "reductionDb",
+        "overSubtraction",
+        "spectralFloor",
+        "noiseEstimationQuantile",
+        "speechPresenceGain",
+        "gainSmoothing"
+      ]
+    );
+    MasteringRepairDetectReverbRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "threshold",
+      "attenuation",
+      "nFft",
+      "hopLength",
+      "t60Sec",
+      "lateDelayMs",
+      "overSubtraction",
+      "spectralFloor",
+      "wpeEnabled",
+      "wpeIterations",
+      "wpeTaps",
+      "wpeStrength"
+    ]);
+    MasteringRepairDetectTrimRangeRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "threshold",
+      "paddingSamples",
+      "paddingSec",
+      "mode",
+      "gateLufs",
+      "windowMs"
+    ]);
+    MasteringRepairDetectTrimRangeStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "threshold",
+      "paddingSamples",
+      "paddingSec",
+      "mode",
+      "gateLufs",
+      "windowMs"
+    ]);
+    MasteringRepairTrimSilenceRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "threshold",
+      "paddingSamples",
+      "paddingSec",
+      "mode",
+      "gateLufs",
+      "windowMs"
+    ]);
+    MasteringRepairTrimSilenceStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "threshold",
+      "paddingSamples",
+      "paddingSec",
+      "mode",
+      "gateLufs",
+      "windowMs"
+    ]);
+    Anon105Keys = keysOf()([
+      "analysisName",
+      "left",
+      "right",
+      "sampleRate",
+      "params"
+    ]);
+    MasteringStreamingPreviewRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "platforms"
+    ]);
+    MasteringStreamingPreviewStereoRequestKeys = keysOf()(
+      ["left", "right", "sampleRate", "platforms"]
+    );
+    MelDeltaRequestKeys = keysOf()([
+      "features",
+      "nFeatures",
+      "nFrames",
+      "width",
+      "validate"
+    ]);
+    MelSpectrogramRequestKeys = keysOf()([
+      "nMels",
+      "fmin",
+      "fmax",
+      "htk",
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "validate"
+    ]);
+    MergeNotesRequestKeys = keysOf()([
+      "first",
+      "last",
+      "samples",
+      "sampleRate",
+      "f0Hz",
+      "frameRate",
+      "voiced",
+      "voicedProb",
+      "notes",
+      "segmentationThresholdCents",
+      "minNoteMs",
+      "referenceHz",
+      "voicedThreshold",
+      "validate"
+    ]);
+    MeteringSamplesRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "validate"
+    ]);
+    MeteringStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "validate"
+    ]);
+    MeteringDetectClippingRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "threshold",
+      "minRegionSamples",
+      "validate"
+    ]);
+    MeteringDynamicRangeRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "windowSec",
+      "hopSec",
+      "lowPercentile",
+      "highPercentile",
+      "validate"
+    ]);
+    MeteringStereoDecimatedRequestKeys = keysOf()([
+      "maxPoints",
+      "left",
+      "right",
+      "sampleRate",
+      "validate"
+    ]);
+    MeteringSilenceRatioRequestKeys = keysOf()([
+      "thresholdDb",
+      "frameLength",
+      "hopLength",
+      "samples",
+      "sampleRate",
+      "validate"
+    ]);
+    MeteringSpectrumRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nFft",
+      "applyOctaveSmoothing",
+      "octaveFraction",
+      "dbRef",
+      "dbAmin",
+      "validate"
+    ]);
+    MeteringSpectrumFrameRequestKeys = keysOf()([
+      "frameOffset",
+      "samples",
+      "sampleRate",
+      "nFft",
+      "applyOctaveSmoothing",
+      "octaveFraction",
+      "dbRef",
+      "dbAmin",
+      "validate"
+    ]);
+    MeteringTruePeakRequestKeys = keysOf()([
+      "oversampleFactor",
+      "samples",
+      "sampleRate",
+      "validate"
+    ]);
+    MfccRequestKeys = keysOf()([
+      "nMfcc",
+      "lifter",
+      "nMels",
+      "fmin",
+      "fmax",
+      "htk",
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "validate"
+    ]);
+    MixStereoRequestKeys = keysOf()([
+      "leftChannels",
+      "rightChannels",
+      "sampleRate",
+      "inputTrimDb",
+      "faderDb",
+      "pan",
+      "panMode",
+      "width",
+      "muted"
+    ]);
+    NnFilterRequestKeys = keysOf()([
+      "s",
+      "nFeatures",
+      "nFrames",
+      "aggregate",
+      "k",
+      "width"
+    ]);
+    NnlsChromaRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "enableStftBlend",
+      "stftBlendWeight",
+      "stftBlendNFft",
+      "hopLength",
+      "validate"
+    ]);
+    NormalizeRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "targetDb",
+      "mode",
+      "validate"
+    ]);
+    NormalizeStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "targetDb",
+      "mode",
+      "validate"
+    ]);
+    NoteMoveRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "onsetSample",
+      "onsetSec",
+      "offsetSample",
+      "offsetSec",
+      "targetOnsetSample",
+      "targetOnsetSec",
+      "validate"
+    ]);
+    NoteSegmentsRequestKeys = keysOf()([
+      "f0Hz",
+      "voicedProb",
+      "frameRate",
+      "segmentationThresholdCents",
+      "minNoteMs",
+      "referenceHz",
+      "voicedThreshold"
+    ]);
+    NoteStretchRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "onsetSample",
+      "onsetSec",
+      "offsetSample",
+      "offsetSec",
+      "stretchRatio",
+      "validate"
+    ]);
+    NoteTargetsFromSmfRequestKeys = keysOf()(["data", "trackIndex"]);
+    OnsetBacktrackRequestKeys = keysOf()(["events", "energy"]);
+    OnsetEnvelopeRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "nMels",
+      "validate"
+    ]);
+    OnsetStrengthMultiRequestKeys = keysOf()([
+      "nBands",
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "nMels",
+      "validate"
+    ]);
+    PadCenterRequestKeys = keysOf()(["values", "targetSize", "padValue"]);
+    PcenRequestKeys = keysOf()([
+      "values",
+      "nBins",
+      "nFrames",
+      "sampleRate",
+      "hopLength",
+      "timeConstant",
+      "gain",
+      "bias",
+      "power",
+      "eps",
+      "options"
+    ]);
+    PeakPickRequestKeys = keysOf()([
+      "values",
+      "preMax",
+      "postMax",
+      "preAvg",
+      "postAvg",
+      "delta",
+      "wait"
+    ]);
+    PercussiveRequestKeys = keysOf()(["samples", "sampleRate", "validate"]);
+    PhaseVocoderRequestKeys = keysOf()([
+      "rate",
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength"
+    ]);
+    PiptrackRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "fmin",
+      "fmax",
+      "threshold"
+    ]);
+    PitchCorrectTimevaryingRequestKeys = keysOf()([
+      "samples",
+      "f0Hz",
+      "sampleRate",
+      "hopLength",
+      "mode",
+      "targetMidi",
+      "scaleRoot",
+      "scaleModeMask",
+      "referenceMidi",
+      "retuneAmount",
+      "maxCorrectionSemitones",
+      "retuneSpeedMs",
+      "vibratoThresholdCents",
+      "voiced",
+      "voicedProb",
+      "validate"
+    ]);
+    PitchCorrectToMidiRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "currentMidi",
+      "targetMidi",
+      "validate"
+    ]);
+    PitchCorrectToMidiTimevaryingRequestKeys = keysOf()([
+      "samples",
+      "f0Hz",
+      "targetMidi",
+      "sampleRate",
+      "hopLength",
+      "voiced",
+      "voicedProb",
+      "validate"
+    ]);
+    PitchPyinRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "frameLength",
+      "hopLength",
+      "fmin",
+      "fmax",
+      "threshold",
+      "fillNa"
+    ]);
+    PitchShiftRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "semitones",
+      "nFft",
+      "hopLength",
+      "validate"
+    ]);
+    PitchTuningRequestKeys = keysOf()([
+      "frequencies",
+      "resolution",
+      "binsPerOctave"
+    ]);
+    PitchYinRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "frameLength",
+      "hopLength",
+      "fmin",
+      "fmax",
+      "threshold",
+      "fillNa"
+    ]);
+    PlpRequestKeys = keysOf()([
+      "onsetEnvelope",
+      "sampleRate",
+      "hopLength",
+      "tempoMin",
+      "tempoMax",
+      "winLength"
+    ]);
+    PolyFeaturesRequestKeys = keysOf()([
+      "order",
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength"
+    ]);
+    ReassignedSpectrogramRequestKeys = keysOf()([
+      "refPower",
+      "fillNan",
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "validate"
+    ]);
+    RemixRequestKeys = keysOf()([
+      "samples",
+      "intervals",
+      "sampleRate",
+      "alignZeros"
+    ]);
+    RenderNotesRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "notes",
+      "fadeMs",
+      "f0Hz",
+      "voiced",
+      "frameRate",
+      "vibratoCutoffHz",
+      "validate"
+    ]);
+    RenderPercussiveEventsRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "events",
+      "fadeMs",
+      "nFft",
+      "hopLength",
+      "hpssKernelHarmonic",
+      "hpssKernelPercussive",
+      "validate"
+    ]);
+    RenderPlaybackRequestKeys = keysOf()([
+      "samples",
+      "channels",
+      "sampleRate",
+      "config",
+      "hrtf"
+    ]);
+    PlaybackRendererConfigKeys = keysOf()([
+      "input",
+      "target",
+      "lfe_mix_db",
+      "upmix",
+      "dialogue_level_db",
+      "loudness",
+      "night_mode",
+      "room",
+      "head_tracking",
+      "output_limiter"
+    ]);
+    ResampleRequestKeys = keysOf()(["samples", "srcSr", "targetSr"]);
+    VocalRestoreRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "state",
+      "limits"
+    ]);
+    ZeroCrossingRateRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "frameLength",
+      "hopLength"
+    ]);
+    RoomGeometryFromEstimateRequestKeys = keysOf()([
+      "estimate",
+      "source",
+      "listener"
+    ]);
+    RoomPlacementKeys = keysOf()(["x", "y", "z"]);
+    RoomMorphRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "wet",
+      "sourceTailSuppression",
+      "preferEyring",
+      "mixingTimeMs",
+      "crossfadeMs",
+      "lengthM",
+      "widthM",
+      "heightM",
+      "absorption",
+      "bandAbsorption",
+      "bandScattering",
+      "materialPreset",
+      "sourceX",
+      "sourceY",
+      "sourceZ",
+      "listenerX",
+      "listenerY",
+      "listenerZ",
+      "ismOrder",
+      "seed",
+      "maxSeconds",
+      "airAbsorptionEnabled",
+      "airTemperatureC",
+      "airHumidityPercent",
+      "validate"
+    ]);
+    RoomMorphStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "receiverSpacingM",
+      "wet",
+      "sourceTailSuppression",
+      "preferEyring",
+      "mixingTimeMs",
+      "crossfadeMs",
+      "lengthM",
+      "widthM",
+      "heightM",
+      "absorption",
+      "bandAbsorption",
+      "bandScattering",
+      "materialPreset",
+      "sourceX",
+      "sourceY",
+      "sourceZ",
+      "listenerX",
+      "listenerY",
+      "listenerZ",
+      "ismOrder",
+      "seed",
+      "maxSeconds",
+      "airAbsorptionEnabled",
+      "airTemperatureC",
+      "airHumidityPercent",
+      "validate"
+    ]);
+    SegmentAgglomerativeRequestKeys = keysOf()([
+      "data",
+      "rows",
+      "cols",
+      "k",
+      "linkage"
+    ]);
+    SegmentCrossSimilarityRequestKeys = keysOf()([
+      "x",
+      "xRows",
+      "xCols",
+      "y",
+      "yRows",
+      "yCols",
+      "k",
+      "metric",
+      "mode"
+    ]);
+    SegmentLagToRecurrenceRequestKeys = keysOf()([
+      "lag",
+      "rows",
+      "lags"
+    ]);
+    SegmentPathEnhanceRequestKeys = keysOf()([
+      "recurrence",
+      "n",
+      "win",
+      "maxRatio",
+      "minRatio",
+      "nFilters"
+    ]);
+    SegmentRecurrenceMatrixRequestKeys = keysOf()([
+      "data",
+      "rows",
+      "cols",
+      "k",
+      "width",
+      "sym",
+      "metric",
+      "mode"
+    ]);
+    SegmentRecurrenceToLagRequestKeys = keysOf()([
+      "recurrence",
+      "n",
+      "pad"
+    ]);
+    SegmentSubsegmentRequestKeys = keysOf()([
+      "data",
+      "rows",
+      "cols",
+      "boundaries",
+      "nSegments"
+    ]);
+    Anon168Keys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "p"
+    ]);
+    SpectralFrameRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength"
+    ]);
+    SpectralContrastRequestKeys = keysOf()([
+      "nBands",
+      "fmin",
+      "quantile",
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength"
+    ]);
+    SpectralEditRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "ops",
+      "nFft",
+      "hopLength",
+      "window",
+      "healRadiusFrames",
+      "validate"
+    ]);
+    Anon172Keys = keysOf()([
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength",
+      "lag"
+    ]);
+    SpectralRolloffRequestKeys = keysOf()([
+      "rollPercent",
+      "samples",
+      "sampleRate",
+      "nFft",
+      "hopLength"
+    ]);
+    SplitNoteRequestKeys = keysOf()([
+      "index",
+      "frame",
+      "samples",
+      "sampleRate",
+      "f0Hz",
+      "frameRate",
+      "voiced",
+      "voicedProb",
+      "notes",
+      "segmentationThresholdCents",
+      "minNoteMs",
+      "referenceHz",
+      "voicedThreshold",
+      "validate"
+    ]);
+    SilenceRequestKeys = keysOf()([
+      "samples",
+      "topDb",
+      "frameLength",
+      "hopLength"
+    ]);
+    SplitSilenceCommonRequestKeys = keysOf()([
+      "signals",
+      "topDb",
+      "frameLength",
+      "hopLength"
+    ]);
+    StreamingLoudnessGainRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "config"
+    ]);
+    StreamingLoudnessGainStereoRequestKeys = keysOf()([
+      "left",
+      "right",
+      "sampleRate",
+      "config"
+    ]);
+    SuggestMixSceneRequestKeys = keysOf()([
+      "tracks",
+      "sampleRate",
+      "options"
+    ]);
+    MixAssistantOptionsKeys = keysOf()([
+      "targetTrackLufs",
+      "suggestionStrength",
+      "eqMaxCutDb",
+      "mixBusHeadroomDbtp",
+      "tempoBpm",
+      "enableStructure",
+      "enableGain",
+      "enableBalance",
+      "enableEq",
+      "enableDynamics",
+      "enableImage",
+      "enableHighPass",
+      "nFft",
+      "hopLength"
+    ]);
+    RirSynthOptionsKeys = keysOf()([
+      "sampleRate",
+      "preferEyring",
+      "mixingTimeMs",
+      "crossfadeMs",
+      "lengthM",
+      "widthM",
+      "heightM",
+      "absorption",
+      "bandAbsorption",
+      "bandScattering",
+      "materialPreset",
+      "sourceX",
+      "sourceY",
+      "sourceZ",
+      "listenerX",
+      "listenerY",
+      "listenerZ",
+      "ismOrder",
+      "seed",
+      "maxSeconds",
+      "airAbsorptionEnabled",
+      "airTemperatureC",
+      "airHumidityPercent"
+    ]);
+    TempogramRequestKeys = keysOf()([
+      "onsetEnvelope",
+      "sampleRate",
+      "hopLength",
+      "winLength",
+      "mode",
+      "center",
+      "norm"
+    ]);
+    TempogramRatioRequestKeys = keysOf()([
+      "tempogramData",
+      "winLength",
+      "sampleRate",
+      "hopLength",
+      "factors",
+      "validate"
+    ]);
+    TimeStretchRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "rate",
+      "nFft",
+      "hopLength",
+      "validate"
+    ]);
+    ToneRequestKeys = keysOf()([
+      "frequency",
+      "sampleRate",
+      "duration",
+      "phase",
+      "amplitude"
+    ]);
+    TonnetzRequestKeys = keysOf()(["chromagram", "nChroma", "nFrames"]);
+    TranscribeRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "tempoBpm",
+      "polyphonic",
+      "referenceHz",
+      "fmin",
+      "fmax",
+      "minNoteMs",
+      "minNoteDivision",
+      "segmentationThresholdCents",
+      "velocityFloorDb",
+      "fixedVelocity",
+      "maxPolyphony",
+      "minFramePeakRatio",
+      "minRidgePeakRatio",
+      "reattackRatio",
+      "group",
+      "channel"
+    ]);
+    TrimRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "thresholdDb",
+      "frameLength",
+      "hopLength",
+      "validate"
+    ]);
+    VectorNormalizeRequestKeys = keysOf()([
+      "values",
+      "normType",
+      "threshold"
+    ]);
+    VoiceChangeRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "pitchSemitones",
+      "formantFactor",
+      "formantMode",
+      "validate"
+    ]);
+    VoiceChangeRealtimeRequestKeys = keysOf()([
+      "samples",
+      "sampleRate",
+      "preset",
+      "channels",
+      "blockSize",
+      "validate"
+    ]);
+    VqtRequestKeys = keysOf()([
+      "gamma",
+      "samples",
+      "sampleRate",
+      "hopLength",
+      "fmin",
+      "nBins",
+      "binsPerOctave",
+      "validate"
+    ]);
+    VqtToAudioRequestKeys = keysOf()([
+      "gamma",
+      "magnitude",
+      "nBins",
+      "nFrames",
+      "sampleRate",
+      "hopLength",
+      "fmin",
+      "binsPerOctave",
+      "nIter",
+      "validate"
+    ]);
+    WaveformPeakPyramidRequestKeys = keysOf()([
+      "samples",
+      "channels",
+      "samplesPerBucketLevels",
+      "validate"
+    ]);
+    WaveformPeaksRequestKeys = keysOf()([
+      "samples",
+      "channels",
+      "samplesPerBucket",
+      "validate"
+    ]);
+    ZeroCrossingsRequestKeys = keysOf()([
+      "samples",
+      "threshold",
+      "refMagnitude",
+      "pad",
+      "zeroPos"
+    ]);
+    REQUEST_SHAPES = {
+      alignTakeToReference: { keys: AlignTakeToReferenceRequestKeys },
+      amplitudeToDb: { keys: DbConversionRequestKeys },
+      analyze: { keys: MusicAnalyzeRequestKeys },
+      analyzeBpm: { keys: AnalyzeBpmRequestKeys },
+      analyzeDynamics: { keys: AnalyzeDynamicsRequestKeys },
+      analyzeImpulseResponse: { keys: AnalyzeImpulseResponseRequestKeys },
+      analyzeMelody: { keys: AnalyzeMelodyRequestKeys },
+      analyzePolyphonic: { keys: AnalyzePolyphonicRequestKeys },
+      analyzeRhythm: { keys: AnalyzeRhythmRequestKeys },
+      analyzeSections: { keys: AnalyzeSectionsRequestKeys },
+      analyzeTimbre: { keys: AnalyzeTimbreRequestKeys },
+      analyzeWithProgress: {
+        keys: AnalyzeWithProgressRequestKeys,
+        nested: { options: MusicAnalyzeOptionsKeys }
+      },
+      assignNoteTargets: { keys: AssignNoteTargetsRequestKeys },
+      autoTune: { keys: AutoTuneRequestKeys, hints: { key: AutoTuneKeyKeys } },
+      bassChroma: { keys: BassChromaSpectrogramRequestKeys },
+      chirp: { keys: ChirpRequestKeys },
+      chordFunctionalAnalysis: { keys: ChordFunctionalAnalysisRequestKeys },
+      chordFunctions: { keys: Anon19Keys },
+      chroma: { keys: SpectrogramRequestKeys },
+      chromaCens: { keys: ChromaSpectrogramRequestKeys },
+      chromaCqt: { keys: ChromaSpectrogramRequestKeys },
+      clicks: { keys: ClicksRequestKeys },
+      cqt: { keys: CqtRequestKeys },
+      cqtToAudio: { keys: CqtToAudioRequestKeys },
+      createVocalEditSession: {
+        keys: VocalCreateRequestKeys,
+        nested: { limits: VocalSessionLimitsKeys },
+        hints: { analysis: VocalAnalysisInputKeys }
+      },
+      cyclicTempogram: { keys: CyclicTempogramRequestKeys },
+      decompose: { keys: DecomposeRequestKeys },
+      decomposeNotePitch: { keys: DecomposeNotePitchRequestKeys },
+      decomposeStems: { keys: DecomposeStemsRequestKeys },
+      decomposeStemsLinked: { keys: DecomposeStemsLinkedRequestKeys },
+      decomposeWithInit: { keys: DecomposeWithInitRequestKeys },
+      deemphasis: { keys: EmphasisRequestKeys },
+      detectAcoustic: { keys: DetectAcousticRequestKeys },
+      detectBeats: { keys: SamplesRequestKeys },
+      detectBoundaries: { keys: DetectBoundariesRequestKeys },
+      detectBpm: { keys: SamplesRequestKeys },
+      detectChords: { keys: DetectChordsRequestKeys },
+      detectDownbeats: { keys: SamplesRequestKeys },
+      detectKey: { keys: DetectKeyRequestKeys },
+      detectKeyCandidates: { keys: DetectKeyCandidatesRequestKeys },
+      detectOnsets: { keys: DetectOnsetsRequestKeys },
+      ebur128LoudnessRange: { keys: Ebur128LoudnessRangeRequestKeys },
+      estimateMeter: { keys: EstimateMeterRequestKeys },
+      estimateRoom: { keys: EstimateRoomRequestKeys },
+      estimateTuning: { keys: EstimateTuningRequestKeys },
+      extractNotes: { keys: ExtractNotesRequestKeys },
+      extractPercussiveEvents: { keys: ExtractPercussiveEventsRequestKeys },
+      fixFrames: { keys: FixFramesRequestKeys },
+      fixLength: { keys: FixLengthRequestKeys },
+      fourierTempogram: { keys: FourierTempogramRequestKeys },
+      frameSignal: { keys: FrameSignalRequestKeys },
+      griffinLim: { keys: GriffinLimRequestKeys },
+      harmonic: { keys: HarmonicRequestKeys },
+      hpss: { keys: HpssRequestKeys },
+      hpssWithResidual: { keys: HpssWithResidualRequestKeys },
+      hybridCqt: { keys: CqtRequestKeys },
+      lufs: { keys: LufsRequestKeys },
+      lufsInterleaved: { keys: LufsInterleavedRequestKeys },
+      lufsSeriesInterleaved: { keys: LufsSeriesInterleavedRequestKeys },
+      masterAudio: { keys: MasterAudioRequestKeys, hints: { overrides: MasteringChainConfigKeys } },
+      masterAudioStereo: {
+        keys: MasterAudioStereoRequestKeys,
+        hints: { overrides: MasteringChainConfigKeys }
+      },
+      masterAudioStereoWithProgress: {
+        keys: MasterAudioStereoRequestKeys,
+        hints: { overrides: MasteringChainConfigKeys }
+      },
+      masterAudioWithProgress: {
+        keys: MasterAudioRequestKeys,
+        hints: { overrides: MasteringChainConfigKeys }
+      },
+      mastering: { keys: MasteringRequestKeys },
+      masteringAbMatchLoudness: { keys: MasteringAbMatchLoudnessRequestKeys },
+      masteringAbMatchLoudnessStereo: { keys: MasteringAbMatchLoudnessStereoRequestKeys },
+      masteringAssistantSuggest: { keys: MasteringAssistantParamsRequestKeys },
+      masteringAssistantSuggestChain: { keys: MasteringAssistantParamsRequestKeys },
+      masteringAssistantSuggestChainStereo: { keys: MasteringAssistantStereoParamsRequestKeys },
+      masteringAssistantSuggestStereo: { keys: MasteringAssistantStereoParamsRequestKeys },
+      masteringAudioProfile: { keys: MasteringSamplesParamsRequestKeys },
+      masteringAudioProfileStereo: { keys: MasteringStereoParamsRequestKeys },
+      masteringChain: { keys: MasteringChainRequestKeys, hints: { config: MasteringChainConfigKeys } },
+      masteringChainStereo: {
+        keys: MasteringChainStereoRequestKeys,
+        hints: { config: MasteringChainConfigKeys }
+      },
+      masteringChainStereoWithProgress: {
+        keys: MasteringChainStereoRequestKeys,
+        hints: { config: MasteringChainConfigKeys }
+      },
+      masteringChainWithProgress: {
+        keys: MasteringChainRequestKeys,
+        hints: { config: MasteringChainConfigKeys }
+      },
+      masteringDynamicsCompressor: { keys: MasteringDynamicsCompressorRequestKeys },
+      masteringDynamicsGate: { keys: MasteringDynamicsGateRequestKeys },
+      masteringDynamicsTransientShaper: { keys: MasteringDynamicsTransientShaperRequestKeys },
+      masteringPairAnalyze: { keys: Anon74Keys },
+      masteringPairProcess: { keys: MasteringPairProcessRequestKeys },
+      masteringPairProcessStereo: { keys: MasteringPairProcessStereoRequestKeys },
+      masteringProcess: { keys: MasteringProcessRequestKeys },
+      masteringProcessStereo: { keys: MasteringProcessStereoRequestKeys },
+      masteringRepairAnalyze: { keys: MasteringRepairAnalyzeRequestKeys },
+      masteringRepairApply: { keys: MasteringRepairApplyRequestKeys },
+      masteringRepairDeclick: { keys: MasteringRepairDeclickRequestKeys },
+      masteringRepairDeclickStereo: { keys: MasteringRepairDeclickStereoRequestKeys },
+      masteringRepairDeclip: { keys: MasteringRepairDeclipRequestKeys },
+      masteringRepairDeclipStereo: { keys: MasteringRepairDeclipStereoRequestKeys },
+      masteringRepairDecrackle: { keys: MasteringRepairDecrackleRequestKeys },
+      masteringRepairDecrackleStereo: { keys: MasteringRepairDecrackleStereoRequestKeys },
+      masteringRepairDehum: { keys: MasteringRepairDehumRequestKeys },
+      masteringRepairDehumStereo: { keys: MasteringRepairDehumStereoRequestKeys },
+      masteringRepairDenoiseClassical: { keys: MasteringRepairDenoiseClassicalRequestKeys },
+      masteringRepairDenoiseClassicalLinked: { keys: MasteringRepairDenoiseClassicalLinkedRequestKeys },
+      masteringRepairDenoiseClassicalStereo: { keys: MasteringRepairDenoiseClassicalStereoRequestKeys },
+      masteringRepairDereverbClassical: { keys: MasteringRepairDereverbClassicalRequestKeys },
+      masteringRepairDereverbClassicalLinked: {
+        keys: MasteringRepairDereverbClassicalLinkedRequestKeys
+      },
+      masteringRepairDereverbClassicalStereo: {
+        keys: MasteringRepairDereverbClassicalStereoRequestKeys
+      },
+      masteringRepairDetectClicks: { keys: MasteringRepairDetectClicksRequestKeys },
+      masteringRepairDetectClipping: { keys: MasteringRepairDetectClippingRequestKeys },
+      masteringRepairDetectCrackle: { keys: MasteringRepairDetectCrackleRequestKeys },
+      masteringRepairDetectHum: { keys: MasteringRepairDetectHumRequestKeys },
+      masteringRepairDetectNoiseFloor: { keys: MasteringRepairDetectNoiseFloorRequestKeys },
+      masteringRepairDetectReverb: { keys: MasteringRepairDetectReverbRequestKeys },
+      masteringRepairDetectTrimRange: { keys: MasteringRepairDetectTrimRangeRequestKeys },
+      masteringRepairDetectTrimRangeStereo: { keys: MasteringRepairDetectTrimRangeStereoRequestKeys },
+      masteringRepairTrimSilence: { keys: MasteringRepairTrimSilenceRequestKeys },
+      masteringRepairTrimSilenceStereo: { keys: MasteringRepairTrimSilenceStereoRequestKeys },
+      masteringStereoAnalyze: { keys: Anon105Keys },
+      masteringStreamingPreview: { keys: MasteringStreamingPreviewRequestKeys },
+      masteringStreamingPreviewStereo: { keys: MasteringStreamingPreviewStereoRequestKeys },
+      melDelta: { keys: MelDeltaRequestKeys },
+      melSpectrogram: { keys: MelSpectrogramRequestKeys },
+      mergeNotes: { keys: MergeNotesRequestKeys },
+      meteringCrestFactorDb: { keys: MeteringSamplesRequestKeys },
+      meteringCrestFactorDbStereo: { keys: MeteringStereoRequestKeys },
+      meteringDcOffset: { keys: MeteringSamplesRequestKeys },
+      meteringDetectClipping: { keys: MeteringDetectClippingRequestKeys },
+      meteringDynamicRange: { keys: MeteringDynamicRangeRequestKeys },
+      meteringPeakDb: { keys: MeteringSamplesRequestKeys },
+      meteringPhaseScope: { keys: MeteringStereoDecimatedRequestKeys },
+      meteringPhaseScopeDecimated: { keys: MeteringStereoDecimatedRequestKeys },
+      meteringRmsDb: { keys: MeteringSamplesRequestKeys },
+      meteringSilenceRatio: { keys: MeteringSilenceRatioRequestKeys },
+      meteringSpectrum: { keys: MeteringSpectrumRequestKeys },
+      meteringSpectrumFrame: { keys: MeteringSpectrumFrameRequestKeys },
+      meteringStereoCorrelation: { keys: MeteringStereoRequestKeys },
+      meteringStereoWidth: { keys: MeteringStereoRequestKeys },
+      meteringTruePeakDb: { keys: MeteringTruePeakRequestKeys },
+      meteringVectorscope: { keys: MeteringStereoDecimatedRequestKeys },
+      meteringVectorscopeDecimated: { keys: MeteringStereoDecimatedRequestKeys },
+      mfcc: { keys: MfccRequestKeys },
+      mixStereo: { keys: MixStereoRequestKeys },
+      momentaryLufs: { keys: LufsRequestKeys },
+      nnFilter: { keys: NnFilterRequestKeys },
+      nnlsChroma: { keys: NnlsChromaRequestKeys },
+      normalize: { keys: NormalizeRequestKeys },
+      normalizeStereo: { keys: NormalizeStereoRequestKeys },
+      noteMove: { keys: NoteMoveRequestKeys },
+      noteSegments: { keys: NoteSegmentsRequestKeys },
+      noteStretch: { keys: NoteStretchRequestKeys },
+      noteTargetsFromSmf: { keys: NoteTargetsFromSmfRequestKeys },
+      onsetBacktrack: { keys: OnsetBacktrackRequestKeys },
+      onsetEnvelope: { keys: OnsetEnvelopeRequestKeys },
+      onsetStrengthMulti: { keys: OnsetStrengthMultiRequestKeys },
+      padCenter: { keys: PadCenterRequestKeys },
+      pcen: { keys: PcenRequestKeys },
+      peakPick: { keys: PeakPickRequestKeys },
+      percussive: { keys: PercussiveRequestKeys },
+      phaseVocoder: { keys: PhaseVocoderRequestKeys },
+      piptrack: { keys: PiptrackRequestKeys },
+      pitchCorrectTimevarying: { keys: PitchCorrectTimevaryingRequestKeys },
+      pitchCorrectToMidi: { keys: PitchCorrectToMidiRequestKeys },
+      pitchCorrectToMidiTimevarying: { keys: PitchCorrectToMidiTimevaryingRequestKeys },
+      pitchPyin: { keys: PitchPyinRequestKeys },
+      pitchShift: { keys: PitchShiftRequestKeys },
+      pitchTuning: { keys: PitchTuningRequestKeys },
+      pitchYin: { keys: PitchYinRequestKeys },
+      plp: { keys: PlpRequestKeys },
+      polyFeatures: { keys: PolyFeaturesRequestKeys },
+      powerToDb: { keys: DbConversionRequestKeys },
+      preemphasis: { keys: EmphasisRequestKeys },
+      pseudoCqt: { keys: CqtRequestKeys },
+      reassignedSpectrogram: { keys: ReassignedSpectrogramRequestKeys },
+      remix: { keys: RemixRequestKeys },
+      remixAlignedIntervals: { keys: RemixRequestKeys },
+      renderNotes: { keys: RenderNotesRequestKeys },
+      renderPercussiveEvents: { keys: RenderPercussiveEventsRequestKeys },
+      renderPlayback: {
+        keys: RenderPlaybackRequestKeys,
+        nested: { config: PlaybackRendererConfigKeys }
+      },
+      resample: { keys: ResampleRequestKeys },
+      restoreVocalEditSession: {
+        keys: VocalRestoreRequestKeys,
+        nested: { limits: VocalSessionLimitsKeys }
+      },
+      rmsEnergy: { keys: ZeroCrossingRateRequestKeys },
+      roomGeometryFromEstimate: {
+        keys: RoomGeometryFromEstimateRequestKeys,
+        hints: { source: RoomPlacementKeys, listener: RoomPlacementKeys }
+      },
+      roomMorph: { keys: RoomMorphRequestKeys },
+      roomMorphStereo: { keys: RoomMorphStereoRequestKeys },
+      segmentAgglomerative: { keys: SegmentAgglomerativeRequestKeys },
+      segmentCrossSimilarity: { keys: SegmentCrossSimilarityRequestKeys },
+      segmentLagToRecurrence: { keys: SegmentLagToRecurrenceRequestKeys },
+      segmentPathEnhance: { keys: SegmentPathEnhanceRequestKeys },
+      segmentRecurrenceMatrix: { keys: SegmentRecurrenceMatrixRequestKeys },
+      segmentRecurrenceToLag: { keys: SegmentRecurrenceToLagRequestKeys },
+      segmentSubsegment: { keys: SegmentSubsegmentRequestKeys },
+      shortTermLufs: { keys: LufsRequestKeys },
+      spectralBandwidth: { keys: Anon168Keys },
+      spectralCentroid: { keys: SpectralFrameRequestKeys },
+      spectralContrast: { keys: SpectralContrastRequestKeys },
+      spectralEdit: { keys: SpectralEditRequestKeys },
+      spectralFlatness: { keys: SpectralFrameRequestKeys },
+      spectralFlux: { keys: Anon172Keys },
+      spectralRolloff: { keys: SpectralRolloffRequestKeys },
+      splitNote: { keys: SplitNoteRequestKeys },
+      splitSilence: { keys: SilenceRequestKeys },
+      splitSilenceCommon: { keys: SplitSilenceCommonRequestKeys },
+      splitSilenceCommonWithReport: { keys: SplitSilenceCommonRequestKeys },
+      stft: { keys: SpectrogramRequestKeys },
+      stftDb: { keys: SpectrogramRequestKeys },
+      streamingLoudnessGain: {
+        keys: StreamingLoudnessGainRequestKeys,
+        hints: { config: MasteringChainConfigKeys }
+      },
+      streamingLoudnessGainStereo: {
+        keys: StreamingLoudnessGainStereoRequestKeys,
+        hints: { config: MasteringChainConfigKeys }
+      },
+      suggestMixScene: {
+        keys: SuggestMixSceneRequestKeys,
+        hints: { options: MixAssistantOptionsKeys }
+      },
+      suggestMixSceneJson: {
+        keys: SuggestMixSceneRequestKeys,
+        hints: { options: MixAssistantOptionsKeys }
+      },
+      synthesizeRir: { keys: RirSynthOptionsKeys },
+      tempogram: { keys: TempogramRequestKeys },
+      tempogramRatio: { keys: TempogramRatioRequestKeys },
+      timeStretch: { keys: TimeStretchRequestKeys },
+      tone: { keys: ToneRequestKeys },
+      tonnetz: { keys: TonnetzRequestKeys },
+      transcribe: { keys: TranscribeRequestKeys },
+      trim: { keys: TrimRequestKeys },
+      trimSilence: { keys: SilenceRequestKeys },
+      vectorNormalize: { keys: VectorNormalizeRequestKeys },
+      voiceChange: { keys: VoiceChangeRequestKeys },
+      voiceChangeRealtime: { keys: VoiceChangeRealtimeRequestKeys },
+      vqt: { keys: VqtRequestKeys },
+      vqtToAudio: { keys: VqtToAudioRequestKeys },
+      waveformPeakPyramid: { keys: WaveformPeakPyramidRequestKeys },
+      waveformPeaks: { keys: WaveformPeaksRequestKeys },
+      zeroCrossingRate: { keys: ZeroCrossingRateRequestKeys },
+      zeroCrossings: { keys: ZeroCrossingsRequestKeys }
+    };
+    MUSIC_ANALYZE_OPTION_KEYS = MusicAnalyzeOptionsKeys;
   }
 });
 
@@ -646,13 +2780,54 @@ function resolveRenderFrame(fnName, renderFrame) {
   }
   return renderFrame;
 }
+function assertKnownRequestKeys(fnName, request) {
+  const shape = REQUEST_SHAPES[fnName];
+  if (shape === void 0) {
+    throw new Error(`${fnName}: no request shape is declared`);
+  }
+  for (const key of Object.keys(request)) {
+    if (shape.keys.includes(key)) {
+      continue;
+    }
+    const owner = Object.entries({ ...shape.nested, ...shape.hints }).find(
+      ([, keys]) => keys.includes(key)
+    );
+    const hint = owner === void 0 ? "" : ` ('${key}' belongs under '${owner[0]}')`;
+    throw new TypeError(`${fnName}: unknown request key '${key}'${hint}`);
+  }
+  for (const [field, keys] of Object.entries(shape.nested ?? {})) {
+    const value = request[field];
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      continue;
+    }
+    for (const key of Object.keys(value)) {
+      if (!keys.includes(key)) {
+        throw new TypeError(`${fnName}: unknown option '${key}' in '${field}'`);
+      }
+    }
+  }
+}
+function optionsBag(fnName, options) {
+  const shape = REQUEST_SHAPES[fnName];
+  if (shape === void 0) {
+    throw new Error(`${fnName}: no request shape is declared`);
+  }
+  for (const key of Object.keys(options ?? {})) {
+    if (!shape.keys.includes(key)) {
+      throw new TypeError(`${fnName}: unknown option '${key}'`);
+    }
+  }
+  return options;
+}
 function requestObject(fnName, value, argName = "samples", requestOnly = false) {
   if (typeof value !== "object" || value === null || Array.isArray(value) || ArrayBuffer.isView(value)) {
     if (requestOnly) {
       throw new TypeError(`${fnName}: request must be an object`);
     }
     assertAudioSamples(fnName, value, {}, argName);
+    return value;
   }
+  assertKnownRequestKeys(fnName, value);
   return value;
 }
 var MIN_AUDIO_SAMPLE_RATE, MAX_AUDIO_SAMPLE_RATE, C_INT_MIN, C_INT_MAX, C_ABSENT;
@@ -660,6 +2835,7 @@ var init_validation = __esm({
   "src/validation.ts"() {
     "use strict";
     init_errors();
+    init_request_keys();
     MIN_AUDIO_SAMPLE_RATE = 8e3;
     MAX_AUDIO_SAMPLE_RATE = 384e3;
     C_INT_MIN = -2147483648;
@@ -758,7 +2934,7 @@ function assertNoteTrack(fnName, request) {
   return voicedF32;
 }
 function noteStretch(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("noteStretch", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("noteStretch", options) } : requestObject("noteStretch", samples);
   assertAudioInput("noteStretch", request.samples, request.sampleRate ?? 22050, request);
   const rate = request.sampleRate ?? 22050;
   return requireModule().noteStretch(
@@ -784,7 +2960,7 @@ function noteStretch(samples, sampleRate = 22050, options = {}) {
   );
 }
 function noteMove(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("noteMove", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("noteMove", options) } : requestObject("noteMove", samples);
   assertAudioInput("noteMove", request.samples, request.sampleRate ?? 22050, request);
   const rate = request.sampleRate ?? 22050;
   return requireModule().noteMove(
@@ -1027,12 +3203,12 @@ function hpss(samples, sampleRate = 22050, kernelHarmonic = 31, kernelPercussive
   );
 }
 function harmonic(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("harmonic", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("harmonic", options) } : requestObject("harmonic", samples);
   assertAudioInput("harmonic", request.samples, request.sampleRate ?? 22050, request);
   return requireModule3().harmonic(request.samples, request.sampleRate ?? 22050);
 }
 function percussive(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("percussive", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("percussive", options) } : requestObject("percussive", samples);
   assertAudioInput("percussive", request.samples, request.sampleRate ?? 22050, request);
   return requireModule3().percussive(request.samples, request.sampleRate ?? 22050);
 }
@@ -1072,7 +3248,7 @@ function resolveRegionTimes({ startSec, endSec, ...op }, index, sampleRate) {
   };
 }
 function spectralEdit(samples, sampleRate, ops = [], options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ops, ...options } : requestObject("spectralEdit", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ops, ...optionsBag("spectralEdit", options) } : requestObject("spectralEdit", samples);
   assertAudioInput("spectralEdit", request.samples, request.sampleRate, request);
   const requestOps = request.ops ?? [];
   const nativeOps = Array.isArray(requestOps) ? requestOps.map(
@@ -1443,6 +3619,7 @@ function requireModule5() {
   return getSonareModule();
 }
 function timeStretch(samples, sampleRate, rate, nFftOrOptions, hopLength, options = {}) {
+  optionsBag("timeStretch", options);
   if (nFftOrOptions !== void 0 && nFftOrOptions !== null && typeof nFftOrOptions !== "number" && typeof nFftOrOptions !== "object") {
     throw new TypeError("timeStretch: nFft must be an integer or options object");
   }
@@ -1471,6 +3648,7 @@ function timeStretch(samples, sampleRate, rate, nFftOrOptions, hopLength, option
   );
 }
 function pitchShift(samples, sampleRate, semitones, nFftOrOptions, hopLength, options = {}) {
+  optionsBag("pitchShift", options);
   if (nFftOrOptions !== void 0 && nFftOrOptions !== null && typeof nFftOrOptions !== "number" && typeof nFftOrOptions !== "object") {
     throw new TypeError("pitchShift: nFft must be an integer or options object");
   }
@@ -1499,7 +3677,13 @@ function pitchShift(samples, sampleRate, semitones, nFftOrOptions, hopLength, op
   );
 }
 function pitchCorrectToMidi(samples, sampleRate = 22050, currentMidi = 69, targetMidi = 69, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, currentMidi, targetMidi, ...options } : requestObject("pitchCorrectToMidi", samples);
+  const request = samples instanceof Float32Array ? {
+    samples,
+    sampleRate,
+    currentMidi,
+    targetMidi,
+    ...optionsBag("pitchCorrectToMidi", options)
+  } : requestObject("pitchCorrectToMidi", samples);
   assertAudioInput("pitchCorrectToMidi", request.samples, request.sampleRate ?? 22050, request);
   return requireModule5().pitchCorrectToMidi(
     request.samples,
@@ -1517,7 +3701,7 @@ function pitchCorrectToMidiTimevarying(samples, f0Hz, targetMidi, sampleRate = 2
     hopLength,
     voiced,
     voicedProb,
-    ...options
+    ...optionsBag("pitchCorrectToMidiTimevarying", options)
   } : requestObject("pitchCorrectToMidiTimevarying", samples);
   assertAudioInput(
     "pitchCorrectToMidiTimevarying",
@@ -1543,7 +3727,13 @@ function pitchCorrectToMidiTimevarying(samples, f0Hz, targetMidi, sampleRate = 2
   );
 }
 function pitchCorrectTimevarying(samples, f0Hz, sampleRate = 22050, hopLength = 512, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, f0Hz, sampleRate, hopLength, ...options } : requestObject("pitchCorrectTimevarying", samples);
+  const request = samples instanceof Float32Array ? {
+    samples,
+    f0Hz,
+    sampleRate,
+    hopLength,
+    ...optionsBag("pitchCorrectTimevarying", options)
+  } : requestObject("pitchCorrectTimevarying", samples);
   assertAudioInput(
     "pitchCorrectTimevarying",
     request.samples,
@@ -1601,7 +3791,7 @@ function requireModule6() {
   return getSonareModule();
 }
 function voiceChange(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("voiceChange", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("voiceChange", options) } : requestObject("voiceChange", samples);
   assertAudioInput("voiceChange", request.samples, request.sampleRate ?? 22050, request);
   const formantMode = request.formantMode ?? "relative";
   assertString("voiceChange", formantMode, "formantMode");
@@ -1621,7 +3811,7 @@ function voiceChange(samples, sampleRate = 22050, options = {}) {
   }
 }
 function voiceChangeRealtime(samples, sampleRate = 48e3, preset = "neutral-monitor", options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, preset, ...options } : requestObject("voiceChangeRealtime", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, preset, ...optionsBag("voiceChangeRealtime", options) } : requestObject("voiceChangeRealtime", samples);
   assertAudioInput("voiceChangeRealtime", request.samples, request.sampleRate ?? 48e3, request);
   const channels = request.channels ?? 1;
   if (channels !== 1 && channels !== 2) {
@@ -1700,6 +3890,7 @@ function resolveNormalizeMode(value, context = "normalize") {
   return value;
 }
 function normalize(samples, sampleRate, targetDb, modeOrOptions = "peak", options = {}) {
+  optionsBag("normalize", options);
   if (modeOrOptions !== void 0 && modeOrOptions !== null && typeof modeOrOptions !== "string" && typeof modeOrOptions !== "object") {
     throw new TypeError("normalize: mode must be the string 'peak' or 'rms'");
   }
@@ -2097,7 +4288,7 @@ function requireModule8() {
   return getSonareModule();
 }
 function mastering(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("mastering", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("mastering", options) } : requestObject("mastering", samples);
   assertAudioInput("mastering", request.samples, request.sampleRate ?? 22050);
   return requireModule8().mastering(
     request.samples,
@@ -2468,6 +4659,7 @@ function assertStereoRequest(fnName, request) {
 }
 function masteringAssistantSuggestStereo(request) {
   assertStereoRequest("masteringAssistantSuggestStereo", request);
+  requestObject("masteringAssistantSuggestStereo", request, "request", true);
   assertAudioInput(
     "masteringAssistantSuggestStereo",
     request.left,
@@ -2491,6 +4683,7 @@ function masteringAssistantSuggestStereo(request) {
 }
 function masteringAssistantSuggestChainStereo(request) {
   assertStereoRequest("masteringAssistantSuggestChainStereo", request);
+  requestObject("masteringAssistantSuggestChainStereo", request, "request", true);
   assertAudioInput(
     "masteringAssistantSuggestChainStereo",
     request.left,
@@ -2514,6 +4707,7 @@ function masteringAssistantSuggestChainStereo(request) {
 }
 function masteringAudioProfileStereo(request) {
   assertStereoRequest("masteringAudioProfileStereo", request);
+  requestObject("masteringAudioProfileStereo", request, "request", true);
   assertAudioInput(
     "masteringAudioProfileStereo",
     request.left,
@@ -2537,6 +4731,7 @@ function masteringAudioProfileStereo(request) {
 }
 function masteringStreamingPreviewStereo(request) {
   assertStereoRequest("masteringStreamingPreviewStereo", request);
+  requestObject("masteringStreamingPreviewStereo", request, "request", true);
   assertAudioInput(
     "masteringStreamingPreviewStereo",
     request.left,
@@ -2572,7 +4767,7 @@ function requireModule9() {
   return getSonareModule();
 }
 function masteringDynamicsCompressor(samples, sampleRate, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("masteringDynamicsCompressor", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("masteringDynamicsCompressor", options) } : requestObject("masteringDynamicsCompressor", samples);
   assertAudioInput(
     "masteringDynamicsCompressor",
     request.samples,
@@ -2594,7 +4789,7 @@ function masteringDynamicsCompressor(samples, sampleRate, options = {}) {
   );
 }
 function masteringDynamicsGate(samples, sampleRate, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("masteringDynamicsGate", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("masteringDynamicsGate", options) } : requestObject("masteringDynamicsGate", samples);
   assertAudioInput("masteringDynamicsGate", request.samples, request.sampleRate ?? 22050, request);
   return requireModule9().masteringDynamicsGate(
     request.samples,
@@ -2603,7 +4798,7 @@ function masteringDynamicsGate(samples, sampleRate, options = {}) {
   );
 }
 function masteringDynamicsTransientShaper(samples, sampleRate, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("masteringDynamicsTransientShaper", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("masteringDynamicsTransientShaper", options) } : requestObject("masteringDynamicsTransientShaper", samples);
   assertAudioInput(
     "masteringDynamicsTransientShaper",
     request.samples,
@@ -2645,7 +4840,12 @@ function mixStereo(leftChannels, rightChannels, sampleRate = 48e3, options = {})
   if (options !== null && typeof options !== "object") {
     throw new TypeError("mixStereo: options must be an object");
   }
-  const request = Array.isArray(leftChannels) ? { leftChannels, rightChannels: rightChannels ?? [], sampleRate, ...options } : requestObject("mixStereo", leftChannels, "request", true);
+  const request = Array.isArray(leftChannels) ? {
+    leftChannels,
+    rightChannels: rightChannels ?? [],
+    sampleRate,
+    ...optionsBag("mixStereo", options)
+  } : requestObject("mixStereo", leftChannels, "request", true);
   if (request.leftChannels.length === 0 || request.leftChannels.length !== request.rightChannels.length) {
     throw new RangeError("leftChannels and rightChannels must have the same non-zero length.");
   }
@@ -2672,7 +4872,7 @@ function requireModule11() {
   return getSonareModule();
 }
 function masteringRepairDereverbClassical(samples, sampleRate, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("masteringRepairDereverbClassical", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("masteringRepairDereverbClassical", options) } : requestObject("masteringRepairDereverbClassical", samples);
   assertAudioInput(
     "masteringRepairDereverbClassical",
     request.samples,
@@ -2726,7 +4926,7 @@ function masteringRepairDereverbConfigForRoom(estimate, config = {}) {
   return requireModule11().masteringRepairDereverbConfigForRoom(request.estimate, request);
 }
 function masteringRepairDetectReverb(samples, sampleRate, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("masteringRepairDetectReverb", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("masteringRepairDetectReverb", options) } : requestObject("masteringRepairDetectReverb", samples);
   assertAudioInput("masteringRepairDetectReverb", request.samples, request.sampleRate ?? 22050);
   return requireModule11().masteringRepairDetectReverb(
     request.samples,
@@ -2771,7 +4971,7 @@ function masteringRepairDeclickStereo(left, right, sampleRate, config = {}) {
   );
 }
 function masteringRepairDeclick(samples, sampleRate, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("masteringRepairDeclick", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("masteringRepairDeclick", options) } : requestObject("masteringRepairDeclick", samples);
   assertAudioInput("masteringRepairDeclick", request.samples, request.sampleRate ?? 22050);
   return requireModule12().masteringRepairDeclick(
     request.samples,
@@ -2780,7 +4980,7 @@ function masteringRepairDeclick(samples, sampleRate, options = {}) {
   );
 }
 function masteringRepairDeclip(samples, sampleRate, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("masteringRepairDeclip", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("masteringRepairDeclip", options) } : requestObject("masteringRepairDeclip", samples);
   assertAudioInput("masteringRepairDeclip", request.samples, request.sampleRate ?? 22050);
   return requireModule12().masteringRepairDeclip(
     request.samples,
@@ -2813,7 +5013,7 @@ function masteringRepairDeclipStereo(left, right, sampleRate, config = {}) {
   );
 }
 function masteringRepairDecrackle(samples, sampleRate, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("masteringRepairDecrackle", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("masteringRepairDecrackle", options) } : requestObject("masteringRepairDecrackle", samples);
   assertAudioInput("masteringRepairDecrackle", request.samples, request.sampleRate ?? 22050);
   return requireModule12().masteringRepairDecrackle(
     request.samples,
@@ -2846,7 +5046,7 @@ function masteringRepairDecrackleStereo(left, right, sampleRate, config = {}) {
   );
 }
 function masteringRepairDetectClicks(samples, sampleRate, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("masteringRepairDetectClicks", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("masteringRepairDetectClicks", options) } : requestObject("masteringRepairDetectClicks", samples);
   assertAudioInput("masteringRepairDetectClicks", request.samples, request.sampleRate ?? 22050);
   return requireModule12().masteringRepairDetectClicks(
     request.samples,
@@ -2855,7 +5055,7 @@ function masteringRepairDetectClicks(samples, sampleRate, options = {}) {
   );
 }
 function masteringRepairDetectClipping(samples, sampleRate, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("masteringRepairDetectClipping", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("masteringRepairDetectClipping", options) } : requestObject("masteringRepairDetectClipping", samples);
   assertAudioInput("masteringRepairDetectClipping", request.samples, request.sampleRate ?? 22050);
   return requireModule12().masteringRepairDetectClipping(
     request.samples,
@@ -2864,7 +5064,7 @@ function masteringRepairDetectClipping(samples, sampleRate, options = {}) {
   );
 }
 function masteringRepairDetectCrackle(samples, sampleRate, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("masteringRepairDetectCrackle", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("masteringRepairDetectCrackle", options) } : requestObject("masteringRepairDetectCrackle", samples);
   assertAudioInput("masteringRepairDetectCrackle", request.samples, request.sampleRate ?? 22050);
   return requireModule12().masteringRepairDetectCrackle(
     request.samples,
@@ -2885,7 +5085,7 @@ function requireModule13() {
   return getSonareModule();
 }
 function masteringRepairDenoiseClassical(samples, sampleRate, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("masteringRepairDenoiseClassical", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("masteringRepairDenoiseClassical", options) } : requestObject("masteringRepairDenoiseClassical", samples);
   assertAudioInput("masteringRepairDenoiseClassical", request.samples, request.sampleRate ?? 22050);
   return requireModule13().masteringRepairDenoiseClassical(
     request.samples,
@@ -2928,7 +5128,7 @@ function masteringRepairDenoiseClassicalLinked(channels, sampleRate, config = {}
   return requireModule13().masteringRepairDenoiseClassicalLinked(input, rate ?? 22050, options);
 }
 function masteringRepairDehum(samples, sampleRate, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("masteringRepairDehum", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("masteringRepairDehum", options) } : requestObject("masteringRepairDehum", samples);
   assertAudioInput("masteringRepairDehum", request.samples, request.sampleRate ?? 22050);
   return requireModule13().masteringRepairDehum(
     request.samples,
@@ -2961,7 +5161,7 @@ function masteringRepairDehumStereo(left, right, sampleRate, config = {}) {
   );
 }
 function masteringRepairDetectNoiseFloor(samples, sampleRate, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("masteringRepairDetectNoiseFloor", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("masteringRepairDetectNoiseFloor", options) } : requestObject("masteringRepairDetectNoiseFloor", samples);
   assertAudioInput("masteringRepairDetectNoiseFloor", request.samples, request.sampleRate ?? 22050);
   return requireModule13().masteringRepairDetectNoiseFloor(
     request.samples,
@@ -2977,7 +5177,7 @@ function masteringRepairNoiseBandBins(nFft, sampleRate) {
   );
 }
 function masteringRepairDetectHum(samples, sampleRate, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("masteringRepairDetectHum", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("masteringRepairDetectHum", options) } : requestObject("masteringRepairDetectHum", samples);
   assertAudioInput("masteringRepairDetectHum", request.samples, request.sampleRate ?? 22050);
   return requireModule13().masteringRepairDetectHum(
     request.samples,
@@ -3072,7 +5272,7 @@ function withPadding(fnName, request, sampleRate) {
   return padding === void 0 ? rest : { ...rest, paddingSamples: padding };
 }
 function masteringRepairTrimSilence(samples, sampleRate, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("masteringRepairTrimSilence", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("masteringRepairTrimSilence", options) } : requestObject("masteringRepairTrimSilence", samples);
   assertAudioInput("masteringRepairTrimSilence", request.samples, request.sampleRate ?? 22050);
   const rate = request.sampleRate ?? 22050;
   return requireModule15().masteringRepairTrimSilence(
@@ -3106,7 +5306,7 @@ function masteringRepairTrimSilenceStereo(left, right, sampleRate, config = {}) 
   );
 }
 function masteringRepairDetectTrimRange(samples, sampleRate, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("masteringRepairDetectTrimRange", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("masteringRepairDetectTrimRange", options) } : requestObject("masteringRepairDetectTrimRange", samples);
   assertAudioInput("masteringRepairDetectTrimRange", request.samples, request.sampleRate ?? 22050);
   const rate = request.sampleRate ?? 22050;
   return requireModule15().masteringRepairDetectTrimRange(
@@ -3898,6 +6098,7 @@ function melToAudio(power, nMels = 0, nFrames = 0, sampleRate = 22050, nFft = 20
   );
 }
 function griffinLim(magnitude, nBins = 0, nFrames = 0, sampleRate = 22050, nFft = 2048, hopLength = 512, nIter = 32, momentum = 0.99, options = {}) {
+  optionsBag("griffinLim", options);
   if (!(magnitude instanceof Float32Array)) {
     requestObject("griffinLim", magnitude, "magnitude");
     const request = magnitude;
@@ -4045,6 +6246,7 @@ function requireModule19() {
   return getSonareModule();
 }
 function lufsInterleaved(samples, channels = 0, sampleRate = 22050, options = {}) {
+  optionsBag("lufsInterleaved", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("lufsInterleaved", samples);
     const r = samples;
@@ -4055,6 +6257,7 @@ function lufsInterleaved(samples, channels = 0, sampleRate = 22050, options = {}
   return requireModule19().lufsInterleaved(samples, channels, sampleRate);
 }
 function lufsSeriesInterleaved(samples, channels = 0, sampleRate = 22050, options = {}) {
+  optionsBag("lufsSeriesInterleaved", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("lufsSeriesInterleaved", samples);
     const r = samples;
@@ -4117,6 +6320,7 @@ function nnlsChroma(samples, sampleRate = 22050, options = {}) {
   );
 }
 function cqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, options = {}) {
+  optionsBag("cqt", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("cqt", samples);
     const request = samples;
@@ -4136,6 +6340,7 @@ function cqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257
   return requireModule20().cqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave);
 }
 function pseudoCqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, options = {}) {
+  optionsBag("pseudoCqt", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("pseudoCqt", samples);
     const request = samples;
@@ -4155,6 +6360,7 @@ function pseudoCqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319
   return requireModule20().pseudoCqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave);
 }
 function hybridCqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, options = {}) {
+  optionsBag("hybridCqt", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("hybridCqt", samples);
     const request = samples;
@@ -4174,6 +6380,7 @@ function hybridCqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319
   return requireModule20().hybridCqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave);
 }
 function vqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, gamma, options = {}) {
+  optionsBag("vqt", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("vqt", samples);
     const request = samples;
@@ -4217,6 +6424,7 @@ function validateCqtInverse(fnName, magnitude, nBins, nFrames, sampleRate, hopLe
   assertSamples(fnName, magnitude, options.validate !== false);
 }
 function cqtToAudio(magnitude, nBins = 0, nFrames = 0, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, binsPerOctave = 12, nIter = 32, options = {}) {
+  optionsBag("cqtToAudio", options);
   if (!(magnitude instanceof Float32Array)) {
     requestObject("cqtToAudio", magnitude, "magnitude");
     const request = magnitude;
@@ -4256,6 +6464,7 @@ function cqtToAudio(magnitude, nBins = 0, nFrames = 0, sampleRate = 22050, hopLe
   );
 }
 function vqtToAudio(magnitude, nBins = 0, nFrames = 0, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, binsPerOctave = 12, gamma, nIter = 32, options = {}) {
+  optionsBag("vqtToAudio", options);
   if (!(magnitude instanceof Float32Array)) {
     requestObject("vqtToAudio", magnitude, "magnitude");
     const request = magnitude;
@@ -4297,6 +6506,7 @@ function vqtToAudio(magnitude, nBins = 0, nFrames = 0, sampleRate = 22050, hopLe
   );
 }
 function analyzeSections(samples, sampleRate = 22050, options = {}) {
+  optionsBag("analyzeSections", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("analyzeSections", samples);
     const r = samples;
@@ -4370,6 +6580,7 @@ function detectBoundaries(request) {
   };
 }
 function analyzeMelody(samples, sampleRate = 22050, options = {}) {
+  optionsBag("analyzeMelody", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("analyzeMelody", samples);
     const r = samples;
@@ -4412,6 +6623,7 @@ function analyzeMelody(samples, sampleRate = 22050, options = {}) {
   );
 }
 function onsetEnvelope(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, options = {}) {
+  optionsBag("onsetEnvelope", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("onsetEnvelope", samples);
     const request = samples;
@@ -4430,6 +6642,7 @@ function onsetEnvelope(samples, sampleRate = 22050, nFft = 2048, hopLength = 512
   return requireModule20().onsetEnvelope(samples, sampleRate, fft.nFft, fft.hopLength, nMels);
 }
 function onsetStrengthMulti(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, nBands = 3, options = {}) {
+  optionsBag("onsetStrengthMulti", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("onsetStrengthMulti", samples);
     const request = samples;
@@ -4456,6 +6669,7 @@ function onsetStrengthMulti(samples, sampleRate = 22050, nFft = 2048, hopLength 
   );
 }
 function fourierTempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, winLength = 384, center = true, norm = true, options = {}) {
+  optionsBag("fourierTempogram", options);
   if (!(onsetEnvelope2 instanceof Float32Array)) {
     requestObject("fourierTempogram", onsetEnvelope2, "onsetEnvelope");
     const request = onsetEnvelope2;
@@ -4482,6 +6696,7 @@ function fourierTempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, w
   );
 }
 function tempogramRatio(tempogramData, winLength = 384, sampleRate = 22050, hopLength = 512, factors, options = {}) {
+  optionsBag("tempogramRatio", options);
   if (!(tempogramData instanceof Float32Array)) {
     requestObject("tempogramRatio", tempogramData, "tempogramData");
     const request = tempogramData;
@@ -4500,6 +6715,7 @@ function tempogramRatio(tempogramData, winLength = 384, sampleRate = 22050, hopL
   return requireModule20().tempogramRatio(tempogramData, winLength, sampleRate, hopLength, factors);
 }
 function lufs(samples, sampleRate = 22050, options = {}) {
+  optionsBag("lufs", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("lufs", samples);
     const r = samples;
@@ -4509,6 +6725,7 @@ function lufs(samples, sampleRate = 22050, options = {}) {
   return requireModule20().lufs(samples, sampleRate);
 }
 function momentaryLufs(samples, sampleRate = 22050, options = {}) {
+  optionsBag("momentaryLufs", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("momentaryLufs", samples);
     const r = samples;
@@ -4518,6 +6735,7 @@ function momentaryLufs(samples, sampleRate = 22050, options = {}) {
   return requireModule20().momentaryLufs(samples, sampleRate);
 }
 function shortTermLufs(samples, sampleRate = 22050, options = {}) {
+  optionsBag("shortTermLufs", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("shortTermLufs", samples);
     const r = samples;
@@ -4823,6 +7041,7 @@ function requireModule24() {
   return getSonareModule();
 }
 function trim(samples, sampleRate = 22050, thresholdDb = -60, frameLengthOrOptions, hopLength, options = {}) {
+  optionsBag("trim", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("trim", samples);
     const r = samples;
@@ -4854,6 +7073,7 @@ function trim(samples, sampleRate = 22050, thresholdDb = -60, frameLengthOrOptio
   );
 }
 function stft(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, options = {}) {
+  optionsBag("stft", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("stft", samples);
     const request = samples;
@@ -4864,6 +7084,7 @@ function stft(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, options
   return requireModule24().stft(samples, sampleRate, fft.nFft, fft.hopLength);
 }
 function stftDb(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, options = {}) {
+  optionsBag("stftDb", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("stftDb", samples);
     const request = samples;
@@ -4874,6 +7095,7 @@ function stftDb(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, optio
   return requireModule24().stftDb(samples, sampleRate, fft.nFft, fft.hopLength);
 }
 function chromaCens(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, binsPerOctave = 36, options = {}) {
+  optionsBag("chromaCens", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("chromaCens", samples);
     const request = samples;
@@ -4894,6 +7116,7 @@ function chromaCens(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, 
   return requireModule24().chromaCens(samples, sampleRate, hopLength, nChroma, binsPerOctave);
 }
 function chromaCqt(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, binsPerOctave = 36, options = {}) {
+  optionsBag("chromaCqt", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("chromaCqt", samples);
     const request = samples;
@@ -4914,6 +7137,7 @@ function chromaCqt(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, b
   return requireModule24().chromaCqt(samples, sampleRate, hopLength, nChroma, binsPerOctave);
 }
 function bassChroma(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, options = {}) {
+  optionsBag("bassChroma", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("bassChroma", samples);
     const request = samples;
@@ -4930,6 +7154,7 @@ function bassChroma(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, 
   return requireModule24().bassChroma(samples, sampleRate, hopLength, nChroma);
 }
 function melSpectrogram(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, fmin = 0, fmax = 0, htk = false, options = {}) {
+  optionsBag("melSpectrogram", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("melSpectrogram", samples);
     const request = samples;
@@ -4961,6 +7186,7 @@ function melSpectrogram(samples, sampleRate = 22050, nFft = 2048, hopLength = 51
   );
 }
 function mfcc(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, nMfcc = 20, fmin = 0, fmax = 0, htk = false, lifter = 0, options = {}) {
+  optionsBag("mfcc", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("mfcc", samples);
     const request = samples;
@@ -5043,6 +7269,7 @@ function reassignedSpectrogram(samples, sampleRate = 22050, nFft = 2048, hopLeng
   );
 }
 function chroma(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, options = {}) {
+  optionsBag("chroma", options);
   if (!(samples instanceof Float32Array)) {
     requestObject("chroma", samples);
     const request = samples;
@@ -5093,17 +7320,24 @@ function requireModule25() {
   return getSonareModule();
 }
 function meteringPeakDb(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("meteringPeakDb", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("meteringPeakDb", options) } : requestObject("meteringPeakDb", samples);
   assertAudioInput("meteringPeakDb", request.samples, request.sampleRate ?? 22050, request);
   return requireModule25().meteringPeakDb(request.samples, request.sampleRate ?? 22050);
 }
 function meteringRmsDb(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("meteringRmsDb", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("meteringRmsDb", options) } : requestObject("meteringRmsDb", samples);
   assertAudioInput("meteringRmsDb", request.samples, request.sampleRate ?? 22050, request);
   return requireModule25().meteringRmsDb(request.samples, request.sampleRate ?? 22050);
 }
 function meteringSilenceRatio(samples, sampleRate = 22050, thresholdDb = -45, frameLength = 1024, hopLength = 256, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, thresholdDb, frameLength, hopLength, ...options } : requestObject("meteringSilenceRatio", samples);
+  const request = samples instanceof Float32Array ? {
+    samples,
+    sampleRate,
+    thresholdDb,
+    frameLength,
+    hopLength,
+    ...optionsBag("meteringSilenceRatio", options)
+  } : requestObject("meteringSilenceRatio", samples);
   assertAudioInput("meteringSilenceRatio", request.samples, request.sampleRate ?? 22050, request);
   return requireModule25().meteringSilenceRatio(
     request.samples,
@@ -5114,7 +7348,7 @@ function meteringSilenceRatio(samples, sampleRate = 22050, thresholdDb = -45, fr
   );
 }
 function meteringCrestFactorDb(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("meteringCrestFactorDb", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("meteringCrestFactorDb", options) } : requestObject("meteringCrestFactorDb", samples);
   assertAudioInput("meteringCrestFactorDb", request.samples, request.sampleRate ?? 22050, request);
   return requireModule25().meteringCrestFactorDb(request.samples, request.sampleRate ?? 22050);
 }
@@ -5141,19 +7375,19 @@ function meteringCrestFactorDbStereo(request) {
   );
 }
 function meteringDcOffset(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("meteringDcOffset", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("meteringDcOffset", options) } : requestObject("meteringDcOffset", samples);
   assertAudioInput("meteringDcOffset", request.samples, request.sampleRate ?? 22050, request);
   return requireModule25().meteringDcOffset(request.samples, request.sampleRate ?? 22050);
 }
 function meteringTruePeakDb(samples, sampleRate = 22050, oversampleFactor = 4, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, oversampleFactor, ...options } : requestObject("meteringTruePeakDb", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, oversampleFactor, ...optionsBag("meteringTruePeakDb", options) } : requestObject("meteringTruePeakDb", samples);
   assertAudioInput("meteringTruePeakDb", request.samples, request.sampleRate ?? 22050, request);
   const factor = request.oversampleFactor ?? 4;
   assertOversampleFactor("meteringTruePeakDb", factor);
   return requireModule25().meteringTruePeakDb(request.samples, request.sampleRate ?? 22050, factor);
 }
 function meteringDetectClipping(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("meteringDetectClipping", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("meteringDetectClipping", options) } : requestObject("meteringDetectClipping", samples);
   assertAudioInput("meteringDetectClipping", request.samples, request.sampleRate ?? 22050, request);
   const minRegionSamples = request.minRegionSamples ?? 1;
   assertNonNegativeInteger("meteringDetectClipping", minRegionSamples, "minRegionSamples");
@@ -5165,7 +7399,7 @@ function meteringDetectClipping(samples, sampleRate = 22050, options = {}) {
   );
 }
 function meteringDynamicRange(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("meteringDynamicRange", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("meteringDynamicRange", options) } : requestObject("meteringDynamicRange", samples);
   assertAudioInput("meteringDynamicRange", request.samples, request.sampleRate ?? 22050, request);
   return requireModule25().meteringDynamicRange(
     request.samples,
@@ -5177,7 +7411,12 @@ function meteringDynamicRange(samples, sampleRate = 22050, options = {}) {
   );
 }
 function meteringStereoCorrelation(left, right, sampleRate = 22050, options = {}) {
-  const request = left instanceof Float32Array ? { left, right, sampleRate, ...options } : requestObject("meteringStereoCorrelation", left, "left");
+  const request = left instanceof Float32Array ? {
+    left,
+    right,
+    sampleRate,
+    ...optionsBag("meteringStereoCorrelation", options)
+  } : requestObject("meteringStereoCorrelation", left, "left");
   assertAudioInput(
     "meteringStereoCorrelation",
     request.left,
@@ -5199,7 +7438,12 @@ function meteringStereoCorrelation(left, right, sampleRate = 22050, options = {}
   );
 }
 function meteringStereoWidth(left, right, sampleRate = 22050, options = {}) {
-  const request = left instanceof Float32Array ? { left, right, sampleRate, ...options } : requestObject("meteringStereoWidth", left, "left");
+  const request = left instanceof Float32Array ? {
+    left,
+    right,
+    sampleRate,
+    ...optionsBag("meteringStereoWidth", options)
+  } : requestObject("meteringStereoWidth", left, "left");
   assertAudioInput(
     "meteringStereoWidth",
     request.left,
@@ -5221,7 +7465,12 @@ function meteringStereoWidth(left, right, sampleRate = 22050, options = {}) {
   );
 }
 function meteringVectorscope(left, right, sampleRate = 22050, options = {}) {
-  const request = left instanceof Float32Array ? { left, right, sampleRate, ...options } : requestObject("meteringVectorscope", left, "left");
+  const request = left instanceof Float32Array ? {
+    left,
+    right,
+    sampleRate,
+    ...optionsBag("meteringVectorscope", options)
+  } : requestObject("meteringVectorscope", left, "left");
   assertAudioInput(
     "meteringVectorscope",
     request.left,
@@ -5244,7 +7493,13 @@ function meteringVectorscope(left, right, sampleRate = 22050, options = {}) {
   );
 }
 function meteringVectorscopeDecimated(left, right, sampleRate = 22050, maxPoints = 0, options = {}) {
-  const request = left instanceof Float32Array ? { left, right, sampleRate, maxPoints, ...options } : requestObject("meteringVectorscopeDecimated", left, "left");
+  const request = left instanceof Float32Array ? {
+    left,
+    right,
+    sampleRate,
+    maxPoints,
+    ...optionsBag("meteringVectorscopeDecimated", options)
+  } : requestObject("meteringVectorscopeDecimated", left, "left");
   assertAudioInput(
     "meteringVectorscopeDecimated",
     request.left,
@@ -5267,7 +7522,12 @@ function meteringVectorscopeDecimated(left, right, sampleRate = 22050, maxPoints
   );
 }
 function meteringPhaseScope(left, right, sampleRate = 22050, options = {}) {
-  const request = left instanceof Float32Array ? { left, right, sampleRate, ...options } : requestObject("meteringPhaseScope", left, "left");
+  const request = left instanceof Float32Array ? {
+    left,
+    right,
+    sampleRate,
+    ...optionsBag("meteringPhaseScope", options)
+  } : requestObject("meteringPhaseScope", left, "left");
   assertAudioInput(
     "meteringPhaseScope",
     request.left,
@@ -5290,7 +7550,13 @@ function meteringPhaseScope(left, right, sampleRate = 22050, options = {}) {
   );
 }
 function meteringPhaseScopeDecimated(left, right, sampleRate = 22050, maxPoints = 0, options = {}) {
-  const request = left instanceof Float32Array ? { left, right, sampleRate, maxPoints, ...options } : requestObject("meteringPhaseScopeDecimated", left, "left");
+  const request = left instanceof Float32Array ? {
+    left,
+    right,
+    sampleRate,
+    maxPoints,
+    ...optionsBag("meteringPhaseScopeDecimated", options)
+  } : requestObject("meteringPhaseScopeDecimated", left, "left");
   assertAudioInput(
     "meteringPhaseScopeDecimated",
     request.left,
@@ -5313,12 +7579,12 @@ function meteringPhaseScopeDecimated(left, right, sampleRate = 22050, maxPoints 
   );
 }
 function meteringSpectrum(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("meteringSpectrum", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("meteringSpectrum", options) } : requestObject("meteringSpectrum", samples);
   assertAudioInput("meteringSpectrum", request.samples, request.sampleRate ?? 22050, request);
   return requireModule25().meteringSpectrum(request.samples, request.sampleRate ?? 22050, request);
 }
 function meteringSpectrumFrame(samples, sampleRate = 22050, frameOffset = 0, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, frameOffset, ...options } : requestObject("meteringSpectrumFrame", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, frameOffset, ...optionsBag("meteringSpectrumFrame", options) } : requestObject("meteringSpectrumFrame", samples);
   assertAudioInput("meteringSpectrumFrame", request.samples, request.sampleRate ?? 22050, {
     validate: false
   });
@@ -5338,7 +7604,7 @@ function meteringSpectrumFrame(samples, sampleRate = 22050, frameOffset = 0, opt
   );
 }
 function waveformPeaks(samples, channels, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, channels, ...options } : requestObject("waveformPeaks", samples);
+  const request = samples instanceof Float32Array ? { samples, channels, ...optionsBag("waveformPeaks", options) } : requestObject("waveformPeaks", samples);
   assertAudioSamples("waveformPeaks", request.samples, request);
   assertInterleavedSamples("waveformPeaks", request.samples, request.channels, false);
   const samplesPerBucket = request.samplesPerBucket ?? 512;
@@ -5346,7 +7612,7 @@ function waveformPeaks(samples, channels, options = {}) {
   return requireModule25().waveformPeaks(request.samples, request.channels, samplesPerBucket);
 }
 function waveformPeakPyramid(samples, channels, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, channels, ...options } : requestObject("waveformPeakPyramid", samples);
+  const request = samples instanceof Float32Array ? { samples, channels, ...optionsBag("waveformPeakPyramid", options) } : requestObject("waveformPeakPyramid", samples);
   assertAudioSamples("waveformPeakPyramid", request.samples, request);
   assertInterleavedSamples("waveformPeakPyramid", request.samples, request.channels, false);
   const levels = request.samplesPerBucketLevels ?? [512, 1024, 2048, 4096];
@@ -5401,12 +7667,12 @@ function resolveAcousticSelectors(options) {
   return resolved;
 }
 function detectBpm(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("detectBpm", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("detectBpm", options) } : requestObject("detectBpm", samples);
   assertAudioInput("detectBpm", request.samples, request.sampleRate ?? 22050, request);
   return requireModule26().detectBpm(request.samples, request.sampleRate ?? 22050);
 }
 function detectKey(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("detectKey", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("detectKey", options) } : requestObject("detectKey", samples);
   assertAudioInput("detectKey", request.samples, request.sampleRate ?? 22050, request);
   const result = requireModule26()._detectKeyWithOptions(
     request.samples,
@@ -5431,7 +7697,7 @@ function detectKey(samples, sampleRate = 22050, options = {}) {
   };
 }
 function detectKeyCandidates(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("detectKeyCandidates", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("detectKeyCandidates", options) } : requestObject("detectKeyCandidates", samples);
   assertAudioInput("detectKeyCandidates", request.samples, request.sampleRate ?? 22050, request);
   const candidates = requireModule26()._detectKeyCandidates(
     request.samples,
@@ -5448,22 +7714,22 @@ function detectKeyCandidates(samples, sampleRate = 22050, options = {}) {
   return Array.from(candidates, convertKeyCandidate);
 }
 function detectOnsets(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("detectOnsets", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("detectOnsets", options) } : requestObject("detectOnsets", samples);
   assertAudioInput("detectOnsets", request.samples, request.sampleRate ?? 22050, request);
   return requireModule26().detectOnsets(request.samples, request.sampleRate ?? 22050, request);
 }
 function detectBeats(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("detectBeats", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("detectBeats", options) } : requestObject("detectBeats", samples);
   assertAudioInput("detectBeats", request.samples, request.sampleRate ?? 22050, request);
   return requireModule26().detectBeats(request.samples, request.sampleRate ?? 22050);
 }
 function detectDownbeats(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("detectDownbeats", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("detectDownbeats", options) } : requestObject("detectDownbeats", samples);
   assertAudioInput("detectDownbeats", request.samples, request.sampleRate ?? 22050, request);
   return requireModule26().detectDownbeats(request.samples, request.sampleRate ?? 22050);
 }
 function detectChords(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("detectChords", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("detectChords", options) } : requestObject("detectChords", samples);
   assertAudioInput("detectChords", request.samples, request.sampleRate ?? 22050, request);
   const result = requireModule26().detectChords(
     request.samples,
@@ -5501,7 +7767,7 @@ function chordFunctions(request) {
   }));
 }
 function chordFunctionalAnalysis(samples, keyRoot, keyMode, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, keyRoot, keyMode, sampleRate, ...options } : requestObject("chordFunctionalAnalysis", samples);
+  const request = samples instanceof Float32Array ? { samples, keyRoot, keyMode, sampleRate, ...optionsBag("chordFunctionalAnalysis", options) } : requestObject("chordFunctionalAnalysis", samples);
   assertAudioInput(
     "chordFunctionalAnalysis",
     request.samples,
@@ -5534,7 +7800,7 @@ function chordFunctionalAnalysis(samples, keyRoot, keyMode, sampleRate = 22050, 
   }));
 }
 function analyze(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("analyze", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("analyze", options) } : requestObject("analyze", samples);
   assertAudioInput("analyze", request.samples, request.sampleRate ?? 22050, request);
   const result = requireModule26().analyze(request.samples, request.sampleRate ?? 22050, request);
   return convertAnalysisResult(result);
@@ -5560,7 +7826,7 @@ function analyzeImpulseResponse(samples, sampleRate = 48e3, nOctaveBands = 6, mi
   return result;
 }
 function detectAcoustic(samples, sampleRate = 48e3, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("detectAcoustic", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("detectAcoustic", options) } : requestObject("detectAcoustic", samples);
   assertAudioInput("detectAcoustic", request.samples, request.sampleRate ?? 48e3, request);
   const result = requireModule26().detectAcoustic(
     request.samples,
@@ -5593,7 +7859,7 @@ function estimateRoom(samples, sampleRate = 48e3, options = {}) {
       "libsonare was built without acoustic-simulation support"
     );
   }
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("estimateRoom", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("estimateRoom", options) } : requestObject("estimateRoom", samples);
   assertAudioInput("estimateRoom", request.samples, request.sampleRate ?? 48e3, request);
   return module3.estimateRoom(
     request.samples,
@@ -5613,7 +7879,7 @@ function roomGeometryFromEstimate(estimate, options = {}) {
   if (typeof estimate !== "object" || estimate === null) {
     throw new TypeError("roomGeometryFromEstimate: estimate must be an object");
   }
-  const request = "estimate" in estimate ? estimate : { estimate, ...options };
+  const request = "estimate" in estimate ? requestObject("roomGeometryFromEstimate", estimate, "request", true) : { estimate, ...optionsBag("roomGeometryFromEstimate", options) };
   if (typeof request.estimate !== "object" || request.estimate === null) {
     throw new TypeError("roomGeometryFromEstimate: estimate must be an object");
   }
@@ -5646,7 +7912,7 @@ function roomMorph(samples, sampleRate, options = {}) {
       "libsonare was built without acoustic-simulation support"
     );
   }
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("roomMorph", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("roomMorph", options) } : requestObject("roomMorph", samples);
   assertAudioInput("roomMorph", request.samples, request.sampleRate, request);
   return module3.roomMorph(request.samples, request.sampleRate, resolveAcousticSelectors(request));
 }
@@ -5680,12 +7946,22 @@ function roomMorphStereo(request) {
   );
 }
 function analyzeWithProgress(samples, sampleRate = 22050, onProgress, options) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, onProgress, options } : requestObject("analyzeWithProgress", samples);
+  const request = requestObject(
+    "analyzeWithProgress",
+    samples instanceof Float32Array ? { samples, sampleRate, onProgress, options } : samples
+  );
   assertAudioInput("analyzeWithProgress", request.samples, request.sampleRate ?? 22050, request);
+  const flat = {};
+  for (const key of MUSIC_ANALYZE_OPTION_KEYS) {
+    const value = request[key];
+    if (value !== void 0) {
+      flat[key] = value;
+    }
+  }
   const result = requireModule26().analyzeWithProgress(
     request.samples,
     request.sampleRate ?? 22050,
-    request.options ?? {},
+    { ...flat, ...request.options },
     request.onProgress ?? (() => {
     }),
     request.cancel ?? (() => false)
@@ -5693,7 +7969,7 @@ function analyzeWithProgress(samples, sampleRate = 22050, onProgress, options) {
   return convertAnalysisResult(result);
 }
 function analyzeBpm(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("analyzeBpm", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("analyzeBpm", options) } : requestObject("analyzeBpm", samples);
   assertAudioInput("analyzeBpm", request.samples, request.sampleRate ?? 22050, request);
   assertNonNegativeInteger("analyzeBpm", request.maxCandidates ?? 5, "maxCandidates");
   return requireModule26().analyzeBpm(
@@ -5708,7 +7984,7 @@ function analyzeBpm(samples, sampleRate = 22050, options = {}) {
   );
 }
 function analyzeRhythm(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("analyzeRhythm", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("analyzeRhythm", options) } : requestObject("analyzeRhythm", samples);
   assertAudioInput("analyzeRhythm", request.samples, request.sampleRate ?? 22050, request);
   return requireModule26().analyzeRhythm(
     request.samples,
@@ -5721,7 +7997,7 @@ function analyzeRhythm(samples, sampleRate = 22050, options = {}) {
   );
 }
 function analyzeDynamics(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("analyzeDynamics", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("analyzeDynamics", options) } : requestObject("analyzeDynamics", samples);
   assertAudioInput("analyzeDynamics", request.samples, request.sampleRate ?? 22050, request);
   return requireModule26().analyzeDynamics(
     request.samples,
@@ -5732,7 +8008,7 @@ function analyzeDynamics(samples, sampleRate = 22050, options = {}) {
   );
 }
 function analyzeTimbre(samples, sampleRate = 22050, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : requestObject("analyzeTimbre", samples);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...optionsBag("analyzeTimbre", options) } : requestObject("analyzeTimbre", samples);
   assertAudioInput("analyzeTimbre", request.samples, request.sampleRate ?? 22050, request);
   return requireModule26().analyzeTimbre(
     request.samples,
@@ -5754,6 +8030,7 @@ var init_quick_analysis = __esm({
     init_errors();
     init_module_state();
     init_public_types();
+    init_request_keys();
     init_validation();
   }
 });
@@ -5797,8 +8074,8 @@ async function closeCreatedContext(context) {
 function decodeChannels(bytes) {
   return getSonareModule().decodeChannels(bytes);
 }
-function downmix(channels, targetLayout) {
-  return getSonareModule().downmix(channels, targetLayout);
+function downmix(channels, targetLayout, options = {}) {
+  return getSonareModule().downmix(channels, targetLayout, options);
 }
 async function decodeChannelsWithBrowserFallback(bytes, options = {}) {
   try {
@@ -6137,6 +8414,9 @@ var init_audio = __esm({
     };
   }
 });
+
+// src/index.ts
+init_errors();
 
 // src/lifetime.ts
 var symbolCtor = Symbol;
@@ -7439,6 +9719,7 @@ init_validation();
 var PolyphonicAnalysis = class {
   /** Analyses the request's audio. {@link analyzePolyphonic} is the same call. */
   constructor(request) {
+    requestObject("analyzePolyphonic", request, "request", true);
     assertAudioInput("analyzePolyphonic", request.samples, request.sampleRate, request);
     this.sampleRate = request.sampleRate;
     const module3 = getSonareModule();
@@ -7677,7 +9958,7 @@ var SYNTH_OSC_WAVEFORMS = [
 var SYNTH_FILTER_MODELS = [
   "default",
   "svf",
-  "moog-ladder",
+  "transistor-ladder",
   "diode-ladder",
   "sallen-key"
 ];
@@ -8504,7 +10785,15 @@ var Project = class _Project {
   addLoopRecordingTakes(desc) {
     return this.native.addLoopRecordingTakes(interleaveLoopRecording(desc));
   }
-  /** Create a MIDI track + clip; returns `{ trackId, clipId }`. */
+  /**
+   * Create a MIDI track + clip; returns `{ trackId, clipId }`.
+   *
+   * @remarks
+   * The clip window is half-open, `[0, lengthPpq)`: an event at exactly
+   * `lengthPpq` is outside it. Export and validation close a note still
+   * sounding at the clip end with a note-off there, so a note running the full
+   * length of the clip is a matched pair.
+   */
   addMidiClip(startPpq, lengthPpq) {
     return this.native.addMidiClip(startPpq, lengthPpq);
   }
@@ -8650,6 +10939,11 @@ var Project = class _Project {
    * and an export byte for byte is gone after one call here. Nothing reads the
    * handles back either, so a caller that must keep the setup edits the
    * exported file rather than the event list.
+   *
+   * Only events inside the clip's half-open window `[0, lengthPpq)` (after the
+   * source offset) are kept for export; a note still sounding at the clip end,
+   * including one whose note-off sits at or past `lengthPpq`, is closed with a
+   * note-off at the clip end.
    */
   setMidiEvents(clipId, events) {
     assertProjectMidiEvents("Project.setMidiEvents", events);
@@ -8737,9 +11031,10 @@ var Project = class _Project {
   }
   /**
    * Pre-flight check for hanging / unmatched notes in a MIDI clip: reports
-   * whether every note-on in the exported half-open playback window has a
-   * matching note-off (FIFO per group+channel+note). Useful before bouncing to
-   * catch a stuck note. Throws if `clipId` is unknown or not a MIDI clip.
+   * whether every note-on in the exported half-open playback window
+   * `[0, lengthPpq)` has a matching note-off (FIFO per group+channel+note). A
+   * note still sounding at the clip end is closed there by export, so it
+   * validates as paired. Useful before bouncing to catch a stuck note. Throws if `clipId` is unknown or not a MIDI clip.
    */
   validateMidiNotes(clipId) {
     return this.native.validateMidiNotes(clipId);
@@ -9505,8 +11800,8 @@ var RealtimeEngine = class _RealtimeEngine {
   /**
    * Queue a sample-accurate parameter change (engine kSetParam).
    * A reserved mixer id (`0x4d58xxxx`) other than a master id names no strip and
-   * throws `InvalidParameter`; resolve per-strip ids with the `resolve*AutomationId`
-   * methods.
+   * throws `InvalidParameter`; resolve ids with the `resolve*AutomationId`
+   * methods (`resolveMasterAutomationId` for the master fader, pan and width).
    */
   setParameter(paramId, value, renderFrame) {
     this.native.setParameter(paramId, value, resolveRenderFrame2("setParameter", renderFrame));
@@ -9525,15 +11820,27 @@ var RealtimeEngine = class _RealtimeEngine {
    * Reserved engine targets — track and bus faders, pan and width, and insert and
    * instrument parameters — keep their own fixed smoothing whatever this is set
    * to, and MIDI-CC mappings apply their values directly. The default is 20 ms;
-   * `0` makes the governed changes instant.
+   * `0` makes the governed changes instant. The time is one time constant: about 63% of the
+   * way at the set time.
    */
   setParamSmoothingMs(smoothingMs) {
     this.native.setParamSmoothingMs(smoothingMs);
   }
+  /**
+   * Queue a lane's solo/mute state. An armed PFL/AFL cue ({@link setTrackMonitorMode}) is folded
+   * into the program output by `process()` / `processPrepared()` and kept separate by the
+   * `WithMonitor` variants; offline renders, bounces and freezes never include it.
+   */
   setSoloMute(laneIndex, solo, mute, renderFrame) {
     this.native.setSoloMute(laneIndex, solo, mute, resolveRenderFrame2("setSoloMute", renderFrame));
   }
-  /** Queue a per-track PFL/AFL monitor tap mode change. */
+  /**
+   * Queue a per-track PFL/AFL monitor tap mode change.
+   *
+   * `process()` and `processPrepared()` fold the armed cue into the program output, so the
+   * tapped lane is counted twice there; the `WithMonitor` variants keep the cue separate.
+   * Offline renders, bounces and freezes never include the cue.
+   */
   setTrackMonitorMode(laneIndex, mode, renderFrame) {
     this.native.setTrackMonitorMode(
       laneIndex,
@@ -9813,14 +12120,32 @@ var RealtimeEngine = class _RealtimeEngine {
   consumeExternalMidiScratch() {
     this.native.consumeExternalMidiScratch();
   }
-  pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples = 0) {
-    this.native.pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples);
+  /**
+   * Push a live MIDI note-on to the engine-owned MIDI input source.
+   *
+   * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+   *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+   */
+  pushMidiInputNoteOn(group, channel, note, velocity, offsetInBlockSamples = 0) {
+    this.native.pushMidiInputNoteOn(group, channel, note, velocity, offsetInBlockSamples);
   }
-  pushMidiInputNoteOff(group, channel, note, velocity = 0, portTimeSamples = 0) {
-    this.native.pushMidiInputNoteOff(group, channel, note, velocity, portTimeSamples);
+  /**
+   * Push a live MIDI note-off to the engine-owned MIDI input source.
+   *
+   * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+   *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+   */
+  pushMidiInputNoteOff(group, channel, note, velocity = 0, offsetInBlockSamples = 0) {
+    this.native.pushMidiInputNoteOff(group, channel, note, velocity, offsetInBlockSamples);
   }
-  pushMidiInputCc(group, channel, controller, value, portTimeSamples = 0) {
-    this.native.pushMidiInputCc(group, channel, controller, value, portTimeSamples);
+  /**
+   * Push a live MIDI control change to the engine-owned MIDI input source.
+   *
+   * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+   *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+   */
+  pushMidiInputCc(group, channel, controller, value, offsetInBlockSamples = 0) {
+    this.native.pushMidiInputCc(group, channel, controller, value, offsetInBlockSamples);
   }
   /**
    * Push a live MIDI pitch bend to the engine-owned MIDI input source.
@@ -9828,24 +12153,33 @@ var RealtimeEngine = class _RealtimeEngine {
    * `bend14` is unsigned 14-bit with centre 8192 (0..16383) — the dimension is
    * not 7-bit, so a value past 16383 is refused rather than narrowed. The input
    * source must be enabled with {@link setMidiInputSource} first.
+   *
+   * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+   *   negative reads as 0. Not an absolute clock position. Defaults to 0.
    */
-  pushMidiInputPitchBend(group, channel, bend14, portTimeSamples = 0) {
-    this.native.pushMidiInputPitchBend(group, channel, bend14, portTimeSamples);
+  pushMidiInputPitchBend(group, channel, bend14, offsetInBlockSamples = 0) {
+    this.native.pushMidiInputPitchBend(group, channel, bend14, offsetInBlockSamples);
   }
   /**
    * Push a live MIDI channel pressure to the engine-owned MIDI input source.
    * `pressure` is 7-bit (0..127). Under MPE this is the member channel's
    * per-note pressure.
+   *
+   * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+   *   negative reads as 0. Not an absolute clock position. Defaults to 0.
    */
-  pushMidiInputChannelPressure(group, channel, pressure, portTimeSamples = 0) {
-    this.native.pushMidiInputChannelPressure(group, channel, pressure, portTimeSamples);
+  pushMidiInputChannelPressure(group, channel, pressure, offsetInBlockSamples = 0) {
+    this.native.pushMidiInputChannelPressure(group, channel, pressure, offsetInBlockSamples);
   }
   /**
    * Push a live MIDI polyphonic key pressure to the engine-owned MIDI input
    * source. `note` and `pressure` are 7-bit (0..127).
+   *
+   * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+   *   negative reads as 0. Not an absolute clock position. Defaults to 0.
    */
-  pushMidiInputPolyPressure(group, channel, note, pressure, portTimeSamples = 0) {
-    this.native.pushMidiInputPolyPressure(group, channel, note, pressure, portTimeSamples);
+  pushMidiInputPolyPressure(group, channel, note, pressure, offsetInBlockSamples = 0) {
+    this.native.pushMidiInputPolyPressure(group, channel, note, pressure, offsetInBlockSamples);
   }
   pushMidiNoteOn(destinationId, group, channel, note, velocity, renderFrame) {
     this.native.pushMidiNoteOn(
@@ -9976,10 +12310,11 @@ var RealtimeEngine = class _RealtimeEngine {
   }
   /**
    * Push a live MIDI 2.0 Program Change to the engine-owned MIDI input source.
-   * The arguments and refusals match {@link pushMidiProgram}; `portTimeSamples`
-   * is the port timestamp in samples.
+   * The arguments and refusals match {@link pushMidiProgram}; `offsetInBlockSamples` is
+   * an offset into the next block drained (clamped to its last frame, negative reads as 0), not
+   * an absolute clock position.
    */
-  pushMidiInputProgram(group, channel, program, bankValid = false, bankMsb = 0, bankLsb = 0, portTimeSamples = 0) {
+  pushMidiInputProgram(group, channel, program, bankValid = false, bankMsb = 0, bankLsb = 0, offsetInBlockSamples = 0) {
     this.native.pushMidiInputProgram(
       group,
       channel,
@@ -9987,16 +12322,17 @@ var RealtimeEngine = class _RealtimeEngine {
       bankValid,
       bankMsb,
       bankLsb,
-      portTimeSamples
+      offsetInBlockSamples
     );
   }
   /**
    * Push one raw UMP message (1 to 4 words) to the engine-owned MIDI input
-   * source. The message rules match {@link pushMidiUmp}. `portTimeSamples` is
-   * the port timestamp in samples.
+   * source. The message rules match {@link pushMidiUmp}. `offsetInBlockSamples` is
+   * an offset into the next block drained (clamped to its last frame, negative reads as 0), not
+   * an absolute clock position.
    */
-  pushMidiInputUmp(words, portTimeSamples = 0) {
-    this.native.pushMidiInputUmp(assertUmpWords("pushMidiInputUmp", words), portTimeSamples);
+  pushMidiInputUmp(words, offsetInBlockSamples = 0) {
+    this.native.pushMidiInputUmp(assertUmpWords("pushMidiInputUmp", words), offsetInBlockSamples);
   }
   /**
    * Queue an immediate (live) MIDI SysEx frame to a MIDI destination. `data` is
@@ -10082,7 +12418,7 @@ var RealtimeEngine = class _RealtimeEngine {
    * called concurrently with {@link process}.
    *
    * @param numChannels - Channel count of the blocks that will be rendered
-   * @param blockSize - Frames per block that will be rendered (clamped to the prepared block size)
+   * @param blockSize - Frames per block that will be rendered (a larger block size is refused)
    * @throws If a count is not positive, `numChannels` exceeds the prepared
    *   channel count, or the engine was never prepared
    */
@@ -10110,6 +12446,9 @@ var RealtimeEngine = class _RealtimeEngine {
    * Longest audible tail after the last input, in samples: an upper bound made
    * of the longest instrument tail plus the longest route through lane strips
    * (channel delay included), buses, sends, the graph and the master strip.
+   * An instrument lane whose patch is not known yet (a drum-kit lane or a General
+   * MIDI program lane before any note sounds) contributes a conservative
+   * worst-case bound that narrows once a patch has sounded.
    * `2147483647` means the tail is unbounded. Control-thread only: must not be
    * called concurrently with {@link process}.
    */
@@ -10171,8 +12510,8 @@ var RealtimeEngine = class _RealtimeEngine {
   /**
    * Replaces the automation lane driving `paramId`.
    * A reserved mixer id (`0x4d58xxxx`) other than a master id names no strip and
-   * throws `InvalidParameter`; resolve per-strip ids with the `resolve*AutomationId`
-   * methods.
+   * throws `InvalidParameter`; resolve ids with the `resolve*AutomationId`
+   * methods (`resolveMasterAutomationId` for the master fader, pan and width).
    */
   setAutomationLane(paramId, points) {
     this.native.setAutomationLane(paramId, points);
@@ -10511,10 +12850,13 @@ var RealtimeEngine = class _RealtimeEngine {
    * `eq.*`, `dynamics.*`, `saturation.*`, `spectral.*`, `stereo.*`,
    * `maximizer.*` and `multiband.*` processors are all available as strip
    * inserts, so placing one on a strip and resolving its parameter here drives
-   * it at audio-block precision, live and offline alike. The whole-signal
-   * stages of the offline mastering chain (`repair.*`, `loudness`, and the
-   * match stages) have no insert form and no automation id: they buffer the
-   * entire signal by construction and do not run on the realtime path.
+   * it at audio-block precision, live and offline alike. The whole-signal stages of the offline
+   * mastering chain that have no insert form (`repair.declick`, `repair.declip`,
+   * `repair.trimSilence`, `loudness`, and the match stages) have no automation id: they buffer the
+   * entire signal by construction and do not run on the realtime path. The four realtime repair
+   * inserts (`repair.decrackle`, `repair.dehum`, `repair.denoiseClassical`,
+   * `repair.dereverbClassical`) load into a strip, but every one of their parameters is
+   * construction-only, so no automation id resolves (-1) and an edit needs a strip replacement.
    *
    * Track, bus and master insert ids share one lifetime rule: an id names its
    * strip by identity and the kind of processor in its slot (for
@@ -10555,6 +12897,15 @@ var RealtimeEngine = class _RealtimeEngine {
    */
   resolveBusAutomationId(busId, paramName) {
     return this.native.resolveBusAutomationId(busId, paramName);
+  }
+  /**
+   * Resolve the master strip's fader (`'faderDb'`), pan (`'pan'`) or width
+   * (`'width'`) to its reserved automation id, usable with `setAutomationLane` /
+   * `setParameter`. The master strip always exists, so the id never goes stale.
+   * Returns `-1` when the name is none of the three.
+   */
+  resolveMasterAutomationId(paramName) {
+    return this.native.resolveMasterAutomationId(paramName);
   }
   /**
    * Resolves a hosted instrument's continuous parameter (by its JSON-key name)
@@ -11381,7 +13732,9 @@ var Mixer = class _Mixer {
    * Mix one block of per-strip stereo audio into the stereo master.
    *
    * @param leftChannels - `leftChannels[i]` is the left channel of strip `i`
-   * @param rightChannels - `rightChannels[i]` is the right channel of strip `i`
+   * @param rightChannels - `rightChannels[i]` is the right channel of strip `i`.
+   *   Fewer inputs than strips leave the remaining strips silent.
+   * @throws RangeError when more inputs are given than the mixer has strips
    * @returns Mixed stereo master (`left`, `right`, `sampleRate`)
    */
   processStereo(leftChannels, rightChannels) {
@@ -11394,8 +13747,9 @@ var Mixer = class _Mixer {
    * Mix one block into caller-owned output arrays.
    *
    * This avoids allocating the result object and result `Float32Array`s. It is
-   * intended for realtime bridges such as AudioWorklet; the input channel count
-   * must match the scene strip count and all arrays must have the same length.
+   * intended for realtime bridges such as AudioWorklet; all arrays must have the
+   * same length. Like {@link processStereo}, fewer inputs than strips leave the
+   * remaining strips silent and more than the strip count throw a `RangeError`.
    */
   processStereoInto(leftChannels, rightChannels, outLeft, outRight) {
     if (leftChannels.length !== rightChannels.length) {
@@ -13018,6 +15372,7 @@ function vocalEditApiVersion() {
   return typeof raw.vocalEditApiVersion === "function" ? raw.vocalEditApiVersion() : 0;
 }
 function createVocalEditSession(request) {
+  requestObject("createVocalEditSession", request, "request", true);
   validateCreate(request);
   if (!vocalEditAvailable()) {
     throw new SonareError(
@@ -14121,7 +16476,7 @@ async function bindWebMidi(engine, options = {}) {
           event,
           group,
           entry.runningStatus,
-          options.timestampToSamples
+          options.timestampToOffsetInBlockSamples
         );
       },
       runningStatus: 0
@@ -14201,7 +16556,7 @@ async function bindWebMidi(engine, options = {}) {
     }
   };
 }
-function dispatchMidiMessage(engine, event, group, runningStatus, timestampToSamples) {
+function dispatchMidiMessage(engine, event, group, runningStatus, timestampToOffsetInBlockSamples) {
   const data = event.data;
   if (data.length === 0) {
     return 0;
@@ -14211,7 +16566,7 @@ function dispatchMidiMessage(engine, event, group, runningStatus, timestampToSam
     dispatchUmpMessages(
       engine,
       data,
-      timestampToSamples?.(event.receivedTime ?? event.timeStamp ?? 0) ?? 0
+      timestampToOffsetInBlockSamples?.(event.receivedTime ?? event.timeStamp ?? 0) ?? 0
     );
     return 0;
   }
@@ -14239,27 +16594,27 @@ function dispatchMidiMessage(engine, event, group, runningStatus, timestampToSam
   if (!oneDataByteMessage && b < 0) {
     return status;
   }
-  const portTimeSamples = timestampToSamples ? timestampToSamples(event.receivedTime ?? event.timeStamp ?? 0) : 0;
+  const offsetInBlockSamples = timestampToOffsetInBlockSamples ? timestampToOffsetInBlockSamples(event.receivedTime ?? event.timeStamp ?? 0) : 0;
   if (message === 128) {
-    engine.pushMidiInputNoteOff(group, channel, a, b, portTimeSamples);
+    engine.pushMidiInputNoteOff(group, channel, a, b, offsetInBlockSamples);
   } else if (message === 144) {
     if (b === 0) {
-      engine.pushMidiInputNoteOff(group, channel, a, 0, portTimeSamples);
+      engine.pushMidiInputNoteOff(group, channel, a, 0, offsetInBlockSamples);
     } else {
-      engine.pushMidiInputNoteOn(group, channel, a, b, portTimeSamples);
+      engine.pushMidiInputNoteOn(group, channel, a, b, offsetInBlockSamples);
     }
   } else if (message === 176 && b >= 0) {
-    engine.pushMidiInputCc(group, channel, a, b, portTimeSamples);
+    engine.pushMidiInputCc(group, channel, a, b, offsetInBlockSamples);
   } else if (message === 160 && b >= 0) {
-    engine.pushMidiInputPolyPressure?.(group, channel, a, b, portTimeSamples);
+    engine.pushMidiInputPolyPressure?.(group, channel, a, b, offsetInBlockSamples);
   } else if (message === 208) {
-    engine.pushMidiInputChannelPressure?.(group, channel, a, portTimeSamples);
+    engine.pushMidiInputChannelPressure?.(group, channel, a, offsetInBlockSamples);
   } else if (message === 224 && b >= 0) {
-    engine.pushMidiInputPitchBend?.(group, channel, a | b << 7, portTimeSamples);
+    engine.pushMidiInputPitchBend?.(group, channel, a | b << 7, offsetInBlockSamples);
   }
   return status;
 }
-function dispatchUmpMessages(engine, words, portTimeSamples) {
+function dispatchUmpMessages(engine, words, offsetInBlockSamples) {
   let offset = 0;
   while (offset < words.length) {
     const word0 = words[offset] >>> 0;
@@ -14271,11 +16626,11 @@ function dispatchUmpMessages(engine, words, portTimeSamples) {
     for (let index = 0; index < wordCount; index++) {
       packet[index] = words[offset + index] >>> 0;
     }
-    dispatchUmpMessage(engine, packet, portTimeSamples);
+    dispatchUmpMessage(engine, packet, offsetInBlockSamples);
     offset += wordCount;
   }
 }
-function dispatchUmpMessage(engine, words, portTimeSamples) {
+function dispatchUmpMessage(engine, words, offsetInBlockSamples) {
   const word0 = words[0] >>> 0;
   const messageType = word0 >>> 28;
   const group = word0 >>> 24 & 15;
@@ -14283,7 +16638,7 @@ function dispatchUmpMessage(engine, words, portTimeSamples) {
     return;
   }
   if (engine.pushMidiInputUmp) {
-    engine.pushMidiInputUmp(words, portTimeSamples);
+    engine.pushMidiInputUmp(words, offsetInBlockSamples);
     return;
   }
   if (messageType === 2) {
@@ -14293,21 +16648,21 @@ function dispatchUmpMessage(engine, words, portTimeSamples) {
     const a = word0 >>> 8 & 127;
     const b = word0 & 127;
     if (message === 128) {
-      engine.pushMidiInputNoteOff(group, channel, a, b, portTimeSamples);
+      engine.pushMidiInputNoteOff(group, channel, a, b, offsetInBlockSamples);
     } else if (message === 144) {
       if (b === 0) {
-        engine.pushMidiInputNoteOff(group, channel, a, 0, portTimeSamples);
+        engine.pushMidiInputNoteOff(group, channel, a, 0, offsetInBlockSamples);
       } else {
-        engine.pushMidiInputNoteOn(group, channel, a, b, portTimeSamples);
+        engine.pushMidiInputNoteOn(group, channel, a, b, offsetInBlockSamples);
       }
     } else if (message === 176) {
-      engine.pushMidiInputCc(group, channel, a, b, portTimeSamples);
+      engine.pushMidiInputCc(group, channel, a, b, offsetInBlockSamples);
     } else if (message === 160) {
-      engine.pushMidiInputPolyPressure?.(group, channel, a, b, portTimeSamples);
+      engine.pushMidiInputPolyPressure?.(group, channel, a, b, offsetInBlockSamples);
     } else if (message === 208) {
-      engine.pushMidiInputChannelPressure?.(group, channel, a, portTimeSamples);
+      engine.pushMidiInputChannelPressure?.(group, channel, a, offsetInBlockSamples);
     } else if (message === 224) {
-      engine.pushMidiInputPitchBend?.(group, channel, a | b << 7, portTimeSamples);
+      engine.pushMidiInputPitchBend?.(group, channel, a | b << 7, offsetInBlockSamples);
     }
     return;
   }
@@ -14317,24 +16672,35 @@ function dispatchUmpMessage(engine, words, portTimeSamples) {
     const data1 = word0 >>> 8 & 127;
     const word1 = words[1] >>> 0;
     if (status === 8) {
-      engine.pushMidiInputNoteOff(group, channel, data1, word1 >>> 25 & 127, portTimeSamples);
+      engine.pushMidiInputNoteOff(
+        group,
+        channel,
+        data1,
+        word1 >>> 25 & 127,
+        offsetInBlockSamples
+      );
     } else if (status === 9) {
       const velocity = Math.max(1, word1 >>> 25 & 127);
-      engine.pushMidiInputNoteOn(group, channel, data1, velocity, portTimeSamples);
+      engine.pushMidiInputNoteOn(group, channel, data1, velocity, offsetInBlockSamples);
     } else if (status === 11) {
-      engine.pushMidiInputCc(group, channel, data1, word1 >>> 25 & 127, portTimeSamples);
+      engine.pushMidiInputCc(group, channel, data1, word1 >>> 25 & 127, offsetInBlockSamples);
     } else if (status === 10) {
       engine.pushMidiInputPolyPressure?.(
         group,
         channel,
         data1,
         word1 >>> 25 & 127,
-        portTimeSamples
+        offsetInBlockSamples
       );
     } else if (status === 13) {
-      engine.pushMidiInputChannelPressure?.(group, channel, word1 >>> 25 & 127, portTimeSamples);
+      engine.pushMidiInputChannelPressure?.(
+        group,
+        channel,
+        word1 >>> 25 & 127,
+        offsetInBlockSamples
+      );
     } else if (status === 14) {
-      engine.pushMidiInputPitchBend?.(group, channel, word1 >>> 18, portTimeSamples);
+      engine.pushMidiInputPitchBend?.(group, channel, word1 >>> 18, offsetInBlockSamples);
     }
   }
 }
@@ -14674,9 +17040,16 @@ function resolveVoicePresetOrdinal(preset) {
     }
     return preset;
   }
+  if (preset.includes("\0")) {
+    throw new RangeError("preset must not contain NUL");
+  }
   const ordinal = VOICE_PRESET_ORDINALS.indexOf(preset);
   if (ordinal < 0) {
-    throw new Error(`Unknown voice character preset: ${preset}`);
+    throw new SonareError(
+      4 /* InvalidParameter */,
+      "InvalidParameter",
+      `Unknown voice character preset: ${preset}`
+    );
   }
   return ordinal;
 }

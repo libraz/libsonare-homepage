@@ -4,7 +4,7 @@
  */
 import type { GuardedOptions } from './_feature_validation.js';
 import type { SpectralFrameRequest } from './feature_spectral.js';
-import type { MelPowerResult, MelSpectrogramResult, MfccResult, StftPowerResult } from './public_types.js';
+import type { MelPowerResult, MelSpectrogramResult, MfccResult, StftMagnitudeResult } from './public_types.js';
 export interface MfccToMelRequest extends GuardedOptions {
     coefficients: Float32Array;
     nMfcc: number;
@@ -96,8 +96,8 @@ export interface MfccToAudioRequest extends MfccToMelRequest {
     htk?: boolean;
 }
 /**
- * Approximate inverse of a Mel filterbank: Mel power spectrogram -> STFT power
- * spectrogram. Mirrors `feature::mel_to_stft`.
+ * Approximate inverse of a Mel filterbank: Mel power spectrogram -> STFT magnitude
+ * spectrogram (not squared; the data sits in the result's `power` field). Mirrors `feature::mel_to_stft`.
  *
  * @param power - Mel power spectrogram [nMels x nFrames] row-major
  * @param nMels - Number of Mel bands
@@ -107,10 +107,10 @@ export interface MfccToAudioRequest extends MfccToMelRequest {
  * @param fmin - Lower Mel band edge in Hz (default: 0)
  * @param fmax - Upper Mel band edge in Hz (default: sr/2 when 0)
  * @param htk - Use the HTK Mel formula instead of Slaney (default: false)
- * @returns STFT power spectrogram result
+ * @returns STFT magnitude spectrogram result
  */
-export declare function melToStft(request: MelToStftRequest | MelResultToStftRequest): StftPowerResult;
-export declare function melToStft(power: Float32Array, nMels: number, nFrames: number, sampleRate?: number, nFft?: number, fmin?: number, fmax?: number, htk?: boolean, options?: GuardedOptions): StftPowerResult;
+export declare function melToStft(request: MelToStftRequest | MelResultToStftRequest): StftMagnitudeResult;
+export declare function melToStft(power: Float32Array, nMels: number, nFrames: number, sampleRate?: number, nFft?: number, fmin?: number, fmax?: number, htk?: boolean, options?: GuardedOptions): StftMagnitudeResult;
 /**
  * Reconstruct audio from a Mel power spectrogram via Griffin-Lim. Mirrors
  * `feature::mel_to_audio`.

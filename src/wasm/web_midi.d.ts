@@ -65,8 +65,12 @@ export interface BindWebMidiOptions {
     software?: boolean;
     /** Bind CC-to-parameter mappings before ports are connected. */
     ccBindings?: readonly WebMidiCcBinding[];
-    /** Convert a Web MIDI event timestamp to engine port-time samples. */
-    timestampToSamples?: (eventTimeMs: number) => number;
+    /**
+     * Convert a Web MIDI event timestamp to an offset in samples into the next block drained (clamped
+     * to its last frame, negative reads as 0). Return a block-relative offset, not the timestamp
+     * scaled to samples: an absolute value lands every event on one frame. Omit for offset 0.
+     */
+    timestampToOffsetInBlockSamples?: (eventTimeMs: number) => number;
     /** Observe hot-plug updates after the helper rebinds matching inputs. */
     onInputsChanged?: (inputs: WebMidiInputInfo[]) => void;
 }

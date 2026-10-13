@@ -30,10 +30,15 @@ export interface DetectKeyRequest extends DetectKeyOptions, SamplesRequest {
 export interface DetectKeyCandidatesRequest extends KeyDetectionOptions, SamplesRequest {
 }
 /** Canonical request form for analysis with synchronous progress reporting. */
-export interface AnalyzeWithProgressRequest extends SamplesRequest {
+export interface AnalyzeWithProgressRequest extends SamplesRequest, MusicAnalyzeOptions {
     onProgress?: ProgressCallback;
     cancel?: () => boolean;
-    /** Analysis options, with the same fields and defaults {@link analyze} takes. */
+    /**
+     * Analysis options, with the same fields and defaults {@link analyze} takes.
+     * Equivalent to setting the same fields directly on this request object (the
+     * flattened form {@link analyze} takes); a field set both ways takes the
+     * value set here.
+     */
     options?: MusicAnalyzeOptions;
 }
 /** Canonical request form for chord detection. */
@@ -426,7 +431,15 @@ export interface BpmCandidate {
 }
 export interface BpmAnalysisResult {
     bpm: number;
+    /**
+     * Winning tempo cluster's vote share within `bpmMin`–`bpmMax` (30–300 by default), searched at
+     * the input rate. `analyze()` searches 60–200 BPM at 22050 Hz, so its `bpmConfidence` can differ.
+     */
     confidence: number;
+    /**
+     * Chosen tempo first (`candidates[0].bpm === bpm`), then the other histogram
+     * bins by descending vote share.
+     */
     candidates: BpmCandidate[];
     autocorrelation: Float32Array;
     tempogram: Float32Array;

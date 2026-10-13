@@ -166,8 +166,16 @@ export declare class SonareEngine {
     addParameter(info: EngineParameterInfo): void;
     /** Clears custom parameters on both engines; automation lanes stay in place. */
     clearParameters(): void;
+    /**
+     * Queues a lane's solo/mute state. An armed PFL/AFL cue ({@link setTrackMonitorMode}) stays off
+     * the program output here, which the facade renders with the cue kept separate; offline renders,
+     * bounces and freezes never include it.
+     */
     setSoloMute(target: string | number, solo: boolean, mute: boolean): boolean;
-    /** Queues a per-track PFL/AFL monitor tap mode change. */
+    /**
+     * Queues a per-track PFL/AFL monitor tap mode change. The facade renders with the cue kept
+     * separate from the program output; offline renders, bounces and freezes never include it.
+     */
     setTrackMonitorMode(target: string | number, mode: EngineTrackMonitorMode, renderFrame?: number): boolean;
     setStripGain(target: string | number, db: number): boolean;
     setStripPan(target: string | number, pan: number): boolean;
@@ -187,9 +195,11 @@ export declare class SonareEngine {
     /**
      * Declares the mixer track lanes in an explicit order.
      *
-     * A successful call may reorder existing track ids, remove track ids, or add
-     * new ones. Existing queued and published track automation follows the track
-     * id, and so do track insert automation ids (see
+     * Lane indices are append-only: the list must start with the already-declared
+     * track ids in their current order and may only append new ones after them;
+     * a reorder or removal throws. (The raw `RealtimeEngine.setTrackLanes` does
+     * accept both.) Existing queued and published track automation follows the
+     * track id, and so do track insert automation ids (see
      * resolveTrackInsertAutomationId). Entries carrying
      * `sends` replace that track's send list; entries without `sends` leave
      * existing sends untouched.
@@ -238,7 +248,8 @@ export declare class SonareEngine {
     canSetLaneSidechain(trackId: number, insertIndex: number, sourceTrackId: number): SidechainCheck;
     /**
      * Longest audible tail in samples (an upper bound; `2147483647` is
-     * unbounded), answered from the offline mirror.
+     * unbounded), answered from the offline mirror. The bound is conservative
+     * before the first note and narrows once a patch has sounded.
      */
     tailSamples(): number;
     /** Processing latency in 1/256 samples, answered from the offline mirror. */
@@ -401,13 +412,55 @@ export declare class SonareEngine {
     bindMidiCc(channel: number, controller: number, paramId: number, options?: MidiCcBindOptions): void;
     setMidiInputSource(destinationId?: number): void;
     clearMidiInputSource(): void;
-    pushMidiInputNoteOn(group: number, channel: number, note: number, velocity: number, portTimeSamples?: number): void;
-    pushMidiInputNoteOff(group: number, channel: number, note: number, velocity?: number, portTimeSamples?: number): void;
-    pushMidiInputCc(group: number, channel: number, controller: number, value: number, portTimeSamples?: number): void;
-    pushMidiInputPitchBend(group: number, channel: number, bend14: number, portTimeSamples?: number): void;
-    pushMidiInputChannelPressure(group: number, channel: number, pressure: number, portTimeSamples?: number): void;
-    pushMidiInputPolyPressure(group: number, channel: number, note: number, pressure: number, portTimeSamples?: number): void;
-    pushMidiInputUmp(words: UmpWords, portTimeSamples?: number): void;
+    /**
+     * Push a live MIDI note-on to the engine-owned MIDI input source.
+     *
+     * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+     *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+     */
+    pushMidiInputNoteOn(group: number, channel: number, note: number, velocity: number, offsetInBlockSamples?: number): void;
+    /**
+     * Push a live MIDI note-off to the engine-owned MIDI input source.
+     *
+     * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+     *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+     */
+    pushMidiInputNoteOff(group: number, channel: number, note: number, velocity?: number, offsetInBlockSamples?: number): void;
+    /**
+     * Push a live MIDI control change to the engine-owned MIDI input source.
+     *
+     * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+     *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+     */
+    pushMidiInputCc(group: number, channel: number, controller: number, value: number, offsetInBlockSamples?: number): void;
+    /**
+     * Push a live MIDI pitch bend to the engine-owned MIDI input source.
+     *
+     * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+     *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+     */
+    pushMidiInputPitchBend(group: number, channel: number, bend14: number, offsetInBlockSamples?: number): void;
+    /**
+     * Push a live MIDI channel pressure to the engine-owned MIDI input source.
+     *
+     * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+     *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+     */
+    pushMidiInputChannelPressure(group: number, channel: number, pressure: number, offsetInBlockSamples?: number): void;
+    /**
+     * Push a live MIDI polyphonic key pressure to the engine-owned MIDI input source.
+     *
+     * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+     *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+     */
+    pushMidiInputPolyPressure(group: number, channel: number, note: number, pressure: number, offsetInBlockSamples?: number): void;
+    /**
+     * Push a live MIDI raw UMP message to the engine-owned MIDI input source.
+     *
+     * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+     *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+     */
+    pushMidiInputUmp(words: UmpWords, offsetInBlockSamples?: number): void;
     pushMidiPanic(renderFrame?: number): void;
     configureCapture(options: CaptureOptions): void;
     /**

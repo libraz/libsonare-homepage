@@ -4,7 +4,8 @@ import type { SonareWorkletMessage, SonareWorkletProcessorOptions, WorkletTransp
  * AudioWorklet-style mixer bridge backed by the package's single `sonare.wasm`.
  *
  * The WASM module must already be initialized via `init()` before constructing
- * this bridge. Each AudioWorklet input is treated as one stereo strip:
+ * this bridge; the registered processor initializes it itself from
+ * `wasmBinary` when it is not (see {@link SonareWorkletProcessorOptions}). Each AudioWorklet input is treated as one stereo strip:
  * `inputs[strip][0]` is left and `inputs[strip][1]` is right. Missing channels
  * are replaced with preallocated silence.
  */

@@ -671,10 +671,10 @@ export interface WasmMfccResult {
   coefficients: Float32Array;
 }
 
-export interface WasmStftPowerResult {
+export interface WasmStftMagnitudeResult {
   nBins: number;
   nFrames: number;
-  power: Float32Array;
+  magnitude: Float32Array;
 }
 
 export interface WasmMelPowerResult {
@@ -1565,6 +1565,7 @@ export interface WasmRealtimeEngine {
   ) => number;
   resolveTrackLaneAutomationId: (trackId: number, paramName: string) => number;
   resolveBusAutomationId: (busId: number, paramName: string) => number;
+  resolveMasterAutomationId: (paramName: string) => number;
   resolveMasterInsertAutomationId: (insertIndex: number, paramName: string) => number;
   resolveBusInsertAutomationId: (busId: number, insertIndex: number, paramName: string) => number;
   resolveInstrumentAutomationId: (destinationId: number, paramName: string) => number;
@@ -1662,40 +1663,40 @@ export interface WasmRealtimeEngine {
     channel: number,
     note: number,
     velocity: number,
-    portTimeSamples: number,
+    offsetInBlockSamples: number,
   ) => void;
   pushMidiInputNoteOff: (
     group: number,
     channel: number,
     note: number,
     velocity: number,
-    portTimeSamples: number,
+    offsetInBlockSamples: number,
   ) => void;
   pushMidiInputCc: (
     group: number,
     channel: number,
     controller: number,
     value: number,
-    portTimeSamples: number,
+    offsetInBlockSamples: number,
   ) => void;
   pushMidiInputPitchBend: (
     group: number,
     channel: number,
     bend14: number,
-    portTimeSamples: number,
+    offsetInBlockSamples: number,
   ) => void;
   pushMidiInputChannelPressure: (
     group: number,
     channel: number,
     pressure: number,
-    portTimeSamples: number,
+    offsetInBlockSamples: number,
   ) => void;
   pushMidiInputPolyPressure: (
     group: number,
     channel: number,
     note: number,
     pressure: number,
-    portTimeSamples: number,
+    offsetInBlockSamples: number,
   ) => void;
   pushMidiNoteOn: (
     destinationId: number,
@@ -1748,7 +1749,7 @@ export interface WasmRealtimeEngine {
     words: Uint32Array | readonly number[],
     renderFrame?: number,
   ) => void;
-  pushMidiInputUmp: (words: Uint32Array | readonly number[], portTimeSamples: number) => void;
+  pushMidiInputUmp: (words: Uint32Array | readonly number[], offsetInBlockSamples: number) => void;
   pushMidiProgram: (
     destinationId: number,
     group: number,
@@ -1766,7 +1767,7 @@ export interface WasmRealtimeEngine {
     bankValid: boolean,
     bankMsb: number,
     bankLsb: number,
-    portTimeSamples: number,
+    offsetInBlockSamples: number,
   ) => void;
   pushMidiSysex: (destinationId: number, data: Uint8Array, renderFrame?: number) => void;
   pushMidiPanic: (renderFrame?: number) => void;
@@ -1887,7 +1888,11 @@ export interface SonareModule {
 
   audioFromMemory: (bytes: Uint8Array) => WasmAudioFromMemoryResult;
   decodeChannels: (bytes: Uint8Array) => { sampleRate: number; channels: Float32Array[] };
-  downmix: (channels: Float32Array[], targetLayout: number) => Float32Array[];
+  downmix: (
+    channels: Float32Array[],
+    targetLayout: number,
+    options: { normalize?: boolean; includeLfe?: boolean },
+  ) => Float32Array[];
 
   // Quick API (high-level)
   detectBpm: (samples: Float32Array, sampleRate: number) => number;
@@ -3160,7 +3165,7 @@ export interface SonareModule {
     fmin: number,
     fmax: number,
     htk: boolean,
-  ) => WasmStftPowerResult;
+  ) => WasmStftMagnitudeResult;
   melToAudio: (
     power: Float32Array,
     nMels: number,

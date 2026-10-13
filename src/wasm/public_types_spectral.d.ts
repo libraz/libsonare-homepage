@@ -470,7 +470,8 @@ export interface PolyphonicAnalysisOptions {
 /** Options for `PolyphonicAnalysis.render`. All fields are optional. */
 export interface PolyphonicRenderOptions {
     /**
-     * Equal-power cross-fade at each edited note's edges. Default 5 ms; a hard cut
+     * Cross-fade at each edited note's edges, weighted to hold the level whether
+     * the note is coherent with the audio under it or not. Default 5 ms; a hard cut
      * is deliberately not selectable, because the seam it leaves is a click.
      */
     fadeMs?: number;
@@ -695,12 +696,13 @@ export interface MfccResult {
     coefficients: Float32Array;
 }
 /**
- * STFT power spectrogram result (from inverse Mel reconstruction)
+ * STFT magnitude spectrogram result (from inverse Mel reconstruction). The data
+ * is magnitude, not squared magnitude.
  */
-export interface StftPowerResult {
+export interface StftMagnitudeResult {
     nBins: number;
     nFrames: number;
-    power: Float32Array;
+    magnitude: Float32Array;
 }
 /**
  * Mel power spectrogram result (from inverse MFCC reconstruction)

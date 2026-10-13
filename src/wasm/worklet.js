@@ -344,7 +344,6 @@ var init_codes = __esm({
     };
     PAN_MODE_VALUES = {
       balance: 0,
-      pan: 1,
       stereopan: 1,
       "stereo-pan": 1,
       dualpan: 2,
@@ -1476,8 +1475,8 @@ var RealtimeEngine = class _RealtimeEngine {
   /**
    * Queue a sample-accurate parameter change (engine kSetParam).
    * A reserved mixer id (`0x4d58xxxx`) other than a master id names no strip and
-   * throws `InvalidParameter`; resolve per-strip ids with the `resolve*AutomationId`
-   * methods.
+   * throws `InvalidParameter`; resolve ids with the `resolve*AutomationId`
+   * methods (`resolveMasterAutomationId` for the master fader, pan and width).
    */
   setParameter(paramId, value, renderFrame) {
     this.native.setParameter(paramId, value, resolveRenderFrame2("setParameter", renderFrame));
@@ -1496,15 +1495,27 @@ var RealtimeEngine = class _RealtimeEngine {
    * Reserved engine targets — track and bus faders, pan and width, and insert and
    * instrument parameters — keep their own fixed smoothing whatever this is set
    * to, and MIDI-CC mappings apply their values directly. The default is 20 ms;
-   * `0` makes the governed changes instant.
+   * `0` makes the governed changes instant. The time is one time constant: about 63% of the
+   * way at the set time.
    */
   setParamSmoothingMs(smoothingMs) {
     this.native.setParamSmoothingMs(smoothingMs);
   }
+  /**
+   * Queue a lane's solo/mute state. An armed PFL/AFL cue ({@link setTrackMonitorMode}) is folded
+   * into the program output by `process()` / `processPrepared()` and kept separate by the
+   * `WithMonitor` variants; offline renders, bounces and freezes never include it.
+   */
   setSoloMute(laneIndex, solo, mute, renderFrame) {
     this.native.setSoloMute(laneIndex, solo, mute, resolveRenderFrame2("setSoloMute", renderFrame));
   }
-  /** Queue a per-track PFL/AFL monitor tap mode change. */
+  /**
+   * Queue a per-track PFL/AFL monitor tap mode change.
+   *
+   * `process()` and `processPrepared()` fold the armed cue into the program output, so the
+   * tapped lane is counted twice there; the `WithMonitor` variants keep the cue separate.
+   * Offline renders, bounces and freezes never include the cue.
+   */
   setTrackMonitorMode(laneIndex, mode, renderFrame) {
     this.native.setTrackMonitorMode(
       laneIndex,
@@ -1784,14 +1795,32 @@ var RealtimeEngine = class _RealtimeEngine {
   consumeExternalMidiScratch() {
     this.native.consumeExternalMidiScratch();
   }
-  pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples = 0) {
-    this.native.pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples);
+  /**
+   * Push a live MIDI note-on to the engine-owned MIDI input source.
+   *
+   * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+   *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+   */
+  pushMidiInputNoteOn(group, channel, note, velocity, offsetInBlockSamples = 0) {
+    this.native.pushMidiInputNoteOn(group, channel, note, velocity, offsetInBlockSamples);
   }
-  pushMidiInputNoteOff(group, channel, note, velocity = 0, portTimeSamples = 0) {
-    this.native.pushMidiInputNoteOff(group, channel, note, velocity, portTimeSamples);
+  /**
+   * Push a live MIDI note-off to the engine-owned MIDI input source.
+   *
+   * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+   *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+   */
+  pushMidiInputNoteOff(group, channel, note, velocity = 0, offsetInBlockSamples = 0) {
+    this.native.pushMidiInputNoteOff(group, channel, note, velocity, offsetInBlockSamples);
   }
-  pushMidiInputCc(group, channel, controller, value, portTimeSamples = 0) {
-    this.native.pushMidiInputCc(group, channel, controller, value, portTimeSamples);
+  /**
+   * Push a live MIDI control change to the engine-owned MIDI input source.
+   *
+   * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+   *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+   */
+  pushMidiInputCc(group, channel, controller, value, offsetInBlockSamples = 0) {
+    this.native.pushMidiInputCc(group, channel, controller, value, offsetInBlockSamples);
   }
   /**
    * Push a live MIDI pitch bend to the engine-owned MIDI input source.
@@ -1799,24 +1828,33 @@ var RealtimeEngine = class _RealtimeEngine {
    * `bend14` is unsigned 14-bit with centre 8192 (0..16383) — the dimension is
    * not 7-bit, so a value past 16383 is refused rather than narrowed. The input
    * source must be enabled with {@link setMidiInputSource} first.
+   *
+   * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+   *   negative reads as 0. Not an absolute clock position. Defaults to 0.
    */
-  pushMidiInputPitchBend(group, channel, bend14, portTimeSamples = 0) {
-    this.native.pushMidiInputPitchBend(group, channel, bend14, portTimeSamples);
+  pushMidiInputPitchBend(group, channel, bend14, offsetInBlockSamples = 0) {
+    this.native.pushMidiInputPitchBend(group, channel, bend14, offsetInBlockSamples);
   }
   /**
    * Push a live MIDI channel pressure to the engine-owned MIDI input source.
    * `pressure` is 7-bit (0..127). Under MPE this is the member channel's
    * per-note pressure.
+   *
+   * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+   *   negative reads as 0. Not an absolute clock position. Defaults to 0.
    */
-  pushMidiInputChannelPressure(group, channel, pressure, portTimeSamples = 0) {
-    this.native.pushMidiInputChannelPressure(group, channel, pressure, portTimeSamples);
+  pushMidiInputChannelPressure(group, channel, pressure, offsetInBlockSamples = 0) {
+    this.native.pushMidiInputChannelPressure(group, channel, pressure, offsetInBlockSamples);
   }
   /**
    * Push a live MIDI polyphonic key pressure to the engine-owned MIDI input
    * source. `note` and `pressure` are 7-bit (0..127).
+   *
+   * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+   *   negative reads as 0. Not an absolute clock position. Defaults to 0.
    */
-  pushMidiInputPolyPressure(group, channel, note, pressure, portTimeSamples = 0) {
-    this.native.pushMidiInputPolyPressure(group, channel, note, pressure, portTimeSamples);
+  pushMidiInputPolyPressure(group, channel, note, pressure, offsetInBlockSamples = 0) {
+    this.native.pushMidiInputPolyPressure(group, channel, note, pressure, offsetInBlockSamples);
   }
   pushMidiNoteOn(destinationId, group, channel, note, velocity, renderFrame) {
     this.native.pushMidiNoteOn(
@@ -1947,10 +1985,11 @@ var RealtimeEngine = class _RealtimeEngine {
   }
   /**
    * Push a live MIDI 2.0 Program Change to the engine-owned MIDI input source.
-   * The arguments and refusals match {@link pushMidiProgram}; `portTimeSamples`
-   * is the port timestamp in samples.
+   * The arguments and refusals match {@link pushMidiProgram}; `offsetInBlockSamples` is
+   * an offset into the next block drained (clamped to its last frame, negative reads as 0), not
+   * an absolute clock position.
    */
-  pushMidiInputProgram(group, channel, program, bankValid = false, bankMsb = 0, bankLsb = 0, portTimeSamples = 0) {
+  pushMidiInputProgram(group, channel, program, bankValid = false, bankMsb = 0, bankLsb = 0, offsetInBlockSamples = 0) {
     this.native.pushMidiInputProgram(
       group,
       channel,
@@ -1958,16 +1997,17 @@ var RealtimeEngine = class _RealtimeEngine {
       bankValid,
       bankMsb,
       bankLsb,
-      portTimeSamples
+      offsetInBlockSamples
     );
   }
   /**
    * Push one raw UMP message (1 to 4 words) to the engine-owned MIDI input
-   * source. The message rules match {@link pushMidiUmp}. `portTimeSamples` is
-   * the port timestamp in samples.
+   * source. The message rules match {@link pushMidiUmp}. `offsetInBlockSamples` is
+   * an offset into the next block drained (clamped to its last frame, negative reads as 0), not
+   * an absolute clock position.
    */
-  pushMidiInputUmp(words, portTimeSamples = 0) {
-    this.native.pushMidiInputUmp(assertUmpWords("pushMidiInputUmp", words), portTimeSamples);
+  pushMidiInputUmp(words, offsetInBlockSamples = 0) {
+    this.native.pushMidiInputUmp(assertUmpWords("pushMidiInputUmp", words), offsetInBlockSamples);
   }
   /**
    * Queue an immediate (live) MIDI SysEx frame to a MIDI destination. `data` is
@@ -2053,7 +2093,7 @@ var RealtimeEngine = class _RealtimeEngine {
    * called concurrently with {@link process}.
    *
    * @param numChannels - Channel count of the blocks that will be rendered
-   * @param blockSize - Frames per block that will be rendered (clamped to the prepared block size)
+   * @param blockSize - Frames per block that will be rendered (a larger block size is refused)
    * @throws If a count is not positive, `numChannels` exceeds the prepared
    *   channel count, or the engine was never prepared
    */
@@ -2081,6 +2121,9 @@ var RealtimeEngine = class _RealtimeEngine {
    * Longest audible tail after the last input, in samples: an upper bound made
    * of the longest instrument tail plus the longest route through lane strips
    * (channel delay included), buses, sends, the graph and the master strip.
+   * An instrument lane whose patch is not known yet (a drum-kit lane or a General
+   * MIDI program lane before any note sounds) contributes a conservative
+   * worst-case bound that narrows once a patch has sounded.
    * `2147483647` means the tail is unbounded. Control-thread only: must not be
    * called concurrently with {@link process}.
    */
@@ -2142,8 +2185,8 @@ var RealtimeEngine = class _RealtimeEngine {
   /**
    * Replaces the automation lane driving `paramId`.
    * A reserved mixer id (`0x4d58xxxx`) other than a master id names no strip and
-   * throws `InvalidParameter`; resolve per-strip ids with the `resolve*AutomationId`
-   * methods.
+   * throws `InvalidParameter`; resolve ids with the `resolve*AutomationId`
+   * methods (`resolveMasterAutomationId` for the master fader, pan and width).
    */
   setAutomationLane(paramId, points) {
     this.native.setAutomationLane(paramId, points);
@@ -2482,10 +2525,13 @@ var RealtimeEngine = class _RealtimeEngine {
    * `eq.*`, `dynamics.*`, `saturation.*`, `spectral.*`, `stereo.*`,
    * `maximizer.*` and `multiband.*` processors are all available as strip
    * inserts, so placing one on a strip and resolving its parameter here drives
-   * it at audio-block precision, live and offline alike. The whole-signal
-   * stages of the offline mastering chain (`repair.*`, `loudness`, and the
-   * match stages) have no insert form and no automation id: they buffer the
-   * entire signal by construction and do not run on the realtime path.
+   * it at audio-block precision, live and offline alike. The whole-signal stages of the offline
+   * mastering chain that have no insert form (`repair.declick`, `repair.declip`,
+   * `repair.trimSilence`, `loudness`, and the match stages) have no automation id: they buffer the
+   * entire signal by construction and do not run on the realtime path. The four realtime repair
+   * inserts (`repair.decrackle`, `repair.dehum`, `repair.denoiseClassical`,
+   * `repair.dereverbClassical`) load into a strip, but every one of their parameters is
+   * construction-only, so no automation id resolves (-1) and an edit needs a strip replacement.
    *
    * Track, bus and master insert ids share one lifetime rule: an id names its
    * strip by identity and the kind of processor in its slot (for
@@ -2526,6 +2572,15 @@ var RealtimeEngine = class _RealtimeEngine {
    */
   resolveBusAutomationId(busId, paramName) {
     return this.native.resolveBusAutomationId(busId, paramName);
+  }
+  /**
+   * Resolve the master strip's fader (`'faderDb'`), pan (`'pan'`) or width
+   * (`'width'`) to its reserved automation id, usable with `setAutomationLane` /
+   * `setParameter`. The master strip always exists, so the id never goes stale.
+   * Returns `-1` when the name is none of the three.
+   */
+  resolveMasterAutomationId(paramName) {
+    return this.native.resolveMasterAutomationId(paramName);
   }
   /**
    * Resolves a hosted instrument's continuous parameter (by its JSON-key name)
@@ -3332,7 +3387,9 @@ var Mixer = class _Mixer {
    * Mix one block of per-strip stereo audio into the stereo master.
    *
    * @param leftChannels - `leftChannels[i]` is the left channel of strip `i`
-   * @param rightChannels - `rightChannels[i]` is the right channel of strip `i`
+   * @param rightChannels - `rightChannels[i]` is the right channel of strip `i`.
+   *   Fewer inputs than strips leave the remaining strips silent.
+   * @throws RangeError when more inputs are given than the mixer has strips
    * @returns Mixed stereo master (`left`, `right`, `sampleRate`)
    */
   processStereo(leftChannels, rightChannels) {
@@ -3345,8 +3402,9 @@ var Mixer = class _Mixer {
    * Mix one block into caller-owned output arrays.
    *
    * This avoids allocating the result object and result `Float32Array`s. It is
-   * intended for realtime bridges such as AudioWorklet; the input channel count
-   * must match the scene strip count and all arrays must have the same length.
+   * intended for realtime bridges such as AudioWorklet; all arrays must have the
+   * same length. Like {@link processStereo}, fewer inputs than strips leave the
+   * remaining strips silent and more than the strip count throw a `RangeError`.
    */
   processStereoInto(leftChannels, rightChannels, outLeft, outRight) {
     if (leftChannels.length !== rightChannels.length) {
@@ -8266,10 +8324,18 @@ var SonareEngine = class _SonareEngine {
   clearParameters() {
     clearParameters(this.parameterContext);
   }
+  /**
+   * Queues a lane's solo/mute state. An armed PFL/AFL cue ({@link setTrackMonitorMode}) stays off
+   * the program output here, which the facade renders with the cue kept separate; offline renders,
+   * bounces and freezes never include it.
+   */
   setSoloMute(target, solo, mute) {
     return setSoloMute(this.parameterContext, target, solo, mute);
   }
-  /** Queues a per-track PFL/AFL monitor tap mode change. */
+  /**
+   * Queues a per-track PFL/AFL monitor tap mode change. The facade renders with the cue kept
+   * separate from the program output; offline renders, bounces and freezes never include it.
+   */
   setTrackMonitorMode(target, mode, renderFrame) {
     return setTrackMonitorMode(this.parameterContext, target, mode, renderFrame);
   }
@@ -8317,9 +8383,11 @@ var SonareEngine = class _SonareEngine {
   /**
    * Declares the mixer track lanes in an explicit order.
    *
-   * A successful call may reorder existing track ids, remove track ids, or add
-   * new ones. Existing queued and published track automation follows the track
-   * id, and so do track insert automation ids (see
+   * Lane indices are append-only: the list must start with the already-declared
+   * track ids in their current order and may only append new ones after them;
+   * a reorder or removal throws. (The raw `RealtimeEngine.setTrackLanes` does
+   * accept both.) Existing queued and published track automation follows the
+   * track id, and so do track insert automation ids (see
    * resolveTrackInsertAutomationId). Entries carrying
    * `sends` replace that track's send list; entries without `sends` leave
    * existing sends untouched.
@@ -8388,7 +8456,8 @@ var SonareEngine = class _SonareEngine {
   }
   /**
    * Longest audible tail in samples (an upper bound; `2147483647` is
-   * unbounded), answered from the offline mirror.
+   * unbounded), answered from the offline mirror. The bound is conservative
+   * before the first note and narrows once a patch has sounded.
    */
   tailSamples() {
     return this.offlineEngine.tailSamples();
@@ -8830,76 +8899,124 @@ var SonareEngine = class _SonareEngine {
       () => this.postSync({ type: "syncClearMidiInputSource" })
     );
   }
-  pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples = 0) {
-    this.offlineEngine.pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples);
+  /**
+   * Push a live MIDI note-on to the engine-owned MIDI input source.
+   *
+   * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+   *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+   */
+  pushMidiInputNoteOn(group, channel, note, velocity, offsetInBlockSamples = 0) {
+    this.offlineEngine.pushMidiInputNoteOn(group, channel, note, velocity, offsetInBlockSamples);
     this.postSync({
       type: "syncMidiInputNoteOn",
       group,
       channel,
       data0: note,
       data1: velocity,
-      portTimeSamples
+      offsetInBlockSamples
     });
   }
-  pushMidiInputNoteOff(group, channel, note, velocity = 0, portTimeSamples = 0) {
-    this.offlineEngine.pushMidiInputNoteOff(group, channel, note, velocity, portTimeSamples);
+  /**
+   * Push a live MIDI note-off to the engine-owned MIDI input source.
+   *
+   * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+   *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+   */
+  pushMidiInputNoteOff(group, channel, note, velocity = 0, offsetInBlockSamples = 0) {
+    this.offlineEngine.pushMidiInputNoteOff(group, channel, note, velocity, offsetInBlockSamples);
     this.postSync({
       type: "syncMidiInputNoteOff",
       group,
       channel,
       data0: note,
       data1: velocity,
-      portTimeSamples
+      offsetInBlockSamples
     });
   }
-  pushMidiInputCc(group, channel, controller, value, portTimeSamples = 0) {
-    this.offlineEngine.pushMidiInputCc(group, channel, controller, value, portTimeSamples);
+  /**
+   * Push a live MIDI control change to the engine-owned MIDI input source.
+   *
+   * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+   *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+   */
+  pushMidiInputCc(group, channel, controller, value, offsetInBlockSamples = 0) {
+    this.offlineEngine.pushMidiInputCc(group, channel, controller, value, offsetInBlockSamples);
     this.postSync({
       type: "syncMidiInputCc",
       group,
       channel,
       data0: controller,
       data1: value,
-      portTimeSamples
+      offsetInBlockSamples
     });
   }
-  pushMidiInputPitchBend(group, channel, bend14, portTimeSamples = 0) {
-    this.offlineEngine.pushMidiInputPitchBend(group, channel, bend14, portTimeSamples);
+  /**
+   * Push a live MIDI pitch bend to the engine-owned MIDI input source.
+   *
+   * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+   *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+   */
+  pushMidiInputPitchBend(group, channel, bend14, offsetInBlockSamples = 0) {
+    this.offlineEngine.pushMidiInputPitchBend(group, channel, bend14, offsetInBlockSamples);
     this.postSync({
       type: "syncMidiInputPitchBend",
       group,
       channel,
       data0: bend14,
       data1: 0,
-      portTimeSamples
+      offsetInBlockSamples
     });
   }
-  pushMidiInputChannelPressure(group, channel, pressure, portTimeSamples = 0) {
-    this.offlineEngine.pushMidiInputChannelPressure(group, channel, pressure, portTimeSamples);
+  /**
+   * Push a live MIDI channel pressure to the engine-owned MIDI input source.
+   *
+   * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+   *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+   */
+  pushMidiInputChannelPressure(group, channel, pressure, offsetInBlockSamples = 0) {
+    this.offlineEngine.pushMidiInputChannelPressure(group, channel, pressure, offsetInBlockSamples);
     this.postSync({
       type: "syncMidiInputChannelPressure",
       group,
       channel,
       data0: pressure,
       data1: 0,
-      portTimeSamples
+      offsetInBlockSamples
     });
   }
-  pushMidiInputPolyPressure(group, channel, note, pressure, portTimeSamples = 0) {
-    this.offlineEngine.pushMidiInputPolyPressure(group, channel, note, pressure, portTimeSamples);
+  /**
+   * Push a live MIDI polyphonic key pressure to the engine-owned MIDI input source.
+   *
+   * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+   *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+   */
+  pushMidiInputPolyPressure(group, channel, note, pressure, offsetInBlockSamples = 0) {
+    this.offlineEngine.pushMidiInputPolyPressure(
+      group,
+      channel,
+      note,
+      pressure,
+      offsetInBlockSamples
+    );
     this.postSync({
       type: "syncMidiInputPolyPressure",
       group,
       channel,
       data0: note,
       data1: pressure,
-      portTimeSamples
+      offsetInBlockSamples
     });
   }
-  pushMidiInputUmp(words, portTimeSamples = 0) {
+  /**
+   * Push a live MIDI raw UMP message to the engine-owned MIDI input source.
+   *
+   * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+   *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+   */
+  pushMidiInputUmp(words, offsetInBlockSamples = 0) {
     const copiedWords = words instanceof Uint32Array ? new Uint32Array(words) : words.slice();
-    this.offlineEngine.pushMidiInputUmp(copiedWords, portTimeSamples);
-    this.postSync({ type: "syncMidiInputUmp", words: copiedWords, portTimeSamples });
+    this.offlineEngine.pushMidiInputUmp(copiedWords, offsetInBlockSamples);
+    this.postSync({ type: "syncMidiInputUmp", words: copiedWords, offsetInBlockSamples });
   }
   pushMidiPanic(renderFrame) {
     const frame = resolveRenderFrame("pushMidiPanic", renderFrame);
@@ -10175,7 +10292,7 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           message.channel,
           message.data0,
           message.data1,
-          message.portTimeSamples
+          message.offsetInBlockSamples
         );
         break;
       case "syncMidiInputNoteOff":
@@ -10184,7 +10301,7 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           message.channel,
           message.data0,
           message.data1,
-          message.portTimeSamples
+          message.offsetInBlockSamples
         );
         break;
       case "syncMidiInputCc":
@@ -10193,7 +10310,7 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           message.channel,
           message.data0,
           message.data1,
-          message.portTimeSamples
+          message.offsetInBlockSamples
         );
         break;
       case "syncMidiInputPitchBend":
@@ -10201,7 +10318,7 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           message.group,
           message.channel,
           message.data0,
-          message.portTimeSamples
+          message.offsetInBlockSamples
         );
         break;
       case "syncMidiInputChannelPressure":
@@ -10209,7 +10326,7 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           message.group,
           message.channel,
           message.data0,
-          message.portTimeSamples
+          message.offsetInBlockSamples
         );
         break;
       case "syncMidiInputPolyPressure":
@@ -10218,11 +10335,11 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           message.channel,
           message.data0,
           message.data1,
-          message.portTimeSamples
+          message.offsetInBlockSamples
         );
         break;
       case "syncMidiInputUmp":
-        this.engine.pushMidiInputUmp(message.words, message.portTimeSamples);
+        this.engine.pushMidiInputUmp(message.words, message.offsetInBlockSamples);
         break;
     }
   }
@@ -10826,6 +10943,29 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
 _SonareRealtimeEngineWorkletProcessor.warnedChannelScratchOverflow = false;
 var SonareRealtimeEngineWorkletProcessor = _SonareRealtimeEngineWorkletProcessor;
 
+// src/worklet/embind-init.ts
+function isEmbindReady() {
+  return isInitialized() && !globalThis.SonareEmbindInitPromise;
+}
+async function initializeEmbindInWorklet(wasmBinary) {
+  const scope = globalThis;
+  if (scope.SonareEmbindInitPromise) {
+    await scope.SonareEmbindInitPromise;
+  }
+  if (isInitialized()) {
+    return;
+  }
+  const moduleFactory = scope.SonareEmbindModuleFactory;
+  if (!moduleFactory) {
+    throw new Error("embind realtime engine module is not initialized.");
+  }
+  await init({
+    locateFile: (path) => path,
+    wasmBinary,
+    moduleFactory
+  });
+}
+
 // src/worklet/engine-register.ts
 function registerSonareRealtimeEngineWorkletProcessor(name = "sonare-realtime-engine-processor") {
   const scope = globalThis;
@@ -10904,21 +11044,7 @@ function registerSonareRealtimeEngineWorkletProcessor(name = "sonare-realtime-en
     }
     async initializeEmbind(options, port) {
       try {
-        const initPromise2 = globalThis.SonareEmbindInitPromise;
-        if (initPromise2) {
-          await initPromise2;
-        }
-        if (!isInitialized()) {
-          const moduleFactory = globalThis.SonareEmbindModuleFactory;
-          if (!moduleFactory) {
-            throw new Error("embind realtime engine module is not initialized.");
-          }
-          await init({
-            locateFile: (path) => path,
-            wasmBinary: options.wasmBinary,
-            moduleFactory
-          });
-        }
+        await initializeEmbindInWorklet(options.wasmBinary);
         if (this.pendingMessagesOverflowed) {
           throw new Error("AudioWorklet initialization message buffer overflowed.");
         }
@@ -11242,13 +11368,38 @@ function registerSonareWorkletProcessor(name = "sonare-worklet-processor") {
   class RegisteredSonareWorkletProcessor extends Base {
     constructor(options) {
       super();
+      this.pendingMessages = [];
       const port = this.port;
-      this.bridge = new SonareWorkletProcessor(options?.processorOptions ?? { sceneJson: "" }, {
-        postMessage: (message) => port?.postMessage?.(message)
-      });
+      const processorOptions = options?.processorOptions ?? { sceneJson: "" };
+      const start = () => {
+        this.bridge = new SonareWorkletProcessor(processorOptions, {
+          postMessage: (message) => port?.postMessage?.(message)
+        });
+        for (const message of this.pendingMessages.splice(0)) {
+          this.bridge.receiveMessage(message);
+        }
+      };
+      if (isEmbindReady()) {
+        start();
+      } else {
+        initializeEmbindInWorklet(processorOptions.wasmBinary).then(() => {
+          start();
+          port?.postMessage?.({ type: "ready", runtimeTarget: "embind" });
+        }).catch((error) => {
+          port?.postMessage?.({
+            type: "error",
+            message: error instanceof Error ? error.message : String(error)
+          });
+        });
+      }
       const onMessage = (event) => {
-        if (isWorkletMessage(event.data)) {
+        if (!isWorkletMessage(event.data)) {
+          return;
+        }
+        if (this.bridge) {
           this.bridge.receiveMessage(event.data);
+        } else if (this.pendingMessages.length < 1024) {
+          this.pendingMessages.push(event.data);
         }
       };
       if (port?.addEventListener) {
@@ -11259,7 +11410,13 @@ function registerSonareWorkletProcessor(name = "sonare-worklet-processor") {
       }
     }
     process(inputs, outputs) {
-      return this.bridge.process(inputs, outputs);
+      if (this.bridge) {
+        return this.bridge.process(inputs, outputs);
+      }
+      for (const channel of outputs[0] ?? []) {
+        channel.fill(0);
+      }
+      return true;
     }
   }
   scope.registerProcessor(name, RegisteredSonareWorkletProcessor);
@@ -11443,11 +11600,37 @@ function registerSonarePlaybackWorkletProcessor(name = "sonare-playback-processo
   class RegisteredSonarePlaybackWorkletProcessor extends Base {
     constructor(options) {
       super();
+      this.pendingMessages = [];
       const port = this.port;
-      this.bridge = new SonarePlaybackWorkletProcessor(options?.processorOptions ?? {}, port);
+      const processorOptions = options?.processorOptions ?? {};
+      const start = () => {
+        this.bridge = new SonarePlaybackWorkletProcessor(processorOptions, port);
+        for (const message of this.pendingMessages.splice(0)) {
+          this.bridge.receiveMessage(message);
+        }
+      };
+      if (isEmbindReady()) {
+        start();
+      } else {
+        initializeEmbindInWorklet(processorOptions.wasmBinary).then(() => {
+          start();
+          port?.postMessage?.({ type: "ready", runtimeTarget: "embind" });
+        }).catch((error) => {
+          port?.postMessage?.({
+            type: "error",
+            request: "init",
+            message: error instanceof Error ? error.message : String(error)
+          });
+        });
+      }
       const onMessage = (event) => {
-        if (isPlaybackMessage(event.data)) {
+        if (!isPlaybackMessage(event.data)) {
+          return;
+        }
+        if (this.bridge) {
           this.bridge.receiveMessage(event.data);
+        } else if (this.pendingMessages.length < 1024) {
+          this.pendingMessages.push(event.data);
         }
       };
       if (port?.addEventListener) {
@@ -11458,7 +11641,13 @@ function registerSonarePlaybackWorkletProcessor(name = "sonare-playback-processo
       }
     }
     process(inputs, outputs) {
-      return this.bridge.process(inputs, outputs);
+      if (this.bridge) {
+        return this.bridge.process(inputs, outputs);
+      }
+      for (const channel of outputs[0] ?? []) {
+        channel.fill(0);
+      }
+      return true;
     }
   }
   scope.registerProcessor(name, RegisteredSonarePlaybackWorkletProcessor);
@@ -11470,7 +11659,8 @@ function createSonarePlaybackNode(context, options = {}) {
     config: JSON.stringify(config),
     hrtf: options.hrtf,
     maxBlockSize: options.maxBlockSize,
-    sampleRate: resolveContextSampleRate(options.sampleRate, context, "createSonarePlaybackNode")
+    sampleRate: resolveContextSampleRate(options.sampleRate, context, "createSonarePlaybackNode"),
+    wasmBinary: options.wasmBinary
   };
   return factory(context, options.processorName ?? "sonare-playback-processor", {
     numberOfInputs: 1,
@@ -11932,6 +12122,8 @@ function registerSonareRealtimeVoiceChangerWorkletProcessor(name = "sonare-realt
   scope.registerProcessor(name, RegisteredSonareRealtimeVoiceChangerWorkletProcessor);
 }
 export {
+  ENGINE_MIXER_PARAM_FADER_DB,
+  ENGINE_MIXER_PARAM_PAN,
   EXPECTED_ABI_VERSION,
   SONARE_CLIP_PAGE_REQUEST_RING_HEADER_INTS,
   SONARE_CLIP_PAGE_REQUEST_RING_RECORD_UINT32S,
@@ -11941,6 +12133,7 @@ export {
   SONARE_EXTERNAL_MIDI_RING_HEADER_INTS,
   SONARE_EXTERNAL_MIDI_RING_RECORD_UINT32S,
   SONARE_METER_RING_HEADER_INTS,
+  SONARE_METER_RING_PROTOCOL_VERSION,
   SONARE_METER_RING_RECORD_FLOATS,
   SONARE_SCOPE_RING_HEADER_INTS,
   SONARE_SPECTRUM_RING_HEADER_INTS,
@@ -11968,6 +12161,7 @@ export {
   decodeFrame,
   encodeFrameHi,
   encodeFrameLo,
+  engineMixerMasterTarget,
   init,
   isInitialized,
   popSonareEngineCommandRingBuffer,

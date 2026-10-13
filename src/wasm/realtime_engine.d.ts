@@ -196,8 +196,8 @@ export declare class RealtimeEngine {
     /**
      * Queue a sample-accurate parameter change (engine kSetParam).
      * A reserved mixer id (`0x4d58xxxx`) other than a master id names no strip and
-     * throws `InvalidParameter`; resolve per-strip ids with the `resolve*AutomationId`
-     * methods.
+     * throws `InvalidParameter`; resolve ids with the `resolve*AutomationId`
+     * methods (`resolveMasterAutomationId` for the master fader, pan and width).
      */
     setParameter(paramId: number, value: number, renderFrame?: number): void;
     /** Queue a smoothed parameter change (engine kSetParamSmoothed). */
@@ -208,11 +208,23 @@ export declare class RealtimeEngine {
      * Reserved engine targets — track and bus faders, pan and width, and insert and
      * instrument parameters — keep their own fixed smoothing whatever this is set
      * to, and MIDI-CC mappings apply their values directly. The default is 20 ms;
-     * `0` makes the governed changes instant.
+     * `0` makes the governed changes instant. The time is one time constant: about 63% of the
+     * way at the set time.
      */
     setParamSmoothingMs(smoothingMs: number): void;
+    /**
+     * Queue a lane's solo/mute state. An armed PFL/AFL cue ({@link setTrackMonitorMode}) is folded
+     * into the program output by `process()` / `processPrepared()` and kept separate by the
+     * `WithMonitor` variants; offline renders, bounces and freezes never include it.
+     */
     setSoloMute(laneIndex: number, solo: boolean, mute: boolean, renderFrame?: number): void;
-    /** Queue a per-track PFL/AFL monitor tap mode change. */
+    /**
+     * Queue a per-track PFL/AFL monitor tap mode change.
+     *
+     * `process()` and `processPrepared()` fold the armed cue into the program output, so the
+     * tapped lane is counted twice there; the `WithMonitor` variants keep the cue separate.
+     * Offline renders, bounces and freezes never include the cue.
+     */
     setTrackMonitorMode(laneIndex: number, mode: EngineTrackMonitorMode, renderFrame?: number): void;
     setMidiClips(clips: readonly EngineMidiClipSchedule[]): void;
     setBuiltinInstrument(config?: {
@@ -419,28 +431,55 @@ export declare class RealtimeEngine {
     externalMidiScratchByteWord(): number;
     externalMidiScratchByteCount(): number;
     consumeExternalMidiScratch(): void;
-    pushMidiInputNoteOn(group: number, channel: number, note: number, velocity: number, portTimeSamples?: number): void;
-    pushMidiInputNoteOff(group: number, channel: number, note: number, velocity?: number, portTimeSamples?: number): void;
-    pushMidiInputCc(group: number, channel: number, controller: number, value: number, portTimeSamples?: number): void;
+    /**
+     * Push a live MIDI note-on to the engine-owned MIDI input source.
+     *
+     * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+     *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+     */
+    pushMidiInputNoteOn(group: number, channel: number, note: number, velocity: number, offsetInBlockSamples?: number): void;
+    /**
+     * Push a live MIDI note-off to the engine-owned MIDI input source.
+     *
+     * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+     *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+     */
+    pushMidiInputNoteOff(group: number, channel: number, note: number, velocity?: number, offsetInBlockSamples?: number): void;
+    /**
+     * Push a live MIDI control change to the engine-owned MIDI input source.
+     *
+     * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+     *   negative reads as 0. Not an absolute clock position. Defaults to 0.
+     */
+    pushMidiInputCc(group: number, channel: number, controller: number, value: number, offsetInBlockSamples?: number): void;
     /**
      * Push a live MIDI pitch bend to the engine-owned MIDI input source.
      *
      * `bend14` is unsigned 14-bit with centre 8192 (0..16383) — the dimension is
      * not 7-bit, so a value past 16383 is refused rather than narrowed. The input
      * source must be enabled with {@link setMidiInputSource} first.
+     *
+     * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+     *   negative reads as 0. Not an absolute clock position. Defaults to 0.
      */
-    pushMidiInputPitchBend(group: number, channel: number, bend14: number, portTimeSamples?: number): void;
+    pushMidiInputPitchBend(group: number, channel: number, bend14: number, offsetInBlockSamples?: number): void;
     /**
      * Push a live MIDI channel pressure to the engine-owned MIDI input source.
      * `pressure` is 7-bit (0..127). Under MPE this is the member channel's
      * per-note pressure.
+     *
+     * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+     *   negative reads as 0. Not an absolute clock position. Defaults to 0.
      */
-    pushMidiInputChannelPressure(group: number, channel: number, pressure: number, portTimeSamples?: number): void;
+    pushMidiInputChannelPressure(group: number, channel: number, pressure: number, offsetInBlockSamples?: number): void;
     /**
      * Push a live MIDI polyphonic key pressure to the engine-owned MIDI input
      * source. `note` and `pressure` are 7-bit (0..127).
+     *
+     * @param offsetInBlockSamples Samples into the next block drained, clamped to its last frame;
+     *   negative reads as 0. Not an absolute clock position. Defaults to 0.
      */
-    pushMidiInputPolyPressure(group: number, channel: number, note: number, pressure: number, portTimeSamples?: number): void;
+    pushMidiInputPolyPressure(group: number, channel: number, note: number, pressure: number, offsetInBlockSamples?: number): void;
     pushMidiNoteOn(destinationId: number, group: number, channel: number, note: number, velocity: number, renderFrame?: number): void;
     pushMidiNoteOff(destinationId: number, group: number, channel: number, note: number, velocity?: number, renderFrame?: number): void;
     /**
@@ -500,16 +539,18 @@ export declare class RealtimeEngine {
     pushMidiProgram(destinationId: number, group: number, channel: number, program: number, bankValid?: boolean, bankMsb?: number, bankLsb?: number, renderFrame?: number): void;
     /**
      * Push a live MIDI 2.0 Program Change to the engine-owned MIDI input source.
-     * The arguments and refusals match {@link pushMidiProgram}; `portTimeSamples`
-     * is the port timestamp in samples.
+     * The arguments and refusals match {@link pushMidiProgram}; `offsetInBlockSamples` is
+     * an offset into the next block drained (clamped to its last frame, negative reads as 0), not
+     * an absolute clock position.
      */
-    pushMidiInputProgram(group: number, channel: number, program: number, bankValid?: boolean, bankMsb?: number, bankLsb?: number, portTimeSamples?: number): void;
+    pushMidiInputProgram(group: number, channel: number, program: number, bankValid?: boolean, bankMsb?: number, bankLsb?: number, offsetInBlockSamples?: number): void;
     /**
      * Push one raw UMP message (1 to 4 words) to the engine-owned MIDI input
-     * source. The message rules match {@link pushMidiUmp}. `portTimeSamples` is
-     * the port timestamp in samples.
+     * source. The message rules match {@link pushMidiUmp}. `offsetInBlockSamples` is
+     * an offset into the next block drained (clamped to its last frame, negative reads as 0), not
+     * an absolute clock position.
      */
-    pushMidiInputUmp(words: UmpWords, portTimeSamples?: number): void;
+    pushMidiInputUmp(words: UmpWords, offsetInBlockSamples?: number): void;
     /**
      * Queue an immediate (live) MIDI SysEx frame to a MIDI destination. `data` is
      * the full message including the leading 0xF0 and trailing 0xF7 (1..512
@@ -568,7 +609,7 @@ export declare class RealtimeEngine {
      * called concurrently with {@link process}.
      *
      * @param numChannels - Channel count of the blocks that will be rendered
-     * @param blockSize - Frames per block that will be rendered (clamped to the prepared block size)
+     * @param blockSize - Frames per block that will be rendered (a larger block size is refused)
      * @throws If a count is not positive, `numChannels` exceeds the prepared
      *   channel count, or the engine was never prepared
      */
@@ -592,6 +633,9 @@ export declare class RealtimeEngine {
      * Longest audible tail after the last input, in samples: an upper bound made
      * of the longest instrument tail plus the longest route through lane strips
      * (channel delay included), buses, sends, the graph and the master strip.
+     * An instrument lane whose patch is not known yet (a drum-kit lane or a General
+     * MIDI program lane before any note sounds) contributes a conservative
+     * worst-case bound that narrows once a patch has sounded.
      * `2147483647` means the tail is unbounded. Control-thread only: must not be
      * called concurrently with {@link process}.
      */
@@ -621,8 +665,8 @@ export declare class RealtimeEngine {
     /**
      * Replaces the automation lane driving `paramId`.
      * A reserved mixer id (`0x4d58xxxx`) other than a master id names no strip and
-     * throws `InvalidParameter`; resolve per-strip ids with the `resolve*AutomationId`
-     * methods.
+     * throws `InvalidParameter`; resolve ids with the `resolve*AutomationId`
+     * methods (`resolveMasterAutomationId` for the master fader, pan and width).
      */
     setAutomationLane(paramId: number, points: EngineAutomationPoint[]): void;
     automationLaneCount(): number;
@@ -788,10 +832,13 @@ export declare class RealtimeEngine {
      * `eq.*`, `dynamics.*`, `saturation.*`, `spectral.*`, `stereo.*`,
      * `maximizer.*` and `multiband.*` processors are all available as strip
      * inserts, so placing one on a strip and resolving its parameter here drives
-     * it at audio-block precision, live and offline alike. The whole-signal
-     * stages of the offline mastering chain (`repair.*`, `loudness`, and the
-     * match stages) have no insert form and no automation id: they buffer the
-     * entire signal by construction and do not run on the realtime path.
+     * it at audio-block precision, live and offline alike. The whole-signal stages of the offline
+     * mastering chain that have no insert form (`repair.declick`, `repair.declip`,
+     * `repair.trimSilence`, `loudness`, and the match stages) have no automation id: they buffer the
+     * entire signal by construction and do not run on the realtime path. The four realtime repair
+     * inserts (`repair.decrackle`, `repair.dehum`, `repair.denoiseClassical`,
+     * `repair.dereverbClassical`) load into a strip, but every one of their parameters is
+     * construction-only, so no automation id resolves (-1) and an edit needs a strip replacement.
      *
      * Track, bus and master insert ids share one lifetime rule: an id names its
      * strip by identity and the kind of processor in its slot (for
@@ -823,6 +870,13 @@ export declare class RealtimeEngine {
      * configured or the name is not `'faderDb'`.
      */
     resolveBusAutomationId(busId: number, paramName: 'faderDb'): number;
+    /**
+     * Resolve the master strip's fader (`'faderDb'`), pan (`'pan'`) or width
+     * (`'width'`) to its reserved automation id, usable with `setAutomationLane` /
+     * `setParameter`. The master strip always exists, so the id never goes stale.
+     * Returns `-1` when the name is none of the three.
+     */
+    resolveMasterAutomationId(paramName: 'faderDb' | 'pan' | 'width'): number;
     /**
      * Resolves a hosted instrument's continuous parameter (by its JSON-key name)
      * to the reserved automation id usable with `setAutomationLane` /
