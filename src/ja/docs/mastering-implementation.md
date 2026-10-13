@@ -51,7 +51,7 @@ description: ブラウザ内マスタリングデモが UI の判断を libsonar
   caption="リペアはオフラインで一度だけ走ります。試聴と書き出しは同じエンジン操作を使うので、ファイルにはレーンで鳴っていた音がそのまま入ります。"
 />
 
-デコードはブラウザ API で行います。リペアの各ステージ（declip、declick、decrackle、dehum、denoise、dereverb）は最初にワーカーでオフライン実行して、エンジンが再生するプログラムのクリップを作ります。再実行されるのはリペア設定を変えたときだけです。デモは 6 段すべてをこの方法で実行してエンジンには載せませんが、decrackle、dehum、denoise、dereverb はリアルタイムインサートとしても使えます。それ以降はリアルタイムエンジンの仕事で、ページは AudioWorklet 上の `SonareEngine` ファサードを postMessage モードで再生します。このため、サイトは SharedArrayBuffer を使わずに済んでいます。
+デコードはブラウザ API で行います。ワーカーは [`masteringRepairAnalyze`](./audio-repair.md#測定とリペアを-1-回の呼び出しで行う) でソースを測定し、推奨されるリペア段を事前入力します。そのうえでリペアの各段（declip、declick、decrackle、dehum、denoise、dereverb）を最初にワーカーでオフライン実行して、エンジンが再生するプログラムのクリップを作ります。再実行されるのはリペア設定を変えたときだけです。デモは 6 段すべてをこの方法で実行してエンジンには載せませんが、decrackle、dehum、denoise、dereverb はリアルタイムインサートとしても使えます。それ以降はリアルタイムエンジンの仕事で、ページは AudioWorklet 上の `SonareEngine` ファサードを postMessage モードで再生します。このため、サイトは SharedArrayBuffer を使わずに済んでいます。
 
 エンジンには 3 つのレーンがあります。**After** はプログラムをインサート列と 8 バンドのストリップ EQ に通したもの、**Before** は同じプログラムを無加工で流したもの、**Reference** は任意のリファレンスファイルです。A/B/R の切り替えはレーンのフェーダーを動かすだけなので、3 レーンは常に動き続け、切り替えにギャップは生じません。各レーンは出力側でラウドネスが揃えられます。大きいレーンは最も静かなレーンに合わせて下げられ、上げられるレーンはありません。ラウドネス合わせをオフにすると、どのレーンも 0 dB のままです。
 
@@ -61,25 +61,27 @@ description: ブラウザ内マスタリングデモが UI の判断を libsonar
 
 lane 1 には 13 スロットのインサートが固定の並びで入っています。モジュールの ON/OFF はバイパスなので、スロット番号やオートメーション ID は動きません。
 
-| スロット | プロセッサ |
-|------|-----------|
-| Input | `utility.gain` |
-| Tone | `eq.tilt` |
-| De-esser | `dynamics.deesser` |
-| Transient | `dynamics.transientShaper` |
-| Compressor | `dynamics.compressor` |
-| Multiband | `multiband.compressor` |
-| Tape | `saturation.tape` |
-| Exciter | `saturation.exciter` |
-| Air | `spectral.airBand` |
-| Stereo | `stereo.imager` |
-| Mono bass | `stereo.monoMaker` |
-| Drive | `utility.gain`（リミッターの直前） |
-| Limiter | `maximizer.truePeakLimiter`（既定で 129 サンプルのレイテンシを報告） |
+| スロット | プロセッサ | 役割 |
+|------|-----------|------|
+| Input | `utility.gain` | 処理の前段でのトリム |
+| Tone | `eq.tilt` | スペクトル全体を暗い側または明るい側へ傾ける |
+| De-esser | `dynamics.deesser` | 耳障りな歯擦音を抑える |
+| Transient | `dynamics.transientShaper` | アタックを強調または和らげる |
+| Compressor | `dynamics.compressor` | レベルの包絡をならす |
+| Multiband | `multiband.compressor` | 周波数帯域ごとに別々に圧縮する |
+| Tape | `saturation.tape` | 温かみとやさしい倍音の密度を加える |
+| Exciter | `saturation.exciter` | 明るさと存在感のための倍音を加える |
+| Air | `spectral.airBand` | スペクトル上端のエア帯域を持ち上げる |
+| Stereo | `stereo.imager` | ステレオイメージを広げる、または狭める |
+| Mono bass | `stereo.monoMaker` | クロスオーバーより下の低域をモノラルにまとめる |
+| Drive | `utility.gain` | リミッターの直前に置く 2 つ目のゲイン。ラウドネスフィットが動かすのはこちらだけ |
+| Limiter | `maximizer.truePeakLimiter` | True Peak のシーリングを守る（既定で 129 サンプルのレイテンシを報告） |
+
+各プロセッサの説明は [マスタリングプロセッサ](./mastering-processors.md#ソロプロセッサ) にあります。
 
 連続値のコントロールはパラメータのセッターでエンジンに渡すので、つまみを回してもプロセッサの内部状態は保たれます。マルチバンドのニーやリミッターのルックアヘッドなど、構築時にしか決められない一部のパラメータは、そのストリップのインサートを作り直します。UI はそれらをコントロールを離したときに適用します。
 
-ラウドネスフィットが動かすのはリミッター前の Drive ゲインだけで、ダイナミクス系ステージへの入力レベルは変わりません。レンダリングは最大 3 回で、選んだシーリングではリミッターが目標に届かない場合は「届かなかった」と報告します。
+ラウドネスフィットが動かすのはリミッター前の Drive ゲインだけで、ダイナミクス系の段への入力レベルは変わりません。レンダリングは最大 3 回で、選んだシーリングではリミッターが目標に届かない場合は「届かなかった」と報告します。
 
 メーターブリッジには、聴いているレーンのピーク、True Peak（再生開始からの保持値）、モーメンタリー・ショートターム・インテグレーテッドのラウドネス、PLR、チェーン内で最も深いゲインリダクション、相関値、ゴニオメーター、スペクトラムが表示されます。ラウドネスレンジは直近の書き出しレンダリングの値です。編集はすべて 1 件の履歴になるので、取り消しややり直しも通常の編集と同じようにエンジンへ届きます。
 
@@ -95,7 +97,7 @@ lane 1 には 13 スロットのインサートが固定の並びで入ってい
 
 | UI 上のエリア | チェーン上のエリア | 主なガイド |
 |---------|------------|-----------|
-| リペアの各ステージ、インプットゲイン | オフラインのリペアと Input スロット | [リペアと入力コントロール](./glossary/mastering/repair.md) |
+| リペアの各段、インプットゲイン | オフラインのリペアと Input スロット | [リペアと入力コントロール](./glossary/mastering/repair.md) |
 | トーン、エキサイター、Air | トーンと Air | [トーンと Air コントロール](./glossary/mastering/tone-air.md) |
 | スレッショルド、レシオ、アタック、リリース | ダイナミクス | [ダイナミクスコントロール](./glossary/mastering/dynamics.md) |
 | 幅、シーリング、目標 LUFS | Stereo・Drive・Limiter スロット | [ステレオ・リミッター・ラウドネスコントロール](./glossary/mastering/stereo-limiter-loudness.md) |
@@ -135,7 +137,7 @@ lane 1 には 13 スロットのインサートが固定の並びで入ってい
 | プリセットを使う | `masterAudio()`、`masterAudioStereo()`、`masteringPresetNames()` |
 | フルチェーンを実行する | `masteringChain()`、`masteringChainStereo()` |
 | 進捗を表示する | `masteringChainWithProgress()`、`masteringChainStereoWithProgress()` |
-| ブロック単位でレンダリングする | `StreamingMasteringChain`（`prepare` / `processMono` / `processStereo` / `flushMono` / `flushStereo` / `setParameter` / `reset` / `latencySamples` / `stageNames`）。静的なラウドネスゲインは `streamingLoudnessGain()` / `streamingLoudnessGainStereo()` が求める |
+| ブロック単位でレンダリングする | `StreamingMasteringChain`（`prepare` / `processMono` / `processStereo` / `flushMono` / `flushStereo` / `setParameter` / `reset` / `latencySamples` / `stageNames`）。静的なラウドネスゲインは [`streamingLoudnessGain()`](./js-api-mastering.md#streamingloudnessgain-request) / `streamingLoudnessGainStereo()` が求める |
 | 名前付きプロセッサを単体で実行する | `masteringProcessorNames()`、`masteringProcess()`、`masteringProcessStereo()` |
 | ソースとリファレンスを比較する | `masteringPairProcessorNames()`、`masteringPairProcess()`、`masteringPairAnalysisNames()`、`masteringPairAnalyze()` |
 | ステレオ出力を解析する | `masteringStereoAnalysisNames()`、`masteringStereoAnalyze()` |
@@ -144,9 +146,9 @@ lane 1 には 13 スロットのインサートが固定の並びで入ってい
 最後の入力ブロックを処理した後は、空のバッファが返るまで `flushMono()` または `flushStereo()` を呼びます。フラッシュしないと、チェーンの遅延分と有限長のプロセッサテールが出力から欠落します。
 
 ::: info 進捗コールバックが数えているもの
-`masteringChainWithProgress()` と `masteringChainStereoWithProgress()` は、**有効な DSP ステージ**のうち完了した割合と、直前に完了したステージ名を返します。無効なステージは数に入らないため、分母は全ステージ一覧ではなく実際に構成したチェーンです。
+`masteringChainWithProgress()` と `masteringChainStereoWithProgress()` は、**有効な DSP 段**のうち完了した割合と、直前に完了した段の名前を返します。無効な段は数に入らないため、分母は全段の一覧ではなく実際に構成したチェーンです。
 
-割合が 1.0 に達するのは最後の DSP ステージが返った時点です。それに続く出力の測定、スペクトル、返却レポートに載るバンド差分の算出はその後に走り、進捗を報告しません。つまりバーが満たされた後も呼び出しはしばらく続きます。プログレスバーはコールバックで動かして構いませんが、UI の処理中表示は割合が 1.0 になった時点ではなく、呼び出し自体が完了した時点まで維持してください。
+割合が 1.0 に達するのは最後の DSP 段が返った時点です。それに続く出力の測定、スペクトル、返却レポートに載るバンド差分の算出はその後に走り、進捗を報告しません。つまりバーが満たされた後も呼び出しはしばらく続きます。プログレスバーはコールバックで動かして構いませんが、UI の処理中表示は割合が 1.0 になった時点ではなく、呼び出し自体が完了した時点まで維持してください。
 :::
 
 関連: [ブラウザ内ローカル処理](./glossary/concepts/browser-local-processing.md)、[マスタリング](./glossary/mastering.md)、[JavaScript API](./js-api-mastering.md)、[WASM](./wasm.md)

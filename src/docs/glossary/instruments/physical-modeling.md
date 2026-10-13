@@ -24,7 +24,7 @@ The consequence worth internalising is that **a model has no notion of a "note" 
 The workhorse of the family is the **digital waveguide**, and it is simpler than the name suggests. Three parts:
 
 - A **delay line** stands in for the travel. A wave leaving one end takes a fixed number of samples to reach the other, and that number *is* the pitch: a shorter trip means a faster round trip means a higher note. These engines have no tuning oscillator, because length does the tuning.
-- A **loss filter** stands in for what the trip costs. Every reflection loses energy, and loses more of it at high frequencies than at low — which is exactly why a plucked note goes dull before it goes quiet. One filter in the loop reproduces the whole decay behaviour.
+- A **loss filter** stands in for what the trip costs. Every reflection loses energy, and loses more of it at high frequencies than at low — which is exactly why a plucked note goes dull before it goes quiet. One filter in the loop reproduces the whole decay behavior.
 - An **exciter** puts energy in. A hammer, a plectrum, a bow, a reed, a pair of lips, a jet of air.
 
 These roles describe a family of architectures; they do not imply identical delay lines or feedback topology.
@@ -83,13 +83,13 @@ What that buys is that **the player stays in the note**. A crescendo on a bowed 
 
 Two of them, and both are worth knowing before reaching for a model.
 
-**A model sounds like what was modelled.** It is not a general-purpose realism setting. A bore model gives you clarinets and saxophones very well and gives you a choir not at all. The specific voice of a *specific* instrument — this cello, in this hall — is not in the mechanism, and getting close to it is calibration work rather than something the method provides.
+**A model sounds like what was modeled.** It is not a general-purpose realism setting. A bore model gives you clarinets and saxophones very well and gives you a choir not at all. The specific voice of a *specific* instrument — this cello, in this hall — is not in the mechanism, and getting close to it is calibration work rather than something the method provides.
 
 **Outside its fitted range, a model does not degrade gracefully.** A sampler pushed past its recorded range sounds wrong in a familiar way: too bright, too slow, obviously stretched. A model pushed past the parameter range it was fitted for can stop being the instrument altogether — a bow force nothing grips at, a blowing pressure that overblows into a mode nobody wanted, a loss filter that stops losing and lets the loop run away. The failure is not a quality gradient; it is a different object.
 
 ## The acoustic models
 
-libsonare's [built-in synthesizer](../../native-synth.md) builds the following acoustic-style engines this way. Each one is organised around one physical quantity — the thing a player actually controls, which the rest of the model is arranged to respond to:
+libsonare's [built-in synthesizer](../../native-synth.md) builds the following acoustic-style engines this way. Each one is organized around one physical quantity — the thing a player actually controls, which the rest of the model is arranged to respond to:
 
 | Model | What it models | The quantity it is built around |
 |---|---|---|
@@ -104,14 +104,14 @@ libsonare's [built-in synthesizer](../../native-synth.md) builds the following a
 | `free-reed` | Metal tongue swinging through a slot | Bellows pressure and tongue stiffness |
 | `harpsichord` | Quill-plucked string choirs with a short rear segment | Pluck position and rear coupling |
 
-The parameters each one exposes, their defaults and ranges, and how settled each model is today all live on [Physical Models](../../physical-models.md). The piano model is tuned; every other physical model still awaits adjustment and calibration, with more work planned for future patch releases. Treat these as data-free preview/fallback voices rather than finished instrument simulations. Two further engines use physical ideas without being waveguides — `modal` strikes a bank of tuned resonators, and `percussion` models a circular membrane with a noise bed — and they are described alongside the rest on [Built-in Synthesizer](../../native-synth.md). `additive` is additive synthesis, not a physical model.
+The parameters each one exposes, their defaults and ranges, and how settled each model is today all live on [Physical Models](../../physical-models.md). Only the piano model is calibrated against a recording; treat the others as data-free preview and fallback voices rather than finished instrument simulations. Two further engines use physical ideas without being waveguides — `modal` strikes a bank of tuned resonators, and `percussion` models a circular membrane with a noise bed — and they are described alongside the rest on [Built-in Synthesizer](../../native-synth.md). `additive` is additive synthesis, not a physical model.
 
 ::: details How libsonare implements this
 The waveguide-style entries are `piano`, `pipe-organ`, `bowed-string`, `reed`, `brass`, `flute`, `plucked-string` and `harpsichord`. `vocal` is a source-filter model — a glottal source through a bank of vowel formant resonators, with no loop at all — and `free-reed` is a driven tongue swinging through a slot with no coupled air column. All of them are in the family because they are solved from a mechanism rather than drawn as a waveform.
 
 Live expression reaches a model through **four abstract excitation axes** rather than through named per-voice fields: **force** (drive into the exciter — bow force, mouth pressure, bellows pressure), **position** (where the exciter meets the resonator, which only the bowed string has), **brightness** (timbral opening of the radiating end, held apart from loudness) and **morph** (registration morph, for an engine whose spectrum is drawn rather than excited). A modulation route names an axis, not an engine, so one dispatch line serves every voice and each engine reads only the axes it declares.
 
-The accept set is declared rather than inferred: `engine_axis_capability()` in `excitation_axes.h` carries one row per engine mode, the switch behind it has no `default:` label so a new mode that declares nothing fails to compile, and an engine marked continuously excited with an empty axis mask fails a `static_assert`. **The struck and plucked engines decline all four axes** — `karplus-strong`, `modal`, `percussion`, `piano`, `plucked-string` and `harpsichord`, alongside the non-physical `subtractive`, `fm` and `sample` — because their exciters are one-shot and do not expose a mid-note excitation target. `additive` is the in-between case: drawbar tonewheels sustain but are not excited, so it takes the morph axis alone. `vocal` takes brightness only, force having no target that is not already the brightness tilt or the amplifier.
+The accept set is declared rather than inferred: every engine mode states which axes it reads, a new mode that declares nothing fails to compile, and an engine marked continuously excited with an empty axis mask is rejected at build time. **The struck and plucked engines decline all four axes** — `karplus-strong`, `modal`, `percussion`, `piano`, `plucked-string` and `harpsichord`, alongside the non-physical `subtractive`, `fm` and `sample` — because their exciters are one-shot and do not expose a mid-note excitation target. `additive` is the in-between case: drawbar tonewheels sustain but are not excited, so it takes the morph axis alone. `vocal` takes brightness only, force having no target that is not already the brightness tilt or the amplifier.
 :::
 
 Related: [Physical Models](../../physical-models.md), [Built-in Synthesizer (NativeSynth)](../../native-synth.md), [Sound Sources](../../sound-sources.md), [Synthesis Basics](./synthesis-basics.md), [SoundFont and Sampled Instruments](./soundfont.md)

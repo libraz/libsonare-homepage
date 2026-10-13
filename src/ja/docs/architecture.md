@@ -19,7 +19,7 @@ libsonare の内部アーキテクチャについて説明します。
 
 ## モジュール概要
 
-以下のレイヤーは上から下へ流れます。API レイヤーはアプリが呼び出す入り口です。スペクトル解析と一部のエフェクトは共通の変換基盤を使いますが、フィルター、ダイナミクス、ミキシングなどには別の信号経路があります。1 つの `MusicAnalyzer` は一部の中間結果を再利用しますが、別のプロセッサーが独自に変換を計算することもあります。各グループは後述の「ディレクトリ構造」セクションの `src/` サブディレクトリに対応します。ノードは代表例であり、完全な API 一覧は「ページ対応表」を参照してください。
+以下のレイヤーは上から下へ流れます。API レイヤーはアプリが呼び出す入り口です。スペクトル解析と一部のエフェクトは共通の変換基盤を使いますが、フィルター、ダイナミクス、ミキシングなどには別の信号経路があります。1 つの `MusicAnalyzer` は一部の中間結果を再利用しますが、別のプロセッサが独自に変換を計算することもあります。各グループは後述の「ディレクトリ構造」セクションの `src/` サブディレクトリに対応します。ノードは代表例であり、完全な API 一覧は「ページ対応表」を参照してください。
 
 <FlowDiagram
   title="モジュール概要"
@@ -36,10 +36,10 @@ libsonare の内部アーキテクチャについて説明します。
     { id: 'moreAnalyzers', label: '音色・ダイナミクス・リズム・メロディ', col: 2, row: 2, group: 'analysis' },
     { id: 'acousticAnalysis', label: 'AcousticAnalyzer / RoomEstimator', col: 3, row: 2, group: 'analysis' },
     { id: 'spectralFx', label: 'HPSS・タイムストレッチ・ピッチシフト', col: 0, row: 3, group: 'effects', variant: 'accent' },
-    { id: 'editFx', label: 'ノーマライズ・無音トリム・プリ／ディエンファシス', col: 1, row: 3, group: 'effects' },
+    { id: 'editFx', label: '正規化・無音トリム・プリ／ディエンファシス', col: 1, row: 3, group: 'effects' },
     { id: 'creativeFx', label: '分解・リバーブ・クリエイティブ FX', col: 2, row: 3, group: 'effects' },
     { id: 'roomFx', label: 'Room Morph・ボイス変換', col: 3, row: 3, group: 'effects' },
-    { id: 'nativeSynth', label: 'NativeSynth（17 エンジン）', col: 0, row: 4, group: 'instruments', variant: 'accent' },
+    { id: 'nativeSynth', label: 'NativeSynth（17 エンジンモード）', col: 0, row: 4, group: 'instruments', variant: 'accent' },
     { id: 'soundfont', label: 'SoundFont プレイヤー（SF2）', col: 1, row: 4, group: 'instruments' },
     { id: 'midiSeq', label: 'MIDI・シーケンサー・SMF/UMP', col: 2, row: 4, group: 'instruments' },
     { id: 'instrumentRack', label: 'インストゥルメントラック', col: 3, row: 4, group: 'instruments' },
@@ -48,6 +48,7 @@ libsonare の内部アーキテクチャについて説明します。
     { id: 'mixerEngine', label: 'Mixer（ストリップ／バス／センド）', col: 2, row: 5, group: 'mastering' },
     { id: 'rtEngine', label: 'RealtimeEngine', col: 3, row: 5, group: 'mastering' },
     { id: 'metering', label: 'メータリング（LUFS／True Peak）', col: 4, row: 5, group: 'mastering' },
+    { id: 'playback', label: 'PlaybackRenderer（スピーカー／バイノーラル）', col: 5, row: 5, group: 'mastering' },
     { id: 'specFeatures', label: 'Mel・Chroma・CQT/VQT', col: 0, row: 6, group: 'feature', variant: 'accent' },
     { id: 'otherFeatures', label: 'スペクトル・オンセット・ピッチ', col: 1, row: 6, group: 'feature' },
     { id: 'inverseFeatures', label: '逆変換特徴量（再構成）', col: 2, row: 6, group: 'feature' },
@@ -85,6 +86,8 @@ libsonare の内部アーキテクチャについて説明します。
     { from: 'masterChain', to: 'spectrum' },
     { from: 'mixerEngine', to: 'metering' },
     { from: 'rtEngine', to: 'mixerEngine' },
+    { from: 'playback', to: 'mixerEngine' },
+    { from: 'playback', to: 'primitives' },
     { from: 'specFeatures', to: 'spectrum' },
     { from: 'specFeatures', to: 'primitives' },
     { from: 'otherFeatures', to: 'spectrum' },
@@ -109,6 +112,27 @@ libsonare の内部アーキテクチャについて説明します。
   caption="バインディングは薄く保たれています。WASM／C／Quick／sonare.h はすべて同じ C++ コアに集約され、バインディングごとに DSP を再実装することはありません。"
 />
 
+API レイヤーは、実行環境ごとにさらに分かれています。Python パッケージは ctypes で C ABI を呼びます。WASM（Embind）と Node ネイティブ（N-API）のバインディングは C++ のクラスを直接ラップし、一部の入口でだけ C ABI を使います。CLI はそれぞれ 1 つの実行環境の上に作られています。pip で入る `sonare` コマンドは Python パッケージの上に、ソースからビルドするネイティブ CLI は C++ の上にあります。
+
+<BindingStackFigure
+  title="各実行環境からコアまで"
+  caption="C ABI を通るのは一部の経路だけです。どの経路を通っても、呼び出しは同じ C++ コアに届きます。"
+  :labels="{
+    cliLayer: 'CLI',
+    bindingLayer: 'バインディング',
+    abiLayer: 'C ABI',
+    coreLayer: 'コア',
+    pythonCli: 'Python CLI',
+    nativeCli: 'ネイティブ CLI',
+    nodeName: 'Node ネイティブ',
+    cppName: 'C++ API',
+    core: 'C++ コア: DSP、解析、ミキシング、エンジン',
+    direct: 'C++ のクラスを直接呼ぶ',
+    viaAbi: 'C ABI を通る',
+    note: 'どの経路も同じコアに届きます。バインディングは形を変換するだけで、DSP を再実装しません。',
+  }"
+/>
+
 ## ページ対応表
 
 | 見ている領域 | 読むページ |
@@ -117,7 +141,8 @@ libsonare の内部アーキテクチャについて説明します。
 | `analysis/acoustic_analyzer.*`、`analysis/room_estimator.*`、`src/acoustic/`、`effects/acoustic/` | [ルーム音響解析](./acoustic-analysis.md)、[アルゴリズム根拠](./algorithm-references.md#スコープの境界) |
 | `streaming/` | [リアルタイムとストリーミング](./realtime-streaming.md) |
 | `mastering/` | [マスタリングプロセッサ](./mastering-processors.md)、[DSP 実装解説](./dsp-implementation.md)、[マスタリングアシスタント](./mastering-assistant.md) |
-| `mixing/` | [ミキシングエンジン](./mixing.md)、[ミキシングシーン JSON](./mixing-scene-json.md) |
+| `mixing/` | [ミキシングエンジン](./mixing.md)、[ミキシングシーン JSON](./mixing-scene-json.md)、[チャンネルフォーマット](./channel-formats.md)（`downmix`） |
+| `playback/` | [再生レンダラー](./playback.md)、[チャンネルフォーマット](./channel-formats.md) |
 | `engine/`, `transport/`, `automation/`, `graph/`, `rt/` | [リアルタイムとストリーミング](./realtime-streaming.md)、特に `RealtimeEngine` |
 | `midi/` と `midi/synth/` | [内蔵シンセサイザー](./native-synth.md)、[SoundFont 2 プレイヤー](./soundfont-player.md)、[MIDI 入力](./midi-input.md) |
 | `arrangement/`（編集モデル） | [プロジェクト編集](./project-editing.md)、[録音とテイク](./recording-and-takes.md)、[プロジェクトバウンス](./project-bounce.md) |
@@ -205,13 +230,14 @@ src/
 ├── mastering/          # マスタリングエンジン
 │   ├── api/            # チェーン・30 プリセット・named-processor と pair/stereo のレジストリ
 │   ├── eq/ dynamics/ spectral/ stereo/ final/
-│   ├── maximizer/ multiband/ saturation/ repair/
+│   ├── maximizer/ multiband/ saturation/ repair/ utility/
 │   ├── match/ assistant/                 # リファレンスマッチ＋アシスタント/プロファイル
 │   └── common/        # 共有 biquad/ラウドネスヘルパー
 │
 ├── mixing/             # ミキシングエンジン
 │   ├── channel_strip.* # ストリップ: トリム/インサート/パン/幅/センド
 │   ├── bus.* sends.* vca_group.* panner.*
+│   ├── downmix.*       # ITU-R BS.775 チャンネル折りたたみ
 │   └── api/            # シーン JSON ＋シーンプリセット
 │
 ├── midi/               # MIDI 入出力と内蔵インストゥルメント
@@ -223,6 +249,7 @@ src/
 │   ├── sequencer.* smf.* smf2.* ump.*   # シーケンサー・SMF・MIDI 2.0（UMP）
 │   └── program_map.* cc_map.* midi_fx.* routing.*
 │
+├── playback/           # 再生レンダラー: スピーカーレイアウト・バイノーラル HRTF・ラウドネス
 ├── arrangement/        # 非破壊の編集モデル・編集コンパイラ・編集履歴
 ├── engine/             # リアルタイムエンジン: トランスポート・クリップ・インストゥルメントラック・トラックミキサー・メトロノーム・テレメトリ
 ├── automation/         # オートメーションレーン＋カーブ形状
@@ -290,6 +317,8 @@ src/
   caption="特徴量の関係を示した図です。1 つの MusicAnalyzer 内で再利用する中間結果もあれば、別の変換を計算する経路もあります。"
 />
 
+<SonareDemo id="stft-basics" />
+
 ### オーディオエフェクトパイプライン
 
 HPSS（音を倍音成分と打撃成分に分ける処理）とフェーズボコーダーは、どちらも複素 STFT データを処理し、逆 STFT で音声に戻します。図が示すのは処理方式の共通点であり、同じ変換インスタンスや窓・ホップ長の一致ではありません。`timeStretch` にはネイティブのスペクトル処理とフェーズボコーダーへのフォールバックがあり、ピッチシフトはタイムストレッチとリサンプリングを組み合わせます。
@@ -330,8 +359,7 @@ HPSS（音を倍音成分と打撃成分に分ける処理）とフェーズボ�
 />
 
 ::: details フェーズボコーダーとは？
-フェーズボコーダーは、STFT の各周波数ビンの位相を新しい時間軸に合わせて進め、音声を伸縮する手法です。リサンプリングと組み合わせればピッチシフトにも使えます。伸縮中のピッチはおおむね保たれますが、過渡音がにじんだり、極端な倍率で不自然に聞こえたりすることがあります。
-libsonare の `timeStretch` にはフェーズボコーダーを使うバックエンドがあります。ほかの編集経路では別のスペクトル処理方式を使う場合もあります。
+フェーズボコーダーは、STFT の各周波数ビンの位相を新しい時間軸に合わせて進め、音声を伸縮する手法です。リサンプリングと組み合わせればピッチシフトにも使えます。伸縮中のピッチはおおむね保たれますが、過渡音がにじんだり、極端な倍率で不自然に聞こえたりすることがあります。libsonare の `timeStretch` にはフェーズボコーダーを使うバックエンドがあります。ほかの編集経路では別のスペクトル処理方式を使う場合もあります。
 :::
 
 <SonareDemo id="time-stretch" />
@@ -426,7 +454,7 @@ auto chorus = full.slice(60, 90);   // 60-90 秒
 
 npm / WebAssembly パッケージは主にサンプルベースの API を公開しています。多くの呼び出しはデコード済みのモノラル `Float32Array` サンプルを受け取ります。エンコード済みバイト列については、`Audio.fromMemory(...)` が WAV/MP3 をメモリ内でデコードし、`Audio.fromMemoryWithBrowserFallback(...)` は同じサンプルベース API に渡す前に Web Audio API などのブラウザコーデックへ切り替えられます。どちらもマルチチャンネルのファイルは ITU-R BS.775 の規則でモノラルに折りたたみます。`decodeChannels(...)` は全チャンネルを保持し、`downmix(...)` は同じ規則を必要なときに適用します。
 
-WASM ビルドでは、ネイティブのファイル I/O や FFmpeg ベースのデコードは使いません。将来ブラウザスレッドを明示的に有効化したビルドを用意しない限り、実行はシングルスレッドです。
+WASM ビルドでは、ネイティブのファイル I/O や FFmpeg ベースのデコードは使いません。実行はシングルスレッドです。
 
 ### librosa 互換性
 
@@ -452,6 +480,7 @@ WASM ビルドでは、ネイティブのファイル I/O や FFmpeg ベース�
 | minimp3 | MP3 デコード | CC0-1.0 |
 | FFmpeg | 任意の拡張ファイルデコード | リンクするビルドにより LGPL/GPL |
 | r8brain | リサンプリング | MIT |
+| SADIE II HRTF サブセット | 再生レンダラーの既定のバイノーラル HRTF セット（コードではなくデータ） | Apache-2.0 |
 
 ::: info 1 つのヘッダーの裏に 2 つの FFT バックエンド
 `core/fft.h` は特定ライブラリへの結び付きではなく、変換の抽象層です。ネイティブビルドでは、PFFFT が因数分解できる変換長をすべて受け持ち、残りを KissFFT が受け持ちます。どちらが使われても受け付ける `n_fft` の範囲は同じで、違うのは速度だけです。KissFFT のみのネイティブビルドにしたい場合は `-DSONARE_USE_PFFFT=OFF` を指定します。
@@ -467,7 +496,7 @@ Eigen はコア自身の翻訳単位の内部で使われ、インストール�
 
 ```
 出力: WASM 単体 ~{{ wasmMeta.wasm.sizeKB }} KB（gzip ~{{ wasmMeta.wasm.gzipKB }} KB）＋ JS バインディングコード。
-      合計 ~{{ wasmMeta.total.sizeKB }} KB（gzip ~{{ wasmMeta.total.gzipKB }} KB）— src/wasm/meta.json を参照
+      JS ローダーと API バンドルを含めて ~{{ wasmMeta.total.sizeKB }} KB（gzip ~{{ wasmMeta.total.gzipKB }} KB）。src/wasm/meta.json を参照
 ビルド: Emscripten + Embind
 フラグ: -sWASM=1 -sMODULARIZE=1 -sEXPORT_ES6=1
 ```
@@ -483,7 +512,8 @@ libsonare はヘッドレスのエンジンであって、アプリケーショ�
 | UI・DAW ワークフロー | エンジンが返すのはデータ構造です。アレンジ・編集・再生の UI は、その上に載るアプリケーション側の領分です。 |
 | サードパーティプラグインのホスティング（VST/CLAP） | ホストするということは、別のプラグイン ABI とそのスレッドモデル、そしてライセンス条件を引き受けるということです。 |
 | クロスプラットフォームのリアルタイム I/O 抽象 | どのホスト環境にも既にあり、それらをまとめて包んでもプラットフォーム固有の依存が増えるだけです。 |
-| サンプルデータの同梱 | 音声コーパスにはそれぞれのライセンスがあり、ライブラリ側に付いて回ります。 |
+| 音声サンプルや楽器サンプルライブラリの同梱 | 音声コーパスにはそれぞれのライセンスがあり、ライブラリ側に付いて回ります。同梱するデータは、上に挙げた小さな HRTF セットだけです。 |
+| ノートレベルの作曲 | メロディやハーモニーを書くことは、解析やレンダリングとは別の関心事です。別プロジェクトの [`@libraz/libcantus`](https://github.com/libraz/libcantus) が担います。 |
 | ディープラーニングモデル | 重みは大きく、ライセンスをきれいに保つのが難しく、ビルドが実行時ランタイムに依存することになります。 |
 | Windows 対応 | Linux・macOS・WebAssembly・WSL2 のいずれかを使ってください。 |
 | オーディオコールバックの管理 | コールバックと UI はいずれも呼び出し側が持ちます。この境界の唯一の例外は実験的な macOS バックエンドです（明示的に有効化した場合のみ、未公開）。 |

@@ -5,9 +5,9 @@ description: sonare CLI をシェルで通しで使うワークフロー例。�
 
 # CLI 使用例
 
-`sonare` CLI をシェルで通しで使うワークフロー例を、索引である [CLI リファレンス](./cli.md) から分けたページです。マスタリングのワークフローは、グローバルオプションや終了コードとともに索引側に残しています。
+`sonare` CLI をシェルで通しで使うワークフロー例を、索引である [CLI リファレンス](./cli.md) から分けたページです。マスタリングとリペアの手順は、索引の [マスタリングとリペア](./cli.md#マスタリングとリペア) にあります。
 
-### 基本解析ワークフロー
+## 基本解析ワークフロー
 
 ```bash
 # クイック BPM とキーチェック
@@ -18,7 +18,62 @@ sonare key song.mp3
 sonare analyze song.mp3 --json > analysis.json
 ```
 
-### 特徴量サマリーの書き出し
+### analyze の JSON
+
+```json
+{
+  "bpm": 120.5,
+  "bpm_confidence": 0.95,
+  "key": {
+    "root": 0,
+    "mode": 0,
+    "confidence": 0.85,
+    "name": "C major"
+  },
+  "time_signature": {
+    "numerator": 4,
+    "denominator": 4,
+    "confidence": 0.91
+  },
+  "beats": [
+    {"time": 0.52, "strength": 0.84},
+    {"time": 1.02, "strength": 0.78}
+  ],
+  "downbeat_indices": [0, 4, 8],
+  "downbeat_phase": 0,
+  "chords": [
+    {"name": "C", "start": 0.0, "end": 2.0, "confidence": 0.88}
+  ],
+  "sections": [
+    {"type": "intro", "start": 0.0, "end": 8.0}
+  ],
+  "timbre": {
+    "brightness": 0.61,
+    "warmth": 0.47,
+    "density": 0.72,
+    "roughness": 0.18,
+    "complexity": 0.56
+  },
+  "dynamics": {
+    "dynamic_range_db": 9.4,
+    "loudness_range_db": 6.8,
+    "crest_factor": 7.2,
+    "is_compressed": false
+  },
+  "rhythm": {
+    "syncopation": 0.32,
+    "groove_type": "straight",
+    "pattern_regularity": 0.89
+  },
+  "form": "IAB"
+}
+```
+
+上の配列は省略した例です。特に `beats` はビート数ではなく、検出したビートごとの `{"time", "strength"}` オブジェクトを保持します。
+
+`downbeat_indices` は独自の時刻を持たず、`beats` のインデックスを保持します。つまりダウンビートかどうかは、この配列に含まれるかどうかで判定します（`i` が `downbeat_indices` にあれば `beats[i]` がダウンビートです）。`downbeat_phase` は最初のダウンビートが何番目のビートに来るかを表し、テイクが小節の途中から始まっている量を示します。
+
+## 特徴量サマリーの書き出し
 
 ```bash
 # コンパクトな特徴量サマリーを書き出す
@@ -27,7 +82,7 @@ sonare spectral song.mp3 --json > spectral_features.json
 sonare chroma song.mp3 --json > chroma_features.json
 ```
 
-### バッチ処理
+## バッチ処理
 
 ```bash
 # ディレクトリ内のすべての MP3 ファイルを解析
@@ -43,7 +98,7 @@ for f in *.wav; do
 done
 ```
 
-### ミキシングワークフロー
+## ミキシングワークフロー
 
 ::: info コマンドの提供範囲
 JSON ファイルまたは組み込みプリセットからミキサーシーンを読み込み、必要ならストリップごとの入力 WAV をレンダリングする `mix` は、Python CLI のみです。
@@ -72,15 +127,24 @@ sonare mix \
 sonare mix --scene scene.json --input vocal.wav --input music.wav -o mixed.wav
 ```
 
-`--scene` と `--preset` は排他かつ必須のペアで、どちらか一方を必ず指定します。両方渡すと使用方法エラーになり、どちらも省略した場合も既定のシーンにフォールバックせず終了コード 2 になります。Python CLI は、リーダーが読まないシーンのキー（たとえば綴りを誤った `faderDB`）ごとに stderr へ `warning:` 行を出力し、そのままレンダリングします。`$` または `x-` で始まるキーは対象外です。
+| オプション | 既定値 | 説明 |
+|------------|--------|------|
+| `--scene FILE` | — | ミキサーシーンの JSON。`--scene` と `--preset` のどちらか一方を必ず指定する |
+| `--preset NAME` | — | 組み込みのシーンプリセット（一覧は `mixing-presets`） |
+| `--input [ID=]WAV` | — | ストリップごとの入力。繰り返し可。詳細は後述 |
+| `-o`, `--output` | — | レンダリングしたステレオ WAV |
+| `--sample-rate` | 48000 | ミキサーのサンプルレート。入力はこのレートへリサンプリングされる |
+| `--block-size` | 512 | ミキサーの最大ブロックサイズ（フレーム数） |
+
+`--scene` と `--preset` は排他です。両方渡すと使用方法エラーになり、どちらも省略した場合も既定のシーンにフォールバックせず終了コード 2 になります。Python CLI は、リーダーが読まないシーンのキー（たとえば綴りを誤った `faderDB`）ごとに stderr へ `warning:` 行を出力し、そのままレンダリングします。`$` または `x-` で始まるキーは対象外です。
 
 `--input` は `[ID=]WAV` の形式で、繰り返し指定できます。`ID=` を付けるとそのストリップに割り当てられ、パスだけを渡した場合はファイルのベース名が ID になります。どのエントリからも名前を指定されなかったストリップは、削除されるのではなく無音が供給されます。アシスタントが提案したシーンのようにエフェクトリターンをセンドで受けるストリップがあっても、リターンごとに無音 WAV を用意せずレンダリングできるのはこのためです。ストリップ名を一切指定しない書き方をした場合は位置指定として扱われ、シーン順に 1 つずつ割り当てられます。この 2 つの書き方を 1 回の実行で混ぜることはできません。長さが足りない入力は、最も長いものに合わせてパディングされます（短い方に切り詰められることはありません）。
 
 `--input` と `-o/--output` はセットで、どちらか片方だけは指定できません。どちらも省略した場合、`mix` はシーンを読み込んでストリップ数を報告するだけです。
 
-#### suggest-mix
+### suggest-mix
 
-`suggest-mix` は逆方向のコマンドです。個々のトラックを渡すとミキサーシーンを提案し、それを `mix --scene` でレンダリングできます。
+`suggest-mix` は逆方向のコマンドです。個々のトラックを渡すと[ミキシングアシスタント](./mixing-assistant.md)がミキサーシーンを提案し、それを `mix --scene` でレンダリングできます。
 
 ```bash
 sonare suggest-mix \
@@ -100,9 +164,9 @@ sonare suggest-mix \
 
 提案の全体は JSON として標準出力に出力されます。`mix` に渡すのは `--scene-out` で書き出したファイルです。
 
-#### チャンネルストリップ
+### チャンネルストリップ
 
-単一入力のチャンネルストリップは役割の異なる別コマンドで、名前は `mix-strip` です。両方のフロントエンドが持っており、オプションの組み合わせにかかわらずバイト単位で同一の出力を書きます。
+単一入力のチャンネルストリップは役割の異なる別コマンドで、名前は `mix-strip` です。両方のフロントエンドが持っており、オプションも共通です。
 
 ```bash
 sonare-cli mix-strip vocal.wav -o strip.wav \
@@ -127,7 +191,7 @@ sonare-cli mix-strip vocal.wav -o strip.wav \
 
 関連: [ミキシングエンジン](./mixing.md)。
 
-### プロジェクト＆ MIDI ワークフロー
+## プロジェクト＆ MIDI ワークフロー
 
 `sonare project` コマンドグループは、JSON プロジェクトファイルを使ったヘッドレスのプロジェクト処理や、Standard MIDI File（SMF）／MIDI 2.0 のワークフローを実行します。`project bounce --synth` はクリップ音声の代わりに、プロジェクトの MIDI トラックを内蔵シンセサイザー（NativeSynth）でレンダリングします。このフラグは 2 通りの使い方があります。
 
@@ -209,9 +273,9 @@ sonare project bounce --in project.json --synth --sample-rate 48000 -o render.wa
 
 どちらの CLI にも `midi-render` があります。これは常にシンセ経路を使う `project bounce` の別名で、`--synth` を省略すると GM プログラムに追従します。`--channels` の指定値とシーンのマスターによる上限も同じです。オプションの詳細は、このセクション前半の `sonare project` の表を参照してください。
 
-#### transcribe
+### transcribe
 
-`transcribe` は逆方向のコマンドで、音声を受け取って Standard MIDI File を書き出します。どちらの CLI にもあります。
+`transcribe` は逆方向のコマンドで、音声を受け取って Standard MIDI File を書き出します（[音を MIDI ノートに変換する](./audio-to-notes.md) を参照）。どちらの CLI にもあります。
 
 ```bash
 sonare transcribe solo.wav -o solo.mid
@@ -228,15 +292,80 @@ sonare transcribe chords.wav -o chords.mid --polyphonic --tempo-bpm 120
 | `--min-frame-peak-ratio` | ポリフォニックのみ。フレーム内の探索を、そのフレームの最初のピークに対するこの割合を下回った時点で打ち切る（既定 0.20）。有限の 0 以上で、`0` は本当にゼロを意味する |
 | `--min-ridge-peak-ratio` | ポリフォニックのみ。リッジ自身のピークに対するこの割合を下回る減衰でリッジを切る（既定 0.10）。値の範囲は同じ |
 | `--reattack-ratio` | ポリフォニックのみ。鳴っている最中に同じ音高が再び打たれたとき、サリエンスが直前のレベルのこの倍率を超えて上がると新しいノートとして分ける（既定 2.0）。`0` で分割をやめ、それ以外は 1 より大きい値が必要 |
-| `--min-note-division N` | 最短ノートを音価で指定（1〜128）。`32` なら 32 分音符以上のノートを書き起こしテンポで残す。両方の経路に効き、`--min-note-ms` との併用は拒否される |
+| `--min-note-division N` | 最短ノートを音価で指定（1〜128）。`32` なら 32 分音符以上のノートを採譜テンポで残す。両方の経路に効き、`--min-note-ms` との併用は拒否される |
 | `--min-note-ms` | ノートとして残す最短の長さ（ms。既定はモノフォニック 30、ポリフォニック 60）。`--min-note-division` との併用は拒否される |
 | `--segmentation-threshold-cents` | モノフォニックでノートを分割する音高変化量（既定 50 セント）。ポリフォニック経路ではリッジを分割せず、報告する F0 安定度だけに使う |
-| `--velocity-floor-db` | ベロシティ 1 に対応するレベル。負の値である必要がある（既定 -48） |
-| `--fixed-velocity N` | すべてのノートをベロシティ N（1〜127）にし、レベル測定を省く |
+| `--velocity-floor-db` | ベロシティ 1 に対応するレベル。これで音が捨てられることはない（テイクの大きな音より 36 dB 以上小さい音と -80 dBFS 未満の音は、この値に関係なく捨てる）。負の値である必要がある（既定 -48） |
+| `--fixed-velocity N` | すべてのノートをベロシティ N（1〜127）にする。減衰の残りやゴーストはこの場合もレベルゲートで捨てる |
 | `--group`, `--channel` | イベントを出力する UMP グループと MIDI チャンネル（既定 0） |
+
+「ポリフォニックのみ」のオプションは、`--polyphonic` なしで指定すると拒否されます（終了コード 3）。
 
 検出したノートはプロジェクトのテンポマップ上に置かれるため、`--tempo-bpm` を明示した場合はトランスクライバへ渡されるのではなく、そのテンポマップとして設定されます。`-o` は必須です。
 
 SoundFont（SF2）とデスティネーションごとのシンセ JSON はこれらの CLI コマンドには接続されていません。SoundFont を使ったバウンスには Project API を使ってください。
 
 関連: [プロジェクト編集](./project-editing.md)、[プロジェクトバウンス](./project-bounce.md)、[内蔵シンセサイザー](./native-synth.md)、[SoundFont プレイヤー](./soundfont-player.md)。
+
+## ノート編集ワークフロー
+
+### ノート単位の編集
+
+`polyphonic-notes` と `polyphonic-render` は対で使います。前者はポリフォニー解析が見つけたノートを 0 から番号付きで表示し、後者はその番号を使って編集を指定し、テイクを再レンダリングします。どちらも解析を同じ既定値で実行し、フレーミングを変えるオプションを持たないため、一方で読んだ番号がそのまま他方の対象になります。
+
+```bash
+sonare polyphonic-notes chord.wav --json
+sonare polyphonic-render chord.wav -o out.wav \
+  --edit 0.pitch_shift_semitones=2 --edit 3.muted=1
+```
+
+`--edit` は 1 回につき 1 つの `NOTE.FIELD=VALUE` を指定し、繰り返し渡せます。指定できるフィールドは `pitch_shift_semitones`、`gain_db`、`time_offset_samples`、`time_stretch_ratio`、`formant_shift_semitones`、`vibrato_depth_change`、`drift_change`、`muted` です。未知のフィールドは無視されるのではなくエラーになります。`polyphonic-render` は `-o` が必須で、`polyphonic-notes` は標準出力に表示するだけなので出力ファイルを取りません。
+
+### スケール補正とボーカルのノート一覧
+
+`pitch-correct-timevarying --mode scale` は、解析フレームごとに目標を選びます。目標は、そのフレームの音程に最も近い音階の音です。目標から `--vibrato-threshold-cents` 以内のフレームはそのまま残し、それ以外のフレームは `--retune-speed-ms` の時定数で目標へ寄せます。そのため、音階の 2 音の中間あたりで歌われ、ビブラートのかかった音は両方の音へ引っ張られ、ビブラートが収まらずに広がります。
+
+`vocal-notes` は、ボーカル編集セッションと同じやり方でテイクを読み、何も書き出しません。各ノートについて、開始と終了（秒とサンプル）、MIDI 値での中心音程、周波数の中央値、`f0_stability`、最も近い音名とそこからのずれ（セント）を出力します。オプションはセッションの解析設定で、省略したものはライブラリの既定値を使います。隣り合う 2 音が 50 セント未満の差で歌われていると境目が遅れて見つかるので、そのときは `--segmentation-threshold-cents` を下げます。セッションの編集とレンダーはバインディングから行います。[オフラインモノフォニックボーカル編集](./vocal-editing.md)と[歌のピッチを直す](./use-cases/vocal-tuning.md)を参照してください。
+
+## 無音でテイクを分割する
+
+テイクを複数渡すと、区間はテイクごとの区間の和集合になり、接する区間は結合されます。つまりカットが入るのは、すべてのテイクが無音になっている場所だけです。
+
+```bash
+sonare split-silence take1.wav --input take2.wav --input take3.wav
+```
+```
+Non-silent intervals: 3
+  23040 - 121344
+  147968 - 246272
+  282624 - 399872
+```
+
+`--write-takes PREFIX` は、各テイクを各区間で切り出して `PREFIX{take:02d}_{interval:03d}.wav`（どちらも 1 始まり）として書き出します。テイク 3 つ・区間 3 つなら 9 ファイルです。
+
+```bash
+sonare split-silence take1.wav --input take2.wav --input take3.wav \
+  --write-takes cut_
+```
+```
+Wrote 9 take files with prefix cut_
+```
+
+他より早く終わるテイクは短縮されず、パディングされます。そのため 1 つの区間のファイルはどのテイクでも同じ長さになり、そのまま比較できます。先頭のテイクとサンプルレートが異なるテイクは、リサンプルされずに名前付きで拒否されます。
+
+```
+Error: take sample rate differs: t3_44.wav is 44100 Hz, the first take is 48000 Hz
+```
+
+## 合成
+
+ネイティブ CLI では簡単なテスト信号を生成でき、MIDI プロジェクトを内蔵シンセでレンダリングするコマンドは両方の CLI にあります。
+
+| コマンド | 必須または主なオプション |
+|----------|--------------------------|
+| `sonare tone -o tone.wav` | `--frequency`; 任意で `--sr`（22050）, `--duration`（1.0）, `--phase`（0.0）, `--amplitude`（1.0） |
+| `sonare chirp -o sweep.wav` | `--fmax`; 任意で `--fmin`, `--exponential`, `--sr`（22050）, `--duration`（1.0） |
+| `sonare clicks -o clicks.wav` | 秒単位のカンマ区切り `--times`; 任意で `--sr`（22050）, `--length`, `--frequency`（1000.0）, `--click-duration`（0.1） |
+| `sonare midi-render --in project.json -o render.wav` | `--in`, `-o`; `--synth PRESET`（省略時は GM プログラムに追従）, `--sample-rate`, `--frames`, `--block-size`, `--channels`（正の出力幅は `1`、`2`、`6`、`8`; 既定は `2`）, `--instrument-latency`。両方の CLI にあり、常にシンセ経路を使う `project bounce` なので、`--audio` と `--resolve-audio` は受け付けない |
+
+`project bounce` とその短縮形 `midi-render` で指定できる正の出力幅は `1`、`2`、`6`、`8` です。`--channels` を省略するか `0` 以下を渡すと、既定の 2 チャンネルになります。要求した出力幅はシーンのマスターのレイアウト幅を超えられません。ただしモノラル／ステレオのマスターと、マスターを持たないシーンは最大 2 チャンネルまで許容します。`"5.1"` は 6 チャンネルまで、`"7.1"` は 8 チャンネルまでです。

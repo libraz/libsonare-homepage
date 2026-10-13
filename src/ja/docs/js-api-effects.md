@@ -11,14 +11,9 @@ description: libsonare JavaScript/TypeScript パッケージのオーディオ�
 
 HPSS（Harmonic / Percussive Source Separation。倍音成分／打撃成分の分離）。音源を倍音成分（ボーカル、シンセなどの持続音）と打撃成分（ドラム、過渡音）に分離します。
 
-::: info ユースケース
-- **リミックス**: ドラムを分離または除去する
-- **カラオケ**: ボーカルを除去して伴奏だけを取り出す（倍音成分を使用）
-- **解析精度の向上**: クリーンなコード検出のために倍音成分のみを使う
-- **ドラム抽出**: サンプリング用に打撃成分だけを取り出す
-:::
-
 <SonareDemo id="hpss-separation" />
+
+`nFft` は 4 以上の偶数で、混合基数 FFT のサイズも使えます。`hopLength` は `(0, nFft / 2]` の整数、両方のメディアンカーネルは 524287 以下の正の奇数を指定します。内部の STFT 窓と `winLength` の組み合わせも、重ね合わせに隙間ができないことが必要です。JavaScript のヘルパーは既定の窓設定を使います。不正な設定は、周期的な音抜けを返す代わりに拒否します。
 
 ::: tip パフォーマンス
 HPSS は STFT（短時間フーリエ変換）とメディアンフィルター処理を必要とします。処理時間は音源の長さに比例します。
@@ -27,12 +22,12 @@ HPSS は STFT（短時間フーリエ変換）とメディアンフィルター�
 ```typescript
 function hpss(
   samples: Float32Array,
-  sampleRate?: number,        // デフォルト: 22050
-  kernelHarmonic?: number,    // デフォルト: 31
-  kernelPercussive?: number,   // デフォルト: 31
-  nFft?: number,               // デフォルト: 2048
-  hopLength?: number,          // デフォルト: 512
-  hardMask?: boolean           // デフォルト: false
+  sampleRate?: number,        // 既定: 22050
+  kernelHarmonic?: number,    // 既定: 31
+  kernelPercussive?: number,   // 既定: 31
+  nFft?: number,               // 既定: 2048
+  hopLength?: number,          // 既定: 512
+  hardMask?: boolean           // 既定: false
 ): HpssResult
 
 interface HpssResult {
@@ -50,9 +45,9 @@ function hpssWithResidual(
   sampleRate?: number,
   kernelHarmonic?: number,
   kernelPercussive?: number,
-  nFft?: number,               // デフォルト: 2048
-  hopLength?: number,          // デフォルト: 512
-  hardMask?: boolean           // デフォルト: false
+  nFft?: number,               // 既定: 2048
+  hopLength?: number,          // 既定: 512
+  hardMask?: boolean           // 既定: false
 ): HpssWithResidualResult
 ```
 
@@ -74,14 +69,7 @@ function percussive(samples: Float32Array, sampleRate?: number): Float32Array  /
 
 ### `timeStretch(samples, sampleRate, rate, nFft?, hopLength?)` <Badge type="warning" text="高負荷" />
 
-ピッチを変えずにテンポを変更します。`rate` が 1.0 未満なら遅く、1.0 より大きければ速くなります。
-
-::: info ユースケース
-- **練習ツール**: 難しいパッセージを練習するために音楽を遅くする
-- **DJ ミキシング**: トラック間のテンポを合わせる
-- **ポッドキャスト編集**: 話す速度の調整
-- **音楽制作**: サンプルをプロジェクトのテンポに合わせる
-:::
+ピッチを変えずにテンポを変更します。`rate` が 1.0 未満なら遅く、1.0 より大きければ速くなります。[タイムストレッチとピッチシフト](./glossary/editing/phase-vocoder-stretch.md) も参照してください。
 
 <SonareDemo id="time-stretch" />
 
@@ -94,21 +82,14 @@ function timeStretch(
   samples: Float32Array,
   sampleRate: number,
   rate: number,      // 0.5 = 半速、2.0 = 倍速
-  nFft?: number,     // デフォルト: 2048
-  hopLength?: number // デフォルト: 512
+  nFft?: number,     // 既定: 2048
+  hopLength?: number // 既定: 512
 ): Float32Array
 ```
 
 ### `pitchShift(samples, sampleRate, semitones, nFft?, hopLength?)` <Badge type="warning" text="高負荷" />
 
-長さを変えずにピッチを変更します。単位は半音で、+12 が 1 オクターブ上です。
-
-::: info ユースケース
-- **キーマッチング**: ミキシング用に曲を移調する
-- **ボーカルチューニング**: ボーカルのピッチを補正・調整する
-- **クリエイティブエフェクト**: ハーモニーの生成、チップマンク／ディープボイス
-- **楽器練習**: 演奏しやすいキーに移調する
-:::
+長さを変えずにピッチを変更します。単位は半音で、+12 が 1 オクターブ上です。[タイムストレッチとピッチシフト](./glossary/editing/phase-vocoder-stretch.md) も参照してください。
 
 ::: tip パフォーマンス
 タイムストレッチとリサンプリングを組み合わせます。処理時間はオーディオの長さに比例します。
@@ -119,21 +100,21 @@ function pitchShift(
   samples: Float32Array,
   sampleRate: number,
   semitones: number,   // +12 = 1オクターブ上
-  nFft?: number,        // デフォルト: 2048
-  hopLength?: number    // デフォルト: 512
+  nFft?: number,        // 既定: 2048
+  hopLength?: number    // 既定: 512
 ): Float32Array
 ```
 
 ### 編集 DSP
 
-これらの関数は解析ではなく、信号そのものを書き換えます。`Audio` インスタンスメソッドとしても利用でき、その場合は保持している `sampleRate` が自動的に使われます。
+これらの関数は解析ではなく、信号そのものを書き換えます。`Audio` インスタンスメソッドとしても利用でき、その場合は保持している `sampleRate` が自動的に使われます。背景は [ピッチ補正とノート編集](./glossary/editing/pitch-correction.md) と [ボイスとフォルマント](./glossary/editing/voice-formant.md) を参照してください。他の単発関数と同じく、どれもリクエストオブジェクトを受け付け、位置引数の呼び出しでは最後の引数の後ろに `{ validate?: boolean }` も渡せます。
 
 ```typescript
 function pitchCorrectToMidi(
   samples: Float32Array,
-  sampleRate: number,
-  currentMidi: number,
-  targetMidi: number,
+  sampleRate?: number,       // 既定 22050
+  currentMidi?: number,
+  targetMidi?: number,
 ): Float32Array
 
 // 追跡したピッチ輪郭を、フレーム単位で固定のターゲット音にリチューンします。
@@ -145,13 +126,13 @@ function pitchCorrectToMidiTimevarying(
   samples: Float32Array,
   f0Hz: Float32Array,
   targetMidi: number,
-  sampleRate: number,
-  hopLength: number,
-  voiced?: VoicedFlags,
-  voicedProb?: Float32Array,
+  sampleRate?: number,       // 既定 22050
+  hopLength?: number,        // 既定 512
+  voiced?: VoicedFlags | null,
+  voicedProb?: Float32Array | null,
 ): Float32Array
 
-// 追跡したピッチ輪郭を、音楽的なスケール（オートチューン）または固定音にスナップします。
+// 追跡したピッチ輪郭を、音楽的なスケール（自動ピッチ補正）または固定音にスナップします。
 // mode 'scale' は有声フレームを最も近いスケール構成音へ引き寄せ、
 // mode 'midi'（既定）は pitchCorrectToMidiTimevarying と同じ挙動になります。
 function pitchCorrectTimevarying(
@@ -195,7 +176,7 @@ const tuned = pitchCorrectToMidiTimevarying(
   69,
   sampleRate,
   512,
-  pitch.voicedFlag,   // boolean[] is accepted as-is
+  pitch.voicedFlag,   // boolean[] はそのまま渡せる
 );
 ```
 
@@ -212,14 +193,14 @@ function noteStretch(
   samples: Float32Array,
   sampleRate: number,
   options?: {
-    onsetSample?: number,    // ノートのオンセット位置（サンプル）
+    onsetSample?: number,    // ノートのオンセット位置（サンプル）。0 以上
     offsetSample?: number,   // ノートのオフセット位置（サンプル）
     stretchRatio?: number,   // >1 で区間を長くし、<1 で短くする
   },
 ): Float32Array
 
 // ノート区間の長さを変えずに、新しいオンセット位置へ移動する
-// （長さは変えずオンセットを変えない noteStretch を補完する）。
+// （長さを変えてオンセットは変えない noteStretch を補完する）。
 function noteMove(
   samples: Float32Array,
   sampleRate?: number,
@@ -231,7 +212,7 @@ function noteMove(
 ): Float32Array
 ```
 
-`Audio.noteStretch(options?)` と `Audio.noteMove(options?)` は `Audio` インスタンス上の対応メソッドです（サンプルレートはインスタンスの値を使います）。
+`Audio.noteStretch(options?)` と `Audio.noteMove(options?)` は `Audio` インスタンス上の対応メソッドです（サンプルレートはインスタンスの値を使います）。負のサンプル位置（`onsetSample`、`offsetSample`、`targetOnsetSample`）は、フィールド名を挙げた `RangeError` で拒否されます。
 
 ```typescript
 function spectralEdit(
@@ -255,7 +236,7 @@ function spectralEdit(
 
 function voiceChange(
   samples: Float32Array,
-  sampleRate?: number,        // デフォルト: 22050
+  sampleRate?: number,        // 既定: 22050
   options?: {
     pitchSemitones?: number,  // 負の値で下げる。既定 0
     formantFactor?: number,   // >1 で明るく、<1 で暗く。既定 1.0
@@ -279,7 +260,9 @@ sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.05 -o voice
 const out = voiceChange(vocal, 48000, { pitchSemitones: 4, formantFactor: 1, formantMode: 'absolute' });
 ```
 
-`pitchCorrectTimevarying(...)` はスケールスナップ式オートチューンの経路です。スケールマスク、`mode`、リチューンの効き方の詳細は [編集 DSP](./editing-dsp.md) を参照してください。領域指定の例とオプションの考え方は [スペクトル編集](./spectral-editing.md) を参照してください。
+`spectralEdit` の `nFft` は `[4, 262144]` の範囲の 2 の冪でなければなりません。それ以外の値は `InvalidParameter` の `SonareError`（`SpectralEditConfig: nFft must be a power of two in [4, 262144]`）になり、領域の開始・終了サンプルが負なら `RangeError` です。領域指定の例とオプションの考え方は [スペクトル編集](./spectral-editing.md) を参照してください。
+
+`pitchCorrectTimevarying(...)` はスケールにスナップする自動ピッチ補正の経路です。スケールマスク、`mode`、リチューンの効き方の詳細は [編集 DSP](./editing-dsp.md) を参照してください。
 
 ### `normalize(samples, sampleRate, targetDb?, mode?)`
 
@@ -289,8 +272,8 @@ const out = voiceChange(vocal, 48000, { pitchSemitones: 4, formantFactor: 1, for
 function normalize(
   samples: Float32Array,
   sampleRate: number,
-  targetDb?: number,        // デフォルト: 0.0 (フルスケール)
-  mode?: 'peak' | 'rms'     // デフォルト: 'peak'
+  targetDb?: number,        // 既定: peak は 0、rms は -20
+  mode?: 'peak' | 'rms'     // 既定: 'peak'
 ): Float32Array
 ```
 
@@ -319,8 +302,8 @@ interface NormalizeStereoResult {
 
 レベルはペア全体から測り、得られたゲインを**両チャンネル**にそのまま適用します。これがこの関数の要点です。チャンネルごとに別々の目標へ正規化すると、レベルではなく左右のバランスが変わり、意図したパンがセンターに寄ります。ゲインが共通なので、`appliedGainDb` はチャンネルごとのペアではなく単一の値です。`'peak'` モードでは大きい側のチャンネルが `targetDb` に達し、小さい側はその差を保ちます。`'rms'` モードで `targetDb` に合わせる量は両チャンネルのサンプルをまとめた RMS、つまりチャンネルごとの値の相加平均ではなく二乗平均平方根で、出力は `[-1, 1]` にハードクリップされます。
 
-::: warning `targetDb` の既定値はモード依存で、モノラルの `normalize` とは異なる
-`normalizeStereo` の `targetDb` の既定値は `mode: 'peak'` で **`0`**、`mode: 'rms'` で **`-20`** であり、他言語のバインディングと一致します。このパッケージのモノラル `normalize` は両モードとも `0` を既定としますが、RMS にとってこれは誤った値です。0 dBFS の RMS は信号中のすべてのピークをクリップさせます。モノラルの呼び出しをステレオ版へ移植するときは、明示的な `targetDb: 0` をそのまま持ち込まないでください。
+::: warning RMS の目標にはピークの余裕を残してください
+`normalize` と `normalizeStereo` はどちらも、`targetDb` の既定値が `mode: 'peak'` では **`0`**、`mode: 'rms'` では **`-20`** です。RMS の目標に 0 dBFS を明示すると、ピークがフルスケールを超える場合があります。出力は `[-1, 1]` にハードクリップされます。目標を省略してモードの既定値を使うか、信号のピークに十分な余裕を残す RMS 目標を指定してください。
 :::
 
 チャンネル長が食い違うペアは、処理の前に `RangeError`（`'Stereo channel lengths must match.'`）を投げます。一方、**無音はエラーではありません**。中身のないペアはそのまま返り、`appliedGainDb` はちょうど `0` になります。例外も、際限のないブーストも起きません。
@@ -335,9 +318,9 @@ interface NormalizeStereoResult {
 function trim(
   samples: Float32Array,
   sampleRate: number,
-  thresholdDb?: number,   // デフォルト: -60.0
-  frameLength?: number,   // デフォルト: 2048
-  hopLength?: number      // デフォルト: 512
+  thresholdDb?: number,   // 既定: -60.0
+  frameLength?: number,   // 既定: 2048
+  hopLength?: number      // 既定: 512
 ): Float32Array
 ```
 
@@ -345,7 +328,7 @@ function trim(
 
 ## ルーム音響解析
 
-これらの関数は、曲そのものではなく録音空間を説明・適用する API です。
+これらの関数は、曲そのものではなく録音空間を説明・適用する API です。背景は [残響時間（RT60 と EDT）](./glossary/acoustics/reverberation-time.md)、[部屋の形状と容積](./glossary/acoustics/room-geometry.md)、[間隔を空けたレシーバーとチャンネル間コヒーレンス](./glossary/acoustics/spaced-receivers.md) を参照してください。
 
 | 目的 | 使う API |
 |------|----------|
@@ -355,6 +338,7 @@ function trim(
 | その推定結果を `synthesizeRir` の入力にする | `roomGeometryFromEstimate(...)` |
 | 寸法からモノラルのルームインパルス応答を作る | `synthesizeRir(...)` |
 | 目標ルームの響きを音作り効果として足す | `roomMorph(...)` |
+| 同じ響きをステレオ録音に足す（間隔をあけた 2 つのレシーバーで聞く） | `roomMorphStereo({ left, right, sampleRate, ... })` |
 
 ::: info RIR とルームモーフィング
 **RIR** は room impulse response（ルームインパルス応答）の略で、部屋が短い音にどう反応するかを表すサンプル列です。`roomMorph(...)` は音作り効果であり、残響除去ではありません。
@@ -383,7 +367,7 @@ console.log(estimate.drrDb, estimate.confidence, estimate.bandAbsorption);
 const rir = synthesizeRir({ lengthM: 7, widthM: 5, heightM: 3, absorption: 0.2, materialPreset: 'none' });
 console.log(rir.sampleRate, rir.rir.length, rir.diagnostics);
 
-// 推定結果は synthesizeRir と同じ名前を使っているので、ヘルパーは位置を足すだけ
+// 推定結果は synthesizeRir と同じ名前を使っているので、ヘルパーは推定した部屋に縮尺した配置を足し、source と listener で上書きできる
 const geometry = roomGeometryFromEstimate(estimate, {
   source: { x: 1, y: 1, z: 1.2 },
   listener: { x: 2, y: 1.5, z: 1.5 },
@@ -395,6 +379,6 @@ const morphed = roomMorph(samples, sampleRate, { lengthM: 12, widthM: 9, heightM
 
 `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)` の `minDecayDb` は減衰フィットのしきい値で、既定値は `30` です。
 
-`materialPreset`（`'none' | 'concrete' | 'wood' | 'curtain' | 'carpet' | 'glass'`、型は `MaterialPresetName`）と `estimateRoom` の `mode` オプション（`'auto' | 'blind' | 'impulse_response'`、型は `AcousticModeName`）は名前だけを受け付けます。数値は `TypeError`、未知の名前は `RangeError` です。`roomGeometryFromEstimate(estimate, { source?, listener? })` は `RoomPlacement`（メートル単位の `{ x, y, z }`）の位置を受け取り、`RoomGeometryOptions` を返します。計測できる寸法がない推定結果には `RangeError` を投げます。
+`materialPreset`（`'none' | 'concrete' | 'wood' | 'curtain' | 'carpet' | 'glass'`、型は `MaterialPresetName`）と `estimateRoom` の `mode` オプション（`'auto' | 'blind' | 'impulse_response'`、型は `AcousticModeName`）は名前だけを受け付けます。数値は `TypeError`、未知の名前は `RangeError` です。`roomGeometryFromEstimate(estimate, { source?, listener? })` は `RoomPlacement`（メートル単位の `{ x, y, z }`）の位置を受け取り、`RoomGeometryOptions` を返します。既定の配置を推定した部屋へ縮尺した位置が入り（渡した位置はそれを置き換えます）、`absorption` は有限なバンドの平均です。計測できる寸法がない推定結果には `RangeError` を投げます。
 
 RT60、EDT、C50、C80、D50、バンド別配列、ルーム推定、生成 RIR、信頼度の読み方は [ルーム音響解析](./acoustic-analysis.md) を参照してください。

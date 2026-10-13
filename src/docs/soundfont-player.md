@@ -48,16 +48,6 @@ The demo below uses built-in voices rather than a user-supplied SF2 file, but it
 
 <SonareDemo id="midi-piano-roll" />
 
-## What You Will Learn
-
-By the end of this page you should be able to:
-
-- load a caller-supplied SF2 into a `Project` or the realtime engine, and release it;
-- read the per-program manifest to see which notes resolve to `sf2` versus the `synth` fallback;
-- bounce a MIDI arrangement through SF2 instruments deterministically;
-- understand the SF2 modulator/envelope semantics the player implements;
-- bind an SF2 instrument for live MIDI input.
-
 ## Pick the right entry point
 
 The player is exposed at two levels. Use the project level for offline rendering and the engine level for live playback.
@@ -81,6 +71,8 @@ The load reports the two apart, so your handler can tell a user "this file is no
 
 - `SONARE_ERROR_INVALID_PARAMETER` — the **call** is wrong: a NULL project or buffer, or a zero-length buffer. Nothing about the data was examined.
 - `SONARE_ERROR_INVALID_FORMAT` — the **data** is unusable: either the SF2 failed to parse, or the file is larger than the resource budget the loader accepts.
+
+A sample rate outside 400 to 50000 Hz inside the file is not an error: it is clamped into that range and the file loads.
 
 Bindings surface these as their own error type (a thrown `Error` in JS, `SonareError` in Python) carrying the message.
 :::
@@ -132,8 +124,8 @@ finally:
 
 Before you render, ask the project **which programs your arrangement actually plays and where each one resolves**. `soundFontManifest()` enumerates every `(channel, bank, program)` a note plays through, in first-use order, and reports the backend:
 
-- `'sf2'` — the loaded SoundFont covers the program (GS variation/drum fallbacks included), with the resolved `presetName`;
-- `'synth'` — no preset covers it, so it plays through the NativeSynth GM fallback; `presetName` is empty.
+- `'sf2'` — the loaded SoundFont covers every played note in the group (GS variation/drum fallbacks included), with the resolved `presetName`;
+- `'synth'` — no preset covers the program, or at least one played note in the group falls outside the SoundFont's zones, so the group plays through the NativeSynth GM fallback; `presetName` is empty.
 
 Without a loaded SoundFont, every entry is a `synth` fallback. This is your honest coverage report: a `synth` row means "this part will sound, but from the data-free floor, not your samples". The fallback is still program-aware: for example, GM program 6 (Harpsichord) uses the dedicated jack-and-plectrum harpsichord engine, while program 7 (Clavi) stays on an FM-style patch.
 
@@ -234,16 +226,23 @@ Passing an explicitly empty array `[]` (rather than a patch or `undefined`) bind
 ::: tip MIDI never renders silent for lack of data
 You can bounce with **no SoundFont loaded at all** — bound destinations still sound, because uncovered programs play through the NativeSynth GM fallback. The manifest tells you exactly which parts will use samples and which will use the fallback. See [NativeSynth](./native-synth.md) for the fallback engine.
 
-That fallback is broad enough for practical previews: pianos use the tuned extended waveguide piano, guitars/basses/harp use Karplus-Strong models, strings use bowed-string or pizzicato/harp/timpani voices, choir/voice programs use a vocal body resonance, and GM 56-79 brass/reed/flute programs use physical models. Those non-piano physical models remain untuned; further adjustment is planned for future patch releases. It is still a fallback, not a replacement for a carefully chosen SF2, but missing programs do not collapse to one generic tone.
+That fallback is broad enough for practical previews: pianos, strings, winds, voices and synth programs each run on the closest engine, so missing programs do not collapse to one generic tone. [GM Tone Map](./gm-tone-map.md) lists the engine for every program. It is still a fallback, not a replacement for a carefully chosen SF2.
 :::
+
+<MaturityNote
+  item="physical-model-maturity"
+  :labels="{
+    title: 'Calibration status',
+    body: 'Only the acoustic piano is calibrated against a reference recording. Every other physical-model fallback voice is provisional and can change across patch releases.'
+  }"
+/>
 
 ### Instrument config and the voice model
 
-`Sf2InstrumentConfig` is the per-player patch. Every field is optional; a non-positive or omitted numeric field takes the C-ABI default.
+`Sf2InstrumentConfig` is the per-player patch. Every field is optional; a non-positive or omitted numeric field takes the C-ABI default. In the JS bindings the config also carries `destinationId` (default `0`), the MIDI destination the player answers to; in Python that is the separate `destination_id` argument.
 
 | Field (JS / Python) | Meaning | Default |
 |---------------------|---------|---------|
-| `destinationId` / `destination_id` | MIDI destination this player answers to | `0` |
 | `gain` | Master output gain, linear | `0.5` |
 | `polyphony` | Max simultaneous voices, clamped to `[1, 64]` | `48` |
 | `preferModelForModeledFamilies` / `prefer_model_for_modeled_families` | Route covered melodic GM programs to the dedicated physical model instead of the SoundFont | `false` |
@@ -252,11 +251,10 @@ That fallback is broad enough for practical previews: pianos use the tuned exten
 
 When the player runs out of voices it uses **deterministic voice stealing**, so a dense passage degrades the same way on every render.
 
-`preferModelForModeledFamilies` is the config's version-2 field. It is worth
-turning on when your SoundFont's samples for a family are weaker than the
-built-in model for it — a thin plucked-string or reed set, say. Drums stay
-SoundFont-first either way, so a good kit is never traded away for the modelled
-percussion voice.
+Turn `preferModelForModeledFamilies` on when your SoundFont's samples for a
+family are weaker than the built-in model for it — a thin plucked-string or
+reed set, say. Drums stay SoundFont-first either way, so a good kit is never
+traded away for the modeled percussion voice.
 
 `clearBankRig` is a whole-player option for a direct comparison. For per-part control, use the project or engine part-rig API described in [GM and GS](./gm-gs.md#part-rigs-and-efx-serial-routing): `bank` keeps the current bank rig, `none` selects the direct voice, and `chain` supplies 1–8 inserts. A GS EFX assignment runs after the part rig, so routing a part into an EFX unit does not remove its default amplifier or cabinet.
 
@@ -284,7 +282,9 @@ The GS side of the player — the variation-bank and drum-kit architecture, the 
 
 For a keyboard or a live MIDI stream, bind the SF2 player to a realtime MIDI destination with `setSf2Instrument(...)`. The engine routes live note/CC commands and scheduled MIDI clips for that destination through the player, with the same 16-channel, channel-10-drum, GS-NRPN, and GS/GM-SysEx behavior. Load the SoundFont into the **engine** first (a separate load from the project's).
 
-```typescript
+::: code-group
+
+```typescript [Browser / Node]
 import { init, RealtimeEngine } from '@libraz/libsonare';
 
 await init();
@@ -306,7 +306,28 @@ try {
 }
 ```
 
-`pushMidiProgram` queues a live program change, with an optional bank, timed like a note or CC. It is packed as one MIDI 2.0 Program Change, so the receiver's own gates apply: a part with RX PROGRAM CHANGE off accepts it and ignores it.
+```python [Python]
+import libsonare as sonare
+
+engine = sonare.RealtimeEngine(sample_rate=48000.0, max_block_size=128)
+try:
+    engine.load_soundfont(sf2_bytes)                    # engine-level load
+    engine.set_sf2_instrument(sonare.Sf2InstrumentConfig(gain=1.0), destination_id=7)
+    engine.midi_instrument_count()                      # 1
+
+    engine.push_midi_note_on(7, 0, 0, 60, 100)          # destination, group, channel, note, velocity
+    out = engine.process([[0.0] * 128, [0.0] * 128])
+
+    engine.clear_midi_instrument(7)                     # unbind
+finally:
+    engine.close()
+```
+
+:::
+
+Calling `setSf2Instrument` or `loadSoundFont` again while the transport rolls replaces what was bound: the outgoing instrument fades over 10 ms, and the new one starts from default channel state ([Realtime Engine](./realtime-engine.md) has the details).
+
+`pushMidiProgram` queues a live program change, with an optional bank, timed like a note or CC. It is packed as one MIDI 2.0 Program Change, so the receiver's own gates apply: a part with RX PROGRAM CHANGE off accepts it and ignores it. The SoundFont player follows it under its RX PROGRAM CHANGE and RX BANK SELECT gates; a NativeSynth bound with `useGmPrograms: true` and a NativeSynth playing the GM kit (the `drum-kit` preset, or a percussion patch with `gmKit` on, where the program picks the GS drum set) follow it too. The built-in synth and any other NativeSynth patch accept it and ignore it.
 
 ::: tip Binding before loading is allowed
 You can call `setSf2Instrument(...)` before any SoundFont is loaded — live MIDI then plays through the NativeSynth GM fallback. Load a SoundFont later and bound destinations begin using its samples. See [MIDI Input](./midi-input.md) for wiring live keyboards and Web MIDI.
@@ -317,7 +338,9 @@ You can call `setSf2Instrument(...)` before any SoundFont is loaded — live MID
 :::: details Inspect coverage, then bounce
 Load your SF2, check the manifest for any `synth` rows (parts that will use the fallback), then render.
 
-```typescript
+::: code-group
+
+```typescript [Browser / Node]
 project.loadSoundFont(sf2Bytes);
 const uncovered = project.soundFontManifest().filter((p) => p.backend === 'synth');
 if (uncovered.length) {
@@ -328,12 +351,27 @@ const audio = project.bounceWithSf2Instrument(
   { totalFrames: 4096, numChannels: 2, sampleRate: 48000 },
 );
 ```
+
+```python [Python]
+project.load_soundfont(sf2_bytes)
+uncovered = [p for p in project.soundfont_manifest() if p.backend == "synth"]
+if uncovered:
+    print("Falling back to NativeSynth for:", uncovered)
+audio = project.bounce_with_sf2_instrument(
+    sonare.Sf2InstrumentConfig(gain=1.0),
+    total_frames=4096, num_channels=2, sample_rate=48000,
+)
+```
+
+:::
 ::::
 
 :::: details Multitimbral: melody + drums in one bounce
 Route a melodic track to one destination and a drum track (channel 10, bank 128) to another, then bind a player to each.
 
-```typescript
+::: code-group
+
+```typescript [Browser / Node]
 // Drum part: bank 128 program 0 on channel 10 (index 9).
 project.setMidiEvents(drumClipId, [
   ...Project.midiBankProgram(0, 0, 9, 0, 0, 0),
@@ -346,6 +384,23 @@ const audio = project.bounceWithSf2Instrument(
   { totalFrames: 8192, numChannels: 2, sampleRate: 48000 },
 );
 ```
+
+```python [Python]
+# Drum part: bank 128 program 0 on channel 10 (index 9).
+project.set_midi_events(drum_clip, [
+    *sonare.Project.midi_bank_program(0, 0, 9, 0, 0, 0),
+    sonare.Project.midi_note_on(0, 0, 9, 36, 110),   # 36 = Bass Drum 1
+    sonare.Project.midi_note_off(1, 0, 9, 36, 0),
+])
+
+cfg = sonare.Sf2InstrumentConfig(gain=1.0)
+audio = project.bounce_with_sf2_instrument(
+    instruments=[(0, cfg), (1, cfg)],
+    total_frames=8192, num_channels=2, sample_rate=48000,
+)
+```
+
+:::
 ::::
 
 :::: details Render even without an SF2
@@ -361,52 +416,9 @@ const preview = project.bounceWithSf2Instrument(
 
 ## NativeSynth and the SoundFont fallback
 
-NativeSynth is the safety net under the [SoundFont player](./soundfont-player.md). When you render with `bounceWithSf2Instrument` (or bind an SF2 live), libsonare resolves each `(channel, bank, program)` the arrangement actually plays:
+NativeSynth is the safety net under the player. For each `(channel, bank, program)` the arrangement plays, a note renders from the **SF2** when the loaded SoundFont covers it (GS variation and drum fallbacks included), and otherwise — including when no SoundFont is loaded — from the **NativeSynth GM fallback bank**: all 128 programs plus the drum map. Because that bank is always present, MIDI never renders silent for lack of data.
 
-- if the loaded SoundFont covers the program, that note renders from the **SF2** (GS variation and drum fallbacks included);
-- otherwise — including when no SoundFont is loaded at all — the note plays through the **NativeSynth GM fallback bank** (all 128 programs plus the drum map).
-
-Inspect the per-program backend before rendering with `soundFontManifest()`, which reports `'sf2'` or `'synth'` for each program in first-use order:
-
-```typescript
-project.loadSoundFont(sf2Bytes);
-const manifest = project.soundFontManifest();
-// [{ channel, bank, program, backend: 'sf2' | 'synth', presetName }, ...]
-```
-
-Because the GM fallback bank is always present, MIDI never renders silent for lack of data. See [SoundFont Player](./soundfont-player.md) for loading SF2 data and per-channel/program resolution.
-
-### GM fallback program routing
-
-The fallback bank uses the closest NativeSynth engine for each GM program family, with a few program-level overrides where the instrument behavior matters. The piano has been tuned, while every other physical fallback model still awaits adjustment and calibration. Read the acoustic-style rows below as routing coverage, not as a claim of final sampled-instrument realism.
-
-| GM program | Instrument | Fallback engine | Why |
-|------------|------------|-----------------|-----|
-| 4-5 | Electric Piano 1 / 2 | `fm` | phase-modulated tine/bell brightness |
-| 6 | Harpsichord | `harpsichord` | jack and plectrum; key speed barely changes loudness |
-| 7 | Clavi | `fm` | struck string and pickup color, currently approximated by FM |
-| 8, 10, 14 | Celesta, Music Box, Tubular Bells | `modal` | felt-struck steel bar, twin-tooth tine shimmer, and a missing-fundamental strike pitch |
-| 9, 11-13 | Glockenspiel, Vibraphone, Marimba, Xylophone | `modal` | tuned-bar resonators |
-| 15 | Dulcimer | `karplus-strong` | provisional; hammered (struck, not plucked) string |
-| 16-23 | Organ family | `additive` / `pipe-organ` / `free-reed` | drawbar registrations (16-18), the provisional church-organ flue pipe (19), and free-reed reed-organ, harmonica, and bandoneon voices (20-23) |
-| 24-31 | Guitar family | `karplus-strong` | plucked string waveguide |
-| 32-37 | Acoustic, electric, fretless, and slap basses | `karplus-strong` | bass-string waveguide with program-specific slap/polarization |
-| 40-43 | Violin, Viola, Cello, Contrabass | `bowed-string` | provisional sustained friction-excited string waveguide |
-| 44 | Tremolo Strings | `subtractive` | detuned-saw section with an amplitude-tremolo LFO rather than a bowed model |
-| 45-46 | Pizzicato Strings, Orchestral Harp | `karplus-strong` | short pluck into a violin-body or steel-string corpus |
-| 47 | Timpani | `percussion` | note-tracked kettledrum fallback voice |
-| 48 | String Ensemble 1 | `subtractive` | pad-like ensemble fallback rather than solo bow model |
-| 52-54 | Choir Aahs, Voice Oohs, Synth Voice | `vocal` | source-filter voice (glottal source + vowel formant bank), not a subtractive pad |
-| 56-60 | Trumpet, Trombone, Tuba, Muted Trumpet, French Horn | `brass` | provisional lip-reed brass waveguide |
-| 61-63 | Brass Section, Synth Brass 1 / 2 | `fm` | FM by design, not the brass waveguide |
-| 64-71 | Saxophones, Oboe, English Horn, Bassoon, Clarinet | `reed` | provisional reed and bore waveguides |
-| 72-79 | Piccolo, Flute, Recorder, Pan Flute, Bottle, Shakuhachi, Whistle, Ocarina | `flute` | provisional air-jet / open-pipe waveguides |
-| 104, 106, 107 | Sitar, Shamisen, Koto | `plucked-string` | buzzing-bridge (jawari / sawari) plucked string; the banjo (105) stays on `karplus-strong` |
-| 112-119 | Tinkle Bell, Agogo, Steel Drums, Woodblock, Taiko Drum, Melodic Tom, Synth Drum, Reverse Cymbal | `percussion` | note-tracked percussion-engine voices, distinct from the drum-kit map |
-
-Bank Select is read on every capital program the fallback voices a variation for — see [GS variation tones](./gm-gs.md#gs-variation-tones) above for the full map.
-
-This routing is separate from the named preset catalog: `synthPresetNames()` still lists the hand-authored presets (`e-piano`, `harp`, `drum-kit`, and so on), while the GM fallback bank chooses the internal patch for each MIDI program number during SF2 fallback.
+`soundFontManifest()` reports the backend per program in first-use order, as shown [above](#know-what-resolves-the-program-manifest). Which engine voices each fallback program is on [GM Tone Map](./gm-tone-map.md); Bank Select on a capital program with variations is covered under [GS variation tones](./gm-gs.md#gs-variation-tones). The routing is separate from the named preset catalog: `synthPresetNames()` lists the hand-authored presets (`e-piano`, `harp`, `drum-kit`, and so on), while the fallback bank chooses an internal patch for each program number.
 
 ## Related
 

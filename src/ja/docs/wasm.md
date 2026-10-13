@@ -2,7 +2,7 @@
 
 libsonare は WebAssembly にコンパイルでき、ブラウザで直接オーディオ解析ができます。重要な原則として、その API が扱うのは生の `.mp3`/`.wav` ファイルではなく、デコード済みのオーディオサンプル（数値が並んだモノラルの `Float32Array`）です。サンプルを得る方法は 2 通りで、Web Audio API や別の JavaScript デコーダで自分でファイルをデコードするか、エンコード済みバイト列を `Audio.fromMemory*` ヘルパーに渡してデコードを任せます。全体の流れは下の表のとおりです。
 
-このページは、ブラウザアプリを作る人向けです。Python スクリプト、ターミナルのバッチ処理、ネイティブデスクトップツールを作る場合は、先に [はじめに](./getting-started.md) で別の利用環境を選んでください。
+このページは、ブラウザアプリを作る人向けです。Python スクリプト、ターミナルのバッチ処理、ネイティブデスクトップツールを作る場合は、先に [はじめに](./getting-started.md) で別の実行環境を選んでください。
 
 このページでは、セットアップ、単発呼び出しの API、マスタリングを扱います。Web Worker との連携、パフォーマンスチューニング、React の例は [WASM の応用的な使い方](./wasm-advanced.md) を、ライブのストリーミング解析、逆再構成、リアルタイムボイスチェンジャーは [WASM のストリーミングとリアルタイム処理](./wasm-streaming.md) を参照してください。
 
@@ -24,9 +24,9 @@ libsonare は WebAssembly にコンパイルでき、ブラウザで直接オー
 - サンプル配列は PCM 音声（`Float32Array`）であり、エンコード済みファイルのバイト列ではない。
 
 ::: details Float32Array・PCM・モノラル・ダウンミックスとは？
-- **PCM サンプル** は、圧縮されていない生の波形 — 振幅値の長い列です。MP3/WAV の*ファイル*は圧縮・梱包されたバイト列で、デコードすると PCM になります。
+- **PCM サンプル** は、圧縮されていない生の波形で、振幅値の長い列です。MP3/WAV の*ファイル*は圧縮・梱包されたバイト列で、デコードすると PCM になります。
 - **`Float32Array`** は、そのサンプルを 32bit 浮動小数点（通常 −1〜1 の範囲）で 1 サンプル 1 要素として保持する、Web Audio API が使う JavaScript の typed array です。libsonare のブラウザ API はこれをそのまま受け取ります。
-- **モノラル／ダウンミックス** — モノラルは 1 チャンネルです。ステレオは左右の独立したチャンネルを持ち、*ダウンミックス*はそれらを 1 つにまとめます（通常は平均）。これでモノラル API に 1 チャンネルを渡せます。
+- **モノラル／ダウンミックス**: モノラルは 1 チャンネルです。ステレオは左右の独立したチャンネルを持ち、*ダウンミックス*はそれらを 1 つにまとめます（通常は平均）。これでモノラル API に 1 チャンネルを渡せます。
 :::
 
 ## このページで身につくこと
@@ -35,7 +35,7 @@ libsonare は WebAssembly にコンパイルでき、ブラウザで直接オー
 
 - WASM パッケージを正しくインストールし、初期化できる。
 - ブラウザ上のファイルを PCM へデコードし、正しいチャンネルとサンプルレートの組を libsonare に渡せる。
-- 1 回呼び出しの関数、`Audio`、`StreamAnalyzer`、`StreamingMasteringChain`、`Mixer`、`RealtimeEngine` を使い分けられる。
+- 1 回呼び出しの関数、`Audio`、[`StreamAnalyzer`](./js-api-streaming.md#streamanalyzer-クラス)、[`StreamingMasteringChain`](./js-api-streaming.md#streamingmasteringchain)、`Mixer`、`RealtimeEngine` を使い分けられる。
 - ブラウザアプリとして出す前に、バンドルサイズ、Worker、AudioWorklet のトレードオフを理解できる。
 
 ## インストール
@@ -99,27 +99,21 @@ async function analyzeAudio() {
 }
 ```
 
-同じ 1 ファイル確認を CLI で行う場合:
+::: details CLI での同等操作
+同じ 1 ファイル確認を `sonare` コマンドラインで行う場合です（ブラウザでは使えません）。
 
 ```bash
 sonare bpm music.mp3
 sonare key music.mp3
 sonare analyze music.mp3 --json
 ```
+:::
 
 下のデモは、同じデータの流れを視覚化したものです。デコード済みサンプルを入力し、時間 × 周波数の表示を出力します。ブラウザページでこの種の結果を描画できれば、WASM パッケージの読み込み、初期化、デコード、サンプルレートの受け渡しがつながっていると確認できます。
 
 <SonareDemo id="stft-basics" />
 
-ブラウザビルドには librosa 互換ヘルパーも含まれます。これは Python で広く使われる音声ライブラリ librosa に対応する関数群で、既存の librosa のレシピをそのまま移植できます。ざっくり次の用途別に分かれます。
-
-- **前処理**（波形） — `preemphasis` / `deemphasis`、`trimSilence` / `splitSilence`
-- **フレーミング／サイズ揃え** — `frameSignal`、`padCenter`、`fixLength`、`fixFrames`
-- **後処理**（1 次元信号） — `peakPick`、`vectorNormalize`
-- **特徴量** — `pcen`（メルの動的レンジ圧縮）、`tonnetz`（ハーモニック空間射影）、`tempogram` / `plp`（テンポ表現）
-- **単位変換** — `powerToDb` / `amplitudeToDb` / `dbToPower` / `dbToAmplitude`、`framesToSamples` / `samplesToFrames`
-
-シグネチャは [JS API リファレンス](./js-api-analysis.md) を、librosa との対応関係は [librosa 互換性](./librosa-compatibility.md) を参照してください。
+ブラウザビルドには librosa 互換ヘルパーも含まれるため、既存の librosa のレシピをそのまま移植できます。用途別の関数一覧は[ヘルパーと変換](./js-api-helpers.md)に、librosa との対応関係は [librosa 互換性](./librosa-compatibility.md)にまとめています。
 
 ## ブラウザ内ミキシング
 
@@ -145,7 +139,8 @@ mixer.delete();
 
 詳しくは [ミキシングエンジン](./mixing.md) を参照してください。
 
-組み込みミキサーシーンを CLI でレンダーする場合:
+::: details CLI での同等操作
+組み込みミキサーシーンを `sonare` コマンドラインでレンダリングする場合です。
 
 ```bash
 sonare mix \
@@ -154,6 +149,7 @@ sonare mix \
   --input music.wav \
   -o mixed.wav
 ```
+:::
 
 ## Audio クラス
 
@@ -195,7 +191,8 @@ console.log(`BPM: ${bpm}, キー: ${key.name}`);
 console.log(`中央値ピッチ: ${pitch.medianF0.toFixed(1)} Hz`);
 ```
 
-上の呼び出しに対応する CLI 例です。4 つとも Python CLI で使えます。
+::: details CLI での同等操作
+同じ呼び出しを Python CLI で行う場合です。
 
 ```bash
 sonare analyze music.mp3 --json
@@ -203,22 +200,25 @@ sonare hpss music.mp3 -o separated --json
 sonare pitch-shift music.wav --semitones 2 -o shifted.wav
 sonare pitch music.mp3 --algorithm pyin --json
 ```
+:::
 
-インスタンスメソッドの一覧は [JS API リファレンス](/ja/docs/js-api-audio#audio-クラス) を参照してください。
+インスタンスメソッドの一覧は [Audio クラスのリファレンス](./js-api-audio.md#audio-クラス)を参照してください。
 
 ## ブラウザ内マスタリング
 
-`/ja/mastering` デモは、このページで説明しているものと同じ WASM パッケージを使用しています。音源のデコードはブラウザで行い、マスタリング処理は Web Worker で実行し、レンダリング後の WAV と JSON レポートはローカルで生成されます。
+`/ja/mastering` デモは、このページで説明しているものと同じ WASM パッケージを使用しています。音源のデコードはブラウザで行い、マスタリング処理は Web Worker で実行し、レンダリング後の WAV と JSON レポートはローカルで生成されます。`masterAudio`、`masteringChain`、名前付きプロセッサは[マスタリングのリファレンス](./js-api-mastering.md)で説明しています。
 
 実装の詳細は [マスタリング実装](./mastering-implementation.md), [ブラウザ内ローカル処理](./glossary/concepts/browser-local-processing.md), [マスタリング](./glossary/mastering.md), [ステレオ、リミッター、ラウドネスコントロール](./glossary/mastering/stereo-limiter-loudness.md) を参照してください。
 
 マスタリング API には、JSON ベースのアシスタント出力、音源プロファイル、配信プラットフォーム別のプレビューを返す `masteringAssistantSuggest(...)`、`masteringAudioProfile(...)`、`masteringStreamingPreview(...)` も含まれます。
 
-シンプルなラウドネス正規化マスターを CLI で行う場合:
+::: details CLI での同等操作
+シンプルなラウドネス正規化マスターを `sonare` コマンドラインで作る場合です。
 
 ```bash
 sonare mastering track.wav --target-lufs -14 --ceiling-db -1 -o master.wav
 ```
+:::
 
 ## ファイル入力
 
@@ -247,7 +247,26 @@ input.addEventListener('change', async (e) => {
 
 ### 全チャンネルを保持する
 
-`Audio.fromMemory(...)` はマルチチャンネルのファイルをデコードしながらモノラルに畳み込みます。チャンネルそのものが必要なときは、`decodeChannels(bytes)` がバイト列を一度だけデコードして `{ sampleRate, channels }` を返します。`channels` は元のチャンネル順（5.1 は L R C LFE Ls Rs）の `Float32Array` の配列です。`downmix(channels, targetLayout)` は ITU-R BS.775 の規則（センターとサラウンドを -3 dB、LFE は除外）で、より狭いレイアウト（`0` モノラル、`1` ステレオ、`2` 5.1、`3` 7.1）へ折りたたみます。アップミックスはできません。`Audio.fromMemoryWithBrowserFallback(...)` はマルチチャンネルの `AudioBuffer` に同じ規則を適用するので、どちらのデコーダーが動いても同じサンプルになります。そのチャンネル保持版が `decodeChannelsWithBrowserFallback(bytes, options?)` で、同じ `{ sampleRate, channels }` の Promise を返します。ネイティブデコーダーが扱わない形式（AAC、OGG、FLAC）は `decodeAudioData` を通し、ブラウザーが返したチャンネルをすべて保持します。`downmix` は、32 ビット整数の範囲の整数でない `targetLayout` に `RangeError` を、数値でないものに `TypeError` をスローします。
+`Audio.fromMemory(...)` はマルチチャンネルのファイルをデコードしながらモノラルに畳み込みます。チャンネルを保持するには `decodeChannels` でデコードします。
+
+| 関数 | チャンネルの保持 | デコーダー | 戻り値 |
+|------|------------------|------------|--------|
+| `Audio.fromMemory` | しない（モノラルに畳み込み） | WASM 内の WAV/MP3 | `Audio` |
+| `Audio.fromMemoryWithBrowserFallback` | しない（モノラルに畳み込み） | WASM、次に `decodeAudioData` | `Promise<Audio>` |
+| `decodeChannels` | する | WASM 内の WAV/MP3 | `{ sampleRate, channels }` |
+| `decodeChannelsWithBrowserFallback(bytes, options?)` | する | WASM、次に `decodeAudioData`（AAC、OGG、FLAC） | `Promise<{ sampleRate, channels }>` |
+| `downmix(channels, targetLayout)` | 狭める | なし | `Float32Array[]` |
+
+`channels` は、元のチャンネル順（5.1 は L R C LFE Ls Rs）の `Float32Array` の配列です。`downmix` はこれを、`targetLayout` で指定したより狭いレイアウトへ折りたたみます。
+
+| `targetLayout` | 結果 |
+|----------------|------|
+| `0` | モノラル |
+| `1` | ステレオ |
+| `2` | 5.1 |
+| `3` | 7.1 |
+
+規則は ITU-R BS.775（センターとサラウンドを -3 dB、LFE は除外）で、アップミックスはできません。元のレイアウトはチャンネル数（1、2、6、8）から判断し、それ以外のチャンネル数はモノラルへの折りたたみ（単純平均）だけが可能です。`...WithBrowserFallback` 系の関数はマルチチャンネルの `AudioBuffer` に同じ規則を適用するので、どちらのデコーダーが動いても同じサンプルになります。`downmix` は、32 ビット整数の範囲の整数でない `targetLayout` に `RangeError` を、数値でないものに `TypeError` を投げます。
 
 ```typescript
 import { decodeChannels, downmix, init } from '@libraz/libsonare';
@@ -280,41 +299,7 @@ const result = analyzeWithProgress(samples, sampleRate, (progress, stage) => {
 
 ## キャンセル
 
-時間のかかるオフラインの解析・マスタリング呼び出しは `cancel` コールバックを受け取ります。
-`onProgress` が進捗を報告するのと同じ境界でポーリングされるため、間違ったファイルを
-読み込んでしまったユーザーがレンダリングの完了を待つ必要はありません。
-
-```typescript
-import {
-  ErrorCode,
-  init,
-  isSonareError,
-  masteringChainWithProgress,
-} from '@libraz/libsonare';
-
-await init();
-
-let abandoned = false;
-cancelButton.onclick = () => { abandoned = true; };
-
-try {
-  const result = masteringChainWithProgress({
-    samples,
-    sampleRate,
-    config,
-    onProgress: (progress, stage) => updateUi(progress, stage),
-    cancel: () => abandoned,
-  });
-  render(result);
-} catch (error) {
-  if (!(isSonareError(error) && error.code === ErrorCode.Cancelled)) throw error;
-  // ユーザーが中止を指示した場合。想定内です。
-}
-```
-
-`cancel` が `true` を返すと呼び出しは中断され、`SONARE_ERROR_CANCELLED`（エラーコード 8）
-で例外になります。キャンセルされた呼び出しは出力を確保しません。途中結果を読むことは
-できないので、「マスターが途中まで出来た」ではなく「何も起きなかった」として扱ってください。
+時間のかかるオフラインの解析・マスタリング呼び出しは `cancel` コールバックを受け取ります。`onProgress` が進捗を報告するのと同じ境界でポーリングされるため、間違ったファイルを読み込んでしまったユーザーがレンダリングの完了を待つ必要はありません。`true` を返すと呼び出しは中断され、コード 8（`Cancelled`）の `SonareError` で例外になります。キャンセルされた呼び出しは出力を確保しません。途中結果を読むことはできないので、「マスターが途中まで出来た」ではなく「何も起きなかった」として扱ってください。完全な例は[長い処理をキャンセルする](./js-api.md#長い処理をキャンセルする)を参照してください。
 
 ## ステレオからモノラルへの変換
 
@@ -339,46 +324,42 @@ async function getMonoSamples(audioBuffer: AudioBuffer): Promise<Float32Array> {
 
 ## ブラウザ互換性
 
+同梱モジュールは WebAssembly SIMD でビルドされているため、最小バージョンは SIMD に対応したブラウザで決まります。
+
 | ブラウザ | 最小バージョン |
 |---------|---------------|
-| Chrome | 57+ |
-| Firefox | 52+ |
-| Safari | 11+ |
-| Edge | 16+ |
+| Chrome | 91+ |
+| Edge | 91+ |
+| Firefox | 89+ |
+| Safari | 16.4+ |
 
-要件:
-- WebAssembly サポート
-- Web Audio API
-- ES2017+ (async/await)
+要件: WebAssembly SIMD、BigInt、Web Audio API。JavaScript バンドルのターゲットは ECMAScript 2020 です。
 
 ## パッケージの構成物
 
 公開パッケージには、連携するいくつかの構成物が含まれます。
 
-- **メインモジュール** — `sonare.js` と `sonare.wasm`。解析・マスタリング・ミキシング・編集の各 API を支える Emscripten ビルドです。
-- **メイン API エントリ** — パッケージの `index`（`index.js` / `index.d.ts`）は `import ... from '@libraz/libsonare'` を支える tsup バンドルです。解析・マスタリング・ミキシング・編集の全 API を公開します。
-- **AudioWorklet エントリ** — `worklet.js` / `worklet.d.ts`。独立した自己完結型の tsup バンドル（コード分割なし、`AudioWorkletGlobalScope` への移植を想定）で、`SonareEngine` API、worklet プロセッサクラスとその登録ヘルパー、`SonareStreamAnalyzerNode`（オーディオグラフの枝のライブ解析）、リングバッファプロトコルを収録します。worklet レルムが独自の WASM インスタンスを初期化できるよう、メインエントリから `init` / `isInitialized` のみを再エクスポートします。
-- **解析専用モジュール** — `@libraz/libsonare/analysis` エントリの背後にある `sonare-analysis.js` / `sonare-analysis.wasm`（生のアセットは `@libraz/libsonare/wasm/analysis`）。マスタリング・ミキシング・リアルタイム・プロジェクトのバインディングを外してコンパイルしています。CI はサイズをレポートに記録しますが、増加だけでビルドを失敗させません。
-- **オフライン Worker エントリ** — `@libraz/libsonare/worker` の背後にある `worker.js`。`OfflineWorkerClient` の Worker 側です。
-- **ボーカル編集 Worker エントリ** — `@libraz/libsonare/vocal-edit-worker` の背後にある `vocal_edit_worker.js`。`VocalEditWorkerClient` の Worker 側です。
-- **ボイスチェンジャーの JSON Schema** — 2 つのプリセットスキーマが `schemas/` 以下に同梱されるため、ホストは何も取得せずにプリセット文書を検証できます。
+- **メインモジュール**: `sonare.js` と `sonare.wasm`。解析・マスタリング・ミキシング・編集の各 API を支える Emscripten ビルドです。
+- **メイン API エントリ**: パッケージの `index`（`index.js` / `index.d.ts`）は `import ... from '@libraz/libsonare'` を支える tsup バンドルです。解析・マスタリング・ミキシング・編集の全 API を公開します。
+- **AudioWorklet エントリ**: `worklet.js` / `worklet.d.ts`。独立した自己完結型の tsup バンドル（コード分割なし、`AudioWorkletGlobalScope` への移植を想定）で、`SonareEngine` API、worklet プロセッサクラスとその登録ヘルパー、`SonareStreamAnalyzerNode`（オーディオグラフの枝のライブ解析）、リングバッファプロトコルを収録します。worklet レルムが独自の WASM インスタンスを初期化できるよう、メインエントリから `init` / `isInitialized` のみを再エクスポートします。
+- **解析専用モジュール**: `@libraz/libsonare/analysis` エントリの背後にある `sonare-analysis.js` / `sonare-analysis.wasm`（生のアセットは `@libraz/libsonare/wasm/analysis`）。マスタリング・ミキシング・リアルタイム・プロジェクトのバインディングを外してコンパイルしています。CI はサイズをレポートに記録しますが、増加だけでビルドを失敗させません。
+- **オフライン Worker エントリ**: `@libraz/libsonare/worker` の背後にある `worker.js`。`OfflineWorkerClient` の Worker 側です。
+- **ボーカル編集 Worker エントリ**: `@libraz/libsonare/vocal-edit-worker` の背後にある `vocal_edit_worker.js`。`VocalEditWorkerClient` の Worker 側です。
+- **ボイスチェンジャーの JSON Schema**: 2 つのプリセットスキーマが `schemas/` 以下に同梱されるため、ホストは何も取得せずにプリセット文書を検証できます。
 
 ### モジュールを自分でインスタンス化する場合
 
 `sonare.js` / `sonare.wasm` は、パッケージがラップしている Emscripten モジュールそのものです。通常のアプリケーションがこれに直接触れる必要はありません。`@libraz/libsonare` から import すればモジュールは初期化され、レルムごとに 1 インスタンスが保たれます。こちらがサポート対象の入口です。独自ローダー、非標準のバンドル先、ヒープを自前で管理するホストなど、モジュールを自分でインスタンス化する場合にかぎり、知っておくべき入力形式がひとつあります。
 
 ::: warning マスタリングチェーンのバインディングはフラット化済みの形式だけを受け取ります
-モジュールのマスタリングチェーンのエントリが受け付ける設定形式はひとつだけです。コア自身のパラメータパーサが読む、フラット化されたパラメータ列です。代わりにネストした設定オブジェクトを渡すと、呼び出しは**名指しで拒否されます** — 認識できた部分だけを適用して残りを落とすのではなく、読めない設定を明示したエラーが返ります。
+モジュールのマスタリングチェーンのエントリが受け付ける設定形式はひとつだけです。コア自身のパラメータパーサが読む、フラット化されたパラメータ列です。代わりにネストした設定オブジェクトを渡すと、呼び出しは**名指しで拒否されます**。認識できた部分だけを適用して残りを落とすのではなく、読めない設定を明示したエラーが返ります。
 
 **npm パッケージの利用には影響しません。** `masteringChain` と `masterAudio` は、ネストした `MasteringChainConfig` を（リペア段や denoise の設定も含めて）モジュールへ渡す前にフラット化します。したがって `@libraz/libsonare` から import しているコードは、JavaScript API の記述どおりネストした設定を渡し続けられます。該当するのは、モジュールを直接インスタンス化してネストしたオブジェクトをバインディングにそのまま渡す呼び出し側だけで、その場合も得られるのは、一部だけ適用されたチェーンではなく明確なエラーです。
 :::
 
 ## バンドルサイズ
 
-このサイズ表が対象とするのはメインモジュールとメイン API エントリです。解析専用モジュール、
-realtime ランタイム、worklet バンドルは別の構成物で、ここには記載していません。解析専用
-モジュールは、マスタリング・ミキシング・リアルタイム・プロジェクトの各機能を含まない分、
-`sonare.wasm` よりかなり小さくなります。
+このサイズ表が対象とするのはメインモジュールとメイン API エントリです。解析専用モジュール、realtime ランタイム、worklet バンドルは別の構成物で、ここには記載していません。解析専用モジュールは、マスタリング・ミキシング・リアルタイム・プロジェクトの各機能を含まない分、`sonare.wasm` よりかなり小さくなります。
 
 | ファイル | サイズ | Gzip |
 |---------|--------|------|
@@ -429,40 +410,4 @@ for (let start = 0; start < totalDuration; start += CHUNK_DURATION) {
 
 ### どのエラーが投げられるか
 
-C++ コアが入力を拒否したとき、またはオブジェクトが不正な状態にあるとき、WASM バインディングは数値の `code` と `codeName` を持つ構造化された `SonareError` をスローします。生の Emscripten ポインタ番号や不透明な `[object Object]` が漏れることはありません。エクスポートされた `isSonareError(...)` ガードで捕捉し、`ErrorCode` で分岐してください。詳細は[エラーハンドリング](./js-api.md#エラーハンドリング)を参照。
-
-JavaScript バインディング自身が拒否する引数は `SonareError` ではありません。型が違う、または値がない場合はネイティブの `TypeError`、値が定義域の外（未知の名前、整数を読む箇所の小数、対応範囲外のサンプルレート、長さが揃うべき 2 つのバッファの不一致、NUL を含む文字列、空または有限でない音声）なら `RangeError` です。`null`・数値・配列のリクエストオブジェクトや、型の違う型付き配列の音声バッファは、関数名と引数を挙げた `TypeError` になります（`detectBpm: samples must be a Float32Array`）。3 つとも扱ってください。
-
-```typescript
-import { ErrorCode, init, isSonareError, Mixer } from '@libraz/libsonare';
-
-try {
-  await init();
-  const mixer = Mixer.fromSceneJson(sceneJson, sampleRate, 512);
-  // ...
-} catch (error) {
-  if (error instanceof TypeError || error instanceof RangeError) {
-    // 呼び出し自体が誤り。引数を直す。
-  } else if (isSonareError(error) && error.code === ErrorCode.InvalidFormat) {
-    // シーンドキュメントが壊れている。
-  } else {
-    throw error;
-  }
-}
-```
-
-ミキシングとプロジェクトのエントリポイントは、下位の C++ 例外ではなく、対応する C エントリポイントが定めているエラーコードを報告します。`Mixer.fromSceneJson` に壊れたシーン JSON を渡すと `InvalidFormat`、未知のインサートを指すシーンを渡すとコアのメッセージを伴う `InvalidParameter` がスローされます。
-
-状態に起因する失敗は次の 3 つで、いずれも `InvalidState` です。`init()` が解決する前のモジュール呼び出し、`destroy()`・`delete()`・`using` で解放したハンドルのメソッド呼び出し、最初と異なるオプションでの 2 回目の `init()`（異なるオプション名を挙げます）。JavaScript とは別のツリーからビルドされた `.wasm` は、`init()` が `AbiMismatch`（コード 10）をスローします。`init()` は読み込んだモジュールの ABI バージョンを `EXPECTED_ABI_VERSION`（パッケージルートと `@libraz/libsonare/worklet` からエクスポート）と比較します。`moduleFactory` に渡すテスト用ダブルは、この値を報告します。
-
-## 各節の移動先
-
-| 節 | ページ |
-|---|---|
-| Web Worker の使用 | [WASM の応用的な使い方](./wasm-advanced.md) |
-| パフォーマンスのヒント | [WASM の応用的な使い方](./wasm-advanced.md) |
-| React の例 | [WASM の応用的な使い方](./wasm-advanced.md) |
-| ストリーミング解析 | [WASM のストリーミングとリアルタイム処理](./wasm-streaming.md) |
-| 逆再構成 | [WASM のストリーミングとリアルタイム処理](./wasm-streaming.md) |
-| Streaming Retune | [WASM のストリーミングとリアルタイム処理](./wasm-streaming.md) |
-| リアルタイムボイスチェンジャー | [WASM のストリーミングとリアルタイム処理](./wasm-streaming.md) |
+ライブラリが起こす失敗は、数値の `code` と `codeName` を持つ構造化された `SonareError` です。バインディング自身が拒否する引数は、素の `TypeError` か `RangeError` になります。クラスの表、失敗ごとの対応表、3 つのクラスをすべて扱う例は[エラーハンドリング](./js-api.md#エラーハンドリング)にあります。ほかのバインディングでの同じ失敗は[エラー契約](./binding-parity.md#エラー契約)にまとめています。JavaScript とは別のツリーからビルドされた `.wasm` は、`init()` が `AbiMismatch`（コード 10）を投げます。よくある原因は[インストール](./installation.md#ライブラリ読み込み時の-abimismatch)を参照してください。

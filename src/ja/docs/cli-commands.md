@@ -5,7 +5,29 @@ description: sonare CLI のコマンド単位リファレンス。解析、特�
 
 # CLI コマンド
 
-`sonare` CLI の解析・特徴・その他のコマンド群を、索引である [CLI リファレンス](./cli.md) から分けたページです。グローバルオプション、マスタリングのワークフロー、終了コード、対応形式は索引側にあります。
+`sonare` CLI のコマンド単位リファレンスです。各コマンドの役割、オプションと既定値、出力を説明します。グローバルオプション、終了コード、ステレオの扱い、どちらの CLI にどのコマンドがあるかは [CLI リファレンス](./cli.md) にあります。シェルでの通しの手順は [CLI 使用例](./cli-examples.md) にあります。
+
+## 目的別のコマンド
+
+| やりたいこと | コマンド | 参照先 |
+|--------------|----------|--------|
+| テンポ、キー、全体の要約を得る | `analyze`、`bpm`、`key`、`beats` | [解析コマンド](#解析コマンド) |
+| 曲のセクションを見つける | `sections`、`boundaries` | [sections](#sections)、[boundaries](#boundaries) |
+| コード進行を読む | `chords` | [chords](#chords) |
+| ラウドネスを測る | `lufs`、`dynamics`、`meter`（ネイティブ CLI のみ） | [その他の解析](#その他の解析) |
+| スペクトル特徴を要約する | `mel`、`chroma`、`spectral` | [特徴量コマンド](#特徴量コマンド) |
+| メロディを追う、歌のノートを一覧する | `pitch`、`vocal-notes` | [pitch](#pitch)、[スケール補正とボーカルのノート一覧](./cli-examples.md#スケール補正とボーカルのノート一覧) |
+| ミックスを分ける | `hpss`、`decompose-stems` | [hpss](#hpss)、[decompose-stems](#decompose-stems) |
+| 音声を MIDI ファイルにする | `transcribe` | [CLI 使用例](./cli-examples.md#transcribe) |
+| 傷んだ録音を直す | `repair`、`declip` | [repair](./cli.md#repair) |
+| 納品用にマスタリングする | `mastering`、`master`、`eq` | [マスタリングとリペア](./cli.md#マスタリングとリペア) |
+| ファイルのピッチ、テンポ、レベルを変える | `pitch-shift`、`time-stretch`、`normalize`、`trim-silence` | [編集](#編集) |
+| テイクを無音で切る | `split-silence` | [split-silence](#split-silence) |
+| 部屋を推定・シミュレートする | `acoustic`、`estimate-room`、`synthesize-rir`、`room-morph` | [ルームコマンド](#acoustic-と-estimate-room) |
+| ステムをシーンにミックスする | `suggest-mix`、`mix`、`mix-strip` | [ミキシングワークフロー](./cli-examples.md#ミキシングワークフロー) |
+| プロジェクトや MIDI を内蔵シンセでレンダリングする | `project bounce`、`midi-render` | [合成](./cli-examples.md#合成) |
+| 映画音声をスピーカーやヘッドホン向けにレンダリングする | `playback` | [再生レンダラー](./playback.md#どの言語でも同じ流れ) |
+| 数値や変換を確かめる | `power-to-db`、`frames-to-samples` など | [CLI ユーティリティ](./cli-utilities.md) |
 
 ## 解析コマンド
 
@@ -26,17 +48,9 @@ sonare analyze music.mp3 --json
 | `--meter-candidates` | `3,4,6` | 探索する拍子の分子。カンマ区切り |
 | `--meter-denominator` | 4 | 検出した拍子を報告するときの音符単位 |
 
-`--with-seventh` を指定しない場合、コード認識はメジャー・マイナー・ディミニッシュ
-・オーギュメントのトライアドだけを照合します。指定すると、ルートごとに 24 種類の
-コードクオリティすべてが対象になります。セブンスやナインスに加えて、シックスス、
-`7sus4`、イレブンス、サーティーンス、オルタードドミナントが含まれます。
+`--with-seventh` を指定しない場合、コード認識はメジャー・マイナー・ディミニッシュ・オーギュメントのトライアドだけを照合します。指定すると、ルートごとに 24 種類のコードクオリティすべてが対象になります。セブンスやナインスに加えて、シックスス、`7sus4`、イレブンス、サーティーンス、オルタードドミナントが含まれます。
 
-拍子の探索は、指定された分子しか報告しません。既定の候補は `3,4,6` なので、
-5/4 や 7/8、11/8 の曲もこの 3 つのいずれかとして返ってきます。`--meter-candidates
-3,4,5,7` のように候補を広げて初めて検出できます。候補リストは 1〜16 個で、各値は
-2〜32 の範囲です。`--meter-denominator` は結果を報告するときの音符単位を決めるだけ
-で、探索そのものには影響しません。2 つの数字の意味は
-[拍子とグルーピング](./glossary/analysis/meter-and-grouping.md) で説明しています。
+拍子の探索は、指定された分子しか報告しません。既定の候補は `3,4,6` なので、5/4 や 7/8、11/8 の曲もこの 3 つのいずれかとして返ってきます。`--meter-candidates 3,4,5,7` のように候補を広げて初めて検出できます。候補リストは 1〜16 個で、各値は 2〜32 の範囲です。`--meter-denominator` は結果を報告するときの音符単位を決めるだけで、探索そのものには影響しません。2 つの数字の意味は [拍子とグルーピング](./glossary/analysis/meter-and-grouping.md) で説明しています。
 
 **出力:**
 ```
@@ -46,59 +60,7 @@ sonare analyze music.mp3 --json
   > Beats: 240
 ```
 
-**JSON 出力:**
-```json
-{
-  "bpm": 120.5,
-  "bpm_confidence": 0.95,
-  "key": {
-    "root": 0,
-    "mode": 0,
-    "confidence": 0.85,
-    "name": "C major"
-  },
-  "time_signature": {
-    "numerator": 4,
-    "denominator": 4,
-    "confidence": 0.91
-  },
-  "beats": [
-    {"time": 0.52, "strength": 0.84},
-    {"time": 1.02, "strength": 0.78}
-  ],
-  "downbeat_indices": [0, 4, 8],
-  "downbeat_phase": 0,
-  "chords": [
-    {"name": "C", "start": 0.0, "end": 2.0, "confidence": 0.88}
-  ],
-  "sections": [
-    {"type": "intro", "start": 0.0, "end": 8.0}
-  ],
-  "timbre": {
-    "brightness": 0.61,
-    "warmth": 0.47,
-    "density": 0.72,
-    "roughness": 0.18,
-    "complexity": 0.56
-  },
-  "dynamics": {
-    "dynamic_range_db": 9.4,
-    "loudness_range_db": 6.8,
-    "crest_factor": 7.2,
-    "is_compressed": false
-  },
-  "rhythm": {
-    "syncopation": 0.32,
-    "groove_type": "straight",
-    "pattern_regularity": 0.89
-  },
-  "form": "IAB"
-}
-```
-
-上の配列は省略した例です。特に `beats` はビート数ではなく、検出したビートごとの `{"time", "strength"}` オブジェクトを保持します。
-
-`downbeat_indices` は独自の時刻を持たず、`beats` のインデックスを保持します。つまりダウンビートかどうかは、この配列に含まれるかどうかで判定します（`i` が `downbeat_indices` にあれば `beats[i]` がダウンビートです）。`downbeat_phase` は最初のダウンビートが何番目のビートに来るかを表し、テイクが小節の途中から始まっている量を示します。
+`--json` を付けると、`analyze` は上の結果に音色、ダイナミクス、リズム、形式を加えた 1 つのオブジェクトを出力します。各フィールドは [analyze の JSON](./cli-examples.md#analyze-の-json) で説明しています。
 
 ### bpm
 
@@ -181,7 +143,29 @@ sonare onsets music.mp3
 sonare onsets music.mp3 --json
 ```
 
-## 特徴コマンド
+### sections
+
+曲をセクション（イントロ、Aメロ、サビなど）に分け、全体の形式を報告します。ラベルの意味は [セクションと構成](./glossary/analysis/section-structure.md) を参照してください。
+
+```bash
+sonare sections music.mp3
+sonare sections music.mp3 --json
+```
+
+| オプション | 既定値 | 説明 |
+|------------|--------|------|
+| `--min-duration` | 4.0 | 残す最短のセクション長（秒） |
+| `--threshold` | 0.3 | ネイティブ CLI のみ。境界検出のしきい値 |
+| `--n-fft`, `--hop-length` | 2048, 512 | 解析のフレーミング |
+
+**JSON 出力:**
+```json
+{"form": "?", "count": 1, "sections": [{"type": "unknown", "start": 0, "end": 6, "energy": 1, "confidence": 0}]}
+```
+
+`form` は全体の構成を表す文字列で、繰り返し構造が見つからなかった場合は `?` になります。`count` は `sections` の要素数で、各要素は `type`、秒単位の `start` と `end`、`energy`、`confidence` を持ちます。
+
+## 特徴量コマンド
 
 ### mel
 
@@ -261,6 +245,7 @@ sonare pitch music.mp3 --algorithm yin
 | `--fmin` | 65.0 | 追跡する最低周波数（Hz） |
 | `--fmax` | 2093.0 | 追跡する最高周波数（Hz） |
 | `--hop-length` | 512 | ホップ長（サンプル数）。グローバルの `--hop-length` とは別に、範囲チェック付きでこのコマンド用に再定義されています |
+| `--frames` | なし | `--json` と併用すると、要約にフレームごとの `times`・`f0`・`voiced_flag`・`voiced_prob` の配列を加えます |
 
 **出力:**
 ```
@@ -272,7 +257,7 @@ sonare pitch music.mp3 --algorithm yin
 
 ### hpss
 
-HPSS（Harmonic / Percussive Source Separation）。倍音成分（ボーカル／メロディ）と打撃成分（ドラム）を分離します。
+HPSS（Harmonic / Percussive Source Separation、[音源分離](./source-separation.md) を参照）。倍音成分（ボーカル／メロディ）と打撃成分（ドラム）を分離します。
 
 ```bash
 sonare hpss music.mp3 -o separated
@@ -300,7 +285,7 @@ sonare hpss music.mp3 -o separated --json
 
 ### decompose-stems
 
-ミックスを非負値行列因子分解（NMF）の成分に分けます。`hpss` のように倍音／打撃という固定の分け方をするのではなく、繰り返し現れるスペクトルパターンをデータから見つけて分離します。
+ミックスを非負値行列因子分解（NMF）の成分に分けます（[音源分離](./source-separation.md) を参照）。`hpss` のように倍音／打撃という固定の分け方をするのではなく、繰り返し現れるスペクトルパターンをデータから見つけて分離します。
 
 ```bash
 sonare decompose-stems band.wav -o stems.wav
@@ -315,12 +300,7 @@ sonare decompose-stems band.wav -o stems.wav --n-components 6 --init nndsvd --js
 | `--init` | random | NMF の初期化方法。`random` または `nndsvd` |
 | `--mask-power` | 1.0 | ソフトマスクの指数（1 以上）。2 は Wiener 型のパワー比になる |
 
-`-o` は 1 つのファイルではなく、ファイル群の名前として扱われます。どちらの CLI も
-`<base>_component1.wav` 〜 `<base>_componentN.wav` を書き出し、渡したパス末尾の
-`.wav` は取り除かれます。各成分は元音声の位相を保つため、すべて足し合わせると入力に
-戻り、成分単体でもそのまま聴けます。ここがライブラリの `decompose` との違いです。
-`decompose` は振幅スペクトログラムの因子を返すだけなので、音として聴くには位相推定が
-必要になります。
+`-o` は 1 つのファイルではなく、ファイル群の名前として扱われます。どちらの CLI も `<base>_component1.wav` 〜 `<base>_componentN.wav` を書き出し、渡したパス末尾の `.wav` は取り除かれます。各成分は元音声の位相を保つため、すべて足し合わせると入力に戻り、成分単体でもそのまま聴けます。ここがライブラリの `decompose` との違いです。`decompose` は振幅スペクトログラムの因子を返すだけなので、音として聴くには位相推定が必要になります。
 
 **出力:**
 ```
@@ -333,11 +313,7 @@ sonare decompose-stems band.wav -o stems.wav --n-components 6 --init nndsvd --js
 
 ## その他のコマンド
 
-Python CLI には、上記のコア以外にも多くのサブコマンドがあります。
-
-音声ファイルを解析・特徴抽出するコマンドは、共通オプション（`--json`、`--n-fft` など）とファイル引数を取ります。
-
-一覧表示やプリセット参照のコマンドは、より小さい専用のオプションセットを持ちます。編集系コマンドは `-o/--output` を渡すと WAV を書き出します。
+上記のコア以外にも、両方の CLI に多くのサブコマンドがあります。「ネイティブ CLI のみ」と書かれたものは `sonare-cli` が必要です。音声ファイルを解析・特徴量抽出するコマンドは、共通オプション（`--json`、`--n-fft` など）とファイル引数を取ります。一覧表示やプリセット参照のコマンドは、より小さい専用のオプションセットを持ちます。編集系コマンドは `-o/--output` を渡すと WAV を書き出します。
 
 ### その他の解析
 
@@ -350,16 +326,16 @@ Python CLI には、上記のコア以外にも多くのサブコマンドがあ
 | コマンド | 説明 | 主なオプション |
 |----------|------|----------------|
 | `sonare downbeats music.mp3` | ダウンビート時刻（秒） | — |
-| `sonare chords music.mp3` | コード進行 | `--min-duration`, `--smoothing-window`, `--threshold`, `--triads-only`, `--nnls`, `--no-beat-sync`, `--use-hmm`, `--hmm-beam-width`, `--key-context`, `--key-root`, `--key-mode`, `--detect-inversions` |
+| `sonare chords music.mp3` | コード進行 | [chords](#chords) を参照 |
 | `sonare rhythm music.mp3` | リズム特性（シンコペーション、グルーヴ、規則性） | `--start-bpm`（120.0）, `--bpm-min`（60.0）, `--bpm-max`（200.0） |
 | `sonare dynamics music.mp3` | ダイナミクス／ラウドネスの要約 | `--window-sec`（0.4） |
 | `sonare timbre music.mp3` | 音色／スペクトル形状の要約 | — |
 | `sonare lufs music.mp3` | EBU R128 ラウドネス。単位は LUFS（Loudness Units relative to Full Scale。聴感上の音量を表す標準単位。[配信ターゲット](./glossary/mastering/delivery-targets.md) を参照） | `--series`（momentary／short-term の系列も出力） |
-| `sonare acoustic room.wav` | ルーム音響推定（RT60／EDT／C50／C80） | `--ir`（入力をインパルス応答として扱う）, `--n-bands`（6）, `--min-decay-db`（30.0）, `--noise-floor-margin-db`（10.0） |
-| `sonare estimate-room room.wav` | 等価ルーム推定（体積、寸法、吸音率、DRR、信頼度） | `--json`, `--aspect-lw`, `--aspect-lh`, `--reference-absorption`, `--sabine`, `--n-octave-bands` |
-| `sonare synthesize-rir --length 7 --width 5 --height 3 -o rir.wav` | シューボックス形状からモノラル RIR を合成 | `--source-x`, `--source-y`, `--source-z`, `--listener-x`, `--listener-y`, `--listener-z`, `--absorption`, `--sample-rate`, `--ism-order`, `--seed`, `--max-seconds` |
-| `sonare room-morph dry.wav --length 12 --width 9 --height 4 -o wet.wav` | 目標ルームへ寄せる音作り向けのルームモーフィング | `--wet`, `--suppression`, 形状・配置オプション、`--receiver-spacing`（メートル、既定 0.5、0 より大きく 4 まで。2 チャンネルファイルで使われ、ステレオペアとしてモーフィングしてステレオファイルで書き出す）、`--max-seconds` |
-| `sonare boundaries music.mp3` | 構造の転換点と、それを拾い出した元のノヴェルティ曲線 | ネイティブ CLI のみ。`--threshold`（0.3）, `--absolute-threshold`（0.005）, `--kernel-size`（64）, `--n-mfcc`（13）, `--n-chroma`（12）, `--peak-distance`（2.0）, `--reference-window`（60）, `--no-mfcc`, `--no-chroma`, `--n-fft`（2048）, `--hop-length`（512） |
+| `sonare acoustic room.wav` | ルーム音響推定（RT60／EDT／C50／C80） | [acoustic と estimate-room](#acoustic-と-estimate-room) を参照 |
+| `sonare estimate-room room.wav` | 等価ルーム推定（体積、寸法、吸音率、DRR、信頼度） | [acoustic と estimate-room](#acoustic-と-estimate-room) を参照 |
+| `sonare synthesize-rir --length 7 --width 5 --height 3 -o rir.wav` | シューボックス形状からモノラル RIR を合成 | [synthesize-rir と room-morph](#synthesize-rir-と-room-morph) を参照 |
+| `sonare room-morph dry.wav --length 12 --width 9 --height 4 -o wet.wav` | 目標ルームへ寄せる音作り向けのルームモーフィング | [synthesize-rir と room-morph](#synthesize-rir-と-room-morph) を参照 |
+| `sonare boundaries music.mp3` | 構造の転換点と、それを拾い出した元のノヴェルティ曲線 | ネイティブ CLI のみ。[boundaries](#boundaries) を参照 |
 | `sonare melody music.mp3` | メロディ輪郭の要約。メロディの有無、音域（オクターブ）、平均周波数、ピッチの安定度、ビブラート速度、ピッチ点の数 | ネイティブ CLI のみ。`--threshold`（0.1）, `--hop-length`（512）, `--fmin`（80.0）, `--fmax`（1000.0） |
 | `sonare meter music.wav` | ピーク、RMS、クレスト、True Peak、クリッピング率、無音率、DC オフセット | ネイティブ CLI のみ。`--clip-threshold`, `--oversample` |
 | `sonare clipping music.wav` | クリップしたサンプルと区間を検出 | ネイティブ CLI のみ。`--threshold`, `--min-region` |
@@ -367,7 +343,82 @@ Python CLI には、上記のコア以外にも多くのサブコマンドがあ
 | `sonare stereo left.wav --reference right.wav` | 左右ファイルからステレオ相関と幅を測定 | ネイティブ CLI のみ |
 | `sonare phase left.wav --reference right.wav` | 左右ファイルからフェーズスコープ要約を測定 | ネイティブ CLI のみ |
 
-`boundaries` は検出器の全パラメータを公開しており、2 つのしきい値は役割が違います。`--threshold` は `--reference-window` 秒（片側の幅、既定 60。`0` で相対しきい値を無効化）の範囲内で最大のノヴェルティイベントに対する相対値なので、「そもそも変化があったのか」を問えません。それを問えるのが下限の `--absolute-threshold` です。両者の関係と、下限を下げても何が拾えて何が拾えないかは [`detectBoundaries(request)`](./js-api-analysis.md#detectboundaries-request) で説明しています。`--no-mfcc` と `--no-chroma` はそれぞれ特徴量ストリームを 1 つ落としますが、両方の指定は拒否されます。2 つはフレーム単位で結合されるため、どちらも無効では結合する対象がなくなるからです。
+#### chords
+
+コード進行を、時刻付きのコード記号として出力します。既定値はポップスやロックの多くの素材に合います。進行が隣り合うコードの間でちらつくときは、HMM とキーコンテキストのオプションを使ってください。
+
+```bash
+sonare chords music.mp3 --json
+sonare chords music.mp3 --use-hmm --key-context --key-root C --key-mode major
+```
+
+| オプション | 既定値 | 説明 |
+|------------|--------|------|
+| `--min-duration` | 0.3 | 残す最短のコード長（秒） |
+| `--smoothing-window` | 2.0 | クロマの平滑化窓（秒。0 より大きい値） |
+| `--threshold` | 0.5 | コード検出の信頼度しきい値 |
+| `--triads-only` | 無効 | 出力をトライアドのクオリティに限定する |
+| `--nnls` | 無効 | STFT クロマの代わりに NNLS クロマを使う |
+| `--no-beat-sync` | 無効 | ビート同期のクロマプーリングを無効にする |
+| `--use-hmm` | 無効 | コード列を隠れマルコフモデルでデコードする |
+| `--hmm-beam-width` | 24 | HMM デコーダーのビーム幅。`0` なら全探索 |
+| `--key-context` | 無効 | キーコンテキストで検出を補正する |
+| `--key-root` | C | `--key-context` のルート（たとえば `F#`） |
+| `--key-mode` | major | `--key-context` のモード（たとえば `minor`） |
+| `--detect-inversions` | 無効 | 転回形（ベース音）を報告する |
+
+#### boundaries
+
+ネイティブ CLI のみ。`boundaries` は構造境界の検出器をそのまま公開しているので、拾い出した境界に加えて、元になったノヴェルティ曲線も出力します。
+
+| オプション | 既定値 | 説明 |
+|------------|--------|------|
+| `--threshold` | 0.3 | 相対しきい値。`--reference-window` 内で最大のノヴェルティイベントに対する割合 |
+| `--absolute-threshold` | 0.005 | ノヴェルティの絶対下限 |
+| `--kernel-size` | 64 | ノヴェルティカーネルのフレーム数 |
+| `--n-mfcc` | 13 | 特徴ストリームの MFCC 係数の数 |
+| `--n-chroma` | 12 | 特徴ストリームのクロマビンの数 |
+| `--peak-distance` | 2.0 | 境界どうしの最小間隔（秒） |
+| `--reference-window` | 60 | 相対しきい値の片側の幅（秒）。`0` で相対しきい値を無効化 |
+| `--no-mfcc`, `--no-chroma` | 無効 | 特徴ストリームを 1 つ落とす |
+| `--n-fft`, `--hop-length` | 2048, 512 | 解析のフレーミング |
+
+2 つのしきい値は役割が違います。`--threshold` は相対値なので、「そもそも変化があったのか」を問えません。それを問えるのが下限の `--absolute-threshold` です。両者の関係と、下限を下げても何が拾えて何が拾えないかは [`detectBoundaries(request)`](./js-api-analysis.md#detectboundaries-request) で説明しています。`--no-mfcc` と `--no-chroma` の同時指定は拒否されます。2 つのストリームはフレーム単位で結合されるため、どちらも無効では結合する対象がなくなるからです。
+
+#### acoustic と estimate-room
+
+`acoustic` は録音から減衰と明瞭度を測ります。`estimate-room` はさらに進んで、等価ルームを推定します。
+
+| オプション | 既定値 | 説明 |
+|------------|--------|------|
+| `--ir` | 無効 | `acoustic`: 入力をインパルス応答として扱う |
+| `--n-bands` | 6 | `acoustic`: 報告するオクターブバンドの数 |
+| `--min-decay-db` | 30.0 | `acoustic`: 最小の減衰量（dB） |
+| `--noise-floor-margin-db` | 10.0 | `acoustic`: ノイズフロアに対する余裕（dB） |
+| `--aspect-lw` | 1.0 | `estimate-room`: 長さ対幅の事前値 |
+| `--aspect-lh` | 1.0 | `estimate-room`: 長さ対高さの事前値 |
+| `--reference-absorption` | 0.15 | `estimate-room`: 吸音率の事前値 |
+| `--sabine` | 無効 | `estimate-room`: 既定の Eyring モデルの代わりに Sabine モデルを使う |
+| `--n-octave-bands`（別名 `--n-bands`） | ライブラリ既定 | `estimate-room`: アナライザーのオクターブバンド数。`0` はライブラリ既定 |
+
+#### synthesize-rir と room-morph
+
+`synthesize-rir` はシューボックス形状からモノラルの部屋のインパルス応答を作ります。`room-morph` は、ドライな録音を目標ルームへ寄せる音作り向けの効果です。どちらも同じルームオプションを取ります。
+
+| オプション | 既定値 | 説明 |
+|------------|--------|------|
+| `--length`, `--width`, `--height` | 7.0, 5.0, 3.0 | 部屋の寸法（m） |
+| `--absorption` | 0.2 | 壁全体で一様な吸音率（0〜1） |
+| `--source-x`, `--source-y`, `--source-z` | 1.0, 1.0, 1.2 | 音源の位置（m） |
+| `--listener-x`, `--listener-y`, `--listener-z` | 5.0, 4.0, 1.7 | リスナーの位置（m） |
+| `--ism-order` | 3 | 虚像法の反射次数 |
+| `--seed` | 1 | 後部残響のシード。同じ値なら毎回同じ結果になる |
+| `--max-seconds` | 0 | RIR または残響の長さの上限（秒）。`0` は自然な長さ |
+| `--sabine` | 無効 | 既定の Eyring モデルの代わりに Sabine の後部残響モデルを使う |
+| `--sample-rate` | 48000 | `synthesize-rir` のみ。出力サンプルレート |
+| `--wet` | 0.5 | `room-morph` のみ。目標ルームのミックス量（0〜1） |
+| `--suppression` | 0.5 | `room-morph` のみ。元の部屋の残響をどれだけ抑えるか（0〜1） |
+| `--receiver-spacing` | 0.5 | `room-morph` のみ。2 つのレシーバーの間隔（m。0 より大きく 4 まで）。2 チャンネルファイルで使われ、ステレオペアとしてモーフィングしてステレオファイルで書き出す |
 
 ### その他の特徴量
 
@@ -378,12 +429,12 @@ Python CLI には、上記のコア以外にも多くのサブコマンドがあ
 | `sonare tempogram music.mp3` | 対応 | 対応 | 自己相関テンポグラム |
 | `sonare plp music.mp3` | 対応 | 対応 | 主要局所パルス |
 | `sonare nnls-chroma music.mp3` | 対応 | 対応 | NNLS クロマグラム |
-| `sonare cqt music.mp3` | 非対応 | 対応 | Constant-Q 変換のサマリー |
-| `sonare vqt music.mp3` | 非対応 | 対応 | Variable-Q 変換のサマリー |
-| `sonare mel-to-audio music.mp3 -o recon.wav` | 非対応 | 対応 | 計算したメルスペクトログラムから Griffin-Lim で音声を再構成 |
-| `sonare mfcc-to-audio music.mp3 -o recon.wav` | 非対応 | 対応 | 計算した MFCC からメル、Griffin-Lim 経由で音声を再構成 |
-| `sonare tonnetz music.mp3` | 非対応 | 対応 | Tonal centroid 特徴 |
-| `sonare pcen --values ... --n-bins 128 --n-frames 10` | 非対応 | 対応 | 平坦化した行列への per-channel energy normalization |
+| `sonare cqt music.mp3` | 非対応 | 対応 | Constant-Q 変換のサマリー。`--n-bins`, `--bins-per-octave`, `--hop-length`, `--fmin` |
+| `sonare vqt music.mp3` | 非対応 | 対応 | Variable-Q 変換のサマリー。`--n-bins`, `--bins-per-octave`, `--gamma`, `--filter-scale`, `--hop-length`, `--fmin` |
+| `sonare mel-to-audio music.mp3 -o recon.wav` | 非対応 | 対応 | 計算したメルスペクトログラムから Griffin-Lim で音声を再構成。`--n-iter`, `--n-mels`, `--fmin`, `--fmax` |
+| `sonare mfcc-to-audio music.mp3 -o recon.wav` | 非対応 | 対応 | 計算した MFCC からメル、Griffin-Lim 経由で音声を再構成。`--n-mfcc`, `--n-iter`, `--n-mels`, `--fmin`, `--fmax` |
+| `sonare tonnetz music.mp3` | 非対応 | 対応 | Tonal centroid 特徴。`--n-fft`, `--hop-length` |
+| `sonare pcen --values ... --n-bins 128 --n-frames 10` | 非対応 | 対応 | 平坦化した行列への per-channel energy normalization。[数値ヘルパー](./cli-utilities.md) と同じく `--values` を取り、ほかに `--n-bins`, `--n-frames`, `--sample-rate`, `--time-constant`, `--gain`, `--bias`, `--power`, `--eps`, `--hop-length` を取る |
 | `sonare fourier-tempogram music.mp3` | 非対応 | 対応 | Fourier tempogram |
 | `sonare tempogram-ratio music.mp3` | 非対応 | 対応 | テンポ比特徴量 |
 
@@ -391,47 +442,32 @@ Python CLI は行列特徴量の全データをそのまま出力せず、サマ
 
 ### 編集
 
-音声を変換し、`-o` で WAV を書き出します。
+音声を変換し、`-o` で WAV を書き出します。ノート単位の編集とスケール補正の手順は [CLI 使用例](./cli-examples.md#ノート編集ワークフロー) にあります。
 
 | コマンド | 説明 | オプション |
 |----------|------|-----------|
 | `sonare pitch-correct vocal.wav -o out.wav` | 目標 MIDI ノートへピッチ補正 | `--current-midi`（69.0）, `--target-midi`（69.0） |
-| `sonare pitch-correct-timevarying vocal.wav -o out.wav` | pYIN 輪郭を追跡し、1 音または音階へ補正 | `--mode midi\|scale`, `--target-midi`, `--scale-root`, `--scale-mode-mask`, `--reference-midi`, `--hop-length` |
+| `sonare pitch-correct-timevarying vocal.wav -o out.wav` | pYIN 輪郭を追跡し、1 音または音階へ補正 | `--mode midi\|scale`, `--target-midi`, `--scale-root`, `--scale-mode-mask`（12 ビットのマスク、または `minor` などのモード名）, `--reference-midi`, `--hop-length`, `--retune-amount`（1.0）, `--max-correction-semitones`（12）, `--retune-speed-ms`（50）, `--vibrato-threshold-cents`（20） |
 | `sonare note-move take.wav --target-onset 48000 -o out.wav` | ノート区間を指定サンプル位置へ移動 | `--onset`, `--offset`, `--target-onset`（サンプル位置） |
 | `sonare note-stretch take.wav -o out.wav` | 単一ノート区間をストレッチ | `--onset`, `--offset`（サンプル位置）, `--ratio`（1.0） |
-| `sonare scale-quantize 68.7` | MIDI 値を音階へ量子化 | `--root`, `--mode-mask`, `--reference-midi` |
+| `sonare scale-quantize 68.7` | MIDI 値を音階へ量子化 | `--root`, `--mode-mask`（12 ビットのマスク、またはモード名）, `--reference-midi` |
 | `sonare voice-change vocal.wav -o out.wav` | ボイスチェンジ（ピッチ＋フォルマント） | `--pitch-semitones`（0.0）, `--formant-factor`（1.0）, `--formant-mode relative\|absolute`（relative） |
 | `sonare pitch-shift vocal.wav --semitones 3 -o out.wav` | 長さを変えずに移調 | `--semitones`（**必須**） |
 | `sonare time-stretch take.wav --rate 1.2 -o out.wav` | ピッチを変えずに長さを変更 | `--rate`（**必須**） |
 | `sonare normalize mix.wav -o out.wav` | ピークまたは RMS ノーマライズ | `--mode peak\|rms`, `--target-db` |
-| `sonare trim-silence take.wav -o out.wav` | 前後の無音をトリム | `--top-db`, `--threshold-db`（-60） |
+| `sonare trim-silence take.wav -o out.wav` | 前後の無音をトリム。既定では絶対値 `-60` dBFS を下回る部分を削り、ライブラリの `trim` と同じ規則になる。`--top-db` を付けると、ピーク基準の `trimSilence` と同じ規則になる | `--top-db`, `--threshold-db`（-60） |
 | `sonare resample music.wav --target-sr 44100 -o out.wav` | リサンプリング | `--target-sr` |
 | `sonare polyphonic-notes chord.wav` | ポリフォニー解析が見つけたノートを一覧表示 | — |
+| `sonare vocal-notes vocal.wav` | ボーカル編集セッションがモノフォニックのテイクから見つけるノートを、最も近い音からのずれ（セント）付きで一覧表示 | `--segmentation-threshold-cents`（50）, `--min-note-ms`（30）, `--fmin-hz`（65）, `--fmax-hz`（2093）, `--reference-hz`（440）, `--frame-length-samples`, `--hop-length-samples`, `--yin-threshold`, `--voiced-threshold`, `--no-centered` |
 | `sonare polyphonic-render chord.wav -o out.wav` | その解析結果をノート単位で編集して再レンダリング | `--edit NOTE.FIELD=VALUE`（繰り返し可） |
 | `sonare project align-takes --in project.json --reference-source 1 -o aligned.json` | プロジェクト内のすべてのテイクを 1 つの参照ソースに揃え、テイクごとのワープマップを付けてプロジェクトを書き戻す。ソースファイルを直接読む。参照と異なるレートで録音されたテイクは参照のグリッドへリサンプリングされ、アンカーはプロジェクトのレートで書き込まれる（[録音とテイク](./recording-and-takes.md) を参照） | `--in`, `--reference-source`（**必須**）, `--audio SOURCE_ID=WAV`（繰り返し可）, `--resolve-audio`, `--hop-length`, `--bins-per-octave` |
 
-`--top-db` と `--threshold-db` は同時に指定できない、択一の無音判定方式です。
-どちらも省略すると `--threshold-db` が `-60` として扱われ、`--top-db` を指定すると
-ピーク相対のトップ dB 方式に切り替わります。
+`--top-db` と `--threshold-db` は同時に指定できない、択一の無音判定方式です。どちらも省略すると `--threshold-db` が `-60` として扱われ、`--top-db` を指定するとピーク相対のトップ dB 方式に切り替わります。
 
-Python CLI は、上のファイル書き出し編集コマンドを提供します。`hpss` も `-o` が必須で、エネルギー要約を表示しながら `<base>_harmonic.wav` と `<base>_percussive.wav` を書き出します。
-
-#### ノート単位の編集
-
-`polyphonic-notes` と `polyphonic-render` は対で使います。前者はポリフォニー解析が見つけたノートを 0 から番号付きで表示し、後者はその番号を使って編集を指定し、テイクを再レンダリングします。どちらも解析を同じ既定値で実行し、フレーミングを変えるオプションを持たないため、一方で読んだ番号がそのまま他方の対象になります。
-
-```bash
-sonare polyphonic-notes chord.wav --json
-sonare polyphonic-render chord.wav -o out.wav \
-  --edit 0.pitch_shift_semitones=2 --edit 3.muted=1
-```
-
-`--edit` は 1 回につき 1 つの `NOTE.FIELD=VALUE` を指定し、繰り返し渡せます。指定できるフィールドは `pitch_shift_semitones`、`gain_db`、`time_offset_samples`、`time_stretch_ratio`、`formant_shift_semitones`、`vibrato_depth_change`、`drift_change`、`muted` です。未知のフィールドは無視されるのではなくエラーになります。`polyphonic-render` は `-o` が必須で、`polyphonic-notes` は標準出力に表示するだけなので出力ファイルを取りません。
+両方の CLI が、上のファイル書き出し編集コマンドを提供します。`hpss` も `-o` が必須で、エネルギー要約を表示しながら `<base>_harmonic.wav` と `<base>_percussive.wav` を書き出します。
 
 ::: warning 何もしない既定値はありません
-`--semitones` と `--rate` に既定値はありません。既定値があると、省略したときに
-コマンドが何もしない状態になるためです。どちらも必須です。また、ピッチシフトの未知の
-`--algorithm` やピッチ補正の未知の `--mode` も、既定値へフォールバックせずエラーになります。
+`--semitones` と `--rate` に既定値はありません。既定値があると、省略したときにコマンドが何もしない状態になるためです。どちらかを省略すると終了コード 3 で終了します。`pitch-correct-timevarying` の `--mode` も同じ考え方で、`midi` か `scale` だけを受け付け、それ以外は既定値へフォールバックせず使用方法エラー（終了コード 2）になります。
 :::
 
 ネイティブ CLI では、共通の編集コマンドに加えて、低レベルの処理コマンドも使えます。
@@ -467,41 +503,19 @@ Non-silent intervals: 3
 [{"start_sample": 28160, "end_sample": 116224}, {"start_sample": 153088, "end_sample": 241152}, {"start_sample": 287232, "end_sample": 394752}]
 ```
 
+`--report` を付けると JSON は `{"intervals": [...], "report": {...}}` というオブジェクトになります。
+
 | オプション | 既定値 | 説明 |
 |------------|------------|------|
 | `--input WAV` | — | 同じパートの別テイク。繰り返し指定可 |
 | `--top-db` | 60.0 | ピークからの無音しきい値（dB） |
 | `--write-takes PREFIX` | — | 各テイクを各区間で切り出して書き出す |
+| `--report` | 無効 | `--json` と併用すると `report` オブジェクトを加える。`silence_ceiling_db`（無音がまだ見つかる最大の `--top-db`。複数テイクでは余裕が最も小さいテイクの値）、`max_signal_intervals` と `min_signal_intervals`（最も細かく分かれたテイクと最も粗いテイクの区間数） |
+| `--n-fft`, `--hop-length` | 2048, 512 | 解析のフレーミング |
 
-テイクを複数渡すと、区間はテイクごとの区間の和集合になり、接する区間は結合されます。つまりカットが入るのは、すべてのテイクが無音になっている場所だけです。
+テイクを複数渡すと、すべてのテイクが無音になっている場所だけがカット位置になります。複数テイクの指定、`--write-takes`、エラーの出方は [無音でテイクを分割する](./cli-examples.md#無音でテイクを分割する) で順に説明しています。
 
-```bash
-sonare split-silence take1.wav --input take2.wav --input take3.wav
-```
-```
-Non-silent intervals: 3
-  23040 - 121344
-  147968 - 246272
-  282624 - 399872
-```
-
-`--write-takes PREFIX` は、各テイクを各区間で切り出して `PREFIX{take:02d}_{interval:03d}.wav`（どちらも 1 始まり）として書き出します。テイク 3 つ・区間 3 つなら 9 ファイルです。
-
-```bash
-sonare split-silence take1.wav --input take2.wav --input take3.wav \
-  --write-takes cut_
-```
-```
-Wrote 9 take files with prefix cut_
-```
-
-他より早く終わるテイクは短縮されず、パディングされます。そのため 1 つの区間のファイルはどのテイクでも同じ長さになり、そのまま比較できます。先頭のテイクとサンプルレートが異なるテイクは、リサンプルされずに名前付きで拒否されます。
-
-```
-Error: take sample rate differs: t3_44.wav is 44100 Hz, the first take is 48000 Hz
-```
-
-`-o`／`--output` は今も使用方法エラー（終了コード 2）です。このコマンドの結果は区間の一覧か切り出したテイクファイルであり、単一のレンダリング済み出力ファイルではありません。
+`-o`／`--output` は使用方法エラー（終了コード 2）です。このコマンドの結果は区間の一覧か切り出したテイクファイルであり、単一のレンダリング済み出力ファイルではありません。
 
 ### リアルタイムボイスプリセット
 
@@ -518,15 +532,6 @@ Error: take sample rate differs: t3_44.wav is 44100 Hz, the first take is 48000 
 
 プリセットの選択は明示的に行います。組み込みの `--preset ID`、`--preset-json FILE`、または `--preset-pack FILE --preset ID` の組み合わせから 1 つを選びます。パックファイルとエントリ ID はセットで 1 つの指定として扱われるため、`--preset-pack` だけを渡すと拒否されます（先頭エントリへのフォールバックはありません）。`--preset-json` とパックは併用できません。`--set PATH=VALUE` を使うには、いずれかのプリセット指定が必要です。
 
-### 合成
+### Playback
 
-ネイティブ CLI では簡単なテスト信号を生成でき、MIDI プロジェクトを内蔵シンセでレンダリングするコマンドは両方の CLI にあります。
-
-| コマンド | 必須または主なオプション |
-|----------|--------------------------|
-| `sonare tone -o tone.wav` | `--frequency`; 任意で `--sr`（22050）, `--duration`（1.0）, `--phase`（0.0）, `--amplitude`（1.0） |
-| `sonare chirp -o sweep.wav` | `--fmax`; 任意で `--fmin`, `--exponential`, `--sr`（22050）, `--duration`（1.0） |
-| `sonare clicks -o clicks.wav` | 秒単位のカンマ区切り `--times`; 任意で `--sr`（22050）, `--length`, `--frequency`（1000.0）, `--click-duration`（0.1） |
-| `sonare midi-render --in project.json -o render.wav` | `--in`, `-o`; `--synth PRESET`（省略時は GM プログラムに追従）, `--sample-rate`, `--frames`, `--block-size`, `--channels`（正の出力幅は `1`、`2`、`6`、`8`; 既定は `2`）, `--instrument-latency`。両方の CLI にあり、常にシンセ経路を使う `project bounce` なので、`--audio` と `--resolve-audio` は受け付けない |
-
-`project bounce` とその短縮形 `midi-render` で指定できる正の出力幅は `1`、`2`、`6`、`8` です。`--channels` を省略するか `0` 以下を渡すと、既定の 2 チャンネルになります。要求した出力幅はシーンのマスターのレイアウト幅を超えられません。ただしモノラル／ステレオのマスターと、マスターを持たないシーンは最大 2 チャンネルまで許容します。`"5.1"` は 6 チャンネルまで、`"7.1"` は 8 チャンネルまでです。
+`playback` は映画音声（モノラル、ステレオ、5.1、7.1）をスピーカーレイアウトまたはバイノーラルヘッドホン向けにレンダリングするコマンドで、5.1 と 7.1 のチャンネルを保つ唯一のコマンドです。オプション: `--target`（`headphones`、`stereo`、`5.1`、`7.1`）、`--input-layout`（`auto`、`mono`、`stereo`、`5.1`、`7.1`）、`--config FILE`、`--no-upmix`、`--night`（0〜1）、`--dialogue-db`（-12〜12）、`--program-lufs`（-70〜0。省略すると入力から測定）、`--target-lufs`（-40〜-5）、`--room`（`none`、`living_room`、`home_theater`、`screening_room`）、`--hrtf FILE`。ステージ、設定キー、例は [再生レンダラー](./playback.md#どの言語でも同じ流れ) にあります。

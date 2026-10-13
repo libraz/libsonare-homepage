@@ -11,7 +11,7 @@ It is the format `Mixer.fromSceneJson(...)` reads and `toSceneJson()` writes. In
 
 The format is identical across WASM, Python, Node, the C ABI, and C++. Because it is plain JSON, you can store it with a project, diff it in git, hand-edit it, and reload it later. A JSON Schema for it, `mixer-scene.schema.json`, ships inside the npm and Python packages so a hand-written or generated scene can be checked before it ever reaches a mixer — see [Validating a scene against the schema](#validating-a-scene-against-the-schema).
 
-If you have not met strips, sends, and buses yet, read [Mixing Basics](./glossary/concepts/mixing-basics.md) and the [Mixing Engine](./mixing.md) guide first — this page is the field-by-field reference.
+If you have not met strips, sends, and buses yet, read [Mixing Basics](./glossary/concepts/mixing-basics.md) and the [Mixing Engine](./mixing.md) guide first. This page is the field-by-field reference.
 
 The demo below shows the same routing ideas without JSON: lanes feed a small mixer, sends and levels change the output, and the meters respond immediately. Use it first if the scene fields feel abstract, then come back to the schema with the signal flow in mind.
 
@@ -62,7 +62,7 @@ Every such key is reported as a **non-fatal warning** with its path from the doc
 
 Insert `params` keys are covered by the same list: a param key that no processor consumed is reported too. Enumerate the keys an insert actually reads with `masteringInsertParamNames(name)` (Python `mastering_insert_param_names(name)`).
 
-The shipped schema catches the same mistakes before any load: every object in it is `additionalProperties: false`, so a validator reports the misspelling at validation time.
+The shipped schema catches the same mistakes before any load. Every object uses `additionalProperties: false` with `patternProperties` allowing `$` and `x-` annotations, so misspellings such as `faderDB` fail validation while reserved metadata keys validate.
 
 The live-engine setters are stricter than a whole-scene load. `setTrackStripJson`, `setBusStripJson`, `setMasterStripJson` (and the Node, WASM, and Python setters over them) and the strip EQ band setters (`setTrackStripEqBand`, `setTrackStripEqBandJson`, and the bus and master counterparts) **refuse** a key they do not consume with `InvalidParameter`, and the message names it: `unknown strip key 'strips[0].faderDB'`, `unknown band key 'gainDB'`. The legacy snake_case spellings and the `$` / `x-` keys are accepted.
 :::
@@ -87,11 +87,12 @@ Each strip object describes one channel lane. All numeric fields have sensible d
 | `dualPanRight` | number | `1` | Right position in dual-pan mode (default is identity hard-right); clamped to `-1` … `+1` |
 | `sourceLayout` | string | `"stereo"` | Channel layout of the source feeding the strip: `"mono"`, `"stereo"`, `"5.1"`, or `"7.1"`. The writer omits it at the stereo default; any other string is rejected at load |
 | `surroundPan` | object | identity | Surround-pan position for wider-than-stereo hosts. `azimuth`, `divergence`, and `lfe` affect the [realtime engine's 5.1/7.1 group-bus panner](./realtime-engine.md#surround-group-buses-and-wide-meters); `elevation` and `distance` are reserved. Values are clamped on load and round-tripped through scene JSON; the writer omits the object at the centred default. The standalone offline `Mixer` remains stereo and therefore does not apply it |
-| `metering` | object | all on | Which meters the strip computes: `enabled`, `lufs`, `truePeak` (booleans, default `true`) and `truePeakOversample` (integer, default `4`, must be `1` … `16`). The writer omits the object when every meter is at its default |
+| `metering` | object | all on | Which meters the strip computes: `enabled`, `lufs`, `truePeak` (booleans, default `true`) and `truePeakOversample` (integer, default `4`, must be `1` … `16`; the meter resolves it to 2x for `2`, 8x for `8`–`16`, and 4x otherwise). The writer omits the object when every meter is at its default |
 | `polarityInvertLeft` | boolean | `false` | Inverts the left channel polarity |
 | `polarityInvertRight` | boolean | `false` | Inverts the right channel polarity |
 | `panLaw` | integer | `0` | `0` = const 3 dB, `1` = const 4.5 dB, `2` = const 6 dB, `3` = linear 0 dB. Anything else is **rejected** at load |
 | `channelDelaySamples` | integer | `0` | Per-strip delay, `0` … `192000`; delays only this strip and is excluded from [PDC](./mixing.md#latency-and-plugin-delay-compensation-pdc). Out of range is rejected at load |
+| `eq` | object | identity | The strip's built-in equalizer, which runs pre-fader: `enabled` (default `true`) and `bands`, at most 24 [EQ bands](#eq-bands). Omitted by the writer while it is enabled and every band is at its default. Scene JSON is the only way to configure it from WASM, which has no EQ setters on `Mixer` |
 | `inserts` | array | `[]` | In-series processors (see [Insert](#insert)) |
 | `sends` | array | `[]` | Parallel sends to buses (see [Send](#send)) |
 
@@ -104,11 +105,11 @@ Serializing a scene after runtime pan edits preserves the strip's current `panMo
 :::
 
 ::: warning How a rejected scene reaches you
-Everything that stops a scene from building — malformed JSON, an unsupported `version`, an out-of-range field, a non-string `timing` — is reported with the C ABI's own code and the specific reason in the message.
+Everything that stops a scene from building (malformed JSON, an unsupported `version`, an out-of-range field, a non-string `timing`) is reported with the C ABI's own code and the specific reason in the message.
 
 | Runtime | What you catch | Code |
 |---------|----------------|------|
-| WASM | `SonareError`, message `failed to build mixer from scene JSON: <reason>` | `InvalidFormat` for a malformed document, `InvalidParameter` for an unsupported version or an out-of-range field |
+| WASM | `SonareError`, message `failed to build mixer from scene JSON: <reason>` | `InvalidFormat` for a malformed document, a fractional integer, or an out-of-range `panMode`, `panLaw`, `channelDelaySamples`, or `metering.truePeakOversample`; `InvalidParameter` for an unsupported `version`, a non-string `slot` or `timing`, an unknown layout, or a graph the build refuses |
 | Node native | `SonareError` with the same message and codes | Same |
 | Python | `SonareError` with the same message and codes | Same |
 | C ABI | `nullptr` from `sonare_mixer_from_scene_json` | `sonare_last_error_code()`; the reason is in `sonare_last_error_message()` |
@@ -117,10 +118,10 @@ Branch on `code`; log the message to see which field was wrong. Validating a sce
 :::
 
 ::: details Field terms: dual pan, polarity invert, pan law, PDC
-- **Dual pan** (`panMode: 2`) — pans the left and right channels to *independent* positions instead of moving the whole signal together. Useful for narrowing or re-placing an already-stereo source.
-- **Polarity invert** — multiplies a channel by −1, flipping the waveform. Used to fix a track recorded out of phase with another; it changes phase relationships, not perceived loudness on its own.
-- **Pan law** — how much the center is attenuated relative to hard-left/right so loudness stays even as you pan. `const 3/4.5/6 dB` are constant-power options; `linear 0 dB` keeps the summed level steady instead. See [Mixing Engine](./mixing.md#pan-modes-and-pan-laws).
-- **PDC (plugin-delay compensation)** — when one path is delayed by a lookahead processor, the engine delays the shorter paths to match so everything lines up at the master. `channelDelaySamples` is excluded from that calculation.
+- **Dual pan** (`panMode: 2`): pans the left and right channels to *independent* positions instead of moving the whole signal together. Useful for narrowing or re-placing an already-stereo source.
+- **Polarity invert**: multiplies a channel by −1, flipping the waveform. Used to fix a track recorded out of phase with another; it changes phase relationships, not perceived loudness on its own.
+- **Pan law**: how much the center is attenuated relative to hard-left/right so loudness stays even as you pan. `const 3/4.5/6 dB` are constant-power options; `linear 0 dB` keeps the summed level steady instead. See [Mixing Engine](./mixing.md#pan-modes-and-pan-laws).
+- **PDC (plugin-delay compensation)**: when one path is delayed by a lookahead processor, the engine delays the shorter paths to match so everything lines up at the master. `channelDelaySamples` is excluded from that calculation.
 :::
 
 ## Insert
@@ -135,13 +136,26 @@ An insert is a named processor running in series inside the strip (or a bus).
 | `sidechainKey` | string | *Optional.* Strip id whose signal feeds this insert's external sidechain (e.g. ducking). Omitted when empty. |
 
 ::: info Sidechain and ducking
-Normally a processor reacts to the audio passing through it. A **sidechain** makes it react to a *different* track instead: `sidechainKey` names that other strip. The classic use is **ducking** — a compressor on the music that turns the music down whenever the named voice strip is loud, so speech stays clear over a music bed.
+Normally a processor reacts to the audio passing through it. A **sidechain** makes it react to a *different* track instead: `sidechainKey` names that other strip. The classic use is **ducking**: a compressor on the music that turns the music down whenever the named voice strip is loud, so speech stays clear over a music bed.
 
-On the live [realtime engine](./realtime-engine.md), sidechain keys are bound with `setLaneSidechain`, `setBusSidechain`, and `setMasterSidechain`, which refuse a binding that keys a strip from itself or closes a cycle with `InvalidParameter`. `canSetLaneSidechain(trackId, insertIndex, sourceTrackId)`, `canSetBusSidechain`, and `canSetMasterSidechain` ask the same question without changing anything and answer `{ ok, reason }` (for example `{ ok: false, reason: 'selfKey' }` or `'cycle'`), so a UI can grey out an impossible choice before the user makes it.
+On the live [realtime engine](./realtime-engine.md), sidechain keys are bound with `setLaneSidechain`, `setBusSidechain`, and `setMasterSidechain`, which refuse a binding they cannot honor with `InvalidParameter`. `canSetLaneSidechain(trackId, insertIndex, sourceTrackId)`, `canSetBusSidechain`, and `canSetMasterSidechain` ask the same question without changing anything and answer `{ ok, reason }`, so a UI can gray out an impossible choice before the user makes it. `reason` is `null` exactly when `ok` is true; otherwise it is the first check that failed:
+
+| `reason` | The binding is refused because |
+|----------|--------------------------------|
+| `invalidTarget` | the track id is 0, or the bus is not configured |
+| `insertOutOfRange` | the strip has no insert at that index |
+| `undeclaredSource` | the source track or bus is not declared |
+| `invalidSourceKind` | the source kind is neither a track nor a bus |
+| `selfKey` | a strip would key itself |
+| `cycle` | the key would close a loop through outputs, sends, or other keys |
+| `tableFull` | the sidechain binding table is full |
+| `planRefused` | no delay-compensation plan exists for the alignment |
+
+The calls and their setup are in [Realtime Engine](./realtime-engine.md).
 :::
 
 ::: warning `params` is an object; the escaped-string form is legacy
-`toSceneJson()` writes `params` as a nested object — `"params": { "ratio": 2.5 }` — and that is the only shape the schema admits. The loader still accepts the older form, an escaped JSON string (`"params": "{\"ratio\":2.5}"`), so a scene saved by an earlier release loads unchanged; a validator rejects it as `is not object`. When you write a scene by hand, use the object form. Anything that is neither an object nor a string is refused at load with `insert params must be a JSON object (or the legacy JSON string)`.
+`toSceneJson()` writes `params` as a nested object (`"params": { "ratio": 2.5 }`), and that is the only shape the schema admits. The loader still accepts the older form, an escaped JSON string (`"params": "{\"ratio\":2.5}"`), so a scene saved by an earlier release loads unchanged; a validator rejects it as `is not object`. When you write a scene by hand, use the object form. Anything that is neither an object nor a string is refused at load with `insert params must be a JSON object (or the legacy JSON string)`.
 :::
 
 ## Send
@@ -151,7 +165,7 @@ A send routes a *copy* of the strip's signal to a destination bus. The `timing` 
 | Field | Type | Meaning |
 |-------|------|---------|
 | `id` | string | Send identifier, unique within the strip |
-| `destinationBusId` | string | *Required.* The `id` of the target bus. It must name a bus in the same document — the mixer build refuses `send destination is not a bus` otherwise |
+| `destinationBusId` | string | *Required.* The `id` of the target bus. An id that no bus declares creates an implicit `aux` bus that routes to the master, so a misspelled destination is not rejected: it makes sound. Declare the bus you mean |
 | `sendDb` | number | Send level in dB, default `0` |
 | `timing` | `"pre"` \| `"post"` | Tapped before or after the fader (again, short tokens); defaults to `"post"` |
 
@@ -165,12 +179,28 @@ A send routes a *copy* of the strip's signal to a destination bus. The `timing` 
 | `inputTrimDb` | number | Gain at the bus input, default `0` |
 | `width` | number | Stereo width of the bus, default `1`, clamped to `0` … `2` like a strip's. Refused when `layout` is wider than stereo, since a surround bed has no stereo image to narrow or widen |
 | `polarityInvertLeft` / `polarityInvertRight` | boolean | Per-channel polarity flip on the bus, default `false` |
+| `pan`, `panMode`, `dualPanLeft`, `dualPanRight`, `panLaw` | as on a strip | Same meaning and ranges as the [strip fields](#strip). Anything other than the defaults is refused when `layout` is wider than stereo |
+| `eq` | object | The bus's built-in equalizer; the same shape as the strip's [`eq`](#eq-bands) |
 | `inserts` | array | Processors on the bus itself (same [Insert](#insert) shape as a strip) |
 
-The writer omits `layout`, `inputTrimDb`, `width`, and both polarity flags whenever they sit at their defaults, so a plain stereo bus serializes as just `id`, `role`, and `inserts`.
+The writer omits `layout`, `inputTrimDb`, `width`, the pan fields, `eq`, and both polarity flags whenever they sit at their defaults, so a plain stereo bus serializes as just `id`, `role`, and `inserts`.
 
-::: info Only `master` and `aux` are special role tokens
-The engine treats `master` and `aux` specially; **any other role string is just a generic non-master bus**. So a "drum bus" works the same whether its role is `submix`, `subgroup`, or `group` — the token is a label, not a behavior switch. The built-in `drumBusSubgroup` preset uses `subgroup`, so if you print it (`mixingScenePresetJson('drumBusSubgroup')`) you will see `"role": "subgroup"`, not `"submix"`. The corollary: a misspelt `"mastre"` is not an error, it is a scene with no master bus.
+### EQ bands
+
+A strip's or bus's `eq` object is `{ "enabled": true, "bands": [...] }`, with at most 24 bands. Each band has the same fields as the realtime engine's `EqBand`:
+
+| Field | Meaning |
+|-------|---------|
+| `enabled` | Defaults to `false`: a band does nothing until it is enabled |
+| `type` | `Peak` (default), `LowShelf`, `HighShelf`, `LowPass`, `HighPass`, `BandPass`, `Notch`, `TiltShelf`, `FlatTilt`, or `AllPass` |
+| `frequencyHz`, `gainDb`, `q` | Center or corner frequency (default 1000), gain (default 0), and resonance or slope |
+| `slopeDbOct`, `coeffMode`, `placement`, `phase`, `soloed`, `bypassed` | Filter slope, coefficient mode, stereo placement, phase mode, and per-band solo and bypass |
+| `dynamic`, `thresholdDb`, `ratio`, `rangeDb`, `attackMs`, `releaseMs`, … | The per-band dynamic-EQ fields; see `eqBand` in the schema for the full list |
+
+A band left out of the list stays at the identity, and the writer drops the whole object while every band is untouched.
+
+::: info Only `master` is a special role token
+`master` is the only role the engine treats specially, and `aux` is just the default a bus gets when it has no role. **Any other role string is a generic non-master bus**, so a "drum bus" works the same whether its role is `submix`, `subgroup`, or `group`: the token is a label, not a behavior switch. The built-in `drumBusSubgroup` preset uses `subgroup`, so if you print it (`mixingScenePresetJson('drumBusSubgroup')`) you will see `"role": "subgroup"`, not `"submix"`. A misspelt `"mastre"` is not an error either. That bus becomes an ordinary one, and the master is the bus with id `master` or an implicit one. The scene still sounds, but not through the bus you configured.
 :::
 
 ## VCA group
@@ -207,8 +237,8 @@ The scene format is described by a JSON Schema (draft 2020-12) titled `MixSceneD
 
 The `$id` (`https://libraz.net/schemas/libsonare/mixer-scene.schema.json`) is an identifier, not a download location — point your validator at the installed copy. The `@libraz/libsonare-native` package and the CMake install do not carry the file; take it from one of the packages above.
 
-::: warning A scene file cannot carry a `$schema` key
-The top-level object is `additionalProperties: false` and lists only `version`, `strips`, `buses`, `vcaGroups`, and `connections`. A `"$schema": "..."` line inside the scene — the usual way to let an editor find its schema — therefore fails validation as an undeclared key (the loader would ignore it). Associate the schema from the outside instead: an editor file-match rule, or the validator's schema argument, as below.
+::: tip Associate a schema with a scene
+A scene may carry a `"$schema"` key for editor discovery. Keys beginning with `$` or `x-` are accepted on every object by the schema and ignored without warnings by the loader. You can also associate the schema through an editor file-match rule or pass it directly to a validator, as below.
 :::
 
 ::: code-group
@@ -264,13 +294,11 @@ The schema is written to be **stricter** than the loader wherever the loader wou
 | `pan`, `dualPanLeft`, `dualPanRight` outside −1 … 1, `width` outside 0 … 2 | Rejected (`minimum`/`maximum`) | Clamped into range |
 | Missing `id`, `processor`, `destinationBusId`, `source`, `destination` | Rejected (`required`, `minLength: 1`) | Read as empty and refused later by the mixer build |
 | Non-object entry in `strips`/`buses`/`vcaGroups`/`connections`/`inserts`/`sends`, non-string `members` entry | Rejected | Skipped silently |
-| `panMode` above `2`, `panLaw` above `3` | Accepted (only `minimum: 0`) | Rejected: `panMode enum is out of range` / `panLaw enum is out of range` |
-| `channelDelaySamples` above `192000` | Accepted (only `minimum: 0`) | Rejected: `channelDelaySamples must be in [0, 192000]` |
-| `metering.truePeakOversample` above `16` | Accepted (only `minimum: 1`) | Rejected: `metering.truePeakOversample must be in [1, 16]` |
 | Number outside 32-bit float range (`1e40`) | Accepted | Rejected: `floating-point field is non-finite or out of float range` |
-| Unknown processor id, send to a bus not in the document, connection or `sidechainKey` naming an unknown node, duplicate ids | Accepted (not expressible) | Refused by the mixer build |
+| Unknown processor id, connection or `sidechainKey` naming an unknown node, duplicate ids | Accepted (not expressible) | Refused by the mixer build |
+| `destinationBusId` naming no declared bus | Accepted (not expressible) | Accepted: the send feeds an implicit `aux` bus routed to the master, which `busCount()` does not count |
 
-Where both agree — `version` must be `1` when present, `slot` and `timing` are `"pre"`/`"post"` strings, `sourceLayout` and `layout` are one of the four layout tokens, integer fields must be integral — the validator's message simply arrives earlier and names the path.
+Where both agree, the validator's message simply arrives earlier and names the path. They agree that `version` must be `1` when present, that `slot` and `timing` are `"pre"`/`"post"` strings, that `sourceLayout` and `layout` are one of the four layout tokens, and that integer fields must be integral. They also share the ranges `panMode` 0–2, `panLaw` 0–3, `channelDelaySamples` 0–192000, and `metering.truePeakOversample` 1–16.
 
 ## Built-In Presets
 
@@ -284,7 +312,7 @@ Discover them at runtime with `mixingScenePresetNames()` and fetch one with `mix
 
 ## A complete, annotated scene
 
-This is the actual output of `mixingScenePresetJson('vocalReverbSend')` (defaults trimmed for readability — every trimmed key is optional, so the shortened form still validates). It shows every relationship: a vocal strip with two pre-fader inserts and a post-fader send, a reverb return strip, two buses, and the connections that wire them to the master.
+This is the actual output of `mixingScenePresetJson('vocalReverbSend')` (defaults trimmed for readability, so the shortened form still validates). `dryWet: 1` keeps the return fully wet; the plate's own default is 0.35, so leaving it out would let dry signal into the return. It shows every relationship: a vocal strip with two pre-fader inserts and a post-fader send, a reverb return strip, two buses, and the connections that wire them to the master.
 
 ```json
 {
@@ -307,7 +335,7 @@ This is the actual output of `mixingScenePresetJson('vocalReverbSend')` (default
       "faderDb": -10,
       "width": 1.25,
       "inserts": [
-        { "slot": "post", "processor": "effects.reverb.plate", "params": { "decaySec": 1.8, "preDelayMs": 25 } }
+        { "slot": "post", "processor": "effects.reverb.plate", "params": { "decaySec": 1.8, "preDelayMs": 25, "dryWet": 1 } }
       ]
     }
   ],
@@ -345,7 +373,7 @@ Trace the reverb below: one reverb instance, with the dry vocal and the wet retu
 />
 
 ::: tip The `eq.parametric` insert uses band-indexed keys
-The `eq.parametric` insert reads **band-indexed** keys — `band{N}.type`, `band{N}.frequencyHz`, `band{N}.gainDb`, `band{N}.q`, and the per-band dynamic-EQ fields. In this preset, `band0` is an 80 Hz high-pass (`"band0.type": 4` is `HighPass` in the EQ band-type enum) and `band1` is a +2 dB presence bell at 4 kHz — a working high-pass + presence boost.
+The `eq.parametric` insert reads **band-indexed** keys — `band{N}.type`, `band{N}.frequencyHz`, `band{N}.gainDb`, `band{N}.q`, and the per-band dynamic-EQ fields. In this preset, `band0` is an 80 Hz high-pass (`"band0.type": 4` is `HighPass` in the EQ band-type enum) and `band1` is a +2 dB presence bell at 4 kHz. This insert is separate from the strip's built-in `eq` field.
 
 List the full key set with `masteringInsertParamNames('eq.parametric')`. Keys outside that list (say, a flat `highPassHz`) load fine but take no effect, and `Mixer.sceneWarnings()` reports them after the scene loads.
 
@@ -360,7 +388,7 @@ For one-knob tonal moves, simpler inserts remain: `eq.tilt` (`tiltDb`, `pivotHz`
 const json = mixingScenePresetJson('vocalReverbSend');
 const mixer = Mixer.fromSceneJson(json, 48000, 512);
 
-mixer.sceneWarnings();  // [] — typo'd insert params would be listed here, non-fatally
+mixer.sceneWarnings();  // [] unread keys (typos) would be listed here, non-fatally
 
 mixer.addSend(0, 'more-verb', 'vocal-verb', -18, 'postFader');  // topology change
 mixer.compile();                                                 // rebuild before timing-critical work
@@ -373,7 +401,7 @@ import libsonare as sonare
 
 scene_json = sonare.mixing_scene_preset_json('vocalReverbSend')
 with sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512) as mixer:
-    mixer.scene_warnings()  # [] — typo'd insert params would be listed here, non-fatally
+    mixer.scene_warnings()  # [] unread keys (typos) would be listed here, non-fatally
 
     mixer.add_send(0, 'more-verb', 'vocal-verb', -18, 'post_fader')  # topology change
     mixer.compile()                                                  # rebuild before timing-critical work
@@ -384,7 +412,7 @@ with sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512)
 ```bash [Python CLI]
 # Export a built-in scene, edit the JSON file, then render it.
 sonare mixing-preset --preset vocalReverbSend > my-scene.json
-sonare mix --scene my-scene.json --input vocal.wav --input reverb-return.wav -o master.wav
+sonare mix --scene my-scene.json --input vocal=vocal.wav -o master.wav
 ```
 
 :::
@@ -394,7 +422,7 @@ Rendering a whole scene from a JSON file with one `--input` per strip is impleme
 :::
 
 ::: tip When to recompile
-Structural edits — adding/removing buses, sends, or connections — mark the graph dirty and need `compile()` before the next timing-critical block. Parameter moves (`setSendDb` / Python `set_send_db`, `setPanLaw`), VCA group changes (add/remove/gain — applied live as control-only gain offsets on member strips), and scheduled automation do **not** need a recompile.
+Structural edits (adding or removing buses, sends, or connections, or re-routing with `setOutputBus`) mark the graph dirty and need `compile()` before the next timing-critical block. Parameter moves (`setSendDb` / Python `set_send_db`, `setPanLaw`), VCA group changes (add/remove/gain — applied live as control-only gain offsets on member strips), and scheduled automation do **not** need a recompile.
 :::
 
 ## Related

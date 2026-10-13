@@ -51,7 +51,7 @@ Choose by whether the app renders once, owns a block-processing loop, or needs s
 If you know you want a scene but not yet what should be in it, the optional [Mixing Assistant](./mixing-assistant.md) measures a set of tracks and proposes one — trims, faders, pans, inserts, and sends, each with a written reason. It only suggests: loading the result into a mixer remains your own explicit step.
 
 ::: info One engine, every runtime
-The same mixer engine is exposed through WASM/JS, Node native, Python, the C ABI, and the CLI. Names follow each language's convention (`mixStereo` ↔ `mix_stereo`; `fromSceneJson` ↔ `from_scene_json`), while the routing graph, scene JSON, and DSP are identical. The CLIs are the exception, and they differ from each other: the Python CLI's `mix` renders a scene in one shot (one `--input` WAV per strip), while the native CLI's `mix-strip` is a single-file, single-strip processor with no `--scene`. A **persistent** multi-strip `Mixer` you drive block by block is available only through WASM/JS, Node, and Python. See [Binding Parity](./binding-parity.md) for the per-runtime table.
+The same mixer engine is exposed through WASM/JS, Node native, Python, the C ABI, and the CLI. Names follow each language's convention (`mixStereo` ↔ `mix_stereo`; `fromSceneJson` ↔ `from_scene_json`), while the routing graph, scene JSON, and DSP are identical. The CLIs are the exception, and they differ from each other: the Python CLI's `mix` renders a scene in one shot (one `--input` WAV per strip), while the native CLI's `mix-strip` is a single-file, single-strip processor with no `--scene`. A **persistent** multi-strip `Mixer` you drive block by block is a library feature (WASM/JS, Node, Python, the C ABI, and C++); neither CLI has one. See [Binding Parity](./binding-parity.md) for the per-runtime table.
 :::
 
 ## The channel strip, signal by signal
@@ -76,12 +76,11 @@ libsonare processes each block of a strip in this exact order:
     { id: 'tap1', label: 'Pre-fader tap', col: 6, row: 0, variant: 'warning' },
     { id: 'fader', label: 'Fader + VCA', col: 0, row: 1, variant: 'accent' },
     { id: 'pan', label: 'Pan', col: 1, row: 1 },
-    { id: 'eqPost', label: 'EQ (post)', col: 3, row: 1 },
-    { id: 'postIns', label: 'Post inserts', col: 4, row: 1 },
     { id: 'width', label: 'Stereo width', col: 2, row: 1 },
-    { id: 'tap2', label: 'Post-fader tap', col: 5, row: 1, variant: 'warning' },
-    { id: 'out', label: 'To bus / master', col: 6, row: 1, variant: 'success' },
-    { id: 'send2', label: 'Post send + meter', col: 5, row: 2, variant: 'muted' }
+    { id: 'postIns', label: 'Post inserts', col: 3, row: 1 },
+    { id: 'tap2', label: 'Post-fader tap', col: 4, row: 1, variant: 'warning' },
+    { id: 'out', label: 'To bus / master', col: 5, row: 1, variant: 'success' },
+    { id: 'send2', label: 'Post send + meter', col: 4, row: 2, variant: 'muted' }
   ]"
   :edges="[
     { from: 'in', to: 'trim' },
@@ -94,13 +93,12 @@ libsonare processes each block of a strip in this exact order:
     { from: 'tap1', to: 'fader' },
     { from: 'fader', to: 'pan' },
     { from: 'pan', to: 'width' },
-    { from: 'eqPost', to: 'postIns' },
-    { from: 'width', to: 'eqPost' },
+    { from: 'width', to: 'postIns' },
     { from: 'postIns', to: 'tap2' },
     { from: 'tap2', to: 'send2', style: 'dashed' },
     { from: 'tap2', to: 'out' }
   ]"
-  caption="Signal order: trim -> polarity -> delay -> EQ (pre) -> pre-fader inserts -> fader -> pan -> width -> EQ (post, optional) -> post-fader inserts -> bus. The two taps branch a copy to sends/meters without altering the main chain."
+  caption="Signal order: trim -> polarity -> delay -> EQ (pre) -> pre-fader inserts -> fader -> pan -> width -> post-fader inserts -> bus. The two taps branch a copy to sends/meters without altering the main chain."
 />
 
 Reading the chain top to bottom:
@@ -108,13 +106,13 @@ Reading the chain top to bottom:
 1. **Input trim** — a clean gain stage *before* anything else, used to set a sensible working level (see [gain staging](./glossary/concepts/gain-staging.md)). This is not the fader; trim is for "get the level right going in", the fader is for "balance against other tracks".
 2. **Polarity invert** — flips the sign of the left and/or right channel. Used to fix a track recorded out of phase with another.
 3. **Channel delay** — a per-strip sample delay. It delays only this strip; it is excluded from the engine's [delay compensation](#latency-and-plugin-delay-compensation-pdc).
-4. **EQ** — a built-in parametric EQ. It sits **pre-fader by default** (so the fader rides the EQ'd signal), but can be moved post-fader.
+4. **EQ** — a built-in parametric EQ, set through the scene's `eq` field. It always runs **pre-fader**, so the fader rides the EQ'd signal. (The C++ `ChannelStrip` can move it post-fader with `set_eq_position`; scene JSON and the bindings do not expose that.)
 5. **Pre-fader inserts** — your named processors (compressor, de-esser, …) running *before* the fader.
 6. **Pre-fader tap** — the point a *pre-fader* send and the pre-fader meter read from. Because it is before the fader, moving the fader does **not** change a pre-fader send level.
 7. **Fader (+ VCA offset)** — the main level control. A [VCA group](#vca-groups) (one fader that trims several strips at once) adds its offset here, so a single group fader can ride many strips without re-routing their audio.
 8. **Pan** — places the signal in the stereo field using the strip's [pan mode and pan law](#pan-modes-and-pan-laws).
 9. **Stereo width** — narrows or widens the side signal (see [mono compatibility](./glossary/concepts/mono-compatibility.md)).
-10. **Post-fader inserts** (and EQ, if you moved it post-fader) — processors that should react to the post-fader level.
+10. **Post-fader inserts** — processors that should react to the post-fader level.
 11. **Post-fader tap + goniometer** — passes signal to *post-fader* sends, the output meter, and the goniometer history buffer.
 
 ::: warning Pre-fader vs post-fader is not cosmetic
@@ -128,7 +126,7 @@ The order above is exactly `ChannelStrip::process_segment`:
 
 ```text
 input_trim -> polarity -> alignment_delay -> eq(pre) -> pre-inserts
-  -> [pre tap] -> fader(+VCA) -> panner -> width -> eq(post)
+  -> [pre tap] -> fader(+VCA) -> panner -> width
   -> post-inserts -> [goniometer + post tap]
 ```
 
@@ -214,9 +212,11 @@ const sceneJson = mixingScenePresetJson('vocalReverbSend'); // an editable start
 const mixer = Mixer.fromSceneJson(sceneJson, sampleRate, /* blockSize */ 512);
 try {
   // Feed one block of per-strip stereo audio; get the routed stereo master back.
+  // Strip 1 (vocal-verb-return) is fed by the vocal-verb aux bus, so its own input stays silent.
+  const silence = new Float32Array(512);
   const out = mixer.processStereo(
-    [vocalBlockL, returnBlockL],
-    [vocalBlockR, returnBlockR],
+    [vocalBlockL, silence],
+    [vocalBlockR, silence],
   );
 
   const vocalMeter = mixer.stripMeter(0, 'postFader');     // see "Metering"
@@ -226,15 +226,18 @@ try {
 ```
 
 ```python [Python]
+import numpy as np
 import libsonare as sonare
 
 sonare.mixing_scene_preset_names()                          # ['vocalReverbSend', 'drumBusSubgroup', 'commentaryDucking']
 scene_json = sonare.mixing_scene_preset_json("vocalReverbSend")
 
 with sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512) as mixer:
+    # Strip 1 (vocal-verb-return) is fed by the vocal-verb aux bus; its own input stays silent.
+    silence = np.zeros(512, dtype=np.float32)
     block = mixer.process_stereo(
-        [vocal_block_l, return_block_l],
-        [vocal_block_r, return_block_r],
+        [vocal_block_l, silence],
+        [vocal_block_r, silence],
     )
     vocal_meter = mixer.strip_meter(0, tap="postFader")     # see "Metering"
 ```
@@ -246,7 +249,8 @@ with sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512)
 # Python). The native CLI has no --scene at all; its `mix-strip` is one strip.
 sonare mixing-presets                            # list the built-in scene preset names
 sonare mixing-preset --preset vocalReverbSend    # print one scene's JSON to stdout
-sonare mix --scene scene.json --input vocal.wav --input reverb-return.wav -o master.wav
+# An --input names its strip (ID=WAV, default: the file's base name); a strip no input names is silent.
+sonare mix --scene scene.json --input vocal=vocal.wav -o master.wav
 ```
 
 :::
@@ -258,7 +262,7 @@ sonare mix --scene scene.json --input vocal.wav --input reverb-return.wav -o mas
 The full scene schema, every field, and annotated preset JSON live in [Mixing Scene JSON](./mixing-scene-json.md). The three built-in presets (`vocalReverbSend`, `drumBusSubgroup`, `commentaryDucking`) are not opaque — load one, edit it, and re-serialize it with `toSceneJson()` (or Python `to_scene_json()`) to learn the format by example.
 
 ::: tip Check `sceneWarnings()` after loading a scene
-Loading a scene audits every insert's `params`: keys that no processor reads (usually typos, or keys meant for a different processor) are collected as **non-fatal warnings**, readable with `mixer.sceneWarnings()` (Python `mixer.scene_warnings()`). The scene still loads; those keys just take no effect. Reading the warnings right after `fromSceneJson(...)` is the cheapest way to catch a knob that silently "does nothing". `masteringInsertParamNames(name)` lists the keys an insert accepts.
+Loading a scene reports every key the reader did not consume (a misspelled field such as `strips[0].faderDB`, or an insert param no processor reads) as a **non-fatal warning**, readable with `mixer.sceneWarnings()` (Python `mixer.scene_warnings()`). The scene still loads; those keys just take no effect. Reading the warnings right after `fromSceneJson(...)` is the cheapest way to catch a knob that silently "does nothing". `masteringInsertParamNames(name)` lists the keys an insert accepts.
 :::
 
 ### Inserts vs sends
@@ -288,7 +292,7 @@ Each strip's own path runs through its pre-fader inserts, the fader, and its pos
 | `aux` | A parallel destination for sends, typically an effect return (reverb, delay). |
 | `submix` | A group of strips processed together before the master (a "drum bus"). |
 
-`master` is the only role string the graph treats specially — `aux` is simply the default value a bus gets when you do not give it one. Any other role string (`submix`, `subgroup`, `group`, …) is treated as a generic non-master bus. The built-in `drumBusSubgroup` preset labels its drum bus `subgroup`, so a printed scene may show `"role": "subgroup"` rather than `"submix"`.
+`master` is the only role string the graph treats specially; `aux` is simply the default value a bus gets when you do not give it one. Any other role string (`submix`, `subgroup`, `group`, …) is treated as a generic non-master bus. A misspelled `"mastre"` therefore makes an ordinary bus, and the master becomes the bus with id `master` or an implicit one. The built-in `drumBusSubgroup` preset labels its drum bus `subgroup`, so a printed scene may show `"role": "subgroup"` rather than `"submix"`.
 
 ::: info A group bus's inserts run once, on the summed signal
 A bus insert chain is stateful and usually non-linear — a compressor's envelope, a saturator's transfer curve, a reverb's tail. It therefore has to see the **sum** of everything feeding the bus, once per block, rather than each contributor on its own: a compressor fed two partial signals separately is not the same processor as one fed their sum.
@@ -307,6 +311,7 @@ Call `compile()` after a **topology** change, before the next timing-critical bl
 - adding a strip
 - adding or removing a bus
 - adding or removing a send
+- re-routing a strip or bus with `setOutputBus`
 
 Parameter changes, automation changes, and VCA group changes (adding, removing, or adjusting group gain) do **not** need a recompile — VCA groups only adjust live strip gain offsets and are not part of the routing graph.
 
@@ -321,9 +326,9 @@ Strip addressing differs by runtime:
 
 Every binding builds a `Mixer` from a scene — there is no empty-mixer constructor — so `mixer.addStrip(id, metering?)` (Python `mixer.add_strip(strip_id, ...)`) is how a mixer grows after construction: a track that arrives mid-session, or a scene loaded as a template and filled in from code. The binding-level signature is on the [JS API page](./js-api-audio.md).
 
-You supply the **id**, which must be unused (a duplicate throws). Nothing is returned: the strip belongs to the mixer and is addressed afterwards by index — it is appended, so it is `stripCount() - 1` — or through `stripById(id)`. Everything else starts at the strip defaults: 0 dB trim and fader, centre pan, width 1, no inserts, no sends, and its output routed straight to `master`. The bindings expose no connection call, so a strip that should feed a `submix` bus instead is declared in scene JSON — `toSceneJson()`, add the [connection](./mixing-scene-json.md#connection), `fromSceneJson()` — rather than added here. A VCA group whose member list already names the id picks the strip up as soon as it exists.
+You supply the **id**, which must be unused (a duplicate throws). Nothing is returned: the strip belongs to the mixer and is addressed afterwards by index — it is appended, so it is `stripCount() - 1` — or through `stripById(id)`. Everything else starts at the strip defaults: 0 dB trim and fader, center pan, width 1, no inserts, no sends, and its output routed straight to `master`. To feed a `submix` bus instead, route the strip after adding it with `mixer.setOutputBus('room-mic', 'drum-bus')` (Python `set_output_bus`) and call `compile()`. A VCA group whose member list already names the id picks the strip up as soon as it exists.
 
-The one decision that can *only* be made here is **metering**, because a strip's meter buffers are sized when it is built. The default keeps both meters in full — LUFS plus true peak at 4x, about 1.4 MB per strip at 48 kHz. `{ lufs: false }` shrinks each meter to about 83 KB, and `{ enabled: false }` drops both (about 145 KB) for a strip whose snapshots you never read. The object is the scene's `strips[].metering` under the same names; a `truePeakOversample` outside `0`–`16` throws, and `0` means the library default of 4x.
+The one decision that can *only* be made here is **metering**, because a strip's meter buffers are sized when it is built. The default keeps both meters in full — LUFS plus true peak at 4x, about 1.4 MB per strip at 48 kHz. `{ lufs: false }` shrinks each meter to about 83 KB, and `{ enabled: false }` drops both (about 145 KB) for a strip whose snapshots you never read. The object is the scene's `strips[].metering` under the same names; a `truePeakOversample` outside `0`–`16` throws. The meter resolves the request to 2x for `2`, 8x for `8`–`16`, and 4x for anything else, so `0` gives the library default of 4x.
 
 ```typescript
 mixer.addStrip('room-mic', { lufs: false });
@@ -334,7 +339,7 @@ mixer.compile();                             // a new strip is a topology change
 mixer.settle(roomMic);                       // see the next section
 ```
 
-`processStereo` takes one stereo pair per strip in strip order, so the new strip is one more input on the end — WASM rejects a call whose input count differs from `stripCount()`.
+`processStereo` takes one stereo pair per strip in strip order, so the new strip is one more input on the end — strips after the last pair you pass receive silence, and passing more pairs than `stripCount()` is rejected.
 
 ### Settle before an offline render: `settle`
 
@@ -358,7 +363,7 @@ Sends on a strip are addressed by index in **add order**. Removing one with `rem
 Removing a bus also cleans up the routing that pointed at it: any send whose destination was that bus is dropped, because its target no longer exists. Audit a strip's sends after removing a bus they fed.
 
 ::: warning Buses that go nowhere
-An explicit `submix` or `aux` bus with no path to the `master` is **not** flagged. The graph compiles and runs, but that bus contributes nothing to the output — usually a missing connection rather than an intentional dead end. `sceneWarnings()` only reports ignored insert params, so check yourself that every bus you added is actually wired through to `master`.
+An explicit `submix` or `aux` bus with no path to the `master` is **not** flagged. The graph compiles and runs, but that bus contributes nothing to the output — usually a missing connection rather than an intentional dead end. `sceneWarnings()` reports unread keys, not unreachable buses, so check yourself that every bus you added is actually wired through to `master`.
 :::
 
 ### VCA groups
@@ -412,7 +417,7 @@ Most laws dip the center by a fixed amount, so a sound panned to the center is n
 `const3dB` is the constant-**power** law (cos/sin, 0.707 per channel at center): total energy stays put as you pan, which is what matters over speakers, while the coherent mono sum rises 3 dB toward the center. `const6dB` is the constant-**amplitude** law (0.5 per channel at center): the two channels add up to the same 1.0 as a hard pan, so the *mono sum* stays put and the power falls 3 dB instead. `const4.5dB` is the geometric mean of the two. `linear0dB` compensates nothing — both channels sit at unity in the center — so a centered source is 3 dB hotter in power and 6 dB hotter in the mono sum than a hard-panned one; pick it only when something downstream already applies its own pan compensation.
 
 ::: warning The center dip only reaches the output in `stereoPan` mode
-Those figures are the raw pan-law gains. In `balance` — the default mode — the panner divides both gains by the louder (near) one, so the near channel is always unity and only the away channel is pulled down. The center stays at 0 dB whichever law you choose; the law only sets the near/away *ratio*. Switch the strip to `stereoPan` if you want the center dip itself. A single-channel (mono) strip is a third case: it receives the law's combined energy `sqrt(l² + r²)` as one gain, which is unity at center under the default `const3dB`.
+Those figures are the raw pan-law gains. In `balance` — the default mode — the panner divides both gains by the louder (near) one, so the near channel is always unity and only the away channel is pulled down. The center stays at 0 dB whichever law you choose; the law only sets the near/away *ratio*. Switch the strip to `stereoPan` if you want the center dip itself. A strip whose `sourceLayout` is `mono` is a third case: in `balance` it is unity at center under every law, and in `stereoPan` each output channel gets the law's center gain (0.707 / 0.595 / 0.5 / 1.0 for the four laws, as re-measured on a settled strip).
 :::
 
 ### Surround and multichannel
@@ -465,7 +470,9 @@ Every strip (and the master) exposes a rich `MixMeterSnapshot`. Read it post-ren
 A goniometer (also called a vectorscope) is a dot-cloud display of the left vs. right signal. It shows the stereo image at a glance: a near-vertical line means mono, a wide blob means a wide stereo spread, and a horizontal smear warns of phase problems that may cancel in mono. It is the picture version of the `correlation` meter.
 :::
 
-The true-peak reading runs one reconstruction-filter group delay behind the block, so it does not depend on the block size. After the last block of a signal, call `mixer.flushMeters()` (Python `flush_meters()`) to read that pending stretch against silence and fold it into the snapshots; a later `processStereo` starts a new signal. Offline engine renders and the one-shot `mixStereo` do this for you. In a measurement with a 16-sample burst at the very end of one block, `truePeakDbL` read -1.99 dBFS before the flush and -1.79 dBFS after it, while the sample peak did not move.
+The true-peak reading runs one reconstruction-filter group delay behind the block, so it does not depend on the block size. After the last block of a signal, call `mixer.flushMeters()` (Python `flush_meters()`) to read that pending stretch against silence and fold it into the snapshots; a later `processStereo` starts a new signal. Offline engine renders and the one-shot `mixStereo` do this for you. A short burst at the very end of a block shows the effect: `truePeakDbL` reads higher after the flush while the sample peak does not move.
+
+<SonareDemo id="inter-sample-peak" />
 
 The **goniometer** is a separate, time-domain view: `readGoniometerLatest(strip, maxPoints)` returns the most recent left/right sample pairs (oldest → newest) for plotting a stereo vectorscope. The core read is allocation-free: it copies the points from the strip's pre-allocated ring into caller-owned storage, so UI polling does not add allocations to the audio thread. The WASM binding then allocates a temporary result and returns a plain JavaScript array of plain `{ left, right }` point objects. The JS call therefore allocates at the binding boundary, but its result is cloneable plain data that is safe to pass to `structuredClone` or `postMessage`.
 

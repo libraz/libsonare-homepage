@@ -13,13 +13,13 @@ A **take** is one recorded attempt at a part. **Comping** (from *compositing*) i
 
 ## What a take is
 
-When you record a part, that one pass is a **take**. Record it again and you have a second take. Rather than scattering these across the project, libsonare stores the takes *inside a single clip*. The clip keeps a list of takes, and exactly one of them is the **active take** — the one you currently hear when the clip plays.
+When you record a part, that one pass is a **take**. Record it again and you have a second take. Rather than scattering these across the project, libsonare stores the takes *inside a single clip*. The clip keeps a list of takes, and exactly one of them is the **active take**, the one you currently hear when the clip plays.
 
 This is convenient because the takes stay aligned: they share the same start position on the timeline, so switching the active take instantly auditions a different attempt of the same part without anything moving out of place.
 
 ## Loop recording: collecting takes fast
 
-The fastest way to gather takes is **loop recording**. You set a loop region — say one verse — and the transport (the play/record cursor that walks the timeline) keeps cycling around it while you keep performing. Every time around the loop captures a **new take** into the clip. Ten passes around the loop give you ten takes stacked in one clip, ready to be comped.
+The fastest way to gather takes is **loop recording**. You set a loop region — say one verse — and the transport (the play/record cursor that walks the timeline) keeps cycling around it while you keep performing. Every time around the loop captures a **new take** into the clip. Ten passes around the loop give you ten takes stacked in one clip, ready to be comped. If you stop mid-loop, the unfinished last pass is kept as a partial take by default; `partialTail: 'drop'` leaves it out. [Recording & Takes](../../recording-and-takes.md#loop-recording-into-takes) covers the capture details.
 
 ::: tip Why this beats recording into separate clips
 Because all the takes live in one clip on one track, they are pre-aligned and easy to compare. You are not juggling ten clips on ten lanes; you are flipping through alternatives in place.
@@ -34,12 +34,12 @@ You divide the clip's timeline into segments and assign a take to each. The firs
 Visually, comping looks like a stack of take "lanes" with a chosen path running through them:
 
 ```
-time  ──────────────────────────────────────────►
-take 1 │░░░░░░│      │      │██████████████████████│   ← end kept
-take 2 │██████████████│      │      │░░░░░░░░░░░░░░░│   ← opening kept
-take 3 │░░░░░░│██████████████│      │░░░░░░░░░░░░░░░│   ← middle kept
-       └──────┴──────────────┴──────┴──────────────┘
-comp:    take2     take3      gap        take1
+time      ──────────────────────────────────────────►
+take 1    │░░░░░░░░░│░░░░░░░░░│░░░░░░░░░│█████████│   ← end kept
+take 2    │█████████│░░░░░░░░░│░░░░░░░░░│░░░░░░░░░│   ← opening kept
+take 3    │░░░░░░░░░│█████████│░░░░░░░░░│░░░░░░░░░│   ← middle kept
+          └─────────┴─────────┴─────────┴─────────┘
+comp:      take 2     take 3      gap      take 1
 ```
 
 Each filled block is a **comp segment**: a start time, an end time, and the id of the take that plays there. Together the segments form the **comp lane** — the recipe for the final performance.

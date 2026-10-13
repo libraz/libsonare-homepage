@@ -15,7 +15,7 @@ Key detection and chord recognition both read from it. This page expands on the 
 
 A **pitch class** groups every octave of a note together. C2, C3, and C4 are different *pitches* but the same *pitch class*, "C." Western music has 12 pitch classes, one per semitone. Chroma takes the energy spread across all frequencies in an [STFT](./spectrogram-stft.md) frame and sums it into those 12 bins — a C played in any octave lands in the same bin.
 
-The octaves are not weighted equally, though. Following the librosa reference, the filterbank tapers each bin's contribution with a Gaussian octave envelope centred near C5 and about two octaves wide, so mid-register content dominates the chroma vector while a very low bass note or a very high harmonic contributes comparatively little. That is why a bass line can look faint in a chromagram even when it is clearly audible.
+The octaves are not weighted equally, though. Following the librosa reference, the filterbank tapers each bin's contribution with a Gaussian octave envelope centered near C5 and about two octaves wide, so mid-register content dominates the chroma vector while a very low bass note or a very high harmonic contributes comparatively little. That is why a bass line can look faint in a chromagram even when it is clearly audible.
 
 This deliberate forgetting is the point. Harmony is about *which notes*, not *which octave*: a C-major chord is a C-major chord whether it is voiced low or high. Folding octaves together gives a clean, 12-dimensional fingerprint of the harmony at each moment.
 
@@ -46,7 +46,7 @@ The `Chroma` class applies a chroma filterbank to the STFT **power** spectrum �
 
 | Item | Detail |
 |------|--------|
-| Bin layout | `n_chroma = 12`. `fmin` and `n_octaves` are also on the config, but the STFT chroma filterbank does not read them (they are CQT-chroma concepts; setting them does not change the analysed range) |
+| Bin layout | `n_chroma = 12`. `fmin` and `n_octaves` are also on the config, but the STFT chroma filterbank does not read them (they are CQT-chroma concepts; setting them does not change the analyzed range) |
 | Analysis window | `n_fft = 2048` / `hop_length = 512`, Hann window |
 | Tuning | For the 12-bin configuration, `tuning` is the deviation from A440 in fractions of a semitone. Default 0 (A440); measured from the signal only when you pass `tuning: 'auto'` to `analyze`, `detectChords` or `detectKey` |
 | Variants | STFT-based; CQT-based (`chromaCqt` / `chroma_cqt`, `ChromaCqtConfig`, the direct `librosa.feature.chroma_cqt` equivalent); CENS (`ChromaCensConfig`) |
@@ -56,7 +56,7 @@ Chroma feeds `KeyAnalyzer` (Krumhansl-Schmuckler) and `ChordAnalyzer` (template 
 :::
 
 ::: warning Tuning is measured only on request
-`ChromaConfig.tuning` defaults to `0` — concert A440 — and the chroma stage never estimates it on its own. `librosa.feature.chroma_stft` behaves differently: its `tuning=None` default runs `estimate_tuning()` first. On a recording that sits a fraction of a semitone off A440 the pitch-class grid no longer lines up with the actual partials, energy smears into neighbouring bins, and key and chord results quietly get worse with nothing to signal it.
+`ChromaConfig.tuning` defaults to `0` — concert A440 — and the chroma stage never estimates it on its own. `librosa.feature.chroma_stft` behaves differently: its `tuning=None` default runs `estimate_tuning()` first. On a recording that sits a fraction of a semitone off A440 the pitch-class grid no longer lines up with the actual partials, energy smears into neighboring bins, and key and chord results quietly get worse with nothing to signal it.
 
 Pass `tuning: 'auto'` (Python: `tuning="auto"`) to `analyze`, `detectChords` or `detectKey` (Python: `analyze`, `detect_chords`, `detect_key`) whenever the source may not be at A440 — older recordings, tape, live acoustic material, anything deliberately tuned to a different reference pitch. The engine measures the offset first and builds the chroma with it. A number in `[-0.5, 0.5)` works too, in fractions of a semitone, as `estimateTuning()` / `estimate_tuning()` returns it; C++ takes it directly as `ChromaConfig.tuning`. Every result reports the value it used (`tuning` on `AnalysisResult`, `ChordAnalysisResult` and `detectKey`'s `KeyDetection`). A synthetic C-major chord detuned by 45 cents read as E minor at A440; with `tuning: 'auto'` it read as C major and reported a tuning of about -0.43. The standalone `chroma` helper uses fixed A440 and takes no tuning argument. `tuningToReferenceHz(tuning)` and `referenceHzToTuning(hz)` convert between this unit and a reference pitch in hertz. Streaming uses hertz directly: set the A4 reference with `tuningRefHz` at creation or `setTuningRefHz()` live. The [Visual Player](/analyzer) estimates the offset and applies it to every file it loads.
 :::

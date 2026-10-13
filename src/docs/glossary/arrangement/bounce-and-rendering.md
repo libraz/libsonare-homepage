@@ -13,12 +13,12 @@ You have arranged your clips, comped your takes, and warped your loops to the gr
 
 ## Offline and deterministic
 
-Bouncing is **offline**: it does not have to run in real time. It can run faster than real time on a quick project, or slower than real time on a heavy one — the goal is correctness, not keeping up with the clock.
+Bouncing is **offline**: it does not have to run in real time. It can run faster than real time on a quick project, or slower than real time on a heavy one. The goal is correctness, not keeping up with the clock.
 
 Because it is offline, it is also **deterministic**: the same project plus the same options plus the same instrument always produce the same audio, sample for sample. There is no live timing jitter, no dropped buffers. This is exactly why you bounce a final master from the offline path rather than recording your speakers.
 
 ::: tip Bounce is not "record the output"
-A bounce reconstructs the arrangement from its edit model and renders it cleanly. You are not capturing a live performance of the project — you are computing it, which is why it is repeatable and artifact-free.
+A bounce reconstructs the arrangement from its edit model and renders it cleanly. You are not capturing a live performance of the project; you are computing it, which is why it is repeatable and artifact-free.
 :::
 
 ## The mix is rendered through the mixer scene
@@ -65,7 +65,7 @@ If you bounce *without* binding an instrument, MIDI tracks render silently — t
 
 ## Length is auto-derived (unless you set it)
 
-You usually do not need to specify how long the bounce should be. If you omit the length, it is **auto-derived from the timeline** — the renderer finds the end of the last clip — **plus the release tail**, the extra time a note needs to ring out and fade after it ends. This stops a final reverb or a long synth release from being cut off mid-decay. You only set an explicit length when you want to force a specific duration.
+You usually do not need to specify how long the bounce should be. If you omit the length, it is **auto-derived from the timeline** — the renderer finds the end of the last clip, **plus the release tail**, the extra time a note needs to ring out and fade after it ends. This stops a final reverb or a long synth release from being cut off mid-decay. You only set an explicit length when you want to force a specific duration.
 
 ## Latency compensation (PDC)
 

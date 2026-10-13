@@ -26,6 +26,20 @@ This page is implementation-oriented, so there is no need to absorb all of it at
 If you only want a BPM, read [Analysis And Feature DSP](#analysis-and-feature-dsp); if you are finishing a track for loudness or delivery, read [Mastering Chain](#mastering-chain) and [Final Stage and Maximizers](#final-stage-and-maximizers).
 :::
 
+## Which Processor For Which Job
+
+| Goal | Start with |
+|------|------------|
+| Reach a loudness target | The chain's loudness slot, or `maximizer.loudnessOptimize` for a whole file; see [Final Stage and Maximizers](#final-stage-and-maximizers) |
+| Keep peaks under a ceiling | `maximizer.truePeakLimiter` or `dynamics.brickwallLimiter` |
+| Even out dynamics | [Dynamics](#dynamics) |
+| Shape tone | [EQ](#eq) and [Spectral and Stereo](#spectral-and-stereo) |
+| Remove noise, hum, clicks or clipping | [Repair](#repair) |
+| Add space or movement | [Effects and Editing DSP](#effects-and-editing-dsp) and [Modulation, Delay, Filter and Utility Inserts](#modulation-delay-filter-and-utility-inserts) |
+| Widen, narrow or check the stereo image | [Spectral and Stereo](#spectral-and-stereo) |
+| Match a reference | [Reference Matching and Analysis](#reference-matching-and-analysis) |
+| Get a BPM, key or chords | [Analysis And Feature DSP](#analysis-and-feature-dsp) |
+
 ## What You Will Learn
 
 By the end of this page you should be able to:
@@ -43,20 +57,6 @@ By the end of this page you should be able to:
 | DSP behavior, shared building blocks, and real-time boundaries | This page |
 | Standards, papers, and compatibility references | [Algorithm References](./algorithm-references.md) |
 | Test coverage and validation status | [Implementation Validation](./implementation-validation.md) |
-
-## Grounding
-
-This page is source-grounded rather than generated from marketing names. It uses these kinds of evidence:
-
-| Evidence | Examples |
-|----------|----------|
-| Registry | `src/mastering/api/named_processor_registry.cpp` for public processor names |
-| Header comments | `compressor.h` describes a feed-forward compressor with soft knee and makeup gain; `linear_phase.h` describes an FFT-domain linear-phase FIR equalizer |
-| Config fields | `TruePeakLimiterConfig` exposes `lookahead_ms`, `release_ms`, `oversample_factor`, and `apply_gain_at_input_rate`; `DenoiseClassicalConfig` exposes three gain functions (LogMMSE, MMSE-STSA, spectral subtraction) and three noise estimators (Quantile, MCRA, IMCRA) |
-| Runtime contracts | Several processors mark which parameters are real-time safe, and which changes resize buffers or rebuild FIR kernels |
-| Implementation includes | Repair code includes LPC helpers for declick/declip; denoise uses `NoiseTracker`; convolution reverb and linear-phase EQ use partitioned convolution |
-
-Where this page says "main use", it describes the public intent implied by the processor name, config, and header comment. It does not claim hidden model behavior beyond the source.
 
 ## Shared Building Blocks
 
@@ -214,6 +214,8 @@ Every insert reports a latency and a tail. The tail is the number of samples the
 | `saturation.exciter` | High-frequency harmonic generation and blend | Add brightness and perceived detail | Can become harsh quickly |
 | `saturation.hardClipper` | Hard nonlinear transfer curve | Aggressive peak shaving and distortion | Use oversampling or conservative drive; the ADAA half sample is reported and the dry path of a blend is delayed to match |
 | `saturation.multibandExciter` | Band-split exciter with per-band drive/blend | Add sparkle without overloading lows | Crossover and drive balance matter |
+| `saturation.overdrive` | A 720 Hz high-passed clip path, gained and soft-clipped, summed with the direct signal; clipping runs at twice the host rate behind antiderivative anti-aliasing, then a one-pole tone low-pass and an output level | Light breakup that keeps the low end | Realtime multichannel insert; reported latency includes the oversampler and anti-aliasing delay |
+| `saturation.distortion` | Gain, a gain-bandwidth low-pass, then two hard clips with a coupling high-pass between them, with the same oversampling, tone and level frame | Heavier, tighter distortion | Realtime multichannel insert; same latency accounting as overdrive |
 | `saturation.softClipper` | Smooth nonlinear curve | Gentle peak rounding | Common before maximizers |
 | `saturation.tape` | Nonlinear saturation with tone/soft compression behavior, evaluated without small-signal cancellation error | Tape-like density | Drive changes loudness and tone together |
 | `saturation.transformer` | Low-order harmonic coloration and subtle saturation, evaluated without small-signal cancellation error | Analog-style thickness | Usually subtle mastering color |
@@ -273,6 +275,28 @@ Every insert reports a latency and a tail. The tail is the number of samples the
 Algorithmic and geometric room reverb are streamable. Convolution accepts a base64 float32 IR through insert params, or synthesizes a decaying-noise IR from `decaySec` and `seed` when omitted.
 :::
 
+## Modulation, Delay, Filter and Utility Inserts
+
+These inserts are built from small modules under `src/effects/` and `src/mastering/utility/`. Each is a realtime insert, listed in [Insert Effects](./effects-inserts.md#creative-fx-insert-catalog) with its parameters.
+
+| Processor | Implementation | Main use |
+|-----------|----------------|----------|
+| `effects.modulation.chorus` | Stereo chorus: fractional delay lines swept by low-frequency oscillators, optional one-pole section in front | Thicken and widen a source |
+| `effects.modulation.ensemble` | Three delay taps per channel, 120 degrees apart, modulated by a slow and a fast oscillator at once; band-limited | String-machine style shimmer |
+| `effects.modulation.flanger` | A loop closed around a modulated delay; the sign of the feedback sets where the comb's teeth sit | Sweeping comb-filter motion |
+| `effects.modulation.phaser` | A cascade of first-order all-pass sections sharing one corner, mixed against the dry signal; one notch per two sections | Soft sweeping notches |
+| `effects.modulation.wah` | Resonant band-pass swept by an oscillator | Rhythmic filter sweep |
+| `effects.modulation.autoWah` | Resonant band-pass driven by the input's envelope | Touch-responsive filter sweep |
+| `effects.modulation.rotary` | Dual-rotor Doppler and tremolo; each rotor glides to its target speed with separate spin-up and spin-down time constants | Rotating-speaker movement |
+| `effects.modulation.pitchShifter` | Time-domain shifter built from two crossfaded delay taps | Small, low-latency detuning |
+| `effects.modulation.ringModulator` | Input multiplied by a sinusoidal carrier | Metallic, inharmonic tones |
+| `effects.delay.stereo` | Zero-latency stereo feedback delay; the left and right lines feed the loop and two panned feed-forward taps read the mono input | Echo and ping-pong patterns |
+| `effects.filter.vowel` | Three parallel band-pass filters beside a direct path, with an optional drive in front; one control moves continuously between vowels | Speech-like filter movement |
+| `effects.gsEfx` | GS insertion-effect unit with a selected type and 20 raw parameter bytes | GS-authored MIDI effect types |
+| `utility.gain` | Broadband level trim | Level matching inside a chain |
+
+Nine catalog entries expose `mixLaw`, which chooses how the dry and wet paths are weighted at a given `dryWet`: six of the entries above (the chorus, ensemble, flanger, pitch shifter, ring modulator and stereo delay), the Dattorro reverb and its plate alias, and the bitcrusher. See [Dry/wet mix law](./effects-inserts.md#dry-wet-mix-law).
+
 ## Mixing DSP
 
 The mixer is DSP as well as routing.
@@ -300,3 +324,21 @@ Realtime processing has to finish with the current block of audio before the nex
 A bounded lookahead delay with preallocated storage can run in realtime; it still adds latency. The callback deadline and prepared state are the constraints.
 
 Conversely, EQ, simple gain, short delays, and stateful compressors are easy to host in realtime once they have been prepared.
+
+## Grounding
+
+This page is source-grounded rather than generated from marketing names. It uses these kinds of evidence:
+
+::: details Evidence this page uses
+
+| Evidence | Examples |
+|----------|----------|
+| Registry | `src/mastering/api/named_processor_registry.cpp` for public processor names |
+| Header comments | `compressor.h` describes a feed-forward compressor with soft knee and makeup gain; `linear_phase.h` describes an FFT-domain linear-phase FIR equalizer |
+| Config fields | `TruePeakLimiterConfig` exposes `lookahead_ms`, `release_ms`, `oversample_factor`, and `apply_gain_at_input_rate`; `DenoiseClassicalConfig` exposes three gain functions (LogMMSE, MMSE-STSA, spectral subtraction) and three noise estimators (Quantile, MCRA, IMCRA) |
+| Runtime contracts | Several processors mark which parameters are real-time safe, and which changes resize buffers or rebuild FIR kernels |
+| Implementation includes | Repair code includes LPC helpers for declick/declip; denoise uses `NoiseTracker`; convolution reverb and linear-phase EQ use partitioned convolution |
+
+:::
+
+Where this page says "main use", it describes the public intent implied by the processor name, config, and header comment. It does not claim hidden model behavior beyond the source.

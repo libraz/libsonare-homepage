@@ -18,7 +18,7 @@ The engine runs the repair stages in one order, and only the enabled ones run:
 | # | Stage | Removes | What it looks for |
 |---|-------|---------|-------------------|
 | 1 | `declip` | Flat-topped runs where a clipper cut the peaks off | Runs of samples pinned at one level |
-| 2 | `declick` | Isolated clicks and pops | Short impulsive runs that stand out from their neighbours |
+| 2 | `declick` | Isolated clicks and pops | Short impulsive runs that stand out from their neighbors |
 | 3 | `decrackle` | Dense surface crackle | Samples that depart from the local median |
 | 4 | `dehum` | A mains-frequency harmonic series | A prominent fundamental and its harmonics |
 | 5 | `denoise` | Steady broadband noise | A noise spectrum estimated from the quietest frames |
@@ -29,13 +29,13 @@ The order is fixed because every stage's detector assumes the damage the earlier
 - **`declip` before `declick`.** A flat-topped region has no transient for a click detector to measure. The peaks have to be rebuilt before a click can be told apart from a clipped edge.
 - **Impulsive repair before broadband estimation.** `denoise` builds its noise spectrum from the quietest frames and then subtracts that estimate from every frame. A click or a crackle burst still sitting in those frames becomes part of the "noise" and is pulled out of frames where it never occurred. `declick` and `decrackle` go first so the estimate describes only the floor.
 - **`dehum` before `denoise`.** Hum is a narrow harmonic series, which a tracked notch removes precisely. Left in place it would only be smeared into the broadband floor estimate.
-- **`dereverb` last.** A broadband floor reads as a stationary late tail and biases the reverb estimate towards it. With the floor already down, what remains behind the direct sound is the room.
+- **`dereverb` last.** A broadband floor reads as a stationary late tail and biases the reverb estimate toward it. With the floor already down, what remains behind the direct sound is the room.
 
 There is no reordering option because there is no order in which a later stage would see cleaner input.
 
 ## Analyze, then Apply
 
-`masteringRepairAnalyze({ channels, sampleRate })` runs the six detectors on every channel of any channel count and returns each channel's defects, whether a declip at the measured flat level is safe, and the stages the assistant would pick, each with its settings. Dereverb is never recommended. `masteringRepairApply({ channels, sampleRate, stages })` takes that list as it stands (or a list you edit) and runs the stages in the fixed order above whatever order the array has; a stage named twice or a setting it does not know is refused. Declip, declick and dehum decide over the whole channel set and report per channel, denoise and dereverb apply one linked mask and report once, and `onProgress` reports after each stage while `cancel` aborts between stages. Python has `mastering_repair_analyze` / `mastering_repair_apply`.
+`masteringRepairAnalyze({ channels, sampleRate })` runs the six detectors on every channel of any channel count and returns each channel's defects, whether a declip at the measured flat level is safe, and the stages the assistant would pick, each with its settings. Dereverb is never recommended. `masteringRepairApply({ channels, sampleRate, stages })` takes that list as it stands (or a list you edit) and runs the stages in the fixed order above whatever order the array has; a stage named twice or a setting it does not know is refused. Declip, declick and dehum decide over the whole channel set and report per channel, denoise and dereverb apply one linked mask and report once, and `onProgress` reports after each stage while `cancel` aborts between stages. Python has `mastering_repair_analyze` / `mastering_repair_apply`. See [Audio Repair](../../audio-repair.md#measure-and-repair-in-one-call) for examples in each binding.
 
 `repair.decrackle`, `repair.dehum`, `repair.denoiseClassical` and `repair.dereverbClassical` are also available as realtime inserts that equal their offline function for the same settings, delayed by the latency the insert reports; declick and declip stay offline-only.
 
@@ -49,7 +49,7 @@ The denoise stage has one main strength control, `repair.denoise.reductionDb`: t
 
 The value sets a lower bound on mask gain, not a guaranteed reduction of the noise itself. At 26 dB that bound is about 0.0501. Signal and noise estimates determine each bin’s actual gain, and audible artifacts remain possible. The demo's Denoise Amount slider is scaled onto this depth.
 
-The chain also accepts the older linear form of the same control. `repair.denoise.gainFloor` is a floor in (0, 1] and is converted on the way in (`reductionDb = -20 * log10(gainFloor)`), so a document written with it loads unchanged; a floor above 1 would become a negative depth and is refused. The shorthand keys `repair.reductionDb` and `repair.gainFloor` resolve to the same `repair.denoise.*` keys. The Node and WASM types declare `gainFloor` as deprecated with that conversion, and a config the engine writes out carries only `reductionDb`.
+The chain also accepts the linear form of the same control. `repair.denoise.gainFloor` is a floor in (0, 1] and is converted on the way in (`reductionDb = -20 * log10(gainFloor)`), so a document written with it loads unchanged; a floor above 1 would become a negative depth and is refused. The shorthand keys `repair.reductionDb` and `repair.gainFloor` resolve to the same `repair.denoise.*` keys. The Node and WASM types declare `gainFloor` as deprecated with that conversion, and a config the engine writes out carries only `reductionDb`.
 
 ## Input Gain
 
@@ -65,7 +65,7 @@ Denoise Amount controls how strongly the repair stage suppresses steady backgrou
 Start low. A little remaining noise is often better than smeared drums, softened attacks, or watery artifacts.
 
 ::: tip A little noise beats smeared drums
-Stop as soon as the noise is unobtrusive. Pushing denoise further wobbles cymbal tails, vacuums room tone, and clips vocal breaths. And never use Input Gain to chase loudness — that belongs to the optimizer and limiter, and big input moves change what every downstream detector sees.
+Stop as soon as the noise is unobtrusive. Pushing denoise further wobbles cymbal tails, vacuums room tone, and clips vocal breaths. And never use Input Gain to chase loudness. That belongs to the optimizer and limiter, and big input moves change what every downstream detector sees.
 :::
 
 <SonareDemo id="repair-denoise" />

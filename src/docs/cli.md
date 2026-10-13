@@ -4,7 +4,7 @@ Complete reference for the `sonare` command-line interface.
 
 Use the CLI when you want quick checks, batch jobs, or script-friendly JSON without writing application code. If you are building a UI, start with [WebAssembly Guide](./wasm.md), [Python API](./python-api.md), or [Mixing Engine](./mixing.md) instead.
 
-This page is the index of the CLI reference: the per-command reference is on [CLI Commands](./cli-commands.md), and the shell walkthroughs are on [CLI Examples](./cli-examples.md). For whole jobs carried end to end in the shell — stems to a finished master, a reference match, a delivery gate in CI — see [Use Cases](./use-cases.md).
+This page is the index of the CLI reference: which CLI carries which command, the global options, exit codes and format notes. The per-command reference is on [CLI Commands](./cli-commands.md), the mastering and repair commands are on this page, and the shell walkthroughs are on [CLI Examples](./cli-examples.md). For whole jobs carried end to end in the shell — stems to a finished master, a reference match, a delivery gate in CI — see [Use Cases](./use-cases.md).
 
 ## What You Will Learn
 
@@ -37,7 +37,7 @@ There are two command-line entry points:
 | CLI | Command name | How you get it | Best for |
 |-----|--------------|----------------|----------|
 | Python CLI | `sonare` | `pip install libsonare` | Most users: batch analysis, feature summaries, editing, mastering, simple mixing |
-| Native CLI | `sonare-cli` | Release archive, or build from source with `BUILD_CLI=ON` | Lower-level utilities, synthesis, librosa-parity helpers, extra scene/export commands |
+| Native CLI | `sonare-cli` | Release archive, or build from source with `BUILD_CLI=ON` | Lower-level utilities, synthesis, librosa-parity helpers, signal generators |
 
 The native executable ships as `sonare-cli` in the FFmpeg-free Linux and macOS
 release archives (each with a SHA-256 checksum), so it installs alongside the
@@ -47,9 +47,12 @@ in examples; substitute `sonare-cli` when running a native-only command.
 Corresponding commands in both CLIs use the same `snake_case` keys and payload
 shapes, so a script can read either one. Do not depend on byte-identical output:
 each front-end serializes independently. JSON values retain native precision;
-some focused human-readable summaries may still round.
+some focused human-readable summaries may still round. The `--json` payloads
+match across the two CLIs; the plain-text layouts do not (the native CLI prefixes
+result lines with `> ` and prints `Saved:` where the Python CLI prints `Wrote:`),
+and the samples in these pages show the Python CLI.
 
-Unless this page explicitly says "native CLI", assume the command is available
+Unless a page explicitly says "native CLI", assume the command is available
 from the PyPI Python CLI.
 
 ::: tip Install via pip
@@ -64,30 +67,28 @@ The default PyPI wheels decode WAV and MP3. Rebuild with FFmpeg enabled for
 direct M4A/AAC/FLAC/OGG/Opus decoding.
 :::
 
-::: info Which commands each CLI carries
-Most commands are on both CLIs and take the same options. `sonare-cli` adds the
-low-level utilities and signal generators the PyPI package does not carry; the
-Python CLI adds the scene mixer and the preset-driven mastering commands. Get the
-native binary from a release archive, or see
-[Building from Source](/docs/installation#building-from-source).
+## Command Availability
 
-**Native CLI only**
+Most commands are on both CLIs and take the same options. `sonare-cli` adds the low-level utilities and signal generators the PyPI package does not carry; the Python CLI adds the scene mixer and the preset-driven mastering commands. Get the native binary from a release archive, or see [Building from Source](/docs/installation#building-from-source).
 
-- Analysis: `melody`, `boundaries`, `meter`, `clipping`, `dynamic-range`, `stereo`, `phase`
-- Effects / transforms: `preemphasis`, `deemphasis`, `gain`, `fade`, `filter`
-- Synthesis: `tone`, `chirp`, `clicks`
-- Features: `cqt`, `vqt`, `mel-to-audio`, `mfcc-to-audio`, `tonnetz`, `pcen`, `onset-env` (onset-envelope summary: peak time, peak strength, mean), `fourier-tempogram`, `tempogram-ratio`
-- Low-level helpers: the fourteen numeric, frame, and conversion utilities the native CLI carries for librosa parity — frame/sample conversion, the four decibel conversions, framing and padding, peak picking, `tune-to-midi`, and `system-info` — have their own page, [CLI Utilities](./cli-utilities.md). Most of them take numbers or value sequences rather than an audio file, which is why they are grouped apart from the commands above; `tune-to-midi` and `system-info` are the exceptions
-- Mastering: `mastering-stereo-analyses`
+| Family | Both CLIs | Native CLI only | Python CLI only |
+|--------|-----------|-----------------|-----------------|
+| Analysis | `analyze`, `bpm`, `key`, `beats`, `downbeats`, `onsets`, `sections`, `chords`, `rhythm`, `dynamics`, `timbre`, `lufs` | `melody`, `boundaries`, `meter`, `clipping`, `dynamic-range`, `stereo`, `phase` | — |
+| Features | `mel`, `chroma`, `spectral`, `pitch`, `onset-envelope`, `tempogram`, `plp`, `nnls-chroma` | `cqt`, `vqt`, `tonnetz`, `pcen`, `onset-env`, `fourier-tempogram`, `tempogram-ratio`, `mel-to-audio`, `mfcc-to-audio` | — |
+| Separation | `hpss`, `decompose-stems` | — | — |
+| Notes and transcription | `transcribe`, `polyphonic-notes`, `polyphonic-render`, `vocal-notes`, `tune-to-midi` | — | — |
+| Editing | `pitch-correct`, `pitch-correct-timevarying`, `note-move`, `note-stretch`, `scale-quantize`, `voice-change`, `pitch-shift`, `time-stretch`, `normalize`, `trim-silence`, `split-silence`, `resample` | `gain`, `fade`, `filter`, `preemphasis`, `deemphasis` | — |
+| Voice presets | `voice-presets`, `voice-preset`, `voice-preset-validate` | — | — |
+| Room acoustics | `acoustic`, `estimate-room`, `synthesize-rir`, `room-morph` | — | — |
+| Mastering and repair | `mastering`, `eq`, `repair`, `mastering-presets`, `mastering-profile`, `mastering-suggest`, `mastering-streaming`, `mastering-processors`, `mastering-processor`, `mastering-pair-processors`, `mastering-pair-processor`, `mastering-pair-analyses`, `mastering-pair-analyze`, `mastering-stereo-analyze` | `mastering-stereo-analyses` | `master`, `mastering-chain`, `declip` |
+| Mixing | `mixing-presets`, `mixing-preset`, `suggest-mix`, `mix-strip` | — | `mix` (the scene mixer; see [Mixing Workflow](./cli-examples.md#mixing-workflow)) |
+| Project and MIDI | `project` (`abi`, `new`, `validate`, `compile`, `synth-presets`, `bounce`, `export-smf`, `import-smf`, `export-midi2`, `import-midi2`, `align-takes`), `midi-render` | — | — |
+| Playback | `playback` | — | — |
+| Synthesis | — | `tone`, `chirp`, `clicks` | — |
+| Numeric helpers ([CLI Utilities](./cli-utilities.md)) | — | `frames-to-samples`, `samples-to-frames`, `power-to-db`, `amplitude-to-db`, `db-to-power`, `db-to-amplitude`, `frame-signal`, `pad-center`, `fix-length`, `fix-frames`, `peak-pick`, `vector-normalize`, `system-info` | — |
+| Utility | `info`, `version`, `doctor` | — | — |
 
-**Python CLI only**
-
-`master`, `mastering-chain`, `declip`, and `mix` — the scene mixer described under
-[Mixing Workflow](./cli-examples.md#mixing-workflow).
-
-`sections` is on both, with a different option set: the native one adds
-`--threshold` alongside the shared `--min-duration`.
-:::
+`sections` is on both with a different option set: the native one adds `--threshold` beside the shared `--min-duration`.
 
 ## Overview
 
@@ -117,7 +118,7 @@ so the help is the authority for any one command. The DSP options above
 consume them: passing one to a command that ignores it is a usage error (exit
 code 2), rather than being silently dropped.
 
-Colour is configured once at startup, so `NO_COLOR` in the environment — or
+Color is configured once at startup, so `NO_COLOR` in the environment — or
 sending stdout to a file or pipe instead of a terminal — disables ANSI escapes
 for the whole run.
 
@@ -162,7 +163,10 @@ libsonare {{ wasmMeta.version }} (Python CLI)
 
 Report what this build can actually do — the first command to run when a feature
 seems missing or a file will not decode. Both CLIs have it, and it prints the
-same build-diagnostics report the bindings expose as `capabilities`.
+build-diagnostics report the bindings expose as `capabilities`. The `--json`
+fields match across the two CLIs; the native text layout differs (it starts with
+`libsonare Doctor` and prints `Version:` and `ABI: project 2, engine 3`), and the
+sample below is the Python CLI's.
 
 ```bash
 sonare doctor
@@ -185,19 +189,23 @@ libsonare {{ wasmMeta.version }}
 An `ffmpeg=false` build explains an M4A/AAC/FLAC/OGG decode failure, and
 `mastering`/`mixing`/`fx` tell you which command groups were compiled in.
 
-## Examples
+## Mastering and Repair
 
-The mastering walkthrough stays on this page; the basic analysis, feature summary export, batch processing, mixing, and project/MIDI walkthroughs are on [CLI Examples](./cli-examples.md).
+Everything that writes a finished master or fixes a damaged take. Both CLIs carry the commands below unless a row says Python or native only; the availability table above has the full list. The options are listed per command below.
 
-### Mastering Workflow
-
-::: info Command availability
-Nearly every mastering command is on both CLIs, including `mastering`, `eq`,
-`repair`, the processor and pair-analysis families, `mastering-pair-processor`,
-`mastering-stereo-analyze`, and the three assistant commands. `master`,
-`mastering-chain`, and `declip` are Python CLI only; `mastering-stereo-analyses`
-is native only. See [Building from Source](/docs/installation#building-from-source).
-:::
+| I want to... | Command |
+|--------------|---------|
+| Reach a loudness target under a true-peak ceiling | `sonare mastering` |
+| Use a named preset | `sonare mastering --preset NAME` (the Python CLI also has `master`) |
+| Let the assistant pick the chain from the audio | `sonare mastering --assistant`, or [`mastering-suggest`](#assistant-commands) to see the chain first |
+| Run my own chain | `sonare mastering --chain-config chain.json` (the Python CLI also has `mastering-chain`) |
+| Shape the tone with one equalizer | `sonare eq` |
+| Fix clipping, clicks, hum or noise | `sonare repair`, or `declip` for clipping alone (Python CLI) |
+| Run one named processor | `sonare mastering-processor` |
+| Compare a track with a reference | `sonare mastering-pair-analyze`, `mastering-pair-processor` |
+| Preview platform normalization | `sonare mastering-streaming` |
+| Check the mono compatibility of a stereo file | `sonare mastering-stereo-analyze` (list the analyses with `sonare mastering-stereo-analyses`, native CLI only) |
+| List the processors that take a reference | `sonare mastering-pair-processors` |
 
 ```bash
 # Loudness-normalize to a target with a true-peak ceiling, write a WAV
@@ -212,10 +220,10 @@ sonare mastering-processor track.wav \
   --params amount=0.4,shelfFrequencyHz=14000 \
   -o libsonare-master.wav
 
-# Apply the unified equalizer (one band per call, or --params for several)
+# Apply the unified equalizer: one high-shelf band (--type 2)
 sonare eq track.wav --type 2 --frequency-hz 12000 --gain-db 2.5 --q 0.7 -o eq.wav
 
-# Apply a named mastering preset (default preset: pop)
+# Apply a named mastering preset (the default preset is pop)
 sonare master track.wav --preset pop -o mastered.wav
 
 # Run a configurable mastering chain from a JSON config
@@ -235,62 +243,84 @@ sonare mastering-pair-analyze track.wav \
   --json > mastering-report.json
 ```
 
-`mastering-pair-analyze` and `mastering-pair-processor` read the reference at
-its own sample rate and resample it onto the source's; equal rates are processed
-exactly as they would be without the step. `mastering-stereo-analyze` is the
-exception: both files must already be at the input's rate, and a mismatch is an
-error. Use the Python API when you need finer control over resampling or
-trimming before comparison.
+`master`, `mastering-chain` and `declip` are Python CLI only, and `mastering-stereo-analyses` is native only. `mastering-pair-analyze` and `mastering-pair-processor` read the reference at its own sample rate and resample it onto the source's; equal rates are processed exactly as they would be without the step. `mastering-stereo-analyze` is the exception: both files must already be at the input's rate, and a mismatch is an error. Use the Python API when you need finer control over resampling or trimming before comparison.
 
 The `/mastering` browser demo uses the same mastering processor families. Use the exported report from the demo as a starting point for CLI automation.
 
-Named mastering commands:
+### mastering
 
-| Purpose | Command | Available on |
-|---------|---------|--------------|
-| Loudness-normalize with a true-peak ceiling | `sonare mastering` | both |
-| Apply the unified equalizer | `sonare eq` | both |
-| Measure and repair defects | `sonare repair` | both |
-| List mono/stereo processors | `sonare mastering-processors` | both |
-| Apply a named processor | `sonare mastering-processor` | both |
-| List pair processors | `sonare mastering-pair-processors` | both |
-| Apply a named pair processor | `sonare mastering-pair-processor` | both |
-| List pair analyses | `sonare mastering-pair-analyses` | both |
-| Analyze a source/reference pair | `sonare mastering-pair-analyze` | both |
-| Analyze a stereo pair | `sonare mastering-stereo-analyze` | both |
-| List mastering preset names | `sonare mastering-presets` | both |
-| Audio profile analysis (prints JSON) | `sonare mastering-profile` | both |
-| Chain suggestion from assistant (prints JSON) | `sonare mastering-suggest` | both |
-| Streaming-platform normalization preview (prints JSON) | `sonare mastering-streaming` | both |
-| Apply a named mastering preset | `sonare master` | Python |
-| Run a configurable mastering chain | `sonare mastering-chain` | Python |
-| Repair clipped audio (reconstruction by linear predictive coding, LPC) | `sonare declip` | Python |
-| List stereo analyses | `sonare mastering-stereo-analyses` | native |
+`mastering` normalizes loudness under a true-peak ceiling. Pick at most one way of choosing the chain: nothing (loudness normalization only), `--preset`, `--chain-config`, or `--assistant`.
 
-The three assistant commands each take an audio file and print a JSON object to stdout:
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--target-lufs` | -14 | Integrated loudness target |
+| `--ceiling-db` | -1 | True-peak ceiling in dBTP |
+| `--true-peak-oversample` | 4 | Oversampling for the true-peak limiter: 1, 2, 4, 8 or 16 |
+| `--bits` | 16 | Output bit depth, 16 or 24 |
+| `--preset NAME` | — | Start from a named preset (`mastering-presets` lists them) |
+| `--chain-config FILE` (alias `--config`) | — | Run a complete chain document. Cannot be combined with `--preset` or `--assistant` |
+| `--params k=v,...` | — | Overrides on top of the chosen preset, document or suggestion; needs one of the three |
+| `--assistant` | off | Master with the chain the [mastering assistant](./mastering-assistant.md) suggests; `--preset` names its base |
+| `--target-platform` | `streaming` | With `--assistant`: `streaming`, `youtube`, `broadcast`, `podcast`, `audiobook`, `cinema`, `club` or `cd` |
+| `--enable-repair` | off | With `--assistant`: let the suggestion enable measured repair stages |
+| `--no-streaming-safe` | off | With `--assistant`: do not prefer the streaming-safe denoise estimator |
+| `--speech-mono-amount` | 1 | With `--assistant`: how much the speech preset collapses side energy at low frequencies, 0 to 1 |
+| `--explain` | off | With `--assistant`: report why each stage was chosen |
+| `--report FILE` | — | Write a mastering report JSON file |
+
+`--target-lufs`, `--ceiling-db` and `--true-peak-oversample` set the loudness stage on their own, so combining them with `--preset` or `--chain-config` is refused; use `--params` to override a preset or document. The five assistant options are refused without `--assistant`.
+
+### eq
+
+`eq` applies the unified equalizer. One call sets one band from `--type`, `--frequency-hz`, `--gain-db` and `--q`; pass `--params` for several bands. `--placement` and `--output-pan` act on the file's own channels, and a two-channel file is processed as a pair. `sonare eq --help` lists the dynamic, sidechain and phase options.
+
+| `--type` | Band | `--type` | Band |
+|----------|------|----------|------|
+| 0 | peak | 5 | band-pass |
+| 1 | low shelf | 6 | notch |
+| 2 | high shelf | 7 | tilt shelf |
+| 3 | low-pass | 8 | flat tilt |
+| 4 | high-pass | | |
+
+### Assistant commands
+
+The three assistant commands each take an audio file and print a JSON object to stdout. The result fields are described on [Mastering Assistant API](./mastering-assistant.md).
 
 | Command | Key options | Output |
-|---------|------------|--------|
+|---------|-------------|--------|
 | `sonare mastering-profile track.wav` | `--params key=val,...` | Audio profile JSON (loudness, dynamics, spectral character) |
-| `sonare mastering-suggest track.wav` | `--params key=val,...` | Suggested mastering chain as JSON |
+| `sonare mastering-suggest track.wav` | `--preset`, `--target-lufs`, `--ceiling-db`, `--target-platform`, `--enable-repair`, `--no-streaming-safe`, `--speech-mono-amount` (the same meanings as on `mastering --assistant`), `--params key=val,...`, `--config-out FILE` | Suggested mastering chain as JSON |
 | `sonare mastering-streaming track.wav` | `--platforms '[...]'`, `--platforms-file f.json` | Per-platform normalization preview as JSON |
 
-`--platforms` accepts a JSON array of `{name, targetLufs, ceilingDb}` objects. `--params` accepts comma-separated `key=value` float pairs passed to the underlying assistant call.
+`mastering-suggest --config-out chain.json` also writes the suggested chain as a complete document. Edit it, then run it with `sonare mastering track.wav --chain-config chain.json -o out.wav` (or `master --chain-config` on the Python CLI). A setting given both as an option and in `--params` is refused. `--platforms` accepts a JSON array of `{name, targetLufs, ceilingDb}` objects. `--params` on `mastering-profile` takes comma-separated `key=value` float pairs for the underlying call.
 
-The preset, chain, and repair commands take an audio file and write a WAV with `-o`, except `mastering-presets`, which only lists names:
+### Preset, chain and declip commands
+
+These take an audio file and write a WAV with `-o`, except `mastering-presets`, which only lists names.
 
 | Command | Key options | Notes |
-|---------|------------|-------|
-| `sonare master track.wav -o out.wav` | `--preset NAME` (default `pop`), `--config '{...}'`, `--config-file f.json`, `--params k=v,...`, `--report FILE` | Applies a named mastering preset; `--config`/`--config-file`/`--params` override preset values; `--report` writes a mastering report JSON file |
-| `sonare mastering-chain track.wav -o out.wav` | `--config '{...}'`, `--config-file f.json`, `--params k=v,...`, `--report FILE` | Runs a configurable mastering chain from JSON config |
+|---------|-------------|-------|
+| `sonare master track.wav -o out.wav` (Python) | `--preset NAME` (default `pop`), `--config '{...}'`, `--config-file f.json`, `--chain-config f.json`, `--assistant`, `--params k=v,...`, `--report FILE` | Applies a named mastering preset; `--config`/`--config-file`/`--params` override preset values; `--chain-config` replaces the preset with a complete chain document; `--assistant` masters with the suggested chain; `--report` writes a mastering report JSON file |
+| `sonare mastering-chain track.wav -o out.wav` (Python) | `--config '{...}'`, `--config-file f.json`, `--params k=v,...`, `--report FILE` | Runs a configurable mastering chain from a JSON config |
 | `sonare mastering-presets` | honors the global `--json` flag | Lists the available mastering preset names |
-| `sonare declip clipped.wav -o out.wav` | `--clip-threshold` (0.98), `--lpc-order` (36), `--iterations` (2), `--lpc-blend` (0.65) | Repairs clipped audio via LPC reconstruction |
+| `sonare declip clipped.wav -o out.wav` (Python) | `--clip-threshold` (0.98), `--lpc-order` (36), `--iterations` (2), `--lpc-blend` (0.65) | Repairs clipped audio via LPC reconstruction |
 
-On every CLI, a `--chain-config` (or `--config`) document and `--params` form one parameter list. Two spellings of one field across the document and `--params` are refused with both keys named, and a document's `<stage>.enabled: false` keeps the stage off when `--params` sets one of its fields. A multiband stage with one band is refused (`multiband stage needs at least two bands; one band is the compressor stage`); the band count is 2 to 64. Enum-valued parameters (`repair.denoise.mode`, `repair.denoise.noiseEstimator`, `repair.decrackle.mode`, `repair.dehum.mode`) accept their choice name beside the number, and `repair.decrackle.mode` refuses any value other than 0 (median) or 1 (wavelet shrinkage).
+On every CLI, a `--chain-config` (or `--config`) document and `--params` form one parameter list. Two spellings of one field across the document and `--params` are refused with both keys named, and a document's `<stage>.enabled: false` keeps the stage off when `--params` sets one of its fields. A multiband stage with one band is refused (`multiband stage needs at least two bands; one band is the compressor stage`); the band count is 2 to 64.
 
-#### repair
+Enum-valued parameters accept their choice name beside the number:
 
-`declip` fixes one defect. `repair` measures the take and runs the defect-repair
+| Key | Accepted names |
+|-----|----------------|
+| `repair.denoise.mode` | `logMmse`, `mmseStsa`, `spectralSubtraction` |
+| `repair.denoise.noiseEstimator` | `mcra`, `imcra`, `spp` |
+| `repair.dehum.mode` | `subtract`, `notch` |
+| `repair.decrackle.mode` | `median`, `waveletShrinkage` |
+
+`repair.decrackle.mode` refuses any other number than 0 (`median`) or 1 (`waveletShrinkage`), and a partial name such as `wavelet` is refused with the valid names.
+
+### repair
+
+`declip` fixes one defect. [`repair`](./audio-repair.md) measures the take and runs the defect-repair
 stages it needs — declip, declick, decrackle, dehum, denoise, dereverb, in that
 order — so it is the command to reach for when you do not already know what is
 wrong with the recording.
@@ -308,7 +338,7 @@ sonare repair noisy.wav --preset broadcast -o clean.wav
 
 | Option | Description |
 |--------|-------------|
-| `--detect` | Measure and report only. No processing runs, and `-o` is not required |
+| `--detect` | Measure and report only. No processing runs and no file is written. The Python CLI refuses `-o`, `--preset`, `--params` and `--bits` with it |
 | `--preset NAME` | Take the repair stages from a named preset (`sonare mastering-presets` lists them) instead of the measure-and-choose path |
 | `--params` | Stage overrides as `repair.<stage>.<field>=value,...` |
 | `--explain` | Report why each stage was chosen |
@@ -316,7 +346,8 @@ sonare repair noisy.wav --preset broadcast -o clean.wav
 
 `-o` is required unless `--detect` is given. `--explain` only describes a
 decision that actually ran, so combining it with `--preset` or `--detect` is
-rejected as an invalid parameter.
+rejected as an invalid parameter (exit 3). A file too short for the detectors
+reports `"defects": {"measured": false}` and nothing else.
 
 `repair` runs no limiter on purpose, and declipping rebuilds the peaks a clipper
 cut off, so the result routinely exceeds full scale. The whole file is fitted
@@ -346,12 +377,13 @@ The commands that would deliver a worse result for it keep the pair instead:
 | `mix` (Python), `mix-strip` | Processed as a pair. A mono file is carried on both sides; a stereo one keeps its own two channels |
 | `suggest-mix` | Each `--input` keeps a stereo file as a pair instead of folding it, since the image analysis is the one part of the assistant that measures both channels. Each file is read at its own sample rate |
 | `normalize` | Kept as a pair. One gain is measured across both channels and applied to both: in `--mode peak` the louder channel lands on `--target-db` and the other keeps its level relative to it, and `--mode rms` measures the pair the same way. Normalizing each channel on its own would lift the quieter side until the two matched, which is a balance change, not a level change |
+| `playback` | Keeps its channels, including 5.1 and 7.1 input; the only command that does |
 | `master`, `mastering-chain`, `declip` (Python CLI) | Kept as a pair; one gain is measured across both channels so the image does not collapse toward the centre |
 | Everything else | Downmixed to mono, with a warning |
 
 There is no option that selects the stereo path: the file's own channel count and the processor's own mono/stereo form decide it. `mastering-processor` refuses a `--stereo` flag as an unknown option (exit code 2) on both CLIs — drop the flag; a two-channel file takes the stereo path on its own. The JSON report says which path ran through its `stereo` field, and `normalize --json` reports `length` per channel.
 
-A source with more than two channels is always downmixed, because the offline
+Apart from `playback`, a source with more than two channels is always downmixed, because the offline
 operations come in a mono and a stereo form and nothing wider. Keeping channel 0
 of a surround file and calling it the record would be worse than saying so.
 
@@ -372,7 +404,8 @@ Check the active build from Python with `libsonare.has_ffmpeg_support()`.
 ## Exit Codes
 
 Both the Python and native CLIs use the following process-exit mapping, aligned
-with the C ABI error classes:
+with the C ABI error classes. The [error contract](./binding-parity.md#error-contract)
+shows the same failures as each library binding reports them.
 
 | Code | Description |
 |------|-------------|
@@ -386,12 +419,12 @@ with the C ABI error classes:
 | 8 | Not supported |
 | 9 | Invalid state |
 | 10 | Other error |
-| 11 | Cancelled |
+| 11 | Canceled |
 | 12 | Encode failed |
 | 13 | ABI mismatch (Python CLI only) |
 
 Usage/parse errors use exit code 2; semantic invalid parameters use 3, and a
-cancelled run uses 11. Exit 13 exists only in the Python CLI: the pip package loads its native library at run time, and a library whose ABI version differs from the one the package was built against is refused before any work starts. The native CLI links its library statically and cannot skew. Exit 12 covers every stage of producing an output file, so
+canceled run uses 11. Exit 13 exists only in the Python CLI: the pip package loads its native library at run time, and a library whose ABI version differs from the one the package was built against is refused before any work starts. The native CLI links its library statically and cannot skew. [Installation](./installation.md#abimismatch-when-loading-the-library) covers the fix for 13. Exit 12 covers every stage of producing an output file, so
 the commonest cause is a `-o` path that cannot be written — most often one that
 resolves to a directory. Set `SONARE_LEGACY_EXIT=1` for either CLI to fold every
 failure back to exit `1` for scripts that hardcode the old all-failures-are-1
@@ -425,15 +458,11 @@ Two details worth knowing before you branch on a specific code:
 
 3. **Hop length**: A larger hop length (`--hop-length 1024`) is faster but gives less time resolution.
 
-## Where the sections went
+## Where to go next
 
-| Section | Now on |
-|---------|--------|
-| Analysis Commands | [CLI Commands](./cli-commands.md#analysis-commands) |
-| Feature Commands | [CLI Commands](./cli-commands.md#feature-commands) |
-| More Commands | [CLI Commands](./cli-commands.md#more-commands) |
-| Basic Analysis Workflow | [CLI Examples](./cli-examples.md#basic-analysis-workflow) |
-| Feature Summary Export | [CLI Examples](./cli-examples.md#feature-summary-export) |
-| Batch Processing | [CLI Examples](./cli-examples.md#batch-processing) |
-| Mixing Workflow | [CLI Examples](./cli-examples.md#mixing-workflow) |
-| Project & MIDI Workflow | [CLI Examples](./cli-examples.md#project-midi-workflow) |
+| Page | What it holds |
+|------|---------------|
+| [CLI Commands](./cli-commands.md) | Every analysis, feature, editing, room and synthesis command with its options and output |
+| [CLI Examples](./cli-examples.md) | Shell walkthroughs: analysis, batch, mixing, projects and MIDI |
+| [CLI Utilities](./cli-utilities.md) | The numeric helpers, `tune-to-midi` and `system-info` |
+| [Use Cases](./use-cases.md) | Whole jobs in the shell, from stems to a finished master |

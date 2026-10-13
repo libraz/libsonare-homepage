@@ -11,41 +11,33 @@
 - 標準の WAV/MP3 対応ではなく、FFmpeg 有効デコードが必要な場面を判断できる。
 - ホイールや既存パッケージで足りないときだけ、ソースからビルドできる。
 - C++ ライブラリをプレフィックス配下にインストールし、自分の CMake プロジェクトから `find_package(sonare)` でリンクできる。
+- 読み込み時の `AbiMismatch` を見分け、バインディングとネイティブコードを同じビルドに揃えられる。
 
 ## どれをインストールするか
 
-| 作るもの | インストール |
-|----------|--------------|
-| ブラウザアプリ | `npm install @libraz/libsonare` |
-| Python スクリプトやノートブック | `pip install libsonare` |
-| ターミナルでのバッチ処理 | `pip install libsonare` で `sonare` を使う |
-| Node ネイティブのサービスやデスクトップツール | `bindings/node` を `@libraz/libsonare-native` としてビルド |
-| C++ 組み込み | ソースからビルドして `cmake --install` し、`find_package(sonare)` で利用 |
-| 独自 WASM ビルド | Emscripten でソースからビルド |
+| 作るもの | インストール | コンパイラが必要か | ファイルを直接読めるか |
+|----------|--------------|--------------------|------------------------|
+| ブラウザアプリ | `npm install @libraz/libsonare` | 不要 | WAV/MP3 のバイト列をデコードする。ほかの形式はブラウザのデコーダーを使う |
+| WebAssembly で動く Node.js のスクリプトやサービス | `npm install @libraz/libsonare` | 不要 | `node:fs` で読んだ WAV/MP3 のバイト列をデコードする |
+| Python スクリプトやノートブック | `pip install libsonare` | [ホイールのあるプラットフォーム](#対応プラットフォーム)では不要 | 読める。WAV/MP3、FFmpeg 有効ならさらに多くの形式 |
+| ターミナルでのバッチ処理 | `pip install libsonare` で `sonare` を使う | ホイールのあるプラットフォームでは不要 | 読める。Python パッケージと同じ形式 |
+| Node ネイティブのサービスやデスクトップツール | `bindings/node` を `@libraz/libsonare-native` としてビルド | 必要 | 読める |
+| C++ 組み込み | ソースからビルドして `cmake --install` し、`find_package(sonare)` で利用 | 必要 | 読める |
+| 独自 WASM ビルド | Emscripten でソースからビルド | 必要（Emscripten） | npm パッケージと同じ |
 
 ::: tip 迷ったらアプリの実行場所で選ぶ
 ブラウザ UI なら npm / WASM、ノートブックやローカル処理なら PyPI、ターミナルだけで確認するなら PyPI 同梱の `sonare` CLI から始めます。Node ネイティブや C++ ビルドは、WASM や Python では性能・配布・既存コード連携が足りないと分かった段階で選ぶと判断しやすくなります。
 :::
 
-迷う場合は、今日すぐ 1 コマンドで試せる経路を選んでください。
+コンパイラが不要な行には、それぞれ最初のプログラムを [はじめに](./getting-started.md#最初の結果) に載せています。後から別の実行環境へ移れます。解析や DSP の中核は共通で、インストール先の違いは主に「音声をどう渡すか」と「結果をどこで使うか」の違いです。
 
-- **Web サイトや Vite / Vue / React アプリ** — npm パッケージを入れ、解析前に `await init()` を呼びます。
-- **ローカルのデータ処理** — Python パッケージを入れ、`Audio.from_file(...)` から始めます。
-- **まだコードを書かずに確認したい** — Python パッケージを入れ、`sonare bpm audio.mp3` や `sonare analyze audio.mp3 --json` を実行します。
+## npm（ブラウザと Node.js）
 
-後から別の実行環境へ移れます。解析や DSP の中核は共通で、インストール先の違いは主に「音声をどう渡すか」と「結果をどこで使うか」の違いです。
+`@libraz/libsonare` は WebAssembly パッケージで、同じビルドがブラウザでも Node.js でも動きます。パッケージの `engines` フィールドは Node.js 22.12.0 以上を求めます。これは Node.js 本体とビルドツールに対する条件で、ブラウザ側に必要なのは WebAssembly だけです。
 
-## npm（ブラウザ / WASM）
+多くの API はサンプルベースなので、デコード済みのモノラル `Float32Array` サンプルを渡します。`Audio.fromMemory(...)` は WAV/MP3 のバイト列をメモリ内でデコードし、`Audio.fromMemoryWithBrowserFallback(...)` は AAC、OGG、FLAC などをブラウザのコーデックスタックで読み込みます。
 
-Node.js 22.12.0 以上が必要です（パッケージの `engines` フィールド）。
-
-`@libraz/libsonare` は WebAssembly パッケージです。多くの API はサンプルベースなので、
-デコード済みのモノラル `Float32Array` サンプルを渡します。読み込み用途では
-`Audio.fromMemory(...)` が WAV/MP3 のバイト列をメモリ内でデコードでき、
-`Audio.fromMemoryWithBrowserFallback(...)` は AAC、OGG、FLAC などをブラウザの
-コーデックスタックへフォールバックできます。
-
-この npm パッケージはブラウザ / WebAssembly 向けです。`sonare` CLI はインストールされません。コマンドラインツールを使う場合は、PyPI の Python パッケージを `pip install libsonare` でインストールしてください。
+npm パッケージでは `sonare` CLI はインストールされません。コマンドラインツールを使う場合は、PyPI の Python パッケージを `pip install libsonare` でインストールしてください。
 
 ::: code-group
 
@@ -85,12 +77,12 @@ pnpm add @libraz/libsonare
 JavaScript のエントリはすべて `import` と `default` の両条件でエクスポートされ、`analysis`、`worklet`、`worker`、`vocal-edit-worker` には `typesVersions` のマップもあります。そのため、バンドラーや `moduleResolution: "node10"` の TypeScript プロジェクトでもサブパスを解決できます。パッケージはツリーシェイキングに対応しており、副作用として宣言しているのは 2 つの Worker エントリと `Symbol.dispose` のシムだけです。
 
 ::: tip 解析だけならアナリシスバンドルを選ぶ
-`@libraz/libsonare/analysis` は同じ DSP からマスタリング・ミキシング・リアルタイム・プロジェクトの各サーフェスを外してビルドしたものです。CI はサイズをレポートに記録しますが、増加だけでビルドを失敗させません。BPM・キー・コード検出やスペクトログラム表示だけを行い、マスタリングやミキシングをしないページなら、メインエントリの代わりにこちらをインポートすると WASM のダウンロード量を大きく減らせます。
+`@libraz/libsonare/analysis` は同じ DSP からマスタリング・ミキシング・リアルタイム・プロジェクトの各サーフェスを外してビルドしたものです。BPM・キー・コード検出やスペクトログラム表示だけを行い、マスタリングやミキシングをしないページなら、メインエントリの代わりにこちらをインポートすると WASM のダウンロード量を大きく減らせます。
 :::
 
 ## PyPI（Python）
 
-Python 3.11 以上が必要です（3.11、3.12、3.13）。
+Python 3.11 以上（3.11、3.12、3.13）と NumPy 2.0.2 以上が必要です。`pip` は NumPy を実行時依存としてインストールします。
 
 ```bash
 pip install libsonare
@@ -98,11 +90,7 @@ pip install libsonare
 
 Python パッケージをインストールすると、ライブラリとして使えるだけでなく `sonare` コマンドも使えます。詳細は [CLI リファレンス](/ja/docs/cli) を参照してください。
 
-PyPI のホイールはインストール結果が環境に左右されないよう、標準では WAV と MP3 の
-デコードに対応しています。M4A、AAC、FLAC、OGG、Opus など FFmpeg が扱える形式を
-直接読み込む場合は、FFmpeg を有効にしてソースからホイールをビルドします。`SONARE_FFMPEG`
-フラグは `pip` ではなくホイールビルダースクリプトが参照するため、リポジトリをクローンして
-ビルドスクリプトを実行します。
+PyPI のホイールがデコードできるのは WAV と MP3 です。M4A、AAC、FLAC、OGG、Opus など FFmpeg が扱える形式を直接読み込む場合は、FFmpeg を有効にしてソースからホイールをビルドします。`SONARE_FFMPEG` フラグは `pip` ではなくホイールビルダースクリプトが参照するため、リポジトリをクローンしてビルドスクリプトを実行します。
 
 ```bash
 git clone https://github.com/libraz/libsonare.git
@@ -119,19 +107,16 @@ FFmpeg 有効ビルドには FFmpeg の開発ライブラリが必要です。ma
 
 | プラットフォーム | 備考 |
 |------------------|------|
-| Linux | ホイールは対応する manylinux 2.28 イメージ内でビルドし、`auditwheel` で修復したうえで glibc 2.31 に対して検査しています |
-| macOS | macOS 11.0 以降が対象です |
+| Linux | `x86_64` と `aarch64` のホイールと CLI アーカイブ。ホイールは対応する manylinux 2.28 イメージ内でビルドし、`auditwheel` で修復したうえで glibc 2.31 に対して検査しています |
+| macOS | Python ホイールは Apple Silicon・macOS 11.0 以降、CLI アーカイブは `arm64`・macOS 14.0 以降。Intel Mac はソースからビルドします |
 | WebAssembly | WebAssembly が動くブラウザ。既定の経路では SharedArrayBuffer は不要です |
 | WSL2 | Windows マシンでビルド・実行する場合はこちらを使います |
 
 ::: warning Windows ネイティブビルドは拒否されます
-Windows 上の CMake 構成は、中途半端に構成を進めるのではなく WSL2 への案内を出して
-失敗します。Windows でネイティブビルドを行う場合は WSL2 を使ってください。npm の
-WebAssembly パッケージは Windows のブラウザでも問題なく動きます。この制限は
-ネイティブライブラリのコンパイルに関するもので、ブラウザ実行の話ではありません。
+Windows 上の CMake 構成は、中途半端に構成を進めるのではなく WSL2 への案内を出して失敗します。Windows でネイティブビルドを行う場合は WSL2 を使ってください。npm の WebAssembly パッケージは Windows のブラウザでも問題なく動きます。この制限はネイティブライブラリのコンパイルに関するもので、ブラウザ実行の話ではありません。
 :::
 
-公開されている成果物は、WebAssembly の npm パッケージ、Python ホイール、ネイティブ CLI のリリースアーカイブです。ネイティブ CLI アーカイブは Linux `x86_64`／`aarch64` と macOS `arm64` 向けに公開されます。Node ネイティブバインディングは private 指定で、ローカル依存としてのみインストールされます（[ネイティブバインディング](/ja/docs/native-bindings) を参照）。
+公開されている成果物は、WebAssembly の npm パッケージ、Python ホイール、ネイティブ CLI のリリースアーカイブです。Node ネイティブバインディングは private 指定で、ローカル依存としてのみインストールされます（[ネイティブバインディング](/ja/docs/native-bindings) を参照）。
 
 ## ソースからビルド
 
@@ -177,6 +162,9 @@ C++ ライブラリを入手する方法はソースビルドだけです（ビ�
 cmake --install build --prefix /your/prefix
 ```
 
+この節の残りは利用側の CMake プロジェクト向けのリファレンスです。ファイルの配置先、`find_package(sonare)` がそれを見つける仕組み、代わりに `add_subdirectory()` を使う場面を扱います。
+
+::: details インストール配置、find_package、add_subdirectory()
 `--prefix` を省略すると CMake の既定値、Linux と macOS では `/usr/local` 配下に入ります。構成時に `-DCMAKE_INSTALL_PREFIX=/your/prefix` を渡しても同じです。プレフィックス配下の配置は次のとおりです（`GNUInstallDirs` がそう定める Linux ディストリビューションでは `lib` が `lib64` になります）。
 
 | プレフィックス配下のパス | 内容 |
@@ -192,9 +180,7 @@ cmake --install build --prefix /your/prefix
 
 インストール時のコンポーネントはありません。`cmake --install --component` で選べるものはなく、インストールに何が含まれるかは構成時の `BUILD_*` オプションで決まります。`-DBUILD_MIXING=OFF` で構成したインストールにはミキシングのアーカイブが存在せず、パッケージファイルにもその構成が反映されます。利用側で言う「コンポーネント」は別の意味で、次項で扱います。絞り込んだ構成の例は[内蔵インストゥルメントだけをリンクする](./cpp-api.md#内蔵インストゥルメントだけをリンクする)を参照してください。
 
-### find_package で利用する
-
-パッケージ名は `sonare`、名前空間は `sonare::`、リンクするターゲットは `sonare::sonare` です。利用側プロジェクトの全体は次のようになります。
+**`find_package` で利用する。** パッケージ名は `sonare`、名前空間は `sonare::`、リンクするターゲットは `sonare::sonare` です。利用側プロジェクトの全体は次のようになります。
 
 ```cmake
 cmake_minimum_required(VERSION 3.16)
@@ -241,9 +227,10 @@ cmake --build build
 
 **ビルド時と実行時に必要なもの。** ビルド時に利用側で必要なのは、C++17 対応コンパイラ、CMake 3.16 以上、スレッドライブラリです。Eigen は不要です。インストールされるヘッダーはどれも Eigen をインクルードしません。インストールが FFmpeg 有効でビルドされている場合、パッケージファイルは FFmpeg のライブラリを `pkg-config` 経由で解決するため、利用側のマシンにも FFmpeg の開発パッケージが必要です。実行時には、既定の静的インストールなら C++ ランタイム以外に何も要りません。共有ビルドのインストールではローダーのパス上に `libsonare.so` / `.dylib` が必要で、FFmpeg 有効のインストールはどちらの形でも FFmpeg の共有ライブラリが必要です。
 
-### インストールと add_subdirectory() の使い分け
+**インストールと `add_subdirectory()` の使い分け。** チェックアウトに対する `add_subdirectory()` も引き続き使え、同じ `sonare::` のターゲット名が定義されるため、リンク行に入手方法の違いは現れません。利用側が独立したプロジェクトなら、インストール済みパッケージを使うほうが向いています。複数のプロジェクトで 1 つのインストールを共有でき、アプリを再ビルドしても libsonare は再ビルドされません。libsonare 自体をアプリと並行して変更しているなら `add_subdirectory()` のほうが向いています。チェックアウトから毎回ライブラリがコンパイルされ、途中に install ステップが要りません。テストツリーと CLI を自分のビルドから外すため、親側で `BUILD_TESTING` と `BUILD_CLI` を `OFF` にしてください。libsonare リポジトリの `examples/cpp` は両方に対応しており、まず `find_package(sonare CONFIG QUIET)` を試し、何もインストールされていなければチェックアウトにフォールバックします。
 
-チェックアウトに対する `add_subdirectory()` も引き続き使え、同じ `sonare::` のターゲット名が定義されるため、リンク行に入手方法の違いは現れません。利用側が独立したプロジェクトなら、インストール済みパッケージを使うほうが向いています。複数のプロジェクトで 1 つのインストールを共有でき、アプリを再ビルドしても libsonare は再ビルドされません。libsonare 自体をアプリと並行して変更しているなら `add_subdirectory()` のほうが向いています。チェックアウトから毎回ライブラリがコンパイルされ、途中に install ステップが要りません。テストツリーと CLI を自分のビルドから外すため、親側で `BUILD_TESTING` と `BUILD_CLI` を `OFF` にしてください。libsonare リポジトリの `examples/cpp` は両方に対応しており、まず `find_package(sonare CONFIG QUIET)` を試し、何もインストールされていなければチェックアウトにフォールバックします。
+幾何ベースのルーム音響では、使う機能に応じて `acoustic/rir_synthesizer.h`、`analysis/room_estimator.h`、`effects/acoustic/room_morph.h` のいずれかをインクルードし、`BUILD_ACOUSTIC_SIM=ON` でビルドします。
+:::
 
 ## ネイティブバインディング（Python / Node.js）
 
@@ -258,94 +245,35 @@ yarn install
 yarn build
 ```
 
-## 使用方法
+## インストールを確認する
 
-### ブラウザ
-
-```typescript
-import { init, detectBpm, detectKey, analyze } from '@libraz/libsonare';
-
-// WASM モジュールを初期化
-await init();
-
-// AudioContext から音声サンプルを取得
-const audioContext = new AudioContext();
-const response = await fetch('audio.mp3');
-const arrayBuffer = await response.arrayBuffer();
-const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-const samples = audioBuffer.getChannelData(0);
-
-// BPM 検出
-const bpm = detectBpm(samples, audioBuffer.sampleRate);
-
-// キー検出
-const key = detectKey(samples, audioBuffer.sampleRate);
-
-// フル解析
-const result = analyze(samples, audioBuffer.sampleRate);
-```
-
-ステレオファイルで両チャンネルを反映したい場合は、片チャンネルだけを渡すのではなく事前にモノラルへダウンミックスしてください。
-
-下のデモは、同じブラウザ / WASM 経路を視覚化したものです。デコード済みサンプルを入力し、STFT 系の時間 × 周波数表示を出力します。これがアプリ内で描画できれば、WASM パッケージの読み込み、初期化、サンプルレートの受け渡しが動いていると確認できます。
-
-<SonareDemo id="stft-basics" />
-
-### Python
-
-```python
-from libsonare import Audio
-
-# WAV/MP3 を読み込む（FFmpeg 付きで再ビルドすると M4A/FLAC/OGG/Opus も対応）
-audio = Audio.from_file("audio.mp3")
-
-# BPM 検出
-bpm = audio.detect_bpm()
-
-# キー検出
-key = audio.detect_key()
-
-# フル解析
-result = audio.analyze()
-```
-
-同じ `sonare` CLI がパッケージに同梱されています。ターミナルでの使い方や JSON 出力は
-[CLI リファレンス](/ja/docs/cli) を参照してください。
-
-### CLI
+どの行も読み込んだバージョンを表示します。`sonare doctor` は、ライブラリのパスとこのビルドがデコードできる形式も一覧します。
 
 ```bash
-pip install libsonare
-
-# ターミナルでの簡易確認
-sonare bpm audio.mp3
-sonare key audio.mp3
-
-# 機械処理しやすいフル解析
-sonare analyze audio.mp3 --json > analysis.json
+node --input-type=module -e "import { init, version } from '@libraz/libsonare'; await init(); console.log(version())"
+python -c "import libsonare; print(libsonare.__version__)"
+sonare doctor
 ```
 
-### C++
+続けて、[はじめに](./getting-started.md#最初の結果) から自分の実行環境の最初のプログラムを動かしてください。C++ の利用側は、[C++ ライブラリのインストール](#c-ライブラリのインストール) にある `main.cpp` から始めます。
 
-```cpp
-#include <quick.h>
+## トラブルシューティング
 
-// BPM 検出
-float bpm = sonare::quick::detect_bpm(samples, size, sample_rate);
+### ライブラリ読み込み時の AbiMismatch
 
-// キー検出
-sonare::Key key = sonare::quick::detect_key(samples, size, sample_rate);
+どのバインディングも、最初の呼び出しの前に、読み込んだネイティブコードが自分のビルド時と同じインターフェースを実装しているかを確認します。比較するのは `sonare_abi_version()` の値で、feature・project・voice changer・acoustic の構造体バージョンを 1 つにパックしたものです。現在の値は `0x05030207`（10 進数で 84083207）で、パックの仕方は [ABI バージョン](./native-bindings.md#abi-バージョン)で説明しています。値が違えばバインディングとネイティブコードは別のビルドなので、バインディングは構造体を読み違える前にエラーコード 10 で止まります。
 
-// フル解析
-sonare::AnalysisResult result = sonare::quick::analyze(samples, size, sample_rate);
-```
+| バインディング | 送出されるタイミング | 表示される内容 | よくある原因 |
+|----------------|----------------------|----------------|--------------|
+| Python と `sonare` CLI | 最初のライブラリ使用時 | `ErrorCode.ABI_MISMATCH` の `SonareError`：`[10] libsonare ABI mismatch: native binary reports 67240454, expected 84083207. …`。CLI は `Error: …` として表示し、終了コード 13 で終了する | `SONARE_LIB_PATH` が別のビルドのライブラリを指している、またはソースチェックアウトの `build/lib` に古いライブラリが残っている |
+| Node ネイティブ | パッケージの import 時 | `codeName` が `AbiMismatch` の `SonareError`：`libsonare native addon ABI mismatch: the addon reports version 0x…, but this package expects 0x05030207. …` | `build/Release/sonare-node.node` が、それを読み込む TypeScript より前にビルドされている |
+| WASM | `init()` | `codeName` が `AbiMismatch` の `SonareError`：`libsonare ABI mismatch: wasm module reports 0x…, this package expects 0x05030207. …` | `wasmBinary`・`locateFile`・`moduleFactory` オプション、またはキャッシュされた `sonare.wasm` が、別バージョンのパッケージのバイナリを渡している |
+| C / C++ | 送出されない（ライブラリ自身は返さない） | — | あるバージョンのヘッダーで、別バージョンのライブラリに対してコンパイルしている。`sonare_abi_version()` と `SONARE_ABI_VERSION` の比較は呼び出し側で行う |
 
-ルーム音響メトリクスでは、測定済みインパルス応答（IR）に
-`sonare::quick::analyze_impulse_response()`、通常音声からのブラインド推定に
-`sonare::quick::detect_acoustic()` を使います。
-幾何ベースのルーム音響では、次の 2 点を確認します。
+Python は次の順にライブラリを探し、最初に見つかったものを使います。ファイルが存在する場合の `SONARE_LIB_PATH`、パッケージが置かれたソースチェックアウトの `build/lib/`、インストール済みパッケージ内のコピー、システムのライブラリパスの順です。対処は、食い違ったライブラリがどこから来たかで決まります。
 
-- 使う機能に応じて、`acoustic/rir_synthesizer.h`、`analysis/room_estimator.h`、`effects/acoustic/room_morph.h` のいずれかをインクルードする。
-- `BUILD_ACOUSTIC_SIM=ON` でビルドする。
+- **Python** — `SONARE_LIB_PATH` を外すか、パッケージと同じチェックアウトからビルドしたライブラリに向けます。あるいはそのチェックアウトの `build/lib` をビルドし直すか、ホイールを入れ直します。読み込めるようになれば、`sonare doctor` が選ばれたライブラリのパスを表示します。
+- **Node ネイティブ** — `bindings/node` で `yarn build` を実行し、アドオンをパッケージの TypeScript に合わせます。
+- **WASM** — JavaScript と同じバージョンのパッケージに含まれる `sonare.wasm` を配信し、キャッシュされたコピー（CDN やサービスワーカー）を消します。
 
-自分の CMake プロジェクトからのリンク方法（`find_package(sonare)`、`sonare::sonare` ターゲット、ヘッダーの配置先、システムプレフィックス外のインストールに対する `CMAKE_PREFIX_PATH`）は [C++ ライブラリのインストール](#c-ライブラリのインストール)で扱っています。エクスポートされる全ターゲットと、どれが存在するかを決めるビルドフラグは[リンクターゲット](./cpp-api.md#リンクターゲット)にあります。
+同じコードを持つ関連メッセージが 2 つあります。バージョン照合は通ったものの、Python バインディングが必要とするエントリポイントを持たないライブラリは `libsonare ABI mismatch: <path> does not export a symbol this binding requires` になります。バインディングより古いライブラリなので、ビルドし直してください。また、リアルタイムエンジンとプロジェクトのサブシステムは独自のバージョンを持ち、各 `RealtimeEngine` のコンストラクターと、Node と Python の `Project` がオブジェクト生成時に照合します。メッセージは `libsonare engine ABI mismatch …`（WASM では `Engine ABI mismatch: wasm=…, expected=…`）と `libsonare project ABI mismatch …` です。このときプロジェクトのバージョンが `0` なら、ライブラリはアレンジ機能なしでビルドされています。

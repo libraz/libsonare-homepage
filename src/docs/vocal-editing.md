@@ -5,11 +5,11 @@ description: Practical guide to libsonare's offline monophonic vocal session API
 
 # Offline Monophonic Vocal Editing
 
-The vocal edit API turns one mono vocal recording into an editable note model. It analyses the source, exposes note pitch and timing, applies pitch/formant/amplitude edits transactionally, and renders the edited source without an audio device or realtime engine. The Node, browser/WASM, and Python bindings expose the same session model.
+The vocal edit API turns one mono vocal recording into an editable note model. It analyzes the source, exposes note pitch and timing, applies pitch/formant/amplitude edits transactionally, and renders the edited source without an audio device or realtime engine. The Node, browser/WASM, and Python bindings expose the same session model.
 
 Use a `VocalEditSession` for a vocal take that needs offline correction. Use a session together with `Project.applyVocalEdit()` when the result belongs to an arrangement. This API accepts one monophonic line; it does not separate overlapping voices or replace a polyphonic source editor. For realtime input, use the [realtime voice changer](./realtime-voice-changer.md).
 
-The vocal edit surface is exposed through the Node, browser/WASM, and Python bindings. The libsonare CLI has no corresponding vocal-edit subcommand.
+The vocal edit surface is exposed through the Node, browser/WASM, and Python bindings. On the CLI, `sonare vocal-notes` lists the notes a session finds in a take, with the session's analysis settings as options; editing and rendering a session have no CLI command.
 
 <FlowDiagram
   title="Vocal edit lifecycle"
@@ -35,7 +35,7 @@ The vocal edit surface is exposed through the Node, browser/WASM, and Python bin
 
 ## Create and inspect a session
 
-The input is a mono `Float32Array` and a sample rate from 8,000 through 384,000 Hz. The following deterministic source also supplies analysis, so it is useful for a smoke test and does not depend on the analyzer's heuristics. Omit `analysis` to let libsonare analyse the source with its built-in pYIN path.
+The input is a mono `Float32Array` and a sample rate from 8,000 through 384,000 Hz. The following deterministic source also supplies analysis, so it is useful for a smoke test and does not depend on the analyzer's heuristics. Omit `analysis` to let libsonare analyze the source with its built-in pYIN path.
 
 ::: code-group
 
@@ -114,13 +114,66 @@ with create_vocal_edit_session(samples, sample_rate) as session:
 
 Gate on `vocalEditAvailable()` and read the API version with `vocalEditApiVersion()` (Python `vocal_edit_api_version()`, C `sonare_vocal_edit_api_version`); `session.capabilities().apiVersion` reports the same counter. It is separate from the engine's ABI counters. A session, draft, snapshot and render job each release their handle with `dispose()`, `delete()` or `destroy()`, and also through `Symbol.dispose`, so `using session = createVocalEditSession(...)` works where the runtime supports explicit resource management.
 
-`session.notes()` returns notes and pitch transitions. A note contains its source span, analysis-frame span, median frequency, centre MIDI note, pitch stability, amplitude samples, and the current edit. `session.analysis()` returns the F0 and voiced arrays, the analysis grid, algorithm metadata, source digest, and settings. `session.capabilities()` reports the profile, the monophonic constraint, whether analysis cancellation is supported by the loaded profile, and the available formant-shift range. Read those values instead of baking profile limits into a UI.
+`session.notes()` returns notes and pitch transitions. A note contains its source span, analysis-frame span, median frequency, center MIDI note (`centerMidi`), pitch stability, amplitude samples, and the current edit. The center is measured from an F0 refined against the audio and averaged over whole vibrato cycles, leaving out the glides at either end, so it is not limited to the pitch tracker's 10-cent steps and a `center` target lands on the pitch you asked for. `session.analysis()` returns the F0 and voiced arrays, the analysis grid, algorithm metadata, source digest, and settings. `session.capabilities()` reports the profile, the monophonic constraint, whether analysis cancellation is supported by the loaded profile, and the available formant-shift range. Read those values instead of baking profile limits into a UI.
 
-Revisions, generations, request IDs, and byte limits (`maxHistoryBytes` and `maxCacheBytes`) cross the JavaScript boundary as decimal strings (`VocalUint64`). Keep those values as strings; `maxUndoDepth` and `maxRenderJobs` are numbers. The Python binding uses snake_case method names, exposes those counters as Python integers, and closes a session at the end of a `with` block. `evaluatePitch(noteId)` returns measured, target, effective, and voiced arrays for a note; the coordinate mapping methods convert between source and destination samples after a timing edit.
+::: warning Decimal strings
+Revisions, generations, request IDs, and byte limits (`maxHistoryBytes`, `maxCacheBytes`) cross the JavaScript boundary as decimal strings (`VocalUint64`). Keep them as strings; `maxUndoDepth` and `maxRenderJobs` are numbers. Pass `expectedRevision` and `expectedGeneration` on any write that can race another control-thread action.
+:::
+
+The Python binding uses snake_case method names, exposes those counters as Python integers, and closes a session at the end of a `with` block.
+
+`evaluatePitch(noteId)` returns measured, target, effective, and voiced arrays for a note. The coordinate mapping methods convert between source and destination samples after a timing edit.
+
+### Session options
+
+Every option is optional. `analysis` supplies your own F0 track instead of running the built-in pYIN path; the rest tune that analysis, the note segmentation and the render.
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `frameLengthSamples` / `hopLengthSamples` | `2048` / `512` | pYIN analysis frame and hop, in samples |
+| `fminHz` / `fmaxHz` | `65` / `2093` | Pitch search range in Hz |
+| `yinThreshold` | `0.1` | pYIN absolute threshold |
+| `voicedThreshold` | `0.5` | Voicing probability at or above which a frame counts as voiced |
+| `centered` | `true` | Center each analysis frame on its hop position |
+| `segmentationThresholdCents` | `50` | Pitch change that starts a new note. A held note with vibrato stays one note, and a short fragment after a glide is not split off |
+| `minNoteMs` | `30` | Shortest span kept as a note, in ms |
+| `referenceHz` | `440` | Reference the per-note cents are measured against |
+| `outputLengthSamples` | source length | Length of the rendered output; `0` or omission takes the source length |
+| `edgeFadeMs` | `5` | Fade at each edited note edge, in ms |
+| `vibratoCutoffHz` | `3` | Where the slow drift ends and vibrato begins when a note's pitch curve is split |
+| `limits` | see [Persist and restore](#persist-and-restore-a-session) | `maxHistoryBytes`, `maxCacheBytes`, `maxUndoDepth`, `maxRenderJobs` |
+
+`session.analysis()` echoes the settings the analysis used, so read them back instead of assuming the defaults. The `sonare vocal-notes` command takes the segmentation and pitch-range settings as `--segmentation-threshold-cents`, `--min-note-ms`, `--fmin-hz`, `--fmax-hz` and `--reference-hz`.
+
+## What a note edit holds
+
+Each note carries a `VocalNoteEdit`, and `setEdit` replaces it whole. Start from `note.edit` and change only the fields you mean to; the defaults below are what an untouched note reports. Pitch moves by the **target**:
+
+| `pitch.target` | Result |
+|----------------|--------|
+| `{ mode: 'none' }` | Leave the pitch alone (the default) |
+| `{ mode: 'center', midi }` | Move the note's `centerMidi` to `midi` in `[0, 127]`; drift and vibrato around the center are kept |
+| `{ mode: 'curve', points }` | Follow `points`, each `{ sourceSample, midi }`: at least two, strictly increasing in `sourceSample`, with the first and last on the note's source start and end |
+
+| Field | Meaning | Range | Default |
+|-------|---------|-------|---------|
+| `pitch.amount` | How far toward the target the pitch moves; `0` applies no correction | `[0, 1]` | `0` |
+| `pitch.speedMs` | Time constant of the move onto the target; `0` moves at once | `>= 0` | `0` |
+| `pitch.maxCorrectionSemitones` | Clamp on the correction at any frame | `>= 0` | `12` |
+| `pitch.transposeSemitones` | Added to the pitch after any correction | any finite value | `0` |
+| `pitch.driftScale` | Scales the slow drift around the center; `0` flattens it | `>= 0` | `1` |
+| `pitch.vibratoScale` | Scales the vibrato; `0` removes it | `>= 0` | `1` |
+| `formant.mode` | `'preserve'` applies no formant move; `'shift'` moves the spectral envelope by `shiftSemitones` | `'preserve'`, `'shift'` | `'preserve'` |
+| `formant.shiftSemitones` | Formant move; `'preserve'` requires `0` | the range `capabilities()` reports (about -10.3 to +8.7) | `0` |
+| `destinationStartSample` | Where the note starts in the output | `>= 0` | the source start |
+| `destinationLengthSamples` | Output length of the note; a different length stretches it | `> 0`, inside the output length | the source length |
+| `gainDb` | Level change | finite | `0` |
+| `muted` | Silences the note | boolean | `false` |
+| `amplitudeEnvelope` | Gain points stretched over the rendered note, on top of `gainDb` | finite, `>= 0` | empty |
 
 ## Apply edits as a draft
 
-`beginEdit()` opens one transaction against the current committed revision. `draft.apply()` checks the draft generation and returns dirty ranges and any note ID changes. `draft.commit()` publishes one new revision and makes the edit visible to the session. A failed or abandoned draft should be cancelled so another draft can start.
+`beginEdit()` opens one transaction against the current committed revision. `draft.apply()` checks the draft generation and returns dirty ranges and any note ID changes. `draft.commit()` publishes one new revision and makes the edit visible to the session. A failed or abandoned draft should be canceled so another draft can start.
 
 ```typescript
 const note = session.notes().notes[0];
@@ -152,7 +205,7 @@ session.redo({ expectedRevision: session.revision() });
 
 The operation set covers `setEdit`, `setSourceSpan`, `split`, `merge`, `setTransition`, `removeTransition`, and `reset`. Splitting and merging can retire note IDs; follow `idChanges` and use the returned IDs for later operations.
 
-Positions in `setSourceSpan` and `split` are samples or seconds, one spelling each (`sourceSample` / `sourceSec`, and `sourceStartSample` / `sourceStartSec`, `sourceEndSample` / `sourceEndSec`, `destinationStartSample` / `destinationStartSec`, `destinationLengthSamples` / `destinationLengthSec`). Seconds are rounded to the nearest sample at the session's rate; giving both spellings of one position is refused, and so is a negative position. `merge` takes `noteIds` and an optional `policy` (`'preserve'` or `'reset'`).
+Positions in `setSourceSpan` and `split` are samples or seconds, one spelling each (`sourceSample` / `sourceSec`, and `sourceStartSample` / `sourceStartSec`, `sourceEndSample` / `sourceEndSec`, `destinationStartSample` / `destinationStartSec`, `destinationLengthSamples` / `destinationLengthSec`). Seconds are rounded to the nearest sample at the session's rate; giving both spellings of one position is refused, and so is a negative position. `merge` takes `noteIds` and an optional `policy` (`'preserve'` or `'reset'`). [Samples and seconds](./editing-dsp.md#samples-and-seconds) lists the spellings for every editing call.
 
 ```typescript
 const [first] = session.notes().notes;
@@ -258,7 +311,7 @@ try {
 
 `client.restore(request)` opens a Worker session from persisted state the same way `create` does. The session handle is a `VocalEditWorkerSession` whose methods return cancellable tasks: reads (`notes()`, `analysis()`, `capabilities()`, `history()`, `evaluatePitch()`), draft control (`beginEdit()`, `apply()`, `commit()`, `cancel()`, `undo()`, `redo()`), `exportState()`, `preview()` and `dispose()`. `preview({ range: { startSec: 0.1, endSec: 0.2 } })` takes the same seconds-or-samples range as a direct render.
 
-Typed-array buffers are transferred by default (`copy: false`) and become detached on the calling thread. Use `copy: true` when the caller must keep using `samples`, the persisted state, or arrays in a mutation request. `AbortSignal` and `VocalEditWorkerTask.cancel()` cancel create, restore, and preview calls. Session mutations are FIFO and cannot be cancelled, so serialize UI writes and use expected revisions or generations. Pipelined replies that no longer match the client's latest intent reject with `VocalEditWorkerStaleResultError`; update UI state only from the latest accepted result.
+Typed-array buffers are transferred by default (`copy: false`) and become detached on the calling thread. Use `copy: true` when the caller must keep using `samples`, the persisted state, or arrays in a mutation request. `AbortSignal` and `VocalEditWorkerTask.cancel()` cancel create, restore, and preview calls. Session mutations are FIFO and cannot be canceled, so serialize UI writes and use expected revisions or generations. Pipelined replies that no longer match the client's latest intent reject with `VocalEditWorkerStaleResultError`; update UI state only from the latest accepted result.
 
 ## Apply a vocal edit to a Project
 
@@ -338,7 +391,7 @@ The cancellation callback is checked between dependency entries; return a truthy
 
 - The session is monophonic. Check `capabilities().monophonicOnly` and expose the formant range returned by `minimumFormantShiftSemitones` and `maximumFormantShiftSemitones`.
 - A source sample rate must be between 8,000 and 384,000 Hz. The Project render rate must match the source rate for the v1 adapter.
-- Revisions, draft generations, request IDs, and byte limits use decimal `VocalUint64` strings; undo-depth and render-job limits are numbers. Pass `expectedRevision` and `expectedGeneration` on writes that can race with another control-thread action.
+- Revisions, generations, request IDs and byte limits are decimal strings; see [Decimal strings](#create-and-inspect-a-session). Pass expected revisions and generations on writes that can race.
 - State persistence does not include source PCM or undo history. Store the original source or a content-addressed equivalent alongside the project JSON.
 - The Worker client runs in a browser or on a `node:worker_threads` Worker. Direct sessions are synchronous on the calling thread; use `renderAsync()` or the Worker for long renders and cancellation.
 
@@ -348,3 +401,4 @@ The cancellation callback is checked between dependency entries; return a truthy
 - [Project Save & Load](./project-save-load.md) — serialize and rebind project sources
 - [Realtime Voice Changer](./realtime-voice-changer.md) — process live input on the realtime path
 - [Binding Parity](./binding-parity.md) — compare runtime surfaces
+- [Tune a Vocal Take](./use-cases/vocal-tuning.md) — measure a sung take, compare whole-take scale correction with note-by-note retuning, and keep the vibrato

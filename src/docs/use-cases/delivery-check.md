@@ -20,7 +20,7 @@ By the end of this page you should be able to:
 
 ## The gate script
 
-This assumes the mastering step already ran and left both files behind: the master itself, and the `--report` it wrote alongside it. See [Mix and Master a Song in the CLI](./cli-mix-and-master.md) for that step.
+This assumes the mastering step already ran and left both files behind: the master itself, and the `--report` it wrote alongside it. See [Mix and Master a Song in the CLI](./cli-mix-and-master.md) for that step. The script runs on either CLI; on the native one, call `sonare-cli` instead of `sonare`.
 
 ```bash
 #!/usr/bin/env bash
@@ -66,17 +66,21 @@ if info["duration"] < 1.0:
     failures.append(f"duration = {info['duration']:.3f}s, file looks truncated")
 
 defects = json.load(open(defects_path))["defects"]
-if defects["clip_sample_fraction"] > 0.0:
-    failures.append(f"clipping: {defects['clip_sample_fraction'] * 100:.3f}% of samples")
-if defects["click_per_second"] > 0.2:
-    failures.append(f"clicks: {defects['click_per_second']:.2f}/s")
-if defects["crackle_per_second"] > 1.0:
-    failures.append(f"crackle: {defects['crackle_per_second']:.2f}/s")
-if defects["hum_peak_found"] and defects["hum_fundamental_prominence"] > 6.0:
-    failures.append(
-        f"mains hum at {defects['hum_fundamental_hz']:.0f} Hz, "
-        f"{defects['hum_fundamental_prominence']:.1f} dB prominence"
-    )
+if not defects.get("measured"):
+    # Too short for the detectors: the output carries no other field.
+    failures.append("damage not measured (file too short for the detectors)")
+else:
+    if defects["clip_sample_fraction"] > 0.0:
+        failures.append(f"clipping: {defects['clip_sample_fraction'] * 100:.3f}% of samples")
+    if defects["click_per_second"] > 0.2:
+        failures.append(f"clicks: {defects['click_per_second']:.2f}/s")
+    if defects["crackle_per_second"] > 1.0:
+        failures.append(f"crackle: {defects['crackle_per_second']:.2f}/s")
+    if defects["hum_peak_found"] and defects["hum_fundamental_prominence"] > 6.0:
+        failures.append(
+            f"mains hum at {defects['hum_fundamental_hz']:.0f} Hz, "
+            f"{defects['hum_fundamental_prominence']:.1f} dB prominence"
+        )
 
 # Loudness and true peak come from the mastering report -- the stereo
 # measurement the chain itself took -- not from a separate `lufs` call.
@@ -161,9 +165,30 @@ sonare info master.wav --json
 
 ### Damage: `repair --detect`
 
-```bash
+::: code-group
+
+```bash [CLI]
 sonare repair master.wav --detect --json
 ```
+
+```typescript [Node]
+import { masteringRepairAnalyze } from '@libraz/libsonare-native';
+
+const { defects } = masteringRepairAnalyze({ channels: [left, right], sampleRate: 48000 });
+if (!defects.measured) throw new Error('damage not measured');
+console.log(defects.clipSampleFraction, defects.clickPerSecond, defects.cracklePerSecond, defects.humFundamentalProminence);
+```
+
+```python [Python]
+import libsonare as sonare
+
+defects = sonare.mastering_repair_analyze([left, right], 48000)["defects"]
+if not defects["measured"]:
+    raise SystemExit("damage not measured")
+print(defects["clipSampleFraction"], defects["clickPerSecond"], defects["cracklePerSecond"], defects["humFundamentalProminence"])
+```
+
+:::
 
 ```json
 {"mode": "detect", "defects": {
@@ -175,7 +200,7 @@ sonare repair master.wav --detect --json
 }}
 ```
 
-`--detect` only measures — it writes nothing, so it costs nothing to run on every commit. Set `clip_sample_fraction`'s threshold to `0.0`: a finished master should never clip, because the limiter's whole job was to prevent it. `click_per_second` and `crackle_per_second` need real headroom instead, because the detector reports a nonzero baseline on ordinary program material — this master's own clean take measured `0.097` and `0.485` per second respectively, so `0.2` and `1.0` catch a genuinely damaged file without failing on normal density.
+`--detect` only measures. It writes nothing, so it costs nothing to run on every commit. A file too short for the detectors returns `{"measured": false}` and no other field; the gate treats that as a failure, not as a clean result. The library calls return the same measurements under camelCase names (`clipSampleFraction`, `clickPerSecond`); `hum_peak_found` exists only in the CLI output and means a prominence above 1.0 dB. Set `clip_sample_fraction`'s threshold to `0.0`: a finished master should never clip, because the limiter's whole job was to prevent it. `click_per_second` and `crackle_per_second` need real headroom instead, because the detector reports a nonzero baseline on ordinary program material — this master's own clean take measured `0.097` and `0.485` per second respectively, so `0.2` and `1.0` catch a genuinely damaged file without failing on normal density.
 
 `hum_peak_found` is a boolean by itself, and mains hum below the noise floor is common and inaudible — the gate should not fail on its mere presence. `hum_fundamental_prominence` is what turns it into a real check: this master's incidental 60 Hz peak sits at `2.19` dB of prominence, while a genuinely damaged take in the same session measured `18.6` dB at 50 Hz. `6.0` dB sits between the two — high enough to ignore an inaudible peak, low enough to catch an audible one.
 
@@ -229,6 +254,10 @@ sonare mastering-profile take-clean.wav --json
 
 Reach for `mastering-streaming` directly when the deliverable is mono, or as a cross-check. For stereo-accurate metering outside the mastering report, use the stereo entry points in the [Python API](../python-api.md) — `mastering_streaming_preview_stereo` and its siblings measure both channels instead of a downmix.
 :::
+
+How much a fold loses depends on how alike the two channels are. In the demo, two copies of one sine wave at a growing phase offset average to a quieter signal and cancel at 180°.
+
+<SonareDemo id="mono-fold" />
 
 `mastering-streaming` also takes your own delivery spec instead of the three built-in platforms. `platforms.json` here holds:
 

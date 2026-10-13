@@ -72,7 +72,7 @@ struct StreamConfig {
 
   // 出力設定
   OutputFormat output_format = OutputFormat::Float32; // レガシー。Float32 のままにする
-  int emit_every_n_frames = 1;   // 4 = 44100Hz で約 60fps
+  int emit_every_n_frames = 1;   // 44100Hz・hop_length 512 で 4 なら約 21.5fps
   int magnitude_downsample = 1;  // マグニチュードのダウンサンプル係数
   size_t max_pending_frames = 4096; // 未読上限。超過時は新たに生成したフレームを破棄
   size_t max_progression_entries = 4096; // 進行データの保持上限。超過時は最も古いエントリを破棄
@@ -282,6 +282,8 @@ struct ProgressiveEstimate {
 時間とともに精度が向上する BPM とキーの推定を取得:
 
 ```cpp
+#include <analysis/key_analyzer.h>
+
 AnalyzerStats stats = analyzer.stats();
 
 // BPM（約 10 秒後に利用可能）
@@ -292,9 +294,8 @@ if (stats.estimate.bpm > 0) {
 
 // キー（約 5 秒後に利用可能）
 if (stats.estimate.key >= 0) {
-  const char* keys[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-  std::cout << "キー: " << keys[stats.estimate.key]
-            << (stats.estimate.key_minor ? " マイナー" : " メジャー") << "\n";
+  std::cout << "キー: "
+            << key_name(stats.estimate.key, stats.estimate.key_minor, /*short_form=*/false) << "\n";
 }
 
 // コード進行パターン

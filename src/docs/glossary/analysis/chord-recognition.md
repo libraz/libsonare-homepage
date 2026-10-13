@@ -44,12 +44,12 @@ Turning the full set on buys the labels a lead sheet actually uses, at three cos
 The chord detector can run on frame-level chroma or beat-synchronized chroma. Beat sync usually gives musically cleaner changes because chord boundaries often align with beats. Smoothing and minimum-duration merging avoid very short flickering labels.
 
 ::: tip Standalone `detectChords()` can use beat sync
-Standalone `detectChords()` estimates a beat grid when `useBeatSync` is `true`; whole-track `analyze()` / `MusicAnalyzer` reuses its shared beat analysis. Pass `useBeatSync: false` for frame-level boundaries. If no beat grid is detected, processing falls back to frame-level chroma.
+Standalone `detectChords()` estimates a beat grid when `useBeatSync` is `true`; whole-track `analyze()` / `MusicAnalyzer` reuses its shared beat analysis. Pass `useBeatSync: false` for frame-level boundaries. If no beat grid is detected, processing falls back to frame-level chroma. Options and defaults (`useBeatSync`, `useHmm`, `chromaMethod`, `tuning`): [Music Analysis](../../analysis.md#chords).
 :::
 
 Optional HMM smoothing (a hidden Markov model, which favors sequences of chords that follow one another plausibly rather than judging each region in isolation) can run over the chord candidates, with optional key context, to further suppress jitter. In streaming mode, chord estimates update over time and should be treated as provisional until enough context accumulates.
 
-The transition model grades cadences rather than scoring them all alike. `V7 -> I` and `v -> i` are the same two scale degrees, so a test that looks only at root motion cannot tell them apart — and it is the dominant's tritone that actually resolves, the strongest harmonic cue there is. A cadence whose dominant carries that tritone is therefore favoured over one spelled with the expected qualities, which in turn is favoured over cadential root motion carrying a quality that does not pull.
+The transition model grades cadences rather than scoring them all alike. `V7 -> I` and `v -> i` are the same two scale degrees, so a test that looks only at root motion cannot tell them apart — and it is the dominant's tritone that actually resolves, the strongest harmonic cue there is. A cadence whose dominant carries that tritone is therefore favored over one spelled with the expected qualities, which in turn is favored over cadential root motion carrying a quality that does not pull.
 
 ## Common confusions
 
@@ -57,12 +57,20 @@ Harmonically close chords share notes, so substitutions happen. C major and A mi
 
 Folding twelve pitch classes into one vector is what causes it. A chord and its relative — A and F#m share two of three tones — leave almost the same chroma evidence, and nothing in that vector says which of the shared tones is the root.
 
-The bass register carries exactly that cue, so the recogniser adds a low-register salience term to each template's score: a candidate whose root the bass sounds is preferred. Two things about how it is applied matter more than the term itself.
+The bass register carries exactly that cue, so the recognizer adds a low-register salience term to each template's score: a candidate whose root the bass sounds is preferred. Two things about how it is applied matter more than the term itself.
 
 - **It is a tie-breaker, not an override.** The bass names the root only in root position. A weight large enough to overturn a clear chroma decision would relabel every inversion after its own bass note, which is worse than the confusion it fixes.
-- **It measures what the low register *adds*, not what it says on its own.** The candidate root's share of the low-register energy has the same share taken over the harmonic chroma subtracted from it, leaving only the part of the bass evidence the chroma did not already carry. On material with no bass part the low-register chromagram is a scaled copy of the harmonic one, the two shares cancel, and the term decides nothing rather than nominating whichever pitch class the leakage happened to favour.
+- **It measures what the low register *adds*, not what it says on its own.** The candidate root's share of the low-register energy has the same share taken over the harmonic chroma subtracted from it, leaving only the part of the bass evidence the chroma did not already carry. On material with no bass part the low-register chromagram is a scaled copy of the harmonic one, the two shares cancel, and the term decides nothing rather than nominating whichever pitch class the leakage happened to favor.
 
 Expect occasional swaps between neighboring chords. Recognition is strongest on clean, sustained material and weakest on dense or distorted mixes, where overtones blur the chroma the templates read.
+
+## From a detected chord to a project annotation
+
+A detected chord is analysis output: a time range in seconds plus a root, a bass and a quality. A project keeps harmony differently, as a chord-symbol annotation stream on its timeline, measured in quarter notes, which travels with the arrangement and survives save and load. Moving one into the other takes two conversions.
+
+The chord itself goes through `chordSymbolFromAnalysis(chord)`, which returns the annotation fields `{ rootPc, quality, extensions, slashBassPc }`. The two sides number qualities differently: analysis has 25 qualities, while an annotation has 8 quality families with the rest spelled as scale-degree extensions. Offsetting the ordinal by hand mislabels most extended chords. A G7 with B in the bass is analysis quality `Dominant7` (ordinal 4) and converts to `{ rootPc: 7, quality: 5, extensions: [7], slashBassPc: 11 }`; a root-position chord gets `slashBassPc: 255`.
+
+The time is left to you. At a constant tempo a time in seconds is `seconds × bpm / 60` quarter notes, which gives each entry its `startPpq` and `endPpq`. `project.annotateChords([...])` then replaces the project's chord stream in one undoable edit, and the saved project JSON carries it under `annotation.chords`. The full field list and the matching Python and C names are on [Project MIDI](../../project-editing-midi.md#key-and-chord-annotation-write-back).
 
 ::: details How libsonare computes it
 `ChordAnalyzer` builds STFT or NNLS chroma, takes `generate_triad_templates()` or `generate_all_chord_templates()` according to `use_triads_only`, scores templates by correlation plus the low-register root term (`bass_root_weight`, C++ only; 0 disables it), prefers triads unless a non-triad template clears its margin — `kTetradThreshold` 0.05 by default, `kExtendedQualityThreshold` 0.09 for `mM7`, `11`, `13`, `7b9` and `7#9` — and merges short segments below `minDuration`. Defaults include `minDuration = 0.3`, `smoothingWindow = 2.0`, `threshold = 0.5`, `nFft = 2048`, `hopLength = 512`, and `useBeatSync = true`; standalone detection estimates beats when enabled and whole-track analysis reuses its shared beat grid. If no beat grid is available, it falls back to frame-level chroma. Public bindings expose chord roots, qualities, timing, confidence, and optional inversion/key/HMM options depending on the binding.
@@ -70,4 +78,4 @@ Expect occasional swaps between neighboring chords. Recognition is strongest on 
 To read a progression as harmony rather than as names, label each chord with a **Roman numeral** relative to the key — `I`, `IV`, `V7`, `vi` — and a function (`tonic`, `subdominant`, `dominant`, `chromatic`). `chordFunctions({ chords, key })` adds `roman` and `function` to chords you already have, without re-detecting; `chordFunctionalAnalysis` detects and labels in one call and returns the same timed entries (`start`, `end`, `name`, `roman`, `function`, ...), not a bare list of numerals. On the WASM binding `detectKey` reports `mode` as a name (`'major'`, `'minor'`, `'dorian'`, ...), which is the form `chordFunctions` takes.
 :::
 
-Related: [Chroma Features](./chroma-features.md), [Key Detection](./key-detection.md), [Beats and Downbeats](./beats-downbeats.md)
+Related: [Chroma Features](./chroma-features.md), [Key Detection](./key-detection.md), [Beats and Downbeats](./beats-downbeats.md), [Project MIDI](../../project-editing-midi.md)

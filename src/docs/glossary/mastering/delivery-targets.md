@@ -41,6 +41,8 @@ If lowering the target barely changes the musical impact, prefer the safer setti
 
 ## Choosing A Target
 
+The targets each engine `targetPlatform` name aims for are listed in [Engine delivery targets](../concepts/loudness-matching.md#engine-delivery-targets).
+
 Start with the destination, then listen to the material:
 
 1. Pick the closest platform preset.

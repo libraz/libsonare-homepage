@@ -9,9 +9,7 @@ libsonare Python パッケージの結果型と設定型のリファレンスで
 
 ## 型定義
 
-結果オブジェクトは属性アクセスできる通常のクラスです。多くは JS との対応の
-ため camelCase のプロパティ別名（例: `bpm_confidence` / `bpmConfidence`）も
-公開します。以下はデータフィールドの形です。
+結果オブジェクトは属性アクセスできる通常のクラスです。多くは JS との対応のため camelCase のプロパティ別名（例: `bpm_confidence` / `bpmConfidence`）も公開します。以下はデータフィールドの形です。
 
 ::: tip 行優先（row-major）の行列レイアウト
 このページで「row-major」と記した平坦化フィールドは、`[rows x n]` の行列を行ごとに並べたものです。先頭の `n` 個が 0 行目、次の `n` 個が 1 行目…と続きます。行数で reshape すると 2 次元の NumPy 配列に戻せます。
@@ -77,10 +75,15 @@ class Chord:
     end: float               # セグメント終了（秒）
     confidence: float
     bass: PitchClass | None  # スラッシュコードのベース音。root と同じなら None
+    canonical_name: str
     name: str                # プロパティ -> "Cmaj7"、"Am"、"G/B"
+    root_name: str           # プロパティ -> "C"（別名 rootName）
+    bass_name: str           # プロパティ（別名 bassName）
     duration: float          # プロパティ -> end - start
+    roman_numeral: str | None # analyze() のコードでは解析キーに対するローマ数字
+                              # N.C. は空文字列。それ以外のコード結果では None
 
-class FunctionalChord(Chord):   # chord_functions(...) の戻り値の型
+class FunctionalChord(Chord):   # chord_functions(...) と chord_functional_analysis(...) の戻り値の型
     roman: str               # "I"、"V7"、"vi"。未知のコードは "N.C."
     function: str            # "tonic"、"subdominant"、"dominant"、"chromatic"、"none"
 
@@ -205,7 +208,7 @@ class WaveformPeaksReport:
 
 class StreamConfig:
     sample_rate: int = 44100
-    n_fft: int = 2048
+    n_fft: int = 2048        # 44100 Hz でのサンプル数。それ未満のレートでは再スケールされ、hop_length を下回らない
     hop_length: int = 512
     n_mels: int = 128
     fmin: float = 0.0
@@ -268,15 +271,16 @@ class StreamStats:
     dropped_output_frames: int
     dropped_chord_progression_entries: int
     dropped_bar_progression_entries: int
+    non_finite_discard_blocks: int  # NaN／Inf の入力が置き換えられたブロック数。reset() で消える
     bpm: float
     bpm_confidence: float
     bpm_candidate_count: int
-    key: int
+    key: int                        # キーが未推定の間（無音など）は -1
     key_minor: bool
     key_confidence: float
     key_name: str | None            # "C major"。キーが未推定の間は None
     key_short_name: str | None      # "C"、"Am"
-    chord_root: int
+    chord_root: int                 # コードなしは -1
     chord_quality: int
     chord_name: str                 # コードなしは "N.C."
     chord_confidence: float
@@ -295,7 +299,7 @@ class StreamStats:
     updated: bool
 ```
 
-個別 API が返す追加の Python result class:
+個別 API が返す追加の Python 結果クラス:
 
 | 分野 | クラス |
 |------|--------|
@@ -306,11 +310,11 @@ class StreamStats:
 | 音響 | `RoomEstimate`（`volume`、`length_m`、`width_m`、`height_m`、`drr_db`、`confidence`、`band_absorption`、`rt60_bands`）、`RoomMorphResult`（`audio`、`sample_rate`、`diagnostics`）、`RoomMorphStereoResult`（`left`、`right`、`sample_rate`、`diagnostics`。`room_morph_stereo` の戻り値）、`RoomGeometry`（`room_geometry_from_estimate` の戻り値となる `TypedDict`）、`MaterialPresetName`, `AcousticModeName` |
 | 解析のリテラル型 | `ChordFunctionName` |
 | ミキシング | `MixTrackInput`（`track_id`、`left`、`right`、`name`、`sample_rate`。別のレートのトラックは呼び出しのレートへリサンプルされます）、`MixerStereoResult`, `SidechainCheck`（`ok` と、最初の拒否理由 `reason`。エンジンの `can_set_*_sidechain` の戻り値） |
-| プロジェクト | `AssistSidecar`（`project.get_assist_sidecar(index)` / `project.assist_sidecars()` の戻り値 — [プロジェクト編集](./project-editing-midi.md#アシストサイドカー) を参照）、`NotePairValidation` |
+| プロジェクト | `AssistSidecar`（`project.get_assist_sidecar(index)` / `project.assist_sidecars()` の戻り値。[プロジェクト編集](./project-editing-midi.md#アシストサイドカー) を参照）、`NotePairValidation` |
 | リアルタイムエンジンのジョブ／テレメトリ | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `MeterTelemetryRecord`, `MeterTelemetryRecordWide`, `ScopeTelemetryRecord` |
 | ビルド情報 | `Capabilities`, `CapabilityCatalog`, `CapabilityCatalogPresets`, `CapabilityCatalogChain`, `CapabilityCatalogChainStage`, `CapabilityCatalogChainList`, `CapabilityCatalogChainAlias`, `SynthParamInfo`, `MasteringPresetCatalogEntry`, `MasteringInsertParamInfo`, `MasteringInsertParamUnit`, `MasteringInsertParamScale`, `MasteringInsertParamRelation`, `MasteringInsertParamDependency`, `MasteringInsertSlot`, `MasteringInsertTiming`, `MasteringProcessorCatalogEntry`（[API サーフェス](./api-surface.md#機能カタログが返すもの) で説明している JSON ドキュメントに対応する `TypedDict`） |
 
-`CapabilityCatalog["chain"]`（`CapabilityCatalogChain`）は、フラットなマスタリングチェーンキーすべてを記述します。ステージ、項目数付きのインデックス付きリスト、どのプロセッサにも属さないキー、別名表記すべてです。`CapabilityCatalog["presets"]["playbackRoom"]` は常に存在します。`SynthParamInfo`（`synth_engine_param_info` と `synth_patch_param_info` が返す）は `name`、`type`（`"number"` または `"boolean"`）、`default`、`unit` と、省略可能な `integer`、`min`、`max` を持ちます。`CapabilityCatalog["masteringPresets"]` は `name`、`kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持つ `MasteringPresetCatalogEntry` を返します。修復プリセットでは 3 つの数値フィールドが `None` です。`MasteringProcessorCatalogEntry` の `slots` は条件付きキー群を列挙し、`causal` は `repair.declick`、`repair.declip`、`repair.trimSilence` で false です。`MasteringInsertParamInfo` の記述子は `id`、`rtSafe`、`type`、`min`、`max`、`default`、`unit`（閉じた集合 `MasteringInsertParamUnit` の値）、`scale`（`linear` または `log`）、`uiMin` / `uiMax`（`[min, max]` の内側に置く任意の表示範囲）、`dependsOn`（現在値がこのキーの範囲を左右する兄弟キー。それぞれ `key`、`relation`、`factor` を持ち、`this <relation> factor * sibling` と読む）、`choices`、`slot` を持ち、`MasteringInsertTiming` は指定したインサート構成の `latencySamples` と `tailSamples` を持ちます。
+`CapabilityCatalog["chain"]`（`CapabilityCatalogChain`）は、フラットなマスタリングチェーンキーすべてを記述します。ステージ、項目数付きのインデックス付きリスト、どのプロセッサにも属さないキー、別名表記すべてです。`CapabilityCatalog["presets"]["playbackRoom"]` は常に存在します。`SynthParamInfo`（`synth_engine_param_info` と `synth_patch_param_info` が返す）は `name`、`type`（`"number"` または `"boolean"`）、`default`、`unit` と、省略可能な `integer`、`min`、`max`、`activeWhen` を持ちます。`default` は `float | bool` で、スイッチでは bool です。`activeWhen` は `SynthParamCondition`（`key`、`scope`（`"engine"` または `"patch"`）、`relation`（`"eq"`、`"ne"`、`"gt"`、`"ge"`、`"lt"`、`"le"` のいずれか）、`value`）の dict を、選択肢ごとにリストにまとめたリストです。どれか 1 つの内側のリストの条件がすべて成り立てば、そのフィールドはボイスに届きます。無条件のフィールドでは存在しません。`CapabilityCatalog["masteringPresets"]` は `name`、`kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持つ `MasteringPresetCatalogEntry` を返します。修復プリセットでは 3 つの数値フィールドが `None` です。`MasteringProcessorCatalogEntry` の `slots` は条件付きキー群を列挙し、`causal` は `repair.declick`、`repair.declip`、`repair.trimSilence` で false です。`MasteringInsertParamInfo` の記述子は `id`、`rtSafe`、`type`、`min`、`max`、`default`、`unit`（閉じた集合 `MasteringInsertParamUnit` の値）、`scale`（`linear` または `log`）、`uiMin` / `uiMax`（`[min, max]` の内側に置く任意の表示範囲）、`dependsOn`（現在値がこのキーの範囲を左右する兄弟キー。それぞれ `key`、`relation`、`factor` を持ち、`this <relation> factor * sibling` と読む）、`coupledWith`（受け入れ範囲を動かすそのほかの兄弟キーのリスト。`min` / `max` はそれらを既定値にして測った値）、`choices`、`slot` を持ち、`MasteringInsertTiming` は指定したインサート構成の `latencySamples` と `tailSamples` を持ちます。
 
 ### 例外
 
@@ -341,7 +345,7 @@ class SonareValueError(SonareError, ValueError):
     # str(e) -> "spectral_centroid: samples contains NaN or Inf at index 0": 接頭辞なし
 ```
 
-ライブラリまたはオブジェクトの状態に由来する失敗は、常に対応するコードを持つ `SonareError` です。読み込んだライブラリにエントリポイントがなければ `NOT_SUPPORTED`、閉じたオブジェクトなら `INVALID_STATE`、ネイティブの結果が健全性検査に通らなければ `UNKNOWN` です。そのため `except RuntimeError` は引き続き捕捉でき、`.code` で場合を区別できます。`ABI_MISMATCH` は、読み込んだライブラリの ABI バージョンがバインディングと異なるとき、ライブラリを最初に使う時点で送出されます。
+ライブラリまたはオブジェクトの状態に由来する失敗は、常に対応するコードを持つ `SonareError` です。読み込んだライブラリにエントリポイントがなければ `NOT_SUPPORTED`、閉じたオブジェクトなら `INVALID_STATE`、ネイティブの結果が健全性検査に通らなければ `UNKNOWN` です。そのため `except RuntimeError` は引き続き捕捉でき、`.code` で場合を区別できます。`ABI_MISMATCH` は、読み込んだライブラリの ABI バージョンがバインディングと異なるとき、ライブラリを最初に使う時点で送出されます。これらのコードとほかのバインディング、CLI の終了コードとの対応は[エラー契約](./binding-parity.md#エラー契約)にあります。
 
 `SonareValueError` は、呼び出しがネイティブコードへ渡る前にバインディングが引数を拒否したときに送出されます。どの基底クラスを継承しているかによって、既存のハンドラでどう捕捉されるかが決まります。
 
@@ -352,7 +356,7 @@ class SonareValueError(SonareError, ValueError):
 | `except SonareValueError` | 捕捉する | 捕捉しない |
 | `.code == ErrorCode.INVALID_PARAMETER` で分岐 | 一致する | 一致する |
 
-インスタンスが持つのはメッセージだけです。問題のパラメータ名を持つ属性も、受理範囲を持つ属性もありません。構造化されたフィールドは `.code` のみで、どの拒否でも `INVALID_PARAMETER` を返します。パラメータ名と、あるなら範囲は本文に含まれます。バッファの拒否はエントリポイントと引数を名指しし（`master_audio_stereo: right must not be empty`）、スカラーの拒否はフィールド名と C 型が表現できる区間を示します（`sample_rate must be an integer within [-2147483648, 2147483647]`）。名前が必要なコードは `str(e)` から読み取るしかありません。文言と、文言でのマッチが壊れやすい理由は [Python API](./python-api.md#エラーハンドリング) を参照してください。
+インスタンスが持つのはメッセージだけです。問題のパラメータ名を持つ属性も、受理範囲を持つ属性もありません。構造化されたフィールドは `.code` のみで、引数の拒否ではどれも `INVALID_PARAMETER` を返します。読み込めないプロジェクト文書だけは C ABI のコード（壊れた JSON は `INVALID_FORMAT`）を持ちます。パラメータ名と、あるなら範囲は本文に含まれます。バッファの拒否はエントリポイントと引数を名指しし（`master_audio_stereo: right must not be empty`）、スカラーの拒否はフィールド名と C 型が表現できる区間を示します（`sample_rate must be an integer within [-2147483648, 2147483647]`）。名前が必要なコードは `str(e)` から読み取るしかありません。文言と、文言でのマッチが壊れやすい理由は [Python API](./python-api.md#エラーハンドリング) を参照してください。
 
 #### 検証層はどこで止まるか
 
@@ -364,7 +368,7 @@ class SonareValueError(SonareError, ValueError):
 
 **5 つのエントリポイントは、結果を返さず拒否します。** 拒否は「検査して続行する」とは別の契約です。以下は、定義済みの空の結果を返す代わりに入力をそのまま拒否するものです。`trim_silence`、`split_silence`、`fix_frames` は空のバッファで送出します。`tempogram_ratio` は空の行列と、有限の正数でない `factors` の要素で送出します。`mix_stereo` はストリップがすべて空か、非有限のサンプルを含むシーンで送出します。それぞれの理由は [受け付けなくなった入力](./python-api.md#受け付けなくなった入力) にあります。
 
-この層が **しない** ことは次の通りです。
+この層が **しない** ことは次のとおりです。
 
 - **値の意味を判断すること。** 絞り込みは数値が表現可能かを確かめるだけで、プロセッサが受け入れるかは見ません。`dynamics.compressor` の `ratio=0.5` はコアまで届き、`SonareError` コード 4 とメッセージ `compressor ratio must be at least 1` で返ってきます。`effects.modulation.chorus` の `dryWet=5` のようにプロセッサ側がクランプする値は、警告なしに受理されます。一部のエントリポイントは Python 側でドメイン規則も検査します。古典的リペア関数の `n_fft` が 2 の冪であること、`hpss` のカーネルが奇数であること、`time_stretch` と `pitch_shift` の FFT ジオメトリがそれで、メッセージの読み方は同じです。それ以外の値の意味は、コアが判断します。
 - **`params` 辞書を読むこと。** `mastering_process`、チェーン、インサートに渡すパラメータ辞書は、そのまま直列化されます。未知のキーはプロセッサに無視され、非有限の値はバインディングではなくコアが拒否します（`mastering parameters must be finite and representable`）。呼び出し側で拒否したいなら、事前に [機能カタログ](./api-surface.md#機能カタログが返すもの) と照合してください。

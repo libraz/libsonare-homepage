@@ -50,7 +50,7 @@ project.setMidiEvents(midiClip, [
   Project.midiNoteOn(0, 0, 0, 60, 100),  // (ppq, group, channel, note, velocity)
   Project.midiNoteOff(2, 0, 0, 60),
   Project.midiNoteOn(2, 0, 0, 64, 100),
-  Project.midiNoteOff(4, 0, 0, 64),
+  Project.midiNoteOff(3.75, 0, 0, 64),
 ]);
 project.setProgram(midiClip, 4);          // GM プログラム（例: 4 = エレクトリックピアノ）
 // 次の編集手順でも `project` を使い、終わったら project.delete() を呼ぶ。
@@ -66,7 +66,7 @@ project.set_midi_events(midi_clip, [
     sonare.Project.midi_note_on(0.0, 0, 0, 60, 100),  # (ppq, group, channel, note, velocity)
     sonare.Project.midi_note_off(2.0, 0, 0, 60),
     sonare.Project.midi_note_on(2.0, 0, 0, 64, 100),
-    sonare.Project.midi_note_off(4.0, 0, 0, 64),
+    sonare.Project.midi_note_off(3.75, 0, 0, 64),
 ])
 project.set_program(midi_clip, 4)          # GM プログラム（例: 4 = エレクトリックピアノ）
 # 次の編集手順でも `project` を使い、終わったら project.close() を呼ぶ。
@@ -74,12 +74,16 @@ project.set_program(midi_clip, 4)          # GM プログラム（例: 4 = エ�
 
 :::
 
+このようなクリップをピアノロールで描き、再生した例です。
+
+<SonareDemo id="midi-piano-roll" />
+
 Python では静的パッカーが `Project.midi_note_on(...)` / `Project.midi_note_off(...)` で、それぞれ `(ppq, data0, data1)` タプルを返します。イベントリストはそのタプルの任意のシーケンスです。
 
-`setProgram` は 3 つ目の任意引数 `bank` を取ります——`setProgram(clipId, program, bank?)`。省略するとバンクセレクトは送出されず、`>= 0` を渡すとプログラムチェンジの前にバンクセレクトを送出します。負の `bank` は拒否されます（Node と WASM は `RangeError`、Python は `SonareValueError`）。`-1` は「なし」を表す値ではありません。クリップ既定ではなく特定の UMP（Universal MIDI Packet）グループ・チャンネルでプログラムを変えるには `setProgramOnChannel(clipId, group, channel, program, bank?)` を使います。どちらも WASM・Node・Python すべてで同じ任意の `bank` を取ります（`set_program(clip_id, program, bank=None)`、`set_program_on_channel(clip_id, group, channel, program, bank=None)`）。
+`setProgram` は 3 つ目の任意引数 `bank` を取ります。`setProgram(clipId, program, bank?)` の形です。省略するとバンクセレクトは送出されず、`>= 0` を渡すとプログラムチェンジの前にバンクセレクトを送出します。負の `bank` は拒否されます（Node と WASM は `RangeError`、Python は `SonareValueError`）。`-1` は「なし」を表す値ではありません。クリップ既定ではなく特定の UMP（Universal MIDI Packet）グループ・チャンネルでプログラムを変えるには `setProgramOnChannel(clipId, group, channel, program, bank?)` を使います。どちらも WASM・Node・Python すべてで同じ任意の `bank` を取ります（`set_program(clip_id, program, bank=None)`、`set_program_on_channel(clip_id, group, channel, program, bank=None)`）。
 
 ::: warning `ppq` はティックではなく 4 分音符単位
-`ppq` 引数は **4 分音符単位の位置**（浮動小数点）であり、MIDI のティック数ではありません。`Project.midiNoteOn(1, …)` は 4 分音符 1 つ分あと、`Project.midiNoteOn(0.5, …)` は 8 分音符 1 つ分あとを指します。名前に反して **480 ティック/4 分音符ではありません** — `Project.midiNoteOn(480, …)` は 4 分音符 480 個分（120 小節）先にノートを置くため、ほぼ常にレンダリング範囲のはるか外となり、何も鳴らずに終わります。ティックベースのソース（480 PPQ の SMF など）から変換する場合は、まずソースの「4 分音符あたりのティック数」で割ってください。同じ単位が `addMidiClip(startPpq, lengthPpq)` と、本ページのすべてのクリップ／オートメーション位置に適用されます。
+`ppq` 引数は **4 分音符単位の位置**（浮動小数点）であり、MIDI のティック数ではありません。`Project.midiNoteOn(1, …)` は 4 分音符 1 つ分あと、`Project.midiNoteOn(0.5, …)` は 8 分音符 1 つ分あとを指します。名前に反して **480 ティック/4 分音符ではありません**。`Project.midiNoteOn(480, …)` は 4 分音符 480 個分（120 小節）先にノートを置くため、ほぼ常にレンダリング範囲のはるか外となり、何も鳴らずに終わります。ティックベースのソース（480 PPQ の SMF など）から変換する場合は、まずソースの「4 分音符あたりのティック数」で割ってください。同じ単位が `addMidiClip(startPpq, lengthPpq)` と、本ページのすべてのクリップ／オートメーション位置に適用されます。
 :::
 
 各静的パッカーは、`setMidiEvents` のリストにそのまま渡せる MIDI 1.0 の UMP ワード（1 つまたは複数）を返します。
@@ -99,9 +103,11 @@ Python では静的パッカーが `Project.midi_note_on(...)` / `Project.midi_n
 
 ### `validateMidiNotes`
 
-バウンス前に MIDI クリップのハングノート、つまり対応するノートオフのないノートオン（またはその逆）を調べます。放置するとスタックノートが鳴ります。`validateMidiNotes` はチャンネル + ノートごとに FIFO でノートオンとノートオフを対応づけ、結果を報告します。
+バウンス前に、MIDI クリップのハングノート、つまり対応するノートオフのないノートオン（またはその逆）を調べます。放置すると音が鳴りっぱなしになります。`validateMidiNotes` は、クリップの再生範囲の中でチャンネル + ノートごとに FIFO でノートオンとノートオフを対応づけ、結果を報告します。クリップの終端以降にあるノートオフはこの範囲の外になるため、ノートは `lengthPpq` より前で終わらせてください。上の最初の例が、4 分音符 4 つ分のクリップの最後のノートを `3.75` で終えているのはそのためです。
 
-```typescript
+::: code-group
+
+```typescript [ブラウザ / Node]
 const check = project.validateMidiNotes(midiClip);
 // { ok: true, unmatchedNoteOns: 0, unmatchedNoteOffs: 0 }
 if (!check.ok) {
@@ -109,11 +115,20 @@ if (!check.ok) {
 }
 ```
 
+```python [Python]
+check = project.validate_midi_notes(midi_clip)
+# check.ok, check.unmatched_note_ons, check.unmatched_note_offs
+if not check.ok:
+    print(f"ハングノート: オン {check.unmatched_note_ons} / オフ {check.unmatched_note_offs}")
+```
+
+:::
+
 MIDI アレンジを鳴らすには、レンダリング時に楽器をバインドします。[プロジェクトバウンス](./project-bounce.md)、[内蔵シンセサイザー](./native-synth.md)、[SoundFont プレイヤー](./soundfont-player.md)を参照してください。コントローラからプロジェクトをライブ演奏するには、[MIDI 入力](./midi-input.md)を参照してください。
 
 ### キャプチャした MIDI ストリームをルーティングする
 
-`Project.midiRouteEvents(events, config?)` は静的ヘルパーで、キャプチャした `ProjectMidiEvent` ストリームをネイティブの `MidiRouter`（フィルター／リマップ／チャンネルスルー）——ライブランタイムが使うものと同じルーター——に通し、`ProjectMidiRouteResult` を返します。録音した入力をクリップにする前に、オフラインで事前フィルターやリマップを行う用途に使えます。
+`Project.midiRouteEvents(events, config?)` は静的ヘルパーで、キャプチャした `ProjectMidiEvent` ストリームをネイティブの `MidiRouter`（フィルター／リマップ／チャンネルスルー。ライブランタイムが使うものと同じルーターです）に通し、`ProjectMidiRouteResult` を返します。録音した入力をクリップにする前に、オフラインで事前フィルターやリマップを行う用途に使えます。
 
 ```typescript
 const routed = Project.midiRouteEvents(capturedEvents, {
@@ -128,7 +143,40 @@ const routed = Project.midiRouteEvents(capturedEvents, {
 project.setMidiEvents(midiClip, routed.events);
 ```
 
-config のフィールドはすべて任意で、JS/WASM では camelCase（`filterGroup`・`filterChannel`・`remapChannel`・`thru`）です。フィルターフィールドが `null` または省略なら「任意」を意味し、`remapChannel` を省略するとチャンネルは変更されません。Python では snake_case（`filter_group`・`filter_channel`・`remap_channel`・`thru`）です。このヘルパーは WASM・Node・Python すべてで利用できます。オフラインの MIDI ラーン（`Project.midiCcLearn`、[MIDI 入力](./midi-input.md)で解説）と組み合わせて使えます。
+config のフィールドはすべて任意で、JS/WASM では camelCase（`filterGroup`・`filterChannel`・`remapChannel`・`thru`）です。フィルターフィールドが `null` または省略なら「任意」を意味し、`remapChannel` を省略するとチャンネルは変更されません。Python では snake_case（`filter_group`・`filter_channel`・`remap_channel`・`thru`）です。このヘルパーは WASM・Node・Python すべてで利用できます。下の [CC ラーン](#cc-をラーンしてオートメーションにする)と組み合わせて使えます。
+
+### CC をラーンしてオートメーションにする
+
+オフラインで「ツマミを動かし、どの CC が動いたかを取り込む」流れには、`Project.midiCcLearn(events, paramId, options?)` を使います。取り込んだイベント列からどのコントローラーが動いたかを見つけ、パラメータ `paramId` へのバインド記述子を返します（該当がなければ `null`）。続けて `midiCcToBreakpoint(bindings, event)` が CC イベントをオートメーションのブレークポイントに変換し、`midiParamToCc(bindings, paramId, unitValue, group, ppq?)` がパラメータ値を CC イベントに戻します。3 つとも、ライブエンジンではなく取り込んだ `ProjectMidiEvent` データを対象とします。ライブで CC をパラメータにバインドするには [MIDI 入力](./midi-input.md#midi-cc-をエンジンパラメータへバインドする)を参照してください。
+
+::: code-group
+
+```typescript [ブラウザ / Node]
+const cc = (ppq: number, value: number) => Project.midiCc(ppq, 0, 0, 1, value); // チャンネル 0 の CC1
+const events = [cc(0, 10), cc(0.5, 100)];
+
+const binding = Project.midiCcLearn(events, /* paramId */ 42, { minMovement: 20 });
+// { ccNumber: 1, channel: 0, kind: 0, paramId: 42, minValue: 0, maxValue: 1, ... }
+
+const point = Project.midiCcToBreakpoint([binding!], events[1]);
+// { ppq: 0.5, value: 0.787, curveToNext: 0 }
+
+const back = Project.midiParamToCc([binding!], 42, 0.5, /* group */ 0, /* ppq */ 1);
+// ppq 1 の CC イベント
+```
+
+```python [Python]
+cc = lambda ppq, value: sonare.Project.midi_cc(ppq, 0, 0, 1, value)  # チャンネル 0 の CC1
+events = [cc(0.0, 10), cc(0.5, 100)]
+
+binding = sonare.Project.midi_cc_learn(events, 42, min_movement=20)
+point = sonare.Project.midi_cc_to_breakpoint([binding], events[1])   # (ppq, value, curve_to_next)
+back = sonare.Project.midi_param_to_cc([binding], 42, 0.5, 0, 1.0)   # (ppq, data0, data1)
+```
+
+:::
+
+`minMovement`（Python は `min_movement`）は 7 ビット CC 単位で測る `0`〜`127` の整数（既定 `0`）で、範囲外の値は例外になります。`0` なら最初に観測したスタンドアロンのコントローラー値ですぐにバインドします。ただし番号の小さい CC（`0..31`）は、次のメッセージと 14 ビットペアを作れるよう一時的に保持します。正のしきい値を指定すると、同じ UMP グループとチャンネルで最初に観測した値から、その値以上動いたときにバインドします。MIDI 2.0 の 32 ビット CC 値も 7 ビット単位へ縮小して比較します。このしきい値はスタンドアロンの 7 ビットコントローラーだけに適用し、14 ビットペアと RPN／NRPN シーケンスはこのゲートを通らずに組み立てます。
 
 ### MIDI-FX チェーンをクリップに焼き込む
 
@@ -150,7 +198,7 @@ const { sourceIndex } = project.bakeMidiFx({
 });
 ```
 
-`previewMidiFxCount(...)` はプロジェクトを変更せず、同じ決定的な変換を実行します。返る件数は続けて焼き込むイベント数と一致するため、出力バッファを正確に確保できます。従来の `bakeMidiFx(clipId, configJson)` 形式も使えますが、由来情報は返しません。Python では `project.preview_midi_fx_count(clip_id, config_json)` と `project.bake_midi_fx(clip_id, config_json, with_source_index=True)` を使います。
+`previewMidiFxCount(...)` はプロジェクトを変更せず、同じ決定的な変換を実行します。返る件数は続けて焼き込むイベント数と一致するため、出力バッファを正確に確保できます。従来の `bakeMidiFx(clipId, configJson)` 形式も使えますが、由来情報は返しません。Python では `project.preview_midi_fx_count(clip_id, config_json)` が件数を、`project.bake_midi_fx(clip_id, config_json, with_source_index=True)` が由来の index を返します（フラグなしの `bake_midi_fx` は `None` を返します）。
 
 config は JSON オブジェクトで、**各ステージの有効／無効はそのパラメータのキーの有無で決まります**。ステージのキーを含めれば有効になり、省けばスキップされます。未知のキーは無視されるため、キーを打ち間違えてもエラーにならず、何も起きません。
 
@@ -163,7 +211,7 @@ config は JSON オブジェクトで、**各ステージの有効／無効は�
 | コード | `chord_intervals`（半音オフセットの配列、1〜8 要素） |
 | アルペジエーター | `arpeggiator_intervals`（半音オフセットの配列、1〜16 要素）、`arpeggiator_step_ppq`（>0）、`arpeggiator_gate_ppq`（既定はステップ長で、それに丸められる） |
 
-`chord_intervals` は 8 要素、`arpeggiator_intervals` は 16 要素が上限です。空配列、またはいずれかの上限を超える配列を渡すと、`bakeMidiFx` は黙って切り詰めるのではなく `SONARE_ERROR_INVALID_PARAMETER` を投げます。
+`chord_intervals` は 8 要素、`arpeggiator_intervals` は 16 要素が上限です。空配列、またはいずれかの上限を超える配列を渡すと、`bakeMidiFx` は黙って切り詰めるのではなく `InvalidParameter` エラー（JS では `SonareError`）を投げます。
 
 ```typescript
 // 押さえた各ノートを 3 ステップの上昇アルペジオにする（1 ステップ 16 分音符）。

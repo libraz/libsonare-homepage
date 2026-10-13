@@ -45,9 +45,11 @@ Compression does not have to be all-or-nothing. **Parallel** (or "New York") com
 
 The compressor described above acts on the whole signal at once. libsonare's mastering chain also supports a **multiband compressor** that splits the signal into frequency bands and compresses each one independently — useful when only one register is misbehaving (a boomy low end, a harsh top) and squashing the whole mix would cost more than it fixes.
 
-::: warning Not reachable from the binding chain objects
-The browser's `masteringChain()` config, Python `mastering_chain()` config, Node `masteringChain()` config, and WASM `MasteringChainConfig` all expose the fixed three-band shorthand (`dynamics.multibandComp.lowThresholdDb`, `midRatio`, `highAttackMs`, and so on — low/mid/high, never more) and flatten config leaves to scalar dot-notation parameters. An arbitrary band count (validated to between 1 and 64 bands) is a JSON-document-level feature: use the mastering CLI's `--config <file>` with a **chain config schema version 2**, where `dynamics.multibandComp` becomes a structured object — a `crossover` plus a `bands` array of independent compressor configs — instead of the flat low/mid/high keys. Schema version 1 and the binding chain config objects cannot express more than three bands.
+::: tip Choose the number of bands
+WASM, Node, and Python can configure 2–64 bands through `dynamics.multibandComp.crossover` and a `bands` array of independent compressor settings. The C ABI expresses the same configuration through indexed flat keys such as `dynamics.multibandComp.bands.<i>.<field>` and `dynamics.multibandComp.crossover.cutoffsHz.<i>`. One band is refused. The fixed low/mid/high keys remain a three-band shorthand. A JSON chain document uses schema version 2 for the structured form; schema version 1 uses the shorthand. See [Mastering Chain Config](../../js-api-types.md#masteringchainconfig) for the fields and [Mastering Processors](../../mastering-processors.md) for chain parameters.
 :::
+
+How the bands are split, and what each crossover mode does at the cutoffs, is on [Crossover Slope and Mode](./crossover.md).
 
 ## In libsonare
 

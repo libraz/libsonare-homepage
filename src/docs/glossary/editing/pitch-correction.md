@@ -43,19 +43,22 @@ Correction is a pitch shift, so the same artifact rules apply: small intervals s
 
 The interval itself is applied in full. Both endpoints are yours, so this is a transposition rather than a correction: C3 → C5 moves the buffer by all 24 semitones. `max_correction_semitones` bounds only a *retune* — a correction computed from a measured pitch — so it does not apply here. Both MIDI numbers are validated to `[0, 127]` and a value outside that range is rejected rather than silently adjusted.
 
-To fix one note inside a take, either slice that span out of the buffer yourself and correct the slice, or use the time-varying variants: their per-frame F0 contour and `voiced` flags are what localise the correction, because unvoiced frames are left alone and each voiced frame gets its own amount.
+To fix one note inside a take, either slice that span out of the buffer yourself and correct the slice, or use the time-varying variants: their per-frame F0 contour and `voiced` flags are what localize the correction, because unvoiced frames are left alone and each voiced frame gets its own amount.
 :::
 
 <SonareDemo id="pitch-shift" />
 
+## Snapping to a scale
+
+Correcting toward one note fits a single held pitch. A whole line is corrected toward a key instead: each voiced frame is pulled to the nearest tone of the scale, and three controls shape how it feels. **Retune amount** is how far toward the target a frame moves, **retune speed** is how quickly it gets there, and **vibrato threshold** is the size of deviation that is left alone so natural vibrato survives. [Editing DSP](../../editing-dsp.md#scale-snap-correction) lists the options, and [Tune a Vocal Take](../../use-cases/vocal-tuning.md) walks through a full take.
 ## Note regions: sample positions
 
 Region-based edits like `noteStretch` take **sample positions**, which are exact and never drift; `onsetSec` / `offsetSec` give the same bounds in seconds, rounded to the nearest sample. `samples = round(seconds × sampleRate)` — at 48 kHz, 0.25 s is sample 12000. A negative position is refused. A region has an onset sample and an offset sample — where the note starts and where it ends. `stretchRatio > 1` lengthens the replacement region, and `noteStretch` blends the source samples at its start and end with an equal-power crossfade. These crossfades stay inside the replacement region rather than consuming neighboring samples, so the clip length and the shift of following material follow the replacement region's length change. `stretchRatio: 1` keeps the whole clip length neutral; for other ratios, the time-stretch backend can round the replacement length by a few samples. A clip edge has no neighboring audio on that side, so it has no crossfade there.
 
-If your UI works in seconds, a seconds bound is rounded to the nearest sample, which can land a sample away from where you meant and turn into a faint click at a loop seam. Passing samples keeps every edit on the exact position you chose.
+Seconds are rounded once, at the call's sample rate; keep the sample value if the position comes from analysis.
 
 ::: details How libsonare corrects and edits
 `pitchCorrectToMidi` maps a current→target MIDI interval to a pitch shift over the signal, reusing the phase-vocoder path from [Time Stretch and Pitch Shift](./phase-vocoder-stretch.md). `PitchCorrectionConfig::max_correction_semitones` (default 12) bounds only the paths that derive the correction from a measured F0 — the `F0Track` overloads and the per-frame pipeline — never a caller-stated interval. Region edits use `NoteEditor` (`NoteEditorConfig`) over a `NoteRegion` defined by onset/offset sample offsets, with `NoteSegmenter` helping locate regions. `noteStretch` applies a region-bounded stretch ratio. All operate on decoded mono samples; `Audio` exposes the same operations as methods so file workflows can load once and edit.
 :::
 
-Related: [Editing Basics](../concepts/editing-basics.md), [Time Stretch and Pitch Shift](./phase-vocoder-stretch.md), [Melody and Pitch](../analysis/melody-pitch.md), [Editing DSP](../../editing-dsp.md)
+Related: [Editing Basics](../concepts/editing-basics.md), [Edit Notes Inside Audio](../../note-editing.md), [Time Stretch and Pitch Shift](./phase-vocoder-stretch.md), [Melody and Pitch](../analysis/melody-pitch.md), [Editing DSP](../../editing-dsp.md)

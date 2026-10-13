@@ -5,17 +5,9 @@ description: Copy-paste recipes for every libsonare feature — BPM/key detectio
 
 # Feature Recipes
 
-This page continues [Usage Examples](./examples.md) with a deeper recipe per feature, shown across runtimes.
+This page continues [Usage Examples](./examples.md) with one recipe per feature, each shown across runtimes: pick the tab for where you run libsonare. Browser examples pass decoded mono `Float32Array` samples; when your input is encoded bytes, decode it first with `Audio.fromMemory*`, Web Audio, or another JavaScript decoder. The Python package and `sonare` CLI load WAV/MP3 files directly. C++ programs are on [Usage Examples](./examples.md#c).
 
-## Feature Recipes
-
-Each recipe shows the same task across runtimes — pick the tab for where you run
-libsonare. Browser examples pass decoded mono `Float32Array` samples; use Web
-Audio, another JavaScript decoder, or `Audio.fromMemory*` before that step when
-your input is encoded bytes. The Python package and `sonare` CLI load WAV/MP3
-files directly. C++ programs are collected separately in the C++ section below.
-
-### Basic BPM and Key Detection
+## Basic BPM and Key Detection
 
 ::: code-group
 
@@ -59,19 +51,9 @@ sonare key song.mp3
 
 :::
 
-### All-In-One Music Analysis
+## All-In-One Music Analysis
 
-In both the browser and Python, `analyze()` returns chords, sections, and form
-(plus timbre, dynamics, rhythm, and melody) in one call. `detect_chords()` and
-`analyze_sections()` stay available as standalone calls for when you want only
-that one element without running the all-in-one analysis.
-
-::: tip Python: function vs. method
-The module-level `analyze(samples, sample_rate)` returns the all-in-one analysis result.
-The `Audio.analyze()` method returns only the core summary (BPM, key, time
-signature, beats), so pass the samples to the function when you need chords,
-sections, and form together.
-:::
+In every runtime, `analyze()` returns chords, sections, and form (plus timbre, dynamics, rhythm, and melody) in one call; in Python, `Audio.analyze()` and the module-level `analyze(samples, sample_rate)` return the same result. `detect_chords()` and `analyze_sections()` stay available as standalone calls for when you want only that one element. Python types `timbre`, `dynamics`, `rhythm`, and `melody` as optional, so check them against `None` before use.
 
 ::: warning `analyze()` reports triads
 The all-in-one path runs chord detection with `useTriadsOnly` set to `true`, so `result.chords` comes back as triads — a seventh in the music is reported as the triad inside it. Pass `useTriadsOnly: false` to `analyze()` if you want the extended vocabulary there, or call `detectChords()` on its own, which searches the extended vocabulary by default.
@@ -105,10 +87,10 @@ console.log(`\nForm: ${result.form}`);
 ```
 
 ```python [Python]
-from libsonare import Audio, analyze
+from libsonare import Audio
 
 with Audio.from_file("song.mp3") as audio:
-    result = analyze(audio.data, audio.sample_rate)
+    result = audio.analyze()
 
 print("=== Music Analysis ===")
 print(f"BPM: {result.bpm} (confidence: {result.bpm_confidence * 100:.0f}%)")
@@ -137,10 +119,23 @@ sonare analyze song.mp3 --json > analysis.json
 :::
 
 ::: details What are "sections" and "form"?
-**Sections** are the structural parts of a song — intro, verse, chorus, bridge, outro — found from where the music's character changes. **Form** is the whole arrangement expressed as a compact pattern of those sections (for example `intro–verse–chorus–verse–chorus–outro`, sometimes written with letters such as `ABABCB`). Together they answer "how is this song laid out over time?"
+**Sections** are the structural parts of a song (intro, verse, chorus, bridge, outro), found from where the music's character changes. **Form** is the whole arrangement as a string with one letter per section, such as `IABABCO`:
+
+| Letter | Section |
+|--------|---------|
+| `I` | Intro |
+| `A` | Verse |
+| `P` | Pre-chorus |
+| `B` | Chorus |
+| `C` | Bridge |
+| `S` | Instrumental |
+| `O` | Outro |
+| `?` | Unknown |
+
+Together they answer "how is this song laid out over time?"
 :::
 
-### Room Acoustic Metrics
+## Room Acoustic Metrics
 
 Start from the input you have:
 
@@ -219,7 +214,7 @@ sonare room-morph recording.wav --length 12 --width 9 --height 4 --wet 0.6 -o mo
 
 :::
 
-### Harmonic-Percussive Separation
+## Harmonic-Percussive Separation
 
 ::: code-group
 
@@ -261,7 +256,7 @@ sonare hpss song.mp3 -o separated --json
 
 :::
 
-### Audio Effects
+## Audio Effects
 
 ::: code-group
 
@@ -303,7 +298,7 @@ sonare trim-silence song.wav -o trimmed.wav
 
 :::
 
-### Feature Extraction
+## Feature Extraction
 
 ::: code-group
 
@@ -350,7 +345,7 @@ sonare chroma song.mp3 --json
 
 :::
 
-### Pitch Detection
+## Pitch Detection
 
 Pitch tracking reports F0 — the fundamental frequency, the lowest frequency of a
 periodic sound and the one you hear as its pitch — frame by frame, which is how
@@ -394,7 +389,7 @@ Pitch trackers label each frame as **voiced** or **unvoiced**. *Voiced* means a 
 
 <SonareDemo id="melody-contour" />
 
-### Streaming Analysis
+## Streaming Analysis
 
 Real-time audio analysis for visualizations and live monitoring.
 
@@ -451,63 +446,6 @@ function checkEstimates() {
 }
 ```
 
-### Streaming with AudioWorklet
+## Streaming with AudioWorklet
 
-```typescript
-// analyzer-processor.ts (AudioWorklet)
-import { init, StreamAnalyzer } from '@libraz/libsonare';
-
-class AnalyzerProcessor extends AudioWorkletProcessor {
-  private analyzer?: StreamAnalyzer;
-
-  constructor() {
-    super();
-    void init().then(() => {
-      this.analyzer = new StreamAnalyzer({
-        sampleRate,
-        nFft: 2048,
-        hopLength: 512,
-        nMels: 64,
-        emitEveryNFrames: 4,
-      });
-    });
-  }
-
-  process(inputs: Float32Array[][]): boolean {
-    const input = inputs[0]?.[0];
-    if (!input || !this.analyzer) return true;
-
-    this.analyzer.process(input);
-
-    const available = this.analyzer.availableFrames();
-    if (available >= 4) {
-      const frames = this.analyzer.readFrames(available);
-      this.port.postMessage({ type: 'frames', data: frames }, [
-        frames.timestamps.buffer,
-        frames.mel.buffer
-      ]);
-    }
-
-    return true;
-  }
-}
-
-registerProcessor('analyzer-processor', AnalyzerProcessor);
-```
-
-```typescript
-// main.ts
-const audioCtx = new AudioContext();
-await audioCtx.audioWorklet.addModule('analyzer-processor.js');
-
-const worklet = new AudioWorkletNode(audioCtx, 'analyzer-processor');
-worklet.port.onmessage = (e) => {
-  if (e.data.type === 'frames') {
-    renderSpectrogram(e.data.data);
-  }
-};
-
-const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-audioCtx.createMediaStreamSource(stream).connect(worklet);
-```
-
+For a live Web Audio graph, `SonareStreamAnalyzerNode` taps a branch of the graph and runs the analysis on the main thread, with no processor to write ([Analyze a graph branch](./wasm-streaming.md#analyze-a-graph-branch)). To run `StreamAnalyzer` on the audio thread instead, instantiate the WASM module inside your own `AudioWorkletProcessor`; [Custom analyzer worklet](./wasm-streaming.md#custom-analyzer-worklet) has the complete processor.

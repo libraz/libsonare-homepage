@@ -12,7 +12,7 @@ Two tracks can have the same peak value while one feels much louder because it s
 |--------|------------|
 | -14 LUFS | General streaming music targets such as Spotify and YouTube. |
 | -16 LUFS | Speech, podcasts, Apple-oriented targets, and more dynamic music. |
-| -12 LUFS | Louder dance or club-style masters where density is intentional. |
+| -9 LUFS | The engine's `club` and `cd` delivery target (with a -0.3 dBTP ceiling), chosen for density rather than taken from a published standard. |
 
 ## Why It Matters
 
@@ -37,7 +37,7 @@ Silence below the absolute gate is excluded. A fade-in or spoken intro can lower
 
 If you are unsure, start at -14 LUFS. It is a practical target for many music and video platforms, and it usually does not require crushing the limiter to reach.
 
-Speech and podcasts often work better with a little more room, such as -16 LUFS, because intelligibility and comfort matter more than maximum density. Dance and club-style masters may sit closer to -12 LUFS, but only when the low end remains controlled, the true peak ceiling is safe, and the result is not fatiguing.
+Speech and podcasts often work better with a little more room, such as -16 LUFS, because intelligibility and comfort matter more than maximum density. Dance and club-style masters may sit much closer to full scale (the engine's `club` and `cd` targets use -9 LUFS), but only when the low end remains controlled, the true peak ceiling is safe, and the result is not fatiguing.
 
 When a streaming platform applies its own normalization, masters that overshoot the target are simply turned down on playback. Overshooting therefore does not always give you a loudness win — a master driven hard into a deep limiter can end up with the same playback loudness as a gentler one, just with less punch left after the platform pulls it down.
 
@@ -46,6 +46,34 @@ When a streaming platform applies its own normalization, masters that overshoot 
 Hitting a LUFS target is not sufficient evidence that the master is good. A master can land on the target while the limiter has crushed transients, the low end has thinned, or the sibilants have started to bite.
 
 The opposite is also true: for some material, sitting a little below the target sounds more natural. For acoustic, speech, and sparse music, loudness-matched A/B and cross-environment checks are usually more informative than chasing the last decibel.
+
+## Measure it in libsonare
+
+`lufs` returns the integrated reading, the momentary and short-term values at the end of the file, and the loudness range.
+
+::: code-group
+
+```typescript [Browser]
+import { init, lufs } from '@libraz/libsonare';
+
+await init();
+
+const { integratedLufs, shortTermLufs, loudnessRange } = lufs(samples, sampleRate);
+```
+
+```python [Python]
+import libsonare as sonare
+
+result = sonare.Audio.from_file("song.wav").lufs()
+result.integrated_lufs, result.short_term_lufs, result.loudness_range
+```
+
+```bash [CLI]
+sonare lufs song.wav            # integrated, momentary and short-term LUFS, and loudness range
+sonare lufs song.wav --series --json   # adds the momentary and short-term series
+```
+
+:::
 
 :::: details Implementation notes
 

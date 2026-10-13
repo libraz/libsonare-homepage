@@ -17,18 +17,22 @@ libsonare is a dependency-free audio engine for browser-native and native music 
 
 libsonare covers several related jobs:
 
-| Area | What libsonare can do |
-|------|-----------------------|
-| Music Information Retrieval (MIR) | Extract tempo, key, chords, beats, downbeats, time signature, structure, melody, timbre, and dynamics |
-| Room acoustics | Measure, estimate, synthesize, or morph room character |
-| Mastering | Run broadcast-grade mastering processors and loudness/true-peak handling |
-| Mixing | Build a real-time-safe mixer with routing, buses, sends, and meters |
-| Editing and creative FX | Change pitch, timing, voice character, reverb, and modulation-style effects |
-| Built-in instruments and MIDI | Render MIDI through a seventeen-engine synthesizer — eleven of the engines are physical models — with a data-free GM/GS fallback bank, or through a SoundFont 2 player for samples you bring ([Sound Sources](./sound-sources.md) for why no samples ship, then [Built-in Synthesizer](./native-synth.md), [Physical Models](./physical-models.md), [SoundFont 2 Player](./soundfont-player.md), [MIDI Input](./midi-input.md)) |
-| Headless-DAW runtime | Author projects with audio/MIDI tracks, sequence MIDI, and bounce or play back in realtime ([Project Editing](./project-editing.md), [Project Bounce](./project-bounce.md), [Realtime and Streaming](./realtime-streaming.md)) |
+| Area | What libsonare can do | Read next |
+|------|-----------------------|-----------|
+| Music Information Retrieval (MIR) | Extract tempo, key, chords, beats, downbeats, time signature, structure, melody, timbre, and dynamics | [Music Analysis](./analysis.md) |
+| Source separation | Split a recording into harmonic and percussive parts (HPSS) or into unlabeled spectral components (NMF). Signal processing, not a trained separator | [Source Separation](./source-separation.md) |
+| Audio to MIDI | Transcribe a mono recording into note events, or straight into a project's MIDI clip | [Audio to MIDI](./audio-to-notes.md) |
+| Editing and creative FX | Change pitch, timing, voice character, reverb, and modulation-style effects | [Editing DSP](./editing-dsp.md), [Effects Inserts](./effects-inserts.md) |
+| Repair | Measure and reduce noise, hum, clipping, clicks, crackle, and diffuse reverb | [Audio Repair Workflow](./audio-repair.md) |
+| Mixing | Build a real-time-safe mixer with routing, buses, sends, and meters | [Mixing Engine](./mixing.md) |
+| Mastering | Run broadcast-grade mastering processors and loudness/true-peak handling | [Mastering Processors](./mastering-processors.md), [Mastering Assistant](./mastering-assistant.md) |
+| Built-in instruments and MIDI | Render MIDI through a seventeen-engine synthesizer (eleven of the engines are physical models) with a data-free GM/GS fallback bank, or through a SoundFont 2 player for samples you bring | [Sound Sources](./sound-sources.md) for why no samples ship, then [Built-in Synthesizer](./native-synth.md) |
+| Headless-DAW runtime | Author projects with audio/MIDI tracks, sequence MIDI, and bounce or play back in realtime | [Project Editing](./project-editing.md), [Bouncing Projects](./project-bounce.md) |
+| Streaming and realtime | Analyze audio block by block as it arrives, and run a transport with live MIDI | [Realtime and Streaming](./realtime-streaming.md) |
+| Room acoustics | Measure, estimate, synthesize, or morph room character | [Room Acoustics](./acoustic-analysis.md) |
 
 ::: info Loudness, LUFS, and true peak
-LUFS (Loudness Units relative to Full Scale) is a standardized estimate of programme loudness used in streaming and broadcasting. Matching two tracks by integrated LUFS is a useful starting point for comparison, but differences in spectrum and dynamics can still make them sound unequally loud. True peak estimates the highest level of the reconstructed signal, including peaks between samples that a sample-peak meter misses. Those peaks can cause distortion during playback or encoding.
+LUFS (Loudness Units relative to Full Scale) is a standardized estimate of program loudness used in streaming and broadcasting. Matching two tracks by integrated LUFS is a useful starting point for comparison, but differences in spectrum and dynamics can still make them sound unequally loud. True peak estimates the highest level of the reconstructed signal, including peaks between samples that a sample-peak meter misses. Those peaks can cause distortion during playback or encoding.
 :::
 
 libsonare is written in C++17 for performance and can be compiled to **WebAssembly**, making it possible to run the same processors directly in web browsers — no server required.
@@ -36,6 +40,17 @@ libsonare is written in C++17 for performance and can be compiled to **WebAssemb
 ::: details What is WebAssembly?
 WebAssembly (WASM) is a binary instruction format that runs in web browsers at near-native speed. It lets code written in languages like C++ be compiled and run in the browser, with no server and nothing to install. libsonare uses this to bring C++-level audio analysis performance directly to web applications.
 :::
+
+## Pick your starting point
+
+| You want to... | Try it in the browser | Then read |
+|----------------|-----------------------|-----------|
+| Read BPM, key, chords, and sections from a song | [Music Analysis Studio](/music-analysis) | [Getting Started](./getting-started.md) |
+| Master or mix a track | [Mastering Studio](/mastering), [Mixing Studio](/mixing) | [Mastering Assistant](./mastering-assistant.md), [Mixing Engine](./mixing.md) |
+| Turn MIDI into sound | [Synth Playground](/synth) | [Sound Sources](./sound-sources.md) |
+| Turn a recording into notes, or edit and repair one | [Piano Transcription](/transcribe) | [Audio to MIDI](./audio-to-notes.md), [Audio Repair Workflow](./audio-repair.md) |
+
+Every demo runs the engine in your browser, and nothing is uploaded.
 
 ## What is Music Information Retrieval?
 
@@ -67,16 +82,12 @@ libsonare is designed for developers building music-related applications:
 - **Music tool creators** — Build DAW plugins, chord detectors, auto-transcription tools, browser mixers, mastering workflows, or music education software. libsonare provides the analysis, mixing, and mastering engine so you can focus on the user experience.
 
 ::: details What is a DAW?
-A DAW (Digital Audio Workstation) is software for recording, editing, and producing audio. Examples include Ableton Live, Logic Pro, FL Studio, and GarageBand. DAW plugins extend these applications with additional functionality like effects, instruments, or analysis tools.
+A DAW (Digital Audio Workstation) is software for recording, editing, and producing audio. DAW plugins extend it with effects, instruments, or analysis tools.
 :::
 
 - **Audio researchers** — If you use [librosa](https://librosa.org/) in Python, libsonare provides a familiar API with compatible parameters and algorithms, but runs the heavy pipeline in native C++ and also works in the browser.
 
 - **Game / interactive media developers** — Analyze music in real time for rhythm games, music visualizers, or adaptive audio systems using the streaming API.
-
-::: tip Try it in the browser
-Open [Demos](/demos) for the browser-local tools. Use [Music Analysis Studio](/music-analysis) for MIR features, or open the [Mastering Studio](/mastering) to master a local file on the realtime engine, with live meters and a loudness-matched before/after/reference switch, and export a WAV with no upload.
-:::
 
 ## How Audio Analysis Works
 
@@ -86,15 +97,10 @@ Audio analysis is not a single step — it's a **pipeline** where each stage bui
 What follows is a quick tour of the pipeline. For a deeper, cross-linked map of how every feature relates — plus a "which question, which feature" table — see [MIR Overview](./glossary/concepts/mir-overview.md).
 :::
 
-```
-Audio Waveform
-  ↓
-Spectral Analysis (STFT)
-  ↓
-Feature Extraction (chroma, onset envelope, mel spectrogram, ...)
-  ↓
-Musical Analysis (key, chords, BPM, beats, sections, ...)
-```
+<AnalysisPipelineFigure
+  title="From decoded samples to an answer"
+  caption="The STFT is computed once and shared: mel feeds MFCC and the onset envelope, chroma feeds key, chords and section labeling, and the onset envelope feeds tempo and beat tracking. The lower rail is what never passes through it: level, zero-crossing rate and the pitch trackers read the waveform directly."
+/>
 
 ### Stage 1: Spectral Analysis
 
@@ -218,7 +224,7 @@ libsonare also exposes inverse helpers for debugging and ML workflows: once you 
 
 libsonare also provides audio processing capabilities that operate on the spectral representation:
 
-- **HPSS** (Harmonic-Percussive Source Separation) — Separates audio into harmonic (tonal) and percussive (rhythmic) components using median filtering on the spectrogram. Often used as a pre-processing step to improve analysis accuracy.
+- **HPSS** (Harmonic-Percussive Source Separation) — Separates audio into harmonic (tonal) and percussive (rhythmic) components using median filtering on the spectrogram. Often used as a pre-processing step to improve analysis accuracy; [Source Separation](./source-separation.md) covers it with the other separation methods.
 
 ::: details What are harmonic and percussive components?
 In a spectrogram, harmonic sounds such as vocals, strings, and sustained notes appear as horizontal lines. They maintain a stable frequency over time.
@@ -228,7 +234,7 @@ Percussive sounds such as drums, clicks, and transients appear as vertical lines
 HPSS exploits this difference with median filters: a horizontal median filter extracts the harmonic part, and a vertical median filter extracts the percussive part.
 :::
 - **Time Stretch / Pitch Shift** — Changes tempo or transposes pitch by combining phase-vocoder processing and resampling.
-- **Editing DSP** — Pitch correction to a target MIDI note, note-region stretch, and voice-change pitch/formant controls.
+- **Editing DSP** — Pitch correction to a target MIDI note, note-region stretch, and voice-change pitch/formant controls ([Editing DSP](./editing-dsp.md)).
 - **Creative FX / inserts** — Sound-design DSP such as reverb inserts, chorus, flanger, phaser, and stereo delay.
 
 ::: details Creative FX availability
@@ -245,7 +251,7 @@ The `StreamAnalyzer` runs the same pipeline on audio **chunk by chunk** with low
 
 It produces per-frame features for real-time visualization or live analysis. Its updating estimate includes BPM, key, current chord, chord progression, bar-level chord voting, and pattern scores.
 
-In the browser, it integrates with the Web Audio API's AudioWorklet for real-time processing.
+In the browser, it integrates with the Web Audio API's AudioWorklet for real-time processing. [Realtime and Streaming](./realtime-streaming.md) covers both.
 
 ### Mixing and Routing
 
@@ -266,7 +272,7 @@ A **send** taps a copy of a channel to a shared effect; a **bus** is a sub-mix s
 | **Linux / macOS** | C++ | Native applications, CLI tools |
 | **Any (via C API)** | C | FFI integration with other languages |
 
-The current site bundle includes about ~{{ wasmMeta.total.sizeKB }} KB of WebAssembly/JavaScript assets before compression. See the [WebAssembly Guide](/docs/wasm#bundle-size) for the current breakdown.
+The full WebAssembly and JavaScript bundle is about {{ wasmMeta.total.sizeKB }} KB, or {{ wasmMeta.total.gzipKB }} KB gzipped. A page that only analyzes can load the much smaller analysis-only entry instead; the [WebAssembly Guide](/docs/wasm#bundle-size) has the breakdown.
 
 ## Relationship with librosa
 
@@ -319,7 +325,7 @@ Two different readers leave this page. Take the path that matches what you want 
 ### If you want to build something
 
 - [Getting Started](/docs/getting-started) — a first result in the runtime you already use, in one short program
-- [Learning Path](/docs/learning-path) — a route by goal through the eight subject areas, so you open the one guide written for what you are building
+- [Learning Path](/docs/learning-path) — a route by goal through the ten subject areas, so you open the one guide written for what you are building
 - [Examples](/docs/examples) — small working patterns per runtime, to copy from rather than read
 - [Feature Map](/docs/api-surface) — which feature family lives where, and which binding exposes it
 

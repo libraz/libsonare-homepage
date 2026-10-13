@@ -19,7 +19,8 @@ The six repair stages are classical DSP. They reconstruct or attenuate part of t
 | Flat-topped peaks or a hard digital ceiling | `masteringRepairDetectClipping` | `declip` | Restoring samples that were overwritten for a long time |
 | Many short, sample-scale surface defects | `masteringRepairDetectCrackle` | `decrackle` | Removing a sustained noise floor |
 | A sustained, diffuse tail after the direct sound | `masteringRepairDetectReverb` | `dereverb` | Room-impulse-response deconvolution |
-| Unwanted silence at the beginning or end | `masteringRepairDetectTrimRange` | `masteringRepairTrimSilence` (separate utility) | It is not one of the six repair stages. See the [CLI recording-cleanup workflow](./use-cases/recording-cleanup.md). |
+
+Unwanted silence at the start or end is a separate utility, `masteringRepairTrimSilence` (detect it with `masteringRepairDetectTrimRange`); see [Trimming silence](#trimming-silence) and the [CLI recording-cleanup workflow](./use-cases/recording-cleanup.md).
 
 The detectors report what their corresponding algorithm measures. They are not a universal damage score, and a non-zero result still needs an audition. In particular, a full-scale sine or a square wave can look clipped to a time-domain detector even when it was intentional.
 
@@ -58,6 +59,11 @@ The denoise and dereverb detectors pad a buffer shorter than `nFft` for analysis
 
 When more than one defect is present, apply only the selected stages in this order. This is also the order used by the repair slot in `masterAudio` and `masteringChain`.
 
+<RepairStagesFigure
+  title="Repair stages in run order"
+  caption="Each detector enables one stage. Short-time defects are repaired first, then the sustained ones, so every detector and estimator sees material the stage before it has already cleaned."
+/>
+
 | Order | Stage | Why this position matters |
 |---:|---|---|
 | 1 | `declip` | A flat clipped region can hide the transient that the click detector needs to see. |
@@ -85,35 +91,104 @@ Read the exact preset parameters in [Mastering Processors](./mastering-processor
 
 ## Measure and repair in one call
 
-`masteringRepairAnalyze` runs all six detectors on every channel and returns the defects per channel, the aggregate, whether a declip at the measured flat level leaves louder audio alone (`declipThresholdSafe`), and the stages the evidence supports in `recommended`, each with its settings. It never recommends dereverb, because the late-decay statistic cannot tell a sustaining dry source from a reverberant one. `masteringRepairApply` takes those stages, or your own, and runs them over a channel set of any size.
+`masteringRepairAnalyze` runs all six detectors on every channel and returns the stages the evidence supports, each with its settings. `masteringRepairApply` runs those stages, or your own, over a channel set of any size. The recommendation is the same repair selection the [mastering assistant](./mastering-assistant.md#masteringassistantsuggest-—-propose-a-chain) makes when `enableRepair` is on.
 
-```ts
-import { init, masteringRepairAnalyze, masteringRepairApply } from '@libraz/libsonare';
+::: code-group
+
+```ts [Browser]
+import { ErrorCode, init, isSonareError, masteringRepairAnalyze, masteringRepairApply } from '@libraz/libsonare';
 
 await init();
 
 const analysis = masteringRepairAnalyze({ channels: [left, right], sampleRate });
 console.log(analysis.recommended.map((s) => s.stage), analysis.explanation);
 
-const { channels, reports } = masteringRepairApply({
-  channels: [left, right],
-  sampleRate,
-  stages: analysis.recommended,
-  onProgress: (fraction, stage) => console.log(stage, fraction), // "repair.declick", 0.5
-  cancel: () => userPressedStop,
-});
+let userPressedStop = false; // set from a Stop button
+try {
+  const { channels, reports } = masteringRepairApply({
+    channels: [left, right],
+    sampleRate,
+    stages: analysis.recommended,
+    onProgress: (fraction, stage) => console.log(stage, fraction), // "repair.declick", 0.33
+    cancel: () => userPressedStop,
+  });
+} catch (error) {
+  if (isSonareError(error) && error.code === ErrorCode.Cancelled) {
+    // The user stopped the run; nothing was returned.
+  } else {
+    throw error;
+  }
+}
 ```
 
-- `stages` is `[{ stage, ...settings }]`. The settings are the stage's catalog parameters (`repair.declick`, `repair.dehum`, `repair.denoiseClassical`, ...); a setting left out takes the default, and an unknown setting, a repeated stage, or an out-of-range value is refused with `InvalidParameter`.
+```python [Python]
+import libsonare
+
+analysis = libsonare.mastering_repair_analyze([left, right], 48000)
+print([s["stage"] for s in analysis["recommended"]], analysis["explanation"])
+
+result = libsonare.mastering_repair_apply(
+    [left, right], 48000, stages=analysis["recommended"]
+)
+print(result.reports[0].stage)  # the first stage that ran, e.g. "declick"
+cleaned = result.channels
+```
+
+```bash [CLI]
+# Measure and report only; writes nothing
+sonare repair noisy.wav --detect --json
+
+# Measure, choose the stages, repair, and say why each was chosen
+sonare repair noisy.wav -o clean.wav --explain
+```
+
+:::
+
+Node uses the same names as the browser build. `masteringRepairAnalyze` returns:
+
+| Field | Meaning |
+|---|---|
+| `defects` | The channels' detector results, aggregated |
+| `channels` | Each channel's own `defects`, in input order |
+| `declipThresholdSafe` | Whether a declip at the measured flat level leaves louder unclipped audio alone; when `false`, declip is withheld from `recommended` |
+| `integratedLufs` | Programme loudness the noise floor is compared against |
+| `recommended` | The supported stages in application order, each with every setting; pass it to `masteringRepairApply` as it stands |
+| `explanation` | Why each stage was or was not chosen |
+
+Dereverb is never recommended, because the late-decay statistic cannot tell a sustaining dry source from a reverberant one. When a denoise is recommended it uses the streaming-safe noise estimator unless you pass `preferStreamingSafe: false` (Python `prefer_streaming_safe=False`).
+
+How `stages` and the reports are spelled:
+
+| Where | Spelling |
+|---|---|
+| `stage` in `stages`, and `reports[].stage` | The bare name (`declick`). `repair.declick` is refused. |
+| Setting names beside `stage` | The catalog parameters of the matching processor (`repair.declick` has `maxClickSamples`). A setting left out takes its default; an unknown setting, a repeated stage, or an out-of-range value is refused with `InvalidParameter`. |
+| The `onProgress` stage argument | `repair.<stage>` |
+
 - The stages run in the fixed order above whatever order the array gives.
 - Declip, declick, and dehum decide over the whole channel set: a defect found in one channel is repaired in all of them, and dehum tracks one fundamental. Decrackle runs each channel alone. Denoise and dereverb apply one linked mask. The first three groups report once per channel (`scope: 'channel'`); the linked stages report once for the set (`scope: 'linked'`).
-- `onProgress` is called after each stage with the fraction done and `repair.<stage>`. When `cancel` returns true after a report, the call throws a `SonareError` with code `Cancelled`.
+- `onProgress` is called after each stage with the fraction done. When `cancel` returns true after a report, the call throws a `SonareError` with code `Cancelled`.
 
-The same pair exists on Node under the same names and in Python as `mastering_repair_analyze(channels, sample_rate)` and `mastering_repair_apply(channels, sample_rate, stages=[...], on_progress=..., cancel=...)`, which also accept a 2-D `(channels, frames)` array. The Python result exposes `.channels` and `.reports`. The individual detectors and stages follow the same `mastering_repair_` prefix in Python (`mastering_repair_detect_hum`, `mastering_repair_declick_stereo`, `mastering_repair_denoise_classical_linked`, `mastering_repair_dereverb_config_for_room`, `mastering_repair_noise_band_bins`).
+The individual detectors and stages carry the same `mastering_repair_` prefix in Python (`mastering_repair_detect_hum`, `mastering_repair_declick_stereo`, `mastering_repair_denoise_classical_linked`, `mastering_repair_dereverb_config_for_room`, `mastering_repair_noise_band_bins`). The CLI command is described in [CLI reference](./cli.md#repair) and the [recording-cleanup workflow](./use-cases/recording-cleanup.md).
 
 ## Realtime inserts
 
-Four of the stages are causal and run as realtime mixer inserts under their catalog ids: `repair.decrackle` (median mode), `repair.dehum`, `repair.denoiseClassical`, and `repair.dereverbClassical` (subtraction mask). Each reproduces its offline function for the same settings, delayed by the latency the instance reports. A setting that needs the whole signal (wavelet decrackle, WPE, the quantile noise estimator) is refused by name, and the insert's denoise estimator defaults to `spp`. Denoise and dereverb link their masks across the insert's channels.
+Four of the stages are causal and run as realtime mixer inserts under their catalog ids. Each reproduces its offline function for the same settings, delayed by the latency the instance reports. Denoise and dereverb link their masks across the insert's channels.
+
+| Insert | Latency | Tail | Cost |
+|---|---:|---:|---|
+| `repair.decrackle` (median mode) | 1 | 1 | low |
+| `repair.dehum` | 0 | 146567 | low |
+| `repair.denoiseClassical` | 1279 | 1023 | moderate |
+| `repair.dereverbClassical` (subtraction mask) | 1023 | 1023 | moderate |
+
+Latency and tail are in samples, at 48 kHz with default settings. `masteringInsertTiming(name, params, sampleRate)` returns the figures for your own configuration, and a bounce must keep pulling output for `tailSamples` after the input ends so the tail is not cut off (`repair.dehum` rings for about 3 s).
+
+A setting that needs the whole signal is refused by name: wavelet decrackle (`mode: 1`), WPE, and the quantile noise estimator (`noiseEstimator: 0`), so the insert's denoise estimator defaults to `spp`. In a mixer scene an enum setting is the choice's number, not its name:
+
+```json
+{ "processor": "repair.denoiseClassical", "slot": "pre", "params": { "reductionDb": 20, "noiseEstimator": 3 } }
+```
 
 `repair.declick`, `repair.declip`, and `repair.trimSilence` are offline only; the capability catalog marks them `causal: false`. See [Effects Inserts](./effects-inserts.md) for how a host reads the catalog.
 

@@ -21,7 +21,7 @@ const audio = Audio.fromBuffer(samples, 44100);
 
 ### `Audio.fromMemory(bytes)`
 
-WAV や MP3 などのエンコード済みオーディオバイト列（`Uint8Array`）をネイティブ WASM デコーダでデコードし、`Audio` インスタンスを返します。同梱デコーダが対応しない形式の場合は `SonareError` をスローします。
+WAV や MP3 などのエンコード済みオーディオバイト列（`Uint8Array`）をネイティブ WASM デコーダでデコードし、`Audio` インスタンスを返します。同梱デコーダが対応しない形式の場合は `SonareError` を投げます。
 
 ```typescript
 const audio = Audio.fromMemory(new Uint8Array(await file.arrayBuffer()));
@@ -43,7 +43,7 @@ const audio = await Audio.fromMemoryWithBrowserFallback(
 
 ### `decodeChannelsWithBrowserFallback(bytes, options?)`
 
-`async` で、`decodeChannels` と同じ `{ sampleRate, channels }` である `Promise<DecodedChannels>` を返します。同梱デコーダーが扱わない形式（AAC、OGG、FLAC）は `Audio.fromMemoryWithBrowserFallback` と同様にブラウザーのコーデックスタックを経由し、同じ `BrowserAudioDecodeOptions` を取ります。ブラウザーが返したチャンネルはすべて保持されます。
+`async` で、`decodeChannels` と同じ `{ sampleRate, channels }` である `Promise<DecodedChannels>` を返します。同梱デコーダーが扱わない形式（AAC、OGG、FLAC）は `Audio.fromMemoryWithBrowserFallback` と同様にブラウザのコーデックスタックを経由し、同じ `BrowserAudioDecodeOptions` を取ります。ブラウザが返したチャンネルはすべて保持されます。
 
 ### `downmix(channels, targetLayout)`
 
@@ -133,11 +133,20 @@ const pitch = audio.pitchPyin();
 const resampled = audio.resample(22050);
 ```
 
-引数の既定値（`nFft`、`hopLength`、`nMels` など）はスタンドアロン関数と同じです。
+引数の既定値（`nFft`、`hopLength`、`nMels` など）はスタンドアロン関数と同じです。メソッドを系統別に並べると次のとおりです。
+
+| 系統 | メソッド |
+|---|---|
+| 解析 | `detectBpm`, `detectKey`, `detectKeyCandidates`, `detectBeats`, `detectDownbeats`, `detectOnsets`, `detectChords`, `chordFunctionalAnalysis`, `analyze`, `analyzeWithProgress` |
+| 分離と編集 | `hpss`, `harmonic`, `percussive`, `timeStretch`, `pitchShift`, `pitchCorrectToMidi`, `noteStretch`, `noteMove`, `voiceChange`, `normalize`, `trim`, `resample` |
+| マスタリング | `mastering`, `masteringChain`, `masterAudio`, `masteringProcess`（[マスタリング API](./js-api-mastering.md) を参照） |
+| スペクトル特徴 | `stft`, `stftDb`, `melSpectrogram`, `mfcc`, `chroma`, `nnlsChroma`, `onsetEnvelope`, `spectralCentroid`, `spectralBandwidth`, `spectralRolloff`, `spectralFlatness`, `zeroCrossingRate`, `rmsEnergy`, `pitchYin`, `pitchPyin` |
+| ラウドネス | `lufs`, `momentaryLufs`, `shortTermLufs`, `ebur128LoudnessRange` |
+| レベルメーター | `peakDb`, `rmsDb`, `dcOffset`, `crestFactorDb`, `silenceRatio`, `truePeakDb`, `detectClipping`, `dynamicRange`, `spectrum`, `spectrumFrame` |
 
 ## メータリング
 
-デコード済みバッファから、レベル、ダイナミクス、ステレオイメージの統計値を返す単体メーターです。マスタリングチェーンやストリーミングエンジンとは独立しています。
+デコード済みバッファから、レベル、ダイナミクス、ステレオイメージの統計値を返す単体メーターです。マスタリングチェーンやストリーミングエンジンとは独立しています。背景は [クレストファクター](./glossary/concepts/crest-factor.md)、[ダイナミックレンジ](./glossary/concepts/dynamic-range.md)、[モノラル互換性](./glossary/concepts/mono-compatibility.md)、[True Peak](./glossary/true-peak.md) を参照してください。
 
 `Float32Array`、またはステレオの左右ペアを渡すと、値またはレポートが返ります。
 
@@ -168,13 +177,15 @@ function meteringSilenceRatio(
 ): number
 ```
 
+<SonareDemo id="inter-sample-peak" />
+
 ### ステレオのレベルメーター
 
 単一チャンネルのメーターが必要とする `0.5 * (left + right)` のダウンミックスではなく、左右 2 チャンネルをそのまま読むレベルメーターです。上のメーターと違い、**リクエストオブジェクト専用です**。位置引数のオーバーロードはなく、位置引数で呼ぶと例外になります。
 
 ```typescript
-// Crest factor over a channel pair, dB. Peak is taken across both channels
-// and RMS is measured over the two together.
+// チャンネルペアのクレストファクター（dB）。ピークは両チャンネルをまたいで取り、
+// RMS は 2 チャンネルをまとめて測る。
 function meteringCrestFactorDbStereo(request: MeteringStereoRequest): number
 
 interface MeteringStereoRequest extends ValidateOptions {
@@ -188,7 +199,9 @@ interface MeteringStereoRequest extends ValidateOptions {
 const crestDb = meteringCrestFactorDbStereo({ left, right, sampleRate });
 ```
 
-左右が逆相になりうる素材では、こちらを使ってください。逆相のペアはダウンミックスで打ち消し合い、RMS が小さく出るぶんクレストファクターが過大に出ます。完全な逆相ペアでの実測値は、ステレオ版が **11.64 dB**、ダウンミックス経由が **0.00 dB** でした。
+左右が逆相になりうる素材では、こちらを使ってください。逆相のペアはダウンミックスで打ち消し合うため、単一チャンネル側のメーターには無音に見えます。完全な逆相ペアでは、ステレオ版が信号本来のクレストファクター（正弦波なら 3.01 dB）を返し、ダウンミックス経由は **0.00 dB** になります。
+
+<SonareDemo id="mono-fold" />
 
 `meteringStereoCorrelation` と `meteringStereoWidth` も、位置引数形式に加えて同じ `MeteringStereoRequest` を受け付けます。
 
@@ -247,19 +260,19 @@ function meteringStereoCorrelation(left: Float32Array, right: Float32Array, samp
 // ミッド/サイドのステレオ幅: 0 = モノラル、約 1 = 広いステレオ。上限なし
 // （完全な逆相などでミッド信号が無音なら Infinity）
 function meteringStereoWidth(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): number
-// Mid/side point series. One point per sample by default; pass maxPoints for a
-// display-sized, deterministically decimated point set (0 / >= length = one point per sample).
+// ミッド/サイドの点列。既定ではサンプルごとに 1 点。maxPoints を渡すと、
+// 表示向けに決定的に間引いた点集合になる（0 / length 以上 = サンプルごとに 1 点）。
 function meteringVectorscope(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ScopeOptions): VectorscopeReport
-// Phase-scope point series plus summary stats. maxPoints decimates the point cloud the same way;
-// the summary stats are always computed over the full-resolution signal.
+// フェーズスコープの点列と要約統計。maxPoints は同じ方法で点群を間引く。
+// 要約統計は常にフル解像度の信号から計算する。
 function meteringPhaseScope(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ScopeOptions): PhaseScopeReport
 
 interface ScopeOptions extends ValidateOptions {
   maxPoints?: number;   // 0 / omit / >= length = one point per input sample
 }
 
-// Deprecated aliases: pass maxPoints to meteringVectorscope / meteringPhaseScope instead.
-// They simply delegate and are kept for backward compatibility.
+// 非推奨のエイリアス。代わりに meteringVectorscope / meteringPhaseScope に maxPoints を渡す。
+// 単に委譲するだけで、互換性のために残している。
 function meteringVectorscopeDecimated(left: Float32Array, right: Float32Array, sampleRate?: number, maxPoints?: number, options?: ValidateOptions): VectorscopeReport
 function meteringPhaseScopeDecimated(left: Float32Array, right: Float32Array, sampleRate?: number, maxPoints?: number, options?: ValidateOptions): PhaseScopeReport
 
@@ -331,9 +344,10 @@ function alignTakeToReference(request: AlignTakeToReferenceRequest): AlignTakeTo
 interface AlignTakeToReferenceRequest {
   reference: Float32Array;  // ガイドテイクまたは伴奏。空でなく、すべて有限値
   take: Float32Array;       // その下に合わせるテイク。条件は同じ
-  sampleRate: number;       // 両バッファ共通のレート [8000, 384000]。異なるなら先にリサンプル
-  hopLength?: number;       // クロマのホップ（サンプル）。省略で 512。正の整数。0 は既定にならず拒否
-  binsPerOctave?: number;   // オクターブあたりの CQT ビン数。省略で 12。正の 12 の倍数。0 は拒否
+  sampleRate: number;       // reference のレート [8000, 384000]。takeSampleRate がなければ take も同じ
+  takeSampleRate?: number;  // take のレート [8000, 384000]。省略で sampleRate。sampleRate へリサンプルされる
+  hopLength?: number;       // sampleRate でのクロマのホップ（サンプル）。省略または 0 で 512。正の整数
+  binsPerOctave?: number;   // オクターブあたりの CQT ビン数。省略または 0 で 12。正の 12 の倍数
 }
 interface AlignTakeToReferenceResult {
   anchors: ProjectWarpAnchor[];   // 2 個以上、有限で狭義単調増加の { warpSample, sourceSample }
@@ -341,7 +355,7 @@ interface AlignTakeToReferenceResult {
 }
 ```
 
-両者のクロマグラムを位置合わせし、その経路を **テイク側** のクリップに `Project.setWarpMap` で渡せるアンカーへ縮約します。`warpSample` はリファレンスのタイムライン上の位置、`sourceSample` はそれに対応するテイク内の位置です。空または非有限のバッファと範囲外の `sampleRate` は `RangeError` で拒否します。解像度フィールドの `0`、クロマ 2 フレーム分に満たない短い信号、相異なるアンカーが 2 個得られない組み合わせは `SonareError` の `InvalidParameter` になります。合わせようのない組み合わせは、使えないマップを返す代わりにエラーとして報告されます。`alignment` は参考情報で、これによって呼び出しが失敗することはありません。`takeFrames / referenceFrames` がアンカーの表す全体のレート差、`meanResidualFrames` が経路が一定レートからどれだけ外れたかで、しきい値は呼び出し側で決めます。
+両者のクロマグラムを位置合わせし、その経路を **テイク側** のクリップに `Project.setWarpMap` で渡せるアンカーへ縮約します。`warpSample` はリファレンスのタイムライン上の位置、`sourceSample` はそれに対応するテイク内の位置です。アンカーと `hopLength` は `sampleRate` でのサンプル数です。空または非有限のバッファと、範囲外の `sampleRate`・`takeSampleRate` は `RangeError` で拒否します。レートの `0` は既定値にならず、範囲外として扱います。負の解像度フィールド、12 の倍数でない `binsPerOctave`、クロマ 2 フレーム分に満たない短い信号、相異なるアンカーが 2 個得られない組み合わせは `SonareError` の `InvalidParameter` になります。合わせようのない組み合わせは、使えないマップを返す代わりにエラーとして報告されます。`alignment` は参考情報で、これによって呼び出しが失敗することはありません。`takeFrames / referenceFrames` がアンカーの表す全体のレート差、`meanResidualFrames` が経路が一定レートからどれだけ外れたかで、しきい値は呼び出し側で決めます。
 
 ### `splitSilenceCommonWithReport(request)`
 
@@ -365,7 +379,7 @@ interface SilenceCommonReport {
 
 ## Mixer のストリップ: `addStrip` と `settle`
 
-シーンドキュメントでは表現できない `Mixer` のメソッド 2 つです。シーン、ルーティング、コンパイルのタイミングは [ミキシングエンジン](./mixing.md) にあります。
+シーンドキュメントでは表現できない `Mixer` のメソッド 2 つです。シーン、ルーティング、コンパイルのタイミングは [ミキシングエンジン](./mixing.md) にあります。概念は [チャンネルストリップ](./glossary/mixing/channel-strip.md)、[バスとセンド](./glossary/mixing/buses-sends.md)、[オートメーションとメーター](./glossary/mixing/automation-metering.md) を参照してください。
 
 ```typescript
 // 構築済みのミキサーにストリップを追加する。戻り値はなく、以後はインデックスで参照する。
@@ -384,9 +398,9 @@ interface StripMeteringOptions {
 settle(stripIndex: number): void
 ```
 
-`addStrip` は id の重複、`[0, 16]` 外の `truePeakOversample`、型の違う metering フィールド、プレーンオブジェクトでない `metering` で例外を投げ、そのストリップは追加されません。メーター構成はストリップ構築時に固定され、後から変えるセッターはありません。明示的な接続のないストリップはコンパイル時にマスターへ配線されるので、シーンを編集しなくても新しいストリップは聞こえます。呼び出し側が変えなければならないのは入力の方です。`processStereo` はストリップ数と同じ数のチャンネルペアを要求するため、新しいインデックスの分だけ配列を増やすまで例外になります。
+`addStrip` は id の重複、`[0, 16]` 外の `truePeakOversample`、型の違う metering フィールド、プレーンオブジェクトでない `metering` で例外を投げ、そのストリップは追加されません。メーター構成はストリップ構築時に固定され、後から変えるセッターはありません。明示的な接続のないストリップはコンパイル時にマスターへ配線されるので、シーンを編集しなくても新しいストリップは聞こえます。呼び出し側が変える必要があるのは入力の方です。`processStereo` はストリップ数までのチャンネルペアを受け取り、ペアのないストリップは無音としてレンダリングするため、新しいインデックスの分だけ配列を増やすまで新しいストリップは無音のままです。`processStereoInto` はちょうど `stripCount()` 組のペアを要求する（違うと `RangeError`）ので、worklet のループでは `addStrip` の後に配列を増やしてください。ストリップ数より多いペアは例外になります。
 
-`settle` が必要になるのは、**設定したばかりのストリップをオフラインでレンダリングする** ときです。レベル系の操作子はライブのフェーダー向けにスムージング（約 5 ms）されているため、`setFaderDb` / `setPan` / `setWidth` / `setInputTrimDb` の直後の最初のブロック、あるいは `fromSceneJson` 直後（フェーダーのスムーザーはユニティから始まる）の最初のブロックは、スムーザーの初期値から目標値へ徐々に移っていきます。−3 dB の 1 ストリップのシーンでは、最初のサンプルが 5.8 dB 高く実測されました。最後の操作の後、最初のブロックの前に呼んでください。ライブのループではこの滑らかな変化こそが目的なので不要です。自動化、メーター、インサートの状態には触れず、何も消しません。範囲外のインデックスは拒否します。
+`settle` が必要になるのは、**設定したばかりのストリップをオフラインでレンダリングする** ときです。レベル系の操作子はライブのフェーダー向けにスムージング（約 5 ms）されているため、`setFaderDb` / `setPan` / `setWidth` / `setInputTrimDb` の直後の最初のブロック、あるいは `fromSceneJson` 直後（フェーダーのスムーザーはユニティから始まる）の最初のブロックは、スムーザーの初期値から目標値へ徐々に移っていきます。−3 dB の 1 ストリップのシーンでは、最初のサンプルが 3 dB 高く実測されました。ユニティから目標値までの距離がそのまま差になります。最後の操作の後、最初のブロックの前に呼んでください。ライブのループではこの滑らかな変化こそが目的なので不要です。自動化、メーター、インサートの状態には触れず、何も消しません。範囲外のインデックスは拒否します。
 
 ## ミキシング API
 

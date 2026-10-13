@@ -68,8 +68,7 @@ segments = sonare.note_segments(
 `note_segments` は、有声度の値が `voiced_threshold`（既定 `0.5`）を下回るところでノートを区切ります。したがって `pitch_pyin` の `voiced_flag` を `0.0`／`1.0` として渡してください。`voiced_prob` はそのフレームの有声観測**量**であり、解析窓に何周期分収まるかに依存するため、確信度を表すのではなく F0 とともに上昇します。`frame_length=2048`、48 kHz では、定常的な 3 倍音のトーンで C2 の平均が 0.1 をはるかに下回り、C5 で 0.5 前後になります。そのため低音楽器や低い男声のトラックを固定しきい値で処理すると、**例外は出ないまま空のリスト**が返ります。連続的な有声度で区切りたい場合は `voiced_threshold` がもう一方の調整点です。
 :::
 
-自己類似度系の関数は、JavaScript の `segment*` という名前とは異なり、Python では
-`segment_` 接頭辞なしで公開されています。
+自己類似度系の関数は、JavaScript の `segment*` という名前とは異なり、Python では `segment_` 接頭辞なしで公開されています。
 
 | Python | JavaScript |
 |--------|------------|
@@ -82,9 +81,9 @@ segments = sonare.note_segments(
 | `agglomerative(...)` | `segmentAgglomerative(...)` |
 
 ::: details ピッチ・特徴量の用語: YIN/pYIN・ゼロ交差率・MIDI ノート番号
-- **YIN / pYIN** — 単音の*基本周波数*（体感ピッチ）を推定するアルゴリズムです。YIN は自己相関を使い、pYIN は確率的な平滑化を加えてピッチラインを時間方向に安定させます。いずれも和音ではなく一度に 1 音を追跡します。
-- **ゼロ交差率**（ZCR） — 波形が 1 フレームあたり何回ゼロを横切るか。高いとノイズ的・高域的（シンバル、摩擦音）、低いと滑らかで音程的な音を表します。
-- **MIDI ノート番号** — ピッチを表す整数で、A4 = 69、中央 C = 60、半音ごとに ±1 です。下の `hz_to_midi` / `midi_to_hz` が Hz とこの尺度を変換します。
+- **YIN / pYIN**：単音の*基本周波数*（体感ピッチ）を推定するアルゴリズムです。YIN は自己相関を使い、pYIN は確率的な平滑化を加えてピッチラインを時間方向に安定させます。いずれも和音ではなく一度に 1 音を追跡します。
+- **ゼロ交差率**（ZCR）：波形が 1 フレームあたり何回ゼロを横切るか。高いとノイズ的・高域的（シンバル、摩擦音）、低いと滑らかで音程的な音を表します。
+- **MIDI ノート番号**：ピッチを表す整数で、A4 = 69、中央 C = 60、半音ごとに ±1 です。下の `hz_to_midi` / `midi_to_hz` が Hz とこの尺度を変換します。
 :::
 
 ## API リファレンス
@@ -94,10 +93,11 @@ segments = sonare.note_segments(
 | メソッド | 説明 |
 |---------|------|
 | `Audio.from_file(path)` | WAV/MP3 ファイルを読み込み。FFmpeg 有効ビルドでは FFmpeg が対応する形式も読み込めます |
-| `Audio.from_buffer(data, sample_rate)` | floatサンプルから作成 |
+| `Audio.from_buffer(data, sample_rate)` | float サンプルから作成 |
 | `Audio.from_memory(data)` | `from_file` と同じ形式対応で、メモリ上のエンコード済み音声をデコード |
+| `Audio.from_file_channel(path, channel_index)` | ダウンミックスではなく、ファイルの 1 チャンネルだけを読み込む。`file_channel_count` と組み合わせて各チャンネルを順に読み込む |
 | `Audio.file_channel_count(path)` | デコードせずに音声ファイルのソースチャンネル数を調べる。`from_file` と異なり、モノラルへのダウンミックスは行わない |
-| `audio.data` | 生のfloatサンプル |
+| `audio.data` | 生の float サンプル |
 | `audio.sample_rate` | サンプルレート（Hz） |
 | `audio.duration` | 長さ（秒） |
 | `audio.length` | サンプル数 |
@@ -107,7 +107,7 @@ Python の `Audio` オブジェクトは、WASM の `Audio` オブジェクト�
 
 共通の特徴量・編集・ラウドネス・マスタリング・リサンプリング系メソッドに加えて、`analyze_bpm(...)`、`analyze_impulse_response(...)`、`detect_acoustic(...)`、`analyze_rhythm(...)`、`analyze_dynamics(...)`、`analyze_timbre(...)`、位置引数形式の `detect_chords(...)` も使えます。
 
-コンテキストマネージャによる自動クリーンアップに対応:
+コンテキストマネージャによる自動クリーンアップに対応しています。
 
 ```python
 with Audio.from_file("music.mp3") as audio:
@@ -127,16 +127,16 @@ with Audio.from_file("music.mp3") as audio:
 | `detect_chords(samples, sample_rate, ...)` | `ChordAnalysisResult` | 時系列のコードセグメントと、使われた `tuning`。検出しきい値未満のフレームは明示的な `N.C.` 区間になります |
 | `analyze(samples, sample_rate)` | `AnalysisResult` | 総合解析: BPM とその候補・キー・拍子とその候補・ビート・検出キーを基準にした `roman_numeral` 付きコード・セクション・音色・ダイナミクス・リズム・メロディ・フォーム |
 | `analyze_with_progress(samples, sample_rate, on_progress?)` | `AnalysisResult` | `analyze` と同じ結果・解析キーワードオプションに、任意の `(progress, stage)` コールバックとキーワード専用の `cancel` コールバックを加えたもの |
-| `transcribe(samples, sample_rate, ...)` | `TranscribeResult` | モノラル音声を一定テンポの PPQ グリッド上の MIDI イベントへ変換。`events`、`note_count`、`tempo_bpm` を返します |
+| `transcribe(samples, sample_rate, ...)` | `TranscribeResult` | モノラル音声を一定テンポの PPQ グリッド上の MIDI イベントへ変換。`events`、`note_count`、`tempo_bpm`、使用した `tuning` を返します |
 | `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | 上位候補付きの BPM 解析 |
 | `estimate_meter(beat_times, beat_strengths, ...)` | `MeterEstimate` | 手元にあるビート系列だけから拍子とアクセントのグルーピングをスコアリング。音声も再解析も不要 |
-| `chord_functional_analysis(samples, key_root, key_mode?, ...)` | `list[FunctionalChord]` | コードを検出したうえで、時刻付きエントリ（`Chord` の全フィールド）に `roman`（`"I"`、`"V7"`、`"vi"` など）と `function`（`"tonic"`、`"subdominant"`、`"dominant"`、`"chromatic"`、`"none"`）を加えて返します |
+| `chord_functional_analysis(samples, key_root, key_mode=Mode.MAJOR, sample_rate=22050, ...)` | `list[FunctionalChord]` | `sample_rate` はキーの後ろにあるのでキーワードで渡してください。コードを検出したうえで、時刻付きエントリ（`Chord` の全フィールド）に `roman`（`"I"`、`"V7"`、`"vi"` など）と `function`（`"tonic"`、`"subdominant"`、`"dominant"`、`"chromatic"`、`"none"`）を加えて返します |
 | `chord_functions(chords, key)` | `list[FunctionalChord]` | すでに手元にあるコードに、再検出せず `key` の中での機能を付けます。`chords` は `detect_chords` の結果かその `chords` リスト、`key` は `Key`、`{"root": ..., "mode": ...}` のマッピング、または `(root, mode)` のペアです |
 | `analyze_rhythm(samples, sample_rate, ...)` | `RhythmResult` | シンコペーション・グルーヴ・規則性 |
 | `analyze_dynamics(samples, sample_rate, ...)` | `DynamicsResult` | ダイナミックレンジ・ラウドネスレンジ・クレストファクター |
-| `analyze_timbre(samples, sample_rate, ...)` | `TimbreResult` | ブライトネス・ウォームス・密度・粗さ・複雑さと、窓ごとの `timbre_over_time`（`timbreOverTime` alias） |
+| `analyze_timbre(samples, sample_rate, ...)` | `TimbreResult` | ブライトネス・ウォームス・密度・粗さ・複雑さと、窓ごとの `timbre_over_time`（別名 `timbreOverTime`） |
 | `analyze_sections(samples, sample_rate, ...)` | `SectionResult` | 楽曲構造のセクション（イントロ／Aメロ／サビ…） |
-| `detect_boundaries(samples, sample_rate=22050, *, n_fft=2048, hop_length=512, kernel_size=64, threshold=0.3, absolute_threshold=0.005, n_mfcc=13, n_chroma=12, peak_distance=2.0, reference_window=60.0, use_mfcc=True, use_chroma=True)` | `BoundaryResult` | 構造の転換点と、それを拾い出した元の `novelty_curve`、および両者が乗るグリッド。`threshold` はピークの前後 `reference_window` 秒の範囲で最大のノヴェルティに対して測られます（`0` で無効）。`analyze_sections` のラベル付き区間ではなく、自前のしきい値を当てたいときに使います |
+| `detect_boundaries(samples, sample_rate=22050, *, n_fft=2048, hop_length=512, kernel_size=64, threshold=0.3, absolute_threshold=0.005, n_mfcc=13, n_chroma=12, peak_distance=2.0, reference_window=60.0, use_mfcc=True, use_chroma=True)` | `BoundaryResult` | 構造の転換点と、それを拾い出した元の `novelty_curve`（ノベルティ曲線）、および両者が乗るグリッド。`threshold` はピークの前後 `reference_window` 秒の範囲で最大のノヴェルティに対して測られます（`0` で無効）。`analyze_sections` のラベル付き区間ではなく、自前のしきい値を当てたいときに使います |
 | `analyze_melody(samples, sample_rate, ...)` | `MelodyResult` | 単音メロディの輪郭（YIN） |
 | `analyze_impulse_response(samples, sample_rate=48000, n_octave_bands=6, min_decay_db=30.0)` | `AcousticResult` | インパルス応答（IR）から求めるルーム音響（RT60／EDT／C50／C80）。`min_decay_db` は減衰フィットのしきい値 |
 | `detect_acoustic(samples, sample_rate, ...)` | `AcousticResult` | ブラインドなルーム音響推定 |
@@ -153,7 +153,7 @@ with Audio.from_file("music.mp3") as audio:
 
 ### `transcribe(...)`
 
-`sonare.transcribe` はモノラル音声を、一定テンポの PPQ グリッド上のノートイベントへ変換します。`tempo_bpm` を渡すとそのテンポでグリッドを作り、省略するとテンポを検出します。戻り値の `TranscribeResult` には `events`、`note_count`、使用した `tempo_bpm` が含まれ、プロジェクトのテンポマップは変更しません。
+`sonare.transcribe` はモノラル音声を、一定テンポの PPQ グリッド上のノートイベントへ変換します。`tempo_bpm` を渡すとそのテンポでグリッドを作り、省略するとテンポを検出します。戻り値の `TranscribeResult` には `events`、`note_count`、使用した `tempo_bpm` と `tuning` が含まれ、プロジェクトのテンポマップは変更しません。`reference_hz="auto"` を渡すと、先に録音のチューニングを測定します。使われた値は `result.tuning` で確認できます。
 
 ```python
 result = sonare.transcribe(
@@ -168,13 +168,11 @@ project.set_midi_events(clip_id, result.events)
 
 ポリフォニックの追跡には `max_polyphony`（既定 10）、`min_frame_peak_ratio`（0.20）、`min_ridge_peak_ratio`（0.10）、`reattack_ratio`（2.0）を指定できます。最短ノートは `min_note_ms`、または音価で指定する `min_note_division` のどちらか一方です。モノフォニック経路は 4 つのポリフォニック上限をフィールド名を挙げて拒否します。詳細は[音を MIDI ノートに変換する](./audio-to-notes.md#オプションと制限)を参照してください。
 
+`velocity_floor_db` はベロシティ 1 に対応するレベルを決めるだけです。テイクの最も大きいノートより 36 dB を超えて小さいノート、または -80 dBFS を下回るノートは、この値に関わらず破棄されます。
+
 プロジェクトのテンポマップに合わせる場合は `Project.transcribeToClip(...)`／`project.transcribe_to_clip(...)` を使います。
 
-コア解析、エフェクト、特徴量、ラウドネス、マスタリングの多くは
-`Audio` インスタンスメソッドとしても使えます（例: `audio.detect_bpm()`）。
-一方で `analyze_sections(...)`、`analyze_melody(...)`、`cqt(...)`、`vqt(...)`
-など一部の詳細ヘルパーはスタンドアロン関数です。これらには `audio.data` と
-`audio.sample_rate` を渡してください。
+コア解析、エフェクト、特徴量、ラウドネス、マスタリングの多くは `Audio` インスタンスメソッドとしても使えます（例: `audio.detect_bpm()`）。一方で `analyze_sections(...)`、`analyze_melody(...)`、`cqt(...)`、`vqt(...)` など一部の詳細ヘルパーはスタンドアロン関数です。これらには `audio.data` と `audio.sample_rate` を渡してください。
 
 Python の `analyze(...)` は現行ビルドでは内部で `sonare_analyze_json_ex` を呼び、BPM と順位付き BPM 仮説、キー、拍子とその候補、ビート時刻・拍ごとの強度に加えて、検出キーを基準にした `roman_numeral` を持つコード、セクション、音色、ダイナミクス、リズム、メロディ、フォームまで含む `AnalysisResult` を 1 回で返します（他のバインディングと揃っています）。上の専用関数は、1 つのフィールドだけが欲しい、呼び出しごとにオプションを変えたい、または結果全体の再計算を避けたいときに役立ちます。ルーム音響（RT60 など）は `AnalysisResult` には含まれず、`estimate_room` などのルームヘルパーで取得します。
 
@@ -221,7 +219,7 @@ sections = sonare.analyze_sections(audio.data, audio.sample_rate)
 
 - `key.confidence` は、スコアリングされた全候補のプロファイル相関に対するソフトマックスです。値域は `[0, 1)` で、候補の confidence の総和は 1 になります。したがって 24 候補中の 1 つが 1 に達することはなく、根拠が割れる平行調どうしはそれぞれおよそ半分を報告します。これはクロマがどれだけ明確に候補集合から 1 つを選び取ったかを示す値であり、**その選択がどれだけの頻度で正しいかではありません**。アノテーション付き録音に対して較正されたものは何もないため、この値で処理を分岐させる場合は、自分の素材で確かめてしきい値を決める必要があります。
 - `downbeat_indices` は `beat_times` のインデックスで、`beat_times[downbeat_indices[k]]` が k 番目のダウンビートです。`beat_times` より短く、あるビートがダウンビートかどうかの判定は、別の時系列との時刻比較ではなくこのリストへの所属判定になります。`downbeat_phase` は拍子推定器自身の位相なので、コードや低域の証拠からダウンビートが精緻化されると `downbeat_indices[0]` と食い違うことがあります。
-- `beat_strengths` と `beat_observations.onset_strength` は別の測定値です。`beat_strengths` はビート自身のフレームで取得したオンセットエンベロープの生の 1 フレームで、正規化されておらず上限もなく、素材によってスケールが変わり、ビート位置の揺れに敏感です。`beat_observations.onset_strength` はライブラリ自身のダウンビート判定がスコアリングに使う窓処理済みの値で、アクセントを扱うならこちらを使います。`beat_observations` は `low_frequency_energy` と `chord_change` も保持します。
+- `beat_strengths` と `beat_observations.onset_strength` は別の測定値です。`beat_strengths` はビート自身のフレームで取得したオンセット包絡線の生の 1 フレームで、正規化されておらず上限もなく、素材によってスケールが変わり、ビート位置の揺れに敏感です。`beat_observations.onset_strength` はライブラリ自身のダウンビート判定がスコアリングに使う窓処理済みの値で、アクセントを扱うならこちらを使います。`beat_observations` は `low_frequency_energy` と `chord_change` も保持します。
 - `beat_local_bpm` は各ビート位置での平滑化された局所テンポで、`beat_times` と並行します。`compute_tempo_curve` を指定しないかぎり空で、ビートが 2 つ未満しか検出されなかった場合は指定しても空です（テンポは 2 つのビートの間隔の性質だからです）。最後の要素は、最終ビートへ至る間隔のテンポを繰り返したものです。設計上、テンポが動く素材では `bpm` から離れるので、ここから 1 つの値を取り出して全体テンポとして読まないでください。
 
 #### 手元のビート系列から拍子をスコアリングする
@@ -294,7 +292,7 @@ labelled = sonare.chord_functions(chords, keys[0].key)
 | `zero_crossing_rate(samples, sample_rate, frame_length?, hop_length?)` | `list[float]` | フレームごとのゼロ交差率 |
 | `zero_crossings(samples, threshold?, ref_magnitude?, pad?, zero_pos?)` | `np.ndarray` | 波形がゼロを横切るサンプル位置 |
 | `waveform_peaks(samples, channels, *, samples_per_bucket=512, validate=True)` | `WaveformPeaksReport` | インターリーブされたマルチチャンネル音声（長さは `channels` の倍数）を波形描画用のチャンネルごとの min/max バケットに縮約。`min`/`max` はチャンネルメジャー（`channel * bucket_count + bucket`） |
-| `waveform_peak_pyramid(samples, channels, *, samples_per_bucket_levels=(512, 1024, 2048, 4096), validate=True)` | `list[WaveformPeaksReport]` | ズームレベルごとに 1 つの peaks レポート（バケット幅ごとに 1 エントリ） |
+| `waveform_peak_pyramid(samples, channels, *, samples_per_bucket_levels=(512, 1024, 2048, 4096), validate=True)` | `list[WaveformPeaksReport]` | ズームレベルごとに 1 つのピークレポート（バケット幅ごとに 1 エントリ） |
 | `rms_energy(samples, sample_rate, frame_length?, hop_length?)` | `list[float]` | フレームごとの RMS エネルギー |
 | `pitch_yin(samples, sample_rate, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | YIN ピッチ推定。すべてのフレームの `f0` は有限で、有声かどうかは `voiced_flag` が示す |
 | `pitch_pyin(samples, sample_rate, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | pYIN ピッチ推定。無声音の `f0` は `fill_na=True` でない限り `nan` |
@@ -307,8 +305,8 @@ labelled = sonare.chord_functions(chords, keys[0].key)
 | `pseudo_cqt(samples, sample_rate?, hop_length?, fmin?, n_bins?, bins_per_octave?)` | `CqtResult` | 擬似 CQT の近似振幅 |
 | `bass_chroma(samples, sample_rate?, hop_length?, n_chroma?)` | `ChromaResult` | 低域寄りのクロマ（低音域のピッチクラス分布） |
 | `chroma_cens(samples, sample_rate?, hop_length?, n_chroma?, bins_per_octave?)` | `ChromaResult` | CENS のエネルギー正規化・平滑化クロマ |
-| `chroma_cqt(samples, sample_rate?, hop_length?, n_chroma?, bins_per_octave?)` | `ChromaResult` | 定 Q クロマグラム（`librosa.feature.chroma_cqt` 相当） — `features` は行優先 `[n_chroma x n_frames]` |
-| `nnls_chroma(samples, sample_rate, *, enable_stft_blend?, stft_blend_weight?, stft_blend_n_fft?, hop_length?)` | `tuple[int, list[float]]` | NNLS クロマグラム — `(n_frames, 行優先 12 x n_frames データ)` を返す。`hop_length` の既定値は `512` |
+| `chroma_cqt(samples, sample_rate?, hop_length?, n_chroma?, bins_per_octave?)` | `ChromaResult` | 定 Q クロマグラム（`librosa.feature.chroma_cqt` 相当）。`features` は行優先 `[n_chroma x n_frames]` |
+| `nnls_chroma(samples, sample_rate, *, enable_stft_blend?, stft_blend_weight?, stft_blend_n_fft?, hop_length?)` | `tuple[int, list[float]]` | NNLS クロマグラム。`(n_frames, 行優先 12 x n_frames データ)` を返す。`hop_length` の既定値は `512` |
 | `decompose(s, n_features, n_frames, n_components, n_iter?, beta?)` | `tuple` | 行優先スペクトログラムから NMF 分解係数 `(w, h)` を返す |
 | `decompose_with_init(s, n_features, n_frames, n_components, n_iter?, beta?, init?)` | `tuple` | 初期化方式を選べる NMF 分解 `(w, h)`。`init` は既定 `'random'`、`'nndsvd'`（SVD ウォームスタート）も受け付ける |
 | `decompose_stems(samples, sample_rate?, n_components?, n_fft?, hop_length?, n_iter?, beta?, init?, mask_power?, *, validate?)` | `dict[str, object]` | 元の複素スペクトログラムにマスクを掛ける NMF 分離。各コンポーネントが元音源の位相を保ち、合計すると入力に戻る。既定は `n_components=4`、`n_iter=100`、`beta=2.0`、`init='random'`、`mask_power=1.0` |
@@ -318,9 +316,10 @@ labelled = sonare.chord_functions(chords, keys[0].key)
 | `onset_strength_multi(samples, sample_rate?, n_fft?, hop_length?, n_mels?, n_bands?)` | `tuple[int, list[float]]` | マルチバンドのオンセット強度。`(n_frames, [n_bands x n_frames])` を行優先で返す（`n_bands` 既定 3） |
 | `lufs(samples, sample_rate)` | `LufsResult` | Integrated／最後の窓の [LUFS](./glossary/lufs.md)（Loudness Units relative to Full Scale）、Max-M / Max-S、ラウドネスレンジ（EBU R128） |
 | `lufs_interleaved(samples, channels, sample_rate?)` | `LufsResult` | インターリーブされたサンプルからチャンネル重み付きマルチチャンネルラウドネスを測定 |
-| `ebur128_loudness_range(samples, sample_rate?)` | `float` | EBU R128 loudness range（LRA、LU 単位） |
-| `momentary_lufs(samples, sample_rate)` | `list[float]` | フレームごとの momentary LUFS |
-| `short_term_lufs(samples, sample_rate)` | `list[float]` | フレームごとの short-term LUFS |
+| `lufs_series_interleaved(samples, channels, sample_rate?, *, validate?)` | `tuple[list[float], list[float]]` | インターリーブされたマルチチャンネルのサンプルから、BS.1770-4 に従ってチャンネルを合算したモーメンタリー LUFS とショートターム LUFS の系列を返す |
+| `ebur128_loudness_range(samples, sample_rate?)` | `float` | EBU R128 のラウドネスレンジ（LRA、LU 単位） |
+| `momentary_lufs(samples, sample_rate)` | `list[float]` | フレームごとのモーメンタリー LUFS |
+| `short_term_lufs(samples, sample_rate)` | `list[float]` | フレームごとのショートターム LUFS |
 
 主な既定値は、`n_fft=2048`、`hop_length=512`、`n_mels=128`、`n_mfcc=20`、ピッチ検出の `fmin=65.0`、`fmax=2093.0`、`threshold=0.1`、`roll_percent=0.85` です。
 
@@ -364,14 +363,15 @@ print(linked["w"].shape, linked["h"].shape)
 
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
+| `griffin_lim(magnitude, n_bins, n_frames, sample_rate?, n_fft?, hop_length?, n_iter?, momentum?)` | `list[float]` | 行優先の STFT 振幅行列から音声を再構成。`n_iter` の既定は `32`、`momentum` の既定は `0.99` |
 | `mel_to_stft(mel, n_mels, n_frames, sample_rate?, n_fft?, fmin?, fmax?, htk?)` | `InverseResult` | メルスペクトログラムからリニア STFT パワー |
 | `mel_to_audio(mel, n_mels, n_frames, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?)` | `list[float]` | メルスペクトログラムから音声（Griffin-Lim） |
 | `mfcc_to_mel(mfcc_coeffs, n_mfcc, n_frames, n_mels?, lifter?)` | `InverseResult` | MFCC 係数からメルスペクトログラム（dB）。`lifter` は順方向の `mfcc(...)` と揃えます |
 | `mfcc_to_audio(mfcc_coeffs, n_mfcc, n_frames, n_mels?, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?, lifter?)` | `list[float]` | MFCC 係数から音声 |
 | `mel_result_to_stft(result)` / `mel_result_to_audio(result, n_iter=32)` | `InverseResult` / `list[float]` | `mel_spectrogram(...)` の結果に対する `mel_to_stft` / `mel_to_audio`。行列と順変換のパラメータをすべて結果から読み取ります。dB の結果（`result.is_db`）は `SonareValueError` で拒否されます |
 | `mfcc_result_to_mel(result)` / `mfcc_result_to_audio(result, n_iter=32)` | `InverseResult` / `list[float]` | `mfcc(...)` の結果に対する `mfcc_to_mel` / `mfcc_to_audio`。メルのパラメータとリフターも含みます |
-| `cqt_to_audio(magnitude, n_bins, n_frames, sample_rate?, hop_length?, fmin?, bins_per_octave?, n_iter?)` | `list[float]` | row-major CQT 振幅行列から音声（Griffin-Lim） |
-| `vqt_to_audio(magnitude, n_bins, n_frames, sample_rate?, hop_length?, fmin?, bins_per_octave?, gamma=None, n_iter?)` | `list[float]` | row-major VQT 振幅行列から音声（Griffin-Lim） |
+| `cqt_to_audio(magnitude, n_bins, n_frames, sample_rate?, hop_length?, fmin?, bins_per_octave?, n_iter?)` | `list[float]` | 行優先の CQT 振幅行列から音声（Griffin-Lim） |
+| `vqt_to_audio(magnitude, n_bins, n_frames, sample_rate?, hop_length?, fmin?, bins_per_octave?, gamma=None, n_iter?)` | `list[float]` | 行優先の VQT 振幅行列から音声（Griffin-Lim） |
 
 `fmin`/`fmax` に `0.0` を渡すと全帯域の既定値、`n_iter` は既定 `32` です。往復変換の整合性を保つため、`fmin`/`fmax`/`htk` は順変換で使った値と同じにするか、順変換の結果を `*_result_to_*` 関数に渡してパラメータを引き継がせてください。
 
@@ -393,7 +393,7 @@ print(linked["w"].shape, linked["h"].shape)
 | `metering_silence_ratio(samples, sample_rate?, threshold_db?, frame_length?, hop_length?, *, validate?)` | `float` | RMS が `threshold_db` を下回る解析フレームの割合。既定は `threshold_db=-45.0`、`frame_length=1024`、`hop_length=256` |
 | `metering_true_peak_db(samples, sample_rate?, oversample_factor?, *, validate?)` | `float` | サンプル間ピーク（ISP、True Peak）を dBFS で返す。`oversample_factor` は 1..16 の 2 の冪（0 で既定 4） |
 | `metering_detect_clipping(samples, sample_rate?, threshold?, min_region_samples?, *, validate?)` | `ClippingReport` | クリップしたサンプルの連続区間。`threshold` 既定 `0.999`、`min_region_samples` 既定 `1` |
-| `metering_dynamic_range(samples, sample_rate?, window_sec?, hop_sec?, low_percentile?, high_percentile?, *, validate?)` | `DynamicRangeReport` | スライディングウィンドウのダイナミックレンジ。`window_sec`/`hop_sec` は `0.0` で既定値（窓 3 秒・ホップ 1 秒）。`low_percentile`/`high_percentile` は負値（既定 `-1.0`）で既定値（low 0.10・high 0.95）。`0.0` は既定ではなく 0 パーセンタイルの指定 |
+| `metering_dynamic_range(samples, sample_rate?, window_sec?, hop_sec?, low_percentile?, high_percentile?, *, validate?)` | `DynamicRangeReport` | スライディングウィンドウのダイナミックレンジ。`window_sec`/`hop_sec` は `0.0` で既定値（窓 3 秒・ホップ 1 秒）。`low_percentile`/`high_percentile` は省略または `None` で既定値（low 0.10・high 0.95）。`0.0` は 0 パーセンタイルの指定です。負値は拒否されます |
 | `metering_stereo_correlation(left, right, sample_rate?, *, validate?)` | `float` | 非中心化相関（コサイン類似度）、−1..1 |
 | `metering_stereo_width(left, right, sample_rate?, *, validate?)` | `float` | ミッド/サイドのステレオ幅 |
 | `metering_vectorscope(left, right, sample_rate?, max_points?, *, validate?)` | `VectorscopeReport` | ミッド/サイドの点列。`max_points` で上限を与えない限り 1 サンプル 1 点 |
@@ -416,7 +416,7 @@ print(linked["w"].shape, linked["h"].shape)
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
 | `scale_mask_for_mode(root, mode)` | `int` | モードの 12 ビットマスク。`mode` は `Mode`、その序数、または `detect_key` が返す教会旋法名（`"major"`、`"minor"`、`"dorian"`、`"phrygian"`、`"lydian"`、`"mixolydian"`、`"locrian"`）です。マイナーは自然短音階です |
-| `scale_quantize_midi(root, mode_mask, midi, reference_midi?)` | `float` | 小数を含む MIDI 番号を最も近い有効なピッチクラスへスナップ |
+| `scale_quantize_midi(root, mode_mask, midi, reference_midi?)` | `float` | 小数を含む MIDI 番号を最も近い有効なピッチクラスへ丸める |
 | `scale_correction_semitones(root, mode_mask, midi, reference_midi?)` | `float` | 補正量（量子化後 − 入力）をセミトーンで返す |
 | `scale_pitch_class_enabled(root, mode_mask, pitch_class)` | `bool` | `pitch_class`（0..11）が `root` を基準に有効か |
 
@@ -424,10 +424,10 @@ print(linked["w"].shape, linked["h"].shape)
 
 | 関数 | 説明 |
 |------|------|
-| `hz_to_mel(hz)` | ヘルツ → Melスケール |
-| `mel_to_hz(mel)` | Melスケール → ヘルツ |
-| `hz_to_midi(hz)` | ヘルツ → MIDIノート番号 |
-| `midi_to_hz(midi)` | MIDIノート番号 → ヘルツ |
+| `hz_to_mel(hz)` | ヘルツ → Mel スケール |
+| `mel_to_hz(mel)` | Mel スケール → ヘルツ |
+| `hz_to_midi(hz)` | ヘルツ → MIDI ノート番号 |
+| `midi_to_hz(midi)` | MIDI ノート番号 → ヘルツ |
 | `hz_to_note(hz)` | ヘルツ → 音名（例: "A4"）。`hz` が有限でも正でもなければ `SonareValueError` |
 | `note_to_hz(note)` | 音名 → ヘルツ。名前が解釈できない、またはオクターブが -1〜9 の範囲外なら `SonareValueError` |
 | `frames_to_time(frames, sr, hop_length)` | フレームインデックス → 秒 |
@@ -445,7 +445,7 @@ print(linked["w"].shape, linked["h"].shape)
 from libsonare import hz_to_mel, mel_to_hz, hz_to_midi, midi_to_hz
 from libsonare import hz_to_note, note_to_hz, frames_to_time, time_to_frames
 
-hz_to_mel(440.0)       # → Melスケール値
+hz_to_mel(440.0)       # → Mel スケール値
 mel_to_hz(549.64)      # → Hz
 hz_to_midi(440.0)      # → 69.0
 midi_to_hz(69.0)       # → 440.0
@@ -465,38 +465,35 @@ time_to_frames(2.32, sr=22050, hop_length=512) # → フレームインデック
 ```python
 import libsonare as sonare
 
-stream = sonare.StreamAnalyzer(
-    sonare.StreamConfig(
-        sample_rate=44100,
-        n_mels=64,
-        emit_every_n_frames=4,
-    )
+config = sonare.StreamConfig(
+    sample_rate=44100,
+    n_mels=64,
+    emit_every_n_frames=4,
 )
 
-for block in audio_blocks:
-    stream.process(block)
+with sonare.StreamAnalyzer(config) as stream:
+    for block in audio_blocks:
+        stream.process(block)
 
-    frames = stream.read_frames(stream.available_frames())
-    # frames.mel は [n_frames * n_mels] のフラット配列
-    # 任意配列は frames.feature_flags を確認してから読む。クロマは [n_frames * n_chroma]
+        frames = stream.read_frames(stream.available_frames())
+        # frames.mel は [n_frames * n_mels] のフラット配列
+        # 任意配列は frames.feature_flags を確認してから読む。クロマは [n_frames * n_chroma]
 
-    stats = stream.stats()
-    if stats.bpm > 0:
-        print(stats.bpm, stats.bpm_confidence)
-
-stream.close()
+        stats = stream.stats()
+        if stats.bpm > 0:
+            print(stats.bpm, stats.bpm_confidence)
 ```
 
 UI 転送量を抑える場合は、`read_frames(max_frames)` の代わりに量子化読み出しを使います。`output_format` はソース互換性のためだけに残っているので、省略するか `0` のままにし、使いたい読み出しメソッドを明示してください。
 
 | メソッド | 変わる点 |
 |----------|----------|
-| `read_frames_u8(max_frames, quantize_config?)` | 特徴量配列を unsigned 8-bit 値へ量子化します。 |
-| `read_frames_i16(max_frames, quantize_config?)` | 特徴量配列を signed 16-bit 値へ量子化します。 |
+| `read_frames_u8(max_frames, quantize_config?)` | 特徴量配列を符号なし 8 ビット値へ量子化します。 |
+| `read_frames_i16(max_frames, quantize_config?)` | 特徴量配列を符号付き 16 ビット値へ量子化します。 |
 
 `quantize_config` は任意の `QuantizeConfig`（`libsonare` からエクスポート）で、既定より大幅に大きい／小さいストリームに合わせて量子化レンジを広げます。省略すると既定値を使います。フィールドと既定値は `mel_db_min=-80.0`、`mel_db_max=0.0`、`onset_max=50.0`、`rms_max=1.0`、`centroid_max=11025.0` です。量子化器は正規化値を `[0, 1]` にクランプするため、このレンジを外れた信号は警告なしに端点で飽和します。これは JS/WASM ストリーミングドキュメントの `StreamQuantizeConfig` に対応します。
 
 どちらもタイムスタンプは float のまま保持します。外部の音声クロックと同期したい場合は、`process_with_offset(samples, sample_offset)` でチャンク開始位置を明示してください。
 
-`process_with_offset` が受け付けるのは連続したオフセットだけです。ギャップやシークの後、または `process(...)` から切り替える前には、`reset(base_sample_offset)` を呼んでから次のブロックを渡してください。`StreamConfig.max_progression_entries`（既定 `4096`）はコード進行と小節進行をそれぞれ保持する上限です。最古の履歴が破棄された場合は、`stats()` の `dropped_chord_progression_entries` と `dropped_bar_progression_entries` で確認できます。
+`process_with_offset` が受け付けるのは連続したオフセットだけです。ギャップやシークの後、または `process(...)` から切り替える前には、`reset(base_sample_offset)` を呼んでから次のブロックを渡してください。`StreamConfig.max_progression_entries`（既定 `4096`）はコード進行と小節進行をそれぞれ保持する上限です。最古の履歴が破棄された場合は、`stats()` の `dropped_chord_progression_entries` と `dropped_bar_progression_entries` で確認できます。NaN や Inf の入力が置き換えられたブロックの数は `non_finite_discard_blocks` に入ります。
 

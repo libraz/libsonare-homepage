@@ -5,7 +5,11 @@ description: ホスト・ゲスト・音楽ベッドをダッキング済みで�
 
 # トーク番組を仕上げる
 
-このページでは、ホストのトラック、ゲストのトラック、音楽ベッドを `commentaryDucking` でレンダーし、`speech` でマスタリングして、レポートを確認します。
+このページでは、ホストのトラック、ゲストのトラック、音楽ベッドを `commentaryDucking` でレンダリングし、`speech` でマスタリングして、レポートを確認します。
+
+::: info どの CLI か
+このページは Python CLI（`pip install libsonare`、コマンド名 `sonare`）を使います。`mix` はネイティブの `sonare-cli` にはありません。[どの CLI を使っているか](../cli.md#どの-cli-を使っているか)を参照してください。コードからは `Mixer.fromSceneJson` が同じシーンを読み込みます（[ミキシングエンジン](../mixing.md#シーンベースのミックス-mixer)）。
+:::
 
 ## このページで身につくこと
 
@@ -33,7 +37,7 @@ for strip in scene["strips"]:
     if strip["id"] == "music-bed":
         for insert in strip["inserts"]:
             if insert["processor"] == "dynamics.sidechainRouter":
-                insert["params"] = json.dumps({"rangeDb": 5})
+                insert["params"] = {"rangeDb": 5}
 json.dump(scene, open("scene.json", "w"))
 '
 
@@ -90,9 +94,26 @@ sonare mastering show.wav \
 
 `sonare mixing-presets --json` は組み込みシーンを 3 つ返します。`vocalReverbSend`、`drumBusSubgroup`、そして `commentaryDucking` です。3 つ目がこの仕事に対応します。
 
-```bash
+::: code-group
+
+```bash [CLI]
 sonare mixing-preset --preset commentaryDucking --json
 ```
+
+```typescript [Node]
+import { mixingScenePresetJson } from '@libraz/libsonare-native';
+
+const scene = JSON.parse(mixingScenePresetJson('commentaryDucking'));
+```
+
+```python [Python]
+import json
+import libsonare as sonare
+
+scene = json.loads(sonare.mixing_scene_preset_json("commentaryDucking"))
+```
+
+:::
 
 レンダリングする前に、まずシーンを読んでください。プリセットは出発点であってブラックボックスではなく、`strips` の中身を読めば何をしているかがそのまま分かります。
 
@@ -122,24 +143,24 @@ for strip in scene["strips"]:
     if strip["id"] == "music-bed":
         for insert in strip["inserts"]:
             if insert["processor"] == "dynamics.sidechainRouter":
-                insert["params"] = json.dumps({"rangeDb": 30})
+                insert["params"] = {"rangeDb": 30}
 json.dump(scene, open("scene.json", "w"))
 '
 sonare mix --scene scene.json \
   --input host=host.wav --input guest=guest.wav --input music-bed=music-bed.wav \
   -o show-r30.wav --json
-cmp show.wav show-r30.wav   # identical — no output
+cmp show.wav show-r30.wav   # 出力なし: 同一
 ```
 
 `rangeDb` をプリセットの既定値 18 から 30 へ上げても何も変わりません。`cmp` は 2 つのレンダリングをバイト単位で完全一致と報告します。この素材では、ホストの音量が求める削減量はどれだけ多くてもおよそ 7 dB までしかなく、8 dB 前後以上の上限であれば上限がないのと同じ挙動になるからです。その値より下げれば、編集が結果に現れます。`sonare dynamics` でファイル全体を測ると効果が出ますが、8 秒のうちホストが話していない区間も長く含めた平均なので値そのものは小さく出ます。
 
-| `rangeDb` | `rms_db`（ファイル全体） | `peak_db` |
-|-----------|--------------------------|-----------|
-| インサートを丸ごと削除 | -22.80 | -10.79 |
-| `1` | -22.85 | -10.84 |
-| `5` | -22.95 | -10.92 |
-| `18`（プリセットの既定値） | -22.96 | -10.92 |
-| `30` | -22.96（`18` とバイト単位で同一） | -10.92 |
+| `rangeDb` | `rms_db`（ファイル全体） | `peak_db` | `18` との比較 |
+|-----------|--------------------------|-----------|---------------|
+| —（インサートを丸ごと削除） | -22.80 | -10.79 | 異なる |
+| `1` | -22.85 | -10.84 | 異なる |
+| `5` | -22.95 | -10.92 | 異なる |
+| `18`（プリセットの既定値） | -22.96 | -10.92 | — |
+| `30` | -22.96 | -10.92 | バイト単位で同一 |
 
 `rangeDb: 5` は、このページ冒頭のスクリプトが最終的に採用している値です。当てずっぽうではなく、上の表で確かめたうえでプリセットの既定値よりわずかに浅いダッキングを選んでいます。
 
@@ -240,7 +261,7 @@ podcast をターゲットにしたアシスタント実行の `--report show-re
 
 ## 次に読むもの
 
-- ベッドや声そのものにノイズ・クリック・ハムが乗っている — [録音素材をまとめて整音する](./recording-cleanup.md)。
-- このエピソードのラウドネスをリリースのたびに自動で点検したい — [納品前チェックを CI で回す](./delivery-check.md)。
+- ベッドや声そのものにノイズ・クリック・ハムが乗っている場合は [録音素材をまとめて整音する](./recording-cleanup.md)。
+- このエピソードのラウドネスをリリースのたびに自動で点検したい場合は [納品前チェックを CI で回す](./delivery-check.md)。
 - ここで使ったシーンとインサートの JSON 形式はフィールド単位で [ミキシングシーン JSON](../mixing-scene-json.md) に、ダッキングとダイナミクス系プロセッサは [マスタリングプロセッサ](../mastering-processors.md) に、アシスタントの判断ルールは [マスタリングアシスタント](../mastering-assistant.md) にまとまっています。
-- スクリプトではなくアプリにこのパイプラインを組み込みたい — [ミキシングエンジン](../mixing.md) が [CLI リファレンス](../cli.md) と各言語 API を通じて同じシーン・ストリップモデルを示しています。
+- スクリプトではなくアプリにこのパイプラインを組み込みたい場合は [ミキシングエンジン](../mixing.md) が [CLI リファレンス](../cli.md) と各言語 API を通じて同じシーン・ストリップモデルを示しています。

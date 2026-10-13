@@ -5,7 +5,7 @@ description: Turn one recording into a slowed copy, a transposed copy, a harmoni
 
 # Build Practice Tracks
 
-You are learning a song off a recording. You do not need the multitrack; you need a slow copy that keeps the pitch, a copy transposed into your instrument's or your voice's range, a version with just the groove or just the harmony to play against, and something to read while you play. This page builds all four from one file with `sonare`.
+You are learning a song off a recording. You do not need the multitrack; you need a slow copy that keeps the pitch, a copy transposed into your instrument's or your voice's range, a version with just the groove or just the harmony to play against, and something to read while you play. This page builds all four from one file with `sonare`. Steps 1 to 3 also have Node and Python tabs: the library calls take mono sample arrays and return arrays, so they write no files and skip the stereo warning below.
 
 Nothing here separates instruments — that needs actual stems or a source-separation model. Harmonic/percussive splitting divides a single mix into a pitched layer and a rhythmic layer; it will not hand you an isolated bass line out of a full band. What it gives you is enough to loop the groove alone or the chords alone, which is most of what practising against a recording needs.
 
@@ -89,9 +89,27 @@ Every command in this script prints `warning: 2-channel input is downmixed to mo
 
 `hpss` divides the signal into a harmonic component (pitched material — chords, bass, melody) and a percussive component (transient material — drums, plucks, attacks):
 
-```bash
+::: code-group
+
+```bash [CLI]
 sonare hpss song.wav -o kit --json
 ```
+
+```typescript [Node]
+import { hpss } from '@libraz/libsonare-native';
+
+// samples: mono Float32Array of song.wav
+const { harmonic, percussive } = hpss(samples, sampleRate);
+```
+
+```python [Python]
+import libsonare as sonare
+
+split = sonare.hpss(samples, sample_rate)  # samples: mono samples of song.wav
+harmonic, percussive = split.harmonic, split.percussive
+```
+
+:::
 
 ```json
 {"length": 494549, "sample_rate": 48000,
@@ -102,6 +120,10 @@ sonare hpss song.wav -o kit --json
 ::: tip `-o` is a prefix, not a filename
 `-o kit` writes two files, `kit_harmonic.wav` and `kit_percussive.wav` — the value is a prefix that both output names are built from, not the name of either file. Passing `-o kit.wav` gives you `kit.wav_harmonic.wav`, which is legal but not what most people want.
 :::
+
+The demo below runs the same split on a band phrase: the harmonic layer keeps the sustained lines, the percussive layer keeps the hits.
+
+<SonareDemo id="hpss-separation" />
 
 The defaults (`--n-fft 2048`, `--hop-length 512`, a soft mask blended between the two components) are a reasonable starting point. Two options are worth turning by ear if the split has too much bleed for what you're practising against: `--hard-mask` assigns each time-frequency cell fully to whichever component dominates it, instead of blending — on this file it moved energy from `harmonic_energy: 0.03774, percussive_energy: 0.004027` to `harmonic_energy: 0.039008, percussive_energy: 0.002892`, a cleaner separation with less cross-bleed but a more artificial-sounding percussive layer. `--kernel-harmonic` and `--kernel-percussive` widen the median-filter kernels the split is built on, which can sharpen the separation on material with longer sustained notes.
 
@@ -121,9 +143,25 @@ Once you've stretched or shifted a file, running `hpss` on it gives you a percus
 
 ## Step 2 — Slow copies that keep pitch
 
-```bash
+::: code-group
+
+```bash [CLI]
 sonare time-stretch song.wav --rate 0.75 -o kit_full_slow.wav --json
 ```
+
+```typescript [Node]
+import { timeStretch } from '@libraz/libsonare-native';
+
+const slowFull = timeStretch(samples, sampleRate, 0.75);
+const slowHarmonic = timeStretch(harmonic, sampleRate, 0.75); // harmonic from Step 1
+```
+
+```python [Python]
+slow_full = sonare.time_stretch(samples, sample_rate, rate=0.75)
+slow_harmonic = sonare.time_stretch(harmonic, sample_rate, rate=0.75)  # harmonic from Step 1
+```
+
+:::
 
 ```json
 {"length": 659399, "sample_rate": 48000, "duration": 13.737479166666667, "rate": 0.75, "output": "kit_full_slow.wav"}
@@ -137,9 +175,23 @@ A stretch is not free at any rate, and it gets less free the further `--rate` si
 
 ## Step 3 — A transposed copy
 
-```bash
+::: code-group
+
+```bash [CLI]
 sonare pitch-shift song.wav --semitones -2 -o kit_down2.wav --json
 ```
+
+```typescript [Node]
+import { pitchShift } from '@libraz/libsonare-native';
+
+const down2 = pitchShift(samples, sampleRate, -2);
+```
+
+```python [Python]
+down2 = sonare.pitch_shift(samples, sample_rate, semitones=-2)
+```
+
+:::
 
 ```json
 {"length": 494552, "sample_rate": 48000, "duration": 10.303166666666666, "semitones": -2.0, "output": "kit_down2.wav"}
@@ -178,7 +230,7 @@ sonare chords song.wav --triads-only --json
  ]}
 ```
 
-`--triads-only` is the flag worth defaulting to for a chart you'll actually read while playing. Without it, the same passage comes back as `Amadd9 - Gmaj9 - Amadd9 - Am - F - Am - AmM7` — seven harmonically precise but denser chords, where `--triads-only` gives five you can read at tempo. `--min-duration` is worth reaching for separately if a detector flickers between two chords for a fraction of a second; it merges anything shorter than the value you give it into its neighbour.
+`--triads-only` is the flag worth defaulting to for a chart you'll actually read while playing. Without it, the same passage comes back as `Amadd9 - Gmaj9 - Amadd9 - Am - F - Am - AmM7` — seven harmonically precise but denser chords, where `--triads-only` gives five you can read at tempo. `--min-duration` is worth reaching for separately if a detector flickers between two chords for a fraction of a second; it merges anything shorter than the value you give it into its neighbor.
 
 Beats and downbeats mark where the bars fall:
 
@@ -213,7 +265,7 @@ sonare sections song.wav --json
 ]}
 ```
 
-`--min-duration` (default 4.0 s) sets the shortest section the detector will report; on a clip this short it doesn't change anything here, but on a full song it's what keeps a four-bar bridge from being merged into the verse around it. See [Section Structure](../glossary/analysis/section-structure.md) for what the section types mean — `unknown` here just means the detector found no stronger label than "not the ending," which given a ten-second clip made mostly of one groove is a fair result.
+The native CLI's JSON also carries a `form` key. `--min-duration` (default 4.0 s) sets the shortest section the detector will report; on a clip this short it doesn't change anything here, but on a full song it's what keeps a four-bar bridge from being merged into the verse around it. See [Section Structure](../glossary/analysis/section-structure.md) for what the section types mean — `unknown` here just means the detector found no stronger label than "not the ending," which given a ten-second clip made mostly of one groove is a fair result.
 
 Put together, the chart reads: A minor, four beats to the bar at 80 BPM, `Am — F#dim — Am` under the first two bars, `F` starting on the downbeat at 6.11 s (just before the section detector's own boundary at 6.22 s — the two detectors work independently and won't always agree to the sample), then `Am` again to the end.
 

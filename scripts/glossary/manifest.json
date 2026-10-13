@@ -146,6 +146,11 @@
           "title": { "en": "Delivery Targets", "ja": "配信ターゲット" }
         },
         {
+          "id": "crossover",
+          "status": "published",
+          "title": { "en": "Crossover Slope and Mode", "ja": "クロスオーバーのスロープとモード" }
+        },
+        {
           "id": "error-recovery",
           "status": "published",
           "title": { "en": "Error Recovery", "ja": "エラー復旧" }
@@ -381,7 +386,7 @@
     },
     {
       "id": "acoustics",
-      "label": { "en": "Room Acoustics", "ja": "室内音響" },
+      "label": { "en": "Room Acoustics", "ja": "ルーム音響" },
       "entries": [
         {
           "id": "reverberation-time",
@@ -400,6 +405,14 @@
           "id": "source-distance",
           "status": "published",
           "title": { "en": "Source Distance and DRR", "ja": "音源距離と DRR" }
+        },
+        {
+          "id": "spaced-receivers",
+          "status": "published",
+          "title": {
+            "en": "Spaced Receivers and Inter-Channel Coherence",
+            "ja": "間隔を空けたレシーバーとチャンネル間コヒーレンス"
+          }
         },
         {
           "id": "room-geometry",

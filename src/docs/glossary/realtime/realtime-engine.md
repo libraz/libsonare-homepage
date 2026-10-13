@@ -9,7 +9,7 @@ Where `StreamAnalyzer` *listens*, the **`RealtimeEngine`** *plays*.
 
 It is the transport-and-playback side of libsonare's realtime tools. It handles tempo, clip scheduling, a metronome, automation, lane mixing, capture, and meter/scope snapshots for the UI.
 
-Use it when you are building a playback engine rather than just a live analyzer. If your app needs a playhead, clips, MIDI, or a mixer that runs while audio plays, this is the right layer. For the API, see [Realtime and Streaming](../../realtime-streaming.md).
+Use it when you are building a playback engine rather than just a live analyzer. If your app needs a playhead, clips, MIDI, or a mixer that runs while audio plays, this is the right layer. For the API, see [Realtime Engine](../../realtime-engine.md); the AudioWorklet bridge is in [Realtime and Streaming](../../realtime-streaming.md).
 
 ## Transport: the playhead and tempo
 
@@ -17,7 +17,7 @@ Use it when you are building a playback engine rather than just a live analyzer.
 
 ## Clips and scheduling
 
-The engine plays **clips** — buffers of audio placed on the timeline at scheduled positions. Scheduling means deciding *when* a clip starts and stops relative to the transport, so playback can be assembled from many pieces rather than one continuous stream. This is how an arrangement, a backing track, or a rhythm-game chart is played back.
+The engine plays **clips** — buffers of audio or sequences of MIDI events placed on the timeline at scheduled positions. Scheduling means deciding *when* a clip starts and stops relative to the transport, so playback can be assembled from many pieces rather than one continuous stream. This is how an arrangement, a backing track, or a rhythm-game chart is played back.
 
 <SonareDemo id="engine-lane-mixer" />
 
@@ -34,7 +34,7 @@ You cannot inspect a realtime audio callback with a debugger without breaking ti
 ::: details How libsonare models the engine
 `RealtimeEngine` works with `EngineController`: it owns the transport, schedules clips through `ClipPlayer`/`ClipSchedule` over `ClipAudioBuffer` storage, generates clicks with `Metronome` (`MetronomeConfig` → `MetronomeEvent`), and plays automation back on the mixer graph. Metering is reported through a `MeterTelemetryTap` producing `MeterTelemetryRecord`s and a general `Telemetry` channel (`TelemetryType`/`TelemetryErrorCode`) that a UI reads off the audio thread. The whole engine is real-time-safe and runs the same offline (bounce) and inside an AudioWorklet, including freeze and capture paths.
 
-Two read-outs size what a host has to wait for: `tailSamples` is an upper bound, in samples, on the engine's longest audible tail, and `graphLatencySamplesQ8` is its processing latency in 1/256 samples. Before an offline bounce or freeze the engine primes itself without rendering: queued commands are applied, every mixer and effect processor is reset to its prepared state (instruments excepted), and smoothers are snapped, so ringing insert tails and delay lines are cut and a second bounce equals the first. `primeOfflineParameters` and `resetProcessorState` expose those steps to a host driving the engine block by block. An offline render whose block size exceeds the one the engine was prepared with is refused.
+Two read-outs size what a host has to wait for: `tailSamples` is a conservative upper bound, in samples, on the engine's longest audible tail, and `graphLatencySamplesQ8` is its processing latency in 1/256 samples. Before an offline bounce or freeze the engine primes itself without rendering: queued commands are applied, every mixer and effect processor is reset to its prepared state (instruments excepted), and smoothers are snapped, so ringing insert tails and delay lines are cut and a second bounce equals the first. `primeOfflineParameters` and `resetProcessorState` expose those steps to a host driving the engine block by block. An offline render whose block size exceeds the one the engine was prepared with is refused.
 :::
 
-Related: [Realtime and Streaming](../../realtime-streaming.md), [Streaming Analysis](./streaming-analysis.md), [Realtime Safety](./realtime-safety.md), [Automation and Metering](../mixing/automation-metering.md)
+Related: [Realtime Engine](../../realtime-engine.md), [Realtime and Streaming](../../realtime-streaming.md), [Streaming Analysis](./streaming-analysis.md), [Realtime Safety](./realtime-safety.md), [Automation and Metering](../mixing/automation-metering.md)

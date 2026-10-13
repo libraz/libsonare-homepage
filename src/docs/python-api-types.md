@@ -77,10 +77,15 @@ class Chord:
     end: float               # segment end (seconds)
     confidence: float
     bass: PitchClass | None  # slash-chord bass, or None when it equals root
+    canonical_name: str
     name: str                # property -> "Cmaj7", "Am", "G/B"
+    root_name: str           # property -> "C" (alias rootName)
+    bass_name: str           # property (alias bassName)
     duration: float          # property -> end - start
+    roman_numeral: str | None # analyze() chords: numeral relative to its key;
+                              # empty for N.C.; None on other chord results
 
-class FunctionalChord(Chord):   # return type of chord_functions(...)
+class FunctionalChord(Chord):   # return type of chord_functions(...) and chord_functional_analysis(...)
     roman: str               # "I", "V7", "vi"; "N.C." for an unknown chord
     function: str            # "tonic", "subdominant", "dominant", "chromatic", "none"
 
@@ -205,7 +210,7 @@ class WaveformPeaksReport:
 
 class StreamConfig:
     sample_rate: int = 44100
-    n_fft: int = 2048
+    n_fft: int = 2048        # samples at 44100 Hz; rescaled below that rate, never below hop_length
     hop_length: int = 512
     n_mels: int = 128
     fmin: float = 0.0
@@ -268,15 +273,16 @@ class StreamStats:
     dropped_output_frames: int
     dropped_chord_progression_entries: int
     dropped_bar_progression_entries: int
+    non_finite_discard_blocks: int  # blocks whose NaN/Inf input was replaced; cleared by reset()
     bpm: float
     bpm_confidence: float
     bpm_candidate_count: int
-    key: int
+    key: int                        # -1 while no key is estimated (e.g. silence)
     key_minor: bool
     key_confidence: float
     key_name: str | None            # "C major"; None while no key is estimated
     key_short_name: str | None      # "C", "Am"
-    chord_root: int
+    chord_root: int                 # -1 for no chord
     chord_quality: int
     chord_name: str                 # "N.C." for no chord
     chord_confidence: float
@@ -306,11 +312,11 @@ Additional Python result classes used by focused APIs:
 | Acoustics | `RoomEstimate` (`volume`, `length_m`, `width_m`, `height_m`, `drr_db`, `confidence`, `band_absorption`, `rt60_bands`), `RoomMorphResult` (`audio`, `sample_rate`, `diagnostics`), `RoomMorphStereoResult` (`left`, `right`, `sample_rate`, `diagnostics`; from `room_morph_stereo`), `RoomGeometry` (a `TypedDict`, from `room_geometry_from_estimate`), `MaterialPresetName`, `AcousticModeName` |
 | Analysis literals | `ChordFunctionName` |
 | Mixing | `MixTrackInput` (`track_id`, `left`, `right`, `name`, `sample_rate`; a track at another rate is resampled onto the call's rate), `MixerStereoResult`, `SidechainCheck` (`ok` plus the first refusal `reason`; from the engine's `can_set_*_sidechain`) |
-| Projects | `AssistSidecar` (return type of `project.get_assist_sidecar(index)` / `project.assist_sidecars()` — see [Project Editing](./project-editing-midi.md#assist-sidecars)), `NotePairValidation` |
+| Projects | `AssistSidecar` (return type of `project.get_assist_sidecar(index)` / `project.assist_sidecars()`; see [Project Editing](./project-editing-midi.md#assist-sidecars)), `NotePairValidation` |
 | Realtime engine jobs/telemetry | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `MeterTelemetryRecord`, `MeterTelemetryRecordWide`, `ScopeTelemetryRecord` |
 | Build introspection | `Capabilities`, `CapabilityCatalog`, `CapabilityCatalogPresets`, `CapabilityCatalogChain`, `CapabilityCatalogChainStage`, `CapabilityCatalogChainList`, `CapabilityCatalogChainAlias`, `SynthParamInfo`, `MasteringPresetCatalogEntry`, `MasteringInsertParamInfo`, `MasteringInsertParamUnit`, `MasteringInsertParamScale`, `MasteringInsertParamRelation`, `MasteringInsertParamDependency`, `MasteringInsertSlot`, `MasteringInsertTiming`, `MasteringProcessorCatalogEntry` (`TypedDict`s over the JSON documents described on [API Surface](./api-surface.md#what-the-capability-catalog-reports)) |
 
-`CapabilityCatalog["chain"]` (`CapabilityCatalogChain`) describes every flat mastering chain key: the stages, the indexed lists with their item counts, the keys no processor carries, and every alias spelling; `CapabilityCatalog["presets"]["playbackRoom"]` is always present. `SynthParamInfo` (from `synth_engine_param_info` and `synth_patch_param_info`) has `name`, `type` (`"number"` or `"boolean"`), `default`, `unit` and the optional `integer`, `min` and `max`. `CapabilityCatalog["masteringPresets"]` contains `MasteringPresetCatalogEntry` values with `name`, `kind`, `targetLufs`, `truePeakCeilingDb`, and `maxLimiterGainReductionDb`; restoration entries use `None` for the three numeric fields. `MasteringProcessorCatalogEntry` includes `slots` for conditional key groups and `causal` (false for `repair.declick`, `repair.declip` and `repair.trimSilence`). `MasteringInsertParamInfo` descriptors include `id`, `rtSafe`, `type`, `min`, `max`, `default`, `unit` (from the closed `MasteringInsertParamUnit` set), `scale` (`linear` or `log`), `uiMin` / `uiMax` (an optional display range inside `[min, max]`), `dependsOn` (sibling keys whose live value bounds this one, each as `key`, `relation` and `factor`, read as `this <relation> factor * sibling`), `choices`, and `slot`, while `MasteringInsertTiming` contains `latencySamples` and `tailSamples` for the requested insert configuration.
+`CapabilityCatalog["chain"]` (`CapabilityCatalogChain`) describes every flat mastering chain key: the stages, the indexed lists with their item counts, the keys no processor carries, and every alias spelling; `CapabilityCatalog["presets"]["playbackRoom"]` is always present. `SynthParamInfo` (from `synth_engine_param_info` and `synth_patch_param_info`) has `name`, `type` (`"number"` or `"boolean"`), `default` (`float | bool`; a bool for a switch), `unit` and the optional `integer`, `min`, `max` and `activeWhen`. `activeWhen` is a list of alternatives, each a list of `SynthParamCondition` dicts (`key`, `scope` `"engine"` or `"patch"`, `relation` one of `"eq"`, `"ne"`, `"gt"`, `"ge"`, `"lt"`, `"le"`, and `value`): the field reaches the voice when every condition of at least one inner list holds; it is absent for an unconditional field. `CapabilityCatalog["masteringPresets"]` contains `MasteringPresetCatalogEntry` values with `name`, `kind`, `targetLufs`, `truePeakCeilingDb`, and `maxLimiterGainReductionDb`; restoration entries use `None` for the three numeric fields. `MasteringProcessorCatalogEntry` includes `slots` for conditional key groups and `causal` (false for `repair.declick`, `repair.declip` and `repair.trimSilence`). `MasteringInsertParamInfo` descriptors include `id`, `rtSafe`, `type`, `min`, `max`, `default`, `unit` (from the closed `MasteringInsertParamUnit` set), `scale` (`linear` or `log`), `uiMin` / `uiMax` (an optional display range inside `[min, max]`), `dependsOn` (sibling keys whose live value bounds this one, each as `key`, `relation` and `factor`, read as `this <relation> factor * sibling`), `coupledWith` (a list of the other sibling keys that move the accepted range; `min` / `max` are measured with them at their defaults), `choices`, and `slot`, while `MasteringInsertTiming` contains `latencySamples` and `tailSamples` for the requested insert configuration.
 
 ### Exceptions
 
@@ -341,7 +347,7 @@ class SonareValueError(SonareError, ValueError):
     # str(e) -> "spectral_centroid: samples contains NaN or Inf at index 0": no prefix
 ```
 
-A failure that comes from the library or from an object's state is always a `SonareError` with the matching code — `NOT_SUPPORTED` when the loaded library lacks an entry point, `INVALID_STATE` for a closed object, `UNKNOWN` for a native result that fails a sanity check — so `except RuntimeError` keeps catching it and `.code` tells the cases apart. `ABI_MISMATCH` is raised on first library use when the loaded library's ABI version differs from the binding's.
+A failure that comes from the library or from an object's state is always a `SonareError` with the matching code — `NOT_SUPPORTED` when the loaded library lacks an entry point, `INVALID_STATE` for a closed object, `UNKNOWN` for a native result that fails a sanity check — so `except RuntimeError` keeps catching it and `.code` tells the cases apart. `ABI_MISMATCH` is raised on first library use when the loaded library's ABI version differs from the binding's. The [error contract](./binding-parity.md#error-contract) lines these codes up with the other bindings and the CLI exit codes.
 
 `SonareValueError` is what the binding raises when it refuses an argument before the call crosses into native code. Its bases decide what an existing handler sees:
 
@@ -352,7 +358,7 @@ A failure that comes from the library or from an object's state is always a `Son
 | `except SonareValueError` | Caught | Not caught |
 | Branching on `.code == ErrorCode.INVALID_PARAMETER` | Matches | Matches |
 
-An instance is message-only. There is no attribute naming the offending parameter and none carrying the accepted range: `.code` is the only structured field, and it reads `INVALID_PARAMETER` for every refusal. The parameter name and, where one applies, the range are in the text — a buffer refusal names the entry point and the argument (`master_audio_stereo: right must not be empty`), a scalar refusal names the field and the interval the C type can hold (`sample_rate must be an integer within [-2147483648, 2147483647]`). Code that needs the name has to read it from `str(e)`; [Python API](./python-api.md#error-handling) covers the wording and why matching on it is fragile.
+An instance is message-only. There is no attribute naming the offending parameter and none carrying the accepted range: `.code` is the only structured field, and it reads `INVALID_PARAMETER` for every argument refusal; a project document that fails to load carries the C-ABI code instead (`INVALID_FORMAT` for malformed JSON). The parameter name and, where one applies, the range are in the text — a buffer refusal names the entry point and the argument (`master_audio_stereo: right must not be empty`), a scalar refusal names the field and the interval the C type can hold (`sample_rate must be an integer within [-2147483648, 2147483647]`). Code that needs the name has to read it from `str(e)`; [Python API](./python-api.md#error-handling) covers the wording and why matching on it is fragile.
 
 #### Where the validation layer stops
 
@@ -367,6 +373,6 @@ The binding validates in two layers, and the shape of each says what a `SonareVa
 What the layer does **not** do:
 
 - **Judge a value's meaning.** Narrowing checks that a number is representable, not that the processor accepts it. `ratio=0.5` on `dynamics.compressor` reaches the core and comes back as `SonareError` code 4 with the message `compressor ratio must be at least 1`; a value the processor clamps instead, such as `dryWet=5` on `effects.modulation.chorus`, is accepted without a word. A handful of entry points do check a domain rule Python-side — the power-of-two `n_fft` of the classical repair functions, the odd kernel of `hpss`, the FFT geometry of `time_stretch` and `pitch_shift` — and their messages read the same way; everything else about a value's meaning is the core's to judge.
-- **Read a `params` dict.** The parameter dictionaries handed to `mastering_process`, the chain and the inserts are serialised as given: an unknown key is ignored by the processor, and a non-finite value is rejected by the core (`mastering parameters must be finite and representable`), not by the binding. Check values against the [capability catalog](./api-surface.md#what-the-capability-catalog-reports) before the call if you want the refusal at the call site.
+- **Read a `params` dict.** The parameter dictionaries handed to `mastering_process`, the chain and the inserts are serialized as given: an unknown key is ignored by the processor, and a non-finite value is rejected by the core (`mastering parameters must be finite and representable`), not by the binding. Check values against the [capability catalog](./api-surface.md#what-the-capability-catalog-reports) before the call if you want the refusal at the call site.
 - **Preflight the exemptions.** The entry points for which an empty buffer is a defined result — the element-wise conversions, the padding helpers, the tempogram family — accept one and return one; they are listed under [What is not checked](./python-api.md#what-is-not-checked).
 - **Cover the CLI's own arguments.** A command-line usage error is a plain `ValueError`, since it reports a mistake in the command rather than an API argument.

@@ -31,6 +31,8 @@ trimmed = audio.trim(threshold_db=-60.0)
 resampled = audio.resample(target_sr=44100)
 ```
 
+<SonareDemo id="hpss-separation" />
+
 For region-based time/frequency edits, use `spectral_edit(samples, sample_rate, [SpectralRegionOp(...)])`; see [Spectral Editing](./spectral-editing.md).
 
 ## Room Acoustics
@@ -44,6 +46,7 @@ Use these functions for the room or playback space, not for song structure.
 | Fit a practical room model from audio | `estimate_room(...)` |
 | Create a mono room impulse response from dimensions | `synthesize_rir(...)` |
 | Add a target-room character as an effect | `room_morph(...)` |
+| Add the same character to a stereo recording, heard at two spaced receivers | `room_morph_stereo(left, right, sample_rate, length_m, width_m, height_m, ...)` |
 
 ::: info Defaults and terms
 `analyze_impulse_response(...)` and `detect_acoustic(...)` return `AcousticResult` with RT60, EDT, C50, C80, D50, per-band arrays, confidence, and `is_blind`. Their `sample_rate` default is `48000`, unlike most music-analysis helpers that default to `22050`. RIR means room impulse response. RT60 is the reverberation time — how long a tail takes to decay by 60 dB — while C50 and C80 are clarity ratios between early and late energy.
@@ -65,7 +68,7 @@ print(blind.is_blind, blind.rt60_bands)
 
 estimate = sonare.estimate_room(room_recording, sample_rate, n_octave_bands=6)
 print(estimate.volume, estimate.length_m, estimate.width_m, estimate.height_m)
-print(estimate.drr_db, estimate.confidence, estimate.absorption_bands)
+print(estimate.drr_db, estimate.confidence, estimate.band_absorption)
 
 rir = sonare.synthesize_rir(7.0, 5.0, 3.0, absorption=0.2, sample_rate=sample_rate)
 print(rir.sample_rate, len(rir.rir), rir.diagnostics)  # warnings only
@@ -77,13 +80,16 @@ rir = sonare.synthesize_rir(**geometry, sample_rate=sample_rate, material_preset
 morphed = sonare.room_morph(room_recording, sample_rate, 12.0, 9.0, 4.0, wet=0.6)
 ```
 
-Keep three cautions in mind:
+<SonareDemo id="room-decay" />
+
+Keep these cautions in mind:
 
 - `estimate_room(...)` returns an equivalent room, not guaranteed real geometry; inspect `confidence`.
-- `synthesize_rir(...)` raises `SonareValueError` for an unusable geometry, such as a source or listener outside the room; the message leads with the diagnostic code (`acoustic.source_outside_room`). A returned `RirResult` carries only warnings on `diagnostics`.
+- `synthesize_rir(...)` raises `SonareError` (code `INVALID_PARAMETER`, so `except ValueError` does not catch it) for an unusable geometry, such as a source or listener outside the room; the message leads with the diagnostic code (`acoustic.source_outside_room`). A returned `RirResult` carries only warnings on `diagnostics`.
 - `material_preset` (`"none"` by default, or `"concrete"`, `"wood"`, `"curtain"`, `"carpet"`, `"glass"`) and the `estimate_room` `mode` (`"auto"` by default, `"blind"`, `"impulse_response"`) take names only: a number is a `TypeError`, an unknown name a `SonareValueError`.
-- `room_geometry_from_estimate(estimate, source=None, listener=None)` returns a dict of `synthesize_rir` keyword arguments (`length_m`, `width_m`, `height_m`, optionally `absorption_bands`, `source`, `listener`); an estimate with no measurable dimensions (NaN) raises `SonareValueError`.
+- `room_geometry_from_estimate(estimate, source=None, listener=None)` returns a `RoomGeometry` dict of `synthesize_rir` keyword arguments: `length_m`, `width_m`, `height_m`, `source` and `listener` (the default placement scaled into the estimated room, replaced by any `source`/`listener` you pass), plus `absorption` (mean of the finite bands) and `band_absorption` when the estimate converged on them. An estimate with no measurable dimensions (NaN) raises `SonareValueError`.
 - `room_morph(...)` is a creative effect, not dereverberation.
+- `room_morph_stereo(...)` takes every `room_morph` keyword plus `receiver_spacing_m` in (0, 4] m (`None` = 0.5 m) and returns a `RoomMorphStereoResult` with `left`, `right`, `sample_rate` and `diagnostics`. A listener closer to a wall than half the spacing raises `SonareError`.
 
 See [Room Acoustics](./acoustic-analysis.md) for interpretation notes and when a blind estimate is appropriate.
 
@@ -99,8 +105,10 @@ See [Room Acoustics](./acoustic-analysis.md) for interpretation notes and when a
 | `pitch_shift(samples, sample_rate, semitones, n_fft?, hop_length?)` | `list[float]` | Pitch-shift without tempo change; defaults: `n_fft=2048`, `hop_length=512` |
 | `pitch_correct_to_midi(samples, sample_rate, current_midi?, target_midi?)` | `list[float]` | Pitch-correct toward a target MIDI note |
 | `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sample_rate?, hop_length?, voiced?, voiced_prob?)` | `list[float]` | Contour-following pitch correction: retunes every voiced frame toward `target_midi` along a per-frame `f0_hz` contour, preserving vibrato/drift instead of flattening it |
-| `note_stretch(samples, sample_rate, onset_sample?, offset_sample?, stretch_ratio?)` | `list[float]` | Stretch a single note region in place |
-| `note_move(samples, sample_rate, onset_sample?, offset_sample?, target_onset_sample?)` | `list[float]` | Move a note region to a new onset without changing its duration |
+| `pitch_correct_timevarying(samples, f0_hz, sample_rate?, hop_length?, *, mode="midi", target_midi?, scale_root?, scale_mode_mask?, reference_midi?, retune_amount?, max_correction_semitones?, retune_speed_ms?, vibrato_threshold_cents?, voiced?, voiced_prob?)` | `list[float]` | The same contour-following correction toward a fixed note (`mode="midi"`) or the nearest degree of a scale (`mode="scale"`); `scale_mode_mask` takes a mask, a `Mode` or a mode name, and the retune knobs trade natural for robotic correction |
+| `auto_tune(samples, sample_rate?, key="detect", *, strength?, retune_speed_ms?, vibrato_threshold_cents?, max_correction_semitones?, reference_midi?)` | `AutoTuneResult` | Tune a monophonic take to a detected (`"detect"`) or named key (`Key`, `{"root", "mode"}` or `(root, mode)`); `.samples` is the tuned audio and `.key` the key used |
+| `note_stretch(samples, sample_rate, onset_sample?, offset_sample?, stretch_ratio?, *, onset_sec?, offset_sec?)` | `list[float]` | Stretch a single note region in place |
+| `note_move(samples, sample_rate, onset_sample?, offset_sample?, target_onset_sample?, *, onset_sec?, offset_sec?, target_onset_sec?)` | `list[float]` | Move a note region to a new onset without changing its duration |
 | `voice_change(samples, sample_rate, pitch_semitones?, formant_factor?, formant_mode?)` | `list[float]` | Independent pitch + formant shift. `formant_mode` is `"relative"` (default: `formant_factor` is a warp applied after the pitch shift) or `"absolute"` (`formant_factor` is the formant shift relative to the input whatever the pitch shift; `1.0` keeps the formants in place). An absolute request whose warp `formant_factor / 2**(pitch_semitones / 12)` leaves [0.55, 1.65] raises `SonareValueError` naming the reachable `formant_factor` range |
 | `voice_change_realtime(samples, sample_rate?, preset?, channels?)` | `np.ndarray` | One-shot render through the realtime voice preset chain |
 | `normalize(samples, sample_rate, target_db?)` | `list[float]` | Normalize peak level to target dB (default: 0.0) |
@@ -111,6 +119,8 @@ See [Room Acoustics](./acoustic-analysis.md) for interpretation notes and when a
 | `remix_aligned_intervals(samples, intervals, sample_rate?, align_zeros?)` | `list[int]` | Resolve the cut points `remix` would use, without cutting; `align_zeros` default `True` |
 | `trim(samples, sample_rate, threshold_db?, frame_length?, hop_length?)` | `list[float]` | Trim silence (defaults: `-60.0` dB, `frame_length=2048`, `hop_length=512`) |
 | `resample(samples, src_sr, target_sr)` | `list[float]` | Resample to target sample rate |
+
+Every edit position takes samples or seconds (`*_sec`), never both; giving both is refused. `SpectralRegionOp` likewise takes `start_sec` / `end_sec`.
 
 `trim(...)` is the simple threshold-based edit helper. The librosa-compatible `trim_silence(...)` helper below uses frame RMS and `top_db`, and returns the trimmed audio together with its original sample range.
 
@@ -171,6 +181,8 @@ Use `realtime_voice_changer_preset_config(preset)` when you want the resolved PO
 
 `realtime_voice_changer_preset_pod(preset)` remains as a compatibility alias.
 
+`formant_mode` (`"relative"` by default, or `"absolute"`) is fixed when the changer is created (preset key `dsp.formant.mode`); `"absolute"` adds one analysis frame of latency and refuses a warp outside [0.55, 1.65]. For stereo, construct the changer with `channels=2` and call `process_planar_stereo(left, right)` or `process_interleaved(samples, channels)`. `StreamingRetune(semitones=, mix=, grain_size=)` runs the retune stage on its own, block by block.
+
 ## librosa-Compatible Helpers
 
 These mirror the corresponding `librosa` functions —
@@ -195,9 +207,10 @@ helper matches.
 | `trim_silence(samples, top_db?, frame_length?, hop_length?)` | `tuple[list[float], int, int]` | `librosa.effects.trim` — returns `(audio, start_sample, end_sample)` |
 | `split_silence(samples, top_db?, frame_length?, hop_length?)` | `list[tuple[int, int]]` | `librosa.effects.split` — non-silent intervals as sample pairs |
 | `split_silence_common(signals, top_db?, frame_length?, hop_length?)` | `list[tuple[int, int]]` | The cut points several takes of one part agree are silent. `signals` is one sequence of sequences, so the signal count and per-signal lengths cannot disagree |
-| `frame_signal(samples, frame_length, hop_length)` | `tuple[int, list[float]]` | `librosa.util.frame` — returns `(n_frames, row-major frames)` |
-| `pad_center(values, size, pad_value?)` | `list[float]` | `librosa.util.pad_center` |
-| `fix_length(values, size, pad_value?)` | `list[float]` | `librosa.util.fix_length` |
+| `split_silence_common_with_report(signals, top_db?, frame_length?, hop_length?)` | `tuple[list[tuple[int, int]], SilenceCommonReport]` | The same cut points plus a report with `silence_ceiling_db`, `max_signal_intervals` and `min_signal_intervals` |
+| `frame_signal(samples, frame_length, hop_length)` | `tuple[int, list[float]]` | `librosa.util.frame`; returns `(n_frames, row-major frames)` |
+| `pad_center(values, target_size, pad_value?)` | `list[float]` | `librosa.util.pad_center` |
+| `fix_length(values, target_size, pad_value?)` | `list[float]` | `librosa.util.fix_length` |
 | `fix_frames(frames, x_min?, x_max?, pad?)` | `list[int]` | `librosa.util.fix_frames`. `x_max` is the inclusive upper bound; omit it (`None`) for no upper bound — `-1` is refused |
 | `peak_pick(values, pre_max, post_max, pre_avg, post_avg, delta, wait)` | `list[int]` | `librosa.util.peak_pick` — returns peak indices |
 | `vector_normalize(values, norm_type?, threshold?)` | `list[float]` | `librosa.util.normalize`. `norm_type`: 0=inf, 1=L1, 2=L2, 3=power |

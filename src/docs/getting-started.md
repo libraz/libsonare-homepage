@@ -1,21 +1,21 @@
 # Getting Started
 
-libsonare is a dependency-free C++17 audio DSP toolkit for music information retrieval (MIR), mastering, mixing, editing, creative FX, and browser-native music tools.
+libsonare is a dependency-free C++17 audio engine for music information retrieval (MIR), mastering, mixing, editing, creative FX, and browser-native music tools. This page takes you from nothing installed to a printed BPM, key, and chord list in the runtime you already use.
 
-If you are unsure which feature or runtime you need, start with the [Learning Path](./learning-path.md). This page assumes you are ready to run a first example.
+If you are unsure which feature you need, start with the [Learning Path](./learning-path.md).
 
 ## What You Will Learn
 
 By the end of this page you should be able to:
 
-- explain the basic sample/sample-rate/mono/stereo vocabulary used by every API;
-- choose the runtime that matches your project before installing anything;
-- run one minimal browser, Python, CLI, or Node native example;
-- know which runtime-specific reference to open next.
+- explain the sample/sample-rate/mono/stereo vocabulary every API uses;
+- pick the runtime that matches your project;
+- install libsonare and print a first analysis result in the browser, Node.js, Python, or a terminal;
+- know which reference to open next.
 
 ## Before You Choose A Runtime
 
-Most examples follow the same pattern: load or decode audio, pass `Float32Array` samples plus a sample rate, then read analysis or processing results. Browser code usually needs you to decode the file first. Python and CLI workflows can usually load common audio files directly.
+Most examples follow the same pattern: load or decode audio, pass `Float32Array` samples plus a sample rate, then read the result.
 
 | Term | Plain meaning |
 |------|---------------|
@@ -23,119 +23,117 @@ Most examples follow the same pattern: load or decode audio, pass `Float32Array`
 | Sample rate | How many samples exist per second, such as 44,100 or 48,000 |
 | Mono | One channel of audio |
 | Stereo | Two channels, left and right |
-| WASM | WebAssembly, the browser runtime used by the npm package |
+| WASM | WebAssembly, the runtime the npm package compiles to; it runs in browsers and in Node.js |
+
+[Audio Basics](./glossary/concepts/audio-basics.md) explains these terms at more length.
 
 ::: info Separate the file from the samples
-MP3 and WAV are file formats. Most libsonare APIs receive decoded PCM samples, such as a `Float32Array` in JavaScript or a sample array in Python. In the browser you decode the file first; in Python and CLI workflows the package can often load the file for you.
+MP3 and WAV are file formats. Most libsonare APIs receive decoded PCM samples, such as a `Float32Array` in JavaScript or a sample array in Python. Every runtime below can decode WAV and MP3 for you; for other formats, the browser decodes the file first, and Python needs an FFmpeg-enabled build.
 :::
 
-## Choose Your Runtime
+## Where Does It Run?
 
-Start with the page that matches where you will run libsonare:
+| Runtime | Install | Reads files directly? | Reference |
+|---------|---------|-----------------------|-----------|
+| Browser | `npm install @libraz/libsonare`, or the [CDN build](./wasm.md#cdn) | Decodes WAV/MP3 bytes; other formats go through the browser's decoder | [WebAssembly Guide](./wasm.md) |
+| Node.js (WASM) | `npm install @libraz/libsonare` (Node.js 22.12 or later) | Decodes WAV/MP3 bytes you read with `node:fs` | [JavaScript API](./js-api.md) |
+| Python | `pip install libsonare` (Python 3.11 or later) | Yes, WAV and MP3; more formats with FFmpeg | [Python API](./python-api.md) |
+| CLI | `pip install libsonare`, which installs the `sonare` command | Yes, the same formats as the Python package | [CLI Reference](./cli.md) |
 
-| You want to... | Use | Start here |
-|----------------|-----|------------|
-| Analyze audio in a web app | Browser WebAssembly package | [Browser / WASM](/docs/wasm) |
-| Analyze files from Python scripts or notebooks | Python package from PyPI | [Python API](/docs/python-api) |
-| Run analysis from a terminal | `sonare` CLI installed from PyPI via `pip install libsonare` | [CLI Reference](/docs/cli) |
-| Add pitch or voice editing | Editing DSP | [Editing DSP](/docs/editing-dsp) |
-| Build a mixer, routing view, or stem renderer | Mixing engine through WASM, Python, Node, or C++ | [Mixing Engine](/docs/mixing) |
-| Build a mastering UI with explainable suggestions | Mastering assistant/profile/preview APIs | [Mastering Assistant](/docs/mastering-assistant) |
-| Build live visualizations or playback tools | Streaming analyzer and realtime engine | [Realtime and Streaming](/docs/realtime-streaming) |
-| Compose, arrange, or render MIDI to audio | Built-in synthesizer and headless-DAW project editing | [Built-in Synthesizer](/docs/native-synth), [Project Editing](/docs/project-editing) |
-| Estimate, synthesize, or morph room acoustics | Room-acoustic helpers | [Room Acoustics](/docs/acoustic-analysis) |
-| Use libsonare from a Node.js backend or desktop tool | Native N-API binding | [Node.js Native](/docs/native-bindings) |
-| Embed the C++ library directly | C++17 library | [C++ API](/docs/cpp-api) |
-| Embed only the built-in instruments in a C++ app | `sonare::midi`, linked on its own | [Link targets](/docs/cpp-api#link-targets) |
+The npm package does not install the `sonare` command. The Node.js native addon and the C++ library are built from source; see [Native Bindings](./native-bindings.md) and [C++ API](./cpp-api.md).
 
-The browser package is primarily sample-based: most APIs take decoded
-`Float32Array` PCM. Its `Audio.fromMemory(...)` helper can decode WAV/MP3 bytes,
-and `Audio.fromMemoryWithBrowserFallback(...)` can use browser codecs for
-supported formats. The Python package and CLI can load WAV/MP3 by default, and
-FFmpeg-enabled builds can load more formats directly.
+## First Result
 
-::: info Package names
-- Browser / WASM: install `@libraz/libsonare` from npm.
-- Python API and CLI: install `libsonare` from PyPI with `pip install libsonare`.
-- Node.js native binding: use `@libraz/libsonare-native` from `bindings/node`; it is currently source-build oriented.
-:::
+Each tab is complete: an install line, the program, and the output it prints. The examples analyze `demo.mp3`, the track the [Music Analysis Studio](/music-analysis) loads, so you can compare your output with the demo.
 
-## Quick Start
+::: code-group
 
-### Browser (WebAssembly)
+```html [Browser]
+<!-- first.html — serve the folder with any static server (for example `npx serve`)
+     and pick demo.mp3 from https://libsonare.libraz.net/demo.mp3 -->
+<input type="file" id="file" accept=".mp3,.wav" />
+<pre id="out"></pre>
+<script type="module">
+  import { init, Audio } from 'https://unpkg.com/@libraz/libsonare';
 
-Decode the file first, then pass mono `Float32Array` samples to libsonare.
-This snippet is complete — paste it into any module script and replace the URL:
+  await init();
+  document.getElementById('file').addEventListener('change', async (event) => {
+    const bytes = new Uint8Array(await event.target.files[0].arrayBuffer());
+    const result = Audio.fromMemory(bytes).analyze();
+    document.getElementById('out').textContent = [
+      `BPM: ${result.bpm.toFixed(1)}`,
+      `Key: ${result.key.name}`,
+      `First chords: ${result.chords.slice(0, 8).map((c) => c.name).join(' ')}`,
+    ].join('\n');
+  });
+</script>
 
-```typescript
-import { init, analyze } from '@libraz/libsonare';
+<!-- Shows:
+BPM: 160.4
+Key: C major
+First chords: C Am C Bm G G#m Em C
+-->
+```
 
-// Initialize the WASM module
+```js [Node.js (WASM)]
+// npm install @libraz/libsonare
+// curl -O https://libsonare.libraz.net/demo.mp3
+// node first.mjs
+import { readFileSync } from 'node:fs';
+import { init, Audio } from '@libraz/libsonare';
+
 await init();
+const audio = Audio.fromMemory(new Uint8Array(readFileSync('demo.mp3')));
+const result = audio.analyze();
 
-// Decode audio with the Web Audio API (the browser decodes; libsonare analyzes)
-const audioContext = new AudioContext();
-const response = await fetch('audio.mp3');
-const arrayBuffer = await response.arrayBuffer();
-const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-const samples = audioBuffer.getChannelData(0); // mono Float32Array
-
-// Analyze audio samples
-const result = analyze(samples, audioBuffer.sampleRate);
-
-console.log('BPM:', result.bpm);
+console.log('BPM:', result.bpm.toFixed(1));
 console.log('Key:', result.key.name);
-console.log('Chords:', result.chords);
+console.log('First chords:', result.chords.slice(0, 8).map((c) => c.name).join(' '));
+
+// BPM: 160.4
+// Key: C major
+// First chords: C Am C Bm G G#m Em C
 ```
 
-Next: read the [WebAssembly Guide](/docs/wasm) and [JavaScript API Reference](/docs/js-api).
-
-### Python
-
-```bash
-pip install libsonare
-```
-
-The standard wheel reads WAV and MP3 files. Rebuild with FFmpeg enabled for
-direct M4A/AAC/FLAC/OGG/Opus input.
-
-```python
+```python [Python]
+# pip install libsonare
+# curl -O https://libsonare.libraz.net/demo.mp3
+# python first.py
 from libsonare import Audio
 
-audio = Audio.from_file("music.mp3")
+audio = Audio.from_file("demo.mp3")
 result = audio.analyze()
 
-print(f"BPM: {result.bpm}")
+print(f"BPM: {result.bpm:.1f}")
 print(f"Key: {result.key.name}")
-print(f"Beats: {len(result.beat_times)}")
+print("First chords:", " ".join(c.name for c in result.chords[:8]))
+
+# BPM: 160.4
+# Key: C major
+# First chords: C Am C Bm G G#m Em C
 ```
 
-Next: read the [Python API Reference](/docs/python-api).
-
-### CLI
-
-Use the CLI when you want a terminal tool for quick checks, batch scripts, or
-JSON summaries. The CLI is installed from PyPI with the Python package. It is
-not provided by the npm WebAssembly package.
-
-```bash
+```bash [CLI]
 pip install libsonare
-sonare analyze music.mp3
-sonare bpm music.mp3
-sonare key music.mp3
+curl -O https://libsonare.libraz.net/demo.mp3
+sonare analyze demo.mp3
+
+# warning: 2-channel input is downmixed to mono by this CLI command; use the stereo library API for channel-preserving processing
+#
+#   > Estimated BPM : 160.42 BPM  (conf 80.7%)
+#   > Estimated Key : C major  (conf 98.3%)
+#   > Time Signature: 4/4
+#   > Beats: 192
 ```
 
-The CLI uses the same audio decoding support as the installed Python package.
+:::
 
-Next: read the [CLI Reference](/docs/cli) for output formats, JSON summaries,
-and available commands.
+`analyze()` returns the whole result in one call: beats, chords, sections and form alongside BPM and key, plus timbre, dynamics, rhythm, and melody. [Music Analysis](./analysis.md) explains each field and when to call a single estimator instead.
 
-### Node.js (Native)
+`Audio.fromMemory` and `Audio.from_file` fold a stereo file to mono, which is what the analysis expects. To decode AAC, OGG, or FLAC in the browser, use `Audio.fromMemoryWithBrowserFallback` ([File Input](./wasm.md#file-input)). A bundled app imports from `'@libraz/libsonare'` instead of the CDN URL.
 
-Use the N-API package — N-API is Node.js's native addon interface, so libsonare
-runs as compiled machine code instead of WebAssembly — when you need native file
-loading and desktop/server-side performance from Node.js. It is currently
-source-build oriented.
+::: details Node.js native addon
+The N-API addon `@libraz/libsonare-native` runs libsonare as compiled machine code instead of WebAssembly and loads files from a path. It is not published to npm, so build it from a checkout:
 
 ```bash
 git clone https://github.com/libraz/libsonare.git
@@ -147,56 +145,39 @@ yarn build
 ```typescript
 import { Audio } from '@libraz/libsonare-native';
 
-const audio = Audio.fromFile('music.mp3');
-const result = audio.analyze();
-
-console.log('BPM:', result.bpm);
-console.log('Key:', result.key.name);
+const result = Audio.fromFile('demo.mp3').analyze();
+console.log('BPM:', result.bpm, 'Key:', result.key.name);
 ```
 
-Next: read [Node.js / Native Bindings](/docs/native-bindings).
+See [Node.js / Native Bindings](./native-bindings.md).
+:::
 
 ## What libsonare Can Do
 
-::: info Room-acoustic terms in the list
-**RIR** means room impulse response — a recording of how a space rings. **Equivalent-room estimate** means a practical room model inferred from audio, not exact measured geometry. **Room morphing** is a creative room effect.
-:::
+| Area | Example | Start page |
+|------|---------|------------|
+| Analysis | BPM, key, chords, beats and downbeats, sections, melody | [Music Analysis](./analysis.md) |
+| Editing and repair | Pitch correction, time stretch, note edits, noise and hum reduction | [Editing DSP](./editing-dsp.md), [Audio Repair Workflow](./audio-repair.md) |
+| Mixing and mastering | Channel strips, sends and buses; mastering chains with LUFS targets and true-peak limiting | [Mixing Engine](./mixing.md), [Mastering Assistant](./mastering-assistant.md) |
+| Instruments and MIDI | A seventeen-engine synthesizer, a GM/GS fallback bank, a SoundFont 2 player | [Sound Sources](./sound-sources.md), [Built-in Synthesizer](./native-synth.md) |
+| Projects and realtime | Headless-DAW projects with offline bounce, streaming analysis, a realtime engine | [Project Editing](./project-editing.md), [Realtime and Streaming](./realtime-streaming.md) |
+| Room acoustics | RT60 and clarity, room estimates from audio, impulse-response synthesis | [Room Acoustics](./acoustic-analysis.md) |
 
-- **BPM Detection** - Tempo estimation using tempogram and autocorrelation
-- **Key Detection** - Musical key detection using Krumhansl-Schmuckler profiles, with optional measured tuning (`tuning: 'auto'`) for recordings that are not at A440
-- **Beat Tracking** - Dynamic programming-based beat extraction, with downbeats and a scored time-signature estimate
-- **Chord Recognition** - Template matching against per-root chord templates: 4 triad qualities by default, 24 qualities across 12 roots once the full template set is enabled, plus Roman-numeral chord functions
-- **Section Detection** - Structural segmentation such as intro, verse, and chorus
-- **Melody / Pitch Tracking** - YIN and pYIN algorithms for F0 detection
-- **Audio Characteristics** - Timbre, dynamics, and rhythm analysis
-- **Room Acoustics** - RT60 / EDT, clarity, definition, octave-band decay, blind and equivalent-room estimates, RIR synthesis, and room morphing
-- **Spectral Features** - Mel spectrogram, MFCC, chroma, CQT/VQT, spectral centroid, and flatness
-- **Audio Effects** - HPSS, time stretch, pitch shift, auto-tune to a key, normalize, and trim
-- **Streaming Analysis** - Chunk-by-chunk processing with BPM/key/chord estimates that update as audio arrives
-- **Mastering** - Preset and configurable mastering chains with LUFS targets, true-peak limiting, EQ, dynamics, repair (analysis and fixed-order repair stages in one call), stereo tools, and reference matching
-- **Mixing** - Channel strips, sends, buses, automation, scene presets, goniometer/true-peak metering, and offline stereo rendering
-- **Editing DSP and inserts** - Direct pitch correction, note-region stretch, and voice-change pitch/formant controls; reverb and ducking are available through named processor or mixer insert paths where enabled
-- **Inverse Feature Helpers** - Approximate STFT/audio reconstruction from mel spectrograms and MFCCs
-- **Built-in Instruments** - A seventeen-engine synthesizer with eleven physical models, a data-free GM/GS fallback bank, and a SoundFont 2 player for samples you bring; [Sound Sources](/docs/sound-sources) explains why no samples ship
-- **Projects and Realtime** - Headless-DAW project editing with MIDI sequencing and offline bounce, plus a realtime engine with transport, track lanes, and live MIDI input
+The [Learning Path](./learning-path.md) lists every area with the page written for each goal.
 
-::: details Acronyms in this list
-- **BPM** — beats per minute; the tempo of the song.
-- **STFT** — short-time Fourier transform; the windowed frequency analysis behind spectrograms.
-- **MFCC** — compact timbre features often used for ML or classification.
-- **CQT / VQT** — frequency analyses shaped around musical pitch spacing.
-- **HPSS** — harmonic/percussive source separation.
-- **LUFS / True Peak** — mastering metrics: LUFS (Loudness Units relative to Full Scale) for perceived loudness, true peak for peak safety including inter-sample peaks (ISP).
-- **Goniometer** — a stereo meter that visualizes width and phase behavior.
+::: details Acronyms in this table
+- **BPM**: beats per minute, the tempo of the song.
+- **LUFS / true peak**: mastering metrics. LUFS (Loudness Units relative to Full Scale) measures perceived loudness; true peak measures peak safety, including peaks between samples.
+- **RT60**: the time a room's reverberation takes to fall by 60 dB.
 :::
 
 ## Try It Now
 
-Visit the [Demos](/demos) to try libsonare in your browser. Simply drag and drop an audio file to see the analysis results.
+The chords you just printed come from chroma frames matched against chord templates. This demo runs the same chord recognition on a short C–Am–F–G clip, computed by the WASM build you just installed:
 
-Or right here: this is a short-time Fourier transform running live in the page, computed by the same WASM build you are about to install.
+<SonareDemo id="chord-track" />
 
-<SonareDemo id="stft-basics" />
+The [Demos](/demos) page has the full browser tools; drop an audio file onto any of them, and nothing is uploaded.
 
 ## Next Steps
 
@@ -205,7 +186,7 @@ You have one example running. What comes next depends on which of two readers yo
 ### If you want to build something
 
 - [Examples](/docs/examples) — the working pattern closest to your task, in each runtime
-- [Learning Path](/docs/learning-path) — a route by goal through the eight subject areas, from analysis to room acoustics
+- [Learning Path](/docs/learning-path) — a route by goal through the ten subject areas, from analysis to playback
 - [Use Cases](/docs/use-cases) — a whole job carried from raw files to a deliverable, as a script you can run
 - [Installation](/docs/installation) — FFmpeg decoding, source builds, and the Node native addon, once the defaults are not enough
 

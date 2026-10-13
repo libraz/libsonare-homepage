@@ -9,10 +9,9 @@ libsonare JavaScript/TypeScript パッケージの librosa 互換ヘルパー関
 
 ## librosa 互換ヘルパー
 
-librosa 互換ヘルパー群です。対応する `librosa` 関数に合わせており、WASM・Node・Python
-すべてのバインディングから利用できます。以下はシグネチャの一覧です。各ヘルパーが対応する
-librosa 関数（引数の対応関係）と使いどころは、[librosa 互換性](/ja/docs/librosa-compatibility)
-を参照してください。
+librosa 互換ヘルパー群です。対応する `librosa` 関数に合わせており、WASM・Node・Python すべてのバインディングから利用できます。以下はシグネチャの一覧です。各ヘルパーが対応する librosa 関数（引数の対応関係）と使いどころは、[librosa 互換性](/ja/docs/librosa-compatibility) を参照してください。位置引数形式はどれも、末尾に `{ validate?: boolean }` を受け取ります。詳しくは[単発 API のリクエストオブジェクト](./js-api.md#単発-api-のリクエストオブジェクト)を参照してください。
+
+Python の関数名は同じですが、セグメンテーション系だけは `segment_` 接頭辞が付きません: `cross_similarity`、`recurrence_matrix`、`recurrence_to_lag`、`lag_to_recurrence`、`path_enhance`、`subsegment`、`agglomerative`。
 
 ### プリエンファシス／ディエンファシス
 
@@ -25,7 +24,7 @@ function deemphasis(samples: Float32Array, coef?: number, zi?: number): Float32A
 
 ### テスト信号の生成
 
-フィクスチャ、キャリブレーション、クリックトラック向けの決定的な信号です。アセットファイルは要りません。
+フィクスチャ、較正、クリックトラック向けの決定的な信号です。アセットファイルは要りません。
 
 ```typescript
 function tone(request?: ToneRequest): Float32Array
@@ -44,12 +43,9 @@ function spectralFlux(request: SpectralFrameRequest & { lag?: number }): Float32
 function onsetBacktrack(request: OnsetBacktrackRequest): Int32Array
 ```
 
-`griffinLim` は STFT の振幅行列から音声を再構成します。`melToAudio` と `mfccToAudio` は
-その mel 領域ラッパーです。`onsetBacktrack` は検出したオンセットフレームを直前のエネルギー
-極小点まで戻します。オンセット位置で音を切り出す前に通しておきたい処理です。
+`griffinLim` は STFT の振幅行列から音声を再構成します。`melToAudio` と `mfccToAudio` はその mel 領域ラッパーです。`onsetBacktrack` は検出したオンセットフレームを直前のエネルギー極小点まで戻します。オンセット位置で音を切り出す前に通しておきたい処理です。
 
-`spectralBandwidth` は Minkowski 指数 `p` を指定できます（位置引数では 5 番目、
-リクエストオブジェクトでは `p`）。`p = 2` 固定ではありません。
+`spectralBandwidth` は Minkowski 指数 `p` を指定できます（位置引数では 5 番目、リクエストオブジェクトでは `p`）。`p = 2` 固定ではありません。
 
 ### 構造と自己類似度
 
@@ -65,15 +61,11 @@ function segmentSubsegment(request: SegmentSubsegmentRequest): Int32Array
 function segmentAgglomerative(request: SegmentAgglomerativeRequest): Int32Array
 ```
 
-「セクションはどこか」への既製の答えは `analyzeSections(...)` です。自己類似度プロットを
-描きたい、あるいは強調済みの recurrence 行列に自前の境界検出をかけたい、といった理由で
-中間行列そのものが欲しいときにこちらを使います。
+「セクションはどこか」への既製の答えは `analyzeSections(...)` です。自己類似度プロットを描きたい、あるいは強調済みの recurrence 行列に自前の境界検出をかけたい、といった理由で中間行列そのものが欲しいときにこちらを使います。
 
 ### ノートセグメンテーション
 
-モノフォニックの F0 トラックを、安定したノート区間に切り分けます。すでに手元にある
-トラック（`pitchYin` / `pitchPyin`、あるいは自前のトラッカーの出力）を、それを生成した
-フレームレートと一緒に渡します。
+モノフォニックの F0 トラックを、安定したノート区間に切り分けます。すでに手元にあるトラック（`pitchYin` / `pitchPyin`、あるいは自前のトラッカーの出力）を、それを生成したフレームレートと一緒に渡します。
 
 ```typescript
 interface NoteSegmentsRequest {
@@ -97,20 +89,14 @@ function noteSegments(request: NoteSegmentsRequest): Array<{
 }>
 ```
 
-`f0Hz` と `voicedProb` は長さが等しく、0 でない必要があります。0 Hz のフレームと、
-`voicedThreshold`（既定 `0.5`）を下回る値は無声として扱われ、そこでノートが切れます。
+`f0Hz` と `voicedProb` は長さが等しく、0 でない必要があります。0 Hz のフレームと、`voicedThreshold`（既定 `0.5`）を下回る値は無声として扱われ、そこでノートが切れます。
 
 `referenceHz` の単位は Hz です。解析の `tuning`（半音の端数）から始める場合は `tuningToReferenceHz(tuning, a4 = 440)` で変換します。逆変換は `referenceHzToTuning(hz, a4 = 440)` です（`tuningToReferenceHz(0.25)` は約 446.4 Hz）。
 
 ::: danger ここに `pitchPyin` の `voicedProb` を渡してはいけない
-フィールド名に反して、ここは pYIN の `voicedProb` を渡す場所では**ありません**。あの値は
-フレームの有声観測**量**であり、フレーム長が一定なら F0 とともに上昇します。つまり確信度では
-なく音高の高さを表しています。これを固定しきい値に通すと、低音域の素材では**セグメントが
-1 つも返らなくなります**。おおよそ C5 より低い定常音は `0.5` に達しないため、全フレームが無声と
-判定され、理由を示すエラーもないまま空配列が返ります。
+フィールド名に反して、ここは pYIN の `voicedProb` を渡す場所では**ありません**。あの値はフレームの有声観測**量**であり、フレーム長が一定なら F0 とともに上昇します。つまり確信度ではなく音高の高さを表しています。これを固定しきい値に通すと、低音域の素材では**セグメントが 1 つも返らなくなります**。おおよそ C5 より低い定常音は `0.5` に達しないため、全フレームが無声と判定され、理由を示すエラーもないまま空配列が返ります。
 
-代わりに**フラグ**を渡してください。`PitchResult.voicedFlag` を `0` / `1` に変換したものです。
-どうしても確率のような系列を使う場合は、扱う音域に合わせて `voicedThreshold` を下げてください。
+代わりに**フラグ**を渡してください。`PitchResult.voicedFlag` を `0` / `1` に変換したものです。どうしても確率のような系列を使う場合は、扱う音域に合わせて `voicedThreshold` を下げてください。
 :::
 
 ### 無音トリム／無音分割
@@ -138,24 +124,15 @@ function splitSilenceCommon(request: {
 }): Int32Array            // 同じフラットなペア配列
 ```
 
-`trimSilence`（`librosa.effects.trim`）はフレーム RMS とピーク RMS からの `topDb` 差で
-無音を判定し、トリム後の音声と元音源上の `[startSample, endSample)` 範囲を返します。
-単純なしきい値トリムの `trim(samples, sampleRate, thresholdDb)` とは別物です。
-`splitSilence`（`librosa.effects.split`）は非無音区間をサンプル単位の開始／終了ペアで返します。
+`trimSilence`（`librosa.effects.trim`）はフレーム RMS とピーク RMS からの `topDb` 差で無音を判定し、トリム後の音声と元音源上の `[startSample, endSample)` 範囲を返します。単純なしきい値トリムの `trim(samples, sampleRate, thresholdDb)` とは別物です。`splitSilence`（`librosa.effects.split`）は非無音区間をサンプル単位の開始／終了ペアで返します。
 
-`splitSilenceCommon` は、**同じパートの複数テイクに対して**同じ問いに一度で答えます。
-テイク同士で共通しているのは音ではなく無音です。あるテイクがブレスを入れる箇所で別のテイクは
-伸ばしている、ということが起きるため、1 本のテイクだけから決めた切れ目は、他のテイクではフレーズの
-途中に落ちます。この関数は各信号に対する `splitSilence` の結果の和集合を、接している区間を
-まとめたうえで返します。したがって返ってきた区間と区間の**あいだ**は、すべてのテイクで同時に
-無音であり、そこに置いた切れ目はどのテイクでも安全です。
+`splitSilenceCommon` は、**同じパートの複数テイクに対して**同じ問いに一度で答えます。テイク同士で共通しているのは音ではなく無音です。あるテイクがブレスを入れる箇所で別のテイクは伸ばしている、ということが起きるため、1 本のテイクだけから決めた切れ目は、他のテイクではフレーズの途中に落ちます。この関数は各信号に対する `splitSilence` の結果の和集合を、接している区間をまとめたうえで返します。したがって返ってきた区間と区間の**あいだ**は、すべてのテイクで同時に無音であり、そこに置いた切れ目はどのテイクでも安全です。
 
 ```typescript
 const cuts = splitSilenceCommon({ signals: [takeA, takeB, takeC], topDb: 55 });
 ```
 
-テイクの長さが揃っていなくてもパディングは不要です。最長の信号より短いものは、自身の終端より先へは
-何も寄与しません。信号を 1 本だけ渡した場合は `splitSilence` とまったく同じ結果になります。
+テイクの長さが揃っていなくてもパディングは不要です。最長の信号より短いものは、自身の終端より先へは何も寄与しません。信号を 1 本だけ渡した場合は `splitSilence` とまったく同じ結果になります。
 
 ### フレーミング／パディングのヘルパー
 
@@ -171,8 +148,7 @@ function fixLength(values: Float32Array, targetSize: number, padValue?: number):
 function fixFrames(frames: Int32Array, xMin?: number, xMax?: number, pad?: boolean): Int32Array
 ```
 
-`frameSignal` は `librosa.util.frame`、`padCenter` / `fixLength` /
-`fixFrames` は対応する `librosa.util` の同名関数と互換です。
+`frameSignal` は `librosa.util.frame`、`padCenter` / `fixLength` / `fixFrames` は対応する `librosa.util` の同名関数と互換です。
 
 ### ピーク検出／ベクトル正規化
 
@@ -194,9 +170,7 @@ function vectorNormalize(
 ): Float32Array
 ```
 
-`peakPick` は `librosa.util.peak_pick`（オンセット包絡線などの 1 次元信号に対する後処理）、
-`vectorNormalize` は `librosa.util.normalize` に対応します。`peakPick` の窓パラメータや
-各 `normType` の意味は [librosa 互換性](/ja/docs/librosa-compatibility) を参照してください。
+`peakPick` は `librosa.util.peak_pick`（オンセット包絡線などの 1 次元信号に対する後処理）、`vectorNormalize` は `librosa.util.normalize` に対応します。`peakPick` の窓パラメータや各 `normType` の意味は [librosa 互換性](/ja/docs/librosa-compatibility) を参照してください。
 
 ### PCEN（チャンネル別エネルギー正規化）
 
@@ -217,8 +191,7 @@ function pcen(
 ): Float32Array
 ```
 
-`pcen` は `librosa.pcen` 互換です。入力は row-major の
-`[nBins x nFrames]` メルスペクトログラム、出力も同じレイアウトです。
+`pcen` は `librosa.pcen` 互換です。入力は row-major の `[nBins x nFrames]` メルスペクトログラム、出力も同じレイアウトです。
 
 ### Tonnetz／Tempogram／PLP
 
@@ -231,10 +204,12 @@ function tonnetz(
 
 function tempogram(
   onsetEnvelope: Float32Array,
-  sampleRate: number,
+  sampleRate?: number,
   hopLength?: number,         // 既定 512
   winLength?: number,         // 既定 384
   mode?: 'autocorrelation' | 'auto' | 'ac' | 'cosine' | 0 | 1,  // 既定 'autocorrelation'
+  center?: boolean,
+  norm?: boolean,
 ): { nFrames: number; winLength: number; data: Float32Array }
 
 function fourierTempogram(
@@ -242,11 +217,13 @@ function fourierTempogram(
   sampleRate?: number,
   hopLength?: number,
   winLength?: number,
+  center?: boolean,
+  norm?: boolean,
 ): { nBins: number; nFrames: number; data: Float32Array }
 
 function cyclicTempogram(
   onsetEnvelope: Float32Array,
-  sampleRate: number,
+  sampleRate?: number,
   hopLength?: number,
   winLength?: number,
   bpmMin?: number,            // 既定 60
@@ -263,7 +240,7 @@ function tempogramRatio(
 
 function plp(
   onsetEnvelope: Float32Array,
-  sampleRate: number,
+  sampleRate?: number,
   hopLength?: number,
   tempoMin?: number,          // 既定 30
   tempoMax?: number,          // 既定 300
@@ -289,7 +266,7 @@ function scaleCorrectionSemitones(root: number, modeMask: number, midi: number, 
 // pitchClass(0..11)が root を基準に modeMask で有効か
 function scalePitchClassEnabled(root: number, modeMask: number, pitchClass: number): boolean
 // モードのマスクをこのレイアウトで返す。mode は教会旋法名または Mode の序数
-function scaleMaskForMode(root: number, mode: KeyMode | Mode): number
+function scaleMaskForMode(root: number, mode: ScaleName | Mode): number  // ScaleName は KeyMode と同じ集合
 ```
 
 ```typescript
@@ -321,8 +298,8 @@ function tuningToReferenceHz(tuning: number, a4?: number): number   // a4 既定
 function referenceHzToTuning(hz: number, a4?: number): number
 
 // 時間 <-> フレーム
-function framesToTime(frames: number, sr: number, hopLength: number): number
-function timeToFrames(time: number, sr: number, hopLength: number): number
+function framesToTime(frames: number, sr?: number, hopLength?: number): number
+function timeToFrames(time: number, sr?: number, hopLength?: number): number
 
 // フレーム <-> サンプル (librosa.frames_to_samples / samples_to_frames 相当)
 function framesToSamples(frames: number, hopLength?: number, nFft?: number): number
@@ -337,7 +314,7 @@ function dbToAmplitude(values: Float32Array, ref?: number): Float32Array
 
 `noteToHz` は解釈できない名前やオクターブが -1〜9（MIDI ノート範囲のオクターブ）の範囲外の名前に、`hzToNote` は有限でも正でもない周波数に対して、`0` や `"?"` を返す代わりに `SonareError` を投げます。
 
-解析オプションはチューニングをセミトーンの端数で表しますが、文字起こしの `referenceHz` やストリーム解析器の `tuningRefHz` は Hz です。`tuningToReferenceHz(tuning)` は `440 * 2 ** (tuning / 12)`、`referenceHzToTuning(hz)` はその逆で、440 以外のコンサートピッチを使うときは `a4` を渡します。
+解析オプションはチューニングをセミトーンの端数で表しますが、採譜の `referenceHz` やストリーム解析器の `tuningRefHz` は Hz です。`tuningToReferenceHz(tuning)` は `440 * 2 ** (tuning / 12)`、`referenceHzToTuning(hz)` はその逆で、440 以外のコンサートピッチを使うときは `a4` を渡します。
 
 ```typescript
 referenceHzToTuning(442);      // 0.0785 セミトーン
@@ -378,16 +355,17 @@ console.log(labelled.map((c) => c.roman));  // 例: ["I", "IV", "V", "I"]
 
 認識できないモード名は `RangeError` を投げます。
 
-`detectKey(...)` と `detectKeyCandidates(...)` は同じ `KeyDetectionOptions` を受け取り、`detectKey(...)` にはさらに `tuning`（`number | 'auto'`）があります。オプションは次のとおりです。
+## キー検出のオプション
 
-| グループ | 値 |
-|----------|----|
-| 制御項目 | `modes`, `profile`, `genreHint`, `useHpss`, `loudnessWeighted`, `highPassHz`, `nFft`, `hopLength` |
-| モード集合 | `'major-minor'`, `'modal'`, `'all'`、または名前のリスト（`['major', 'minor']`）か `Mode` の序数のリスト |
-| プロファイル名 | `ks`, `krumhansl`, `temperley`, `shaath`, `keyfinder`, `faraldo-edmt` / `edmt`, `faraldo-edma` / `edma`, `faraldo-edmm` / `edmm`, `bellman-budge` / `bellman` |
-| ジャンルヒント | `auto`, `edm`, `electronic`, `dance`, `pop`, `classical`, `jazz` |
+`detectKey(...)` と `detectKeyCandidates(...)` は同じ `KeyDetectionOptions` を受け取り、`detectKey(...)` にはさらに `tuning`（`number | 'auto'`、既定 `0`）があります。結果や呼び出し全体は、[解析 API](./js-api-analysis.md) の `detectKey` に記載しています。
 
-
-
-
-
+| オプション | 値 | 既定 |
+|------------|----|------|
+| `modes` | `'major-minor'`, `'modal'`, `'all'`、または名前のリスト（`['major', 'minor']`）か `Mode` の序数のリスト | `'major-minor'` |
+| `profile` | `ks`, `krumhansl`, `temperley`, `shaath`, `keyfinder`, `faraldo-edmt` / `edmt`, `faraldo-edma` / `edma`, `faraldo-edmm` / `edmm`, `bellman-budge` / `bellman` | エンジンの選択に任せる |
+| `genreHint` | `auto`, `edm`, `electronic`, `dance`, `pop`, `classical`, `jazz` | `auto` |
+| `useHpss` | 倍音成分に対して検出する | `false` |
+| `loudnessWeighted` | クロマフレームをラウドネスで重み付けする | `false` |
+| `highPassHz` | クロマ計算前のハイパスのカットオフ。`0` で無効 | `0` |
+| `nFft` | 22050 Hz 換算のサンプル数で表した窓長。入力のレートに合わせて換算される | `4096` |
+| `hopLength` | 入力バッファのサンプル数で表したホップ | `512` |

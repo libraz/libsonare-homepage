@@ -49,14 +49,14 @@ That means an even-Hz grid can waste resolution high up and lack resolution down
 
 <BinSpacingFigure
   title="The same octave, twice"
-  caption="Both panels are one octave wide and drawn the same size. A pitch-aware bank puts twelve bins in each; an STFT puts whatever a constant hertz spacing happens to give it — five bins in the low octave, over 160 in the high one. VQT keeps exactly these pitch-aware bin centres and instead widens the filters at the bottom, where a strict constant Q would need windows long enough to smear timing."
+  caption="Both panels are one octave wide and drawn the same size. A pitch-aware bank puts twelve bins in each; an STFT puts whatever a constant hertz spacing happens to give it — five bins in the low octave, over 160 in the high one. VQT keeps exactly these pitch-aware bin centers and instead widens the filters at the bottom, where a strict constant Q would need windows long enough to smear timing."
 />
 
 | Transform | How it spaces frequency | Use when |
 |-----------|-------------------------|----------|
 | STFT | Evenly in Hz | You want a general time-frequency view |
 | CQT (constant-Q transform) | By musical interval, often one set per semitone | Pitch relationships matter |
-| VQT (variable-Q transform) | Bin centres stay on CQT's per-semitone grid, but the low-frequency filters are widened (lower Q), so they are shorter in time and low notes do not smear | You want CQT-style pitch-aware bins but cleaner timing on bass and low percussion |
+| VQT (variable-Q transform) | Bin centers stay on CQT's per-semitone grid, but the low-frequency filters are widened (lower Q), so they are shorter in time and low notes do not smear | You want CQT-style pitch-aware bins but cleaner timing on bass and low percussion |
 
 ::: details How libsonare computes the STFT
 libsonare's STFT and framing utilities apply a window (Hann by default), advance by `hopLength`, and run a real FFT per frame, producing the magnitude/power spectra that mel, chroma, onset, and tempogram stages reuse. That reuse is scoped: inside `analyze()` (`MusicAnalyzer`) the spectrogram is computed once and shared by the chroma and mel stages, while the standalone per-feature helpers — `chroma()`, `melSpectrogram()`, and the individual key/chord/section analyzers — each run their own STFT. Ask for several features through `analyze()` if you want the FFT paid for once. The `nFft`/`hopLength` defaults (`2048`/`512`) mirror common librosa usage so reference tests can compare outputs. CQT/VQT use log-frequency bins layered on top of the same framing conventions.

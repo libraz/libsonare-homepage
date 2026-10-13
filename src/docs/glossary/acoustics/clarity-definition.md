@@ -18,8 +18,6 @@ C50, C80, and D50 are produced only by `analyzeImpulseResponse(...)`. Blind anal
   caption="C50, C80, and D50 all divide the same impulse response; only the boundary moves. The direct sound and the discrete early reflections land inside the early window, so they reinforce a syllable instead of masking the next one — while everything past the boundary is counted as late energy."
 />
 
-<SonareDemo id="room-decay" />
-
 ## C50 — speech clarity
 
 **C50** is the ratio, in decibels, of the energy in the first **50 milliseconds** to all the energy after it:
@@ -62,4 +60,4 @@ They answer subtly different questions: C50 for *speech*, C80 for *music*, D50 f
 libsonare integrates the squared impulse response on each side of the 50 ms and 80 ms boundaries to form the early and late energy sums, then reports C50 and C80 as 10·log₁₀ of the early/late ratio and D50 as the early/total fraction. The integration stops at the noise-floor truncation point (found by the Lundeby method) — where the decay meets the recording’s noise floor — so background noise after the reverberant tail does not count as late energy and drag the clarity values down. All of that runs on the impulse-response path only. Blind analysis of ordinary music never forms an early/late split at all — it fits a decay rate to the fragments of tail the programme happens to expose — so C50, C80, and D50 are returned as `NaN` there rather than as rough approximations. Because clarity depends on the exact arrival time of the direct sound, the analysis first locates the direct-sound peak and measures the windows relative to it; a mislocated direct sound is one reason a low confidence score should make you treat C50/C80/D50 as approximate.
 :::
 
-Related: [Reverberation Time (RT60 and EDT)](./reverberation-time.md), [Source Distance and DRR](./source-distance.md), [Inverse Room Estimation](./inverse-estimation.md), [Acoustic Analysis](../../acoustic-analysis.md)
+Related: [Reverberation Time (RT60 and EDT)](./reverberation-time.md), [Source Distance and DRR](./source-distance.md), [Inverse Room Estimation](./inverse-estimation.md), [Room Acoustics](../../acoustic-analysis.md)

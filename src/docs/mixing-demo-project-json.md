@@ -5,7 +5,7 @@ description: The browser /mixing demo's project file (v2) — the whole mix stat
 
 # Mixing Demo Project JSON
 
-The [Mixing Studio](/mixing) saves its whole mix state as `libsonare-mix-project.json`: tracks with their clips, strips, sends, and automation, the two aux buses, the master, VCA gains, and the loop range. The file excludes decoded audio. Use **Save project JSON** to write it and **Open project JSON** to read it back; the tracks come back waiting for audio, and each file you add attaches to the track with the same name, otherwise to the next one in order. For the app architecture and source files, see [Build a Browser Mixer](./use-cases/browser-mixer.md).
+The [Mixing Studio](/mixing) saves its whole mix state as `libsonare-mix-project.json`: tracks with their clips, strips, sends, outputs, and automation, the two aux buses, the two subgroup buses, the master, VCA gains, and the loop range. The file excludes decoded audio. Use **Save project JSON** to write it and **Open project JSON** to read it back; the tracks come back waiting for audio, and each file you add attaches to the track with the same name, otherwise to the next one in order. For the app architecture and source files, see [Build a Browser Mixer](./use-cases/browser-mixer.md).
 
 ::: warning This is not the mixer scene format
 This is a different exchange format from the [Mixing Scene JSON](./mixing-scene-json.md) reference. A *scene* describes a whole mixer graph — strips, buses, VCA groups, and connections — and round-trips through `Mixer.toSceneJson()` / `fromSceneJson()`. The demo project file below is the state of a fixed-layout console, read only by the browser demo; the engine's `fromSceneJson(...)` does not accept it, and the demo rejects a scene file.
@@ -45,6 +45,7 @@ The example is abbreviated: a real file lists all six EQ bands and every slot pa
       "soloed": false,
       "soloSafe": false,
       "vcaGroup": null,
+      "outputBus": null,
       "eq": [
         { "type": "HighPass", "frequencyHz": 30, "gainDb": 0, "q": 0.707, "enabled": false }
       ],
@@ -69,6 +70,7 @@ The example is abbreviated: a real file lists all six EQ bands and every slot pa
     "reverb": { "gainDb": 0, "params": { "decay": 0.566, "damping": 0.5, "preDelayMs": 20, "dryWet": 1 } },
     "delay": { "gainDb": 0, "params": { "delayTimeLMs": 250, "delayTimeRMs": 250, "feedback": 0.25, "pingPong": 0, "dryWet": 1 } }
   },
+  "groups": { "group1": { "gainDb": 0 }, "group2": { "gainDb": 0 } },
   "master": {
     "faderDb": 0,
     "slots": {
@@ -84,6 +86,7 @@ The example is abbreviated: a real file lists all six EQ bands and every slot pa
 - `id` is a positive integer, unique within the file. A send at or below `-60` dB is not routed. `lengthSec: null` plays the rest of the source.
 - `eq` has exactly six bands. `type` is one of the engine's EQ band types (`Peak`, `LowShelf`, `HighShelf`, `LowPass`, `HighPass`, `BandPass`, `Notch`, `TiltShelf`, `FlatTilt`, `AllPass`).
 - `curve` is `linear`, `exponential`, `hold`, or `s-curve`, and shapes the segment up to the next point. Each lane is `fader` (dB), `pan`, or `width`.
+- `outputBus` is `"group1"`, `"group2"`, or `null` for the master; any other value is rejected. `groups` holds each subgroup bus's `gainDb` (default 0). A subgroup bus is a summing fader with no inserts. Both are optional, so a v2 file saved without them still opens, with every track on the master.
 - `vcaGroup` is `"A"`, `"B"`, `"C"`, or `null`. `duckKeyTrackId` names the track whose signal keys the `duck` slot, or `null` to key it from the track's own input.
 - A file holds at most eight tracks.
 

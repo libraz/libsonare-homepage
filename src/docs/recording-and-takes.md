@@ -14,7 +14,7 @@ The capture path works in **samples** on the audio thread. The project works in 
 :::
 
 ::: info Take and comp
-A **take** is one recorded attempt. A **comp** is the edited keeper assembled from parts of several takes. In libsonare the original takes stay in the clip; comp segments only choose which take plays over each PPQ range.
+A **take** is one recorded attempt. A **comp** is the edited keeper assembled from parts of several takes. In libsonare the original takes stay in the clip; comp segments only choose which take plays over each PPQ range. See [Takes and comping](./glossary/arrangement/takes-and-comping.md) for the concepts.
 :::
 
 ::: tip Where recording sits in the pipeline
@@ -71,7 +71,9 @@ The realtime engine records into a **capture buffer** you allocate up front. Not
 
 The engine runs in Node, so the whole capture path below is testable outside the browser. Only the microphone section needs a browser.
 
-```typescript
+::: code-group
+
+```typescript [Browser / Node]
 import { init, RealtimeEngine } from '@libraz/libsonare';
 
 await init();
@@ -94,6 +96,27 @@ try {
   engine.destroy();              // the WASM handle is NOT garbage-collected — always release it
 }
 ```
+
+```python [Python]
+import libsonare as sonare
+
+engine = sonare.RealtimeEngine(sample_rate=48000.0, max_block_size=128)
+try:
+    engine.set_capture_buffer(2, 48000 * 10)   # num_channels, capacity_frames: room for 10 s
+    engine.arm_capture()
+    engine.play()
+
+    engine.process([block_l, block_r])         # in a real app, your audio callback
+
+    status = engine.capture_status()
+    # status.captured_frames, overflow_count, armed, punch_enabled, source, record_offset_samples
+
+    channels = engine.captured_audio()         # list[list[float]], one list per channel
+finally:
+    engine.close()
+```
+
+:::
 
 ::: danger Always release the engine
 `RealtimeEngine`, like every embind object, holds a WASM heap handle the JavaScript garbage collector cannot reclaim. Call `engine.destroy()` in a `finally` block. Leaking handles slowly exhausts WASM memory in long sessions.
@@ -125,7 +148,7 @@ try {
 
 ### Record-offset compensation
 
-A live monitoring chain has latency: by the time a player hears the click and plays a note, the engine has already advanced. `setRecordOffsetSamples(offsetSamples)` shifts the captured audio to line it back up with the timeline. A negative offset pulls the recording earlier (the usual direction, to undo round-trip latency); the active value is echoed back in `captureStatus().recordOffsetSamples`.
+A live monitoring chain has latency: by the time a player hears the click and plays a note, the engine has already advanced. `setRecordOffsetSamples(offsetSamples)` moves the capture window along the stream you pass to `process`. A positive value delays capture: with a [punch window](#punch-in-out) of `[start, end)`, the recording covers `[start + offsetSamples, end + offsetSamples)`. When the performer's audio reaches the engine late by the round-trip latency, use a positive offset equal to that latency. The offset acts on the punch window, so without one it changes nothing. The active value is echoed back in `captureStatus().recordOffsetSamples`.
 
 ### Input monitoring
 
@@ -133,7 +156,16 @@ A live monitoring chain has latency: by the time a player hears the click and pl
 
 ### Punch in/out
 
-Punch recording arms capture only inside a chosen timeline region, so a fixed take is left untouched outside it. `setCapturePunch({ startSample, endSample, enabled? })` sets the in/out points in timeline samples, or `setCapturePunch({ startSec, endSec })` in seconds (rounded to the nearest sample at the engine's sample rate). Give one spelling per bound and both bounds; a negative bound, both spellings of one bound, or a missing bound throws a `RangeError`. The positional form `setCapturePunch(startSample, endSample, enabled?)` still works, and Python takes `start_sample` / `end_sample` or the keyword-only `start_sec` / `end_sec`. while `punchEnabled` is true the engine appends only when the transport (the moving play position) is inside `[startSample, endSample)`. Pass `enabled: false` (or `resetCapture()`) to clear the region and return to free recording.
+Punch recording arms capture only inside a chosen timeline region, so a fixed take is left untouched outside it. While `punchEnabled` is true, the engine appends only when the transport (the moving play position) is inside `[startSample, endSample)`.
+
+| Spelling | Call |
+|----------|------|
+| Samples | `setCapturePunch({ startSample, endSample, enabled? })` |
+| Seconds | `setCapturePunch({ startSec, endSec })`, rounded to the nearest sample at the engine's sample rate |
+| Positional | `setCapturePunch(startSample, endSample, enabled?)` |
+| Python | `set_capture_punch(start_sample, end_sample, enabled=True)`, or keyword-only `start_sec` / `end_sec` |
+
+Give one spelling per bound, and both bounds: a negative bound, both spellings of one bound, or a missing bound throws a `RangeError`. Pass `enabled: false` to clear the region and return to free recording. `resetCapture()` empties the buffer but keeps the punch window.
 
 :::: details Track a part, then read it back
 ```typescript
@@ -141,7 +173,8 @@ const engine = new RealtimeEngine(48000, 128);
 try {
   engine.setCaptureBuffer(1, 48000 * 8);   // mono, up to 8 s
   engine.setCaptureSource('input');         // record the live signal, not the mix
-  engine.setRecordOffsetSamples(-256);      // undo ~256 frames of monitoring latency
+  engine.setCapturePunch({ startSec: 0, endSec: 8 });
+  engine.setRecordOffsetSamples(256);       // input arrives ~256 frames late, so capture 256 frames later
   engine.setInputMonitor(true, 1.0);        // let the player hear themselves
   engine.armCapture();
   engine.play();
@@ -191,7 +224,9 @@ For the surrounding AudioWorklet plumbing — building the engine node, register
 
 Loop recording cycles the same musical region over and over while you play, capturing one **take** per pass. `Project.addLoopRecordingTakes(desc)` takes the *concatenated* captured audio for all passes and splits it into per-pass takes on a single new clip:
 
-```typescript
+::: code-group
+
+```typescript [Browser / Node]
 import { init, Project } from '@libraz/libsonare';
 
 await init();
@@ -223,6 +258,31 @@ try {
 }
 ```
 
+```python [Python]
+import libsonare as sonare
+import numpy as np
+
+sample_rate = 48000
+with sonare.Project() as project:
+    project.set_sample_rate(sample_rate)
+    track_id = project.add_track("audio", "vocal")
+
+    # A 4-quarter-note loop at 120 BPM lasts 2 s, so three passes need 3 * 2 s.
+    loop_length_quarters = 4.0
+    passes = 3
+    pass_samples = round(loop_length_quarters * 60 / 120 * sample_rate)   # 96000
+    recorded = np.zeros(passes * pass_samples, dtype=np.float32)          # your concatenated passes
+
+    clip_id, take_count = project.add_loop_recording_takes(
+        track_id, 0.0, loop_length_quarters, recorded,
+        audio_channels=1, audio_sample_rate=sample_rate, partial_tail="keep",
+    )   # take_count == 3
+```
+
+:::
+
+Node uses the same calls as the browser tab.
+
 ::: warning Supply enough audio for the takes you claim
 `loopLengthPpq` is measured in quarter notes, so its duration depends on tempo: a 4-quarter-note loop is 2 s at 120 BPM but 4 s at 60 BPM. Set the project tempo first, work out the per-pass sample count from it, and supply `passes * passSamples` frames. Hand in less and you simply get fewer takes than you expected.
 :::
@@ -239,7 +299,9 @@ Pass `partialTail: 'drop'` (Python `partial_tail="drop"`) to leave the partial t
 
 A clip can carry an ordered list of **takes** plus an **active take id** (the take that plays when no comp says otherwise) and a list of **comp segments** (PPQ ranges, each pointing at the take to play there). Both are undoable edits and both round-trip through JSON.
 
-```typescript
+::: code-group
+
+```typescript [Browser / Node]
 // takes: each has a stable id; sourceOffsetPpq slides a take's source under the clip.
 project.setClipTakes(clipId, [
   { id: 1, name: 'take A' },
@@ -253,7 +315,23 @@ project.setClipCompSegments(clipId, [
 ]);
 ```
 
-Each `ProjectClipTake` is `{ id, sourceId?, sourceOffsetPpq?, name? }`; each `ProjectClipCompSegment` is `{ startPpq, endPpq, takeId?, crossfadePpq? }`. Take ids must be unique, and any *non-zero* `takeId` referenced by a comp segment must match an existing take — a bad non-zero reference throws, so the edit fails loudly rather than corrupting the clip. A `takeId` of `0` (or omitted) is the deliberate exception: it falls back to the clip's active/base take for that region, so you can leave a segment on the active take without naming an id.
+```python [Python]
+# takes: each has a stable id; source_offset_ppq slides a take's source under the clip.
+project.set_clip_takes(clip_id, [
+    {"id": 1, "name": "take A"},
+    {"id": 2, "source_offset_ppq": 0.0, "name": "take B"},
+], 2)   # active_take_id
+
+# comp segments: each PPQ range picks one take. Verses from A, chorus from B.
+project.set_clip_comp_segments(clip_id, [
+    {"start_ppq": 0.0, "end_ppq": 2.0, "take_id": 1},
+    {"start_ppq": 2.0, "end_ppq": 4.0, "take_id": 2},
+])
+```
+
+:::
+
+Each `ProjectClipTake` is `{ id, sourceId?, sourceOffsetPpq?, name? }`; each `ProjectClipCompSegment` is `{ startPpq, endPpq, takeId?, crossfadePpq? }`. Take ids must be unique, and any *non-zero* `takeId` referenced by a comp segment must match an existing take — a bad non-zero reference throws, so the edit fails loudly rather than corrupting the clip. Segments must also be in order, must not overlap, must stay inside the clip, and each must have a positive length. A `takeId` of `0` (or omitted) is the deliberate exception: it falls back to the clip's active/base take for that region, so you can leave a segment on the active take without naming an id.
 
 ### Softening the seam
 
@@ -266,7 +344,7 @@ project.setClipCompSegments(clipId, [
 ]);
 ```
 
-`0` — the default — is the butt join: segments meet with no overlap. A fade cannot outrun either its own segment or the part ahead of it, and the first segment has nothing in front of it, so a crossfade there is held at `0`.
+`0`, the default, is the butt join: segments meet with no overlap. A crossfade must fit inside both its own segment and the stretch of the previous part ahead of it, and the first segment has nothing ahead of it, so it takes `0` only. A value beyond those limits makes `setClipCompSegments` throw `InvalidParameter`; it is not clamped.
 
 The third argument, `activeTakeId`, is optional and defaults to `0`. Pass `0` (or omit it) and the clip keeps playing its **base source** with no active-take override — useful when you have defined takes but do not want any of them to replace the original clip audio by default. Any non-zero `activeTakeId` must match the `id` of one of the takes you pass; take ids themselves are always non-zero, so `0` unambiguously means 'no active take'.
 
@@ -305,11 +383,39 @@ restored.delete();
 
 ## Comping free takes: shared cut points and alignment
 
-Loop takes arrive on the grid: every pass covers the same PPQ range, so `addLoopRecordingTakes` can split them by length alone. Takes recorded as separate passes — each a fresh run through the part against a guide vocal or a backing track — do not. Comping them means cutting every take at the same places, which only works while the takes share a timeline; a take sung live drifts against its reference throughout, a little ahead here and a little behind there, so no single offset places it. Three calls cover this ground: `splitSilenceCommonWithReport` finds the cut points every take agrees on and says whether the takes line up well enough to have any; `remixAlignedIntervals` turns those cut points into one frame set for all channels of a stereo take; `alignTakeToReference` handles the take that does not line up, returning the warp map that puts it under the reference. Signatures are on the [JavaScript API](./js-api-audio.md) page; this section is the order they go in and how to read what they return.
+Loop takes arrive on the grid: every pass covers the same PPQ range, so `addLoopRecordingTakes` splits them by length alone. Takes recorded as separate passes, each a fresh run through the part against a guide vocal or a backing track, do not. A take sung live drifts against its reference, a little ahead here and a little behind there, so no single offset places it, and comping needs every take cut at the same places. Signatures are on the [JavaScript API](./js-api-audio.md) page; this section gives the order the calls go in and how to read what they return.
+
+| Situation | Call | Result |
+|-----------|------|--------|
+| Takes line up (loop passes, takes tracked to a click) | `splitSilenceCommonWithReport`, then `remixAlignedIntervals` | Shared cut points, the same frames on every channel |
+| One take drifts against the reference | `alignTakeToReference`, then `setWarpMap` | Warp anchors; the comp is cut on the project timeline |
+| Unsure which applies | Read `report.silenceCeilingDb` against `topDb` | The table under [Cut points the takes share](#cut-points-the-takes-share) |
+
+<FlowDiagram
+  title="Choosing a path for free takes"
+  :nodes="[
+    { id: 'takes', label: 'Free takes', col: 0, row: 1, variant: 'muted' },
+    { id: 'split', label: 'splitSilenceCommonWithReport', col: 1, row: 1, variant: 'accent' },
+    { id: 'read', label: 'Read silenceCeilingDb', col: 2, row: 1, variant: 'decision' },
+    { id: 'lower', label: 'Re-run with a lower topDb', col: 3, row: 0 },
+    { id: 'marker', label: 'Cut at a marker or a beat', col: 3, row: 1 },
+    { id: 'align', label: 'alignTakeToReference, then setWarpMap', col: 3, row: 2 },
+    { id: 'remix', label: 'remixAlignedIntervals', col: 3, row: 3, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'takes', to: 'split' },
+    { from: 'split', to: 'read' },
+    { from: 'read', to: 'lower', label: 'below topDb' },
+    { from: 'read', to: 'marker', label: 'near 0' },
+    { from: 'read', to: 'align', label: 'one interval' },
+    { from: 'read', to: 'remix', label: 'cut points found' }
+  ]"
+  caption="The report decides: cut points found go straight to the remix; a take that is out of time is warped under the reference first."
+/>
 
 ### Cut points the takes share
 
-What takes of one part share is their silence, not their sound: a take that happens to go quiet where another is still singing must not be cut there. `splitSilenceCommon({ signals })` takes all the takes at once and returns the **union** of each take's sounding intervals — the same flat `[start0, end0, start1, end1, …]` `Int32Array` that `splitSilence` returns for one signal — merged where they touch, so every gap between the returned intervals is silent in all takes at once and a cut placed in a gap lands mid-phrase in none of them. Takes of unequal length need no padding: a shorter take contributes nothing past its own end, which is the same as being silent there. A single signal answers exactly as `splitSilence` does. Cutting is left to you, and it is an array slice.
+What takes of one part share is their silence, not their sound: a take that happens to go quiet where another is still singing must not be cut there. `splitSilenceCommon({ signals })` takes all the takes at once and returns the **union** of each take's sounding intervals, in the same flat `[start0, end0, start1, end1, …]` `Int32Array` that `splitSilence` returns for one signal, merged where they touch, so every gap between the returned intervals is silent in all takes at once and a cut placed in a gap lands mid-phrase in none of them. Takes of unequal length need no padding: a shorter take contributes nothing past its own end, which is the same as being silent there. A single signal answers exactly as `splitSilence` does. Cutting is left to you, and it is an array slice.
 
 `splitSilenceCommonWithReport` returns the identical intervals plus a `report`. The report exists because one interval covering everything is the answer to three different situations, and the interval list cannot separate them:
 
@@ -325,11 +431,11 @@ const { intervals, report } = splitSilenceCommonWithReport({
 // report    -> { silenceCeilingDb, maxSignalIntervals, minSignalIntervals }
 ```
 
-Read `silenceCeilingDb` — the largest `topDb` at which **every** take still shows silence — against the `topDb` you passed:
+Read `silenceCeilingDb`, the largest `topDb` at which **every** take still shows silence, against the `topDb` you passed:
 
 | `silenceCeilingDb` | What it says | What to do |
 |--------------------|--------------|------------|
-| Near `0` | A take never stops sounding; no threshold can open a gap in it | Take the cut points from something other than silence — a marker, a beat |
+| Near `0` | A take never stops sounding; no threshold can open a gap in it | Take the cut points from something other than silence: a marker, a beat |
 | Below `topDb` | The threshold was too loose to see the quiet these takes do have | Re-run with a `topDb` under the reported ceiling; that figure cuts |
 | At or above `topDb`, and still one interval | Every take goes quiet at this setting, but never in the same place | The takes are out of time with each other — align them first (below) |
 
@@ -358,7 +464,7 @@ Two guards keep a slice from vanishing: a channel with no sign change at all (si
 
 ### Aligning a take that drifts
 
-When the report puts the ceiling at or above `topDb` and still returns one interval, the takes each go quiet but never together: they are out of time with each other, and no threshold fixes that. `alignTakeToReference` measures a chromagram (the twelve pitch classes over time) for the reference and for the take, aligns the two with dynamic time warping, and returns the alignment as project **warp anchors** — the `{ warpSample, sourceSample }` pairs [`setWarpMap`](./project-editing.md#warp-stretching-clips-to-the-grid) accepts, already oriented for a clip whose source is the take: `warpSample` is a position on the **reference** timeline and `sourceSample` the matching position in the **take**. The recording itself is untouched; the clip plays it stretched under the reference.
+When the report puts the ceiling at or above `topDb` and still returns one interval, the takes each go quiet but never together: they are out of time with each other, and no threshold fixes that. `alignTakeToReference` measures a chromagram (the twelve pitch classes over time) for the reference and for the take, aligns the two with dynamic time warping, and returns the alignment as project [**warp anchors**](./glossary/arrangement/warp-and-tempo.md), the `{ warpSample, sourceSample }` pairs [`setWarpMap`](./project-editing.md#warp-stretching-clips-to-the-grid) accepts, already oriented for a clip whose source is the take: `warpSample` is a position on the **reference** timeline and `sourceSample` the matching position in the **take**. The recording itself is untouched; the clip plays it stretched under the reference.
 
 ```typescript
 import { alignTakeToReference, Project } from '@libraz/libsonare';
@@ -386,21 +492,26 @@ try {
 }
 ```
 
-A warp map belongs to a clip, so each aligned take gets its own clip and its own map; once they all play in time under the reference, the comp is cut on that shared timeline with `splitClip` and trims, and a `'time-stretch'` clip takes the new map from the next audio block with no re-bake. The anchors are already reduced to the strictly increasing form a warp map requires — a DTW path holds one axis still wherever the two recordings differ in speed, and a run of tied coordinates is represented by its middle anchor — so the result goes into `setWarpMap` as it is. `alignment` says how well the pair was conditioned: `takeFrames / referenceFrames` is the overall rate difference the anchors encode, and `meanResidualFrames` is the mean absolute departure of the path from its own diagonal trend — a coarse indication of how much the take disagrees with the reference, not an error bound. None of these figures fails the call; a caller deciding what is acceptable supplies its own threshold.
+A warp map belongs to a clip, so each aligned take gets its own clip and its own map. Once they all play in time under the reference, cut the comp on that shared timeline with `splitClip` and trims; a `'time-stretch'` clip takes the new map from the next audio block with no re-bake. The anchors are already reduced to the strictly increasing form a warp map requires (a DTW path holds one axis still wherever the two recordings differ in speed, and a run of tied coordinates is represented by its middle anchor), so the result goes into `setWarpMap` as it is.
+
+`alignment` describes how the pair was conditioned. None of these figures fails the call; a caller deciding what is acceptable supplies its own threshold.
+
+- `takeFrames / referenceFrames` is the overall rate difference the anchors encode.
+- `meanResidualFrames` is the mean absolute departure of the path from its own diagonal trend: a coarse indication of how much the take disagrees with the reference, not an error bound.
 
 ::: warning What is refused, and how
 A take that cannot be aligned is reported, never answered with a map you cannot use. Two layers refuse, and which one answers decides what you are told:
 
-- **Named by field, before the measurement.** An empty buffer (`reference must not be empty`, `take must not be empty`), a non-finite sample (`reference contains NaN or Inf`, `take contains NaN or Inf`), a `sampleRate` or `takeSampleRate` that is not an integer in `[8000, 384000]`, and a `hopLength` or `binsPerOctave` of the wrong shape (a string, a fraction) all throw a `RangeError` that names the offending field.
+- **Named by field, before the measurement.** An empty buffer (`reference must not be empty`, `take must not be empty`), a non-finite sample (`reference contains NaN or Inf`, `take contains NaN or Inf`), a `sampleRate` or `takeSampleRate` that is not an integer in `[8000, 384000]`, and a `hopLength` or `binsPerOctave` that is not an integer all throw a `RangeError` that names the offending field. A value that is not a number at all throws a `TypeError`.
 - **`SonareError` `InvalidParameter`, from the measurement.** A negative `hopLength`; a `binsPerOctave` that is negative or not a multiple of 12 (each pitch class is the mean of a whole number of CQT bins, so 13 and 18 have no fold); and a pair that yields no two distinct anchors — either recording shorter than one chroma frame is what that looks like. The core reports the condition without naming an argument.
 
 A multiple of 12 is necessary, not sufficient: the finest usable `binsPerOctave` depends on the sample rate and does not rise with it, so leave the field at its default unless a finer grid has been checked at the rate it will run at. Omitting either field, or writing `0`, selects the library value.
 
-**Sample rates.** `sampleRate` is the reference's rate and `takeSampleRate` (Python `take_sample_rate`, C `sonare_align_take_to_reference_ex`) the take's; when they differ the take is resampled onto the reference's grid before measuring. Both anchor axes come back in samples at the **reference** rate, and `hopLength` is at that rate too. A project reads warp anchors in samples at the project rate, so multiply `warpSample` and `sourceSample` by the project rate over the reference rate before `setWarpMap` (the example above has them equal). The CLI counterpart, `sonare project align-takes`, reads the reference and each take from their files, aligns a take at another rate, and writes the anchors at the project rate.
-:::
+Sample rates:
 
-::: tip Which path, decided by the report
-Takes that already line up — loop passes, or takes tracked to a click — go straight from `splitSilenceCommonWithReport` to `remixAlignedIntervals` and the comp. `alignTakeToReference` is for the take the report flags as out of time: warp it under the reference first, and cut the comp on the project timeline rather than on shared silence.
+- `sampleRate` is the reference's rate and `takeSampleRate` (Python `take_sample_rate`, C `sonare_align_take_to_reference_ex`) the take's. When they differ, the take is resampled onto the reference's grid before measuring.
+- Both anchor axes come back in samples at the **reference** rate, and `hopLength` is at that rate too.
+- A project reads warp anchors in samples at the project rate, so multiply `warpSample` and `sourceSample` by the project rate over the reference rate before `setWarpMap` (the example above has them equal). The CLI counterpart, `sonare project align-takes`, reads the reference and each take from their files, aligns a take at another rate, and writes the anchors at the project rate.
 :::
 
 ## Drawing the recorded waveform
@@ -464,36 +575,6 @@ try {
 } finally {
   engine.destroy();
 }
-```
-::::
-
-:::: details Punch-record a fix into a fixed take
-Re-record only one phrase without touching the rest.
-
-```typescript
-const inSample = Math.round(2.0 * 48000);    // punch in at 2 s
-const outSample = Math.round(4.0 * 48000);   // punch out at 4 s
-engine.setCapturePunch({ startSample: inSample, endSample: outSample });
-// or in seconds: engine.setCapturePunch({ startSec: 2, endSec: 4 });
-engine.setCaptureSource('input');
-engine.armCapture();
-engine.play();
-// Capture appends only while the transport is inside [inSample, outSample).
-```
-::::
-
-:::: details Loop-record three takes, then comp them
-Capture three passes of a 2-bar phrase, split into takes, keep the best halves.
-
-```typescript
-const result = project.addLoopRecordingTakes({
-  trackId, startPpq: 0, loopLengthPpq: 4,
-  audio: threePassesOfAudio, audioChannels: 1, audioSampleRate: 48000,
-});
-project.setClipCompSegments(result.clipId, [
-  { startPpq: 0, endPpq: 2, takeId: 1 },
-  { startPpq: 2, endPpq: 4, takeId: 2 },
-]);
 ```
 ::::
 

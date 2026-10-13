@@ -28,12 +28,12 @@ Key detection starts from a mean chroma vector: the 12 pitch-class bins are aver
 
 A key profile is a 12-number template of how strongly each pitch class is expected to appear in a given key. The default profile is Krumhansl-Schmuckler, a classic set of reference pitch-class weights derived from listener experiments. The implementation can also use other profile families (Shaath, Faraldo EDM variants, Bellman-Budge, and Temperley), each tuned for different material; `genreHint` can steer the choice, and `auto` keeps the historical behavior unless another profile has clearly stronger evidence.
 
-The candidate set is the 24 major and minor keys by default. `modes` widens it to the five church modes (`'modal'`) or to all seven (`'all'`).
+The candidate set is the 24 major and minor keys by default. `modes` widens it to the five church modes (`'modal'`) or to all seven (`'all'`). Options and defaults (`profile`, `modes`, `genreHint`, `tuning`): [Music Analysis](../../analysis.md#key).
 
 The WASM and Node bindings report the winning `mode` as a name — `'major'`, `'minor'`, `'dorian'`, ... — and `root` is a pitch-class number (C = 0) on Node, WASM and Python alike. Inputs that take a key (`keyRoot` / `keyMode` of `detectChords` and the chord-function helpers) accept a pitch-class name (`'C#'`) or a number, and a mode name or ordinal. The result also carries the `tuning` the chroma was built with; pass `tuning: 'auto'` to have it measured first (see [Chroma Features](./chroma-features.md)).
 
 ::: warning The modal profiles do not have the standing the major/minor ones do
-Every major and minor profile above is a published one, derived from listening experiments or from a corpus. The five modal profiles (Dorian, Phrygian, Lydian, Mixolydian, Locrian) are not: they are a stated construction in the same shape, built from six named weights that put the tonic highest, then its fifth and third, then the degree that separates the mode from its major or minor neighbour, then the remaining scale tones, with everything outside the scale suppressed. The ordering is what carries the meaning; the exact numbers only place each weight between its neighbours. No probe-tone study or annotated corpus stands behind them, so read a modal result as a plausible heuristic rather than as a measurement — see the [FAQ](../../faq.md) for the full account.
+Every major and minor profile above is a published one, derived from listening experiments or from a corpus. The five modal profiles (Dorian, Phrygian, Lydian, Mixolydian, Locrian) are not: they are a stated construction in the same shape, built from six named weights that put the tonic highest, then its fifth and third, then the degree that separates the mode from its major or minor neighbor, then the remaining scale tones, with everything outside the scale suppressed. The ordering is what carries the meaning; the exact numbers only place each weight between its neighbors. No probe-tone study or annotated corpus stands behind them, so read a modal result as a plausible heuristic rather than as a measurement — see the [FAQ](../../faq.md) for the full account.
 :::
 
 <SonareDemo id="chromagram" />
@@ -63,8 +63,21 @@ Confidence is also not proof that the track has one unambiguous key. Modal mixtu
 
 Use `detectKeyCandidates` when the runner-up matters. For UI, showing the top candidate plus confidence is usually better than treating the key as a fixed label.
 
+## From a detected key to a project annotation
+
+A project can carry key regions as an annotation stream on its timeline, so the key travels with the arrangement and survives save and load. `detectKey` already returns the tonic as a pitch class (`root`, C = 0 … B = 11), which is what an annotation's `tonicPc` takes. The mode needs converting: the annotation numbering reserves 0 for "unknown", so `keyModeFromAnalysis(mode)` maps `'major'` to 1, `'minor'` to 2, `'dorian'` to 3, and so on up to 7.
+
+```typescript
+const key = detectKey(samples, sampleRate);
+project.annotateKeys([
+  { startPpq: 0, endPpq: 64, tonicPc: key.root, mode: keyModeFromAnalysis(key.mode) },
+]);
+```
+
+`annotateKeys` replaces the whole key stream in one undoable edit, and the saved project JSON carries it under `annotation.keys`. A track that modulates gets one segment per key region, with the boundaries placed in quarter notes by the caller. See [Project MIDI](../../project-editing-midi.md#key-and-chord-annotation-write-back) for the field encodings and the Python and C names.
+
 ::: details How libsonare computes it
 `KeyAnalyzer` computes chroma with default `n_fft = 4096` and `hop_length = 512`, then scores root/mode candidates by profile correlation. `assign_posterior_confidences` subtracts the best correlation from each, divides by `kConfidenceTemperature`, exponentiates and normalizes; `evidence_score()` is half the winner's rescaled correlation plus half its gap over the runner-up capped at `kFullDistinctivenessGap` (0.2). Options can enable harmonic HPSS input, RMS loudness weighting, a high-pass cutoff, explicit candidate modes, and genre/profile hints. `estimate_key_from_chords` and `refine_key_with_chords` provide chord-progression-aware helpers in the native layer — they report the progression's diatonic share in the `confidence` field rather than the softmax posterior described above — while the JS/Python detection helpers expose chroma-profile key estimates and candidate lists.
 :::
 
-Related: [Chroma Features](./chroma-features.md), [Chord Recognition](./chord-recognition.md), [MIR Overview](../concepts/mir-overview.md)
+Related: [Chroma Features](./chroma-features.md), [Chord Recognition](./chord-recognition.md), [MIR Overview](../concepts/mir-overview.md), [Project MIDI](../../project-editing-midi.md)

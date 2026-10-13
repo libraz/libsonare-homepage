@@ -19,13 +19,6 @@ The tempo map is a list of **tempo segments**. Each segment says "from this poin
 
 Alongside the tempo map are **time signatures** (4/4, 3/4, 6/8…), which set how many beats make a bar. Together the tempo map and the time signatures define the **musical grid** — the bars-and-beats ruler that every clip position from [Clips and Tracks](./clips-and-tracks.md) is measured against.
 
-```
-seconds  0        2        4        6        8        10
-tempo    │ 90 BPM          │ ramp 90→120     │ 120 BPM        │
-bars     1        2        3        4        5        6
-         └ a clip warped to this map stretches to match each region
-```
-
 The grid is the thing a clip warps *to*, so it helps to see how tempo turns musical positions into seconds. Drag the tempo below and watch the bars compress or spread against a fixed seconds ruler — that is exactly the mapping a clip has to follow.
 
 <SonareDemo id="tempo-grid" />
@@ -72,7 +65,7 @@ That design sets what it costs and what it sounds like.
 
 - **A configurable voice budget.** The stretcher's state is preallocated so the audio thread never allocates. The pool starts with 8 voices, accepts capacities from 0 through 64, and can be changed with `setWarpVoiceCapacity`. Capacity 0 disables `time-stretch` without incrementing the overflow counter; a prepared engine rebuilds the pool and restarts active WSOLA state when the capacity changes. How voices are assigned and how to watch the overflow counter is on [Realtime Engine](../../realtime-engine.md#the-time-stretch-voice-budget).
 - **Transients survive; dense textures can double.** A slice is the source itself, so a drum hit keeps its attack shape. On sustained, polyphonic material — a pad, a choir — a large stretch repeats or skips slices that no single offset can align for every note at once, and the result is a faint doubling or flutter rather than the phase vocoder's smear.
-- **A roughly 10 ms grain.** Position is honoured to within the search radius: each frame lands within about 10 ms of where the map points, which is invisible for tempo following and only matters when lining up sample-exact edits.
+- **A roughly 10 ms grain.** Position is honored to within the search radius: each frame lands within about 10 ms of where the map points, which is invisible for tempo following and only matters when lining up sample-exact edits.
 
 Reach for `time-stretch` when the map is going to *change while audio runs* — a tempo the user is dragging, an anchor being nudged, a groove being auditioned — because the next block simply reads the new map. On the raw engine it is also the pitch-preserving mode that works with paged clips, where `tempo-sync` bakes and therefore cannot. Reach for `tempo-sync` when the map is settled and the material is sustained or harmonic, where the vocoder's whole-clip view gives the cleaner stretch.
 
@@ -89,7 +82,7 @@ Each anchor ties a position in the source audio to a position on the project tim
 />
 
 ::: tip Your app owns the anchors
-The engine reads anchors, it does not invent them. Each anchor is an absolute pair of sample positions, so a clip bends to the grid exactly as far as the map you supplied says — and editing the tempo map afterwards does not rewrite it. A host that lets the user change tempo has to recompute the anchors and push a new warp map. A map with fewer than two anchors describes no stretch at all: a `repitch` or `time-stretch` clip then plays at its native rate, and a `tempo-sync` clip fails to compile.
+The engine reads anchors, it does not invent them. Each anchor is an absolute pair of sample positions, so a clip bends to the grid exactly as far as the map you supplied says — and editing the tempo map afterwards does not rewrite it. A host that lets the user change tempo has to recompute the anchors and push a new warp map. `setWarpMap` refuses a map with fewer than two anchors. A `repitch` or `time-stretch` clip with no warp map attached plays at its native rate, and a `tempo-sync` clip with none fails to compile.
 :::
 
 ::: warning tempo-sync is real time-stretching, with limits

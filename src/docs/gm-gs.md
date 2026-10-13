@@ -19,20 +19,7 @@ What lives here is the concrete side of GS — the addresses, the tables, the pe
 
 ## The GM fallback bank
 
-The GM fallback is not just a last-resort sine bank. When a SoundFont is absent or incomplete, NativeSynth chooses the closest built-in synthesis voice for the requested GM program. The piano has been tuned; every other physical fallback model still awaits adjustment and calibration. Further work is planned for future patch releases. The goal is useful, data-free preview and missing-program coverage, not final sampled-instrument realism.
-
-| GM area | Data-free fallback voice |
-|---------|--------------------------|
-| Programs 0-7, keyboard | Extended-waveguide grand piano, FM electric pianos/clavinet, and the jack-and-plectrum harpsichord with its three registrations |
-| Programs 8-15, chromatic percussion | Modal celesta, glockenspiel, music box, vibraphone, marimba, xylophone, and tubular bells, plus a Karplus-Strong dulcimer |
-| Programs 16-23, organ | Additive drawbar organs (16-18), the physical church-organ flue pipe (19), and free-reed-engine reed-organ/accordion, harmonica, and bandoneon voices (20-23) |
-| Programs 24-37, guitar and bass | Karplus-Strong nylon, steel, electric, muted/overdriven/distorted guitars, and dedicated bass variants |
-| Programs 40-47, strings/orchestra | Bowed violin family, a tremolo-strings pad, Karplus-Strong pizzicato strings and harp, and a timpani fallback |
-| Programs 52-54, choir/voice | Choir-aahs, voice-oohs, and synth-voice programs voiced on the dedicated source-filter vocal engine |
-| Programs 56-79, brass/reed/flute | Provisional lip-reed brass (56-60) and FM brass (61-63), plus reed woodwinds/saxophones and air-jet flutes |
-| Programs 104-107, ethnic plucked | Buzzing-bridge plucked-string sitar (104), shamisen (106), and koto (107); the banjo (105) stays on Karplus-Strong |
-| Programs 112-119, percussive | Percussion-engine tinkle bell, agogo, steel drums, woodblock, taiko drum, melodic tom, synth drum, and reverse cymbal |
-| Drums and GS variants | GM/GS drum-kit variants and GM2/GS bank fallbacks, with GS EFX routed to built-in insert chains where available |
+The GM fallback is not just a last-resort sine bank. When a SoundFont is absent or incomplete, NativeSynth chooses the closest built-in synthesis voice for the requested GM program: the piano on its calibrated engine, other acoustic instruments on physical models, electric pianos and synth brass on FM, and synth leads, pads and effects on subtractive oscillators. Drums go to the GM/GS drum-kit variants, with GS EFX routed to built-in insert chains where available. [GM Tone Map](./gm-tone-map.md) lists the engine for each of the 128 programs. The goal is useful, data-free preview and missing-program coverage, not final sampled-instrument realism; [Built-in Synthesizer](./native-synth.md) says which engines are calibrated.
 
 One note worth knowing up front: named pipe-organ colors like `bourdon` and `trumpet-rank` live only in the named preset catalog, not in GM program routing (program 19 is the church-organ flue pipe, and programs 20-23 are the free-reed reed-organ, harmonica, and bandoneon).
 
@@ -136,8 +123,8 @@ Every set is a **re-voicing of the one shared percussion model**, not a second c
 | 53 | 24 | Cymbal & Claps | Map 3 | one-shot set — plays the Standard voicing |
 | 58 | 25 | Rhythm FX 2 | Map 3 | one-shot set — plays the Standard voicing |
 
-::: warning One-shot sets and Sound-Effects programs are addressed, not yet modeled
-Four rhythm sets are banks of individual one-shot recordings on real GS hardware rather than re-voiced kits: **SFX** (program 56), **Rhythm FX** (57), **Cymbal & Claps** (53), and **Rhythm FX 2** (58). There is nothing for a membrane model to reshape, so the player addresses and names them while the fallback map sends all four through to the Standard kit's voicing. The GM **Sound-Effects** programs (120-127, Guitar Fret Noise through Gunshot, covered in the [GM tone map](./gm-tone-map.md)) are in the same position and share one generic noise-based voice. Both gaps are in the data-free fallback only: a SoundFont that supplies real samples for those addresses plays back normally through the [SF2 player](./soundfont-player.md).
+::: warning One-shot sets are addressed, not modeled
+Four rhythm sets are banks of individual one-shot recordings on real GS hardware rather than re-voiced kits: **SFX** (program 56), **Rhythm FX** (57), **Cymbal & Claps** (53), and **Rhythm FX 2** (58). There is nothing for a membrane model to reshape, so the player addresses and names them while the fallback map sends all four through to the Standard kit's voicing. This gap is in the data-free fallback only: a SoundFont that supplies real samples for those addresses plays back normally through the [SF2 player](./soundfont-player.md). The GM Sound-Effects programs (120-127) are a different case: each has its own noise-based voice, listed in the [GM tone map](./gm-tone-map.md).
 :::
 
 The audition below plays one bar of the same groove through a selection of the sets, choosing the kit the way a GS file does — a Program Change on the rhythm part. It is a selection rather than the whole table because it was built by rendering every set and dropping the ones whose output came back bit-identical to Standard, which is exactly what the four one-shot programs above do by design. A host does not need to render anything to draw that line — [the queries below](#deriving-which-sets-are-voiced-apart) return it.
@@ -148,21 +135,43 @@ The audition below plays one bar of the same groove through a selection of the s
 
 Which slots a Program Change or Bank Select actually moves is a question the engine answers, so a picker's annotations should be computed from three queries rather than copied from the tables above. On WASM/Node they are `synthGsDrumKitName`, `synthGsDrumKitIsVoicedApart`, and `synthGsVariationIsVoicedApart`; the C ABI and Python expose the same three under their own naming conventions.
 
-- `synthGsDrumKitName(program)` returns the GS rhythm-set name a rhythm part's Program Change selects (`'Standard'`, `'Room'`, `'Jazz'`, ...), or `null` when the module's own tone map defines no set at that program. Six of the names the engine returns are the model designations of the drum machines those sets voice; the tables on this page call those six by the kind of machine instead, and the program number is the same either way.
+- `synthGsDrumKitName(program)` returns the GS rhythm-set name a rhythm part's Program Change selects (`'Standard'`, `'Room'`, `'Jazz'`, ...), or `null` when the module's own tone map defines no set at that program. Some of the names the engine returns are hardware model designations; the tables on this page call those sets by the kind of machine instead, and a page of your own should label them itself, as the example below does. The program number is the same either way.
 - `synthGsDrumKitIsVoicedApart(program)` returns `true` when at least one drum note in the set differs from Standard, `false` when the set renders exactly as Standard, and `null` when no set sits at that program. Program 0 is Standard itself, so it answers `false` too, alongside the four one-shot sets above.
-- `synthGsVariationIsVoicedApart(bank, program)` is the melodic half: `true` when the Bank Select variation has a patch of its own, `false` when it resolves to the capital tone, `null` when either argument falls outside `0..127`. It accepts the GS Bank Select MSB and the GM2 LSB alike, since both address the same variation. Note that `128` is out of range here rather than the drum bank it selects elsewhere in this API. Resolving an unvoiced variation to its capital is what GS specifies, so `false` is correct behaviour rather than a gap — but only this query separates it from a bank that is genuinely voiced, which otherwise takes rendering both and comparing.
+- `synthGsVariationIsVoicedApart(bank, program)` is the melodic half: `true` when the Bank Select variation has a patch of its own, `false` when it resolves to the capital tone, `null` when either argument falls outside `0..127`. It accepts the GS Bank Select MSB and the GM2 LSB alike, since both address the same variation. Note that `128` is out of range here rather than the drum bank it selects elsewhere in this API. Resolving an unvoiced variation to its capital is what GS specifies, so `false` is correct behavior rather than a gap — but only this query separates it from a bank that is genuinely voiced, which otherwise takes rendering both and comparing.
 
 The answers are **derived, not listed**: the kit predicate applies the set to every drum note's own resolved patch and compares bytes, and the variation predicate asks whether resolution returns the capital tone's own patch. A slot that gains a voicing changes its answer with no list to keep in step, and a case that exists but no-ops against the current patches still reports honestly. The reference is the module's own tone map, which is the newest one and reaches every set this build voices; a file that selects an older tone map reaches fewer sets.
 
 Both predicates return **three states, and a truthiness check destroys them**: `null` means no slot is there at all, and 102 programs are in that state, so `if (!voicedApart)` sweeps those 102 empty programs in as placeholders on top of the few sets that answer `false`. Compare against `false` explicitly.
 
+::: code-group
+
 ```typescript [WASM / Node]
 import { synthGsDrumKitIsVoicedApart, synthGsDrumKitName } from '@libraz/libsonare';
 
-const kits = Array.from({ length: 128 }, (_, program) => ({ program, name: synthGsDrumKitName(program) }))
-  .filter((kit): kit is { program: number; name: string } => kit.name !== null)
-  .map((kit) => ({ ...kit, placeholder: synthGsDrumKitIsVoicedApart(kit.program) === false }));
+const kits = Array.from({ length: 128 }, (_, program) => program)
+  .filter((program) => synthGsDrumKitName(program) !== null)
+  .map((program) => ({
+    program,
+    label: `Rhythm set ${program}`,   // your own label; do not display the returned name
+    placeholder: synthGsDrumKitIsVoicedApart(program) === false,
+  }));
 ```
+
+```python [Python]
+import libsonare as sonare
+
+kits = [
+    {
+        "program": program,
+        "label": f"Rhythm set {program}",
+        "placeholder": sonare.synth_gs_drum_kit_is_voiced_apart(program) is False,
+    }
+    for program in range(128)
+    if sonare.synth_gs_drum_kit_name(program) is not None
+]
+```
+
+:::
 
 ### Following GM programs instead of pinning one patch
 
@@ -173,17 +182,10 @@ that is the wrong shape — you want each channel to pick up its own instrument.
 Turn on GM program following and the synth resolves melodic voices from the
 tracked bank and program change, and routes MIDI channel 10 through the GM
 drum-kit map. The bound patch stays as the fallback for anything the map does
-not cover, so nothing goes silent. With the mode off, the fixed-patch behaviour
+not cover, so nothing goes silent. With the mode off, the fixed-patch behavior
 above is unchanged.
 
-```python
-# Python
-audio = project.bounce_with_synth_instrument(
-    "acoustic-piano",          # fallback for unmapped programs
-    auto_select_gm=True,
-    sample_rate=48000,
-)
-```
+::: code-group
 
 ```typescript [WASM / Node]
 // A SynthPatch object carries the JS binding option; a preset string cannot.
@@ -193,13 +195,17 @@ const audio = project.bounceWithSynthInstrument(
 );
 ```
 
-The flag is `use_gm_programs` on the C ABI's `SonareSynthInstrumentBinding`,
-`auto_select_gm` in Python, and `useGmPrograms` on the WASM/Node JavaScript
-`SynthPatch` descriptor. All default to `false`, preserving the fixed-patch
-fallback. `useGmPrograms` is a JS binding convenience, not a NativeSynth patch
-field. On both CLIs it is the bare `--synth` flag
-(`sonare project bounce --in project.json --synth -o out.wav`); passing a preset
-name instead pins that patch.
+```python [Python]
+audio = project.bounce_with_synth_instrument(
+    "acoustic-piano",          # fallback for unmapped programs
+    auto_select_gm=True,
+    sample_rate=48000,
+)
+```
+
+:::
+
+The flag is `use_gm_programs` on the C ABI's `SonareSynthInstrumentBinding`, `auto_select_gm` in Python's bounce call, and `useGmPrograms` on the WASM/Node JavaScript `SynthPatch` descriptor. All default to `false`, preserving the fixed-patch fallback. `useGmPrograms` is a binding option, not a NativeSynth patch field. Python also has the per-patch field `SynthPatch.use_gm_programs`: it overrides `auto_select_gm` for that destination, and it is the only switch for the realtime `set_synth_instrument`. On both CLIs it is the bare `--synth` flag (`sonare project bounce --in project.json --synth -o out.wav`); passing a preset name instead pins that patch.
 
 ::: code-group
 
@@ -269,7 +275,7 @@ To customize, pass a `SynthPatch` instead of a name — start from a preset and 
 const audio = project.bounceWithSynthInstrument(
   {
     preset: 'warm-pad',
-    cutoffHz: 1200,                // darker than the preset's 2800 Hz
+    cutoffHz: 1200,                // darker than the preset's 1800 Hz
     resonanceQ: 3,
     modRoutings: [{ source: 'lfo1', destination: 'cutoff-cents', depth: 600 }],
   },
@@ -277,7 +283,7 @@ const audio = project.bounceWithSynthInstrument(
 );
 ```
 
-Leave `totalFrames` at 0 and the bounce auto-derives the length from the arrangement plus the patch's release tail. Unknown preset names throw. For everything `bounceWith*` shares — channels, sample rate, latency — see [Project Bounce](./project-bounce.md).
+Leave `totalFrames` at 0 and the bounce auto-derives the length from the arrangement plus the patch's release tail; with GM program following, the tail covers only the programs the arrangement plays ([Omitting the length](./project-bounce.md#omitting-the-length)). Unknown preset names throw. For everything `bounceWith*` shares — channels, sample rate, latency — see [Project Bounce](./project-bounce.md).
 
 ## The GS architecture layer
 
@@ -335,7 +341,7 @@ Routing does not add an address either. `40 4x 22` PART EFX ASSIGN keeps `00` BY
   caption="A part's own rig runs before an EFX unit. A bypassed part sends to reverb, chorus and delay from the part path; a part routed into a unit sends after the effect, by the unit's own three send levels."
 />
 
-**Two different things wear the phrase "what the hardware does", and they must not be merged.** *One unit for the whole module* is a resource limit of the machine that was built, not a property of GS, and it is lifted. *Parts routed to the same unit sum into it* is not a limit at all — it is what an effect is, the way two guitars into one pedal intermodulate — and it is **not** lifted. A unit runs once, over the sum of every part assigned to it. So the unit count changed and the summing did not, and asking to "restore the summing" never means capping the units. [Sound Sources](./sound-sources.md) sets out why the one is a limit and the other is behaviour.
+**Two different things wear the phrase "what the hardware does", and they must not be merged.** *One unit for the whole module* is a resource limit of the machine that was built, not a property of GS, and it is lifted. *Parts routed to the same unit sum into it* is not a limit at all — it is what an effect is, the way two guitars into one pedal intermodulate — and it is **not** lifted. A unit runs once, over the sum of every part assigned to it. So the unit count changed and the summing did not, and asking to "restore the summing" never means capping the units. [Sound Sources](./sound-sources.md) sets out why the one is a limit and the other is behavior.
 
 Because a unit's output is one signal, what sits downstream of it belongs to the unit rather than to the parts. Its send to the system effects is the unit's own (`40 3u 17`–`19`), and the part-level CC91/CC93/CC94 send is suppressed for a routed part so the wet tail is not sent twice. Its master-EQ routing follows the parts feeding it only where those parts agree: a bypass at `40 4x 20` holds when every part on the unit asked for it, and otherwise the unit takes the EQ, which is what every part powers on with.
 
@@ -395,16 +401,16 @@ Each EFX type number selects one insertion effect. Type `0` is Thru (no effect).
 | 0x0140 | Hexa Chorus | six-voice ensemble |
 | 0x0141 | Tremolo Chorus | chorus |
 | 0x0142 | Stereo Chorus | chorus |
-| 0x0143 | Space-D | chorus (unmodulated) |
+| 0x0143 | Space chorus | chorus (unmodulated) |
 | 0x0144 | 3D Chorus | chorus (widened) |
 | 0x0150 | Stereo Delay | stereo delay |
 | 0x0151 | Modulation Delay | stereo delay |
 | 0x0152–0x0154 | 3-tap / 4-tap / Time-Control Delay | stereo delay |
 | 0x0155 | Reverb | plate reverb |
-| 0x0156 | Gate Reverb | plate reverb (gated tail not yet modelled) |
+| 0x0156 | Gate Reverb | plate reverb (gated tail not yet modeled) |
 | 0x0157 | 3D Delay | stereo delay |
 | 0x0160 | 2-voice Pitch Shifter | pitch shifter |
-| 0x0161 | Feedback Pitch Shifter | pitch shifter (feedback loop not modelled) |
+| 0x0161 | Feedback Pitch Shifter | pitch shifter (feedback loop not modeled) |
 | 0x0170 / 0x0171 | 3D Auto / Manual | binaural positioning |
 | 0x0172 / 0x0173 | Lo-Fi 1 / 2 | bit-crusher |
 
@@ -414,7 +420,7 @@ In the modern realisation, Overdrive and Distortion types run a `saturation.over
 
 ### Composite EFX types (multi-stage chains)
 
-A composite EFX type realises as an ordered **chain** of the same DSP inserts running in series, matching the hardware's block structure — a guitar multi-effect, for example, still runs through the individual amp-sim/chorus/delay inserts above, just chained together. The table below is a representative slice; the full map covers the dual-stage `0x0200`–`0x020C` matrix (Overdrive / Distortion / Enhancer feeding Chorus, Flanger, or Delay) and the guitar / bass / Rhodes / keyboard multi presets in the `0x0400`–`0x0500` range.
+A composite EFX type realises as an ordered **chain** of the same DSP inserts running in series, matching the hardware's block structure — a guitar multi-effect, for example, still runs through the individual amp-sim/chorus/delay inserts above, just chained together. The table below is a representative slice; the full map covers the dual-stage `0x0200`–`0x020C` matrix (Overdrive / Distortion / Enhancer feeding Chorus, Flanger, or Delay) and the guitar / bass / electric piano / keyboard multi presets in the `0x0400`–`0x0500` range.
 
 | EFX type | GS EFX name | Chain (signal order) |
 |---|---|---|
@@ -422,7 +428,7 @@ A composite EFX type realises as an ordered **chain** of the same DSP inserts ru
 | 0x0202 | OD → Delay | overdrive pedal → amp-sim → stereo delay |
 | 0x0400 | Guitar Multi 1 | compressor → amp-sim → chorus → delay |
 | 0x0405 | Bass Multi | compressor → amp-sim (bass cab) → EQ → chorus |
-| 0x0406 | Rhodes Multi | enhancer → phaser → chorus → auto-pan |
+| 0x0406 | Electric piano Multi | enhancer → phaser → chorus → auto-pan |
 | 0x0500 | Keyboard Multi | ring-mod → EQ → pitch-shifter → phaser → delay |
 
 ### Modern and classic EFX
@@ -436,7 +442,7 @@ The [GS module demo](/gs-module) lets you choose either path before playback. As
 
 ### Level and balance bytes
 
-An EFX balance byte follows a two-ramp law: the louder side of dry and effect stays at full level, so the default centre byte plays both at unity, and moving off centre turns one side down. Output and tap level bytes map each nonzero byte to its own level rather than stopping at -24 dB, and 0 is silence. Delay and modulation bytes reach the limits the effects themselves allow: feedback up to 98% and chorus and ensemble pre-delay up to 100 ms.
+An EFX balance byte follows a two-ramp law: the louder side of dry and effect stays at full level, so the default center byte plays both at unity, and moving off center turns one side down. Output and tap level bytes map each nonzero byte to its own level rather than stopping at -24 dB, and 0 is silence. Delay and modulation bytes reach the limits the effects themselves allow: feedback up to 98% and chorus and ensemble pre-delay up to 100 ms.
 
 ### Live vs. offline realisation
 
@@ -451,8 +457,6 @@ The demo below renders one held chord through the GS-compatible player and lets 
 `Project.midiBankProgram(ppq, group, channel, bankMsb, bankLsb, program)` expands a bank-select-plus-program-change into the MIDI events `setMidiEvents` accepts — the right way to select a GS variation or a drum kit. Static helpers like `Project.gmInstrumentName(program)`, `Project.gmDrumName(note)`, `Project.gm2InstrumentName(bankLsb, program)`, and `Project.midiCcName(controller)` name the slots so your authoring code reads clearly. The reverse direction is symmetric: `Project.gmProgramForName(name)`, `Project.gmDrumNoteForName(name)`, and `Project.midiCcIndexForName(name)` return the number for a canonical name (`-1` when unknown), while `Project.gmFamilyName(family)` and `Project.gmFamilyFirstProgram(family)` enumerate the 16 GM instrument families. `Project.gm2DrumSetName(bankLsb)` and `Project.gm2DrumName(bankLsb, note)` name the GM2 drum-set variations.
 :::
 
-## GM tone map — all 128 programs
+## GM tone map
 
-Every General MIDI program resolves to one of the synthesis engines, and the per-program table of all 128 — instrument name, engine, and voicing notes — is long enough to live on its own page. The canonical instrument names are also available at runtime from `Project.gmInstrumentName(program)`.
-
-See [GM Tone Map](./gm-tone-map.md) for the complete table.
+The per-program table of all 128 programs (instrument name, engine, and voicing notes) is on [GM Tone Map](./gm-tone-map.md).

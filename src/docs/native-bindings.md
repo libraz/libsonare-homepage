@@ -1,6 +1,6 @@
 # Native Bindings
 
-libsonare ships three bindings: browser **WASM**, **Python**, and a **Node.js native addon**. This page compares all three so you can pick one; the full Node native function reference lives on its own page. See the individual API pages for each language:
+libsonare ships three bindings: browser **WASM**, **Python**, and a **Node.js native addon**. This page covers what differs between the three (initialization, installation, release semantics, errors, and the Node-native specifics); the full Node native function reference lives on its own page. See the individual API pages for each language:
 
 - **[Python API](/docs/python-api)** — ctypes-based bindings with wheels on PyPI
 - **[Node.js Native API](/docs/node-api)** — Native addon for direct C++ performance
@@ -11,7 +11,7 @@ For beginners, the choice is usually simple: use Python for scripts and notebook
 |------------------|-----|---------|
 | A browser app | WASM | `@libraz/libsonare` |
 | A Python script or notebook | Python | `pip install libsonare` |
-| A Node.js app needing native decode or performance | Node native | `@libraz/libsonare-native` |
+| A Node.js app needing native decode or performance | Node native | `@libraz/libsonare-native` (build from source; not on npm) |
 
 ## What You Will Learn
 
@@ -27,17 +27,13 @@ By the end of this page you should be able to:
 | | WebAssembly | Python | Node.js (N-API) |
 |---|---|---|---|
 | **Platform** | Browser | Desktop | Desktop |
+| **Initialization** | `await init()` | None | None |
 | **Distribution** | npm (`@libraz/libsonare`) | PyPI (`pip install libsonare`) | Source (`bindings/node`) |
 | **Build** | Emscripten | Pre-built wheels (or CMake + pip) | CMake + cmake-js |
 | **Performance** | Near-native | Native | Native |
-| **Streaming** | Yes | Yes | Yes |
+| **Handle release** | `delete()` | `with` / `close()` | `destroy()`, or `using` where the runtime supports it |
 | **File I/O** | Sample-based APIs; `Audio.fromMemory(...)` decodes WAV/MP3 bytes, and the browser decode path can read additional supported formats | WAV/MP3 by default; FFmpeg formats in FFmpeg builds | WAV/MP3 by default; FFmpeg formats in FFmpeg builds |
-| **Effects** | Yes | Yes | Yes |
-| **Feature Extraction** | Yes | Yes | Yes |
-| **Inverse reconstruction** | Yes | Yes | Yes |
-| **Unit Conversions** | Yes | Yes | Yes |
-| **Mastering** | Yes | Yes | Yes |
-| **Mixing** | Yes | Yes | Yes |
+| **Ordinary analysis, effects, features, conversions, mastering, mixing, streaming** | Same feature set | Same feature set | Same feature set |
 
 ---
 
@@ -71,6 +67,8 @@ Examples in [JavaScript API](./js-api.md) use the WASM package. Examples that us
 
 ### Installation
 
+`@libraz/libsonare-native` is not published to npm. Build it from `bindings/node` in the source tree; to use it from another project, reference the built local package through your workspace or a `file:` dependency.
+
 ```bash
 git clone https://github.com/libraz/libsonare.git
 cd libsonare/bindings/node
@@ -84,21 +82,21 @@ A binding and the shared library it loads must come from the same tree. The C AB
 
 | ABI | Current | Covers |
 |-----|---------|--------|
-| Feature | 7 | the flat analysis and feature-result structs plus the shipped general C function contracts — `SonareKey`, `SonareAnalysisResult`, `SonareChordDetectionOptions`, and their neighbours |
+| Feature | 7 | the flat analysis and feature-result structs plus the shipped general C function contracts — `SonareKey`, `SonareAnalysisResult`, `SonareChordDetectionOptions`, and their neighbors |
 | Project | 2 | the headless-DAW project and arrangement structs. Reports `0` in a build without arrangement support |
 | Voice changer | 3 | the realtime voice-changer configuration struct |
-| Acoustic | 4 | the room-acoustics structs |
+| Acoustic | 5 | the room-acoustics structs |
 | Engine | 3 | the realtime command queue |
 
-`sonare_abi_version()` packs the first four into one `uint32_t` — feature in bits 0-7, project in 8-15, voice changer in 16-23, acoustic in 24-31 — so one comparison covers all of them. The engine ABI is deliberately excluded and keeps its own accessor, `sonare_engine_abi_version()`, because it versions a SharedArrayBuffer record layout rather than a POD struct. Each subsystem's header owns its macro (`SONARE_FEATURE_ABI_VERSION`, `SONARE_PROJECT_ABI_VERSION`, `SONARE_VOICE_CHANGER_ABI_VERSION`, `SONARE_ACOUSTIC_ABI_VERSION`). The feature macro also covers shipped general C function contracts, so a signature change such as the note APIs' `voiced` argument moves it; the other macros move on layout changes to the structs they guard. The project version moves once per release that changes its layout. Equal values therefore mean identical layout and covered contracts, and a field appended to a guarded struct is a bump, not an additive change.
+`sonare_abi_version()` packs the first four into one `uint32_t` (feature in bits 0-7, project in 8-15, voice changer in 16-23, acoustic in 24-31, aggregate `0x05030207`), so one comparison covers all of them. The engine ABI is deliberately excluded and keeps its own accessor, `sonare_engine_abi_version()`, because it versions a SharedArrayBuffer record layout rather than a POD struct. Each subsystem's header owns its macro (`SONARE_FEATURE_ABI_VERSION`, `SONARE_PROJECT_ABI_VERSION`, `SONARE_VOICE_CHANGER_ABI_VERSION`, `SONARE_ACOUSTIC_ABI_VERSION`). The feature macro also covers shipped general C function contracts, so a signature change such as the note APIs' `voiced` argument moves it; the other macros move on layout changes to the structs they guard. The project version moves once per release that changes its layout. Equal values therefore mean identical layout and covered contracts, and a field appended to a guarded struct is a bump, not an additive change.
 
-What each binding does with the number differs, and it decides where a stale library shows up:
+What each binding does with the number differs, and it decides where a stale library shows up (the [error contract](./binding-parity.md#error-contract) puts it beside every other failure, and [Installation](./installation.md#abimismatch-when-loading-the-library) covers the fix):
 
-- **Python** compares the packed value against the one it was built for when the library first loads, before configuring a single symbol, and raises a `SonareError` with `ErrorCode.ABI_MISMATCH` (10) and a message beginning `libsonare ABI mismatch` — a shared library from another checkout fails on first library use, never partway through a call. The Python CLI exits with 13.
-- **Node native and WASM** make the same comparison themselves and throw a `SonareError` with `ErrorCode.AbiMismatch` (10): Node when the addon is required, WASM in `init()`. They also export `EXPECTED_PROJECT_ABI_VERSION` and `EXPECTED_ENGINE_ABI_VERSION` and the query functions `abiVersion()`, `projectAbiVersion()`, `engineAbiVersion()`, `voiceChangerAbiVersion()`. `projectAbiVersion()` equals the expected constant when arrangement support is compiled in and `0` when it is not, and WASM's `engineCapabilities()` reports `engineAbiVersion`, `expectedEngineAbiVersion` and `abiCompatible`. The engine ABI is outside the packed value, so that comparison is yours to make before constructing a `RealtimeEngine`.
+- **Python** compares the packed value against the one it was built for when the library first loads, before configuring a single symbol, and raises a `SonareError` with `ErrorCode.ABI_MISMATCH` (10) and a message beginning `libsonare ABI mismatch` — a shared library from another checkout fails on first library use, never partway through a call. Its `RealtimeEngine` and `Project` constructors, and `Project.from_json`, check the engine and project versions the same way. The Python CLI exits with 13.
+- **Node native and WASM** make the same comparison themselves and throw a `SonareError` with `ErrorCode.AbiMismatch` (10): Node when the addon is required, WASM in `init()`. Both export the query functions `abiVersion()`, `projectAbiVersion()`, `engineAbiVersion()`, `voiceChangerAbiVersion()` and the constant `EXPECTED_PROJECT_ABI_VERSION`. WASM also exports `EXPECTED_ABI_VERSION` (from the package root and from `/worklet`) and `EXPECTED_ENGINE_ABI_VERSION`; the Node addon checks the engine ABI when a `RealtimeEngine` is constructed. `projectAbiVersion()` equals the expected constant when arrangement support is compiled in and `0` when it is not, and WASM's `engineCapabilities()` reports `engineAbiVersion`, `expectedEngineAbiVersion` and `abiCompatible`. The engine ABI is outside the packed value, so each `RealtimeEngine` constructor compares it separately and throws `AbiMismatch` before creating the engine; Node's `Project` constructor and `Project.fromJson` do the same with the project version.
 - **A C caller** compares `sonare_abi_version()` with its compile-time `SONARE_ABI_VERSION` once; the JSON entry points (the voice changer's JSON configuration, the capability catalog) tolerate layout drift and need no gate. See [C ABI versions](./cpp-api.md#c-abi-versions).
 
-Additive struct changes are gated on a per-struct `struct_version` so existing C callers keep their behaviour at both source and call level. `SonareNoteSegmenterConfig` is the case to know: it carries a trailing `voiced_threshold` read only when `struct_version` is `2`, so a config filled the way it always was is unaffected, and a zero-initialized one keeps the 0.5 default. What does change is the version the library reports — which is why the library has to be rebuilt alongside the binding even when your own code is untouched.
+Additive struct changes are gated on a per-struct `struct_version` so existing C callers keep their behavior at both source and call level. `SonareNoteSegmenterConfig` is the case to know: it carries a trailing `voiced_threshold` read only when `struct_version` is `2`, so a config filled the way it always was is unaffected, and a zero-initialized one keeps the 0.5 default. What does change is the version the library reports — which is why the library has to be rebuilt alongside the binding even when your own code is untouched.
 
 ## Mastering API
 
@@ -193,22 +191,11 @@ const stereoPreview = JSON.parse(masteringStreamingPreviewStereo({ left, right, 
 console.log(stereoProfile, stereoSuggestions, stereoPreview)
 ```
 
-Use the stereo entry points whenever you have two channels. The mono ones measure a `0.5 * (left + right)` downmix, which on decorrelated stereo material reads about 6 dB low — dragging integrated loudness, the normalization gain derived from it, and the ceiling-risk judgement down by the same amount. Those readings are in LUFS (Loudness Units relative to Full Scale), the loudness unit streaming platforms normalize against; see [LUFS](./glossary/lufs.md).
+Use the stereo entry points whenever you have two channels. The mono ones measure a `0.5 * (left + right)` downmix, which on decorrelated stereo material reads about 6 dB low, dragging integrated loudness and every value derived from it down by the same amount; only the `loudness` block of the stereo profile is measured from both channels. The measured comparison and the demo are under [Stereo profiling, assistant, and preview](./cpp-api.md#stereo-profiling-assistant-and-preview), and the readings are in LUFS ([LUFS](./glossary/lufs.md)).
 
-Measured on a pink-noise pair at 48 kHz for 4 s:
+Note the calling-convention difference: these four take a single request object and nothing else, unlike the positional mastering examples above. The metering sibling `meteringCrestFactorDbStereo({ left, right, sampleRate })` follows the same request-object shape and returns a `number`. Node native and WASM also name the request types differently: Node declares one request type per function (`MasteringAudioProfileStereoRequest`, `MasteringAssistantSuggestStereoRequest`, `MasteringStreamingPreviewStereoRequest`), where WASM shares `MasteringStereoParamsRequest`.
 
-| Pair type | Downmix vs stereo reading | Gap |
-|-----------|---------------------------|-----|
-| Decorrelated | -22.55 LUFS vs -16.44 LUFS | 6.11 dB — 3.01 dB of it is the plain downmix halving, the remaining ~3 dB is the decorrelation |
-| Correlated | the downmix halving only | 3.01 dB |
-
-On the decorrelated pair that gap turns a Spotify `normalizationGainDb` of +2.44 into +8.55.
-
-Only the `loudness` block of the stereo profile is measured from both channels — integrated LUFS and LRA (loudness range, the spread between the quiet and loud parts of a program) from the channel-summed program, true peak as the larger of the two. The spectral, dynamics, and tempo fields describe shape and timing rather than absolute level, so they stay on the downmix and remain directly comparable with the mono call.
-
-Note the calling-convention difference: these four take a single request object and nothing else, unlike the positional mastering examples above. The metering sibling `meteringCrestFactorDbStereo({ left, right, sampleRate })` follows the same request-object shape and returns a `number`. Node native and WASM also name the request types differently — Node declares `MasteringAssistantSuggestStereoRequest` and `MasteringAudioProfileStereoRequest` (the latter extends the former and adds nothing), where WASM uses one shared `MasteringStereoParamsRequest`.
-
-The assistant/profile helpers accept the same option names as the WASM entry points. Profile params are `nFft`, `hopLength`, and `truePeakOversample`; assistant params are `targetLufs`, `ceilingDb`, `enableRepair`, `preferStreamingSafe`, and `speechMonoAmount`. The native parser also accepts snake_case aliases.
+The assistant/profile helpers accept the same option names as the WASM entry points. Profile params are `nFft`, `hopLength` (both in samples at 48 kHz, rescaled to the input rate), and `truePeakOversample`; assistant params are `targetLufs`, `ceilingDb`, `enableRepair`, `preferStreamingSafe`, and `speechMonoAmount`. The native parser also accepts snake_case aliases.
 
 For long offline renders, pass the optional progress callback to `masteringChain(...)`, `masteringChainStereo(...)`, `masterAudio(...)`, or `masterAudioStereo(...)` and update your Node UI from that callback.
 
@@ -235,33 +222,16 @@ Node native uses the same base names but folds progress into an optional final c
 
 ### Repair entry points
 
-Every repair function accepts either a request object or the positional form, on both packages. What differs is the input arity and what comes back:
+Every repair function accepts either a request object or the positional form, on both packages. The shape decides the input arity and what comes back:
 
 | Shape | Call | Returns |
 |-------|------|---------|
 | Mono | `masteringRepairDeclick(samples, sampleRate, options?)` | the repaired `Float32Array` |
 | Stereo pair | `masteringRepairDeclickStereo(left, right, sampleRate, config?)` | the repaired pair plus its report fields |
-| Channel-linked | `masteringRepairDenoiseClassicalLinked(channels, sampleRate, config?)` | `{ channels, report }` — one output per input channel, in input order |
+| Channel-linked | `masteringRepairDenoiseClassicalLinked(channels, sampleRate, config?)` | `{ channels, report }`, one output per input channel in input order |
 | Measurement | `masteringRepairDetectClicks(samples, sampleRate, options?)` | a detection report; no audio |
 
-A stereo repair is not two mono calls, which is the reason to prefer it. The decision that would move the stereo image is shared across the pair, and only the part that safely varies is per channel — so a common-mode click either channel's detection selects is repaired in both, and a denoise mask is built from the channel-summed power and applied unchanged to both sides.
-
-The result's report fields follow that split, so read them accordingly:
-
-| Function | Report fields |
-|----------|---------------|
-| `masteringRepairDeclickStereo()`, `masteringRepairDeclipStereo()`, `masteringRepairDecrackleStereo()`, `masteringRepairDehumStereo()` | `leftReport` and `rightReport`. Each channel is filled or filtered from its own samples, so the two genuinely differ |
-| `masteringRepairDenoiseClassicalStereo()`, `masteringRepairDereverbClassicalStereo()` | one shared `report` — there is one mask, so there is one thing to report |
-| `masteringRepairTrimSilenceStereo()` | one shared `report` plus `leftRange` and `rightRange` |
-
-The `*Linked` pair takes `channels: Float32Array[]` instead of a left/right pair and carries the same one-mask reasoning to any channel count, including a single channel. Note that a linked report's `detected` level is the set's and moves with the channel count — N identical channels read `10*log10(N)` above one of them, about 3 dB for a pair — while every other field is a fraction and does not.
-
-The measurement helpers take the same options type as the repair they belong to, so you can measure with the exact configuration you are about to run. Two of them are not per-signal measurements at all:
-
-- `masteringRepairNoiseBandBins(nFft?, sampleRate?)` returns the 33 `Int32Array` bin indices that describe the band grid `masteringRepairDetectNoiseFloor()` reports its `bandFloorDbfs` on — the first bin of each of the 32 bands plus the one-past-the-end bin of the last. Only the analysis geometry decides the grid, so it takes no denoise config. Where two consecutive entries are equal the band is empty and its level is a sentinel rather than a measurement.
-- `masteringRepairDereverbConfigForRoom(estimate, config?)` fills a complete dereverb configuration from an `estimateRoom(...)` result, so a measured room can drive the repair instead of hand-tuned numbers.
-
-Two more entry points sit beside the assistant rather than the repair family. `masteringPlatformNames()` lists the delivery targets the assistant accepts as `targetPlatform`, read from the library rather than from a list kept in the binding, so a target added in the core is discoverable without a binding change. `masteringAbMatchLoudness({ source, reference, sampleRate })` gain-matches `source` to `reference`'s loudness for A/B listening and returns the matched samples alongside `referenceLufs`, `sourceLufs`, `appliedGainDb`, and `matchedTruePeakDbtp`; the reference is measured and returned untouched. The gain has no upper bound on purpose, so `matchedTruePeakDbtp` can sit above 0 dBTP — clamping to headroom would leave a near-full-scale source at its own loudness, which is the one thing a loudness match must not do. Limit downstream when the peak matters more than the match. `masteringAbMatchLoudnessStereo()` is the stereo form: it applies one gain, measured on the stereo program, to both channels.
+A stereo repair is not two mono calls: the decision that would move the stereo image is shared across the pair. Report-field shapes, the measurement helpers, and `masteringAbMatchLoudness` are in the [JavaScript mastering reference](./js-api-mastering.md); the stages and their fixed order are in [Audio Repair](./audio-repair.md).
 
 ## Mixing API
 
@@ -283,7 +253,7 @@ The guides carry the depth: [Project Editing](./project-editing.md), [Bouncing P
 
 ## Error Handling
 
-Like the WASM package, the native addon throws a structured `SonareError` on every failure the library or an object's state reports: an `Error` subclass with a numeric `code` and its canonical `codeName`, mirroring the C ABI error enum. Both packages export `ErrorCode`, `SonareError`, and the `isSonareError(value)` type guard, and the same failure reports the same numeric code on every binding. An argument the binding refuses before the call reaches the library is a native `TypeError` (wrong type or missing) or `RangeError` (out of domain, including a string with an embedded NUL, empty or non-finite audio, and an out-of-range or non-integer sample rate passed to an audio-taking one-shot) on both packages, and `isSonareError` does not match it. A `samples` that is not a `Float32Array`, a `sampleRate` that is not a number, or a non-string name is a `TypeError` naming the argument. A released or destroyed handle throws `InvalidState`. See [Error Handling](./js-api.md#error-handling) for the code table and a usage example.
+Like the WASM package, the native addon throws a structured `SonareError` on every failure the library or an object's state reports: an `Error` subclass with a numeric `code` and its canonical `codeName`, mirroring the C ABI error enum. Both packages export `ErrorCode`, `SonareError`, and the `isSonareError(value)` type guard, and the same failure reports the same numeric code on every binding. An argument the binding refuses before the call reaches the library is a native `TypeError` or `RangeError` on both packages, and `isSonareError` does not match it. The [error contract](./binding-parity.md#error-contract) lists which failure takes which class and code on every runtime; [Error Handling](./js-api.md#error-handling) has the `ErrorCode` enum and a usage example.
 
 `SonareError` is a runtime class on both packages, so importing the name by value gets you a constructor rather than `undefined`, and a shared TypeScript module can import it from either package and find the same *kind* of thing. Its `instanceof` is brand-based rather than prototype-based — it narrows any `Error` named `SonareError` that carries a numeric `code`:
 
@@ -318,16 +288,14 @@ Node native's `Audio` object has more methods because it can call into the nativ
 | Capability | Node native | WASM |
 |------------|-------------|------|
 | Extra `Audio` methods | More focused analysis and room-acoustic methods are available as instance methods | Use standalone focused helpers where available |
-| File construction | `Audio.fromFile(...)`, `Audio.fromMemory(...)` | `Audio.fromBuffer(...)`, `Audio.fromMemory(...)`, `Audio.fromMemoryWithBrowserFallback(...)` |
+| File construction | `Audio.fromFile(...)`, `Audio.fromFileChannel(...)`, `Audio.fromBuffer(...)`, `Audio.fromMemory(...)` | `Audio.fromBuffer(...)`, `Audio.fromMemory(...)`, `Audio.fromMemoryWithBrowserFallback(...)` |
 | Sample access | `audio.getData()` returns a copy | `audio.data` returns a copy |
 
 Node native adds `analyzeBpm(...)`, `analyzeImpulseResponse(...)`, `detectAcoustic(...)`, `analyzeRhythm(...)`, `analyzeDynamics(...)`, and `analyzeTimbre(...)` to `Audio`. The room helpers `estimateRoom(...)`, `synthesizeRir(...)`, and `roomMorph(...)` remain standalone functions. The full method and function reference is on the [Node.js Native API](./node-api.md) page.
 
 ### StreamingMasteringChain
 
-The native addon (and the WASM package) exposes a `StreamingMasteringChain`
-class for incremental rendering — for example when bridging an Electron app,
-worker, or audio capture pipeline. It accepts the same nested config as
+The native addon (and the WASM package) exposes a `StreamingMasteringChain` class for incremental rendering, for example when bridging an Electron app, worker, or audio capture pipeline. It accepts the same nested config as
 `masteringChain()`, plus `loudnessStaticGainDb` and the optional
 `loudnessStaticGainPeakDb`, and renders one block at a time.
 
@@ -342,7 +310,7 @@ const chain = new StreamingMasteringChain({
 
 chain.prepare(48000, /*maxBlockSize=*/512, /*numChannels=*/2);
 
-const monoOut = chain.processMono(monoBlock);
+// processMono needs a chain prepared with numChannels = 1
 const { left, right } = chain.processStereo(leftBlock, rightBlock);
 
 console.log(chain.stageNames(), chain.latencySamples());
@@ -356,11 +324,7 @@ Stereo-only stages are skipped when `numChannels === 1`. The streaming chain
 rejects offline-only repair stages. A `loudness` stage requires a precomputed
 static gain in `loudnessStaticGainDb`; optionally pass the source true-peak in
 `loudnessStaticGainPeakDb` so the gain is clamped against the configured ceiling.
-The WASM build exposes `chain.delete()` to release the underlying handle; the
-native addon exposes an idempotent `destroy()` (and `[Symbol.dispose]`, so
-`using` works on Node 22+). GC eventually reclaims a native handle, but a
-long-lived process that builds one chain per request must release it explicitly
-or native memory accumulates.
+The WASM build exposes `delete()` (with `destroy()` and `[Symbol.dispose]` as aliases) to release the underlying handle; the native addon exposes an idempotent `destroy()` and `[Symbol.dispose]`. `using` releases it when the code is compiled by TypeScript 5.2+ or runs on a runtime with explicit resource management (Node 22 itself does not parse `using`). GC eventually reclaims a native handle, but a long-lived process that builds one chain per request must release it explicitly or native memory accumulates.
 
 Related mastering guides: [Browser local processing](./glossary/concepts/browser-local-processing.md), [Reference match](./glossary/mastering/reference-match.md), [Quality checklist](./glossary/mastering/quality-checklist.md).
 
@@ -389,10 +353,6 @@ eq.setAutoGain(true);
 const { left, right } = eq.processStereo(leftBlock, rightBlock);
 console.log(eq.spectrum(), eq.latencySamples(), left, right);
 ```
-
-`@libraz/libsonare-native` is currently intended to be built from
-`bindings/node` in the source tree. To use it from another project, reference
-the built local package through your workspace or a `file:` dependency.
 
 The native build auto-detects FFmpeg development libraries via `pkg-config`.
 Without FFmpeg it decodes WAV and MP3. To require or disable FFmpeg explicitly:

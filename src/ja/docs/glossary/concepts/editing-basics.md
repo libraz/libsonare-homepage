@@ -1,6 +1,6 @@
 ---
 title: 編集の基礎
-description: 音声編集の用語 — ピッチと時間、半音とセント、MIDI ノート番号、フォルマント、サンプルと秒 — を、libsonare の編集 DSP に触れる前の初学者向けに解説します。
+description: 音声編集の用語（ピッチと時間、半音とセント、MIDI ノート番号、フォルマント、サンプルと秒）を、libsonare の編集 DSP に触れる前の初学者向けに解説します。
 ---
 
 # 編集の基礎
@@ -9,7 +9,7 @@ description: 音声編集の用語 — ピッチと時間、半音とセント�
 
 トラックを*測定*するだけで手を加えない**解析**とも、複数のパートの*バランス*を取る**ミキシング**とも別の工程です。
 
-このページは、[編集 DSP](../../editing-dsp.md) ガイドを読む前に必要な言葉を定義します。概念だけで、コードは出てきません。
+このページは、[編集 DSP](../../editing-dsp.md) ガイドを読む前に必要な言葉を定義します。終わり近くに、2 つの主な編集を呼び出しとして示す短い例があります。
 
 ::: tip 編集の位置
 制作の流れは、個々のパートを**編集**し（タイミング修正、ノートの音程調整、声質変更）、それらを**ミックス**し、仕上がったステレオファイルを配信向けに**マスタリング**する、という順です。編集はパート単位の修復と整形の工程です。控えめな編集はパートを自然に保ち、大胆な編集はクリエイティブな効果になります。
@@ -38,8 +38,8 @@ description: 音声編集の用語 — ピッチと時間、半音とセント�
 
 関数が *MIDI ノート番号*（`pitchCorrectToMidi` の `currentMidi` や `targetMidi` など）を求めているとき、渡すのは**整数 1 つが 1 半音**にあたるインデックスです（小数も可）。基準になる値を 2 つ覚えておくと便利です。
 
-- **A4 = 69 = 440 Hz** — チューニング基準。
-- **C4 = 60** — 中央のド（ミドル C）。
+- **A4 = 69 = 440 Hz**: チューニング基準。
+- **C4 = 60**: 中央のド（ミドル C）。
 
 オクターブごとに 12 を足すので、C5 = 72、C3 = 48 です。よく使う目標音をいくつか挙げます。
 
@@ -72,6 +72,35 @@ description: 音声編集の用語 — ピッチと時間、半音とセント�
 ## サンプルと秒
 
 *区間*に作用する編集関数（ノートストレッチなど）は、**サンプル位置**を取ります。サンプル位置は正確でずれないからです。多くの関数は、同じ位置を `*Sec` という名前（`onsetSec`、`offsetSec`、`startSec`、`endSec`、`paddingSec`）で秒指定することもでき、呼び出しのサンプルレートで換算されます。どちらか一方の指定だけを使い、両方は渡せません。換算は `samples = round(seconds × sampleRate)` です。48 kHz なら 0.25 秒はサンプル 12000 です。サンプルとサンプルレートが何かは [オーディオ基礎](./audio-basics.md) を参照してください。
+
+## libsonare で試す
+
+タイムストレッチとピッチシフトは、それぞれ 1 回の呼び出しです。`rate` が `0.5` なら半分の速さで再生されるので、ピッチはそのまま、長さは 2 倍になります。`semitones: 12` は、長さを保ったままピッチを 1 オクターブ上げます。
+
+::: code-group
+
+```typescript [Browser]
+import { init, timeStretch, pitchShift } from '@libraz/libsonare';
+
+await init();
+
+const slower = timeStretch(samples, sampleRate, 0.5);   // 長さは 2 倍、ピッチは同じ
+const higher = pitchShift(samples, sampleRate, 12);     // 1 オクターブ上、長さは同じ
+```
+
+```python [Python]
+import libsonare as sonare
+
+slower = sonare.time_stretch(samples, sample_rate, 0.5)   # 長さは 2 倍、ピッチは同じ
+higher = sonare.pitch_shift(samples, sample_rate, 12)     # 1 オクターブ上、長さは同じ
+```
+
+```bash [CLI]
+sonare time-stretch take.wav --rate 0.5 -o slower.wav
+sonare pitch-shift take.wav --semitones 12 -o higher.wav
+```
+
+:::
 
 :::: details libsonare が編集 DSP をどう実装するか
 

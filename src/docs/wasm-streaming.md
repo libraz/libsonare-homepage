@@ -5,24 +5,126 @@ description: The libsonare WASM streaming and realtime APIs — live StreamAnaly
 
 # WASM Streaming and Realtime
 
-This page covers the WASM streaming and realtime APIs — live streaming analysis, inverse reconstruction, streaming retune, and the realtime voice changer — continuing from [WebAssembly Guide](./wasm.md).
+This page covers the WASM streaming and realtime APIs: live streaming analysis, inverse reconstruction, streaming retune, and the realtime voice changer. It continues from [WebAssembly Guide](./wasm.md).
 
 ## Streaming Analysis
 
-The Streaming API enables real-time audio analysis with low latency. Unlike batch analysis, streaming processes audio chunk by chunk as it arrives.
+The Streaming API analyzes audio chunk by chunk as it arrives, so a visualizer or a live BPM/key readout does not wait for the whole file.
 
 ::: info Batch vs Streaming
 | Approach | Use Case | Latency | Features |
 |----------|----------|---------|----------|
 | **Batch** | Pre-recorded files | High | All-in-one analysis (BPM, chords, sections) |
-| **Streaming** | Live audio, visualization | Low (~10ms) | Mel, chroma, onset, updating BPM/key |
+| **Streaming** | Live audio, visualization | Low (one analysis window, ~46 ms at nFft 2048 / 44.1 kHz) | Mel, chroma, onset, updating BPM/key |
 :::
 
 <SonareDemo id="loudness-meter" />
 
-### Architecture Overview
+### Choosing where the analyzer runs
 
-Audio capture and analysis run on the AudioWorklet thread so the main thread stays free to paint; only the small, already-computed frame buffer crosses the thread boundary via `postMessage`, not raw audio.
+| Path | Analysis runs on | WASM in the worklet | Use it for |
+|------|------------------|---------------------|------------|
+| [`SonareStreamAnalyzerNode`](#analyze-a-graph-branch) | Main thread | No | The default for a live graph: no processor to write, no `SharedArrayBuffer` |
+| [Custom analyzer worklet](#custom-analyzer-worklet) | Audio thread | Yes | Analysis that must stay off the main thread and next to your own DSP |
+| [`ScriptProcessorNode`](#basic-example) | Main thread | No | Demos only; the node is deprecated |
+
+### Analyze a graph branch
+
+`SonareStreamAnalyzerNode` runs a `StreamAnalyzer` against any node in your audio graph. The worklet side only averages the input channels to mono and transfers fixed-size chunks (`chunkFrames`, default 4096, at least 128); the analyzer itself runs on the main thread, so its frames lag the audio by about one chunk. The node has one input and no output.
+
+```typescript
+// analyzer-worklet.ts
+import { registerSonareStreamAnalyzerWorkletProcessor } from '@libraz/libsonare/worklet';
+
+registerSonareStreamAnalyzerWorkletProcessor();
+```
+
+```typescript
+// main.ts
+import { init } from '@libraz/libsonare';
+import { SonareStreamAnalyzerNode } from '@libraz/libsonare/worklet';
+
+await init();
+await audioCtx.audioWorklet.addModule('/analyzer-worklet.js');
+const analyzer = await SonareStreamAnalyzerNode.create(audioCtx, {
+  config: { nMels: 64 },
+});
+source.connect(analyzer.node);
+
+const stopFrames = analyzer.onFrames((frames) => draw(frames.mel, frames.nFrames));
+const stopStats = analyzer.onStats((stats) => console.log(stats.estimate.bpm));
+
+// Later:
+stopFrames();
+stopStats();
+analyzer.destroy();
+```
+
+`config` takes the same fields as `new StreamAnalyzer(...)`. `sampleRate` defaults to the context's, and any other value throws `RangeError`. `onFrames` delivers the `readFrames` format, and `onStats` fires when the key or tempo estimate was re-estimated. If a chunk is dropped or the processor restarts, the analyzer's sample offset is reset rather than splicing the two streams together.
+
+### Basic Example
+
+::: warning `ScriptProcessorNode` is deprecated
+The example below uses `createScriptProcessor()` because it is the shortest way to see frames flowing. The node runs on the main thread and can glitch under load. For anything real, use [`SonareStreamAnalyzerNode`](#analyze-a-graph-branch) or a [custom analyzer worklet](#custom-analyzer-worklet).
+:::
+
+```typescript
+import { init, StreamAnalyzer } from '@libraz/libsonare';
+
+async function setupStreaming() {
+  await init();
+
+  const audioCtx = new AudioContext();
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const source = audioCtx.createMediaStreamSource(stream);
+
+  // Create analyzer with output-frame throttling
+  const analyzer = new StreamAnalyzer({
+    sampleRate: audioCtx.sampleRate,
+    nFft: 2048,
+    hopLength: 512,
+    nMels: 128,
+    computeMel: true, computeChroma: true, computeOnset: true,
+    emitEveryNFrames: 4, // emit one frame per 4 hops (~21 frames/s at 44100Hz, hopLength 512)
+  });
+
+  const processor = audioCtx.createScriptProcessor(512, 1, 1);
+
+  processor.onaudioprocess = (e) => {
+    const input = e.inputBuffer.getChannelData(0);
+    analyzer.process(input);
+
+    const available = analyzer.availableFrames();
+    if (available > 0) {
+      const frames = analyzer.readFrames(available);
+      updateVisualization(frames);
+
+      // BPM/key estimates update as audio arrives
+      const stats = analyzer.stats();
+      if (stats.estimate.updated) {
+        console.log(`BPM: ${stats.estimate.bpm.toFixed(1)}`);
+        if (stats.estimate.keyName !== null) console.log(`Key: ${stats.estimate.keyName}`);
+      }
+    }
+  };
+
+  source.connect(processor);
+  processor.connect(audioCtx.destination);
+
+  // Call when the session ends: stop the callback, then release the WASM handle.
+  return () => {
+    processor.disconnect();
+    source.disconnect();
+    analyzer.delete();
+  };
+}
+```
+
+`delete()` releases the analyzer's WASM handle (`dispose()` is a backward-compatible alias, and `using` works too). An embind handle is never garbage-collected, so release it when the session ends.
+
+### Custom analyzer worklet
+
+Run `StreamAnalyzer` inside your own `AudioWorkletProcessor` when the analysis has to stay off the main thread. Only the small, already-computed frame buffer crosses the thread boundary through `postMessage`, never raw audio.
 
 <FlowDiagram
   title="Streaming pipeline"
@@ -53,95 +155,41 @@ Audio capture and analysis run on the AudioWorklet thread so the main thread sta
   caption="Everything left of the dashed edge runs off the main thread; only the postMessage hop crosses back to it."
 />
 
-### Basic Example
-
-::: warning `ScriptProcessorNode` is deprecated — use AudioWorklet in production
-The first example below uses `createScriptProcessor()` because it is the shortest way to see frames flowing. `ScriptProcessorNode` is **deprecated**: it runs on the main thread and can glitch under load. For anything real, use the [AudioWorklet integration](#audioworklet-integration) shown right after it, which runs the analyzer off the main thread.
-:::
-
-```typescript
-import { init, StreamAnalyzer } from '@libraz/libsonare';
-
-async function setupStreaming() {
-  await init();
-
-  const audioCtx = new AudioContext();
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  const source = audioCtx.createMediaStreamSource(stream);
-
-  // Create analyzer with output-frame throttling
-  const analyzer = new StreamAnalyzer({
-    sampleRate: audioCtx.sampleRate,
-    nFft: 2048,
-    hopLength: 512,
-    nMels: 128,
-    computeMel: true,
-    computeChroma: true,
-    computeOnset: true,
-    emitEveryNFrames: 4, // emit one frame per 4 hops (~21 frames/s at 44100Hz, hopLength 512)
-  });
-
-  // Use ScriptProcessor for simplicity (AudioWorklet recommended for production)
-  const processor = audioCtx.createScriptProcessor(512, 1, 1);
-
-  processor.onaudioprocess = (e) => {
-    const input = e.inputBuffer.getChannelData(0);
-    analyzer.process(input);
-
-    const available = analyzer.availableFrames();
-    if (available > 0) {
-      const frames = analyzer.readFrames(available);
-      updateVisualization(frames);
-
-      // Check BPM/key estimates that update as audio arrives
-      const stats = analyzer.stats();
-      if (stats.estimate.updated) {
-        const keyNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-        const mode = stats.estimate.keyMinor ? 'minor' : 'major';
-        console.log(`BPM: ${stats.estimate.bpm.toFixed(1)}`);
-        // estimate.key is a PitchClass index (0-11), not a string
-        console.log(`Key: ${keyNames[stats.estimate.key]} ${mode}`);
-      }
-    }
-  };
-
-  source.connect(processor);
-  processor.connect(audioCtx.destination);
-}
-```
-
-### AudioWorklet Integration
-
-For production use, run `StreamAnalyzer` in an AudioWorklet — the browser's dedicated audio-rendering thread — so analysis does not block the main thread. The example below shows a self-contained analyzer worklet.
-
-::: warning WASM in AudioWorklet
-Loading WASM in AudioWorklet requires special handling. The WASM module must be loaded and instantiated within the worklet context.
+::: warning The worklet needs its own WASM module
+A worklet has its own global scope and its own WASM heap. The argument-less `init()` does not work there: it loads the module with a dynamic `import()`, which a worklet scope forbids, and the glue code resolves the `.wasm` file through `URL` and `fetch`, which a worklet does not have. Import the Emscripten factory statically, fetch the `.wasm` bytes on the main thread, pass them in through `processorOptions`, and hand all three to `init({ moduleFactory, wasmBinary, locateFile })`.
 :::
 
 **analyzer-worklet.ts:**
 
 ```typescript
 import { init, StreamAnalyzer } from '@libraz/libsonare';
+// The Emscripten factory (sonare.js) that ships with the package's WASM glue.
+import createModule from './sonare.js';
 
 class AnalyzerWorklet extends AudioWorkletProcessor {
   private analyzer?: StreamAnalyzer;
   private frameCounter = 0;
 
-  constructor() {
+  constructor(options: AudioWorkletNodeOptions) {
     super();
-    void init().then(() => {
+    const { wasmBinary } = options.processorOptions;
+    void init({ moduleFactory: createModule, wasmBinary, locateFile: (path) => path }).then(() => {
       // sampleRate is a global in AudioWorkletGlobalScope
       this.analyzer = new StreamAnalyzer({
         sampleRate,
         nFft: 2048,
         hopLength: 512,
         nMels: 64, // reduced for bandwidth
-        computeMel: true,
-        computeChroma: true,
-        computeOnset: true,
+        computeMel: true, computeChroma: true, computeOnset: true,
         emitEveryNFrames: 4,
       });
     });
+    this.port.onmessage = (e) => {
+      if (e.data.type === 'destroy') {
+        this.analyzer?.delete();
+        this.analyzer = undefined;
+      }
+    };
   }
 
   process(inputs: Float32Array[][]): boolean {
@@ -155,22 +203,14 @@ class AnalyzerWorklet extends AudioWorkletProcessor {
       const frames = this.analyzer.readFrames(available);
 
       // Transfer buffers for zero-copy
-      this.port.postMessage({
-        type: 'frames',
-        data: frames
-      }, [
-        frames.timestamps.buffer,
-        frames.mel.buffer,
-        frames.chroma.buffer
+      this.port.postMessage({ type: 'frames', data: frames }, [
+        frames.timestamps.buffer, frames.mel.buffer, frames.chroma.buffer,
       ]);
     }
 
     // Periodically send stats
     if (++this.frameCounter % 100 === 0) {
-      this.port.postMessage({
-        type: 'stats',
-        data: this.analyzer.stats()
-      });
+      this.port.postMessage({ type: 'stats', data: this.analyzer.stats() });
     }
 
     return true;
@@ -186,7 +226,11 @@ registerProcessor('analyzer-worklet', AnalyzerWorklet);
 const audioCtx = new AudioContext();
 await audioCtx.audioWorklet.addModule('analyzer-worklet.js');
 
-const workletNode = new AudioWorkletNode(audioCtx, 'analyzer-worklet');
+// wasmUrl: the URL of the package's sonare.wasm (your bundler's asset import).
+const wasmBinary = await (await fetch(wasmUrl)).arrayBuffer();
+const workletNode = new AudioWorkletNode(audioCtx, 'analyzer-worklet', {
+  processorOptions: { wasmBinary },
+});
 
 workletNode.port.onmessage = (e) => {
   if (e.data.type === 'frames') {
@@ -200,10 +244,13 @@ workletNode.port.onmessage = (e) => {
 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 const source = audioCtx.createMediaStreamSource(stream);
 source.connect(workletNode);
+
+// Later: release the analyzer inside the worklet.
+workletNode.port.postMessage({ type: 'destroy' });
 ```
 
 ::: details Related entry points (realtime engine, MIDI)
-The example above builds a custom analyzer worklet. To analyze a branch of an audio graph without writing a processor, use `SonareStreamAnalyzerNode` from `@libraz/libsonare/worklet`: the worklet only downmixes to mono and forwards chunks, and the analyzer runs on the main thread (see [Analyzing a graph branch](./realtime-streaming.md#analyzing-a-graph-branch)). If you instead want to run the whole playback engine in a worklet — track lanes, channel strips, buses, MIDI clips, live MIDI, instruments, and capture — the package ships an AudioWorklet bridge at `@libraz/libsonare/worklet`. The bridge's `SonareEngine` API mirrors that engine to the worklet; see [Realtime and Streaming](./realtime-streaming.md).
+To run the whole playback engine in a worklet (track lanes, channel strips, buses, MIDI clips, live MIDI, instruments, and capture), use the AudioWorklet bridge at `@libraz/libsonare/worklet`. Its `SonareEngine` API mirrors that engine to the worklet; see [Realtime and Streaming](./realtime-streaming.md).
 
 The main package entry (`@libraz/libsonare`) also ships two main-thread browser integration helpers: `bindMicrophoneInput(...)` wires `getUserMedia` into an AudioWorklet engine node (see [Recording and Takes](./recording-and-takes.md)), and `bindWebMidi(...)` bridges Web MIDI input to the engine (see [MIDI Input](./midi-input.md)).
 :::
@@ -212,11 +259,11 @@ The main package entry (`@libraz/libsonare`) also ships two main-thread browser 
 
 The TypeScript `StreamAnalyzer` has three read methods. Choose them by how much precision your UI needs and how much data you can afford to move between threads.
 
-| Method | Returned type | Use when |
-|--------|---------------|----------|
-| `readFrames(maxFrames)` | `FrameBuffer` with `Float32Array` / `Int32Array` fields | You need full precision for analysis or high-quality visuals |
-| `readFramesI16(maxFrames)` | `StreamFramesI16` | You want smaller payloads but still enough precision for most visual meters |
-| `readFramesU8(maxFrames)` | `StreamFramesU8` | You need very small payloads for mobile or dense visual updates |
+| Method | Returned type | Approx. size per frame | Use when |
+|--------|---------------|------------------------|----------|
+| `readFrames(maxFrames)` | `FrameBuffer` with `Float32Array` / `Int32Array` fields | ~600 bytes | You need full precision for analysis or high-quality visuals |
+| `readFramesI16(maxFrames)` | `StreamFramesI16` | ~300 bytes | You want smaller payloads but still enough precision for most visual meters |
+| `readFramesU8(maxFrames)` | `StreamFramesU8` | ~150 bytes | You need very small payloads for mobile or dense visual updates |
 
 The analyzer still computes internally in float. Select the transfer precision with the explicit read method: `readFrames()` for float data, `readFramesI16()` for 16-bit data, or `readFramesU8()` for 8-bit data. `StreamConfig.outputFormat` is retained only for source compatibility and must be omitted or set to `0`; the C++/WASM read path quantizes the integer forms, so you do not need to quantize manually before `postMessage`.
 
@@ -229,12 +276,6 @@ Plain lists and objects returned from WASM are rooted back into the JavaScript r
 - **Transferable objects** are `ArrayBuffer`s that `postMessage` can *move* to a worker instead of copying. Ownership transfers (the sender's view becomes empty afterward), which makes passing audio frames between threads near-instant. List the buffers in the second argument: `postMessage(msg, [buffer, ...])`.
 - **Quantizing** here means packing each float into a smaller 16-bit or 8-bit integer — fewer bytes to send, at the cost of precision (fine for a meter or heatmap, not for further DSP).
 :::
-
-| Approach | Approx. size per frame | Best For |
-|----------|------------------------|----------|
-| `readFrames()` (Float32 SoA) | ~600 bytes | General use, full precision |
-| `readFramesI16()` (quantized SoA) | ~300 bytes | High-quality visualizations |
-| `readFramesU8()` (quantized SoA) | ~150 bytes | Mobile, bandwidth-limited |
 
 ### Updating Estimates
 
@@ -250,13 +291,12 @@ if (stats.estimate.bpm > 0) {
 }
 
 // Key (available after ~5 seconds — see StreamConfig.keyUpdateIntervalSec)
-if (stats.estimate.key >= 0) {
-  const keyNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-  const keyName = keyNames[stats.estimate.key];
-  const mode = stats.estimate.keyMinor ? 'minor' : 'major';
-  console.log(`Key: ${keyName} ${mode}`);
+if (stats.estimate.keyName !== null) {
+  console.log(`Key: ${stats.estimate.keyName}`); // e.g. "A minor"; keyShortName is "Am"
 }
 ```
+
+With no pitched content yet (silence), `key` and `chordRoot` are `-1`, `keyName` is `null`, and `chordName` is `'N.C.'`. The key estimate is computed from a 186 ms chroma window, so it trails the frame outputs, and `nFft` is rescaled on a stream below 44100 Hz; see [Usage, AudioWorklet integration, and timing](./js-api-streaming.md#usage-audioworklet-integration-and-timing).
 
 ### Visualization Example
 
@@ -266,29 +306,16 @@ import type { StreamAnalyzer } from '@libraz/libsonare';
 function renderVisualization(frames: ReturnType<StreamAnalyzer['readFrames']>, nMels: number) {
   const { nFrames, mel, chroma, onsetStrength } = frames;
 
-  // Render mel spectrogram (scrolling display). Values are linear power; clamp/scale to 0-1.
   for (let f = 0; f < nFrames; f++) {
     for (let m = 0; m < nMels; m++) {
-      const value = Math.min(1, mel[f * nMels + m]);
-      const c = Math.round(value * 255);
-      const color = `rgb(${c}, ${Math.round(c * 0.5)}, ${255 - c})`;
+      const value = Math.min(1, mel[f * nMels + m]); // linear power, clamped to 0-1
       // Draw pixel at (scrollX + f, nMels - m)
     }
-  }
-
-  // Render chroma (12 pitch classes)
-  for (let f = 0; f < nFrames; f++) {
     for (let c = 0; c < 12; c++) {
-      const value = chroma[f * 12 + c];
+      const value = chroma[f * 12 + c]; // 12 pitch classes
       // Draw chroma bar
     }
-  }
-
-  // Trigger effects on strong onsets (linear units)
-  for (let f = 0; f < nFrames; f++) {
-    if (onsetStrength[f] > 1.5) { // tune threshold for your audio
-      triggerBeatEffect();
-    }
+    if (onsetStrength[f] > 1.5) triggerBeatEffect(); // tune the threshold for your audio
   }
 }
 ```
@@ -320,10 +347,10 @@ sonare mfcc-to-audio music.wav -o mfcc-reconstructed.wav
 
 | Function | Returns | Notes |
 |----------|---------|-------|
-| `melToStft(melPower, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `StftPowerResult` `{ nBins, nFrames, power }` | Pseudo-inverse of the mel filterbank |
-| `melToAudio(melPower, nMels, nFrames, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | Griffin-Lim audio synthesis |
-| `mfccToMel(mfccCoefficients, nMfcc, nFrames, nMels?, lifter?)` | `MelPowerResult` `{ nMels, nFrames, power }` | Inverse DCT back to a mel spectrogram; pass the forward MFCC lifter |
-| `mfccToAudio(mfccCoefficients, nMfcc, nFrames, nMels, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?, lifter?)` | `Float32Array` | MFCC → mel → audio in one call; pass the forward MFCC lifter |
+| `melToStft(power, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `StftPowerResult` `{ nBins, nFrames, power }` | Pseudo-inverse of the mel filterbank |
+| `melToAudio(power, nMels, nFrames, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | Griffin-Lim audio synthesis |
+| `mfccToMel(coefficients, nMfcc, nFrames, nMels?, lifter?)` | `MelPowerResult` `{ nMels, nFrames, power }` | Inverse DCT back to a mel spectrogram; pass the forward MFCC lifter |
+| `mfccToAudio(coefficients, nMfcc, nFrames, nMels, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?, lifter?)` | `Float32Array` | MFCC → mel → audio in one call; pass the forward MFCC lifter |
 
 ::: warning Lossy round-trip
 These reconstruct *magnitude* and estimate phase with Griffin-Lim, so the output is an approximation — fine for sonification, audition, and visualization, not for bit-exact recovery. See [Inverse Features](./inverse-features.md) for the processing flow and caveats.
@@ -361,7 +388,7 @@ sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.
 
 ## Realtime Voice Changer
 
-`RealtimeVoiceChanger` is the WASM object for the preset-based live voice chain. It is separate from the offline `voiceChange(...)` helper because it keeps DSP state across blocks and exposes heap-backed zero-copy buffers for AudioWorklet-style loops.
+`RealtimeVoiceChanger` is the WASM object for the preset-based live voice chain. It is separate from the offline `voiceChange(...)` helper because it keeps DSP state across blocks and exposes heap-backed zero-copy buffers for AudioWorklet-style loops. For the signal chain, presets, `formantMode` and the `voice.changer` insert, see [Realtime Voice Changer](./realtime-voice-changer.md).
 
 ```typescript
 import {
@@ -398,6 +425,33 @@ try {
 
 Use `realtimeVoiceChangerPresetJson(name)` to inspect a built-in preset and `validateRealtimeVoiceChangerPresetJson(json)` before accepting user-authored preset JSON. `RealtimeVoiceChangerConfigInput` accepts one of the six strict `VoicePresetId` strings or a preset object with either a `dsp` object or a `macros` object, never both. `voiceCharacterPresetId(...)` returns `null` for an unknown numeric ordinal and throws for an unknown string ID; `realtimeVoiceChangerPresetConfig(...)` throws when it cannot resolve a preset. If you need the canonical ID or resolved flat POD config, use `voiceCharacterPresetId(...)` and `realtimeVoiceChangerPresetConfig(...)`.
 
+The heap-backed buffers are views onto the WASM heap. `bufferGeneration()` increases whenever `prepare(...)` can replace the native scratch buffers, so re-acquire any cached view after it changes.
+
+### In an AudioWorklet
+
+The package ships a ready-made processor, so a voice changer in a worklet needs no hand-written loop. Register it from the worklet module, then create the node with `processorOptions`:
+
+```typescript
+// voice-worklet.ts
+import { registerSonareRealtimeVoiceChangerWorkletProcessor } from '@libraz/libsonare/worklet';
+
+registerSonareRealtimeVoiceChangerWorkletProcessor(); // 'sonare-realtime-voice-changer-processor'
+```
+
+```typescript
+// main.ts
+const node = new AudioWorkletNode(audioCtx, 'sonare-realtime-voice-changer-processor', {
+  processorOptions: { preset: 'bright-idol', sampleRate: audioCtx.sampleRate, blockSize: 128, channelCount: 1 },
+});
+
+// Change the voice live. The worklet only accepts a normalized flat config, never JSON.
+node.port.postMessage({ type: 'setConfig', config: realtimeVoiceChangerPresetConfig('soft-whisper') });
+node.port.postMessage({ type: 'reset' });   // clear the DSP state
+node.port.postMessage({ type: 'destroy' }); // release the changer
+```
+
+The processor builds its changer in the worklet's own realm, so the WASM module must be initialized there first, the same way as for a [custom analyzer worklet](#custom-analyzer-worklet). A flat config includes `formantMode`, so build it with `realtimeVoiceChangerPresetConfig(...)` rather than by hand.
+
 ## Paged clip audio streaming
 
 A long arrangement can hold more clip audio than fits in memory at once. The engine streams clip audio in **pages**: instead of one giant buffer, a clip is backed by a *clip page provider* that hands the engine fixed-size pages on demand.
@@ -407,7 +461,7 @@ The flow is lock-free by design:
 1. The render thread needs a page it does not have yet and pushes a request onto a **wait-free page-request queue**.
 2. The main thread drains that queue with `engine.popClipPageRequest()`, reads the audio for the requested page from storage, and calls `provider.supply(pageIndex, channels)`.
 3. When a page is no longer needed, `provider.clear(pageIndex)` releases it.
-4. Separately, the render thread also reports the pages it is *about to* read and does not have yet, so the host can supply them before the playhead arrives. See [Look-ahead](#look-ahead) below.
+4. Separately, the render thread also reports the pages it is *about to* read and does not have yet, so the host can supply them before the playhead arrives. See [Lookahead](#lookahead) below.
 
 Because the audio thread only enqueues requests and reads already-supplied pages, it never blocks on storage or allocation.
 
@@ -442,16 +496,16 @@ Because the audio thread only enqueues requests and reads already-supplied pages
 A realtime audio thread must not pause — if it stalls for even a moment, the output glitches. **Lock-free** means the audio thread never waits to acquire a lock that another thread holds. **Wait-free** is the stronger guarantee used here: pushing a page-miss request onto the page-request queue always finishes in a bounded number of steps, so the audio thread never spins or blocks waiting on it. The slow part — reading the page from storage — happens on the main thread instead.
 :::
 
-### Look-ahead
+### Lookahead
 
 Reporting a miss only when the read has already happened is too late to be silent: the read produced silence for that block, and the host learns about it afterwards. At every page boundary it has not primed, that costs one block of silence. So the player also reports the pages it is about to reach.
 
-`prepare(...)` sets the look-ahead window to **half a second** at the engine's sample rate, and `setClipPagePrefetchFrames(frames)` changes it while audio is running (`clipPagePrefetchFrames()` reads it back; `0` disables the look-ahead entirely). The C entry points are `sonare_engine_set_clip_page_prefetch_frames` and `sonare_engine_clip_page_prefetch_frames`, and the `SonareEngine` worklet facade forwards the setter to both the worklet engine and this thread's offline engine.
+`prepare(...)` sets the lookahead window to **half a second** at the engine's sample rate, and `setClipPagePrefetchFrames(frames)` changes it while audio is running (`clipPagePrefetchFrames()` reads it back; `0` disables the lookahead entirely). The C entry points are `sonare_engine_set_clip_page_prefetch_frames` and `sonare_engine_clip_page_prefetch_frames`, and the `SonareEngine` worklet facade forwards the setter to both the worklet engine and this thread's offline engine.
 
-Look-ahead requests drain through the same `popClipPageRequest()` queue, and within a block they are queued **after** that block's genuine misses. A host that keeps only the newest request per clip therefore tracks the look-ahead frontier rather than a stale miss. The read-then-miss reporting above is unchanged and still runs, so a host that simply ignores look-ahead requests behaves exactly as it would without them. A clip whose pages are all resident produces no requests at all, either way.
+Lookahead requests drain through the same `popClipPageRequest()` queue, and within a block they are queued **after** that block's genuine misses. A host that keeps only the newest request per clip therefore tracks the lookahead frontier rather than a stale miss. The read-then-miss reporting above is unchanged and still runs, so a host that simply ignores lookahead requests behaves exactly as it would without them. A clip whose pages are all resident produces no requests at all, either way.
 
 ::: info This is not the `ClipPageStreamer` window
-Two different mechanisms sit on top of each other, and you want both. The look-ahead here is the **engine's** — the audio thread telling you which pages it is heading for. `ClipPageStreamer`'s `readAheadPages` / `retainBehindPages` (below) is the **JS-side** sliding window that decides how much audio stays resident in WASM memory. The engine's look-ahead tells the streamer what to fetch; the streamer's window decides what to keep.
+Two different mechanisms sit on top of each other, and you want both. The lookahead here is the **engine's** — the audio thread telling you which pages it is heading for. `ClipPageStreamer`'s `readAheadPages` / `retainBehindPages` (below) is the **JS-side** sliding window that decides how much audio stays resident in WASM memory. The engine's lookahead tells the streamer what to fetch; the streamer's window decides what to keep.
 :::
 
 ### OPFS-backed provider in the browser

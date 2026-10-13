@@ -7,26 +7,13 @@ description: Analysis functions, scale quantization, unit conversion, and resamp
 
 This page covers the core analysis functions for the libsonare JavaScript/TypeScript package: BPM/key/beat/onset detection, the all-in-one `analyze()` call and its focused helpers, structural boundary and meter estimation, and Roman-numeral chord analysis. Two related references live alongside it: [Feature Extraction](./js-api-features.md) covers STFT, mel/MFCC, chroma, spectral features, pitch detection, and the CQT/VQT/decomposition family, and [Helpers and Conversions](./js-api-helpers.md) covers the argument-for-argument librosa ports for pre-emphasis, test-signal generation, spectral reconstruction, structure, segmentation, and tempograms, along with scale quantization, unit conversion, resampling, and `chordFunctions`.
 
-## Where the sections went
-
-| Section | Page |
-|---|---|
-| Feature Extraction | [Feature Extraction](./js-api-features.md) |
-| librosa-Compatible Helpers | [Helpers and Conversions](./js-api-helpers.md) |
-| Scale Quantization, Unit Conversion, Resampling, `chordFunctions` | [Helpers and Conversions](./js-api-helpers.md#scale-quantization) |
-
 ## Analysis Functions
 
 ### `detectBpm(samples, sampleRate)`
 
-Detect BPM (tempo) from audio samples.
+Detect BPM (tempo) from audio samples. For how the tempo is found and why half and double readings happen, see [Tempo and BPM](./glossary/analysis/tempo-bpm.md).
 
-::: info Use Cases
-- **DJ Software**: Match tempos between tracks for seamless mixing
-- **Music Players**: Display tempo information, auto-generate playlists by tempo
-- **Fitness Apps**: Match music to workout intensity
-- **Beat Sync**: Synchronize visualizations or animations to music
-:::
+<SonareDemo id="beat-tracking" />
 
 ```typescript
 function detectBpm(samples: Float32Array, sampleRate?: number): number
@@ -50,14 +37,7 @@ console.log(`BPM: ${bpm}`);  // "BPM: 120"
 
 ### `detectKey(samples, sampleRate)`
 
-Detect musical key from audio samples. Returns the root note (C, D, E...), the mode (major, minor, or a church mode), and the tuning the chroma was built with.
-
-::: info Use Cases
-- **Harmonic Mixing**: DJs match keys for smooth transitions (Camelot wheel)
-- **Transposition**: Suggest key changes to match vocal range
-- **Music Recommendation**: Find songs in compatible keys
-- **Practice Tools**: Display key for musicians to play along
-:::
+Detect musical key from audio samples. Returns the root note (C, D, E...), the mode (major, minor, or a church mode), and the tuning the chroma was built with. Background: [Key detection](./glossary/analysis/key-detection.md). The options (`profile`, `modes`, `genreHint` and the rest) are tabulated under [Key detection options](./js-api-helpers.md#key-detection-options).
 
 ```typescript
 function detectKey(request: DetectKeyRequest): KeyDetection
@@ -113,15 +93,15 @@ const { name, tuning } = detectKey(samples, sampleRate, { tuning: 'auto' });
 
 ::: warning What `confidence` measures
 `confidence` is a **softmax over every scored candidate's profile correlation**.
-Its range is `[0, 1)`, all candidates' confidences sum to `1`, and with 24
-candidates in the set no single share can reach `1` — a decisive result looks
-like `0.3`, not `0.95`.
+Its range is `[0, 1)` and all candidates' confidences sum to `1`. A clean tonal
+passage can read above 0.9, closely related keys split the share between them,
+and silence reads about 1/24 for every candidate.
 
 It says how sharply the chroma picked one candidate out of the set, **not how
 often that pick is right**: nothing here is calibrated against annotated
 recordings, so a high share on a modally ambiguous piece is a confident wrong
-answer, not a reliable one. Compare shares against each other rather than
-against a fixed threshold you carried over from a calibrated classifier.
+answer, not a reliable one. Compare the winner with the runner-up rather than
+against a fixed threshold carried over from a calibrated classifier.
 
 `KeyCandidate.key.confidence` carries the same posterior share, while
 `KeyCandidate.correlation` stays the raw profile correlation the softmax was
@@ -130,14 +110,7 @@ computed from.
 
 ### `detectBeats(samples, sampleRate)`
 
-Detect beat times from audio samples. Returns exact timestamps of each beat.
-
-::: info Use Cases
-- **Music Visualization**: Trigger effects on each beat
-- **Rhythm Games**: Generate note charts from audio
-- **Video Editing**: Auto-cut to the beat
-- **Loop Creation**: Find perfect loop points
-:::
+Detect beat times from audio samples. Returns exact timestamps of each beat. See [Beats and downbeats](./glossary/analysis/beats-downbeats.md).
 
 ```typescript
 function detectBeats(samples: Float32Array, sampleRate?: number): Float32Array  // sampleRate default: 22050
@@ -155,30 +128,34 @@ for (let i = 0; i < beats.length; i++) {
 
 ### `detectOnsets(samples, sampleRate)`
 
-Detect onset times (note attacks) from audio samples. More granular than beats - captures every note/hit.
-
-::: info Use Cases
-- **Drum Transcription**: Detect individual drum hits
-- **Audio-to-MIDI**: Convert audio to note events
-- **Sample Slicing**: Automatically segment audio at transients
-:::
+Detect onset times (note attacks) from audio samples. More granular than beats: it captures every note or hit. See [Onset detection](./glossary/analysis/onset-detection.md).
 
 ```typescript
-function detectOnsets(samples: Float32Array, sampleRate?: number): Float32Array  // sampleRate default: 22050
+function detectOnsets(request: DetectOnsetsRequest): Float32Array
+function detectOnsets(
+  samples: Float32Array,
+  sampleRate?: number,             // default: 22050
+  options?: OnsetDetectOptions,
+): Float32Array
 ```
 
 **Returns:** Float32Array of onset times in seconds
 
+| Option | Default | Meaning |
+|---|---|---|
+| `nFft` | 2048 | Window length in samples at 22050 Hz, rescaled to the input rate |
+| `hopLength` | 512 | Hop in samples of the input |
+| `threshold` | 0 | Minimum onset strength; `0` picks it adaptively |
+| `preMax`, `postMax` | 1, 1 | Frames before and after a peak that must not exceed it |
+| `preAvg`, `postAvg` | 3, 4 | Frames averaged before and after a peak for the adaptive floor |
+| `delta` | 0.06 | Offset added to that average |
+| `wait` | 1 | Minimum frames between two onsets |
+| `backtrack` | `false` | Move each onset back to the preceding local minimum |
+| `backtrackRange` | 10 | Farthest a backtrack may travel, in frames |
+
 ### `analyze(samples, sampleRate)` <Badge type="warning" text="Heavy" />
 
 Perform the all-in-one music analysis. Returns BPM, key, beats, chords, sections, timbre, and more.
-
-::: info Use Cases
-- **Music Library Management**: Auto-tag songs with metadata
-- **Music Production**: Analyze reference tracks
-- **DJ Preparation**: Get all track info at once
-- **Music Education**: Study song structure
-:::
 
 ::: tip Performance
 This is the heaviest API. For long audio files (>3 minutes), consider using `analyzeWithProgress` to show progress, or analyze only relevant segments.
@@ -245,7 +222,7 @@ failure.
 `meterCandidateNumerators` **widens the search, it does not force the result**:
 the estimator still has to find support for a numerator before reporting it. But
 the reverse holds absolutely — a numerator you did not ask for cannot be
-reported, so a 5/4 or 7/8 piece analysed with the default `[3, 4, 6]` comes back
+reported, so a 5/4 or 7/8 piece analyzed with the default `[3, 4, 6]` comes back
 as a four. `meterDenominator` is reported as requested; the estimator will still
 report `8` on its own when it resolves a compound meter.
 
@@ -268,14 +245,28 @@ console.log(`Form: ${result.form}`);  // e.g., "IABABCO"
 Perform the same all-in-one analysis with progress reporting.
 
 ```typescript
+function analyzeWithProgress(request: AnalyzeWithProgressRequest): AnalysisResult
 function analyzeWithProgress(
   samples: Float32Array,
   sampleRate: number | undefined,  // undefined applies the 22050 default
-  onProgress: (progress: number, stage: string) => void
+  onProgress: (progress: number, stage: string) => void,
+  options?: MusicAnalyzeOptions,
 ): AnalysisResult
+
+interface AnalyzeWithProgressRequest {
+  samples: Float32Array;
+  sampleRate?: number;
+  onProgress?: (progress: number, stage: string) => void;
+  cancel?: () => boolean;          // return true to stop; the call throws
+  options?: MusicAnalyzeOptions;   // the same fields and defaults as analyze()
+}
 ```
 
 `sampleRate` is positional (before the callback) but accepts `undefined`, which uses the same 22050 Hz default as `analyze`. Pass the buffer's real rate.
+
+::: warning In the request form, options go under `options`
+`analyzeWithProgress({ samples, sampleRate, options: { bpmMin: 90, bpmMax: 140 } })` applies the range. The same keys written beside `samples` (`{ samples, sampleRate, bpmMin: 90 }`) are silently ignored. The call is synchronous, so it blocks the thread it runs on; in a page, run it through the [worker client](./wasm-advanced.md) to keep the UI painting.
+:::
 
 **Progress Stages:**
 
@@ -310,7 +301,7 @@ interface TranscribeRequest {
   tempoBpm?: number;  // omit to detect
   polyphonic?: boolean;
   referenceHz?: number | 'auto';  // tuning reference in Hz; default 440, 'auto' measures it
-  // Other TranscribeOptions detector settings are optional.
+  // Further optional detector settings: see the table below.
 }
 
 interface TranscribeResult {
@@ -334,29 +325,75 @@ project.setMidiEvents(clipId, events);
 console.log(noteCount, tempoBpm);
 ```
 
+Every field is optional except `samples` and `sampleRate`. Omitting a field takes its default; a value outside the field's domain throws a `RangeError`, and a written `0` on a field whose domain excludes it is out of domain rather than a request for the default (only `group` and `channel` accept `0` as a value). The sample rate must be in `[8000, 384000]`.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `polyphonic` | `false` | `true` reads the multi-F0 chain, which finds overlapping notes; `false` cuts a single pYIN pitch line into notes |
+| `referenceHz` | `440` | Tuning reference in Hz the MIDI note numbers are measured against (finite, positive), or `'auto'` to measure it from the audio. `TranscribeResult.tuning` reports what was used |
+| `fmin`, `fmax` | `65`, `2093` mono; `55`, `1760` poly | F0 tracker range in Hz. Omit an endpoint for the path's default; explicit values are positive and `fmax` must exceed `fmin`. On the polyphonic path an `fmin` below the cent spectrum's floor lowers that floor, and a note found above `fmax` is dropped rather than reported an octave low |
+| `minNoteMs` | `30` mono, `60` poly | Shortest span kept as a note, in milliseconds. Positive; refused together with `minNoteDivision` |
+| `minNoteDivision` | none | Shortest note as a note value: `n` keeps notes from a `1/n` note up at the transcription tempo. Integer in `[1, 128]`; refused together with `minNoteMs`. The only setting that reads the tempo |
+| `segmentationThresholdCents` | `50` | Pitch movement that ends one note and starts the next. Positive |
+| `velocityFloorDb` | `-48` | Level mapped to velocity 1, in dBFS; must be negative. Does not drop notes: a note more than 36 dB under the take's loudest notes, or under -80 dBFS, is dropped whatever this is |
+| `fixedVelocity` | none (level is mapped) | Integer in `[1, 127]` giving every note that velocity. The level gate still drops tails and ghosts |
+| `maxPolyphony` | `10` | Polyphonic only. Voices one frame may hold, integer in `[1, 64]` |
+| `minFramePeakRatio` | `0.20` | Polyphonic only. A frame's search stops below this share of its first peak, in `[0, 1]`; `0` is a real 0 (no cut) |
+| `minRidgePeakRatio` | `0.10` | Polyphonic only. A ridge ends below this share of its own running peak, in `[0, 1]`; `0` is a real 0 (no cut) |
+| `reattackRatio` | `2.0` | Polyphonic only. Splits a ridge where its salience climbs past this multiple of the level just before, so the same pitch struck again while it sounds becomes a new note. Must be above `1`; `0` turns the split off |
+| `group`, `channel` | `0`, `0` | UMP group and MIDI channel the events are emitted on, each `0..15` |
+
+`maxPolyphony`, `minFramePeakRatio`, `minRidgePeakRatio` and `reattackRatio` are refused on the monophonic path. [Audio to Notes](./audio-to-notes.md#options-and-limits) explains how these limits behave on real material and where the polyphonic path is known to fall short.
+
 When the PPQ grid should follow a project tempo map, use `Project.transcribeToClip(...)` instead; its request has no `tempoBpm` and it returns the number of notes written.
 
 ### Focused analysis helpers
 
 ::: tip One call is usually enough
-`analyze()` already returns chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength. Reach for a focused helper only when you want a single field or need options the high-level call hides.
+`analyze()` already returns chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength. Reach for a focused helper when you want a single field or need options the high-level call hides.
 :::
 
-Use the focused helpers when the default `analyze(...)` result is either too broad or not detailed enough. They share the same mono `Float32Array` input model but expose options that are hidden by the high-level call.
+The helpers take the same mono `Float32Array` as the rest of the page. Each also accepts a request object (`{ samples, sampleRate, ...options }`).
 
-| Task | Function | Notes |
-|------|----------|-------|
-| Downbeat/bar starts | `detectDownbeats(samples, sampleRate)` | Returns seconds for likely bar starts. Pair with `detectBeats` for grid displays. |
-| Ranked key candidates | `detectKeyCandidates(samples, sampleRate, options?)` | Useful when the top key is ambiguous or when you want profile/mode filtering. |
-| Detailed tempo candidates | `analyzeBpm(samples, sampleRate, ...)` | Returns the best BPM plus alternate candidates and tempo evidence. |
-| Rhythm character | `analyzeRhythm(samples, sampleRate, ...)` | Reports groove, syncopation, and regularity style features. |
-| Dynamics | `analyzeDynamics(samples, sampleRate, ...)` | Dynamic range, loudness range, crest factor, and compression flag. |
-| Timbre | `analyzeTimbre(samples, sampleRate, ...)` | Brightness, warmth, density, roughness, and complexity. |
-| Chords | `detectChords(samples, sampleRate, options?)` | Returns `{ chords, tuning }`: the chord segments and the tuning used. Options include HMM smoothing, key context, inversions, `chromaMethod: 'stft' \| 'nnls'`, and `tuning`. |
-| Chord functions | `chordFunctions({ chords, key })` | Adds a Roman numeral and a harmonic function to chords you already have, without re-detecting. |
-| Sections | `analyzeSections(samples, sampleRate, ...)` | Song-structure sections such as intro, verse, chorus, bridge, and outro. Long inputs keep accurate `start` / `end` times even when the internal boundary grid is pooled. |
-| Structural boundaries | `detectBoundaries(request)` | The transitions alone, plus the novelty curve they were picked from. Use it when you want to apply your own threshold. |
-| Melody | `analyzeMelody(samples, sampleRate, ...)` | Monophonic melody contour based on pitch tracking. |
+| Task | Function | Returns |
+|------|----------|---------|
+| Bar starts | `detectDownbeats(samples, sampleRate)` | Seconds of likely bar starts. Pair with `detectBeats` for grid displays. See [Beats and downbeats](./glossary/analysis/beats-downbeats.md) |
+| Ranked key candidates | `detectKeyCandidates(samples, sampleRate, options?)` | Every key with its confidence, best first. Use it when the top key is ambiguous or you want profile or mode filtering |
+| Tempo candidates | `analyzeBpm(...)` | `bpm`, `confidence`, `candidates`, `autocorrelation`, `tempogram` |
+| Rhythm character | `analyzeRhythm(...)` | `timeSignature`, `syncopation`, `grooveType`, `patternRegularity`, `tempoStability`, `bpm`, `beatIntervals` |
+| Dynamics | `analyzeDynamics(...)` | The `Dynamics` fields plus `loudnessTimes` and `loudnessRmsDb` |
+| Timbre | `analyzeTimbre(...)` | The `Timbre` fields plus `spectralCentroid`, `spectralFlatness`, `spectralRolloff` and `timbreOverTime` |
+| Chords | `detectChords(samples, sampleRate, options?)` | `{ chords, tuning }`: the chord segments and the tuning used. See [Chord recognition](./glossary/analysis/chord-recognition.md) |
+| Chord functions | `chordFunctions({ chords, key })` | Adds a Roman numeral and a harmonic function to chords you already have, without re-detecting |
+| Sections | `analyzeSections(...)` | Labeled spans such as intro, verse, chorus, bridge and outro. Long inputs keep accurate `start` / `end` times even when the internal boundary grid is pooled. See [Section structure](./glossary/analysis/section-structure.md) |
+| Structural boundaries | `detectBoundaries(request)` | The transitions alone, plus the novelty curve they were picked from |
+| Melody | `analyzeMelody(...)` | `points`, `pitchRangeOctaves`, `pitchStability`, `meanFrequency`, `vibratoRate` (note `points`, not `pitches`). See [Melody and pitch](./glossary/analysis/melody-pitch.md) |
+
+Options for the helpers that take them, all optional:
+
+| Helper | Option | Default |
+|---|---|---|
+| `analyzeBpm` | `bpmMin`, `bpmMax` | 30, 300 (`analyze()` searches 60 to 200) |
+| | `startBpm` | 120 |
+| | `maxCandidates` | 5 |
+| | `nFft`, `hopLength` | 2048 (at 22050 Hz), 512 |
+| `analyzeRhythm` | `bpmMin`, `bpmMax`, `startBpm` | 60, 200, 120 |
+| | `nFft`, `hopLength` | 2048 (at 22050 Hz), 512 |
+| `analyzeDynamics` | `windowSec` | 0.4 |
+| | `hopLength` | 512 |
+| | `compressionThreshold` | 6 (crest factor in dB below which `isCompressed` is set) |
+| `analyzeTimbre` | `nMels`, `nMfcc` | 128, 13 |
+| | `windowSec` | 0.5 |
+| | `nFft`, `hopLength` | 2048 (at 22050 Hz), 512 |
+| `analyzeSections` | `minSectionSec` | 4 |
+| | `nFft`, `hopLength` | 2048, 512 |
+| `analyzeMelody` | `fmin`, `fmax` | 65 Hz, 2093 Hz |
+| | `frameLength`, `hopLength` | 2048 (at 22050 Hz), 256 |
+| | `threshold` | 0.1 (voicing confidence in `[0, 1]`) |
+| | `usePyin` | `false`; `true` gives a smoother, less octave-jumpy contour |
+| | `center` | `true` (pYIN only) |
+
+`detectChords` takes `minDuration`, `smoothingWindow`, `threshold`, `useTriadsOnly`, `nFft`, `hopLength`, `useBeatSync`, `useHmm`, `hmmBeamWidth`, `useKeyContext`, `keyRoot`, `keyMode`, `detectInversions`, `chromaMethod: 'stft' | 'nnls'` and `tuning`. `detectKeyCandidates` takes the same options as `detectKey` except `tuning` (see [Key detection options](./js-api-helpers.md#key-detection-options)).
 
 ```typescript
 const keys = detectKeyCandidates(samples, sampleRate, {
@@ -378,7 +415,7 @@ const sections = analyzeSections(samples, sampleRate);
 
 ### `detectBoundaries(request)`
 
-Where `analyzeSections` hands back labelled spans, `detectBoundaries` hands back
+Where `analyzeSections` hands back labeled spans, `detectBoundaries` hands back
 the transitions themselves *and* the novelty curve they were picked from. That
 curve is the reason to reach for this one: a caller that wants its own threshold
 cannot recover it from a list of finished sections.
@@ -407,21 +444,12 @@ for (const { time, strength } of boundaries) {
 | `useMfcc` | `true` | Use MFCC features |
 | `useChroma` | `true` | Use chroma features |
 
-::: tip The two thresholds do different jobs
-`threshold` asks how prominent a peak is *among its neighbours*: each peak is
-gated against the largest novelty within `referenceWindow` seconds on either
-side, not against the whole track's maximum, so a dominant change does not hide
-weaker section changes far from it. A lone dominant event, one that no other
-event in the window comes within 30% of, is set aside from that
-reference. It says nothing about how much the features actually changed.
-`absoluteThreshold` is the floor that asks whether anything changed at all. Setting it to `0` does not make the detector more sensitive in a
-useful way — self-scaling turns residual fluctuation into peaks of 1.0, so a
-stationary input then segments anyway.
+| Threshold | Question it answers |
+|---|---|
+| `threshold` | How prominent is this peak among its neighbors? Each peak is gated against the largest novelty within `referenceWindow` seconds on either side, not against the whole track's maximum, so a dominant change does not hide weaker ones far from it. A lone event that no other event in the window comes within 30% of is set aside from that reference |
+| `absoluteThreshold` | Did anything change at all? A floor on the raw response, applied before the relative scaling |
 
-Lowering the floor also will not recover level-only structure. A level change
-turns the feature vector about five times less than a comparable pitch change,
-which lands it below what steady noise produces, so the noise is admitted first.
-:::
+`threshold` says nothing about how much the features changed. Setting `absoluteThreshold` to `0` does not make the detector usefully more sensitive: the self-scaling turns residual fluctuation into peaks of 1.0, so a stationary input then segments anyway. Lowering the floor also will not recover level-only structure, because a level change moves the feature vector about five times less than a comparable pitch change, which puts it below what steady noise produces.
 
 The result carries the grid it was measured on, not the source's: input above
 22050 Hz is resampled before any feature is computed, so `boundary.frame` is
@@ -443,6 +471,8 @@ It takes beats and accents rather than audio, so it runs on a grid you already
 have — from `analyze()`, from a DAW, or from a tapped tempo — without a second
 pass over the samples. For what a meter is and how grouping differs from a time
 signature, see [Meter and grouping](./glossary/analysis/meter-and-grouping.md).
+
+<SonareDemo id="meter-estimate" />
 
 ```typescript
 function estimateMeter(request: EstimateMeterRequest): MeterEstimate
@@ -487,7 +517,7 @@ answer per visitor for the same clip. Use one of the two sources above.
 
 ::: warning An odd meter is only reported if you asked for its numerator
 The default candidate set is `{3, 4, 6}`. A numerator outside the set cannot win,
-so a 5/4 or 7/8 piece analysed with the defaults comes back as a four with no
+so a 5/4 or 7/8 piece analyzed with the defaults comes back as a four with no
 indication that the right answer was never on the ballot. Widening the set does
 not force an odd reading — the estimator still needs support for it — so pass the
 numerators your material might actually use.
@@ -529,7 +559,7 @@ within one result, never across two.
 ### `chordFunctionalAnalysis(samples, keyRoot, keyMode, sampleRate?, options?)`
 
 Functional (Roman-numeral) harmonic analysis of the detected chord progression,
-relative to the given key. It runs chord detection internally, then labels each
+relative to the given key ([Chord recognition](./glossary/analysis/chord-recognition.md)). It runs chord detection internally, then labels each
 detected chord, so give it the same `options` you would give `detectChords(...)`.
 
 It returns the timed chord entries themselves: every `Chord` field (`root`, `bass`,

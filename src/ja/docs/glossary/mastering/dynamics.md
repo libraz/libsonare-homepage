@@ -5,7 +5,7 @@ description: スレッショルド・レシオ・アタック・リリース・�
 
 # ダイナミクスコントロール
 
-ダイナミクスコントロールは、マスターにどれだけ動きを残すかを決めるパートです。デモではコンプレッサーのステージとクイックマスターの Dynamics マクロに反映されます。
+ダイナミクスコントロールは、マスターにどれだけ動きを残すかを決めるパートです。デモではコンプレッサーの段とクイックマスターの Dynamics マクロに反映されます。
 
 スレッショルド、レシオ、アタック、リリース、ニーの 5 つは、まとめて判断して初めて意味のある設定になります。
 
@@ -49,9 +49,11 @@ description: スレッショルド・レシオ・アタック・リリース・�
 
 ここまでのコンプレッサーは信号全体を一度にまとめて処理します。libsonare のマスタリングチェーンは、信号を複数の周波数帯域に分割し、それぞれを独立してコンプレッションする**マルチバンドコンプレッサー**も備えています。低域だけがボワつく、高域だけが刺さるといった、特定の帯域だけが問題を起こしているときに、ミックス全体を潰さずに対処できます。
 
-::: warning バインディングのチェーン設定オブジェクトからは使えません
-ブラウザの `masteringChain()` 設定、Python の `mastering_chain()` 設定、Node の `masteringChain()` 設定、WASM の `MasteringChainConfig` は、固定 3 バンドの簡易記法（`dynamics.multibandComp.lowThresholdDb`、`midRatio`、`highAttackMs` など — low/mid/high のみで、それ以上には増えません）を公開し、設定の葉をスカラー値のドット記法へ展開します。任意のバンド数（1〜64 バンドの範囲で検証されます）は JSON ドキュメントレベルの機能です。マスタリング CLI の `--config <file>` に **チェーン設定スキーマバージョン 2** を渡してください。バージョン 2 では `dynamics.multibandComp` が、フラットな low/mid/high キーの代わりに、`crossover` と独立したコンプレッサー設定の配列 `bands` を持つ構造化オブジェクトになります。スキーマバージョン 1 とバインディングのチェーン設定オブジェクトでは、3 バンドを超える表現はできません。
+::: tip バンド数を選ぶ
+WASM、Node、Python では、`dynamics.multibandComp.crossover` と、バンドごとの独立したコンプレッサー設定を並べる `bands` 配列を使い、2〜64 バンドを設定できます。C ABI は `dynamics.multibandComp.bands.<i>.<field>` や `dynamics.multibandComp.crossover.cutoffsHz.<i>` のようなインデックス付きのフラットなキーで同じ設定を表します。1 バンドは拒否されます。low/mid/high の固定キーは 3 バンドの簡易記法として使えます。JSON のチェーン文書では、構造化形式にスキーマバージョン 2、簡易記法にバージョン 1 を使います。フィールドは [MasteringChainConfig](../../js-api-types.md#masteringchainconfig)、チェーンのパラメータは[マスタリングプロセッサ](../../mastering-processors.md)を参照してください。
 :::
+
+帯域の分け方と、各クロスオーバーモードがカットオフ付近でどう振る舞うかは[クロスオーバー](./crossover.md)にあります。
 
 ## libsonare での扱い
 

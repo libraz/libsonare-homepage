@@ -29,6 +29,8 @@ auto db = mel.to_db();
 auto mfcc = mel.mfcc(13);  // 13 coefficients
 ```
 
+<SonareDemo id="mel-spectrogram" />
+
 ### Chroma <Badge type="info" text="Medium" />
 
 ```cpp
@@ -43,6 +45,8 @@ auto features = chroma.features();
 // Mean energy per pitch class
 auto energy = chroma.mean_energy();
 ```
+
+<SonareDemo id="chromagram" />
 
 ### Spectral Features
 
@@ -169,8 +173,10 @@ These are declared in `sonare_c_features.h`, `sonare_c_types_functions.h` and `s
 
 | Function | Purpose |
 |----------|---------|
+| `sonare_detect_chords_ex(samples, length, sample_rate, &options, &result)` | Chord detection with a `SonareChordDetectionOptions` (no `_default()`; set every field, see [Versioned structs](./cpp-api.md#versioned-structs-and-their-defaults)); the result carries `struct_version` and `tuning`, and is released with `sonare_free_chord_analysis_result` |
+| `sonare_chord_functional_analysis(samples, length, sample_rate, &options, key_root, key_mode, &chords, &roman, &functions)` | Detects chords, then labels each one relative to the key. `chords` is a `SonareChordAnalysisResult`; `roman` and `functions` are parallel `SonareStringArray`s with one entry per chord, released with `sonare_free_string_array` |
 | `sonare_detect_key_with_tuning(...)` | Key detection with a recording `tuning` (a fraction of a semitone in `[-0.5, 0.5)`) or `tuning_auto` to measure it; `out_tuning` receives the value used |
-| `sonare_chord_functions(chords, count, key_root, key_mode, &roman, &functions)` | Roman numeral and harmonic function of chords already in hand, as two `SonareStringArray`s of `count` entries released with `sonare_free_string_array`; no audio is analysed |
+| `sonare_chord_functions(chords, count, key_root, key_mode, &roman, &functions)` | Roman numeral and harmonic function of chords already in hand, as two `SonareStringArray`s of `count` entries released with `sonare_free_string_array`; no audio is analyzed |
 | `sonare_chord_symbol_from_analysis(...)`, `sonare_key_mode_from_analysis(mode, &out_mode)` | Convert a detected chord or key into the fields of an arrangement annotation (`SonareProjectChordSymbol`, `SonareProjectKeySegment`) through the library's own reduction table; declared in `sonare_c_project_annotate.h` |
 | `sonare_tuning_to_reference_hz`, `sonare_reference_hz_to_tuning` | Convert between the analysis tuning unit and a reference in Hz |
 | `sonare_scale_mask_for_mode(root, mode, &mask)` | The 12-bit scale mask of a `SonareMode`, in the layout `sonare_scale_quantize_midi` and `SonarePitchCorrectionConfig` read |
@@ -181,7 +187,7 @@ These are declared in `sonare_c_features.h`, `sonare_c_types_functions.h` and `s
 
 ## Structural boundaries
 
-`BoundaryDetector` finds section transitions from a checkerboard-kernel novelty curve over MFCC and chroma features. `BoundaryConfig` exposes the detector's parameters; the two thresholds do different jobs.
+`BoundaryDetector` finds [section transitions](./glossary/analysis/section-structure.md) from a checkerboard-kernel novelty curve over MFCC and chroma features. `BoundaryConfig` exposes the detector's parameters; the two thresholds do different jobs.
 
 ```cpp
 BoundaryConfig config;
@@ -217,9 +223,11 @@ struct Key {
 std::string key_name(int root, bool minor, bool short_form);
 ```
 
-`KeyConfig::tuning`, `ChordConfig::tuning` and `MusicAnalyzerConfig::tuning` are a recording's offset from concert A440 in fractions of a semitone, in `[-0.5, 0.5)`. Set `auto_tuning = true` on any of the three to measure it from the audio (`measure_tuning(audio)` in `feature/pitch.h`) instead; `KeyAnalyzer::tuning()`, `ChordAnalyzer::tuning()` and `MusicAnalyzer::tuning()` report the value used, and `AnalysisResult::tuning` carries it. `tuning_to_reference_hz(tuning, a4 = 440)` and `reference_hz_to_tuning(hz, a4 = 440)` in `feature/chroma.h` convert to and from the Hz a reference pitch is stated in.
+Key tuning is covered in [Key detection](./glossary/analysis/key-detection.md). `KeyConfig::tuning`, `ChordConfig::tuning` and `MusicAnalyzerConfig::tuning` are a recording's offset from concert A440 in fractions of a semitone, in `[-0.5, 0.5)`. Set `auto_tuning = true` on any of the three to measure it from the audio (`measure_tuning(audio)` in `feature/pitch.h`) instead; `KeyAnalyzer::tuning()`, `ChordAnalyzer::tuning()` and `MusicAnalyzer::tuning()` report the value used, and `AnalysisResult::tuning` carries it. `tuning_to_reference_hz(tuning, a4 = 440)` and `reference_hz_to_tuning(hz, a4 = 440)` in `feature/chroma.h` convert to and from the Hz a reference pitch is stated in.
 
 ### Chord
+
+Background: [Chord recognition](./glossary/analysis/chord-recognition.md).
 
 ```cpp
 struct Chord {
@@ -237,7 +245,7 @@ struct Chord {
 std::string chord_symbol(int root, int quality);
 ```
 
-`ChordAnalyzer::chord_to_roman_numeral(chord, key_root, mode)` returns the Roman numeral of a chord in a key (`"N.C."` for an unknown chord), and `ChordAnalyzer::chord_function(chord, key_root, mode)` its harmonic function: `"tonic"`, `"subdominant"`, `"dominant"`, `"chromatic"` for a root outside the key's scale, or `"none"` for an unknown chord. Every mode other than minor reads the major scale. Both are static and analyse no audio.
+`ChordAnalyzer::chord_to_roman_numeral(chord, key_root, mode)` returns the Roman numeral of a chord in a key (`"N.C."` for an unknown chord), and `ChordAnalyzer::chord_function(chord, key_root, mode)` its harmonic function: `"tonic"`, `"subdominant"`, `"dominant"`, `"chromatic"` for a root outside the key's scale, or `"none"` for an unknown chord. Every mode other than minor reads the major scale. Both are static and analyze no audio.
 
 ### Section
 
@@ -265,7 +273,12 @@ struct AnalysisResult {
   TimeSignature time_signature;
   std::vector<TimeSignature> time_signature_candidates;
   std::vector<Beat> beats;
+  std::vector<int> downbeat_indices; // Indices into beats, not one flag per beat
+  int downbeat_phase;
+  BeatObservations beat_observations; // Parallel onset, low-frequency and chord-change evidence
+  std::vector<float> beat_local_bpm;  // Parallel to beats; empty unless compute_tempo_curve
   std::vector<Chord> chords;
+  std::vector<std::string> chord_roman_numerals; // Parallel to chords, relative to key; empty for N.C.
   std::vector<Section> sections;
   Timbre timbre;
   Dynamics dynamics;

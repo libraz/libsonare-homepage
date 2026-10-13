@@ -13,45 +13,20 @@ For a first pass, you only need three ideas:
 2. route MIDI notes to the destination that uses that preset;
 3. optionally override simple fields such as `cutoffHz`, `ampAttackMs`, or `stereoSpread`.
 
-Under the hood, NativeSynth is one synthesizer with **seventeen swappable synthesis engines**. Each engine is a different way to create the raw tone. The physical-model voices are useful for data-free preview and fallback: the piano has been tuned, while every other physical model still awaits adjustment and calibration. Further work is planned for future patch releases.
+Under the hood, NativeSynth is one synthesizer with **seventeen swappable synthesis engines**. Each engine is a different way to create the raw tone; the [overview table](#the-seventeen-synthesis-engines) lists them with what each is good for.
 
-- a virtual-analog subtractive voice (classic synth leads and pads),
-- FM (electric pianos, bells, and clavinet),
-- Karplus-Strong plucked string (guitars, basses, harp, and harpsichord),
-- modal percussion (marimba, vibraphone),
-- additive drawbar organ,
-- membrane percussion (the drum kit),
-- an extended-waveguide acoustic piano,
-- sustained flue-pipe organ,
-- bowed-string waveguide,
-- reed woodwind waveguide,
-- brass lip-reed waveguide,
-- air-jet flute waveguide,
-- a buzzing-bridge plucked string (koto, sitar, tanpura),
-- a source-filter vocal voice (choir and solo voices),
-- a free-reed voice (accordion, harmonica, bandoneon),
-- a jack-and-plectrum harpsichord with real string choirs,
-- and a sample player for PCM you supply yourself.
+<MaturityNote
+  item="physical-model-maturity"
+  :labels="{
+    title: 'Calibration status',
+    body: 'Only the acoustic piano is calibrated against a reference recording. Every other physical model, including the harpsichord, modal and membrane models, is provisional: it is meant for data-free preview and as the fallback floor, and its sound can change across patch releases.'
+  }"
+/>
 
 All seventeen share one common control layer for modulation, envelopes, filters, stereo width, and polyphony, so the same patch fields work across very different sounds. To get a sound, pick a preset by name — or start from a preset and change only the fields you care about with a `SynthPatch`. You never have to touch the engine internals to start.
 
-::: info Synthesis terms in one place
-The engine names below are different ways to *generate* a tone. You don't need them all to start — pick a preset and play — but here is the one-line version of each:
-
-- **subtractive** — start with a bright waveform and carve it with a filter (the classic analog-synth recipe).
-- **FM / phase modulation** — one oscillator's output is added to another's phase (the DX-family way of implementing FM), producing metallic and bell-like tones.
-- **Karplus-Strong** — a short delay loop that models a plucked string.
-- **modal** — a bank of tuned resonators modeling a struck bar or bell.
-- **additive / drawbar** — sums harmonic sine partials, like the drawbars on a Hammond organ.
-- **(extended) waveguide** — a delay-line model of a vibrating string or tube.
-- **reed / brass / flute waveguide** — sustained breath-excited models for woodwinds and brass.
-- **buzzing-bridge plucked** — a plucked-string loop whose bridge can be made to graze the string and spray energy into the upper partials: cleanly terminated at `buzz` 0 (harp, koto), shimmering and buzzing as `buzz` rises (sitar, tanpura).
-- **source-filter vocal** — a glottal source (sawtooth + tilt) fed through a bank of vowel formant resonators for choir and solo-voice tones.
-- **free reed** — a driven metal-tongue oscillator (accordion, harmonica, bandoneon), optionally musette-detuned into two beating tongues.
-- **jack and plectrum** — the harpsichord's own mechanism: a quill plucks a registration of separate string choirs, so key speed barely changes loudness.
-- **sample** — no synthesis at all: PCM frames you hand the engine, mapped over the keyboard and played through the same filter and mod matrix as every other voice.
-
-Two terms appear throughout the patch controls: an **ADSR envelope** (attack/decay/sustain/release — how a level rises and falls over a note) and the **mod matrix** (a routing table that sends modulation sources such as LFOs or envelopes to targets such as pitch or filter cutoff).
+::: info Synthesis terms
+You don't need the engine names to start: pick a preset and play. [Synthesis Basics](./glossary/instruments/synthesis-basics.md#the-seventeen-synthesis-families) gives the one-line version of each method. Two terms appear throughout the patch controls: an **ADSR envelope** (attack/decay/sustain/release, how a level rises and falls over a note) and the **mod matrix** (a routing table that sends modulation sources such as LFOs or envelopes to targets such as pitch or filter cutoff).
 :::
 
 ::: info MIDI never renders silent
@@ -68,24 +43,35 @@ Because the engine takes the oscillator's place, `waveform` shapes the subtracti
 
 <SynthSignalPathFigure title="One voice, and where the mod matrix reaches into it" />
 
-## What You Will Learn
-
-By the end of this page you should be able to:
-
-- pick the right synthesis engine for a sound, and the right named preset;
-- start from a preset and override individual fields with a `SynthPatch`;
-- list the **real** preset and enum names from the runtime instead of guessing;
-- understand the `va:` routing prefix and the `drum-kit` GM drum map;
-- render MIDI to audio offline with `bounceWithSynthInstrument` and live with `setSynthInstrument`;
-- know when a note plays NativeSynth versus the loaded SoundFont.
-
 ::: tip Play it first
-The [Synth Playground](/synth) runs this synthesizer in the browser — a keyboard, the full preset catalog, and live patch edits. It uses nothing but the instruments: no analysis, no mastering. [Step Bass](/step-bass) puts the subtractive engine to work as one instrument instead: a sixteen-step monophonic bass machine on the diode ladder, where accent and slide are sequenced per step and the cutoff moves under a sounding note. The [instrument demos](/demos) cover single behaviours such as the ADSR envelope, the filter, and the GS effects.
+The [Synth Playground](/synth) runs this synthesizer in the browser — a keyboard, the full preset catalog, and live patch edits. It uses nothing but the instruments: no analysis, no mastering. [Step Bass](/step-bass) puts the subtractive engine to work as one instrument instead: a sixteen-step monophonic bass machine on the diode ladder, where accent and slide are sequenced per step and the cutoff moves under a sounding note. The [instrument demos](/demos) cover single behaviors such as the ADSR envelope, the filter, and the GS effects.
 :::
 
 ## The seventeen synthesis engines
 
-Every preset selects one `engineMode`. The shared sections (filter, envelopes, LFOs, mod matrix, body resonance, polyphony) apply on top of whichever engine is active. Mode-specific deep parameters — FM operator stacks, modal mode tables, drawbar registrations, kit pieces, piano strings, pipe ranks, bowed-string friction, reed/brass bores, and flute jet geometry — come with the named presets, and a patch overrides them one by one through [`engineParams`](#engine-parameters).
+Every preset selects one `engineMode`. The shared sections (filter, envelopes, LFOs, mod matrix, body resonance, polyphony) apply on top of whichever engine is active. Each engine's own model fields come with the named presets, and a patch overrides them one by one through [`engineParams`](#engine-parameters).
+
+| Engine | Kind | Good for | `engineParams` keys (gated) |
+|--------|------|----------|-----------------------------|
+| `subtractive` | signal | leads, basses, pads, plucks | 0 |
+| `fm` | signal | electric pianos, bells, mallets | 49 |
+| `additive` | signal | drawbar organ | 24 (2) |
+| `karplus-strong` | physical, provisional | guitars, basses, harp | 23 |
+| `modal` | physical, provisional | glockenspiel, vibraphone, marimba | 30 |
+| `percussion` | physical, provisional | the GM drum kit | 93 (92) |
+| `piano` | physical, calibrated | acoustic piano | 14 |
+| `pipe-organ` | physical, provisional | church organ ranks | 63 (52) |
+| `bowed-string` | physical, provisional | violin family | 17 (3) |
+| `reed` | physical, provisional | clarinet, saxophones, oboe, bassoon | 21 (4) |
+| `brass` | physical, provisional | trumpet, trombone, horn, tuba | 21 (1) |
+| `flute` | physical, provisional | flutes, whistles, ocarina | 18 |
+| `plucked-string` | physical, provisional | koto, sitar, tanpura | 8 |
+| `vocal` | physical, provisional | choir and solo voices | 7 |
+| `free-reed` | physical, provisional | accordion, harmonica, bandoneon | 12 (3) |
+| `harpsichord` | physical, provisional | harpsichord | 29 (5) |
+| `sample` | host PCM | your own recordings | 0 |
+
+The key counts are what `synthEngineParamInfo(engineMode)` returns; the number in parentheses is how many of those keys carry an [`activeWhen`](#gated-fields-activewhen) gate. The subsections below say only what is specific to each engine.
 
 ::: info A bare `engineMode` voices that engine's base preset
 A patch that sets only `engineMode` takes the engine section from the named `preset` when that preset uses the selected engine, and otherwise from the engine's base preset: `fm` the e-piano, `modal` the bell, `percussion` the GM drum kit, and so on. Every engine except `sample` sounds from a bare mode; `sample` has nothing to voice until a `SampleBank` is bound and stays silent without one. Raw engine levels are not matched, and named presets carry their own `gain` while an API patch uses only the `gain` you provide, so set an explicit gain and audition the result when comparing bare modes or building your own patch.
@@ -112,23 +98,23 @@ All four stay stable and zipper-free under per-sample cutoff/resonance modulatio
 
 ### `fm` — frequency modulation
 
-A phase-modulation operator stack (one oscillator's output is added to another's phase → metallic/bell tones) with a small algorithm table, exponential operator envelopes, a feedback operator, and velocity-to-index (brightness) scaling. Good for **electric pianos, bells, mallets, clavinet, and brass** — the metallic, bell-like, and inharmonic sounds subtractive struggles with. **Preset-only.** A bare `engineMode: 'fm'` carries no operator levels and renders silence; start from `e-piano`.
+A phase-modulation operator stack (one oscillator's output is added to another's phase → metallic/bell tones) with a small algorithm table, exponential operator envelopes, a feedback operator, and velocity-to-index (brightness) scaling. Good for **electric pianos, bells, mallets, clavi-style keys, and brass** — the metallic, bell-like, and inharmonic sounds subtractive struggles with. A bare `engineMode: 'fm'` uses the `e-piano` engine section; select the named preset to use its complete wrapper settings too.
 
 ### `karplus-strong` — plucked string
 
-A fractional-delay waveguide loop (a short delay loop that models a plucked string) with phase-exact tuning, plus pick-position comb, velocity-driven brightness, decay stretching, and note-off loop damping (finger/palm mute). Guitar, harp, and bass presets add provisional physical details: pickup position, body coupling, steel-string dispersion, sympathetic open strings, tension bend, and dual-polarization decay. Its acoustic realism is **not yet calibrated**. Good for **plucked and strummed strings** — guitar, bass, harp, and the plucked ethnic family. (The harpsichord is not a bright guitar and has its own engine; see below.) Presets: `classical-guitar`, `steel-guitar`, `electric-guitar`, `harp`, `bass-acoustic`, `bass-fingered`, `bass-picked`, `bass-fretless`, `bass-slap`.
+A fractional-delay waveguide loop (a short delay loop that models a plucked string) with phase-exact tuning, plus pick-position comb, velocity-driven brightness, decay stretching, and note-off loop damping (finger/palm mute). Guitar, harp, and bass presets add physical details: pickup position, body coupling, steel-string dispersion, sympathetic open strings, tension bend, and dual-polarization decay. Good for **plucked and strummed strings** — guitar, bass, harp, and the plucked ethnic family. (The harpsichord is not a bright guitar and has its own engine; see below.) Presets: `classical-guitar`, `steel-guitar`, `electric-guitar`, `harp`, `bass-acoustic`, `bass-fingered`, `bass-picked`, `bass-fretless`, `bass-slap`.
 
 ### `modal` — mallet percussion
 
-A modal resonator bank (a bank of tuned resonators modeling a struck bar or bell) tuned to physical mode ratios (uniform-bar glockenspiel, deep-arch marimba/vibraphone), with mallet-hardness velocity weighting and per-mode decay. Good for **tuned mallet instruments** — glockenspiel, vibraphone, marimba, xylophone. **Preset-only.** A bare `engineMode: 'modal'` has an empty mode list and renders silence; start from `marimba`, `glass`, or `bell`.
+A modal resonator bank (a bank of tuned resonators modeling a struck bar or bell) tuned to physical mode ratios (uniform-bar glockenspiel, deep-arch marimba/vibraphone), with mallet-hardness velocity weighting and per-mode decay. Good for **tuned mallet instruments** — glockenspiel, vibraphone, marimba, xylophone. A bare `engineMode: 'modal'` uses the `bell` engine section. Named presets include `marimba`, `glass`, and `bell`.
 
 ### `additive` — drawbar organ
 
-The nine Hammond drawbar pitches (summing harmonic sine partials, one drawbar per partial) with stepped stop levels, free-running partial phases, and a key-click contact transient. Good for **organs** — sustained, harmonic-rich registrations. Preset: `organ`.
+The nine drawbar pitches of a tonewheel organ (summing harmonic sine partials, one drawbar per partial) with stepped stop levels, free-running partial phases, and a key-click contact transient. Good for **organs** — sustained, harmonic-rich registrations. Preset: `organ`.
 
 ### `percussion` — membrane percussion
 
-Rayleigh circular-membrane modes with a descending strike-pitch envelope under filtered noise. This engine backs the **GM drum kit** — kick, snare shell + wires, toms, hats, and cymbals with inharmonic ring modes, one-shot and deterministic. **Preset-only.** A bare `engineMode: 'percussion'` has no kit and no membrane modes and renders silence; start from `drum-kit`.
+Rayleigh circular-membrane modes with a descending strike-pitch envelope under filtered noise. This engine backs the **GM drum kit** — kick, snare shell + wires, toms, hats, and cymbals with inharmonic ring modes, one-shot and deterministic. A bare `engineMode: 'percussion'` uses the `drum-kit` engine section; the named `drum-kit` preset also supplies its wrapper settings.
 
 ### `piano` — extended-waveguide acoustic piano
 
@@ -136,37 +122,37 @@ A data-free grand-piano sketch with the four piano-defining elements: stiff-stri
 
 Three structural details shape what you hear beyond that outline:
 
-- **Longitudinal string modes** are modelled and summed into the output. A struck string vibrates along its length as well as across it, and those modes — driven by the tension the transverse motion itself creates — are what fills the bass attack between roughly 200 Hz and 3 kHz. Without them a low note is felt more than heard.
+- **Longitudinal string modes** are modeled and summed into the output. A struck string vibrates along its length as well as across it, and those modes — driven by the tension the transverse motion itself creates — are what fills the bass attack between roughly 200 Hz and 3 kHz. Without them a low note is felt more than heard.
 - **Inharmonicity follows a U-shaped curve**, not a monotonic climb. It grows toward the treble as stiffness would suggest, but below the bass break the wound strings turn it back upward, so the very bottom of the keyboard is more inharmonic than the notes just above it.
 - **Stretch tuning is an asymmetric Railsback curve** — two power-law branches meeting at the A4 anchor, about ten cents flat at the bottom against fifty sharp at the top, which is why one odd function about the middle cannot express it. The curve is held at the fitted keyboard bounds rather than extrapolated past them.
 
 The voice also carries **an explicit output level**, so you can set its place in a mix directly instead of inferring it from the string, hammer, and soundboard contributions.
 
-This is still a provisional model intended for built-in preview, not a sampled-piano replacement. Good for **acoustic piano**. Preset: `acoustic-piano`. GM programs 0-3 use it, as do the five piano-derived [GS variations](./gm-gs.md#gs-variation-tones).
+It is a built-in model, not a sampled-piano replacement. Good for **acoustic piano**. Preset: `acoustic-piano`. GM programs 0-3 use it, as do the five piano-derived [GS variations](./gm-gs.md#gs-variation-tones).
 
 ### `pipe-organ` — sustained flue pipe
 
-A provisional waveguide flue-pipe model with shared wind behavior, multi-rank registration, reed-pipe color, and mouth/radiation correction. Good for **church organ color previews** from principals and bourdon stops to flute and trumpet ranks. Presets: `church-organ`, `church-flute`, `church-bourdon`, `church-trumpet`.
+A waveguide flue-pipe model with shared wind behavior, multi-rank registration, reed-pipe color, and mouth/radiation correction. Good for **church organ color previews** from principals and bourdon stops to flute and trumpet ranks. Presets: `church-organ`, `church-flute`, `church-bourdon`, `church-trumpet`.
 
 ### `bowed-string` — friction-excited string
 
-A sustained bowed-string waveguide with bow speed/force/position control, sympathetic resonance, second-polarization beating, and a violin-family body resonator. The model is provisional and has not yet been tuned against references. Good for **violin-family previews**. Presets: `violin`, `viola`, `cello`, `contrabass`.
+A sustained bowed-string waveguide with bow speed/force/position control, sympathetic resonance, second-polarization beating, and a violin-family body resonator. Good for **violin-family previews**. Presets: `violin`, `viola`, `cello`, `contrabass`.
 
 ### `reed` — woodwind reed
 
-A reed-bore waveguide with cylindrical and conical variants, tonehole/growth-cone behavior, register-scaled voicing, and live breath/brightness control. This is a provisional GM fallback/preview voice that still awaits calibration. Good for **single- and double-reed woodwind previews** and saxophones. Presets: `clarinet`, `soprano-sax`, `alto-sax`, `tenor-sax`, `baritone-sax`, `oboe`, `english-horn`, `bassoon`.
+A reed-bore waveguide with cylindrical and conical variants, tonehole/growth-cone behavior, register-scaled voicing, and live breath/brightness control. Good for **single- and double-reed woodwind previews** and saxophones. Presets: `clarinet`, `soprano-sax`, `alto-sax`, `tenor-sax`, `baritone-sax`, `oboe`, `english-horn`, `bassoon`.
 
 ### `brass` — lip-reed brass
 
-A brass waveguide with lip tension, brass-bell body resonance, conical/cylindrical voicing, register scaling, and a bright cuivré edge for loud playing. This is a provisional physical model, so use it as a built-in brass fallback rather than as a final brass simulation. Presets: `brass`, `trumpet`, `trombone`, `tuba`, `french-horn`, `muted-trumpet`, `cornet`, `flugelhorn`, `euphonium`.
+A brass waveguide with lip tension, brass-bell body resonance, conical/cylindrical voicing, register scaling, and a bright cuivré edge for loud playing. Good for **brass fallback and preview**. Presets: `brass`, `trumpet`, `trombone`, `tuba`, `french-horn`, `muted-trumpet`, `cornet`, `flugelhorn`, `euphonium`.
 
 ### `flute` — air-jet flute
 
-A breath-driven air-jet / open-pipe model with jet/reflection brightness, chiff/noise, overblow behavior, and vibrato control. This is currently a provisional fallback voice for **flutes, whistles, and ocarina-like edge-tone instruments**. Presets: `concert-flute`, `piccolo`, `recorder`, `pan-flute`, `shakuhachi`, `tin-whistle`, `ocarina`, `blown-bottle`.
+A breath-driven air-jet / open-pipe model with jet/reflection brightness, chiff/noise, overblow behavior, and vibrato control. Good for **flutes, whistles, and ocarina-like edge-tone instruments**. Presets: `concert-flute`, `piccolo`, `recorder`, `pan-flute`, `shakuhachi`, `tin-whistle`, `ocarina`, `blown-bottle`.
 
 ### `plucked-string` — buzzing-bridge plucked string
 
-A plucked-string waveguide whose bridge model keeps grazing the string, spraying energy back into the upper partials so the note shimmers and buzzes for its whole ring. The `buzz` control sweeps from a clean harp or koto (no buzz) to the bright, sustaining rattle of a sitar's curved jawari bridge or a shamisen's sawari. Distinct from `karplus-strong`, which models a clean-terminated pluck (the named `harp` preset stays there — `pluck`, `bell`, and `brass` are GM-fallback aliases whose engine differs from what the name suggests). Good for **the koto / sitar buzzing-bridge plucked family**. Presets: `pluck`, `harp-plucked`, `koto`, `sitar`, `tanpura`.
+A plucked-string waveguide whose bridge model keeps grazing the string, spraying energy back into the upper partials so the note shimmers and buzzes for its whole ring. The `buzz` control sweeps from a clean harp or koto (no buzz) to the bright, sustaining rattle of a sitar's curved jawari bridge or a shamisen's sawari. Distinct from `karplus-strong`, which models a clean-terminated pluck (the named `harp` preset stays there, while `pluck`, despite its name, runs on this engine). Good for **the koto / sitar buzzing-bridge plucked family**. Presets: `pluck`, `harp-plucked`, `koto`, `sitar`, `tanpura`.
 
 ### `vocal` — source-filter voice
 
@@ -206,7 +192,7 @@ synthPresetNames();
 
 const pad = synthPresetPatch('warm-pad');
 // { preset: 'warm-pad', engineMode: 'subtractive', waveform: 'saw',
-//   unison: 7, detuneCents: 18, cutoffHz: 2800, ampAttackMs: 400, ... }
+//   unison: 7, detuneCents: 18, cutoffHz: 1800, ampAttackMs: 620, ... }
 ```
 
 ```python [Python]
@@ -221,7 +207,7 @@ sonare.synth_preset_names()
 
 pad = sonare.synth_preset_patch("warm-pad")
 # SynthPatch(preset='warm-pad', engine_mode='subtractive', waveform='saw',
-#            unison=7, detune_cents=18.0, cutoff_hz=2800.0, ...)
+#            unison=7, detune_cents=18.0, cutoff_hz=1800.0, ...)
 ```
 
 :::
@@ -262,7 +248,7 @@ Think of a `SynthPatch` as "a preset, plus your tweaks". It starts from a **base
 The most useful beginner workflow is small and reversible: choose a preset, change one or two audible fields, listen, then reset or move on. For example, start from `warm-pad`, lengthen `ampAttackMs` for a slower fade-in, lower `cutoffHz` for a darker tone, or raise `stereoSpread` for a wider pad. You do not need to fill the whole object.
 
 ::: warning Absent and zero are different
-What decides whether a field overrides the base is **presence**, not value. Omit a numeric field and the base value stays; set one and it overrides the base, clamped to its audible range. That includes an explicit `0` — writing `ampSustain: 0` really does drop the sustain to zero, and `stereoSpread: 0` really does collapse the patch to the centre. Enum fields still use `'default'` to mean "keep".
+What decides whether a field overrides the base is **presence**, not value. Omit a numeric field and the base value stays; set one and it overrides the base, clamped to its audible range. That includes an explicit `0` — writing `ampSustain: 0` really does drop the sustain to zero, and `stereoSpread: 0` really does collapse the patch to the center. Enum fields still use `'default'` to mean "keep".
 
 The patch carries a per-field "was this set?" record alongside a struct version, which is what keeps "absent" and "zero" apart. A zero is therefore never treated as "untouched", and no token value such as `ampSustain: 0.001` is needed to approximate it — write the `0` you mean.
 
@@ -279,23 +265,29 @@ The patch exposes the shared controls every engine uses:
 - **Key tracking** — making a parameter (like filter cutoff) follow the note's pitch up the keyboard.
 :::
 
+Ranges are what `synthPatchParamInfo()` reports; a value outside one is clamped, and the same call returns each field's init value.
+
 | Group | Fields |
 |-------|--------|
-| Oscillator | `engineMode`, `waveform`, `unison` (1-7), `detuneCents`, `driftCents`, `driftRateHz` (0.01-20), `drive` (0-1) |
-| Filter | `filterModel`, `filterOutput` (SVF only), `cutoffHz`, `resonanceQ`, `keyTrack` (0-1), `envToCutoffCents`, `velToCutoffCents` |
-| Amp envelope | `ampDelayMs` (0-5000), `ampAttackMs`, `ampHoldMs` (0-5000), `ampDecayMs`, `ampSustain`, `ampReleaseMs`, `oneShot` |
-| Filter envelope | `filterDelayMs` (0-5000), `filterAttackMs`, `filterHoldMs` (0-5000), `filterDecayMs`, `filterSustain`, `filterReleaseMs` |
-| LFOs & glide | `lfoRateHz`, `lfoToPitchCents`, `lfo2RateHz`, `glideMs` |
-| Body resonance | `body` (`none` / `guitar` / `violin` / `wood-tube` / `brass-bell` / `vocal`), `bodyMix` (0-1) |
-| Stereo & output | `stereoSpread` (0-1), `gain` (linear), `polyphony` (1-64), `busDrive` (0-1) |
+| Oscillator | `unison` (1-7) and `detuneCents` (0-200), both subtractive only; `driftCents` (0-100), `driftRateHz` (0.01-20), `drive` (0-1), `pitchOffsetCents` (-4800 to 4800) |
+| Filter | `cutoffHz` (10-22000), `resonanceQ` (0.5-30), `keyTrack` (0-1), `envToCutoffCents` and `velToCutoffCents` (-9600 to 9600), `hpCutoffHz` (0-22000, 0 is off) |
+| Output stage | `sampleHoldHz` (0-192000, 0 is off), `bitDepth` (0-24, 0 is off) |
+| Amp and filter envelopes | `ampDelayMs` / `ampHoldMs` and the `filter*` pair (0-5000); attack, decay and release times (up to 20000 ms); `ampSustain` / `filterSustain` (0-1); `oneShot` (amp only, boolean) |
+| LFOs and glide | `lfoRateHz`, `lfo2RateHz` (0-40), `lfoToPitchCents` (0-1200), `glideMs` (0-5000) |
+| Body | `body` (`none` / `guitar` / `violin` / `wood-tube` / `brass-bell` / `vocal`), `bodyMix` (0-1) |
+| Stereo and output | `stereoSpread` (0-1), `gain` (linear), `polyphony` (1-64), `busDrive` (0-1) |
+| Enums | `engineMode`, `waveform` (subtractive only), `filterModel`, `filterOutput` (SVF only): names from `synthEnumTables()`, or `'default'` to keep the base |
 | Voice start state | `retrigger` (`'default'` / `'free'` / `'note'`) |
 | Engine section | `engineParams` (a key-to-number record) |
 | Mod matrix | `modRoutings` (up to 8) |
-| Binding (JS only) | `destinationId` (default `0`) |
+| Sample engine | `sampleBank`, `sampleSet`, `sampleLevel` (0-8), `sampleLoop`, `sampleStartOffset` (0-0.999), `sampleKeyTrack`; see [the `sample` engine](#host-pcm-the-sample-engine) |
+| Binding | `destinationId` (JS only, default `0`); `useGmPrograms` (Python `use_gm_programs`) follows incoming GM bank and program changes, see [GM and GS Fallback Bank](./gm-gs.md#following-gm-programs-instead-of-pinning-one-patch) |
 
 (*Polyphony* is how many notes can sound at once; a *voice* is one sounding note, and *voice stealing* cuts the oldest note when you run out.)
 
-The delay stage holds an envelope at zero before its attack starts and the hold stage keeps it at the peak before the decay; both are in milliseconds. `oneShot` ignores note-off, so the voice ends with its envelope's decay or its engine's own end, as a drum hit does. `driftRateHz` sets how fast the per-voice pitch drift wanders, and `driftCents` its depth. The five times (`ampDelayMs`, `ampHoldMs`, `filterDelayMs`, `filterHoldMs`, `driftRateHz`) are automatable on a live instrument like their sibling fields; a delay or hold change applies the next time its stage starts.
+The delay stage holds an envelope at zero before its attack starts and the hold stage keeps it at the peak before the decay; both are in milliseconds ([Delay and hold: DAHDSR](./glossary/instruments/envelopes-modulation.md#delay-and-hold-dahdsr)). `driftRateHz` sets how fast the per-voice pitch drift wanders, and `driftCents` its depth ([Envelopes and Modulation](./glossary/instruments/envelopes-modulation.md#drift-every-voice-slightly-out-of-tune) shows what that sounds like). The four delay/hold times and the drift frequency are automatable on a live instrument; a delay or hold change applies the next time its stage starts.
+
+`oneShot` ignores note-off. With zero amp sustain, the voice ends when its envelope decays to silence. With positive sustain, it needs an engine that ends naturally, such as a finite FM envelope, a percussion strike, or a non-looping sample. A sustained one-shot patch with no natural end has an unbounded tail, so [automatic-length bounces](./project-bounce.md#omitting-the-length) are refused; pass a positive `totalFrames` to render a bounded window.
 
 `retrigger` chooses the seed used when each voice starts. `'default'` keeps the base patch's choice; every catalog preset uses `'free'`. `'free'` varies oscillator start phases, unison jitter, drift, and each engine's noise stream from the voice pool slot and running note count, so repeated notes generally differ. `'note'` derives those values from the MIDI note number alone, so playing the same note again after its tail ends renders the same samples. The setting applies to each voice's start state. It does not reset controllers, the bus DC blocker, a piano's shared soundboard, a plucked string's sympathetic halo, an organ's wind chest, or effect tails. The `drum-kit` preset keeps its own mode for each drum piece.
 
@@ -323,16 +315,31 @@ Piano-style pedal controls are decoded as ordinary MIDI CCs. Sustain pedal **CC6
 
 `engineParams` sets fields of the selected engine's own model section by key: bow force, breath pressure, lip tension, strike position, FM operator levels, mode ratios. Keys are the section's field names in lowerCamelCase (`bowForce`, `ops0.level`, `ranks2.level`), and absent keys keep the base section's value.
 
-```typescript
+::: code-group
+
+```typescript [Browser / Node]
 const audio = project.bounceWithSynthInstrument(
   { engineMode: 'bowed-string', engineParams: { bowForce: 0.9, bowPosition: 0.08 } },
   { totalFrames: 48000, numChannels: 2 },
 );
 ```
 
-Unlike the wrapper fields, nothing here is clamped. An unknown key, a key of another engine's section, a non-finite value, a fractional value for a whole-number field or a value outside the field's range is refused with an error that names the key (`engine param 'bowForce': out of range [0, 1]`). In Python the field is `engine_params`.
+```python [Python]
+audio = project.bounce_with_synth_instrument(
+    sonare.SynthPatch(
+        engine_mode="bowed-string",
+        engine_params={"bowForce": 0.9, "bowPosition": 0.08},
+    ),
+    total_frames=48000,
+    num_channels=2,
+)
+```
 
-`synthEngineParamInfo(engineMode)` lists the keys an engine accepts, and `synthPatchParamInfo()` lists every numeric wrapper field. Both return `SynthParamInfo[]` in the shape of the [insert parameter descriptor](./effects-inserts.md#the-parameter-descriptor): `name`, `type` (`'number'` or `'boolean'`, a switch given as 0 or 1), `integer`, `min`, `max`, `default` and `unit`. For an engine field `default` is the base preset's value; for a wrapper field it is the init patch's. `synthEngineParamInfo` returns `[]` for `default`, `subtractive` and `sample`. Python spells them `synth_engine_param_info` and `synth_patch_param_info`.
+:::
+
+Unlike the wrapper fields, nothing here is clamped. An unknown key, a key of another engine's section, a non-finite value, a fractional value for a whole-number field or a value outside the field's range is refused with an error that names the key (`engine param 'bowForce': out of range [0, 1]`). In Python the field is `engine_params`, and the keys stay lowerCamelCase. The command-line `--synth` option takes a preset name only, so patches and `engineParams` are available in the bindings, not the CLI.
+
+`synthEngineParamInfo(engineMode)` lists the keys an engine accepts, and `synthPatchParamInfo()` lists every numeric wrapper field. Both return `SynthParamInfo[]` in the shape of the [insert parameter descriptor](./effects-inserts.md#the-parameter-descriptor): `name`, `type` (`'number'` or `'boolean'`, a switch given as 0 or 1), `integer`, `min`, `max`, `default`, `unit` and, for a gated field, `activeWhen`. For an engine field `default` is the base preset's value; for a wrapper field it is the init patch's. `default` is a `number`, or a `boolean` for a switch (the percussion `gmKit` is `true`), so narrow it before doing arithmetic. `synthEngineParamInfo` returns `[]` for `default`, `subtractive` and `sample`. Python spells them `synth_engine_param_info` and `synth_patch_param_info`.
 
 ```typescript
 synthEngineParamInfo('fm').slice(0, 2);
@@ -340,7 +347,27 @@ synthEngineParamInfo('fm').slice(0, 2);
 //  { name: 'ops0.ratio', type: 'number', min: 0, max: 64, default: 1, unit: 'ratio' }]
 ```
 
+In Python the result is a list of dicts with the same keys; a gate stays under the camelCase key `activeWhen`.
+
 The FM operator algorithm is the `algorithm` key of the `fm` section. Build a control panel from these descriptors rather than copying the ranges.
+
+#### Gated fields: `activeWhen`
+
+A field can be accepted yet have no effect, because another field switches its section off. `activeWhen` states when the field reaches the voice, as a list of alternatives: each alternative is a list of conditions that must all hold, and the field is live when at least one alternative holds. A condition is `{ key, scope, relation, value }`: `key` is read from the same `synthEngineParamInfo` table when `scope` is `'engine'`, or from the `SynthPatch` when it is `'patch'`; `relation` is one of `'eq'`, `'ne'`, `'gt'`, `'ge'`, `'lt'`, `'le'`. A field with no `activeWhen` is not gated. If you set a field and hear nothing change, read its `activeWhen`: in the `percussion` section 92 of the 93 fields are gated, so `noiseBurstCount` does nothing while `gmKit` is on.
+
+```typescript
+synthEngineParamInfo('percussion').find((p) => p.name === 'noiseBurstCount')?.activeWhen;
+// [[{ key: 'gmKit',     scope: 'engine', relation: 'eq', value: false },
+//   { key: 'noiseGain', scope: 'engine', relation: 'gt', value: 0 }]]
+```
+
+In the `percussion` section every field except `gmKit` needs `gmKit` off, because the GM kit chooses its own pieces; the layer fields add their own gate (`noiseBurstCount` needs `noiseGain > 0`, `shellNumModes` needs `shellMix > 0`). A field that reaches the voice through several layers carries one alternative per route: `baseFreqHz` is live when any sounding mode or shell layer uses it, so its list has one alternative for each. In `pipe-organ`, the single-pipe fields (`stopped`, `brightness`, `reed`) act only while `rankCount` is `0`, and the `ranks0.*` fields only while `rankCount` is above `0`. The reed, brass, free-reed, harpsichord, bowed-string and additive sections gate their fields the same way.
+
+To build a panel, evaluate each gate against the current values and disable or hide the control when no alternative holds; the value is still stored and still validated, it just does not change the sound. Compare numbers with the relation, and a boolean switch or a wrapper enum name (`body: 'violin'`) with `eq` / `ne`. A field that depends on performance (velocity, a controller, overlapping notes) or only saturates past some value carries no `activeWhen`, so its absence does not promise that the field is always audible.
+
+How an engine parameter differs from a patch field (refused versus clamped, and where each lives) is explained in [Synthesis Basics](./glossary/instruments/synthesis-basics.md#patch-fields-and-engine-parameters).
+
+The [Synth Playground](/synth) builds its model controls this way: it shows only the fields whose gate holds, so the `percussion` engine with `gmKit` on shows `gmKit` alone, and with the kit off it shows the modal fields that apply.
 
 ### Enum name tables
 
@@ -352,11 +379,7 @@ import { init, synthEnumTables } from '@libraz/libsonare';
 await init();
 synthEnumTables();
 // {
-//   engineModes:      ['default', 'subtractive', 'fm', 'karplus-strong',
-//                      'modal', 'additive', 'percussion', 'piano',
-//                      'pipe-organ', 'bowed-string', 'reed', 'brass', 'flute',
-//                      'plucked-string', 'vocal', 'free-reed', 'harpsichord',
-//                      'sample'],
+//   engineModes:      ['default', 'subtractive', 'fm', ..., 'harpsichord', 'sample'],
 //   waveforms:        ['default', 'sine', 'saw', 'square', 'triangle', 'noise'],
 //   builtinWaveforms: ['sine', 'saw', 'sawtooth', 'square', 'triangle'],
 //   filterModels:     ['default', 'svf', 'moog-ladder', 'diode-ladder', 'sallen-key'],
@@ -370,8 +393,12 @@ synthEnumTables();
 //                      'resonance-q', 'vibrato-depth-cents', 'filter-env-depth',
 //                      'lfo1-rate-scale', 'excitation-force', 'excitation-position',
 //                      'excitation-brightness', 'spectrum-morph'],
+//   // ...plus controllerInputs, controllerAxes, articulations,
+//   //    mpeDimensions and noteTrackings
 // }
 ```
+
+Python spells the call `synth_enum_tables()` and returns the same tables under snake_case keys.
 
 The same arrays are also exported as named constants (`SYNTH_ENGINE_MODES`, `SYNTH_OSC_WAVEFORMS`, `SYNTH_FILTER_MODELS`, `SYNTH_FILTER_OUTPUTS`, `SYNTH_BODY_TYPES`, `SYNTH_MOD_SOURCES`, `SYNTH_MOD_DESTINATIONS`, plus `BUILTIN_SYNTH_WAVEFORMS`). Note the index 0 in most tables is `'default'` (keep the base value); `modSources` / `modDestinations` use `'none'` instead.
 
@@ -383,7 +410,9 @@ Node and WASM expose this field as `SynthPatch.retrigger`, and Python uses the s
 
 The `sample` engine reads its audio from a `SampleBank` you build yourself. Three steps: add mono float frames, map note-number and velocity ranges onto them, then bind the bank alongside a patch whose `engineMode` is `'sample'`.
 
-```typescript
+::: code-group
+
+```typescript [Browser / Node]
 import { init, Project, SampleBank } from '@libraz/libsonare';
 
 await init();
@@ -400,6 +429,20 @@ try {
   bank.delete();   // the WASM handle is NOT garbage-collected
 }
 ```
+
+```python [Python]
+import libsonare as sonare
+
+with sonare.SampleBank() as bank:                      # closes the native handle
+    index = bank.add_sample(pcm, root_key=60, source_rate=44100.0)
+    bank.add_zone(0, sample_index=index)               # the whole keyboard, in set 0
+    audio = project.bounce_with_synth_instrument(
+        sonare.SynthPatch(engine_mode="sample", sample_set=0, sample_bank=bank),
+        total_frames=24000,
+    )
+```
+
+:::
 
 A **zone** is a note-number and velocity range pointing at one sample; every bound defaults on its own, so `{}` is the whole keyboard at every velocity and narrowing one axis leaves the other whole. Zones live in numbered **sets**, and a patch names the set it plays through `sampleSet`. Build the whole bank before the bounce that binds it starts — the sample pool is contiguous and moves as it grows, so adding to it while something sounds invalidates the voices reading it.
 
@@ -430,7 +473,9 @@ To turn a MIDI arrangement into audio, bind a NativeSynth instrument to your MID
 
 For interactive playback, bind the synth to a destination on a `RealtimeEngine` and feed it MIDI. The snippet below runs entirely on the control thread (no AudioWorklet needed) and produces non-zero samples.
 
-```typescript
+::: code-group
+
+```typescript [Browser / Node]
 import { init, RealtimeEngine } from '@libraz/libsonare';
 
 await init();
@@ -449,21 +494,37 @@ try {
 }
 ```
 
-In a real app you would drive `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` from a live keyboard (`pushMidiProgram` queues a program change with an optional bank in the same way, and a receiver that selects no programs, the built-in synth included, accepts it and ignores it), or enable the engine-owned MIDI input source and push events as they arrive — see [MIDI Input](./midi-input.md). `setSynthInstrument` resolves a preset name or `SynthPatch` exactly like `bounceWithSynthInstrument`, so a sound you dialed in offline plays identically live.
+```python [Python]
+import libsonare as sonare
 
-## Current status and limitations
+engine = sonare.RealtimeEngine(sample_rate=48000.0, max_block_size=128)
+try:
+    engine.set_synth_instrument("va:saw-lead", destination_id=7)
+    engine.push_midi_note_on(7, 0, 0, 60, 100)     # destination, group, channel, note, velocity
+    out = engine.process([[0.0] * 128, [0.0] * 128])
+    # out[0] / out[1] are the rendered stereo block; non-silent.
+    engine.midi_instrument_count()                 # 1
+finally:
+    engine.close()
+```
 
-**The piano has been tuned.** Every other physical model still awaits adjustment and calibration. These voices are designed for data-free preview and as the GM fallback floor, not as finished sampled-instrument replacements. Further work is planned for future patch releases.
+:::
 
-**The tuned piano voice includes** an explicit output-level treatment, bass-register excitation, and longitudinal string modes.
+Calling `setSynthInstrument` again on a destination replaces the instrument while the transport rolls: the outgoing voice fades over 10 ms and the new instrument starts from default channel state, so resend any program or controller state you need ([Realtime Engine](./realtime-engine.md) covers rebind and clear). `tailSamples()` is a conservative upper bound, not the length of what has actually played: an unstruck `drum-kit` destination reports about 29.5 s, and a `useGmPrograms` destination about 42.7 s before its first note. An offline bounce that follows GM programs measures only the programs it plays ([Omitting the length](./project-bounce.md#omitting-the-length)).
 
-**Deeper mode-specific fields are set per patch, not live.** `engineParams` fixes them when the patch is bound; live control during a note uses the excitation axes that each engine declares. The physical voices will continue to be adjusted in future patch releases.
+In a real app you would drive `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` from a live keyboard (`pushMidiProgram` queues a program change with an optional bank in the same way; see below for which synths follow it), or enable the engine-owned MIDI input source and push events as they arrive — see [MIDI Input](./midi-input.md). `setSynthInstrument` resolves a preset name or `SynthPatch` exactly like `bounceWithSynthInstrument`, so a sound you dialed in offline plays identically live.
+
+Receivers that select programs are the SoundFont player (under its RX PROGRAM CHANGE and RX BANK SELECT gates), a NativeSynth bound with `useGmPrograms: true` (Python `use_gm_programs`), which resolves each channel's voice from the bank and program, and a NativeSynth that plays the GM kit (the `drum-kit` preset, or a percussion patch with `gmKit` on), where the program picks the GS drum set on every channel. Every other receiver accepts the message and ignores it: the built-in synth, any other NativeSynth patch, a part with RX PROGRAM CHANGE off, and an MPE member channel.
+
+## Limitations
+
+**Deeper model fields are set per patch, not live.** `engineParams` fixes them when the patch is bound; live control during a note uses the excitation axes that each engine declares.
 
 **A couple of self-oscillating models have a small residual intonation error.** The air-jet flute and flue pipe-organ lock slightly off the naive tuning and are corrected by a calibrated factor; a small, note-dependent residual remains.
 
-**The non-physical engines have a different status.** Subtractive (virtual-analog), FM, and additive (drawbar organ) are signal-based and do not carry physical-model calibration status. Modal (mallets/bells), membrane percussion, and the jack-and-plectrum harpsichord are physical models and remain subject to the same pending adjustment and calibration as the other physical voices. The `sample` engine plays back what you give it and has no voicing of its own.
+**Only some engines carry a calibration status.** Subtractive, FM, and additive are signal-based, so the status above does not apply to them. Modal (mallets and bells), membrane percussion, and the jack-and-plectrum harpsichord are physical models and share the provisional status. The `sample` engine plays back what you give it and has no voicing of its own.
 
-**Where the sounds come from.** The synthesis engines are original implementations of published synthesis and physical-modelling algorithm families, and the GM/GS behavior follows the openly documented General MIDI / GS addressing — no sampled or captured instrument audio is bundled, and the result is an independent re-creation rather than a copy of any specific device. For the standards and papers behind each engine, see [Algorithm References](./algorithm-references.md).
+**Where the sounds come from.** The synthesis engines are original implementations of published synthesis and physical-modeling algorithm families, and the GM/GS behavior follows the openly documented General MIDI / GS addressing — no sampled or captured instrument audio is bundled, and the result is an independent re-creation rather than a copy of any specific device. For the standards and papers behind each engine, see [Algorithm References](./algorithm-references.md).
 
 ## Recipes
 
@@ -505,7 +566,7 @@ project.setMidiEvents(clipId, [
 ]);
 const audio = project.bounceWithSynthInstrument('drum-kit', { totalFrames: 24000 });
 ```
-Each note triggers its mapped GM piece rather than playing the note as a pitch.
+Each note triggers its mapped GM piece rather than playing the note as a pitch. An auto-length bounce (no `totalFrames`) ends when the struck pieces have rung out, not when the slowest piece in the kit would: a clip with a single kick runs about 0.69 s past the clip's end.
 ::::
 
 :::: details A custom patch with an LFO wobble
@@ -534,14 +595,3 @@ A non-empty `modRoutings` replaces the preset's mod matrix entirely.
 - [Project Editing](./project-editing.md) — building the MIDI arrangement you render
 - [Recording and Takes](./recording-and-takes.md) — capturing performances into the project
 - [Link targets](./cpp-api.md#link-targets) — driving this synthesizer from C++, and trimming a build down to the instruments alone
-
-## Where the sections went
-
-| Section | Now on |
-|---|---|
-| The GM fallback bank (with GS variation tones) | [GM and GS Fallback Bank](./gm-gs.md) |
-| The `drum-kit` preset and the GM drum map | [GM and GS Fallback Bank](./gm-gs.md) |
-| GS / GM drum-kit variants | [GM and GS Fallback Bank](./gm-gs.md) |
-| Following GM programs instead of pinning one patch | [GM and GS Fallback Bank](./gm-gs.md) |
-| NativeSynth and the SoundFont fallback (with GM fallback program routing) | [GM and GS Fallback Bank](./gm-gs.md) |
-| GM tone map — all 128 programs | [GM Tone Map](./gm-tone-map.md) |

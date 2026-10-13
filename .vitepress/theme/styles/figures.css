@@ -267,6 +267,12 @@
   opacity: 0.86;
 }
 
+/* Opaque cut where a mark passes through a block it does not join. */
+.fx-knockout {
+  fill: var(--fx-surface);
+  stroke: none;
+}
+
 /* Thin leader line from a callout to the thing it names. */
 .fx-leader {
   fill: none;

@@ -78,6 +78,7 @@ sonare suggest-mix \
   --input guitar=guitar.wav --input vocal=vocal.wav \
   --sample-rate 48000 \
   --params targetTrackLufs=-18,suggestionStrength=0.8 \
+  --tempo-bpm auto \
   --scene-out scene.json
 ```
 
@@ -108,7 +109,7 @@ Most decisions use the two measurement layers described here. Source classificat
 | Measurement | What it is | Read by |
 |---|---|---|
 | Band dominance (`bandDominance[]`) | Per band and per ordered pair, the masker's share of the summed band energy, `E_a / (E_a + E_b)`, averaged over the frames where both tracks clear the band's energy floor. 0.5 is parity; 1 is outright ownership. An energy ratio, not a loudness model — no auditory filterbank, no excitation pattern. | EQ, dynamics |
-| Alignment (`alignment[]`) | Per unordered pair, the lag and polarity of the strongest normalised cross-correlation peak, measured over the one-second window where the two are jointly most active. A pair counts as related only when the absolute correlation is at least 0.5; below that it is left alone. | Image |
+| Alignment (`alignment[]`) | Per unordered pair, the lag and polarity of the strongest normalized cross-correlation peak, measured over the one-second window where the two are jointly most active. A pair counts as related only when the absolute correlation is at least 0.5; below that it is left alone. | Image |
 | Image occupancy (`crowdedBands[]`) | A per-band histogram of where energy already sits across nine pan positions, each stereo track placed per band from its own left/right balance. A band is crowded when its energy is concentrated into fewer than about 1.7 effective positions. | Image |
 | Mono risks (`monoRisks[]`) | Stereo tracks whose correlation is below 0.30, whose width exceeds 1.0 (side energy above mid), or whose low end alone is wide — the sub and low bands carry at least 10% of the track's energy and at least a quarter of that is side. | Image |
 
@@ -120,10 +121,34 @@ Most decisions use the two measurement layers described here. Source classificat
 | Gain | Integrated LUFS against `targetTrackLufs`. Class is never read. | One static input trim per track to the absolute target. A master trim then brings the amplitude-summed true peaks down to `mixBusHeadroomDbtp`. |
 | Balance | Class and its confidence. | A fixed table of class-relative fader offsets — `vocal` furthest forward at +5 dB, `fx` furthest back at −5 dB, and `drumKit` at +0.5 dB — scaled by classification confidence between 0.5 and 1. The lookup is keyed by the profiler's genre guess, but only one table exists, so today every genre resolves to the same offsets. |
 | EQ | Band dominance, both tracks' `bandOccupancy`, the mean spectrum. | A cut is considered when one track holds at least 0.65 of a band's energy (roughly 2:1) over at least 32 frames in which both sound. The track that gives way is the lower **role priority** — a fixed ranking with `lead` and `kick` at the top and `fx` at the bottom — never the quieter one. The cut is proposed only when the band is at least 40% of the winner's own energy and at most 7% of the loser's. Depth grows with the dominance up to 6 dB at outright ownership, is capped at `eqMaxCutDb`, and anything under 0.5 dB is dropped. Q is 1.2. |
-| Dynamics | Class, integrated LUFS, crest factor, sustain ratio, attack density; low-band dominance for the sidechain. | A compressor from a per-class starting table whose threshold is an offset from the track's own measured loudness, never an absolute; the `drumKit` row starts at 3:1, a −6 dB threshold offset, 15 ms attack and 150 ms release. Ratio, attack and threshold move with crest factor around a 12 dB reference, release with sustain ratio. A transient shaper for `kick` `snare` `tom` `percussion`; a level rider and de-esser for `vocal` and `backing`. A gate only for `kick` `snare` `tom`, and only when the track is unmistakably a close mic (sustain ratio at most 0.25, crest factor at least 14 dB, at least 0.5 onsets per second, confidence near its class ceiling). The one sidechain: `bass` ducked under `kick`, at most 4 dB, only when the kick holds at least 0.55 of the sub and low band energy while both sound. |
-| Image | Class for placement; alignment, crowding and mono risks for the rest. | The class table pins `kick` `snare` `bass` `lead` `vocal` and `drumKit` to centre. A spreadable class is also centred when at least half of its energy is below 120 Hz, whatever its class. Other tracks alternate left, right, left, stepping inwards, out to a per-class extent (`guitar` and `percussion` 0.8, `fx` 0.9, `keys` `strings` `backing` `tom` `cymbal` 0.55, `hiHat` 0.3) and never past ±0.9. A lone member of a spreadable class goes halfway; a crowded band widens the spread by a quarter. A related, polarity-opposed pair has its later track inverted; a related pair with a lag has the earlier side delayed. A mono-risk track has its width pulled to 0.7 and, when its low end is wide, a `stereo.monoMaker` at 120 Hz. |
+| Dynamics | Class, integrated LUFS, crest factor, sustain ratio, attack density; low-band dominance for the sidechain. | A per-class compressor whose threshold is an offset from the track's own loudness, plus class-specific extras. See [Dynamics by class](#dynamics-by-class). |
+| Image | Class for placement; alignment, crowding and mono risks for the rest. | Pins or spreads each track by class, then corrects polarity, delay and mono risks. See [Pan and mono fixes](#pan-and-mono-fixes). |
 
-**The confidence gate.** Balance, EQ, dynamics and pan placement act on a class only when `sourceConfidence` is at least 0.5; below that the track keeps its staged level and stays where the caller had it. Structure routes any classified track; an unclassified track joins no bus. Polarity and delay ignore class entirely — a cancellation is measured between two signals whatever they turn out to be.
+**The confidence gate.** Balance, EQ, dynamics and pan placement act on a class only when `sourceConfidence` is at least 0.5; below that the track keeps its staged level and stays where the caller had it. Structure routes any classified track; an unclassified track joins no bus. Polarity and delay ignore class entirely: a cancellation is measured between two signals whatever they turn out to be.
+
+### Dynamics by class
+
+The compressor comes from a per-class starting table. The `drumKit` row starts at 3:1, a −6 dB threshold offset, 15 ms attack and 150 ms release. Ratio, attack and threshold then move with crest factor around a 12 dB reference, and release moves with sustain ratio.
+
+| Processor | Classes | Condition |
+|---|---|---|
+| Transient shaper | `kick` `snare` `tom` `percussion` | Always proposed for these classes. |
+| Level rider and de-esser | `vocal` `backing` | Always proposed for these classes. |
+| Gate | `kick` `snare` `tom` | Only for an unmistakable close mic: sustain ratio at most 0.25, crest factor at least 14 dB, at least 0.5 onsets per second, and confidence near its class ceiling. |
+| Sidechain | `bass`, ducked under `kick` | At most 4 dB, and only when the kick holds at least 0.55 of the sub and low band energy while both sound. |
+
+### Pan and mono fixes
+
+Placement starts from the class. The class table pins `kick` `snare` `bass` `lead` `vocal` and `drumKit` to centre, and any spreadable class is also centred when at least half of its energy is below 120 Hz. Other tracks alternate left, right, left, stepping inwards, out to a per-class extent and never past ±0.9.
+
+| Class | Pan extent |
+|---|---|
+| `guitar`, `percussion` | 0.8 |
+| `fx` | 0.9 |
+| `keys`, `strings`, `backing`, `tom`, `cymbal` | 0.55 |
+| `hiHat` | 0.3 |
+
+A lone member of a spreadable class goes halfway, and a crowded band widens the spread by a quarter. A related, polarity-opposed pair has its later track inverted; a related pair with a lag has the earlier side delayed. A mono-risk track has its width pulled to 0.7 and, when its low end is wide, gets a `stereo.monoMaker` at 120 Hz.
 
 ### What it cannot know
 
@@ -135,7 +160,15 @@ The assistant works from measured signal characteristics, and everything a mixin
 - **Keys, strings, lead, vocal, backing and effects.** No measured feature separates a piano from a plucked guitar, a backing stack from a lead vocal, or a voice from a sustained synth pad or lead line. These six classes can come from the track name when the measured family does not contradict it; an unnamed voice, pad or lead stays `unknown`.
 - **Time.** Every decision is one static setting for the whole song — no automation, no dynamic EQ, no section awareness. A part that collides only in the chorus is judged on how much of the song it collides in.
 - **What the effects will add.** The master headroom estimate sums the dry strips; reverb and delay returns and insert make-up gain are not in it, which is why the target sits at −6 dBTP.
-- **Whether it heard the instrument right.** The table covers separated acoustic parts and whole-kit hit stems. Sustained harmonic audio does not distinguish a sung voice from a pad, lead synth or wind line, so names provide `vocal` and `lead` when the evidence permits; an unnamed voice, pad or lead stays `unknown`. A whole-kit stem can classify as `drumKit` when its centroid is within 40–8000 Hz, sustain ratio is at most 0.45, attack density is at least 1.5 per second, and low- and high-band hit shares are each at least 0.15. It is kept at centre and given the whole-kit dynamics row. It maps to `drumBus`, but a subgroup is created only when at least two tracks map there; a lone kit goes directly to master. Read `tracks[].source` before applying the scene.
+- **Whether it heard the instrument right.** The table covers separated acoustic parts and whole-kit hit stems. Sustained harmonic audio does not distinguish a sung voice from a pad, lead synth or wind line, so names provide `vocal` and `lead` when the evidence permits. A whole-kit stem classifies as `drumKit` only when every measurement below holds; it is then kept at centre and given the whole-kit dynamics row. It maps to `drumBus`, but a subgroup is created only when at least two tracks map there, so a lone kit goes directly to master. Read `tracks[].source` before applying the scene.
+
+  | Measurement | `drumKit` requires |
+  |---|---|
+  | Centroid | 40–8000 Hz |
+  | Sustain ratio | at most 0.45 |
+  | Attack density | at least 1.5 per second |
+  | Low-band hit share | at least 0.15 |
+  | High-band hit share | at least 0.15 |
 - **Whether your labels are right.** A name can change classification when the measurement does not contradict it. If it cannot, the conflicting name lowers the measured class's confidence by 0.25 and can push it under the gate. That is the designed response to a disagreement between engineer and measurement: do less, rather than pick a side.
 
 ## Entry points
@@ -145,9 +178,9 @@ The assistant works from measured signal characteristics, and everything a mixin
 | WASM (`@libraz/libsonare`) | `suggestMixScene(request)` | One request object: `{ tracks, sampleRate, options? }`. Synchronous. Returns `MixAssistantResult`. |
 | Node (`@libraz/libsonare-native`) | `suggestMixScene(request)` | Same request object and same result. Synchronous. |
 | Python (`libsonare`) | `suggest_mix_scene(tracks, *, sample_rate, ...)` | Tracks positional, every option a snake_case keyword. Returns a `dict`. |
-| C ABI | `sonare_mixing_assistant_suggest_scene_json(...)` | Flat C arrays plus a `SonareMasteringParam` list; writes JSON to `char** json_out`. |
+| C ABI | `sonare_mixing_assistant_suggest(...)` | Flat C arrays plus a `SonareMasteringParam` list; writes the full result as JSON to `char** json_out`. |
 
-`sampleRate` is required on every surface — there is no default. It is the rate the analysis runs at, and a track recorded at another rate says so itself: `sampleRate` on a Node or WASM `MixAssistantTrack`, `sample_rate` on a Python `MixTrackInput` (omitted or `None`: the call's rate). Each such track is resampled onto the call's rate before analysis. The C entries take `const int* track_sample_rates` after `track_lengths` (`NULL`: every track at `sample_rate`), and a rate of 0 or below is refused with `InvalidParameter`. `suggest-mix` on both command-line front-ends reads each file at its own rate.
+`sampleRate` is required on every surface — there is no default. It is the rate the analysis runs at, and a track recorded at another rate carries its own rate: `sampleRate` on a Node or WASM `MixAssistantTrack`, `sample_rate` on a Python `MixTrackInput` (omitted or `None`: the call's rate). Each such track is resampled onto the call's rate before analysis. The C entries take `const int* track_sample_rates` after `track_lengths` (`NULL`: every track at `sample_rate`), and a rate of 0 or below is refused with `InvalidParameter`. `suggest-mix` on both command-line front-ends reads each file at its own rate.
 
 ### The scene-only call
 
@@ -184,7 +217,7 @@ The option set is deliberately flat — no nested groups, no per-domain sub-obje
 | `suggestionStrength` | number | `1.0` | In `[0, 1]`; scales every level-like decision. |
 | `eqMaxCutDb` | number | `4.0` | Ceiling on any single suggested cut. |
 | `mixBusHeadroomDbtp` | number | `-6.0` | Target for the static master trim. |
-| `tempoBpm` | number | `0.0` | `0` selects the transport's own fallback tempo. A positive value outside 20–400 is refused, not clamped. |
+| `tempoBpm` | number | `0.0` | `0` selects the transport's own fallback tempo. A positive value outside 20–400 is refused, not clamped. CLI: `--tempo-bpm <bpm>\|auto`, which cannot be combined with `--params tempoBpm=`. |
 | `enableStructure` | boolean | `true` | Bus topology and routing. |
 | `enableGain` | boolean | `true` | Input trims and loudness staging. |
 | `enableBalance` | boolean | `true` | Faders. |
@@ -192,8 +225,8 @@ The option set is deliberately flat — no nested groups, no per-domain sub-obje
 | `enableDynamics` | boolean | `true` | Compression. |
 | `enableImage` | boolean | `true` | Pan and width. |
 | `enableHighPass` | boolean | **`false`** | Per-track high-pass. Off by default — see [below](#conservative-eq-and-enablehighpass). |
-| `nFft` | number | `2048` | Shared [STFT](./glossary/analysis/spectrogram-stft.md) geometry. |
-| `hopLength` | number | `512` | |
+| `nFft` | number | `2048` | [STFT](./glossary/analysis/spectrogram-stft.md) window in samples at 48 kHz, rescaled to the analysis rate. |
+| `hopLength` | number | `512` | Hop in samples at 48 kHz, also rescaled to the analysis rate. |
 
 Python takes the same keys in snake_case (`target_track_lufs`, `enable_high_pass`, `n_fft`, …). The C ABI takes the camelCase spellings as `SonareMasteringParam` entries.
 
@@ -256,9 +289,9 @@ It scales the level-like decisions toward nothing, but bus topology, routing, po
 
 ## Reading the explanation
 
-`explanation` is assembled from each delta as it is applied and never re-summarised, so reading it top to bottom retraces how the scene was built. It is empty when every domain is disabled or no track is usable.
+`explanation` is assembled from each delta as it is applied and never re-summarized, so reading it top to bottom retraces how the scene was built. It is empty when every domain is disabled or no track is usable.
 
-The reluctance is visible in the text. An EQ reason names the frequency, says whether that frequency was *measured* or fell back to the band centre, and gives **both** parts' shares:
+The reluctance is visible in the text. An EQ reason names the frequency, says whether that frequency was *measured* or fell back to the band center, and gives **both** parts' shares:
 
 ```text
 carved 3.2 dB at 1247 Hz (measured overlap in mid, which vocal needs at 41.6%
@@ -301,9 +334,29 @@ sonare mix --scene scene.json --input kick=kick.wav --input vocal=vocal.wav -o m
 
 `suggest-mix` is on both command-line front-ends. The second command is not: **`mix --scene` is Python-only**, so a shell pipeline that renders the suggested scene end to end needs the PyPI `sonare` CLI for its second half.
 
-The scene the assistant writes is an ordinary mixer scene with lanes, faders, sends, and buses. The demo below shows that mixer scene:
+The scene the assistant writes is an ordinary mixer scene with lanes, faders, sends, and buses. The figure shows where it comes from:
 
-<SonareDemo id="engine-lane-mixer" />
+<FlowDiagram
+  title="From tracks to a scene"
+  direction="LR"
+  :nodes="[
+    { id: 'tracks', label: 'Tracks (audio + names)', col: 0, row: 0, variant: 'muted' },
+    { id: 'profile', label: 'Per-track profile', col: 1, row: 0 },
+    { id: 'cross', label: 'Cross-track passes', col: 2, row: 0 },
+    { id: 'domains', label: 'Domains (rules)', col: 3, row: 0, variant: 'accent' },
+    { id: 'scene', label: 'Scene', col: 4, row: -1, variant: 'success' },
+    { id: 'why', label: 'Explanation', col: 4, row: 1, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'tracks', to: 'profile' },
+    { from: 'profile', to: 'cross' },
+    { from: 'cross', to: 'domains' },
+    { from: 'profile', to: 'domains', style: 'dashed' },
+    { from: 'domains', to: 'scene' },
+    { from: 'domains', to: 'why' }
+  ]"
+  caption="Each track is profiled alone, then compared with the others; the enabled domains turn those measurements into scene changes and write a reason for each."
+/>
 
 ## Conservative EQ and `enableHighPass`
 
@@ -311,7 +364,7 @@ The assistant proposes far less EQ than a first-time reader expects, and that is
 
 A band is carved only where one part is **built around** that band and the other **can spare** it — measured as each track's share of its own energy there. Two parts colliding in a band they are both made of get nothing, because there is no version of that cut which does not take the foundation out of one of them. A kick and a bass both living at 80 Hz is an arrangement problem, and an EQ that pretends otherwise just makes one of them thin.
 
-When a cut is justified, its centre frequency is measured inside the band rather than taken from the band's midpoint. A band here runs up to two octaves, so the midpoint can be far from the measured overlap. The reason string says whether the frequency was measured or fell back to the midpoint.
+When a cut is justified, its center frequency is measured inside the band rather than taken from the band's midpoint. A band here runs up to two octaves, so the midpoint can be far from the measured overlap. The reason string says whether the frequency was measured or fell back to the midpoint.
 
 ### Why `enableHighPass` is off
 
@@ -340,18 +393,19 @@ The filter is proposed only when the share of the track's energy below its corne
 - **Will you add low end back later?** A sub layer put under a filtered part later in the mix is fighting the assistant's own insert. Leave the filter off and decide per track.
 - **Is `enableEq` on?** The high-pass is part of the EQ domain, and `enableEq: false` skips it whatever `enableHighPass` says.
 
-## Two behaviours to state plainly
+## Two behaviors to state plainly
 
-**Degenerate input is not an error.** No tracks, silent tracks, a track too short to measure, a non-positive sample rate, a NaN or an infinity in a buffer — none of these throw. The call succeeds and returns an empty scene, an empty explanation, and a per-track `exclusionReason` naming what was wrong:
+**Unmeasurable tracks are excluded.** Empty, silent, too-short, or non-finite track buffers get a per-track `exclusionReason`. If no track is usable, the call succeeds with an empty scene and explanation; an empty track list also succeeds. Valid tracks in the same call are still measured.
 
 | `exclusionReason` | Cause |
 |-------------------|-------|
-| `track has no samples` | Null buffer or zero frames. |
-| `track sample rate is not positive` | |
+| `track has no samples` | Zero frames. The core also reports this for a null pointer; JavaScript requires a `Float32Array`. |
 | `track has non-finite samples` | A NaN or an infinity — named as such rather than diagnosed as silence. |
 | `track is shorter than the minimum measurable duration` | |
 | `track is silent` | |
 | `track has no energy in the analysis bands` | |
+
+The call's sample rate and any explicit per-track rate are validated before analysis. Node and WASM reject an invalid rate with `RangeError`, and a missing or wrongly typed buffer with `TypeError`. Python rejects a non-positive rate with `SonareValueError`. The core's `track sample rate is not positive` exclusion reason is not a substitute for this binding validation.
 
 **A missing or empty track id, and a duplicate track id, are rejected inputs.** Binding validation rejects a missing or empty id before analysis (WASM and Node throw a `TypeError` naming `tracks[i].id`, Python reports `SonareValueError`), while a duplicate id raises `InvalidParameter` (a coded `SonareError` on WASM, `RangeError` on Node, `SonareValueError` on Python). A scene with two strips of the same id is a scene the mixer refuses to load — accepting it here would only move the failure somewhere harder to read.
 
@@ -372,7 +426,7 @@ if (capabilities().features.mixingAssistant) {
 
 ## Related
 
-- [Mixing Scene JSON](./mixing-scene-json.md) — the schema of the `scene` the assistant returns
-- [Mixing Engine](./mixing.md) — the mixer that loads it
-- [Mastering Assistant](./mastering-assistant.md) — the same explain-then-decide shape, one stage later
+- [Mixing Scene JSON](./mixing-scene-json.md): the schema of the `scene` the assistant returns
+- [Mixing Engine](./mixing.md): the mixer that loads it
+- [Mastering Assistant](./mastering-assistant.md): the same explain-then-decide shape, one stage later
 - [Channel Strip](./glossary/mixing/channel-strip.md) · [Buses and Sends](./glossary/mixing/buses-sends.md) · [Pan and Stereo Width](./glossary/mixing/pan-width.md) · [Mono Compatibility](./glossary/concepts/mono-compatibility.md)

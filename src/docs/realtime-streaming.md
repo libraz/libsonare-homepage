@@ -36,7 +36,7 @@ By the end of this page you should be able to:
 - use updating estimates without treating early BPM/key/chord values as final answers;
 - recognize which realtime operations are safe in an audio callback and which should be prepared outside it.
 
-## Common beginner choices
+## Which API to use
 
 | If you are building... | Start with |
 |------------------------|------------|
@@ -44,31 +44,22 @@ By the end of this page you should be able to:
 | A live chord / progression / pattern display | `StreamAnalyzer.stats()` |
 | A playback engine with tempo, loop points, markers, metronome, clips, and automation | [Realtime Engine](./realtime-engine.md) |
 | A playback engine that also mixes its own tracks live (lanes, buses, sends, strips) | [Realtime Engine lane mixer](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
+| Sample-accurate MIDI clip playback into engine instruments | [Realtime Engine](./realtime-engine.md#midi-clip-scheduling-and-sampleatppq) `setMidiClips()` + `sampleAtPpq()` |
+| The engine on the audio thread, with telemetry | `@libraz/libsonare/worklet` ([AudioWorklet notes](#audioworklet-notes)) |
 | A standalone mixer with strips, sends, and meters (one-shot or scene-driven) | [Mixing Engine](./mixing.md) |
 | A simple offline script | [Getting Started](./getting-started.md), not this page |
 
-## Which API to use
-
-| Need | API |
-|------|-----|
-| Mel/chroma/onset frames from a microphone or playing file | `StreamAnalyzer` |
-| BPM, key, current chord, chord progression, and pattern scores that update over time | `StreamAnalyzer.stats()` |
-| Transport, tempo, loop points, markers, metronome, clip scheduling, and automation | [Realtime Engine](./realtime-engine.md) |
-| Per-track lanes, buses, sends, and channel strips inside the playback engine | [Realtime Engine lane mixer](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
-| Sample-accurate MIDI clip playback into engine instruments | [Realtime Engine](./realtime-engine.md#midi-clip-scheduling-and-sampleatppq) `setMidiClips()` + `sampleAtPpq()` |
-| AudioWorklet bridge for engine-style playback with telemetry | `@libraz/libsonare/worklet` |
-| Stem or strip mixing with sends and meters | [Mixing Engine](./mixing.md) |
-
 ::: info Runtime entry points
-This page is centered on the Browser / WASM `StreamAnalyzer`, `RealtimeEngine`, and AudioWorklet bridge. Python and CLI are not the same live callback API; their main entry points are batch APIs that process files or arrays outside the audio callback.
+The live callback examples on this page are Browser / WASM. Python has the same block-in, frames-out analyzer, driven from your own loop; the CLI works on whole files.
 
 | Runtime | Entry point | Typical use |
 |---------|-------------|-------------|
 | Browser / WASM | `StreamAnalyzer`, `RealtimeEngine`, `@libraz/libsonare/worklet` | Live visualizers, AudioWorklet tools, updating BPM / key / chord displays |
-| Python | `Audio.analyze()`, `onset_envelope(...)`, `tempogram(...)`, and related batch functions | Notebooks, offline analysis, validation scripts |
+| Node native | `StreamAnalyzer` | The same analyzer in a server or desktop process |
+| Python | `StreamAnalyzer(StreamConfig(...))`, `RealtimeEngine` | Pass blocks, read frames, from your own loop (no AudioWorklet) |
 | CLI | `sonare analyze`, `sonare bpm`, `sonare key`, and related commands | File-level checks, batch jobs, JSON output |
 
-If you need to analyze the same file from Python or CLI, use [Python API](./python-api.md) or [CLI Reference](./cli.md). Treat the WASM / Worklet examples as the source of truth for code that runs inside an audio callback.
+For whole-file analysis from Python or the CLI, see [Python API](./python-api.md) or [CLI Reference](./cli.md). Treat the WASM / Worklet examples as the source of truth for code that runs inside an audio callback.
 :::
 
 ## StreamAnalyzer
@@ -103,7 +94,9 @@ The analyzer runs an STFT (short-time Fourier transform — repeated FFTs over s
 The `2048`/`512` defaults below are the common starting point. See [MIR Overview](./glossary/concepts/mir-overview.md) if these are new.
 :::
 
-```typescript
+::: code-group
+
+```typescript [WASM]
 import { init, StreamAnalyzer } from '@libraz/libsonare';
 
 await init();
@@ -129,6 +122,23 @@ if (stats.estimate.updated) {
   console.log(stats.estimate.bpm, stats.estimate.key, stats.estimate.chordRoot);
 }
 ```
+
+```python [Python]
+from libsonare import StreamAnalyzer, StreamConfig
+
+analyzer = StreamAnalyzer(StreamConfig(sample_rate=48000, n_fft=2048, hop_length=512, n_mels=64))
+analyzer.process(block)
+
+frames = analyzer.read_frames(analyzer.available_frames())
+stats = analyzer.stats()
+
+if stats.updated:
+    print(stats.bpm, stats.key_name, stats.chord_name)
+```
+
+:::
+
+Python's `stats()` is flat (`stats.bpm`, `stats.key_name`), with no `.estimate` level.
 
 `maxPendingFrames` defaults to `4096`. Set it to a smaller value for a UI that may pause or fall behind: analysis continues, but newly produced output frames are dropped while the unread queue is full. `stats().pendingFrames` / `stats().droppedOutputFrames` report the current backlog and cumulative drops.
 
@@ -202,10 +212,12 @@ if (estimate.updated) {
   // Tempo and key (with confidence)
   estimate.bpm;            estimate.bpmConfidence;
   estimate.key;            estimate.keyMinor;  estimate.keyConfidence;
+  estimate.keyName;        // "A minor"; null until a key is estimated
 
   // The chord playing right now
   estimate.chordRoot;      // PitchClass (numeric enum, 0 = C)
   estimate.chordQuality;   // ChordQuality (numeric enum)
+  estimate.chordName;      // "Am"; 'N.C.' when no chord is sounding
   estimate.chordConfidence;
   estimate.chordStartTime;
 
@@ -220,6 +232,11 @@ if (estimate.updated) {
   estimate.votedPattern;         // BarChord[] the locked, repeating pattern
   estimate.patternLength;        // bars in that pattern
   estimate.currentBar;           // estimate.barDuration  -> bar position/length
+
+  // How much the estimate is built on
+  estimate.bpmCandidateCount;    // tempo candidates the latest BPM estimate chose from
+  estimate.accumulatedSeconds;   // audio folded into the estimate so far
+  estimate.usedFrames;
 }
 ```
 
@@ -357,13 +374,17 @@ Its `transport` API covers play/stop, seek by seconds or PPQ (musical position i
 | Offline export | `renderOffline`, `finishOfflineRender`, `bounceOffline`, `freezeOffline` on the main-thread mirror (see [Offline render, bounce, and freeze](#offline-render-bounce-and-freeze)) |
 | Processor state and timing | `resetProcessorState(renderFrame?)`, `tailSamples()`, `graphLatencySamplesQ8()` |
 
+`pushMidiProgram` reaches the receivers that select programs: the SoundFont player, a synth bound with `useGmPrograms`, and a `drum-kit` (GM-kit) synth, where the program selects the GS drum set. The built-in synth and other synth patches accept the message and ignore it.
+
 On the worklet API, strip-addressing methods take a track id *or name* (`target: string | number`), and `setSoloMute(target, solo, mute)` resolves the lane index for you. `setTrackStripEqBand` accepts an `EqBand` object directly, so you rarely hand-build band JSON.
 
-`automationParamId(target, 'faderDb' | 'pan')` and `busAutomationParamId(busId)` return reserved engine parameter ids, so you can pass them straight to `setAutomationLane(paramId, points)` to automate a track or master fader or pan, or a bus fader (which resolves to its fader gain in dB), without first registering a custom parameter via `addParameter`. The `target`/`busId` declares the mixer lane/bus on first use. A track or bus id names that track or bus, not its position: it keeps driving it across `setTrackLanes` and `setTrackBuses` reorders and the removal of others, and applies nothing once its track or bus is removed. Resolve ids through these methods rather than computing them; the main-thread mirror and the worklet engine number them identically.
+`automationParamId(target, 'faderDb' | 'pan')` and `busAutomationParamId(busId)` return reserved engine parameter ids, so you can pass them straight to `setAutomationLane(paramId, points)` to automate a track or master fader or pan, or a bus fader (which resolves to its fader gain in dB), without first registering a custom parameter via `addParameter`. The `target`/`busId` declares the mixer lane/bus on first use. A track or bus id names that target rather than its list position. Resolve ids through these methods rather than computing them; the main-thread mirror and the worklet engine number them identically.
+
+The facade's `setTrackLanes` is append-only: preserve all existing track ids in their current order, and append new ids. Reordering or removing an existing lane is refused. The raw `RealtimeEngine` can replace and reorder its lane list; its reserved automation ids continue to address the same track, and apply nothing while that track is absent.
 
 For Worklet-side scope snapshots, pass `scopeIntervalFrames`, `scopeBands`, and optionally `scopeSharedBuffer` / `scopeRingCapacity` to `SonareRealtimeEngineNode.create(...)`. The SAB scope ring keeps the render callback allocation-free; `pollScope()` drains it, and `onScope()` receives the same `SonareWorkletScopeSnapshot` shape. When SAB is unavailable or `mode: 'postMessage'` is selected, the processor sends each snapshot with transferred `Float32Array` buffers for `bands` and `points`; `onScope()` receives the same shape, while `pollScope()` returns an empty array because there is no ring. The postMessage fallback materializes the bounded arrays for each snapshot before transfer. The lower-level `createSonareScopeRingBuffer(...)` and `readSonareScopeRingBuffer(...)` helpers are exported for custom shared-ring bridges.
 
-Meter snapshots reach `onMeter` the same way on both transports. A target wider than stereo (a 5.1 or 7.1 bus) adds `channelCount` plus per-plane `peakDb`, `rmsDb`, `truePeakDb`, and `inputPeakDb` arrays in canonical WAVE channel order; the stereo fields always hold planes 0 and 1. The SAB meter ring record is `SONARE_METER_RING_RECORD_FLOATS` (49) floats, and header slot 3 carries `SONARE_METER_RING_PROTOCOL_VERSION` (2). Size a custom reader from those constants, and do not share a ring between a main thread and a worklet from different package versions.
+Meter snapshots reach `onMeter` the same way on both transports. A target wider than stereo (a 5.1 or 7.1 bus) adds `channelCount` plus per-plane `peakDb`, `rmsDb`, `truePeakDb`, and `inputPeakDb` arrays in canonical WAVE channel order; the stereo fields always hold planes 0 and 1. The SAB meter ring record is `SONARE_METER_RING_RECORD_FLOATS` (49) floats, and header slot 3 carries the protocol version, currently `2` (compare against that literal; the package exports only `SONARE_METER_RING_RECORD_FLOATS` and `SONARE_METER_RING_HEADER_INTS`). Size a custom reader from the exported constants, and do not share a ring between a main thread and a worklet from different package versions.
 
 ```typescript
 import { SonareEngine } from '@libraz/libsonare/worklet';
@@ -392,9 +413,9 @@ engine.destroy();
 
 ### Offline render, bounce, and freeze
 
-`renderOffline`, `bounceOffline`, and `freezeOffline` run on the facade's main-thread engine and block the calling thread for the whole render, so run long jobs where blocking is acceptable. Each returns after restoring the mirror's transport position, and OPFS-streamed clips are paged in for the span first. `bounceOffline` and `freezeOffline` take the options of the raw engine's methods of the same name and return its results; see [Realtime Engine](./realtime-engine.md).
+`renderOffline`, `bounceOffline`, and `freezeOffline` run on the facade's main-thread engine and block the calling thread for the whole render, so run long jobs where blocking is acceptable. OPFS-streamed clips are paged in for the span first. A completed render restores the mirror's transport position; with `finalize: false`, the position advances across chunks and is restored only by the final chunk or `finishOfflineRender()`. `bounceOffline` and `freezeOffline` take the options of the raw engine's methods of the same name and return its results; see [Realtime Engine](./realtime-engine.md).
 
-| Call | Behaviour |
+| Call | Behavior |
 |------|-----------|
 | `renderOffline(totalFrames)` | Renders from the current position and returns one planar buffer per offline channel. |
 | `renderOffline({ totalFrames, blockSize?, finalize? })` | The request form. `blockSize` defaults to the engine's offline block size and must not exceed it (`RangeError`). `finalize: false` renders one chunk of a longer timeline, leaving held notes and delay tails running into the next call. |
@@ -416,11 +437,11 @@ for (let done = 0; done < total; done += chunkFrames) {
 }
 ```
 
-Every offline entry point resets the mirror's mixer and effect processors to their prepared state first, so two renders of the same span are identical. `resetProcessorState(renderFrame?)` exposes that reset for the live engine: it cuts running insert tails and delay lines like a seek, applies at `renderFrame` (omitted: the next block head), and leaves instruments alone. `tailSamples()` is an upper bound on the longest audible tail in samples (`2147483647` means unbounded), and `graphLatencySamplesQ8()` is the processing latency in 1/256 samples; both answer from the mirror.
+An offline render primes the mirror's mixer and effect processors to their prepared state at the start of a new render session. Continuing chunks preserve processor state, held notes, and tails from the previous chunk. Instruments are not reset by the prime, so their current voice and controller state can still affect the result. `resetProcessorState(renderFrame?)` exposes the processor reset for the live engine: it cuts running insert tails and delay lines like a seek, applies at `renderFrame` (omitted: the next block head), and leaves instruments alone. `tailSamples()` is an upper bound on the longest audible tail in samples (`2147483647` means unbounded), and `graphLatencySamplesQ8()` is the processing latency in 1/256 samples; both answer from the mirror.
 
 ### Node-level control and polling
 
-`engine.node` is the `SonareRealtimeEngineNode`; use it directly for sample-accurate commands and for draining the worklet's output queues.
+These are the methods of the node that `SonareRealtimeEngineNode.create(...)` returns. They queue sample-accurate commands and drain the worklet's output queues. `SonareEngine.node` is a plain `AudioWorkletNode` for you to `connect()`; the facade keeps the engine node private and exposes the same capabilities through `transport.*`, `resetProcessorState`, `resetMasterLoudnessMeter`, `getTransportState()`, `captureStatus()` / `capturedAudio()` / `resetCapture()`, `onMidiOut`, and `pollInsertGainReduction`.
 
 | Method | Use |
 |--------|-----|
@@ -434,37 +455,7 @@ Every offline entry point resets the mirror's mixer and effect processors to the
 
 ### Analyzing a graph branch
 
-`SonareStreamAnalyzerNode` runs a `StreamAnalyzer` against any node in your audio graph without writing a processor. The worklet side only averages the input channels to mono and transfers fixed-size chunks (`chunkFrames`, default 4096, at least 128); the analyzer runs on the main thread, so it needs no WASM in the worklet realm and no `SharedArrayBuffer`, and its frames lag the audio by about one chunk. The node has one input and no output.
-
-```typescript
-// analyzer-worklet.ts
-import { registerSonareStreamAnalyzerWorkletProcessor } from '@libraz/libsonare/worklet';
-
-registerSonareStreamAnalyzerWorkletProcessor();
-```
-
-```typescript
-// main.ts
-import { init } from '@libraz/libsonare';
-import { SonareStreamAnalyzerNode } from '@libraz/libsonare/worklet';
-
-await init();
-await audioCtx.audioWorklet.addModule('/analyzer-worklet.js');
-const analyzer = await SonareStreamAnalyzerNode.create(audioCtx, {
-  config: { nMels: 64 },
-});
-source.connect(analyzer.node);
-
-const stopFrames = analyzer.onFrames((frames) => draw(frames.mel, frames.nFrames));
-const stopStats = analyzer.onStats((stats) => console.log(stats.estimate.bpm));
-
-// Later:
-stopFrames();
-stopStats();
-analyzer.destroy();
-```
-
-`config` takes the same fields as `new StreamAnalyzer(...)`; `sampleRate` defaults to the context's and any other value throws `RangeError`. `onFrames` delivers the `readFrames` format, and `onStats` fires when the key or tempo estimate was re-estimated. If a chunk is dropped or the processor restarts, the analyzer's sample offset is reset rather than splicing the two streams together.
+`SonareStreamAnalyzerNode` runs a `StreamAnalyzer` against any node in your audio graph without writing a processor. The worklet only downmixes to mono and forwards chunks, and the analyzer runs on the main thread, so it needs no WASM in the worklet and no `SharedArrayBuffer`. `SonareStreamAnalyzerNode.create` takes the optional `sampleRate` described above. The registration code and a full example are in [WASM Streaming and Realtime](./wasm-streaming.md#analyze-a-graph-branch).
 
 ::: tip Worklet sync messages
 `SonareEngine` runs the full embind engine inside the worklet. If your host worklet entry filters message names before forwarding, allowlist every `sync*`, `captureRequest`, and `transportRequest` message — otherwise lane/strip/MIDI sync messages are silently dropped.

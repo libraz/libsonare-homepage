@@ -66,11 +66,11 @@ Python では `project.compile()` が同じ形（`has_timeline`・`diagnostic_co
 
 ## 保存と読み込み: 決定的な JSON
 
-`toJson()` はプロジェクト全体（トラック、クリップ、MIDI の内容、ループクロスフェード、テンポマップ、拍子、マーカー、注釈、ワープマップ、オートメーション、パートリグの選択）を**決定的な JSON** にシリアライズします。同じプロジェクトは常にバイト単位で同一のテキストになります。`Project.fromJson(...)` で復元します。ループクロスフェードは 0 のときフィールドを省略するため、従来のハードループプロジェクトは同じ JSON 形状を保ちます。読み込みには数値の整数 `version` が必要で、欠落または整数でない値、スキーマ `0`、サポートする `5` を超えるバージョンは拒否します。
+`toJson()` はプロジェクト全体（トラック、クリップ、MIDI の内容、ループクロスフェード、テンポマップ、拍子、マーカー、注釈、ワープマップ、オートメーション、パートリグの選択）を**決定的な JSON** にシリアライズします。同じプロジェクトは常にバイト単位で同一のテキストになります。`Project.fromJson(...)` で復元します。ループクロスフェードは 0 のときフィールドを省略するため、ハードループのプロジェクトは簡潔な JSON 形状を保ちます。読み込みには `1` からサポートする `5` までの整数 `version` が必要です。
 
 シリアライザーはモデルに必要な最も低いスキーマを選びます。型付きフィールドや物理フィールドがないプロジェクトはスキーマ `1` を使います。型付きオートメーションレーンがあるとスキーマ `2` になり、クリップまたはテイクに秒単位の物理ソースオフセット、またはクリップにループアンカーがあるとスキーマ `3` になります。コンプのレンダーパーツにはスキーマ `4` を使い、パートリグが 1 件以上あるとスキーマ `5` を使います。物理ソースオフセット、ループアンカー、コンプのレンダーパーツ、パートリグは JSON／ネイティブモデルのデータです。現行 JavaScript サーフェスには最初の 3 種類のセッターがないため、プロジェクトを交換するときは JSON／ネイティブモデルを通して保持してください。これらのフィールドがないプロジェクトは下位スキーマと既存の内容を保ちます。
 
-パートリグは `destination_id` と `part` をキーにして `part_rigs` へ保存します。`part` は `0`〜`15` または宛先全体を表す `255`（`PART_RIG_ALL_PARTS`）です。各エントリのモードは `bank`、`none`、`chain` のいずれかです。`chain` には 1〜8 個の `{ processor, params }` オブジェクトを入れ、`params` は JSON オブジェクトを表す文字列として保存します。`Project.setPartRig(...)` は、その宛先へトラックがまだルーティングされていなくてもエントリを保存し、`Project.clearPartRig(...)` は削除します。プロジェクトのバウンスでは SoundFont と物理モデルの宛先へ適用されます。SMF の書き出しには含まれません。
+パートリグは `destination_id` と `part` をキーにして `part_rigs` へ保存します。`part` は `0`〜`15` またはデスティネーション全体を表す `255`（`PART_RIG_ALL_PARTS`）です。各エントリのモードは `bank`、`none`、`chain` のいずれかです。`chain` には 1〜8 個の `{ processor, params }` オブジェクトを入れ、`params` は JSON オブジェクトを表す文字列として保存します。`Project.setPartRig(...)` は、そのデスティネーションへトラックがまだルーティングされていなくてもエントリを保存し、`Project.clearPartRig(...)` は削除します。プロジェクトのバウンスでは SoundFont と物理モデルのデスティネーションへ適用されます。SMF の書き出しには含まれません。
 
 ```typescript
 const json = project.toJson();
@@ -97,15 +97,26 @@ try {
 
 Python では `project.to_json()`・`Project.from_json(json)`・`Project.from_json_with_diagnostics(json)` が対応します。
 
-読み込めない文書は、どのサーフェスでも C ABI 自身のコードで失敗し、メッセージは診断名で始まります。壊れた文書は `InvalidFormat`（`malformed_json: …`）で、対応範囲内の整数ヘルツでない `sample_rate` も同じく `InvalidFormat`（`invalid_sample_rate: …`）です。WASM と Node は `SonareError` を投げ、Python は同じ `code` を持つ `SonareValueError` を送出します。Python CLI も、ネイティブ CLI と同様に、壊れたプロジェクト文書では終了コード `5` で終了します。
+読み込めない文書は、どのサーフェスでも C ABI の `InvalidFormat` コードで失敗し、メッセージは診断名で始まります。WASM と Node は `SonareError` を投げ、Python は同じ `code` を持つ `SonareValueError` を送出します。Python CLI も、ネイティブ CLI と同様に、壊れたプロジェクト文書では終了コード `5` で終了します。
 
-読み込みに成功したときの警告は `diagnostics` のテキストで返ります。埋め込まれたミキサーシーンのうちシーンリーダーが消費しないキーは、ドキュメントのルートからのパス付き（例: `scene.strips[0].faderDB`）で `unknown_scene_key` として報告されます。`$` または `x-` で始まるキーは対象外です。プロジェクト文書のそれ以外の部分は、未知のキーを検査しません。単体のシーンに対する同じ検査は[ミキシングシーン JSON](./mixing-scene-json.md)を参照してください。
+| 診断名 | 原因 | 致命的か |
+|--------|------|----------|
+| `malformed_json` | テキストが JSON オブジェクトではない | はい |
+| `missing_version` | `version` がない、または数値ではない | はい |
+| `invalid_version` | `version` が `0`、または 0 以上の整数ではない | はい |
+| `unsupported_schema_version` | `version` がサポートする `5` より新しい | はい |
+| `invalid_sample_rate` | `sample_rate` が 8000〜384000 の整数ヘルツではない | はい |
+| `unknown_scene_key` | 埋め込まれたミキサーシーンのうち、シーンリーダーが消費しないキー | いいえ。`diagnostics` に返る |
+
+`unknown_scene_key` の警告は、ドキュメントのルートからのパス付き（例: `scene.strips[0].faderDB`）で報告されます。`$` または `x-` で始まるキーは対象外です。プロジェクト文書のそれ以外の部分は、未知のキーを検査しません。単体のシーンに対する同じ検査は[ミキシングシーン JSON](./mixing-scene-json.md)を参照してください。
 
 ### モデルを読み戻し、読み込み後に音声を再バインドする
 
 プロジェクト JSON が保存するのは**アレンジ**であって PCM ではありません。そのため読み込んだプロジェクトはソースの存在は分かっていても、その実体となるサンプルを持っていません。読み取り専用のディスクリプタ 3 系統と PCM／ソースメタデータのセッターを使えば、読み込んだプロジェクトに音声を戻せます。
 
-```typescript
+::: code-group
+
+```typescript [ブラウザ / WASM]
 const loaded = Project.fromJson(json);
 
 for (let i = 0; i < loaded.trackCount(); i++) {
@@ -128,6 +139,32 @@ for (let i = 0; i < loaded.sourceCount(); i++) {
 
 const audio = loaded.bounce({ sampleRate: 48000 });
 ```
+
+```python [Python]
+loaded = sonare.Project.from_json(json_text)
+
+for i in range(loaded.track_count()):
+    track = loaded.track_by_index(i)
+    print(track.id, track.name)
+for i in range(loaded.clip_count()):
+    clip = loaded.clip_by_index(i)
+    print(clip.id, clip.start_ppq, clip.length_ppq)
+
+unresolved = set(loaded.unresolved_audio_source_ids())
+for i in range(loaded.source_count()):
+    source = loaded.source_by_index(i)
+    if source.kind != 0 or source.id not in unresolved:  # 0 = audio、MIDI は除外
+        continue
+    pcm = decode_from_your_storage(source.name_or_uri)
+    loaded.set_source_audio(source.id, pcm, source.channel_count, int(source.sample_rate_hint))
+    loaded.set_audio_source_metadata(source.id, "sha256:...", "lead-vocal")
+
+audio = loaded.bounce(sample_rate=48000)
+```
+
+:::
+
+コマンドラインからは `sonare project bounce --resolve-audio` が、ソースの持つ `file://` URI を開きます（[Python CLI からバウンスする](./project-bounce.md#python-cli-からバウンスする)を参照）。
 
 `trackByIndex` / `clipByIndex` / `sourceByIndex` は保存順に対する 0 始まりのインデックスで、`trackCount()` / `clipCount()` / `sourceCount()` と対になります。返るのはハンドルではなくディスクリプタなので、返り値を書き換えても何も変わりません。ホストがディスクから読み込んだプロジェクトをレンダリングしたいときや、自前のコードが構築したのではないプロジェクトに対して UI を組むときに使います。
 

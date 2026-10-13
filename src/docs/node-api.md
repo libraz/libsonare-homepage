@@ -28,7 +28,7 @@ console.log(`Key: ${result.key.name}`);     // "C major"
 console.log(`Beats: ${result.beatTimes.length}`);
 ```
 
-Every analyzer above reads from the same shared spectrogram — the transform this demo walks through, and the reason asking for BPM and key together costs barely more than asking for one.
+Each `detect*` call computes its own spectrogram from the samples, the transform this demo walks through. `analyze()` computes it once for the whole pipeline, so prefer it when you want several results from one buffer.
 
 <SonareDemo id="stft-basics" />
 
@@ -88,8 +88,8 @@ import {
   hzToNote, noteToHz, framesToTime, timeToFrames
 } from '@libraz/libsonare-native';
 
-hzToMel(440);        // → Mel scale value
-melToHz(549.64);     // → Hz
+hzToMel(440);        // → 6.6 (Slaney mel scale)
+melToHz(6.6);        // → 440
 hzToMidi(440);       // → 69
 midiToHz(69);        // → 440
 hzToNote(440);       // → "A4"
@@ -145,20 +145,13 @@ try {
 }
 ```
 
-Argument problems caught before the call reaches the library are raised as
-native errors, which `isSonareError` does not match: a wrong-typed or missing
-argument is a `TypeError`, and a value outside its domain — two arrays of unequal
-length, a `mode` that is not one of the accepted strings, a fractional number
-where an integer is read, a string or object property carrying an embedded NUL —
-is a `RangeError` naming the field. A request object, or the audio buffer of a
-buffer-or-request entry point, that is `null`, a number, an array or the wrong
-typed array is a `TypeError` (`<function>: request must be an object`, or
-`<function>: samples must be a Float32Array`). Empty or non-finite audio and an
-out-of-range or non-integer `sampleRate` passed to an audio-taking one-shot are a
-`RangeError`, checked before the core is reached. Everything the library or an
-object's state reports stays a coded `SonareError`: a released or destroyed handle throws
-`InvalidState`, and an addon built from a different tree than the package throws
-`AbiMismatch` (code 10) when the package is required.
+Argument problems caught before the call reaches the library are raised as native `TypeError` or `RangeError`, which `isSonareError` does not match, and they name the function and the argument (`<function>: request must be an object`, `detectBpm: samples must be a Float32Array`, `detectBpm: sampleRate out of supported range [8000, 384000]`). Which failure takes which class and code, here and on every other runtime, is in the [error contract](./binding-parity.md#error-contract); an addon built from a different tree than the package throws `AbiMismatch` (code 10) when the package is required, and [Installation](./installation.md#abimismatch-when-loading-the-library) covers the fix.
+
+Three more refusals are worth knowing:
+
+- A string with an embedded NUL (names, ids, keys, JSON text, file paths) is a `RangeError` naming the field.
+- Any call on a handle after `destroy()` throws `SonareError` `InvalidState`.
+- On `RealtimeEngine`, every trailing `renderFrame` is optional: omit it to apply at once. A negative value, `-1` included, is a `RangeError`.
 
 ### Audio
 
@@ -221,10 +214,10 @@ function render() {
 The `using` syntax needs TypeScript 5.2 or later (or another tool that lowers it)
 or a runtime that parses it natively; Node 22 does not, so there call `destroy()`
 in a `try/finally`.
-`destroy()` is the canonical native release method on every handle class;
-`Project` and `Mixer` also expose `delete()` as a WASM-compatible alias. GC also
-reclaims handles eventually, but `using`/explicit release gives deterministic
-cleanup that long-lived processes should prefer.
+`destroy()` is the release method on the handle classes (`ProjectTimeline` uses
+`dispose()`); `Project`, `Mixer` and `SampleBank` also expose `delete()` as a
+WASM-compatible alias. GC also reclaims handles eventually, but `using`/explicit
+release gives deterministic cleanup that long-lived processes should prefer.
 
 `RealtimeVoiceChanger` also implements `[Symbol.dispose]` alongside an explicit
 `destroy()`, so it supports `using` as well. `StreamingMasteringChain`,
@@ -235,14 +228,16 @@ cleanup that long-lived processes should prefer.
 
 Reconstruct a spectrum or audio from a mel spectrogram or MFCC matrix. Phase is estimated with Griffin-Lim, so the round-trip is lossy — see [Inverse Features](./inverse-features.md).
 
-The first four also take a request object, and a request carrying neither the forward `result` nor the raw `power` / `coefficients` throws a `TypeError` naming the missing field (`melToStft: power is required (or pass result)`).
+<SonareDemo id="griffin-lim" />
+
+All six also take a request object. The mel and MFCC requests name the matrix `power` / `coefficients` or carry the forward `result`; a request with neither throws a `TypeError` naming the missing field (`melToStft: power is required (or pass result)`).
 
 | Function | Return Type | Description |
 |----------|-------------|-------------|
-| `melToStft(mel, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `InverseStftResult` | Linear STFT power from a mel spectrogram |
-| `melToAudio(mel, nMels, nFrames, sr?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | Audio from a mel spectrogram (Griffin-Lim) |
-| `mfccToMel(mfcc, nMfcc, nFrames, nMels?, lifter?)` | `InverseMelResult` | Mel spectrogram from MFCC coefficients |
-| `mfccToAudio(mfcc, nMfcc, nFrames, nMels?, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | Audio from MFCC coefficients |
+| `melToStft(power, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `InverseStftResult` | Linear STFT power from a mel spectrogram |
+| `melToAudio(power, nMels, nFrames, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | Audio from a mel spectrogram (Griffin-Lim) |
+| `mfccToMel(coefficients, nMfcc, nFrames, nMels?, lifter?)` | `InverseMelResult` | Mel spectrogram from MFCC coefficients |
+| `mfccToAudio(coefficients, nMfcc, nFrames, nMels?, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?, lifter?)` | `Float32Array` | Audio from MFCC coefficients; `lifter` defaults to 0 |
 | `cqtToAudio(magnitude, nBins, nFrames, sampleRate?, hopLength?, fmin?, binsPerOctave?, nIter?)` | `Float32Array` | Audio from a row-major CQT magnitude matrix (Griffin-Lim) |
 | `vqtToAudio(magnitude, nBins, nFrames, sampleRate?, hopLength?, fmin?, binsPerOctave?, gamma?, nIter?)` | `Float32Array` | Audio from a row-major VQT magnitude matrix (Griffin-Lim) |
 
@@ -273,12 +268,12 @@ see [librosa Compatibility](./librosa-compatibility.md) for the full mapping.
 | `fixLength(values, targetSize, padValue?)` | `Float32Array` | `librosa.util.fix_length` |
 | `fixFrames(frames, xMin?, xMax?, pad?)` | `Int32Array` | `librosa.util.fix_frames` |
 | `peakPick(values, preMax, postMax, preAvg, postAvg, delta, wait)` | `Int32Array` | `librosa.util.peak_pick` |
-| `vectorNormalize(values, normType?, threshold?)` | `Float32Array` | `librosa.util.normalize`. `normType`: 0=inf, 1=L1, 2=L2, 3=power. Node native defaults `threshold` to `0.0`; WASM defaults it to `1e-12` |
+| `vectorNormalize(values, normType?, threshold?)` | `Float32Array` | `librosa.util.normalize`. `normType`: 0=inf, 1=L1, 2=L2, 3=power; `threshold` defaults to `0` (the library's tiny-norm guard) |
 | `pcen(values, nBins, nFrames, options?)` | `Float32Array` | `librosa.pcen` (row-major mel input) |
 | `tonnetz(chromagram, nChroma, nFrames)` | `Float32Array` | `librosa.feature.tonnetz` (`[6 x nFrames]`) |
-| `tempogram(onsetEnvelope, sr?, hopLength?, winLength?, mode?)` | `{ nFrames: number; winLength: number; data: Float32Array }` | `librosa.feature.tempogram`; `mode` is `'autocorrelation'` (default) or `'cosine'` |
-| `fourierTempogram(onsetEnvelope, sr?, hopLength?, winLength?)` | `{ nBins: number; nFrames: number; data: Float32Array }` | `librosa.feature.fourier_tempogram` |
-| `cyclicTempogram(onsetEnvelope, sr?, hopLength?, winLength?, center?, norm?, bpmMin?, nBins?)` | `{ nFrames: number; nBins: number; data: Float32Array }` | Cyclic (tempo-octave-invariant) tempogram |
+| `tempogram(onsetEnvelope, sr?, hopLength?, winLength?, mode?, center?, norm?)` | `{ nFrames: number; winLength: number; data: Float32Array }` | `librosa.feature.tempogram`; `mode` is `'autocorrelation'` (default) or `'cosine'` |
+| `fourierTempogram(onsetEnvelope, sr?, hopLength?, winLength?, center?, norm?)` | `{ nBins: number; nFrames: number; data: Float32Array }` | `librosa.feature.fourier_tempogram` |
+| `cyclicTempogram(onsetEnvelope, sr?, hopLength?, winLength?, bpmMin?, nBins?)` | `{ nFrames: number; nBins: number; data: Float32Array }` | Cyclic (tempo-octave-invariant) tempogram; defaults `winLength=384`, `bpmMin=60`, `nBins=60` |
 | `tempogramRatio(tempogramData, winLength?, sr?, hopLength?, factors?)` | `Float32Array` | `librosa.feature.tempogram_ratio`; factors default to `[0.5, 1, 2, 3, 4]` |
 | `plp(onsetEnvelope, sr?, hopLength?, tempoMin?, tempoMax?, winLength?)` | `Float32Array` | `librosa.beat.plp` |
 
@@ -286,8 +281,8 @@ see [librosa Compatibility](./librosa-compatibility.md) for the full mapping.
 
 | Function | Description |
 |----------|-------------|
-| `hzToMel(hz)` | Hertz → Mel scale |
-| `melToHz(mel)` | Mel scale → Hertz |
+| `hzToMel(hz)` | Hertz → Mel (Slaney scale, as `librosa` uses by default) |
+| `melToHz(mel)` | Mel (Slaney scale) → Hertz |
 | `hzToMidi(hz)` | Hertz → MIDI note number |
 | `midiToHz(midi)` | MIDI note number → Hertz |
 | `hzToNote(hz)` | Hertz → note name (e.g., "A4"); a frequency that is not finite and positive throws `SonareError` `InvalidParameter` |
@@ -351,7 +346,7 @@ const preview = JSON.parse(
 );
 ```
 
-Use the stereo entry points for anything stereo. The mono helpers measure a `0.5 * (left + right)` downmix, and on decorrelated material that reads about 6 dB low, so the integrated loudness, the normalization gain derived from it, and the ceiling-risk judgement are all under-reported by the same amount. Measured on a decorrelated pink-noise pair (48 kHz, 4 s), the downmix path reported -22.55 LUFS against the stereo path's -16.44 LUFS — a 6.11 dB gap — and Spotify `normalizationGainDb` came out at +8.55 through the downmix versus +2.44 through the stereo path.
+Use the stereo entry points for anything stereo. The mono helpers measure a `0.5 * (left + right)` downmix, and on decorrelated material that reads about 6 dB low, so the integrated loudness, the normalization gain derived from it, and the ceiling-risk judgment are all under-reported by the same amount. Measured on a decorrelated pink-noise pair (48 kHz, 4 s), the downmix path reported -22.55 LUFS against the stereo path's -16.44 LUFS — a 6.11 dB gap — and Spotify `normalizationGainDb` came out at +8.55 through the downmix versus +2.44 through the stereo path.
 
 Only the `loudness` block of the stereo profile is measured from both channels: integrated LUFS and LRA come from the channel-summed program, and the true peak is the larger of the two. The spectral, dynamics, and tempo fields stay measured on the downmix, so they remain comparable with `masteringAudioProfile`.
 
@@ -404,7 +399,7 @@ import { StreamAnalyzer } from '@libraz/libsonare-native';
 const analyzer = new StreamAnalyzer({ sampleRate: 48000, computeMel: true, computeOnset: true });
 analyzer.process(block);                 // pass a Float32Array block
 const frames = analyzer.readFramesSoa(analyzer.availableFrames());
-const stats = analyzer.stats();          // stats.estimate.bpm / .key (PitchClass int)
+const stats = analyzer.stats();          // stats.estimate.key (pitch class, -1 = none), .keyName ("C major"), .chordName
 ```
 
 Node native's canonical name for the float Structure-of-Arrays read is `readFramesSoa(...)`; it also exposes `readFrames(...)` as an alias, for naming consistency with the WASM package, which uses `readFrames(...)` for the same operation.
@@ -445,7 +440,7 @@ changer.destroy();
 
 | Detail | WASM | Node native |
 |--------|------|-------------|
-| Capability check | Adds `engineCapabilities()` and checks ABI compatibility before construction | Exposes `engineAbiVersion()` but not the browser capability helper |
+| ABI and capability check | Adds `engineCapabilities()` and checks ABI compatibility before construction | Checks the packed ABI when the package loads and the engine ABI at construction (`AbiMismatch`); exports `engineAbiVersion()` but not the browser `engineCapabilities()` helper |
 | Capture buffer setup | `setCaptureBuffer(numChannels, capacityFrames)` — the canonical cross-binding form | Same canonical `setCaptureBuffer(numChannels, capacityFrames)`, plus a `@deprecated` `setCaptureBuffer(channels: Float32Array[])` overload retained for backward compatibility |
 
 `Project.create()` constructs an empty project. Its `setAssistSidecar(...)`
@@ -453,14 +448,22 @@ and `assistSidecars()` methods preserve opaque module metadata, while
 `ProjectAutomationTargetKind` and `targetKind` classify automation lanes.
 `RealtimeEngine.setTrackMonitorMode(laneIndex, mode, renderFrame?)` accepts
 `'off'`, `'pfl'` (pre-fader listen), or `'afl'` (after-fader listen), and their
-numeric ordinals. Track and mixer pan
+numeric ordinals; omit `renderFrame` to apply immediately. Track and mixer pan
 law setters accept the `PanLawInput` aliases described below.
 
-## Where the sections went
+### Additional stateful methods
 
-| Section | Page |
-|---------|------|
-| Analysis Functions | [Node.js Native Analysis and Effects](./node-api-analysis.md) |
-| Effects Functions | [Node.js Native Analysis and Effects](./node-api-analysis.md) |
-| Feature Extraction Functions | [Node.js Native Analysis and Effects](./node-api-analysis.md) |
-| Types | [Node.js Native Types](./node-api-types.md) |
+| Object | Methods and contract |
+|--------|----------------------|
+| `Project` tempo and meter | `analyzeTempo(audio, sampleRate, options?)` returns ranked candidates without editing the project. Read installed maps with `tempoSegmentByIndex(index)`, `timeSignatureByIndex(index)` and `timeSignatureCount()`; indices are zero-based. |
+| `Project` instrument bounces | `bounceWithBuiltinInstruments(bindings, options?)`, `bounceWithSynthInstruments(bindings, options?)` and `bounceWithSf2Instruments(bindings, options?)` bind instruments per destination. See [Project Bounce](./project-bounce.md). |
+| `Project` metadata | `assistSidecarCount()` counts the opaque sidecars returned by `assistSidecars()`. |
+| `RealtimeEngine` graph | `setGraph(spec)` installs an `EngineGraphSpec`; `graphNodeCount()` and `graphConnectionCount()` inspect its size. |
+| `RealtimeEngine` capture and paging | `countInEndSample(startSample, bars)` resolves the count-in end on the tempo map. `createFileClipPageProvider(path, options)` creates a file-backed provider; destroy the provider when done. |
+| `RealtimeEngine` routing | `setTrackSends(trackId, sends)` and `setTrackOutputBus(trackId, busId)` replace one lane's sends or output bus (`busId` 0 is the master mix); the track must already be in the lane list set by `setTrackLanes`. `canSetLaneSidechain(trackId, insertIndex, sourceTrackId)`, `canSetBusSidechain(...)` and `canSetMasterSidechain(...)` return a `SidechainCheck` without changing anything. |
+| `RealtimeEngine` offline and clips | `primeOfflineParameters(numChannels, blockSize)`, `resetProcessorState(renderFrame?)`, `tailSamples()` and `graphLatencySamplesQ8()` (latency in 1/256 samples) support offline renders. `upsertClip(clip)` and `removeClip(clipId)` edit clips in place. |
+| `RealtimeEngine` automation ids | `resolveTrackLaneAutomationId(trackId, 'faderDb' \| 'pan')` and `resolveBusAutomationId(busId, 'faderDb')` return the id to automate. |
+| `RealtimeEngine` MIDI | `pushMidiProgram(destinationId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)` queues a program change. |
+| `Mixer` routing | `setOutputBus(sourceId, busId)` routes a source to a bus; `flushMeters()` folds the pending true-peak stretch into the meter snapshots; call it after the last block of an offline render. |
+| `Project` bounces and sources | `bounceWithInstruments(instruments, options?)` and `bounceWithInstrument(instrument, options?)` bounce with external instruments. `unresolvedAudioSources()` returns the descriptors of audio sources that still need decoded PCM, in the order of `unresolvedAudioSourceIds()`. |
+| `Mixer` diagnostics | `stripNonFiniteDiscardCount(strip)` and `busNonFiniteDiscardCount(busId)` count processed blocks that discarded non-finite recursive DSP state. Counts are cumulative; bus reads require a compiled bus. `vcaGroupCount()` returns the VCA group count. |

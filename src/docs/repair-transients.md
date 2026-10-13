@@ -11,7 +11,7 @@ Clipping, clicks, and crackle are all short-time defects, but their evidence is 
 
 | Defect | Detector | Repair stage | What to inspect |
 |---|---|---|---|
-| A flat-topped or over-threshold peak | `masteringRepairDetectClipping` | `masteringRepairDeclip` | `sampleCount`, `runCount`, and `longestRunSamples`; long runs use an interpolation fallback. |
+| A flat-topped or over-threshold peak | `masteringRepairDetectClipping` | `masteringRepairDeclip` | `sampleCount`, `runCount`, and `longestRunSamples` for samples at or past `clipThreshold`; long runs use an interpolation fallback. For audio clipped before a later gain change, read `flatRunCount`, `longestFlatRunSamples`, `flatSampleCount`, and `flatLevel` instead. |
 | An isolated impulse-like discontinuity | `masteringRepairDetectClicks` | `masteringRepairDeclick` | `count`, `rejected`, `longestRunSamples`, and `perSecond`. |
 | Dense sample-scale surface damage | `masteringRepairDetectCrackle` | `masteringRepairDecrackle` | `sampleCount`, `sampleFraction`, and `perSecond`. |
 
@@ -36,8 +36,12 @@ await init();
 
 let repaired = samples;
 const clipping = masteringRepairDetectClipping(repaired, sampleRate);
-if (clipping.sampleCount > 0) {
-  repaired = masteringRepairDeclip(repaired, sampleRate);
+if (clipping.sampleCount > 0 || clipping.flatRunCount > 0) {
+  repaired = masteringRepairDeclip({
+    samples: repaired,
+    sampleRate,
+    clipThreshold: clipping.sampleCount > 0 ? 0.98 : clipping.flatLevel,
+  });
 }
 
 const clicks = masteringRepairDetectClicks(repaired, sampleRate);
@@ -50,6 +54,8 @@ if (crackle.sampleCount > 0) {
   repaired = masteringRepairDecrackle(repaired, sampleRate);
 }
 ```
+
+`sampleCount` only sees samples at or past the threshold (0.98 by default). Audio that was clipped and then turned down has its flat tops at a lower level, so `sampleCount` reads 0 and a default declip changes nothing; the flat-run fields find those tops, and `flatLevel` is the threshold to pass. [`masteringRepairAnalyze`](./audio-repair.md#measure-and-repair-in-one-call) chooses this threshold for you and withholds declip when a louder unclipped passage would be rewritten.
 
 The positive-count checks are only a starting point. Review the waveform and audition each change; a detector cannot know whether a clipped-looking waveform was intentional.
 
@@ -92,6 +98,8 @@ console.log(decrackled.leftReport, decrackled.rightReport);
 
 ## Read the reports
 
+The mono calls return only the samples. For these report fields, call the `*Stereo` form (which returns `leftReport` and `rightReport`) or `masteringRepairApply`.
+
 | Stage | Useful report fields | Interpretation |
 |---|---|---|
 | Declip | `lpcReconstructedRuns`, `interpolatedRuns`, `repairedSamples` | A run longer than 512 samples uses cubic or linear interpolation; LPC options do not change that fallback. |
@@ -101,6 +109,8 @@ console.log(decrackled.leftReport, decrackled.rightReport);
 The detector and repair use signal-level thresholds, not a promise that every damaged sample can be restored. Clipping discards information; reconstruction estimates the missing shape from nearby samples. Keep the original and compare the result at a controlled playback gain.
 
 In a chain config or override, `repair.decrackle.mode` takes `median` (0) or `waveletShrinkage` (1); any other value is refused with `unknown decrackle mode`.
+
+<SonareDemo id="repair-crackle" />
 
 ## Settings and accepted ranges
 
@@ -120,7 +130,7 @@ Each option has an upper bound. A value above it throws `InvalidParameter` on ev
 | Decrackle | `threshold` | `0.4` | `(0, 1000]` |
 | Decrackle | `levels` | `4` | `[1, 24]` |
 
-Declick fills every selected run linearly between its two anchoring samples before any run is solved with the AR model, so the context an AR solve reads never contains a click that has not been repaired yet. Runs that touch or overlap, including those selected by different channels in the stereo form, are joined into one region, because a neighbouring click cannot anchor the fill.
+Declick fills every selected run linearly between its two anchoring samples before any run is solved with the AR model, so the context an AR solve reads never contains a click that has not been repaired yet. Runs that touch or overlap, including those selected by different channels in the stereo form, are joined into one region, because a neighboring click cannot anchor the fill.
 
 The causal stages, decrackle in median mode among them, also run as realtime inserts; declick and declip do not. See [Audio Repair Workflow](./audio-repair.md#realtime-inserts).
 

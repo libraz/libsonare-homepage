@@ -28,7 +28,9 @@ description: libsonare の音楽情報検索（MIR）を使うためのタスク
 
 `analyze(...)` は全チェーンを実行し、すべてを一度に返します。ほとんどのアプリケーションではこれが最初の呼び出しとして正解です。共有されるスペクトル層を一度だけ計算し、そこから各推定器が答えを読み取ります。
 
-```typescript
+::: code-group
+
+```typescript [Browser]
 import { init, analyze } from '@libraz/libsonare';
 
 await init();
@@ -49,7 +51,49 @@ console.log(result.chords.length, result.sections.length, result.form);
 console.log(result.chords[0]?.name, result.chords[0]?.romanNumeral);
 ```
 
-`sampleRate` を省略すると既定の 22050 Hz が使われるので、バッファ本来のレートを必ず渡してください。レートが誤っていると、時間領域の結果がすべて警告なしに誤った倍率でスケールされます。この呼び出しは同期で、WASM ビルドはシングルスレッドです。短いクリップでなければ Web Worker で実行してください。`analyzeWithProgress(...)` は同じ解析オプションを受け取り、`(progress, stage)` を通知し、長いリクエストをキャンセルできます。
+```typescript [Node]
+import { Audio, analyze } from '@libraz/libsonare-native';
+
+const audio = Audio.fromFile('track.mp3');
+const result = analyze({ samples: audio.getData(), sampleRate: audio.getSampleRate() });
+
+console.log(result.bpm, result.key.name, result.timeSignature.numerator);
+console.log(result.beats.length, result.chords.length, result.sections.length, result.form);
+```
+
+```python [Python]
+from libsonare import Audio, analyze
+
+audio = Audio.from_file("track.mp3")
+result = analyze(audio.data, audio.sample_rate)
+
+print(result.bpm, result.key.name, result.time_signature.numerator)
+print(len(result.beat_times), len(result.chords), len(result.sections), result.form)
+```
+
+```bash [CLI]
+sonare analyze track.mp3 --json
+# 5 拍子も採点する（既定の候補は 3、4、6）
+sonare analyze track.mp3 --meter-candidates 3,4,5,6
+```
+
+:::
+
+この呼び出しは同期で、WASM ビルドはシングルスレッドです。短いクリップでなければ Web Worker で実行してください。`analyzeWithProgress(...)` は同じリクエストを受け取り、`(progress, stage)` を通知し、長い処理をキャンセルできます。解析オプションは `options` の下に渡します。最上位に書いた `tuning` はエラーにならずに無視されます。
+
+```typescript
+const result = analyzeWithProgress({
+  samples,
+  sampleRate,
+  options: { tuning: 'auto' },
+  onProgress: (progress, stage) => console.log(stage, progress),
+  cancel: () => userPressedStop,
+});
+```
+
+::: warning `sampleRate` は必ず渡す
+解析系の関数は、`sampleRate` を省略すると 22050 Hz とみなし、食い違いを報告しません。44.1 kHz の録音をレートなしで解析すると半分の速さで読まれ、120 BPM のクリック列が 60 と返ります。テンポ、ビートやセクションの時刻、ピッチの周波数など、時間に関わる結果がすべて同じ倍率でずれます。ブラウザなら `buffer.sampleRate` のように、バッファ本来のレートをすべての呼び出しに渡してください。ルーム音響の関数は既定が 48000 です。
+:::
 
 ::: warning `analyze()` はトライアドしか探索しない
 一括パスは `useTriadsOnly` を `true` にします。単体の `detectChords(...)` は `false` のままです。`useTriadsOnly: false` を渡すまで、セブンスコードはその中のトライアドとして返ります。拡張クオリティが必要なら明示的に渡してください。
@@ -92,32 +136,34 @@ console.log(result.chords[0]?.name, result.chords[0]?.romanNumeral);
     noteEach: '単一の答えを返すヘルパー（detectBpm、detectKey など）は毎回サンプルから組み直します。',
     legendStft: 'STFT を経由して計算',
     legendTime: 'サンプルから直接読む',
-    legendEstimator: '推定器 — 特徴量から 1 つの判断',
+    legendEstimator: '推定器：特徴量から 1 つの判断',
   }"
-  caption="STFT は一度だけ計算して共有されます。メルが MFCC とオンセットエンベロープへ、クロマがキー・コード・セクションのラベル付けへ、オンセットエンベロープがテンポとビート追跡へ流れます。下段のレールはそこを通らない経路です。レベル、ゼロ交差率、ピッチ追跡は波形を直接読むため、スペクトル経路が苦手とする素材でもメロディを追えます。"
+  caption="STFT は一度だけ計算して共有されます。メルが MFCC とオンセット包絡線へ、クロマがキー・コード・セクションのラベル付けへ、オンセット包絡線がテンポとビート追跡へ流れます。下段のレールはそこを通らない経路です。レベル、ゼロ交差率、ピッチ追跡は波形を直接読むため、スペクトル経路が苦手とする素材でもメロディを追えます。"
 />
 
 この配置はコストの違いも説明します。`analyze(...)` は STFT を一度だけ計算し、同じ行列をすべての推定器へ渡します。単一の答えを返すヘルパーは毎回サンプルからチェーンを組み直すので、4 つ呼べばおよそ 4 回分の解析になります。ヘルパーは 1 つのフィールドだけが欲しいとき、または一括呼び出しが隠しているオプションが必要なときに使うもので、処理を節約するためのものではありません。
 
 ## 呼び出しの選び方
 
-| 知りたいこと | 呼び出し | 解説の場所 |
-|--------------|----------|------------|
-| すべてを一度に | `analyze(...)` · `analyzeWithProgress(...)` | このページと [JavaScript 解析 API](./js-api-analysis.md) |
-| 速さ | `detectBpm(...)` · `analyzeBpm(...)` | [テンポと BPM](./glossary/analysis/tempo-bpm.md) |
-| ビートと小節線の位置 | `detectBeats(...)` · `detectDownbeats(...)` | [ビートとダウンビート](./glossary/analysis/beats-downbeats.md) |
-| すべての打点 | `detectOnsets(...)` · `onsetEnvelope(...)` | [オンセット検出](./glossary/analysis/onset-detection.md) |
-| 拍子記号 | `estimateMeter(...)` | [拍子とグルーピング](./glossary/analysis/meter-and-grouping.md) |
-| キー | `detectKey(...)` · `detectKeyCandidates(...)` | [キー検出](./glossary/analysis/key-detection.md) |
-| コード進行 | `detectChords(...)` · `chordFunctionalAnalysis(...)` | [コード認識](./glossary/analysis/chord-recognition.md) |
-| 曲の構成 | `analyzeSections(...)` · `detectBoundaries(...)` | [セクションと構成](./glossary/analysis/section-structure.md) |
-| メロディの動き | `analyzeMelody(...)` · `pitchYin(...)` · `pitchPyin(...)` | [メロディとピッチ](./glossary/analysis/melody-pitch.md) |
-| 音色 | `analyzeTimbre(...)` · `mfcc(...)` · `melSpectrogram(...)` | [メル・MFCC・音色](./glossary/analysis/mel-mfcc-timbre.md) |
-| 時間軸上の和声行列 | `chroma(...)` · `chromaCqt(...)` · `nnlsChroma(...)` | [クロマ特徴量](./glossary/analysis/chroma-features.md) |
-| 生の時間周波数表現 | `stft(...)` · `melSpectrogram(...)` | [スペクトログラムと STFT](./glossary/analysis/spectrogram-stft.md) |
-| モノラル／マルチチャンネルのミックスの分割 | `hpss(...)` · `decomposeStems(...)` · `decomposeStemsLinked(...)` | 後述の[音源分離](#音源分離) |
+Node はブラウザと同じ名前です。Python は同じ名前のスネークケース（`detect_bpm`、`analyze_sections`、`chord_functional_analysis`）で、CLI の列には対応する `sonare` サブコマンドを示します。
 
-`analyze(...)` はテンポ、拍子、ビート、キー、コード、セクション、メロディ、音色、ダイナミクス、リズムの主な結果を含みます。特徴量行列、低レベルの変換、ステム分離には個別のヘルパーを使います。ヘルパーが要るのは、より細かく制御したいとき（テンポ範囲を狭める、別のキープロファイルを使う、拡張クオリティを含めてコードを探索する）か、答えが 1 つだけ必要で残りが無駄になるときです。
+| 知りたいこと | 呼び出し | `analyze(...)` に含まれるか | CLI | 解説の場所 |
+|--------------|----------|:---------------------------:|-----|------------|
+| すべてを一度に | `analyze(...)` · `analyzeWithProgress(...)` | n/a | `analyze` | このページと [JavaScript 解析 API](./js-api-analysis.md) |
+| 速さ | `detectBpm(...)` · `analyzeBpm(...)` | 含まれる | `bpm` | [テンポと BPM](./glossary/analysis/tempo-bpm.md) |
+| ビートと小節線の位置 | `detectBeats(...)` · `detectDownbeats(...)` | 含まれる | `beats` · `downbeats` | [ビートとダウンビート](./glossary/analysis/beats-downbeats.md) |
+| すべての打点 | `detectOnsets(...)` · `onsetEnvelope(...)` | 含まれない | `onsets` | [オンセット検出](./glossary/analysis/onset-detection.md) |
+| 拍子記号 | `estimateMeter(...)` | 含まれる | `analyze --meter-candidates` | [拍子とグルーピング](./glossary/analysis/meter-and-grouping.md) |
+| キー | `detectKey(...)` · `detectKeyCandidates(...)` | 含まれる | `key` | [キー検出](./glossary/analysis/key-detection.md) |
+| コード進行 | `detectChords(...)` · `chordFunctionalAnalysis(...)` | 含まれる | `chords` | [コード認識](./glossary/analysis/chord-recognition.md) |
+| 曲の構成 | `analyzeSections(...)` · `detectBoundaries(...)` | セクションのみ | `sections` | [セクションと構成](./glossary/analysis/section-structure.md) |
+| メロディの動き | `analyzeMelody(...)` · `pitchYin(...)` · `pitchPyin(...)` | メロディのみ | `pitch` | [メロディとピッチ](./glossary/analysis/melody-pitch.md) |
+| 音色 | `analyzeTimbre(...)` · `mfcc(...)` · `melSpectrogram(...)` | 音色のみ | `mel` | [メル・MFCC・音色](./glossary/analysis/mel-mfcc-timbre.md) |
+| 時間軸上の和声行列 | `chroma(...)` · `chromaCqt(...)` · `nnlsChroma(...)` | 含まれない | `chroma` | [クロマ特徴量](./glossary/analysis/chroma-features.md) |
+| 生の時間周波数表現 | `stft(...)` · `melSpectrogram(...)` | 含まれない | n/a | [スペクトログラムと STFT](./glossary/analysis/spectrogram-stft.md) |
+| モノラル／マルチチャンネルのミックスの分割 | `hpss(...)` · `decomposeStems(...)` · `decomposeStemsLinked(...)` | 含まれない | n/a | 後述の[音源分離](#音源分離) |
+
+ヘルパーを使うのは、より細かく制御したいとき（テンポ範囲を狭める、別のキープロファイルを使う、拡張クオリティを含めてコードを探索する）か、答えが 1 つだけ必要で残りが無駄になるときです。`analyze(...)` ではコードの HMM・キー文脈・転回形のスイッチが少し長い名前になっていて、`useChordHmm`・`useChordKeyContext`・`detectChordInversions` が、`detectChords(...)` の `useHmm`・`useKeyContext`・`detectInversions` に当たります。
 
 ## リズム
 
@@ -144,12 +190,12 @@ for (const [index, beat] of beats.entries()) {
 |------------|------|
 | `beatTimes` | 秒単位のビート位置を `Float32Array` で。 |
 | `beats` | 同じ位置をオブジェクトで表したもの。各要素が `strength` を持つ。 |
-| `downbeatIndices` | 検出した小節頭ごとに 1 つの、`beats` への*インデックス*。並行配列でも第 2 の時系列でもないので、ダウンビート判定は所属チェックで行う。 |
+| `downbeatIndices` | 検出した小節頭ごとに 1 つの、`beats` への*インデックス*。並行配列でも第 2 の時系列でもないので、ダウンビート判定は集合に含まれるかの判定で行う。 |
 | `downbeatPhase` | 曲頭が最初の小節の何拍目から始まるか。拍子推定器が出す値で、後からダウンビートが精緻化されても再計算されないため、`downbeatIndices[0]` と食い違うことがある。 |
 | `beatObservations` | 判断の根拠となるアクセント情報。`onsetStrength`、`lowFrequencyEnergy`、`chordChange` の 3 本で、いずれも 1 拍につき 1 値。解析が生成できなかったストリームは空で返り、これは「全拍が 0 点だった」とは別の状態。 |
 | `beatLocalBpm` | 各拍における平滑化テンポ。`computeTempoCurve: true` を指定しない限り空で、テンポが動く素材では `adaptiveTempo: true` も必要。 |
 
-`beats[].strength` と `beatObservations.onsetStrength` は交換できません。前者はオンセットエンベロープを拍の位置で 1 フレームだけ読んだ生の値で、上限がなく、拍位置の揺れにそのまま影響されます。後者は拍の周囲の窓で集約した値で、ライブラリ自身のダウンビート判定が採点しているのはこちらです。拍どうしのアクセントを比較する用途では `onsetStrength` を使ってください。
+`beats[].strength` と `beatObservations.onsetStrength` は交換できません。前者はオンセット包絡線を拍の位置で 1 フレームだけ読んだ生の値で、上限がなく、拍位置の揺れにそのまま影響されます。後者は拍の周囲の窓で集約した値で、ライブラリ自身のダウンビート判定が採点しているのはこちらです。拍どうしのアクセントを比較する用途では `onsetStrength` を使ってください。
 
 ### テンポ
 
@@ -162,9 +208,9 @@ for (const [index, beat] of beats.entries()) {
 
 `analyzeRhythm(...)` の `bpm` は意図的に第 3 の数値です。ビート追跡が落ち着いたグリッドから測っており、合成クリック列に対する計測では、どちらのテンポ入口よりも既知テンポに近い値になります。3 つが小数点まで一致することは期待しないでください。
 
-### 拍子： `estimateMeter`
+### 拍子：`estimateMeter`
 
-`estimateMeter(...)` は、渡したビート列の上で候補となる拍子記号を採点します。音声もフレーム単位のエンベロープも不要なので、既存の解析結果の任意の区間（たとえば 1 セクション分）を、解析をやり直さずに採点できます。
+`estimateMeter(...)` は、渡したビート列の上で候補となる拍子記号を採点します。音声もフレーム単位の包絡線も不要なので、既存の解析結果の任意の区間（たとえば 1 セクション分）を、解析をやり直さずに採点できます。
 
 ```typescript
 import { analyze, estimateMeter } from '@libraz/libsonare';
@@ -185,9 +231,9 @@ console.log(meter.timeSignature, meter.grouping, meter.downbeatPhase);
 
 <SonareDemo id="meter-estimate" />
 
-このデモでは断定よりも順位を見てください。素直な 4 拍子を 4 小節鳴らすと、支持の大半は 4 が取りますが 6 にも相応の分が残ります。1 小節おきの強拍は 6 拍の区切りの開始点でもあるからです。表示を「ビート」に切り替えると、採点の土台になった拍が見えます。
+このデモでは断定よりも順位を見てください。素直な 4 拍子を 4 小節鳴らすと、支持の大半は 4 が取りますが 6 にも相応の分が残ります。1 小節おきの強拍は 6 拍の区切りの開始点でもあるからです。
 
-答えのもう半分は `grouping` です。小節が 2 拍と 3 拍のアクセント群にどう分かれるかを表し、7 拍なら 7 単独ではなく `[3, 2, 2]` として返り、合計は必ず分子に一致します。要素が 1 つだけなら内部分割は解決されていません。複合拍子と単純拍子を見分けるのもこのフィールドです。拍ごとのアクセントからは拍の内部分割が分からないため、3 拍ずつにアクセントが乗った 6 は、要求された分母のまま `[3, 3]` として報告されます。
+答えのもう半分は `grouping` で、小節が 2 拍と 3 拍のアクセント群にどう分かれるかを表します。7 拍なら `[3, 2, 2]` と返り、合計は必ず分子に一致します。要素が 1 つだけなら内部分割は解決されていません。3 拍ずつにアクセントが乗った 6 は、拍の内部分割がアクセントからは分からないため、要求された分母のまま `[3, 3]` として報告されます。
 
 #### `confidence` という名前のフィールドが 2 つある
 
@@ -200,10 +246,7 @@ console.log(meter.timeSignature, meter.grouping, meter.downbeatPhase);
 
 したがって、明確な 3 拍子では `candidates[0].confidence` がほぼすべての支持を示していても `timeSignature.confidence` は 1 よりかなり低いままになりえますし、本当に曖昧なクリップでも 2 位がたまたま大きく離れていれば `timeSignature.confidence` は高く出ます。答えている問いが別なので、自分の問いに合うほうを選び、UI ではそれに合わせて表示し、両方を 1 つのしきい値に通すことは避けてください。それぞれの計算式は[拍子とグルーピング](./glossary/analysis/meter-and-grouping.md#同じフィールド名を持つ-2-つの信頼度)にあります。
 
-さらに、順序に関する 2 点も間違えやすいところです。
-
-- `candidates` は**順位表**で、`k` 番目の要素が k 番目に良い仮説です（選ばれた拍子記号が先頭に置かれます）。`candidateScores` は**要求した分子と並行**で、渡した順に並びます。両者のインデックスは対応しません。
-- `candidateScores` は標準化された符号付きの値です。0 は拍子を持たないビート列で分子が到達する水準なので、負の値はノイズ以下の支持を意味します。スコアは採点したビート数の平方根に比例して大きくなるため、長さの違う区間どうしのスコアは、長さを正規化しない限り比較できません。
+`candidates` は**順位表**（k 番目の要素が k 番目に良い仮説で、選ばれた拍子記号が先頭）で、`candidateScores` は**要求した分子と並行**に、渡した順で並びます。両者のインデックスは対応しません。スコアは採点したビート数が多いほど大きくなるため、比較は 1 つの結果の中だけにしてください。どちらも[拍子とグルーピング](./glossary/analysis/meter-and-grouping.md)に詳しい説明があります。
 
 #### 短い区間ではそもそも探索されない
 
@@ -224,11 +267,11 @@ if (!meter.searched) {
 }
 ```
 
-このフォールバックはもっともらしい 4/4 であり、だからこそフラグが存在します。短いクリップ、静かなイントロ、材料の乏しいビート追跡のいずれもが同じ答えに行き着き、それを実測と区別できるのは `searched` だけです。描画する前に必ず確認してください。
+このフォールバックはもっともらしい 4/4 です。短いクリップ、静かなイントロ、材料の乏しいビート追跡のいずれも同じ答えに行き着き、実測と区別できるのは `searched` だけです。描画する前に必ず確認してください。
 
 <SonareDemo id="meter-estimate-three" />
 
-上のワルツは、4 拍子のクリップと並べる価値のある対比です。4 拍や 6 拍の小節を支持する材料が素材に無いため、3 がほぼすべての支持を取り、他は落ちます。自信のある推定と割れている推定は見え方が違い、その違いを教えてくれるのが内訳です。
+ワルツは 4 拍子のクリップとの対比です。4 拍や 6 拍の小節を支持する材料が無いため、3 がほぼすべての支持を取ります。自信のある推定と割れている推定は、内訳の見え方が違います。
 
 ## ハーモニー
 
@@ -289,7 +332,7 @@ const labelled = chordFunctions({ chords, key });
 console.log(labelled[0].roman, labelled[0].function);   // 例: "I", "tonic"
 ```
 
-`chordFunctions(...)` は同じ時刻付きエントリに、ローマ数字（`roman`）と和声機能（`'tonic'`、`'subdominant'`、`'dominant'`、キーのスケール外のルートは `'chromatic'`、`N.C.` は `'none'`）を加えて返します。`chordFunctionalAnalysis(...)` は検出とラベル付けを 1 回の呼び出しで行い、同じエントリを返します。コード一覧を別に使わないときに向いています。
+`chordFunctions(...)` は同じ時刻付きエントリに、ローマ数字（`roman`）と和声機能（`'tonic'`、`'subdominant'`、`'dominant'`、キーのスケール外のルートは `'chromatic'`、`N.C.` は `'none'`）を加えて返します。`chordFunctionalAnalysis(...)` は、キーが分かっている場合に検出とラベル付けを 1 回の呼び出しで行い、同じエントリを返します。`keyRoot` は必須で、`chordFunctionalAnalysis({ samples, sampleRate, keyRoot: key.root, keyMode: key.mode })` のように渡します。結果をプロジェクトにコード注釈として書き戻す方法は、[検出したコードからプロジェクトの注釈へ](./glossary/analysis/chord-recognition.md#検出したコードをプロジェクトの注釈にする)を参照してください。
 
 各 `Chord` は `root`、`bass`、`quality`、`start`、`end`、`duration`、`confidence`、そしてコアが正規の綴りで与える `name` を持ちます。`rootName`、`bassName`、`name` はどのバインディングから読んでも同一です。`analyze(...)` 内のコードには `result.key` を基準にした `romanNumeral` も付き、`N.C.` では空になります。
 
@@ -321,13 +364,23 @@ for (const section of sections) {
 const { boundaries, noveltyCurve, noveltyPeak } = detectBoundaries({ samples, sampleRate });
 ```
 
-`analyzeSections(...)` はラベル付きの区間を返します。イントロ、ヴァース、コーラス、ブリッジ、インストゥルメンタル、アウトロ、または不明です。`detectBoundaries(...)` はその下にあるラベルなしの層で、遷移点と、それを拾い出した連続的なノベルティ曲線を返します。自前のしきい値を当てるにはこちらが必要です。セクション一覧を粗くした表現ではありませんし、どちらか一方から他方を導くこともできません。
+`analyzeSections(...)` はラベル付きの区間を返します。イントロ、A メロ（Verse）、サビ（Chorus）、ブリッジ、間奏（Instrumental）、アウトロ、または不明（Unknown）です。`detectBoundaries(...)` はその下にあるラベルなしの層で、遷移点と、それを拾い出した連続的なノベルティ曲線を返します。自前のしきい値を当てるにはこちらが必要です。セクション一覧を粗くした表現ではありませんし、どちらか一方から他方を導くこともできません。
 
-想定しておくべき挙動が 2 つあります。プリコーラスには検出分岐が無いため、このラベルで絞り込むと常に空になります。そして不明は 3 つの異なる状況をまとめたラベルです。境界が見つからなかった、どの肯定分岐にも当てはまらなかった、機能を断定するには根拠が弱すぎた、の 3 つで、最初のものは `confidence` 0 を、最後のものはしきい値未満のスコアをそのまま保持するので、数値からどれなのかが分かります。
+想定しておくべき挙動が 2 つあります。プリコーラスには検出分岐が無いため、このラベルで絞り込むと常に空になります。そして不明が返る経路は 2 つで、どちらも `confidence` は 0 です。境界が見つからなかった（曲全体が 1 区間）場合と、静かでもなく他と反復もしない端の区間の場合です。見分け方は[セクションと構成](./glossary/analysis/section-structure.md#unknown-が返る-2-つの経路)にあります。
 
 `noveltyCurve` は自身の最大値でスケールされています。ピークの 1 は「この曲の中で最も変化の大きいフレーム」という意味であって「大きな変化」という意味ではありません。絶対しきい値と比較される生の応答に戻すには `noveltyPeak` を掛けます。
 
-各ピークは、前後 `referenceWindow` 秒（既定 60）の範囲で最大のノベルティの `threshold` 倍に達する必要があります。そのため長い曲でも、支配的な変化が遠く離れた弱いセクション変化を隠しません。`referenceWindow: 0` で相対しきい値を無効にでき、曲の長さ以上の値を渡すと基準が曲全体になります。範囲内のどのイベントも 30% 以内に迫らない孤立した大きなバースト（短い大音量）は、その基準から除外されるので、周囲のセクション変化を隠しません。各セクションの `energyLevel` はフレーム RMS の中央値を最も大きいセクションで正規化した値なので、短いバーストが自分のセクションを最大にすることはありません。
+各ピークは、前後 `referenceWindow` 秒（既定 60）の範囲で最大のノベルティ値の `threshold` 倍に達する必要があります。そのため長い曲でも、支配的な変化が遠く離れた弱いセクション変化を隠しません。範囲内のどのイベントも 30% に届かない孤立した大きなバースト（短い大音量）は、その基準から除外されるので、周囲のセクション変化を隠しません。各セクションの `energyLevel` はフレーム RMS の中央値を最も大きいセクションで正規化した値なので、短いバーストが自分のセクションを最大にすることはありません。
+
+`analyzeSections(...)` が受け取るのは `nFft`、`hopLength`、`minSectionSec` だけで、`referenceWindow` は既定の 60 秒のままです。それ以外の境界オプションは `detectBoundaries(...)` のものです。
+
+| オプション | 既定値 | 意味 |
+|------------|--------|------|
+| `threshold` | 0.3 | ピークが達する必要のある、局所基準に対する割合。 |
+| `absoluteThreshold` | 0.005 | 生のノベルティに対する下限。0 にすると `threshold` だけで判定するので、定常的な入力でも区切られる。 |
+| `referenceWindow` | 60 | 局所基準を取る片側の秒数。0 で相対しきい値を無効にでき、曲の長さ以上なら基準が曲全体になる。 |
+| `peakDistance` | 2 | ピーク間の最小間隔（秒）。強いピークから順に採用する。 |
+| `kernelSize` · `nMfcc` · `nChroma` · `useMfcc` · `useChroma` | 64 · 13 · 12 · true · true | チェッカーボード型カーネルと特徴量の組み合わせ。`useMfcc` と `useChroma` のどちらかは有効のままにする。 |
 
 ### メロディとピッチ
 
@@ -340,13 +393,13 @@ console.log(melody.meanFrequency, melody.pitchRangeOctaves, melody.vibratoRate);
 const voiced = melody.points.filter((point) => point.frequency > 0);
 ```
 
-ピッチ追跡は STFT ではなく波形を直接読み、**単旋律**の素材、つまり同時に 1 音だけが鳴る素材を前提とします。ソロボーカル、リードライン、あるいは先に分離したステムに対して使ってください。フルミックスに掛けると、その瞬間に支配的な音をフレームごとに追いかけます。
+ピッチ追跡は STFT ではなく波形を直接読み、**モノフォニック**の素材、つまり同時に 1 音だけが鳴る素材を前提とします。ソロボーカル、リードライン、あるいは先に分離したステムに対して使ってください。フルミックスに掛けると、その瞬間に支配的な音をフレームごとに追いかけます。
 
 `points[].frequency` は無声フレームで `0` になるので、平均を取る前に除外します。`usePyin: true` は Viterbi で平滑化した追跡器を選びます。コストは上がりますが、素の YIN に比べてオクターブ飛びが格段に減るため、ユーザーに見せる用途では通常こちらです。既定の探索範囲は `fmin` 65 Hz から `fmax` 2093 Hz、有声判定の `threshold` は 0.1 です。実際に扱う楽器に合わせて範囲を狭めるのが、最も手軽に精度を上げる方法です。
 
 ## 音源分離
 
-調波・打撃成分の分離、NMF による成分分解、共通マスクを使うマルチチャンネル処理は、[音源分離](./source-separation.md)で説明しています。音の比較デモと、各方式の再構成・位相に関する制約も確認できます。
+倍音成分・打撃成分の分離、NMF による成分分解、共通マスクを使うマルチチャンネル処理は、[音源分離](./source-separation.md)で説明しています。音の比較デモと、各方式の再構成・位相に関する制約も確認できます。
 
 ## その下の層
 
@@ -373,11 +426,11 @@ libsonare は同じ DSP を 2 通りに公開しています。このページ�
 
 ## 関連ページ
 
-- [ビートとダウンビート](./glossary/analysis/beats-downbeats.md) · [テンポと BPM](./glossary/analysis/tempo-bpm.md) · [拍子とグルーピング](./glossary/analysis/meter-and-grouping.md) — リズムの概念と、推定器が置いている前提
-- [キー検出](./glossary/analysis/key-detection.md) · [コード認識](./glossary/analysis/chord-recognition.md) · [クロマ特徴量](./glossary/analysis/chroma-features.md) — 和声をどう測っているか
-- [セクションと構成](./glossary/analysis/section-structure.md) · [メロディとピッチ](./glossary/analysis/melody-pitch.md) · [オンセット検出](./glossary/analysis/onset-detection.md) — 構成、旋律、打点
-- [スペクトログラムと STFT](./glossary/analysis/spectrogram-stft.md) · [メル・MFCC・音色](./glossary/analysis/mel-mfcc-timbre.md) — すべての土台になる共通層
-- [JavaScript 解析 API](./js-api-analysis.md) · [JavaScript 特徴抽出 API](./js-api-features.md) — フィールド単位のリファレンス
-- [librosa 互換性](./librosa-compatibility.md) — 同じコアへのもう 1 つの入口
-- [ルーム音響解析](./acoustic-analysis.md) — 音楽ではなく録音空間の解析
-- [はじめに](./getting-started.md) — 導入と最初のファイルのデコード
+- [ビートとダウンビート](./glossary/analysis/beats-downbeats.md) · [テンポと BPM](./glossary/analysis/tempo-bpm.md) · [拍子とグルーピング](./glossary/analysis/meter-and-grouping.md)：リズムの概念と、推定器が置いている前提
+- [キー検出](./glossary/analysis/key-detection.md) · [コード認識](./glossary/analysis/chord-recognition.md) · [クロマ特徴量](./glossary/analysis/chroma-features.md)：和声をどう測っているか
+- [セクションと構成](./glossary/analysis/section-structure.md) · [メロディとピッチ](./glossary/analysis/melody-pitch.md) · [オンセット検出](./glossary/analysis/onset-detection.md)：構成、旋律、打点
+- [スペクトログラムと STFT](./glossary/analysis/spectrogram-stft.md) · [メル・MFCC・音色](./glossary/analysis/mel-mfcc-timbre.md)：すべての土台になる共通層
+- [JavaScript 解析 API](./js-api-analysis.md) · [JavaScript 特徴抽出 API](./js-api-features.md)：フィールド単位のリファレンス
+- [librosa 互換性](./librosa-compatibility.md)：同じコアへのもう 1 つの入口
+- [ルーム音響解析](./acoustic-analysis.md)：音楽ではなく録音空間の解析
+- [はじめに](./getting-started.md)：導入と最初のファイルのデコード

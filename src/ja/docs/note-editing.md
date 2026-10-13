@@ -38,6 +38,8 @@ description: 音声から計測した音符を抽出し、NoteObject を編集�
 
 `pitchPyin` が F0 トラックを作り、`extractNotes` がそのトラックと有声音フラグを `NoteObject[]` へ変換します。各オブジェクトはサンプル／フレーム境界、`medianHz`、振幅、保留中の `edit` を持ちます。edit を変更してリストを `renderNotes` へ渡します。
 
+<SonareDemo id="melody-contour" />
+
 ::: code-group
 
 ```typescript [ブラウザ / WASM]
@@ -83,13 +85,38 @@ edited = sonare.render_notes(samples, sample_rate, notes, fade_ms=10)
 
 :::
 
-恒等編集なら元の区間をそのまま通します。レンダー前に編集対象のソース区間をすべてクリアし、ノート配列の順に書き込みます。宛先が重なる場合は後のノートが先のノートを上書きし、各編集境界には等電力クロスフェード（既定 5 ms）を使います。`renderNotes` の音声は入力と同じ長さとサンプルレートを持ちます。すべてのソース区間は `0 <= onsetSample < offsetSample <= samples.length` を満たし、ソース区間同士も重なってはいけません。無効な区間は拒否します。移動または伸長したノートが隣のサンプルへ書き込むことはありますが、宛先への書き込みは出力バッファの範囲にクリップされ、両端を越えた出力は切り詰められます。ミュートしたノートはソース区間をクリアしますが、ほかのノートがレンダーした宛先は消しません。有限でない音声サンプルは拒否します。`gainDb` と振幅エンベロープの各値は有限でなければならず、エンベロープは負にできません。ゲインとエンベロープを掛けた結果が有限でない場合も拒否します。
+`extractNotes` は `noteSegments` と同じセグメンターを使うため（[ノートセグメンテーション](./js-api-helpers.md#ノートセグメンテーション)）、ビブラートのかかった持続音は 1 つのノートのままです。オプションはすべて省略可能で、`0` または省略で既定値になります。
 
-`NoteEdit` はサンプル移動、半音シフト、dB ゲイン、時間伸縮、フォルマントシフト、ミュート、振幅エンベロープ、ドリフト／ビブラート変更を扱います。通常の編集にピッチメタデータは不要です。カーブ編集（`vibratoDepthChange` と `driftChange`）には、レンダーリクエストにも元の `f0Hz` トラックと `frameRate` が必要で、JS/WASM では `f0Hz` を `Float32Array` にします。任意の `voiced` フラグ配列を渡す場合は `f0Hz` と同じ長さにします。`false` は正の F0 も抑制し、`true` でも 0 以下・有限でない・利用できない F0 は有効になりません。`decomposeNotePitch` も同じ任意フラグを受け付けます。`extractNotes` は有声音フラグまたは有声音確率を受け付け、0 以下または有限でない F0 フレームはピッチの計測に使いません。
+| オプション | 既定値 | 効果 |
+|---|---|---|
+| `segmentationThresholdCents` | `50` | 新しいノートを始めるピッチ変化量 |
+| `minNoteMs` | `30` | ノートとして残す最短の長さ |
+| `referenceHz` | `440` | ノートごとの `medianCents` を測る基準 |
+| `voicedThreshold` | `0.5` | 有声とみなす `voicedProb` の水準。`voiced` を省略したときだけ読まれます |
+
+例のように `pitch.voicedFlag` を `voiced` へ渡してください。pYIN の `voicedProb` は F0 が高いほど大きくなるため、既定のしきい値では低音域が落ちてしまいます。
+
+恒等編集なら元の区間をそのまま通します。レンダリング前に編集対象のソース区間をすべてクリアし、ノート配列の順に書き込みます。宛先が重なる場合は後のノートが先のノートを上書きし、各編集境界には等電力クロスフェード（既定 5 ms）を使います。`renderNotes` の音声は入力と同じ長さとサンプルレートを持ちます。すべてのソース区間は `0 <= onsetSample < offsetSample <= samples.length` を満たし、ソース区間同士も重なってはいけません。無効な区間は拒否します。移動または伸長したノートが隣のサンプルへ書き込むことはありますが、宛先への書き込みは出力バッファの範囲にクリップされ、両端を越えた出力は切り詰められます。ミュートしたノートはソース区間をクリアしますが、ほかのノートがレンダリングした宛先は消しません。有限でない音声サンプルは拒否します。`gainDb` と振幅エンベロープの各値は有限でなければならず、エンベロープは負にできません。ゲインとエンベロープを掛けた結果が有限でない場合も拒否します。
+
+`NoteEdit` のフィールドはすべて省略可能で、省略した値は変化なしとして扱われます。
+
+| フィールド | 効果 | 変化なしの値 | `f0Hz`/`frameRate` の要否 |
+|---|---|---|---|
+| `timeOffsetSamples` | ノートを時間軸上で動かす。負の値は前へ移動 | `0` | 不要 |
+| `pitchShiftSemitones` | ノートを移調する | `0` | 不要 |
+| `gainDb` | レベルの変更 | `0` | 不要 |
+| `timeStretchRatio` | 長さの比。`1` より大きいと長くなり、ピッチは保たれる | `1`（`0` は `1` として扱う） | 不要 |
+| `formantShiftSemitones` | ピッチシフトに加えてスペクトル包絡を動かす | `0` | 不要 |
+| `vibratoDepthChange` | 計測したビブラート深さの変化量。`-1` で平坦、`+1` で 2 倍 | `0` | 必要 |
+| `driftChange` | ノートの中心ピッチまわりのゆっくりしたドリフトに対する同じ変化量 | `0` | 必要 |
+| `muted` | 区間を無音にする。ほかのフィールドは適用されない | `false` | 不要 |
+| `amplitudeEnvelope` | レンダリング後のノートの長さに引き伸ばされるゲイン点列。`gainDb` に上乗せされる | 空（なし） | 不要 |
+
+カーブ編集（`vibratoDepthChange`、`driftChange`）には、レンダリングリクエストにも元の `f0Hz` トラックと `frameRate` が必要で、JS/WASM では `f0Hz` を `Float32Array` にします。任意の `voiced` フラグ配列を渡す場合は `f0Hz` と同じ長さにします。`false` は正の F0 も抑制し、`true` でも利用できない F0 は有効になりません。`decomposeNotePitch` も同じフラグを受け付けます。`extractNotes` は有声音フラグまたは有声音確率を受け付け、0 以下または有限でない F0 フレームはピッチの計測に使いません。
 
 ### 秒指定とサンプル指定
 
-`renderNotes` や `renderPercussiveEvents` に渡すノートまたはパーカッシブイベントは、区間の各境界をサンプル（`onsetSample`、`offsetSample`）または秒（`onsetSec`、`offsetSec`）で、編集の移動量を `timeOffsetSamples` または `timeOffsetSec`（負の値は前へ移動）で指定できます。秒は呼び出しのサンプルレートで最も近いサンプルに丸められます。各境界はどちらか一方の表記だけを渡してください。両方を渡すと拒否されます。Python では `onset_sec`、`offset_sec`、`time_offset_sec` です。
+`renderNotes` や `renderPercussiveEvents` に渡すノートまたはパーカッシブイベントは、区間の各境界をサンプル（`onsetSample`、`offsetSample`）または秒（`onsetSec`、`offsetSec`）で、編集の移動量を `timeOffsetSamples` または `timeOffsetSec`（負の値は前へ移動）で指定できます。秒は呼び出しのサンプルレートで最も近いサンプルに丸められます。各境界はどちらか一方の表記だけを渡してください。両方を渡すと拒否されます。Python では `onset_sec`、`offset_sec`、`time_offset_sec` です。編集呼び出しごとの表記は[編集 DSP](./editing-dsp.md#サンプル指定と秒指定)にまとめています。
 
 ```typescript
 const edited = renderNotes({
@@ -115,7 +142,7 @@ const halves = splitNote({ ...source, notes, index: 0, frame: middle }); // ノ�
 const rejoined = mergeNotes({ ...source, notes: halves, first: 0, last: 1 }); // 元の個数に戻る
 ```
 
-`frame` はノート区間の厳密に内側、`first < last < notes.length` である必要があり、満たさない場合は `SonareError`（`InvalidParameter`）を投げます。結合したノートは最初のノートの開始から最後のノートの終了まで（間の隙間も含む）に及び、最初のノートの編集を引き継ぎます。ノートごとに編集が異なっていた場合は、結合後に編集を設定し直してください。Python では `split_note(samples, sample_rate, f0_hz, frame_rate, notes, index, frame, voiced=...)` と `merge_notes(..., notes, first, last, voiced=...)` です。
+`frame` はノート区間の厳密に内側でなければならず、満たさない場合は `SonareError`（`InvalidParameter`）を投げます。`index` や `first < last < notes.length` の範囲がノート集合の外にある場合は、WASM と Node では `RangeError` です。結合したノートは最初のノートの開始から最後のノートの終了まで（間の隙間も含む）に及び、最初のノートの編集を引き継ぎます。ノートごとに編集が異なっていた場合は、結合後に編集を設定し直してください。Python では `split_note(samples, sample_rate, f0_hz, frame_rate, notes, index, frame, voiced=...)` と `merge_notes(..., notes, first, last, voiced=...)` です。
 
 ## 保持する解析で重なった声を編集する
 
@@ -158,10 +185,29 @@ with sonare.PolyphonicAnalysis.analyze(samples, sample_rate, max_polyphony=3) as
 
 :::
 
-編集が identity の新しいポリフォニック解析をレンダリングすると、解析の STFT 再構成を含む往復結果になります。入力とバイト単位で同じになるわけではありません。保持するスペクトログラムと帰属セットは解析区間に応じて増えるため、短い区間を単位にし、解放したハンドルを再利用しないでください。
+`reattackRatio` は、鳴っている間に同じ音高を弾き直したとき、それを 2 つ目のノートにするかどうかを決めます。解析は約 35 ms の範囲で読んだサリエンス（その音高がスペクトログラム上でどれだけ目立つか）が、直前のレベルのこの倍率を超えて立ち上がった位置で、保持されたノートを分割します。値は `1` より大きい必要があり、`0` または省略で分割を無効にします。そのため `analyzePolyphonic` は既定では、鳴り続けている同じ音高の繰り返しを 1 つの長いノートとして返します。既定値は `transcribe` と次のように異なります。
+
+| オプション | `analyzePolyphonic` | `transcribe` |
+|---|---|---|
+| `maxPolyphony` | `4` | `10` |
+| `reattackRatio` | 無効（`0`） | `2.0` |
+| 受け付ける範囲 | `maxPolyphony` は `1..64`、`reattackRatio` は `1` より大きい値 | 同じ |
+
+44.1 kHz で、220 Hz のトーンに減衰後のレベルの 3 倍で 2 回目の打鍵を重ねて解析すると、次のようになります。
+
+| `reattackRatio` | 返るノート数 |
+|---|---|
+| 省略または `0` | 1（0.00 秒から 2.00 秒） |
+| `1.5` または `2` | 2（1.02 秒で分割） |
+| `4` または `10` | 1 |
+
+1.5 倍の打鍵は `1.5` のときだけ分割され、8 倍の打鍵はレベルの急落でリッジ（音高がフレームをまたいで描く軌跡）がすでに終わっているため、どの設定でも分割されます。拾いたい打鍵と直前のレベルの比より少し小さい値を選んでください。`transcribe` は `2` を使います。小さくするとより弱い弾き直しも拾え、大きくすると結合されたままになります。その範囲内でその大きさのレベルの立ち上がりは、原因を問わず弾き直しとみなされるため、振幅が大きくうねる持続音も分割されます。範囲外の値（`0` より大きく `1` 以下、または負の値）は `InvalidParameter` を投げます。Python では `reattack_ratio` で渡します。`transcribe` での同じオプションは[音声からノートへ](./audio-to-notes.md#オプションと制限)を参照してください。そこには `transcribe` が加えるトラッカーの制限と、小さな音を落とすゲートも載っています。
+
+編集が恒等の新しいポリフォニック解析をレンダリングすると、解析の STFT 再構成を含む往復結果になります。入力とバイト単位で同じになるわけではありません。保持するスペクトログラムと帰属セットは解析区間に応じて増えるため、短い区間を単位にし、解放したハンドルを再利用しないでください。
+
+<SonareDemo id="pitch-correct" />
 
 ## SMF を参照メロディにする: ノートターゲット
-
 
 SMF は録音テイクの参照メロディとして使えます。`noteTargetsFromSmf` と `assignNoteTargets` はモジュールレベル関数です。前者はメモリ上の SMF からターゲットを読み、後者は `extractNotes` で得たノートに適用します。[編集 DSP](./editing-dsp.md) の `pitchCorrectToMidi` はバッファ全体に 1 つの音程差を適用しますが、このワークフローはノートごとにターゲットを割り当てます。
 

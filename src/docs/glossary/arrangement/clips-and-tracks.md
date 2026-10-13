@@ -15,10 +15,11 @@ A **project** holds **tracks**, each track holds **clips**, and every clip sits 
 
 A **project** is the whole song. It is the container that everything else lives inside, and it is the thing you save, load, and eventually [bounce](./takes-and-comping.md) to a finished file.
 
-Inside the project are **tracks**. A track is a single lane of content — think of one horizontal row in the arrangement view. Each track is one of two kinds:
+Inside the project are **tracks**. A track is a single lane of content — think of one horizontal row in the arrangement view. Each track is an audio track, a MIDI track, or an aux (routing/return) track:
 
 - An **audio track** holds recorded or imported sound (a vocal take, a guitar, a drum loop).
-- A **MIDI track** holds *notes*, not sound. The notes are instructions — "play C4 now, hold it for one beat" — that only become audible when an instrument turns them into sound.
+- A **MIDI track** holds *notes*, not sound. The notes are instructions ("play C4 now, hold it for one beat") that only become audible when an instrument turns them into sound.
+- An **aux track** is a routing lane, such as an effect return or a submix. It is not where recorded content belongs.
 
 Inside each track are **clips**. A clip is one block of content placed at a specific spot on the timeline. An audio clip points at a piece of audio; a MIDI clip contains a list of note events. You can have many clips on one track, side by side or with gaps between them.
 
@@ -78,7 +79,7 @@ That something is reached through the track's **MIDI destination**. A destinatio
 
 This separation is powerful: the same MIDI clip can be played by a synth today and a sampled instrument tomorrow, just by changing the destination's instrument.
 
-Step 2 — *the performance is written down* — is literally a score: a clip's note events are standard musical notation. Here is one such clip engraved, then performed; switch the instrument and the same written notes are rendered by a different voice.
+Step 2, *the performance is written down*, is literally a score: a clip's note events are standard musical notation. Here is one such clip engraved, then performed; switch the instrument and the same written notes are rendered by a different voice.
 
 <SonareDemo id="midi-score" />
 
@@ -86,7 +87,7 @@ Step 2 — *the performance is written down* — is literally a score: a clip's 
 
 Once the structure exists, arranging is mostly a handful of operations.
 
-**Clip operations** — the everyday moves:
+**Clip operations**, the everyday moves:
 
 - **Move** a clip to a new position (and optionally to another track).
 - **Set gain** to make one clip louder or quieter than its neighbors.
@@ -96,7 +97,7 @@ Once the structure exists, arranging is mostly a handful of operations.
 - **Re-source** a clip to point it at different underlying material.
 - **Remove** a clip you no longer want.
 
-**Track operations** — managing the lanes themselves: add a track, remove one, rename it, route it (bind it to a mixer strip / output, or set its MIDI destination), and change its kind between audio and MIDI.
+**Track operations** manage the lanes themselves: add a track, remove one, rename it, route it (bind it to a mixer strip / output, or set its MIDI destination), and change its kind between audio, MIDI, and aux.
 
 ::: warning Clips reference, they do not copy
 Several clips can point at the *same* source material. Duplicating a clip usually shares the source rather than cloning the audio, which keeps projects small but means re-sourcing one clip can be independent of another. Keep this in mind when you copy parts around.
@@ -106,9 +107,9 @@ Several clips can point at the *same* source material. Duplicating a clip usuall
 
 Two more edits sit above individual clips.
 
-**Audio-source metadata.** Since several clips can share one source (see the warning above), it is often the source — not the clip — that needs to carry information. `setAudioSourceMetadata(sourceId, contentHash, externalStemRole)` attaches two informational strings to a source as one undoable edit: a `contentHash` a host can use to recognize the same underlying audio reappearing under a different source id (skip a redundant import, flag a stale reference), and an `externalStemRole` that records what an externally separated stem represents (for example "vocals" or "drums"), so a project built around stem separation can still tell its stems apart after a save and reload.
+**Audio-source metadata.** Since several clips can share one source (see the warning above), it is often the source, not the clip, that needs to carry information. `setAudioSourceMetadata(sourceId, contentHash, externalStemRole)` attaches two informational strings to a source as one undoable edit: a `contentHash` a host can use to recognize the same underlying audio reappearing under a different source id (skip a redundant import, flag a stale reference), and an `externalStemRole` that records what an externally separated stem represents (for example "vocals" or "drums"), so a project built around stem separation can still tell its stems apart after a save and reload.
 
-**Bounded undo/redo memory.** Every edit in this model — `moveClip`, `setClipGain`, `addAutomationLane`, and the rest — is retained on an undo stack so `undo()` / `redo()` can step back and forward through a session. Each edit command reports its own retained byte footprint, and `Project.setMaxHistoryBytes(bytes)` caps the *combined* memory the undo and redo stacks are allowed to hold; once the cap is reached, the oldest entries are evicted to make room. Setting the cap to zero disables retention entirely. `setMaxUndoDepth` caps the same history a different way, by entry count rather than bytes — the two limits apply together.
+**Bounded undo/redo memory.** Every edit in this model — `moveClip`, `setClipGain`, `addAutomationLane`, and the rest — is retained on an undo stack so `undo()` / `redo()` can step back and forward through a session. Each edit command reports its own retained byte footprint, and `Project.setMaxHistoryBytes(bytes)` caps the *combined* memory the undo and redo stacks are allowed to hold; once the cap is reached, the oldest entries are evicted to make room. Setting the cap to zero disables retention entirely. `setMaxUndoDepth` caps the same history a different way, by entry count rather than bytes, and the two limits apply together.
 
 ::: details How libsonare implements this
 The model lives on the `Project` class in the editing engine. `addTrack` creates a track (audio or MIDI), and `addMidiClip(startPpq, lengthPpq)` returns `{ trackId, clipId }` for a fresh MIDI track + clip; `addClip` adds an audio or MIDI clip to an existing track. All positions are floating-point quarter-note units (`1.0` = one quarter note), so `moveClip(clipId, newStartPpq, newTrackId?)`, `setClipGain(clipId, gain)`, `setClipFade(clipId, fadeIn, fadeOut)`, `setClipLoop`, `duplicateClip`, `setClipSource`, and `removeClip` work in musical time. Track lifecycle is `removeTrack`, `renameTrack`, `setTrackKind`, and `setTrackRoute`. A MIDI track reaches its instrument through `setTrackMidiDestination(trackId, destinationId)`: the compiler stamps each MIDI clip with that id so the engine dispatches its events to the instrument bound at that destination. The whole project round-trips through JSON via `toJson()` / `Project.fromJson(json)`, and musical time is converted to samples only at `compile()` / `bounce()`.

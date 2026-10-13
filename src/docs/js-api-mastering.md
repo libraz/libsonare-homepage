@@ -7,23 +7,62 @@ description: The mastering chain, named processors, presets, one-shot dynamics a
 
 This page covers the offline mastering entry points of the libsonare JavaScript/TypeScript package: the chain and preset calls, the explainable-mastering helpers, the one-shot dynamics and repair processors. Two related references live alongside it: [Streaming and Realtime API](./js-api-streaming.md) covers `StreamingEqualizer`, `StreamingRetune`, `RealtimeVoiceChanger`, `voiceChangeRealtime(...)`, and `StreamingMasteringChain`, and the `MasteringChainConfig` schema with its result types is on [Types and Enumerations](./js-api-types.md#masteringchainconfig).
 
-## Where the sections went
-
-| Section | Page |
-|---|---|
-| StreamingEqualizer | [Streaming and Realtime API](./js-api-streaming.md) |
-| StreamingRetune | [Streaming and Realtime API](./js-api-streaming.md) |
-| RealtimeVoiceChanger | [Streaming and Realtime API](./js-api-streaming.md) |
-| `voiceChangeRealtime(samples, sampleRate?, preset?, options?)` | [Streaming and Realtime API](./js-api-streaming.md) |
-| StreamingMasteringChain | [Streaming and Realtime API](./js-api-streaming.md) |
-| MasteringChainConfig | [Types and Enumerations](./js-api-types.md) |
-| Mixing API | [Audio, Metering and Mixing API](./js-api-audio.md#mixing-api) |
-
 ## Mastering API
 
 The browser package includes the same named mastering processors that the `/mastering` demo runs as inserts on the realtime engine. Decode audio with the Web Audio API, pass `Float32Array` channel buffers to libsonare, then export the returned samples as WAV in your application.
 
 This section lists the JS entry points and their result/config types. For what each processor does, the preset list, and the analysis/assistant JSON, see [Mastering Processors](./mastering-processors.md) and [Mastering Assistant](./mastering-assistant.md).
+
+### Which entry point
+
+| You have | Use |
+|---|---|
+| One named processor to run | `masteringProcess()` |
+| A preset, with optional overrides | `masterAudio()` / `masterAudioStereo()` |
+| A full stage config | `masteringChain()` / `masteringChainStereo()` |
+| Audio arriving block by block | `StreamingMasteringChain`, with `streamingLoudnessGain()` for its loudness stage |
+| No idea where to start | `masteringAssistantSuggestChain()`, then `masterAudio({ overrides })` |
+
+### Named functions
+
+| Purpose | Function |
+|---------|----------|
+| Apply simple loudness mastering | `mastering()` |
+| List built-in mastering presets | `masteringPresetNames()` |
+| Expand one preset into flat chain parameters | `masteringPresetParams(preset)` |
+| Apply a preset to mono audio | `masterAudio()` |
+| Apply a preset to stereo audio | `masterAudioStereo()` |
+| Apply a preset to mono audio with progress | `masterAudioWithProgress()` |
+| Apply a preset to stereo audio with progress | `masterAudioStereoWithProgress()` |
+| Run a full mono chain | `masteringChain()` |
+| Run a full stereo chain | `masteringChainStereo()` |
+| Run a full mono chain with progress | `masteringChainWithProgress()` |
+| Run a full stereo chain with progress | `masteringChainStereoWithProgress()` |
+| Run block-by-block EQ | `StreamingEqualizer` |
+| Run a streaming chain (block-by-block) | `StreamingMasteringChain` |
+| Measure the loudness numbers a streaming chain is built with | `streamingLoudnessGain()` / `streamingLoudnessGainStereo()` |
+| Summarize source audio for mastering decisions | `masteringAudioProfile()` |
+| Summarize a stereo pair for mastering decisions | `masteringAudioProfileStereo()` |
+| Suggest mastering moves from source analysis | `masteringAssistantSuggest()` |
+| Suggest mastering moves from a stereo pair | `masteringAssistantSuggestStereo()` |
+| Take just the suggested chain, ready to use as `overrides` | `masteringAssistantSuggestChain()` / `masteringAssistantSuggestChainStereo()` |
+| Preview loudness targets for delivery platforms | `masteringStreamingPreview()` |
+| Preview delivery loudness for a stereo pair | `masteringStreamingPreviewStereo()` |
+| List mono/stereo processors | `masteringProcessorNames()` |
+| Get machine-readable processor classifications | `masteringProcessorCatalog()` |
+| List chain insert processors | `masteringInsertNames()` |
+| List the parameter keys an insert accepts | `masteringInsertParamNames(name)` |
+| Describe construction keys and realtime insert parameters | `masteringInsertParamInfo(name, sampleRate?)` |
+| Measure configured insert latency and tail | `masteringInsertTiming(name, params, sampleRate)` |
+| Process mono audio | `masteringProcess()` |
+| Process stereo audio | `masteringProcessStereo()` |
+| List pair processors | `masteringPairProcessorNames()` |
+| Process source/reference pair | `masteringPairProcess()` / `masteringPairProcessStereo()` |
+| List pair analyses | `masteringPairAnalysisNames()` |
+| Analyze source/reference pair | `masteringPairAnalyze()` |
+| List stereo analyses | `masteringStereoAnalysisNames()` |
+| Analyze stereo channels | `masteringStereoAnalyze()` |
+| Analyze and repair any channel count in one call | `masteringRepairAnalyze()` / `masteringRepairApply()` — see [Audio Repair Workflow](./audio-repair.md#measure-and-repair-in-one-call) |
 
 ```typescript
 import { init, masterAudioStereo, masteringChainStereo } from '@libraz/libsonare'
@@ -48,6 +87,10 @@ const presetResult = masterAudioStereo(left, right, sampleRate, 'pop', {
   maximizer: { truePeakLimiter: { releaseMs: 50 } },
 })
 ```
+
+::: warning In request-object form, stage config sits under `config`
+`masteringChain({ samples, sampleRate, config: { loudness: { targetLufs: -14 } } })` applies the target. A `loudness` key written beside `samples` (`masteringChain({ samples, sampleRate, loudness: { targetLufs: -14 } })`) is silently ignored and the chain runs at its default level. The same holds for `masteringChainStereo` and the `*WithProgress` variants. The positional form takes the config as its last argument, and `masterAudio` takes its overrides as `overrides`.
+:::
 
 Each of these has a `*WithProgress` variant taking an `(progress, stage) => void` callback. `masteringProcess(...)` / `masteringProcessStereo(...)` run one named processor, and `masteringStereoAnalyze(...)` returns a JSON report.
 
@@ -142,7 +185,7 @@ const preview = JSON.parse(
 );
 ```
 
-Use them for anything stereo. The mono helpers measure a `0.5 * (left + right)` downmix, and on decorrelated material that downmix reads about 6 dB low — so the integrated loudness, the normalization gain derived from it, and the ceiling-risk judgement are all under-reported by the same amount. Measured on a decorrelated pink-noise pair (48 kHz, 4 s), the downmix path reported **-18.45 LUFS** against the stereo path's **-12.43 LUFS**, a **6.03 dB** gap, and a -14 LUFS target's `normalizationGainDb` came out at **+4.45** through the downmix versus **-1.57** through the stereo path. On a correlated pair the gap shrinks to 3.01 dB, which is just the halving; the remaining ~3 dB is the decorrelation.
+Use them for anything stereo. The mono helpers measure a `0.5 * (left + right)` downmix, and on decorrelated material that downmix reads about 6 dB low — so the integrated loudness, the normalization gain derived from it, and the ceiling-risk judgment are all under-reported by the same amount. Measured on a decorrelated pink-noise pair (48 kHz, 4 s), the downmix path reported **-18.45 LUFS** against the stereo path's **-12.43 LUFS**, a **6.03 dB** gap, and a -14 LUFS target's `normalizationGainDb` came out at **+4.45** through the downmix versus **-1.57** through the stereo path. On a correlated pair the gap shrinks to 3.01 dB, which is just the halving; the remaining ~3 dB is the decorrelation.
 
 Only the `loudness` block of the stereo profile is measured from both channels: integrated LUFS and LRA come from the channel-summed program, and the true peak is the larger of the two. The spectral, dynamics, and tempo fields describe shape and timing rather than absolute level, so they stay measured on the downmix and remain directly comparable with `masteringAudioProfile`.
 
@@ -296,47 +339,6 @@ It exists because a multichannel series cannot be assembled from mono ones. BS.1
 
 `sampleRate` has to be the buffer's actual rate: K-weighting is sample-rate dependent, so the `22050` default gives a wrong answer for real audio rather than an error. A signal shorter than a window yields an empty array for that series, not an error, so `shortTerm` can be empty while `momentary` is not.
 
-The named mastering API families are:
-
-| Purpose | Function |
-|---------|----------|
-| Apply simple loudness mastering | `mastering()` |
-| List built-in mastering presets | `masteringPresetNames()` |
-| Expand one preset into flat chain parameters | `masteringPresetParams(preset)` |
-| Apply a preset to mono audio | `masterAudio()` |
-| Apply a preset to stereo audio | `masterAudioStereo()` |
-| Apply a preset to mono audio with progress | `masterAudioWithProgress()` |
-| Apply a preset to stereo audio with progress | `masterAudioStereoWithProgress()` |
-| Run a full mono chain | `masteringChain()` |
-| Run a full stereo chain | `masteringChainStereo()` |
-| Run a full mono chain with progress | `masteringChainWithProgress()` |
-| Run a full stereo chain with progress | `masteringChainStereoWithProgress()` |
-| Run block-by-block EQ | `StreamingEqualizer` |
-| Run a streaming chain (block-by-block) | `StreamingMasteringChain` |
-| Measure the loudness numbers a streaming chain is built with | `streamingLoudnessGain()` / `streamingLoudnessGainStereo()` |
-| Summarize source audio for mastering decisions | `masteringAudioProfile()` |
-| Summarize a stereo pair for mastering decisions | `masteringAudioProfileStereo()` |
-| Suggest mastering moves from source analysis | `masteringAssistantSuggest()` |
-| Suggest mastering moves from a stereo pair | `masteringAssistantSuggestStereo()` |
-| Take just the suggested chain, ready to use as `overrides` | `masteringAssistantSuggestChain()` / `masteringAssistantSuggestChainStereo()` |
-| Preview loudness targets for delivery platforms | `masteringStreamingPreview()` |
-| Preview delivery loudness for a stereo pair | `masteringStreamingPreviewStereo()` |
-| List mono/stereo processors | `masteringProcessorNames()` |
-| Get machine-readable processor classifications | `masteringProcessorCatalog()` |
-| List chain insert processors | `masteringInsertNames()` |
-| List the parameter keys an insert accepts | `masteringInsertParamNames(name)` |
-| Describe construction keys and realtime insert parameters | `masteringInsertParamInfo(name, sampleRate?)` |
-| Measure configured insert latency and tail | `masteringInsertTiming(name, params, sampleRate)` |
-| Process mono audio | `masteringProcess()` |
-| Process stereo audio | `masteringProcessStereo()` |
-| List pair processors | `masteringPairProcessorNames()` |
-| Process source/reference pair | `masteringPairProcess()` / `masteringPairProcessStereo()` |
-| List pair analyses | `masteringPairAnalysisNames()` |
-| Analyze source/reference pair | `masteringPairAnalyze()` |
-| List stereo analyses | `masteringStereoAnalysisNames()` |
-| Analyze stereo channels | `masteringStereoAnalyze()` |
-| Analyze and repair any channel count in one call | `masteringRepairAnalyze()` / `masteringRepairApply()` — see [Audio Repair Workflow](./audio-repair.md#measure-and-repair-in-one-call) |
-
 ### Amp preset catalog
 
 `masteringAmpPresetCatalog()` returns the built-in amp-sim rigs as `{ index, name, params }` objects. `index` selects the rig through `saturation.ampSim`'s `presetIndex`; `params` contains its resolved numeric and boolean controls before user overrides. Save the index and explicit overrides in a project so the engine can supply the rig's defaults when it is loaded.
@@ -367,7 +369,7 @@ Related mastering guides: [Processing chain](./glossary/mastering.md), [Tone and
 
 ### Standalone dynamics and repair processors
 
-Every named stage is also a one-shot function, so you can run a single processor without assembling a chain. The dynamics processors return a `DynamicsResult` (the processed `samples` plus `latencySamples`, the processor's look-ahead latency in samples); the repair processors return a `Float32Array`.
+Every named stage is also a one-shot function, so you can run a single processor without assembling a chain. The dynamics processors return a `DynamicsResult` (the processed `samples` plus `latencySamples`, the processor's lookahead latency in samples); the repair processors return a `Float32Array`.
 
 ```typescript
 // Offline dynamics
@@ -385,7 +387,11 @@ function masteringRepairDereverbClassical(samples: Float32Array, sampleRate: num
 function masteringRepairTrimSilence(samples: Float32Array, sampleRate: number, options?: TrimSilenceOptions): Float32Array
 ```
 
+<SonareDemo id="compressor-curve" />
+
 The one-shot repair helpers and the chain-config repair stages are offline. `StreamingMasteringChain` rejects `repair.declick`, `repair.declip`, `repair.decrackle`, `repair.dehum`, and `repair.dereverb`, and accepts `repair.denoise` with a causal noise estimator (`mcra`, `imcra`, or the default `spp`); `quantile` is refused by name. Four of the repair processors — `repair.decrackle`, `repair.dehum`, `repair.denoiseClassical`, and `repair.dereverbClassical` — are also causal realtime inserts under those ids; see [Audio Repair Workflow](./audio-repair.md#realtime-inserts). See [Dynamics](./glossary/mastering/dynamics.md) and [Repair](./glossary/mastering/repair.md).
+
+<SonareDemo id="repair-denoise" />
 
 #### Stereo and linked repair
 
@@ -411,52 +417,21 @@ function masteringRepairDenoiseClassicalLinked(request: MasteringRepairDenoiseCl
 function masteringRepairDereverbClassicalLinked(request: MasteringRepairDereverbClassicalLinkedRequest): MasteringRepairDereverbClassicalLinkedResult
 ```
 
-The result **shape tells you how much was linked**, and there are three of them:
+The result **shape tells you how much was linked**: two reports mean the channels were processed separately enough to need them, one report means one decision covered both channels.
 
-| Result shape | Entry points | What the shape means |
-|--------------|--------------|----------------------|
-| `{ left, right, leftReport, rightReport }` | declick, declip, decrackle, dehum | The channels were processed separately enough to need two reports. |
-| `{ left, right, report }` | denoise, dereverb | One decision covered both channels, so there is one report. |
-| `{ left, right, report, leftRange, rightRange }` | trim silence | One cut, plus each channel's own detected range for inspection. |
+| Processor | What is shared | Result shape | Notes |
+|---|---|---|---|
+| declick | The *selection*: a run either channel detects is repaired in both, each channel filling from its own samples and AR model | `{ left, right, leftReport, rightReport }` | The two reports genuinely differ. A merged run can exceed `maxClickSamples` |
+| declip | The union of both channels' clipped runs; a channel with no clipped sample stays untouched | `{ left, right, leftReport, rightReport }` | `linkedRuns` is `0` for a plateau clipped in one channel only. Runs longer than 512 samples fall back to interpolation, a fixed cap independent of `lpcOrder` and the sample rate |
+| decrackle | Nothing: crackle is surface damage with no common event | `{ left, right, leftReport, rightReport }` | The entry centralizes the reports and the channel-length contract. Fields of the mode you did not choose read `0` |
+| dehum | Only with `adaptive` set: the tracker reads the channel mean and both cascades follow one frequency | `{ left, right, leftReport, rightReport }` | `appliedFundamentalHz` and `fundamentalDriftHz` are identical in both reports, while each `detected` measures its own channel. With `adaptive` clear (the default) the channels are independent |
+| denoise, dereverb | Everything: the gain mask is built from channel-summed power and applied unchanged to every channel | `{ left, right, report }` | Interchannel level and phase cannot move. The `Linked` variants take `channels: Float32Array[]`; one channel reproduces the mono entry bit for bit, two reproduce the stereo entry |
+| trim silence | The union of the per-channel keep ranges, erring toward keeping because trimming is destructive; never a downmix | `{ left, right, report, leftRange, rightRange }` | `leftRange` and `rightRange` are each channel's own detected range, for inspection |
 
-How each one links:
+Every repair processor and detector pads an input shorter than `nFft` instead of refusing it.
 
-- **Declick** shares the *selection*: a run either channel detects is repaired in
-  both, but each channel fills from its own samples and its own AR model, so the
-  two reports genuinely differ. A merged run can exceed `maxClickSamples`.
-- **Declip** takes the union of both channels' clipped runs, but leaves a channel
-  untouched where it has no clipped sample. `linkedRuns` is therefore `0` for a
-  plateau clipped in one channel only, and non-zero only where both clip with
-  different extents. Runs longer than 512 samples fall back to interpolation —
-  a fixed cap, not something derived from `lpcOrder` or the sample rate.
-- **Decrackle** links nothing: crackle is surface damage with no common event, so
-  the channels are fully independent. The entry exists to centralize the reports
-  and the channel-length contract. Fields belonging to the mode you did not
-  choose read `0` — expected, not unfilled.
-- **Dehum** links only when `adaptive` is set: the tracker then reads the channel
-  mean and both cascades follow one frequency, so `appliedFundamentalHz` and
-  `fundamentalDriftHz` are identical in both reports by construction while each
-  `detected` still measures its own channel. With `adaptive` clear, which is the
-  default, the two channels are independent.
-- **Denoise** and **dereverb** are **fully linked**: the gain mask is built from
-  channel-summed power and applied unchanged to every channel, so interchannel
-  level and phase cannot move. That is why they return a single `report`. The
-  `Linked` variants are the same processors over `channels: Float32Array[]` —
-  one channel reproduces the mono entry bit for bit, two reproduce the stereo
-  entry plane for plane.
-- **Trim silence** scans each channel and takes the **union** of the keep ranges,
-  erring toward keeping, since trimming is destructive. It never reads a downmix.
-
-::: warning Two asymmetries between denoise and dereverb that bite
-**Short input.** `masteringRepairDenoiseClassical*` **rejects** a buffer shorter
-than `nFft`; `masteringRepairDereverbClassical*` **pads** it. The same
-too-short take therefore throws through one and succeeds through the other.
-
-**Comparing reports across channel counts.** `DenoiseReport.detected` is
-*absolute* and measured on the summed set, so N identical channels read
-`10*log10(N)` above one — about +3.01 dB at two, +4.77 dB at three. A stereo
-`floorDbfs` is not comparable with a mono one. `DereverbReport` is made of ratios
-and fractions, so it is channel-count invariant and compares directly.
+::: warning Comparing reports across channel counts
+`DenoiseReport.detected` is *absolute* and measured on the summed set, so N identical channels read `10*log10(N)` above one: about +3.01 dB at two, +4.77 dB at three. A stereo `floorDbfs` is not comparable with a mono one. `DereverbReport` is made of ratios and fractions, so it is channel-count invariant and compares directly.
 :::
 
 `masteringRepairTrimSilenceStereo` is the **only** repair entry point that
@@ -495,52 +470,18 @@ interface TrimRange {
 }
 ```
 
-What each one actually measures, where it differs from the obvious reading:
+| Function | What it measures | Watch for |
+|---|---|---|
+| `masteringRepairDetectClicks` | The same LPC analysis the repair runs, so a counted run is one the repair would act on | Repair options shape the count. A large `rejected` means `maxClickSamples` or `neighborRatio` is too tight, not that the material is clean |
+| `masteringRepairDetectClipping` | Reads only `clipThreshold`; `lpcOrder`, `iterations` and `lpcBlend` are validated and then unread, and `sampleRate` is validated but never read | Compare `longestRunSamples` against the 512-sample cap to predict the interpolation fallback. The four flat-top fields look for three or more bit-identical samples within 1 dB of peak, which catches material that was clipped and then attenuated |
+| `masteringRepairDetectCrackle` | Always the median criterion, whatever `mode` says, because wavelet shrinkage never decides that a sample *is* crackle | The counts do not describe what a wavelet-mode repair removes, but they give the same answer before you have chosen a mode |
+| `masteringRepairDetectHum` | Always the estimation path regardless of `adaptive`, since the fixed path never looks for hum | `fundamentalProminence` is the winner's projected energy over the median candidate, so `1.0` means no peak was found at all; it is not a lock flag. `harmonicDbfs` covers every `k*f0` the sample rate carries, not only the notched ones, and a harmonic at or past Nyquist reads the dB floor |
+| `masteringRepairDetectNoiseFloor` | Stops before the gain mask, so there is no attenuation figure | `floorDbfs` is absolute: compare it only against a figure taken over the same channel count |
+| `masteringRepairDetectReverb` | What the dereverb itself measures while deciding how much to subtract; **not** an ISO 3382 RT60 (use `estimateRoom(...)` for that) | `lateDecayRatioDb` runs counter-intuitively: *less* negative means *more* reverberant. `latePredictability` is exactly `0` under the default config, because the WPE stage runs only with `wpeEnabled` |
+| `masteringRepairDetectTrimRange` | The range the repair would cut **to**, with `paddingSamples` already inside it, not the detected extent of the signal | Nothing above threshold yields `(length, length)` |
+| `masteringRepairDetectTrimRangeStereo` | The union of the per-channel ranges | A channel with nothing above threshold contributes **no edge** at all rather than an edge at the buffer end, so a silent channel united with an active one is exactly the active channel's range |
 
-- **`masteringRepairDetectClicks`** runs the same LPC analysis the repair runs, so
-  a counted run is one the repair would act on — and repair options shape the
-  count. A large `rejected` means `maxClickSamples` or `neighborRatio` is too
-  tight, not that the material is clean.
-- **`masteringRepairDetectClipping`** reads only `clipThreshold` from the
-  options; `lpcOrder`, `iterations` and `lpcBlend` are validated and then unread,
-  and `sampleRate` is validated but never read. Compare `longestRunSamples`
-  against the 512-sample cap to predict the interpolation fallback. The four
-  flat-top fields answer a different question — three or more bit-identical
-  samples within 1 dB of peak — which catches material that was clipped and then
-  attenuated. Both failure modes are real: a genuinely flat-topped waveform is a
-  false positive, and any per-sample perturbation (a downmix, a resample, lossy
-  coding) erases a true flat top. **Detect each channel separately, before any
-  downmix, never on the mixed-down result.**
-- **`masteringRepairDetectCrackle`** always measures by the median criterion
-  whatever `mode` says, because wavelet shrinkage never decides that a sample
-  *is* crackle. The counts therefore do not describe what a wavelet-mode repair
-  removes — but they give the same answer before you have chosen a mode.
-- **`masteringRepairDetectHum`** always runs the estimation path regardless of
-  `adaptive`, since the fixed path never looks for hum.
-  `fundamentalProminence` is the winner's projected energy over the median
-  candidate, so **`1.0` means no peak was found at all** — it is not a lock flag,
-  and a value near 1 is the negative result. `harmonicDbfs` covers every `k*f0`
-  the sample rate carries, not only the notched ones, and a harmonic at or past
-  Nyquist reads the dB floor.
-- **`masteringRepairDetectNoiseFloor`** stops before the gain mask, which is why
-  there is no attenuation figure. It **throws** for a buffer shorter than `nFft`.
-  `floorDbfs` is absolute, so compare it only against a figure taken over the
-  same channel count.
-- **`masteringRepairDetectReverb`** is **not an ISO 3382 RT60** — use
-  `estimateRoom(...)` for that. It reports what the dereverb itself measures while
-  deciding how much to subtract. It **pads** a buffer shorter than `nFft`, the
-  opposite of the noise-floor entry. `lateDecayRatioDb` runs counter-intuitively:
-  *less* negative means *more* reverberant. Under a default config
-  `latePredictability` is exactly `0`, because the WPE stage runs only with
-  `wpeEnabled`.
-- **`masteringRepairDetectTrimRange`** returns the range the repair would cut
-  **to**, with `paddingSamples` already inside it — not the detected extent of
-  the signal. Nothing above threshold yields `(length, length)`.
-- **`masteringRepairDetectTrimRangeStereo`** scans per channel and takes the
-  union, and a channel with nothing above threshold contributes **no edge** at
-  all rather than an edge at the buffer end. A union of a silent channel with an
-  active one is therefore exactly the active channel's range, where a naive
-  min/max would have kept the whole tail.
+Flat-top detection has two failure modes. A genuinely flat-topped waveform is a false positive, and any per-sample perturbation (a downmix, a resample, lossy coding) erases a true flat top. **Detect each channel separately, before any downmix, never on the mixed-down result.**
 
 #### `masteringRepairDereverbConfigForRoom(...)`
 

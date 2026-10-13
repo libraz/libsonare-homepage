@@ -11,17 +11,37 @@ description: libsonare のオーディオ解析、MIR、ブラウザ内マスタ
 まず [オーディオ基礎](./glossary/concepts/audio-basics.md)、次に [MIR の全体像](./glossary/concepts/mir-overview.md) を読んでください。マスタリングデモから来た場合は [マスタリングとは?](./glossary/concepts/what-is-mastering.md) から始めると全体像をつかみやすくなります。
 :::
 
+## クイック索引
+
+| 探しているもの | 参照先 |
+|----------------|--------|
+| サンプルレート、ビット深度、dBFS、ピークと RMS の違い、クリッピング、ヘッドルーム、レイテンシ | [オーディオ基礎](./glossary/concepts/audio-basics.md) |
+| LUFS、Integrated ラウドネス、LRA、ラウドネスのゲート | [LUFS](./glossary/lufs.md) |
+| True Peak、dBTP、サンプル間ピーク、リミッターのシーリング | [True Peak](./glossary/true-peak.md) |
+| クレストファクター、ダイナミックレンジ | [クレストファクター](./glossary/concepts/crest-factor.md)、[ダイナミックレンジ](./glossary/concepts/dynamic-range.md) |
+| ステレオ幅、相関値、位相キャンセル | [モノラル互換性](./glossary/concepts/mono-compatibility.md) |
+| インプットゲイン、トリム、段ごとのヘッドルーム | [ゲインステージング](./glossary/concepts/gain-staging.md) |
+| フェーダー、パン、インサートとセンド、バス | [ミキシングの基礎](./glossary/concepts/mixing-basics.md)、[バスとセンド](./glossary/mixing/buses-sends.md) |
+| BPM、ビート、オンセット | [テンポと BPM](./glossary/analysis/tempo-bpm.md)、[オンセット検出](./glossary/analysis/onset-detection.md) |
+| キー、クロマ、コード | [キー検出](./glossary/analysis/key-detection.md)、[コード認識](./glossary/analysis/chord-recognition.md) |
+| STFT、スペクトログラム、`nFft`、`hopLength` | [スペクトログラムと STFT](./glossary/analysis/spectrogram-stft.md) |
+| メル、MFCC、音色 | [メル・MFCC・音色](./glossary/analysis/mel-mfcc-timbre.md) |
+| F0、ピッチ追跡 | [メロディとピッチ](./glossary/analysis/melody-pitch.md) |
+| 半音、セント、MIDI ノート番号、フォルマント | [編集の基礎](./glossary/concepts/editing-basics.md) |
+| デノイズ、デクリップ、デクリック、デハム、デリバーブ | [リペアと入力コントロール](./glossary/mastering/repair.md) |
+| RT60、EDT、明瞭度 | [残響時間](./glossary/acoustics/reverberation-time.md)、[明瞭度と定義度](./glossary/acoustics/clarity-definition.md) |
+
 ## 基礎
 
 API、CLI、WASM、ブラウザデモで共通して出てくる信号処理と解析の土台です。
 
 | ガイド | 扱う内容 |
 |--------|----------|
-| [オーディオ基礎](./glossary/concepts/audio-basics.md) | サンプルレート、ビット深度、モノラル／ステレオ、振幅、dB、クリッピング、ヘッドルーム、レイテンシ。 |
+| [オーディオ基礎](./glossary/concepts/audio-basics.md) | サンプルレート、ビット深度、モノラル／ステレオ、振幅と dB（ピーク、RMS、ラウドネス）、クリッピング、ヘッドルーム、レイテンシ。 |
 | [MIR の全体像](./glossary/concepts/mir-overview.md) | BPM、ビート、オンセット、キー、コード、クロマ、FFT、STFT、スペクトログラム、MFCC、CQT、VQT、HPSS、ピッチ、セクション。 |
-| [ミキシングの基礎](./glossary/concepts/mixing-basics.md) | トラック、ステム、トリム、フェーダー、パン、ステレオ幅、ミュート、ソロ、極性、ヘッドルーム、バウンス。 |
+| [ミキシングの基礎](./glossary/concepts/mixing-basics.md) | トラックとチャンネルストリップ、トリム、フェーダーとゲインステージング、パン、インサートとセンド、バスとサブグループ、オートメーション、メーター。 |
 | [編集の基礎](./glossary/concepts/editing-basics.md) | ピッチと時間、半音とセント、MIDI ノート番号、フォルマント、サンプルと秒。 |
-| [ブラウザ内ローカル処理](./glossary/concepts/browser-local-processing.md) | ブラウザ内マスタリングで何がローカルに残り、何がネットワーク経由で読み込まれ、WASM 処理にどんな制約があるか。 |
+| [ブラウザ内ローカル処理](./glossary/concepts/browser-local-processing.md) | ブラウザデモで何がローカルに残り、何がネットワーク経由で読み込まれ、WASM 処理にどんな制約があるか。 |
 
 ## 解析ガイド
 
@@ -62,18 +82,30 @@ API、CLI、WASM、ブラウザデモで共通して出てくる信号処理と�
 | [ピッチ補正とノート編集](./glossary/editing/pitch-correction.md) | MIDI 目標への補正、ノート区間、サンプル精度の編集。 |
 | [ボイスとフォルマント](./glossary/editing/voice-formant.md) | フォルマント、声道、ピッチとフォルマントの独立。 |
 
-## 楽器と MIDI
+## リペアガイド
 
-libsonare が MIDI を音に変える仕組み — [内蔵シンセサイザー](./native-synth.md)（NativeSynth）、[SoundFont プレイヤー](./soundfont-player.md)、そして両者が共有する MIDI の語彙を解説します。
+リペアは、音色・ダイナミクス・リミッティングの前に、ソースの損傷を取り除く工程です。用語集のページでは 6 段のチェーンと順序が固定されている理由を説明し、各ガイドでは録音を測定して各段を適用する手順を示します。
 
 | ガイド | 扱う内容 |
 |--------|----------|
-| [シンセの音作りの基礎](./glossary/instruments/synthesis-basics.md) | オシレーター、フィルター、内蔵シンセサイザーが使う音作り方式（減算・FM・物理モデリング・モーダル・加算）。 |
-| [エンベロープとモジュレーション](./glossary/instruments/envelopes-modulation.md) | ADSR エンベロープ、LFO、ベロシティ、キートラック、モッドマトリクス。 |
+| [リペアと入力コントロール](./glossary/mastering/repair.md) | 6 段のリペアチェーン、デノイズの深さを指定するキー、メイン処理前のインプットゲイン。 |
+| [オーディオリペアの流れ](./audio-repair.md) | リペア段の選別、測定、適用。 |
+| [広帯域ノイズとハムのリペア](./repair-noise.md) | ノイズフロアや電源ハムの検出と、対応する段の選び方。 |
+| [クリップ、クリック、クラックルのリペア](./repair-transients.md) | declip、declick、decrackle による過渡的な欠陥の検出とリペア。 |
+| [拡散残響のリペア](./repair-reverb.md) | 後期の拡散した余韻の測定と、オフラインのデリバーブの設定。 |
+
+## 楽器と MIDI
+
+libsonare が MIDI を音に変える仕組みを、[内蔵シンセサイザー](./native-synth.md)（NativeSynth）、[SoundFont プレイヤー](./soundfont-player.md)、そして両者が共有する MIDI の語彙から解説します。
+
+| ガイド | 扱う内容 |
+|--------|----------|
+| [シンセの音作りの基礎](./glossary/instruments/synthesis-basics.md) | オシレーター、フィルター、内蔵シンセサイザーが使う音作り方式、パッチフィールドとエンジンパラメータの違い。 |
+| [エンベロープとモジュレーション](./glossary/instruments/envelopes-modulation.md) | ADSR と DAHDSR のエンベロープ、ワンショット、LFO、ボイスごとのドリフト、ベロシティ、キートラック、モッドマトリクス。 |
 | [MIDI の基礎](./glossary/instruments/midi-basics.md) | ノート、ベロシティ、チャンネル、CC、プログラムチェンジ、バンク、General MIDI、ピッチベンド、MIDI 2.0。 |
 | [SoundFont とサンプル音源](./glossary/instruments/soundfont.md) | サンプル音源と合成音源の違い、SF2 のバンクとプログラム、General MIDI の補完。 |
 | [GM と GS](./glossary/instruments/gm-gs.md) | 楽器に番号を振る規格が保証するもの。プログラムナンバー、ドラムチャンネル、バンクセレクトとバリエーション音色、GS の追加分。 |
-| [物理モデリング](./glossary/instruments/physical-modeling.md) | 録音を再生せず楽器そのものを計算する方式。導波管ループ、連続的な表現、サンプリングとのコストの逆転。 |
+| [物理モデリング](./glossary/instruments/physical-modeling.md) | 録音を再生せず楽器そのものを計算する方式。導波路ループ、連続的な表現、サンプリングとのコストの逆転。 |
 
 ## アレンジとプロジェクト
 
@@ -81,7 +113,7 @@ libsonare が MIDI を音に変える仕組み — [内蔵シンセサイザー]
 
 | ガイド | 扱う内容 |
 |--------|----------|
-| [クリップとトラック](./glossary/arrangement/clips-and-tracks.md) | プロジェクトの構造 — トラック、クリップ、タイムライン、MIDI の送出先（デスティネーション）、クリップ編集、ソースのメタデータ、Undo 履歴のバイト上限。 |
+| [クリップとトラック](./glossary/arrangement/clips-and-tracks.md) | プロジェクトの構造。トラック、クリップ、タイムライン、MIDI の送出先（デスティネーション）、クリップ編集、ソースのメタデータ、Undo 履歴のバイト上限。 |
 | [テイクとコンピング](./glossary/arrangement/takes-and-comping.md) | クリップ内の複数テイク、アクティブテイク、コンプセグメント、ループ録音。 |
 | [ワープとテンポ同期](./glossary/arrangement/warp-and-tempo.md) | ワープモード、アンカー、テンポマップ、拍子、ピッチを保つストレッチ。 |
 | [バウンスとレンダリング](./glossary/arrangement/bounce-and-rendering.md) | アレンジを音声へ書き出す、ミキサーシーン、楽器バウンス、レイテンシ補償。 |
@@ -98,15 +130,16 @@ libsonare が MIDI を音に変える仕組み — [内蔵シンセサイザー]
 
 ## ルーム音響
 
-[空間ルームスキャナー](/ja/spatial) と [音響解析](./acoustic-analysis.md) で使うルーム音響の用語を掘り下げます。部屋の減衰から、その大きさ・壁面・音源までの距離について何がわかるかを扱います。
+[空間ルームスキャナー](/ja/spatial) と [ルーム音響解析](./acoustic-analysis.md) で使うルーム音響の用語を掘り下げます。部屋の減衰から、その大きさ・壁面・音源までの距離について何がわかるかを扱います。
 
 | ガイド | 扱う内容 |
 |--------|----------|
 | [残響時間（RT60 と EDT）](./glossary/acoustics/reverberation-time.md) | RT60、初期減衰時間、T20／T30 外挿、2 つの指標が食い違う理由。 |
-| [明瞭度と明瞭性（C50・C80・D50）](./glossary/acoustics/clarity-definition.md) | 音声と音楽の初期／後期エネルギー比、割合としての明瞭性。 |
+| [明瞭度（C50・C80）と定義度（D50）](./glossary/acoustics/clarity-definition.md) | 音声と音楽の初期／後期エネルギー比、割合としての定義度。 |
 | [音源距離と DRR](./glossary/acoustics/source-distance.md) | 直接音／残響音比、臨界距離、1 チャンネルでは距離は求められても方向は求められない理由。 |
+| [間隔を空けたレシーバーとチャンネル間コヒーレンス](./glossary/acoustics/spaced-receivers.md) | `roomMorphStereo` とルーム系インサートのステレオレシーバーの対、`receiverSpacingM`、間隔によって 2 本の残響テールが一緒に動かなくなる周波数が決まる仕組み。 |
 | [部屋の形状と容積](./glossary/acoustics/room-geometry.md) | 等価なシューボックス、容積、サビーンの容積／吸音のトレードオフ。 |
-| [帯域別の減衰と吸音](./glossary/acoustics/absorption-bands.md) | 帯域別 RT60、吸音係数、高域のロールオフ。 |
+| [帯域別の減衰と吸音](./glossary/acoustics/absorption-bands.md) | 帯域別 RT60、吸音率、高域のロールオフ。 |
 | [逆問題による部屋推定](./glossary/acoustics/inverse-estimation.md) | インパルス応答（IR）を使う推定とブラインド推定、信頼度スコアの読み方。 |
 
 ## マスタリング概念
@@ -115,7 +148,7 @@ libsonare が MIDI を音に変える仕組み — [内蔵シンセサイザー]
 
 | ガイド | 扱う内容 |
 |--------|----------|
-| [マスタリング](./glossary/mastering.md) | ラウドネス、音色、ダイナミクス、ステレオ感、ピーク安全性をまとめる最終工程。 |
+| [マスタリング](./glossary/mastering.md) | ラウドネス、音色、ダイナミクス、ステレオイメージ、ピーク安全性をまとめる最終工程。 |
 | [マスタリングとは?](./glossary/concepts/what-is-mastering.md) | リリース前の最終処理としてのマスタリング全体像。 |
 | [LUFS](./glossary/lufs.md) | Integrated ラウドネスと代表的な配信ターゲット。 |
 | [True Peak](./glossary/true-peak.md) | サンプル間ピークと `dBTP` がサンプルピークと異なる理由。 |
@@ -135,8 +168,9 @@ libsonare が MIDI を音に変える仕組み — [内蔵シンセサイザー]
 
 | ガイド | 扱う内容 |
 |--------|----------|
-| [リペアと入力コントロール](./glossary/mastering/repair.md) | インプットゲイン、ディノイズ、ソースのクリッピング、メイン処理前の準備。 |
+| [リペアと入力コントロール](./glossary/mastering/repair.md) | インプットゲイン、デノイズ、ソースのクリッピング、メイン処理前の準備。 |
 | [ダイナミクスコントロール](./glossary/mastering/dynamics.md) | スレッショルド、レシオ、アタック、リリース、ニー、ゲインリダクション、パンチ、マルチバンドコンプレッション。 |
+| [クロスオーバーのスロープとモード](./glossary/mastering/crossover.md) | マルチバンドプロセッサの帯域分割。dB/oct のスロープ、Linkwitz-Riley・Butterworth・Bessel・線形位相 FIR と、それぞれのレイテンシと位相のコスト。 |
 | [トーンと Air コントロール](./glossary/mastering/tone-air.md) | Tilt EQ、エキサイター量、Air バンド量、明るさの判断。 |
 | [ステレオ、リミッター、ラウドネスコントロール](./glossary/mastering/stereo-limiter-loudness.md) | ステレオ幅、リミッターのシーリング、ラウドネス目標、最終レンダリング。 |
 | [リファレンスマッチ](./glossary/mastering/reference-match.md) | リファレンスの読み込み、レベルマッチング、スペクトル比較、マッチ強度。 |

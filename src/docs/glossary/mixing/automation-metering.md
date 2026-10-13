@@ -35,6 +35,8 @@ Rooms lie and ears tire, so a mix is also judged on meters:
 
 Meters describe; they do not decide. Use them to catch problems your ears miss, not to chase numbers.
 
+<SonareDemo id="inter-sample-peak" />
+
 <SonareDemo id="loudness-meter" />
 
 ::: details How libsonare models automation and metering

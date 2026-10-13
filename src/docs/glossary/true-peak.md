@@ -22,11 +22,40 @@ For the delivery-safety side of this topic, see [True Peak Safety](./concepts/tr
 
 ## Related Controls
 
-| Control | Meaning |
-|---------|---------|
-| Ceiling | The maximum allowed reconstructed peak level. |
-| Lookahead | How early the limiter can react before a peak arrives. |
-| Release | How quickly the limiter recovers after reducing peaks. |
+| Control | Meaning | Default |
+|---------|---------|---------|
+| Ceiling | The maximum allowed reconstructed peak level. | -1 dBTP |
+| Lookahead | How early the limiter can react before a peak arrives. | 1 ms |
+| Release | How quickly the limiter recovers after reducing peaks. | 50 ms |
+
+## Measure it in libsonare
+
+The true-peak meter oversamples 4x by default and accepts 1, 2, 4, 8 or 16. The limiter that enforces a ceiling is the chain stage `maximizer.truePeakLimiter`; [True Peak Safety](./concepts/true-peak-safety.md) shows it in use.
+
+::: code-group
+
+```typescript [Browser]
+import { init, meteringPeakDb, meteringTruePeakDb } from '@libraz/libsonare';
+
+await init();
+
+const samplePeak = meteringPeakDb(samples, sampleRate);        // dBFS
+const truePeak = meteringTruePeakDb(samples, sampleRate);      // dBTP, 4x oversampling
+```
+
+```python [Python]
+import libsonare as sonare
+
+audio = sonare.Audio.from_file("song.wav")
+sample_peak = audio.peak_db()
+true_peak = audio.true_peak_db()
+```
+
+```bash [CLI]
+sonare meter song.wav   # native CLI only: includes sample peak and true peak (--oversample sets the factor)
+```
+
+:::
 
 ## What to Check by Ear
 
@@ -60,7 +89,7 @@ True peak detection is different from sample peak detection: it oversamples the 
 
 The demo limiter has lookahead, so it can prepare gain reduction before a peak arrives rather than reacting after the peak has already clipped. Longer lookahead can be safer, but excessive values may soften transient feel.
 
-The ceiling guarantee belongs to the default polyphase path, which limits the oversampled signal and decimates the result. The `applyGainAtInputRate` option computes the gain envelope at the oversampled rate but applies it to the base-rate signal; it is best-effort and does not guarantee the inter-sample ceiling, because the limited signal is never re-synthesised at the oversampled rate. Leave it off; the default path is the one that guarantees the ceiling.
+The ceiling guarantee belongs to the default polyphase path, which limits the oversampled signal and decimates the result. The `applyGainAtInputRate` option computes the gain envelope at the oversampled rate but applies it to the base-rate signal; it is best-effort and does not guarantee the inter-sample ceiling, because the limited signal is never re-synthesized at the oversampled rate. Leave it off; the default path is the one that guarantees the ceiling.
 
 ::::
 

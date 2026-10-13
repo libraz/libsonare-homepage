@@ -1,13 +1,13 @@
 ---
 title: リアルタイムエンジン
-description: libsonare の RealtimeEngine リファレンス。トランスポートとテレメトリ、リアルタイムセーフなレーンミキサー、グループルーティングとサイドチェイン、パラメータオートメーション、ワイドメーター付きサラウンドグループバス、サンプル精度の MIDI クリップスケジューリング、トラックの外部 MIDI 機器への送出を解説します。
+description: libsonare の RealtimeEngine リファレンス。トランスポートとテレメトリ、リアルタイム安全なレーンミキサー、グループルーティングとサイドチェイン、パラメータオートメーション、ワイドメーター付きサラウンドグループバス、サンプル精度の MIDI クリップスケジューリング、トラックの外部 MIDI 機器への送出を解説します。
 ---
 
 # リアルタイムエンジン
 
 `RealtimeEngine` は libsonare のトランスポート／再生エンジンです。パラメータとトランスポートへのサンプル精度コマンド、トラックごとのレーンミキサー（レーン、バス、センド、チャンネルストリップ）、MIDI クリップスケジュールを扱います。グループルーティングとサイドチェイン、サラウンドグループバス、キャプチャ、オフラインバウンス、フリーズ、メーター情報も扱います。クリップ・MIDI・トランスポート・ミックス済み音声を*出力*するとき、つまり DAW 風のタイムラインや楽器ホストに使います。
 
-ストリーミング解析器（`StreamAnalyzer`）、テンポグラム、AudioWorklet ブリッジ、クリップ音声のページストリーミング、表示用の波形ピークは、[リアルタイムとストリーミング](./realtime-streaming.md)を参照してください。
+ストリーミングアナライザー（`StreamAnalyzer`）、テンポグラム、AudioWorklet ブリッジ、クリップ音声のページストリーミング、表示用の波形ピークは、[リアルタイムとストリーミング](./realtime-streaming.md)を参照してください。
 
 ## このページで身につくこと
 
@@ -53,49 +53,27 @@ engine.stop();
 engine.destroy();
 ```
 
+`getTransportState()` には生のサンプル位置と PPQ 位置（4 分音符単位の音楽的な位置）だけでなく、小節・拍で表した再生位置も含まれます。`barCount` は 0 始まり、`beat` はその小節内で 1 始まり、`beatFraction` は `[0, 1)` の範囲です。そのため、PPQ から自前で換算せずに一般的な小節:拍表示（`${barCount + 1}:${beat}`、たとえば "3:2"）を作れます。滑らかなインジケーターには `beatFraction` を使います。
+
 ### 実際のチャンネル数に合わせて prepare する
 
-コンストラクタと `prepare(...)` は、末尾に省略可能な `maxChannels` を取ります。prepare は
-キャプチャ・インストゥルメント・PDC（プラグインのディレイ補正）・モニターの各プレーンを、
-常に 64 本ではなくこの数だけ確保するため、ステレオのホストが決して使わない 64 プレーン分のスクラッチを抱える必要がなくなります。
+コンストラクタと `prepare(...)` は、末尾に省略可能な `maxChannels` を取ります。prepare はキャプチャ・インストゥルメント・PDC（プラグインのディレイ補正）・モニターの各プレーンを、常に 64 本ではなくこの数だけ確保するため、ステレオのホストが決して使わない 64 プレーン分のスクラッチを抱える必要がなくなります。
 
 ```typescript
-// ステレオのホスト: 64 ではなく 2 プレーンを確保
-const engine = new RealtimeEngine(48000, 128, /*commandCapacity=*/undefined,
-                                  /*telemetryCapacity=*/undefined, /*maxChannels=*/2);
-
-// 構築済みのエンジンに対して指定する場合
-engine.prepare(48000, 128, undefined, undefined, 8);   // 7.1 向け
+// ステレオのホストは 64 ではなく 2 プレーンを確保する（commandCapacity と telemetryCapacity は既定のまま）
+const engine = new RealtimeEngine(48000, 128, undefined, undefined, 2);
+engine.prepare(48000, 128, undefined, undefined, 8);   // または 7.1 向けに再 prepare
 ```
 
-実際にレンダリングする最大チャンネル数を指定してください。指定しなければ従来どおりの挙動です。
+実際にレンダリングする最大チャンネル数（1〜64）を指定してください。指定しなければ 64 を確保します。
 
 ### コントロール専用のホスト
 
-`process()` を呼ばないホスト（ヘッドレスのコントローラーや、コマンドをキューイングして
-状態を読むだけのオフライン経路）は、コマンドキューを明示的に流し込めます。
-
-```typescript
-engine.setTempo(140);
-engine.flushControlCommands();   // レンダリングせずにキュー済みコマンドを適用
-```
-
-`getTransportState()` には生のサンプル位置と PPQ 位置（4 分音符単位の音楽的な位置）だけでなく、小節・拍で表した再生位置も含まれます。`barCount` は 0 始まり、`beat` はその小節内で 1 始まり、`beatFraction` は `[0, 1)` の範囲です。そのため、PPQ から自前で換算せずに一般的な小節:拍表示を作れます。
-
-```typescript
-const { barCount, beat, beatFraction } = transport;
-const playhead = `${barCount + 1}:${beat}`; // 例: "3:2"
-// beatFraction はその拍の進行度。滑らかなインジケーターに使える。
-```
+`process()` を呼ばないホスト（ヘッドレスのコントローラーや、コマンドをキューイングして状態を読むだけのオフライン経路）は、`engine.flushControlCommands()` でキュー済みのコマンドを明示的に適用できます。レンダリングはしません。
 
 ### シークとメトロノーム
 
-`seekSample(timelineSample, renderFrame?)`、`seekPpq(ppq, renderFrame?)`、`seekMarker(markerId, renderFrame?)` は、プレイヘッドのジャンプをキューします（マーカー版は先に `setMarkers([...])` を呼びます）。他のキュー済みコマンドと同じく `renderFrame` で、省略時は次のブロック先頭で適用されます。シークは、ループの折り返しや停止と同様に、鳴っているノートを解放しコントローラーをリセットします。`setMetronome({ enabled, beatGain?, accentGain?, clickSamples?, clickSeconds? })` でクリックを設定し、`metronome()` で読み戻せます。クリックの長さは 1 秒までです。ワークレットの `SonareEngine` では、ライブリングがコマンドをキューできないとき `setMetronome` は `false` を返します。
-
-```typescript
-engine.setMetronome({ enabled: true, beatGain: 0.5, accentGain: 0.9, clickSeconds: 0.01 });
-engine.seekPpq(16);
-```
+`seekSample(timelineSample, renderFrame?)`、`seekPpq(ppq, renderFrame?)`、`seekMarker(markerId, renderFrame?)` は、プレイヘッドのジャンプをキューします（マーカー版は先に `setMarkers([...])` を呼びます）。他のキュー済みコマンドと同じく `renderFrame` で、省略時は次のブロック先頭で適用されます。シークは、ループの折り返しや停止と同様に、鳴っているノートを解放しコントローラーをリセットします。`setMetronome({ enabled, beatGain?, accentGain?, clickSamples?, clickSeconds? })` でクリックを設定し、`metronome()` で読み戻せます。クリックの長さは 1 秒までです。worklet の `SonareEngine` では、ライブリングがコマンドをキューできないとき `setMetronome` は `false` を返します。
 
 ### コンパイル済み Project タイムラインをインストールする
 
@@ -104,16 +82,7 @@ engine.seekPpq(16);
 適用は全体として成功するか失敗します。破棄済みのタイムライン、不正なシーンまたはタイムライン、複数トラックからルーティングされたシーンストリップは拒否され、置き換えは公開されません。WASM では、同じ初期化済みモジュールが作った `ProjectTimeline` だけを渡せます。別のモジュールインスタンスのハンドルや解放済みハンドルは適用できません。適用に成功するとエンジンが自分の参照を保持するため、タイムラインはすぐに破棄できます。タイムラインを適用した後、別のサンプルレートでの prepare は、`setClips([])` と `setMidiClips([])` でタイムラインの両方のクリップ領域を消去するまで拒否されます。
 
 ```typescript
-const project = new Project();
-project.setSampleRate(48000);
-project.setTempoSegments([{ startPpq: 0, bpm: 120 }]);
-const { clipId } = project.addMidiClip(0, 4);
-project.setMidiEvents(clipId, [
-  Project.midiNoteOn(0, 0, 0, 60, 100),
-  Project.midiNoteOff(2, 0, 0, 60, 0),
-]);
-
-const compiled = project.compileTimeline();
+const compiled = project.compileTimeline(); // project: テンポ・クリップ・イベントを持つ Project
 if (!compiled.hasTimeline || compiled.timeline === null) {
   throw new Error(compiled.messages);
 }
@@ -123,58 +92,70 @@ try {
   compiled.timeline.dispose(); // エンジンが独自の参照を保持します
 } finally {
   engine.destroy();
-  project.delete();
 }
 ```
 
-`RealtimeEngine` はトランスポート以外にも、パラメータ情報の登録、オートメーションレーンの設定、シーク、メトロノームクリックの設定、モニター出力付き処理、キャプチャ、オフラインバウンス、クリップのフリーズも扱えます。UI を組むうえで重要なテレメトリは 2 系統あります。
+### メーターとスコープのテレメトリ
 
-- **メーター** — ステレオ高速経路なら `drainMeterTelemetry()`、サラウンド／オフライン対象のプレーン別レコードなら `drainMeterTelemetryWide()` を使います。
-- **スコープ** — `configureScopeTelemetry(intervalFrames, bandCount)` を 1 度呼んでターゲットごとのスペクトラム＋ベクトルスコープ取得を有効化し、`drainScopeTelemetry()` でスナップショットを読み出します。
-  - `intervalFrames` — スナップショット間の最小レンダーフレーム間隔（`0` で取得を無効化）。
-  - `bandCount` — FFT のバンド分解能。`1..64` にクランプされ、実際に適用されたバンド数が戻り値として返ります。
+UI を組むうえで重要なテレメトリは 2 系統あります。
 
-メーターレコードにはトリム前入力ピークも含まれます。ステレオ経路では `inputPeakDbL` と `inputPeakDbR`、ワイド経路では有効なプレーンごとの `inputPeakDb` として返ります。`gainReductionDb` はマスターだけでなく、対象ストリップまたはバスのリダクションを報告します。
+- **メーター**: ステレオ高速経路なら `drainMeterTelemetry()`、サラウンドやオフライン対象のプレーン別レコードなら `drainMeterTelemetryWide()` を使います。
+- **スコープ**: `configureScopeTelemetry(intervalFrames, bandCount)` を 1 度呼んで、ターゲットごとのスペクトラムとベクトルスコープの取得を有効にし、`drainScopeTelemetry()` でスナップショットを読み出します。`intervalFrames` はスナップショット間の最小レンダーフレーム間隔で、`0` なら取得を無効にします。`bandCount` は FFT のバンド分解能で、`1..64` にクランプされ、実際に適用されたバンド数が戻り値として返ります。
 
-集約値の元になったインサートごとの値は `meterTargetInsertGainReduction(targetId)` で取得できます。直近にレンダーしたブロックのリダクションを dB（各値は `<= 0`）で、プリフェーダーからポストフェーダーまでをまとめたインサート順に返します。バイパス中またはダイナミクス系ではないインサートは `0` で、メーターレコードの `gainReductionDb` はこの配列の最小値です。`targetId` の `0` はマスター、`1..32` はレーン、`33..40` はバス、入力モニターは空配列です。
+メーターレコードには次のフィールドがあります。
 
-AudioWorklet では、postMessage の構造化メータースナップショットに `insertGainReductionDb` が付くのは、1 回のドレインでターゲットごとに最新のレコードだけです。値はドレイン時点でコミットされた最新ホストブロックを表します。固定レイアウトの SharedArrayBuffer メーターリングにはこの任意フィールドを置けないため、リング経路では `SonareEngine.pollInsertGainReduction(targetId)`（または低レベルノードの `SonareRealtimeEngineNode` メソッド）を呼び出してください。
+| フィールド | ステレオ経路 | ワイド経路 | 備考 |
+|------------|--------------|------------|------|
+| サンプルピーク | `peakDbL`、`peakDbR` | `peakDb[]` | ワイド経路ではプレーンごとに 1 値 |
+| RMS | `rmsDbL`、`rmsDbR` | `rmsDb[]` | |
+| True Peak | `truePeakDbL`、`truePeakDbR`、`maxTruePeakDb` | `truePeakDb[]`、`maxTruePeakDb` | ストリーミング計測で、ブロックより数サンプル遅れる |
+| トリム前の入力ピーク | `inputPeakDbL`、`inputPeakDbR` | `inputPeakDb[]` | 有効なプレーンごとに 1 値 |
+| ラウドネス | `momentaryLufs`、`shortTermLufs`、`integratedLufs` | 同じ | ストリーミングが一定時間続いて初めてフロアより上がる。短いレンダーでは −120 のまま |
+| ゲインリダクション | `gainReductionDb` | 同じ | マスターだけでなく、対象ストリップまたはバスのリダクションも報告する |
+| 位相と幅 | `correlation`、`monoCompatWidth` | 同じ | 既定は 0 |
+| `droppedRecords` | 累積数 | 同じ | 下記を参照 |
 
-AudioWorklet の生メーターリングは 49 float のレコードを使い、ヘッダーのスロット 3 にはプロトコルバージョン 2 が入ります。そのため、異なるパッケージバージョンのメインスレッドとワークレットでリングを共有してはいけません。`SharedArrayBuffer` を直接読むコードは、固定されたレコード形式を前提にせず、公開された `SONARE_METER_RING_RECORD_FLOATS` 定数でレコードのサイズとストライドを決め、レコード数／ヘッダーを使ってください。
+dB 値を持つレベル／ラウドネスのフィールドはすべて −120 dBFS のフロアを持ち、`NaN` や `-Infinity` を返しません。未初期化・無音・未書き込みのプレーン（例: モノラルレーンの右チャンネル）は 0 dBFS ではなく −120 dBFS を返すので、レコードは常に JSON セーフです。dB ではないフィールド（`correlation`、`monoCompatWidth`、`gainReductionDb`）は 0 が既定です。
 
-読み出した各スコープスナップショットは `targetId`（マスター・レーン・バスのいずれか）で識別され、2 本の配列を持ちます。`bands` は線形バンドの FFT マグニチュード（dB、長さ＝適用されたバンド数）、`points` はベクトルスコープ表示用のゴニオメータ点群で、`{ left, right }` レコードが最大 32 ステレオ点入ります（ワークレットのスコープリングバッファは同じ点群をインターリーブされた `[l0, r0, l1, r1, …]` の `Float32Array` として渡します）。スペクトラムは実際のサンプル数に Hann 窓を適用し、窓のコヒーレントゲインを正規化した FFT から、各線形バンドに含まれるビンの平均パワーを dBFS へ変換して求めます。読み値はレンダーブロックサイズ、FFT の周波数分解能、`bandCount` に依存するため、これらの設定をそろえたスナップショット同士を比較してください。
+`drainMeterTelemetry()`／`drainMeterTelemetryWide()`／`drainScopeTelemetry()` が返す各レコードには、生成元のタップに対応する `droppedRecords` が含まれます。この値はタップの `prepare` または `reset` 以降に失われたレコードの累積数で、取り出しても 0 には戻りません。前回のポーリング値と比較し、増加していればその間にレコードが失われています。値が変わらなければ、その間に新しいドロップはありません。0 以外でも、以前の期間に発生したドロップを示す場合があります。
 
-マスターメーターの統合ラウドネスをやり直すには `resetMasterLoudnessMeter(renderFrame?)` を呼びます（Python は `reset_master_loudness_meter(render_frame=None)`、ワークレットノードは `resetMasterLoudnessMeter(sampleTime?)`）。このコマンドが消去するのは統合ラウドネスの積算値だけで、モーメンタリー、ショートターム、True Peak の履歴は保持されます。`renderFrame` はリセットを適用するレンダーフレームで、省略すると次のブロック先頭で適用されます。負の値は拒否され（WASM と Node では `RangeError`）、これはトランスポート、パラメータ、ソロ／ミュート、MIDI の各呼び出しにある `renderFrame` すべてに共通です。
+`gainReductionDb` の元になったインサートごとの値は `meterTargetInsertGainReduction(targetId)` で取得できます。直近にレンダーしたブロックのリダクションを dB（各値は `<= 0`）で、プリフェーダーからポストフェーダーまでをまとめたインサート順に返します。バイパス中またはダイナミクス系ではないインサートは `0` で、メーターレコードの `gainReductionDb` はこの配列の最小値です。`targetId` の `0` はマスター、`1..32` はレーン、`33..40` はバス、入力モニターは空配列です。AudioWorklet では、postMessage の構造化メータースナップショットに `insertGainReductionDb` が付くのは、1 回の取り出しでターゲットごとに最新のレコードだけです。値は取り出し時点でコミットされた最新ホストブロックを表します。固定レイアウトの SharedArrayBuffer メーターリングにはこの任意フィールドを置けないため、リング経路では `SonareEngine.pollInsertGainReduction(targetId)`（または低レベルノードの `SonareRealtimeEngineNode` メソッド）を呼び出してください。
 
-`drainMeterTelemetry()`／`drainMeterTelemetryWide()`／`drainScopeTelemetry()` が返す各レコードには、生成元のタップに対応する `droppedRecords` が含まれます。この値はタップの `prepare` または `reset` 以降に失われたレコードの累積数で、ドレインしても 0 には戻りません。前回のポーリング値と比較し、増加していればその間にレコードが失われています。値が変わらなければ、その間に新しいドロップはありません。0 以外でも、以前の期間に発生したドロップを示す場合があります。
+AudioWorklet の生メーターリングは 49 float のレコードを使い、ヘッダーのスロット 3 にはプロトコルバージョン 2 が入ります。そのため、異なるパッケージバージョンのメインスレッドと worklet でリングを共有してはいけません。`SharedArrayBuffer` を直接読むコードは、固定されたレコード形式を前提にせず、公開された `SONARE_METER_RING_RECORD_FLOATS` 定数でレコードのサイズとストライドを決め、レコード数とヘッダーを使ってください。
 
-メーターレコードの dB 値を持つレベル／ラウドネスのフィールド（`peakDbL`／`R`、`rmsDbL`／`R`、`truePeakDbL`／`R`、`maxTruePeakDb`、`momentaryLufs`／`shortTermLufs`／`integratedLufs`）はすべて −120 dBFS のフロアを持ち、`NaN` や `-Infinity` を返しません。未初期化・無音・未書き込みのプレーン（例: モノラルレーンの右チャンネル）は 0 dBFS ではなく −120 dBFS を返すので、レコードは常に JSON セーフです（`correlation`・`monoCompatWidth`・`gainReductionDb` などの非 dB フィールドは 0 が既定）。積分系メーターのフィールド（`momentaryLufs`／`shortTermLufs`／`integratedLufs` と true-peak 系）は、ストリーミングが一定時間続いて初めてフロアより上に上がります。短いレンダーやワンショットのレンダーでは −120 のままです。
+読み出した各スコープスナップショットは `targetId`（マスター・レーン・バスのいずれか）で識別され、2 本の配列を持ちます。`bands` は線形バンドの FFT マグニチュード（dB、長さ＝適用されたバンド数）、`points` はベクトルスコープ表示用のゴニオメータ点群で、`{ left, right }` レコードが最大 32 ステレオ点入ります（worklet のスコープリングバッファは同じ点群をインターリーブされた `[l0, r0, l1, r1, …]` の `Float32Array` として渡します）。スペクトラムは実際のサンプル数に Hann 窓を適用し、窓のコヒーレントゲインを正規化した FFT から、各線形バンドに含まれるビンの平均パワーを dBFS へ変換して求めます。読み値はレンダーブロックサイズ、FFT の周波数分解能、`bandCount` に依存するため、これらの設定をそろえたスナップショット同士を比較してください。
 
-スケジュール済みのクリップとシーケンス MIDI が鳴るのは、トランスポートが走っている間だけです。停止中のエンジンでは音が漏れず無音のままです。オフラインヘルパー（`renderOffline`、`bounceOffline`、`freezeOffline`）はレンダー期間だけトランスポートを走らせ、終了後に元の状態へ戻すので、オフラインのクリップ／MIDI レンダリングに手動の `play()` は不要です。
+マスターメーターの統合ラウドネスをやり直すには `resetMasterLoudnessMeter(renderFrame?)` を呼びます（Python は `reset_master_loudness_meter(render_frame=None)`、worklet ノードは `resetMasterLoudnessMeter(sampleTime?)`）。このコマンドが消去するのは統合ラウドネスの積算値だけで、モーメンタリー、ショートターム、True Peak の履歴は保持されます。`renderFrame` はリセットを適用するレンダーフレームで、省略すると次のブロック先頭で適用されます。負の値は拒否され（WASM と Node では `RangeError`）、これはトランスポート、パラメータ、ソロ／ミュート、MIDI の各呼び出しにある `renderFrame` すべてに共通です。
+
+### オフラインレンダー、バウンス、フリーズ
+
+スケジュール済みのクリップとシーケンス MIDI が鳴るのは、トランスポートが走っている間だけです。停止中のエンジンでは音が漏れず無音のままです。オフラインヘルパーはレンダー期間だけトランスポートを走らせ、終了後に元の状態へ戻すので、オフラインのクリップ／MIDI レンダリングに手動の `play()` は不要です。
+
+| 呼び出し | レンダーするもの |
+|----------|------------------|
+| `renderOffline` | 渡したチャンネルバッファへ書き込む。チャンク化できる低レベルのレンダー |
+| `bounceOffline` | タイムラインを 1 本のインターリーブバッファへ。必要ならリサンプルする |
+| `freezeOffline` | ソース層を 1 つのクリップへ |
 
 `bounceOffline` は prepare 済みのエンジンレートでレンダーします。`sourceSampleRate` を 0 または省略するとそのレートになり、0 以外を指定する場合は一致しなければ拒否されます。`totalFrames` はソースレートで数えます。`targetSampleRate` を 0 または省略するとソースレートを保ち、別のレートを指定すると返却バッファをリサンプルして `result.sampleRate` にそのレートを報告します。
 
-`bounceOffline` と `freezeOffline` は、聴こえるレンダーの前に非レンダーのオフラインプライムを行います。キュー済みコマンドを排出し、すべてのミキサーとエフェクトのプロセッサを prepare 直後の状態へリセットし（インストゥルメントはリセットしません）、公開済みのテンポ／グラフ／レーン／オートメーションのスナップショットを取り込み、開始位置のオートメーションを適用してからパラメータランプを確定値へスナップします。プライム中はトランスポートを停止するため、プレイヘッドは進みません。ユーザーが `play()` やプライミング用の `process()` を呼ぶ必要はありません。プロセッサが prepare 直後の状態から始まるので、ライブ再生で鳴り残っていたインサートのテールやディレイラインは切れ、同じエンジンでの 2 回目のバウンスは 1 回目と同じ音声になります。
+`bounceOffline` と `freezeOffline` は、聴こえるレンダーの前に非レンダーのオフラインプライムを行います。キュー済みコマンドを取り出し、すべてのミキサーとエフェクトのプロセッサを prepare 直後の状態へリセットし（インストゥルメントはリセットしません）、公開済みのテンポ／グラフ／レーン／オートメーションのスナップショットを取り込み、開始位置のオートメーションを適用してからパラメータランプを確定値へ揃えます。プライム中はトランスポートを停止するため、プレイヘッドは進みません。ユーザーが `play()` やプライミング用の `process()` を呼ぶ必要はありません。プロセッサが prepare 直後の状態から始まるので、ライブ再生で鳴り残っていたインサートのテールやディレイラインは切れ、同じエンジンでの 2 回目のバウンスは 1 回目と同じ音声になります。
 
-`renderOffline` はチャンク化できる低レベルのレンダーで、エンジンの現在のライフサイクルとランプ状態を保ち、停止中ならレンダー中だけトランスポートを走らせて元へ戻します。停止中の `process()` の量子はプロセッサ状態を進めるため、同等のプライムにはなりません。`settleParameters()` だけでは既知のターゲットをスナップするだけで、保留中のレーン／グラフ／テンポのスナップショットは取り込みません。ライブ音声スレッド外で使用してください。
+`renderOffline` はエンジンの現在のライフサイクルとランプ状態を保ち、停止中ならレンダー中だけトランスポートを走らせて元へ戻します。停止中の `process()` の量子はプロセッサ状態を進めるため、同等のプライムにはなりません。`settleParameters()` だけでは既知のターゲットを確定値へ揃えるだけで、保留中のレーン／グラフ／テンポのスナップショットは取り込みません。ライブ音声スレッド外で使用してください。
 
-prepare 時のブロックサイズより大きなブロックサイズは、`renderOffline`、`bounceOffline`、`freezeOffline`、`primeOfflineParameters` のいずれでも拒否されます（`InvalidParameter` の `SonareError`。ワークレットファサードは `RangeError`）。prepare 時のサイズで黙ってレンダーすることはありません。`blockSize` の既定値は 128 で、prepare 時のサイズより小さくてもかまいません。
+prepare 時のブロックサイズより大きなブロックサイズは、`renderOffline`、`bounceOffline`、`freezeOffline`、`primeOfflineParameters` のいずれでも拒否されます（`InvalidParameter` の `SonareError`。worklet ファサードは `RangeError`）。prepare 時のサイズで黙ってレンダーすることはありません。`blockSize` の既定値は 128 で、prepare 時のサイズより小さくてもかまいません。
 
-```typescript
-engine.renderOffline({ channels: [new Float32Array(totalFrames), new Float32Array(totalFrames)], blockSize: 128 });
-```
-
-### チャンク化したレンダーと手動のプライム
+#### チャンク化したレンダーと手動のプライム
 
 ブロック単位でレンダーするホストは、このプライムの各ステップを自分で実行できます。
 
 | メソッド | 動作 |
 |--------|------|
-| `primeOfflineParameters(numChannels, blockSize)` | レンダーを伴わないオフラインプライム全体。キュー済みコマンドの適用、ミキサーとエフェクトのプロセッサのリセット、スナップショットの取り込み、トランスポート位置でのオートメーションとレーンゲートの解決、スムーザーのスナップを行います。最初のチャンクの前に 1 度呼ぶと、繰り返しのレンダーが同じ状態から始まります。 |
+| `primeOfflineParameters(numChannels, blockSize)` | レンダーを伴わないオフラインプライム全体。キュー済みコマンドの適用、ミキサーとエフェクトのプロセッサのリセット、スナップショットの取り込み、トランスポート位置でのオートメーションとレーンゲートの解決、スムーザーを確定値に揃えます。最初のチャンクの前に 1 度呼ぶと、繰り返しのレンダーが同じ状態から始まります。 |
 | `resetProcessorState(renderFrame?)` | プロセッサのリセットだけをキューし、`renderFrame`（省略時は次のブロック先頭）で適用します。再生中に呼ぶと、シークと同じく鳴っているインサートのテールやディレイラインを途中で切ります。 |
-| `settleParameters()` / `settleInsertParameters()` | 進行中のパラメータランプ、または構造変更後のインサートオートメーションスロットだけをスナップします。 |
-| `finishOfflineRender()` | `renderOffline({ ..., finalize: false })` で始めたチャンク化レンダーを終えます。保持中のノートを解放し、ディレイラインをフラッシュします。省略すると、最後のチャンクで鳴っていたノートが鳴り続けます。 |
-| `tailSamples()` / `graphLatencySamplesQ8()` | 可聴テールの上限（サンプル数。`2147483647` は無制限）と、処理レイテンシ（1/256 サンプル単位）。 |
+| `settleParameters()` / `settleInsertParameters()` | 進行中のパラメータランプ、または構造変更後のインサートオートメーションスロットだけを確定値へ揃えます。 |
+| `finishOfflineRender()` | `renderOffline({ ..., finalize: false })` で始めたチャンク化レンダーを終えます。保持中のノートを解放し、ディレイラインを空にします。省略すると、最後のチャンクで鳴っていたノートが鳴り続けます。 |
+| `tailSamples()` / `graphLatencySamplesQ8()` | 可聴テールの保守的な上限（サンプル数。`2147483647` は無制限）と、処理レイテンシ（1/256 サンプル単位）。ドラムキットのシンセは、それまでに叩かれたキットのピースのテール（キック 1 つなら約 0.69 秒）を返し、キット全体の最大値を返すのは最初のノートの前だけです。 |
 
 ```typescript
 engine.primeOfflineParameters(2, 128);
@@ -184,23 +165,23 @@ engine.renderOffline({ channels: chunkB, blockSize: 128, finalize: false });
 engine.finishOfflineRender();
 ```
 
-Python では `prime_offline_parameters`、`reset_processor_state`、`settle_insert_parameters`、`finish_offline_render`、`tail_samples`、`graph_latency_samples_q8` です。ワークレットの `SonareEngine` にも `bounceOffline`、`freezeOffline`、`finishOfflineRender`、`renderOffline({ totalFrames, blockSize?, finalize? })` があり、ファサードのメインスレッド側オフラインエンジンで実行されるため、レンダーが終わるまで呼び出し元のスレッドをブロックします。
+Python では `prime_offline_parameters`、`reset_processor_state`、`settle_insert_parameters`、`finish_offline_render`、`tail_samples`、`graph_latency_samples_q8` です。worklet の `SonareEngine` にも `bounceOffline`、`freezeOffline`、`finishOfflineRender`、`renderOffline({ totalFrames, blockSize?, finalize? })` があり、ファサードのメインスレッド側オフラインエンジンで実行されるため、レンダーが終わるまで呼び出し側のスレッドをブロックします。詳しくは[オフライン書き出しの API](./realtime-streaming.md#オフライン書き出しの-api)を参照してください。
+
+### キャプチャとライブ MIDI
 
 録音まわりでは、キャプチャ面にいくつかのコントロールが加わります。
 
-- `setCaptureSource('output' | 'input')` — エンジンのレンダー済み出力バスを録るか、`process(...)` に渡す生の入力を録るかを選びます。
-- `setRecordOffsetSamples(offset)` — モニタリングの往復レイテンシを補正するため、キャプチャ音声をずらします。
-- `setInputMonitor(enabled, gain?)` — 演奏者が自分の音を聞けるように、ライブ入力を出力へミックスします。
+- `setCaptureSource('output' | 'input')` は、エンジンのレンダー済み出力バスを録るか、`process(...)` に渡す生の入力を録るかを選びます。
+- `setRecordOffsetSamples(offset)` は、モニタリングの往復レイテンシを補正するため、キャプチャ音声をずらします。
+- `setInputMonitor(enabled, gain?)` は、演奏者が自分の音を聞けるように、ライブ入力を出力へミックスします。
 
 `captureStatus()` は、現在のキャプチャ元 `source`（`'output'` または `'input'`）と現在の `recordOffsetSamples` の両方を返すので、何を録っているかを UI 側で確認できます。全体の流れは [録音とテイク](./recording-and-takes.md) を参照してください。
 
-::: info ライブ MIDI と録音
-エンジンは、楽器への**ライブ MIDI** 入力（`pushMidiNoteOn`、`pushMidiCc`、`pushMidiPitchBend`、`pushMidiChannelPressure`、`pushMidiPolyPressure`、`pushMidiUmp`、`pushMidiSysex`）と、再生されている内容の**録音**も受け付けます。これらには専用ページがあります。Web MIDI からエンジンへのブリッジ（ポート管理、CC バインド、NativeSynth／SF2 のデスティネーション）は [MIDI 入力](./midi-input.md) を参照してください。キャプチャ・ループ録音のテイク／コンプレーン・`getUserMedia` をエンジンノードへつなぐブラウザマイクヘルパー `bindMicrophoneInput(...)` は [録音とテイク](./recording-and-takes.md) を参照してください。
-:::
+エンジンは、楽器への**ライブ MIDI** 入力も受け付けます。`pushMidiNoteOn`、`pushMidiNoteOff`、`pushMidiCc`、`pushMidiProgram`、`pushMidiPitchBend`、`pushMidiChannelPressure`、`pushMidiPolyPressure`、`pushMidiUmp`、`pushMidiSysex` です。MIDI の範囲外の値（15 を超えるチャンネルなど）は、引数名と範囲を示す `RangeError` になります。Web MIDI からエンジンへのブリッジ（ポート管理、CC バインド、NativeSynth／SF2 のデスティネーション）は [MIDI 入力](./midi-input.md) を、ループ録音のテイク／コンプレーン・`getUserMedia` をエンジンノードへつなぐブラウザマイクヘルパー `bindMicrophoneInput(...)` は [録音とテイク](./recording-and-takes.md) を参照してください。
 
 ## レーンミキサー
 
-エンジンはリアルタイムセーフな**レーンミキサー**を内蔵しており、再生エンジンが自分の再生するトラックを別のミキシングパスなしでそのままミックスできます。各トラックは**レーン**を 1 つ占有し、レーンは**Auxセンド**で番号付きの**バス**へ送れます。トラック・バス・マスターはそれぞれ EQ、インサート、フェーダー、パン、センドを備えた完全な**チャンネルストリップ**を持ち、これは[ミキシングエンジン](./mixing.md)と同じストリップモデルです。レーン構成を再発行するたびに、プラグインのディレイ補正（PDC）は自動で再計算されます。
+エンジンはリアルタイム安全な**レーンミキサー**を内蔵しており、再生エンジンが自分の再生するトラックを別のミキシングパスなしでそのままミックスできます。各トラックは**レーン**を 1 つ占有し、レーンは**センド**で番号付きの**バス**へ送れます。トラック・バス・マスターはそれぞれ EQ、インサート、フェーダー、パン、センドを備えた完全な**チャンネルストリップ**を持ち、これは[ミキシングエンジン](./mixing.md)と同じストリップモデルです。レーン構成を再発行するたびに、プラグインのディレイ補正（PDC）は自動で再計算されます。
 
 ```typescript
 // まずバスを宣言し、次にセンド付きでレーン順を宣言する。
@@ -210,31 +191,28 @@ engine.setTrackLanes([
   2, // トラック id だけを書くと、センドなしのレーンを追加する
 ]);
 
-// ストリップはミキサーシーン JSON を再利用する:
-// シーンの最初の strips[0] エントリーがストリップ仕様になる。
+// ストリップはミキサーシーン JSON を再利用する。トラックとマスターのストリップはシーンの strips[0]、
+// バスのストリップはシーンの buses[0]（inserts・トリム・幅・パンを持つバスエントリー）を仕様として使う。
 engine.setTrackStripJson(1, vocalSceneJson);
 engine.setBusStripJson(1, reverbSceneJson);   // バスは setTrackBuses で先に存在させる
 engine.setMasterStripJson(masterSceneJson);
 
-// ストリップを作り直さずに内蔵 EQ の 1 バンドだけ更新する
-// （バンド JSON のスキーマは eq.parametric / StreamingEqualizer と同じ）:
-engine.setTrackStripEqBandJson(1, 0,
-  JSON.stringify({ type: 'peak', frequencyHz: 250, gainDb: -2, q: 1.0 }));
+// ストリップを作り直さずに内蔵 EQ の 1 バンドだけ更新する（バンド JSON は eq.parametric と同じ）:
+engine.setTrackStripEqBandJson(1, 0, JSON.stringify({ type: 'peak', frequencyHz: 250, gainDb: -2, q: 1.0 }));
 
 // インサートをその場でバイパスする。第 4 引数に true を渡すと状態もリセットする。
 engine.setTrackStripInsertBypassed(1, 0, true);
 
-// キュー可能なソロ／ミュート: レーンインデックスと renderFrame を取る
-// （省略 = 次のブロック先頭で適用、将来のフレームを渡すとサンプル精度で適用）。
+// キュー可能なソロ／ミュート: レーンインデックスと、省略可能な renderFrame（省略 = 次のブロック先頭）。
 engine.setSoloMute(0, true, false);
 ```
 
 ::: info レーンの順序は `setTrackLanes(...)` に従います
-`setTrackLanes(...)` が成功すると、トラックの並べ替え、削除、追加が反映されます。キュー済みコマンド、センド、インサートオートメーション、レーン状態はトラックの識別子に追従し、レーンインデックスは呼び出し後の現在位置になります。生の `RealtimeEngine` では、呼び出しのたびに各レーンのセンドを、そのレーンのエントリーが渡した `sends` 配列から作り直します。`sends` を省略すると（id だけの指定を含む）、既存のセンドは維持されず消去されます。省略時にセンドを維持するのは `SonareEngine` ワークレットファサードのほうで、JS 側にセンドのキャッシュを持ち、呼び出しのたびに完全なリストを裏で再送信しています。トポロジー変更後は、数値のレーン指定やトラックインサート指定を読み直してください。
+生の `RealtimeEngine` では、`setTrackLanes(...)` が成功すると、トラックの並べ替え、削除、追加が反映されます。`SonareEngine` ファサードの `setTrackLanes` は追加専用です。宣言済みの id を順序どおり残して新しい id を追加してください。並べ替えと削除は拒否されます（[AudioWorklet での使い分け](./realtime-streaming.md#audioworklet-での使い分け)を参照）。キュー済みコマンド、センド、インサートオートメーション、レーン状態はトラックの識別子に追従し、レーンインデックスは呼び出し後の現在位置になります。生の `RealtimeEngine` では、呼び出しのたびに各レーンのセンドを、そのレーンのエントリーが渡した `sends` 配列から作り直します。`sends` を省略すると（id だけの指定を含む）、既存のセンドは維持されず消去されます。省略時にセンドを維持するのは `SonareEngine` worklet ファサードのほうで、JS 側にセンドのキャッシュを持ち、呼び出しのたびに完全なリストを裏で再送信しています。トポロジー変更後は、数値のレーン指定やトラックインサート指定を読み直してください。
 
-レーン一覧を書き直さずに 1 レーンのセンドや出力バスだけを変えるには、`setTrackSends(trackId, sends)` と `setTrackOutputBus(trackId, busId)` を使います（C は `sonare_engine_set_track_sends` / `sonare_engine_set_track_output_bus`、Python は `set_track_sends` / `set_track_output_bus`）。どちらもそのレーンのほかのフィールドと、ほかのレーンには触れません。センドのリストが変わらなければ、進行中のレベルランプも維持されます。未知のトラック id、宣言されていないバス、重複したセンド先バス、センドの範囲外のレベルは例外になります。生の `RealtimeEngine` では、レーンが `setTrackLanes` で宣言済みである必要があります。ワークレットファサードの `setTrackSends` は、トラックにレーンがなければ作成します。
+レーン一覧を書き直さずに 1 レーンのセンドや出力バスだけを変えるには、`setTrackSends(trackId, sends)` と `setTrackOutputBus(trackId, busId)` を使います（C は `sonare_engine_set_track_sends` / `sonare_engine_set_track_output_bus`、Python は `set_track_sends` / `set_track_output_bus`）。どちらもそのレーンのほかのフィールドと、ほかのレーンには触れません。センドのリストが変わらなければ、進行中のレベルランプも維持されます。未知のトラック id、宣言されていないバス、重複したセンド先バス、センドの範囲外のレベルは例外になります。生の `RealtimeEngine` では、レーンが `setTrackLanes` で宣言済みである必要があります。worklet ファサードの `setTrackSends` は、トラックにレーンがなければ作成します。
 
-センドやインサートのためにエンジンが作ったストリップ、またはシーン仕様から構築したストリップを持つレーンを含め、中央のモノラルレーンはどのパンロウでもユニティで再生されます。パンを振れば、そのぶん動きます。
+センドやインサートのためにエンジンが作ったストリップ、またはシーン仕様から構築したストリップを持つレーンを含め、中央のモノラルレーンはどのパンローでもユニティで再生されます。パンを振れば、そのぶん動きます。
 :::
 
 ::: warning 構造を変えるストリップ呼び出しはコントロールスレッドで
@@ -243,9 +221,7 @@ engine.setSoloMute(0, true, false);
 
 ### バスのインサート列は合算後の信号を 1 度だけ通る
 
-クリップのオーディオとホストしたインストゥルメントのオーディオは、同じバスへ流れ込む 2 つの寄与であり、ストリップ・センド・バス列が走る前に 1 つのブロックへまとめて集約されます。したがってバスのインサート列は、寄与の **合計** を 1 ブロックにつきちょうど 1 回だけ処理します。これは非線形なインサートが必要とする条件そのものです。コンプレッサーやサチュレーションをクリップ側の寄与とインストゥルメント側の寄与に分けて 2 回走らせると、合算後のバスにかけるのとは別物の、2 つの部分信号にかけることになります。リバーブであればテールが 1 ブロックにつき 2 回進んでしまいます。
-
-このまとめ処理が行われるには 2 つの条件があります。1 つはプラグインディレイコンペンセーション（PDC）が働いていないことです。PDC が有効なあいだ、クリップバスは専用のスクラッチへレンダリングされ、内部で遅延されたインストゥルメントと位相が揃うように遅延されます。そのときのバスはこの別パスに属するものです。もう 1 つはインストゥルメントラックが空でないことで、空であればそもそもまとめる相手がありません。
+クリップのオーディオと、エンジンが保持しているインストゥルメントのオーディオは、ストリップ・センド・バス列が走る前に 1 つのブロックへ集約されます。そのためバスのインサート列は、寄与の **合計** を 1 ブロックにつきちょうど 1 回だけ処理します。コンプレッサーやサチュレーションを寄与ごとに別々にかけると 2 つの部分信号に作用してしまい、リバーブならテールが 1 ブロックに 2 回進みます。このまとめ処理が行われるのは、プラグインディレイ補正（PDC）が働いていないとき（PDC が有効なあいだ、クリップバスは専用のスクラッチへレンダリングされ、内部で遅延されたインストゥルメントと位相が揃うように遅延されます）で、かつインストゥルメントラックが空でないときです。
 
 ::: info ソロとミュートのランプは所定の時間をかけて進みます
 各レーンが 1 ブロックにつき 1 度だけ仕上げられるため、そのフェーダー・パン・ゲートのスムーザーも 1 ブロックにつき 1 度だけ進みます。ソロとミュートの背後にあるゲートスムーザーの時定数は **10 ms**、パンスムーザーは **5 ms** です。そのためソロやミュートの切り替えは、段差ではなく短い可聴のランプになります。これはインサートパラメータやフェーダーのオートメーションの既定追従時間（既定 20 ms）を決める `setParamSmoothingMs` とは別のものです。
@@ -257,9 +233,13 @@ engine.setSoloMute(0, true, false);
 
 設定済みの各トラックレーンは、独立したキュー／モニターバスへ信号を送れます。`setTrackMonitorMode(laneIndex, mode, renderFrame?)` でモードをキューします。`laneIndex` は直近の `setTrackLanes` 呼び出しにおける現在の位置なので、並べ替え後は読み直してください。`renderFrame` を省略すると次のブロック先頭で適用され、`mode` は `'off'`・`'pfl'`・`'afl'`（または序数 `0`・`1`・`2`）です。
 
-- **off** — レーンはモニターバスへ何も送らない。
-- **PFL**（pre-fader listen）— レーンストリップとプラグインディレイ補正の後、レーンのフェーダー・ゲート・パンの前でタップします。そのため、レーンをミュートしたりソロ制御でゲートしたりしても、ここでは聞こえます。
-- **AFL**（after-fader listen）— フェーダー・ゲート・パンの後でタップします。サラウンドレーンではフェーダー／ゲートとサラウンドのプレーン配置の後、ステレオ AFL ではパンの後です。
+- **off**: レーンはモニターバスへ何も送らない。
+- **PFL**（pre-fader listen）: レーンストリップとプラグインディレイ補正の後、レーンのフェーダー・ゲート・パンの前でタップします。そのため、レーンをミュートしたりソロ制御でゲートしたりしても、ここでは聞こえます。
+- **AFL**（after-fader listen）: フェーダー・ゲート・パンの後でタップします。サラウンドレーンではフェーダー／ゲートとサラウンドのプレーン配置の後、ステレオ AFL ではパンの後です。
+
+PFL はプリフェーダーセンド、AFL はポストフェーダーセンドと同じ動きをします。下のデモで、フェーダーを動かしたときの違いを聴けます。
+
+<SonareDemo id="pre-post-fader" />
 
 <FlowDiagram
   title="PFL と AFL がタップする位置"
@@ -294,12 +274,38 @@ WASM と Node は `{ output, monitor }` を返します。Python は `set_track_
 
 ## グループルーティング・サイドチェイン・ライブストリップ操作
 
-レーン／センドのグラフ以外にも、ストリップを作り直さずにルーティングとパンを変えるリアルタイムセーフな操作がいくつかあります。
+レーン／センドのグラフ以外にも、ストリップを作り直さずにルーティングとパンを変えるリアルタイム安全な操作がいくつかあります。下の図は、それぞれがどこに接続するかを示します。
 
-| 目的 | 生の `RealtimeEngine` | `SonareEngine` ワークレット API |
+<FlowDiagram
+  title="グループルーティングとサイドチェインのキータップ"
+  :nodes="[
+    { id: 'lane', label: 'レーンストリップ', col: 0, row: 0 },
+    { id: 'fader', label: 'フェーダー・ゲート・パン', col: 1, row: 0 },
+    { id: 'bus', label: 'バスのインサート', col: 2, row: 0, variant: 'accent' },
+    { id: 'busgain', label: 'バスの gainDb', col: 3, row: 0 },
+    { id: 'master', label: 'マスター', col: 4, row: 0, variant: 'success' },
+    { id: 'laneKey', label: 'レーンのキータップ', col: 0, row: 1, variant: 'muted' },
+    { id: 'busKey', label: 'バスのキータップ', col: 3, row: 1, variant: 'muted' }
+  ]"
+  :edges="[
+    { from: 'lane', to: 'fader' },
+    { from: 'fader', to: 'bus', label: 'outputBusId' },
+    { from: 'bus', to: 'busgain' },
+    { from: 'busgain', to: 'master', label: 'outputBusId' },
+    { from: 'lane', to: 'laneKey', label: 'ストリップ後・フェーダー前', style: 'dashed' },
+    { from: 'laneKey', to: 'bus', label: 'サイドチェインキー', style: 'dashed' },
+    { from: 'lane', to: 'bus', label: 'センド（preFader）', style: 'dashed' },
+    { from: 'fader', to: 'bus', label: 'センド（postFader）', style: 'dashed' },
+    { from: 'bus', to: 'busKey', label: 'gainDb の前', style: 'dashed' },
+    { from: 'busKey', to: 'master', label: 'サイドチェインキー', style: 'dashed' }
+  ]"
+  caption="レーンは出力先とセンドを通じてバスへ流れ、バスも同じ方法でマスターか別のバスへ流れます。キータップは、レーンではフェーダーの前、バスでは gainDb の前から取ります。送り元より狭い宛先は BS.775 ダウンミックスを受け取ります。"
+/>
+
+| 目的 | 生の `RealtimeEngine` | `SonareEngine` worklet API |
 |------|----------------------|--------------------------------------|
 | レーンをグループバスへ折り込む（`busId 0` でマスターミックスへ戻す） | `setTrackLanes(...)` のレーン `outputBusId`（`0` または未指定でマスターミックス）、または 1 レーンだけなら `setTrackOutputBus(trackId, busId)` | `setTrackOutputBus(target, busId)`（`busId 0` でマスターミックスへ戻す） |
-| 1 レーンの補助センドを置き換える（空配列で消去） | `setTrackSends(trackId, sends)` | `setTrackSends(target, sends)` |
+| 1 レーンのセンドを置き換える（空配列で消去） | `setTrackSends(trackId, sends)` | `setTrackSends(target, sends)` |
 | バスを別バスへ折り込む、またはコピーをセンドする | `setTrackBuses(...)` のバス `outputBusId` と `sends`（出力が `0`／未指定ならマスターミックス） | `setTrackBuses(...)` の同じフィールド |
 | サイドチェインのバインディングを適用せずに検査 | `canSetLaneSidechain(trackId, insertIndex, sourceTrackId)`、`canSetBusSidechain(...)`、`canSetMasterSidechain(...)`（引数はセッターと同じ） | 同名 |
 | あるレーンのインサートを別レーンでキーイング（ダッキング） | `setLaneSidechain(trackId, insertIndex, sourceTrackId)`（`0` で解除） | `setLaneSidechain(target, insertIndex, sourceTarget)`（`null` で解除） |
@@ -312,7 +318,7 @@ WASM と Node は `{ output, monitor }` を返します。Python は `set_track_
 | インサートパラメータを名前で設定 | `setTrackStripInsertParamByName(trackId, insertIndex, paramName, value)`（マスター／バス: `setMasterStripInsertParamByName(...)`、`setBusStripInsertParamByName(...)`） | 同名、加えて `setStripInsertParamByName(target, ...)` |
 | バスインサートをバイパス | `setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass?)` | 同名 |
 
-`setTrackStripInsertParamByName(...)` はリアルタイムオートメーションの入り口です。[`masteringInsertParamInfo(name)`](./mastering-processors.md) が返す JSON キーでパラメータを指定するため、ホストはストリップ JSON を作り直さずにインサートの自動化可能なパラメータをライブで変更できます。ワークレット API では `target` はトラック id または名前です。
+`setTrackStripInsertParamByName(...)` はリアルタイムオートメーションの入り口です。[`masteringInsertParamInfo(name)`](./mastering-processors.md) が返す JSON キーでパラメータを指定するため、ホストはストリップ JSON を作り直さずにインサートの自動化可能なパラメータをライブで変更できます。worklet API では `target` はトラック id または名前です。
 
 バス／マスターのサイドチェインキーにおける `sourceKind` は `'track'`（レーンのストリップ処理後・レーンフェーダー前の信号）または `'bus'`（バスの処理後・自身の `gainDb` 前の信号。より広ければステレオへ畳まれる）です。Python の `set_bus_sidechain` / `set_master_sidechain` も同じ名前、または対応する `0`／`1` の序数を取ります。マスターの `insertIndex` は、他のマスターインサートセッターと同じ順序で、まずプリフェーダーインサート、続いてポストフェーダーインサートを数えます。どちらのキーもレーンのサイドチェインバインディングテーブル（32 エントリ）を共有し、`setTrackBuses` 自体と同じくコントロールスレッド専用です。
 
@@ -325,13 +331,18 @@ engine.setTrackBuses([
   { busId: 1, gainDb: 0 },
   { busId: 2, gainDb: -6, outputBusId: 1, sends: [{ busId: 1, levelDb: -12, sendTiming: 'preFader' }] },
 ]);
+engine.setBusStripJson(1, busCompSceneJson); // バスのインサート 0 はコンプレッサー
+engine.setMasterStripJson(compSceneJson);    // マスターのインサート 0 はコンプレッサー
+engine.setTrackLanes([1, 2]);
 engine.setBusSidechain(1, 0, 'bus', 2);   // バス 1 のインサート 0 を、バス 2 でキーイング
 engine.setMasterSidechain(0, 'track', 1); // マスターのインサート 0 を、トラック 1 でキーイング
 ```
 
-各 `canSet*Sidechain` はセッターと同じ引数を取り、何も変更せずに `SidechainCheck`（`{ ok, reason }`）を返します。`reason` は `ok` が true のときだけ `null` で、そうでなければセッターが最初に失敗するチェックを `'invalidTarget'`、`'insertOutOfRange'`、`'undeclaredSource'`、`'invalidSourceKind'`、`'selfKey'`、`'cycle'`、`'tableFull'`、`'planRefused'` のいずれかで示します。UI では、不可能なキー元を提示する前にグレーアウトするのに使えます。レーンの `insertOutOfRange` はそのレーンのストリップに該当するインサートがないこと（ストリップのないレーンはインサートを持ちません）、`undeclaredSource` はソースのトラックにレーンが宣言されていないことを表し、バスとマスターの形式でも同じ理由が返ります。`planRefused` は、ディレイ上限を超えるアラインメントかオーバーフローだけを意味します。Python にも同じ 3 つのメソッド（`can_set_lane_sidechain` など）があり、`SidechainCheck` を返します。いずれもコントロールスレッド専用です。
+各 `canSet*Sidechain` はセッターと同じ引数を取り、何も変更せずに `SidechainCheck`（`{ ok, reason }`）を返します。`reason` は `ok` が true のときだけ `null` で、そうでなければセッターが最初に失敗するチェックを `'invalidTarget'`、`'insertOutOfRange'`、`'undeclaredSource'`、`'invalidSourceKind'`、`'selfKey'`、`'cycle'`、`'tableFull'`、`'planRefused'` のいずれかで示します。UI では、不可能なキー元を提示する前にグレーアウトするのに使えます。レーンの `insertOutOfRange` はそのレーンのストリップに該当するインサートがないこと（ストリップのないレーンはインサートを持ちません）、`undeclaredSource` はソースのトラックにレーンが宣言されていないことを表し、バスとマスターの形式でも同じ理由が返ります。`planRefused` は、ディレイ上限を超えるアラインメントかオーバーフローだけを意味します。Python にも同じ 3 つのメソッド（`can_set_lane_sidechain` など）があり、`SidechainCheck` を返します。Python の `reason` は同じ値を snake_case（`'self_key'`、`'insert_out_of_range'` など）で返します。いずれもコントロールスレッド専用です。
 
 ```typescript
+engine.setTrackLanes([1, 2]);
+engine.setTrackStripJson(1, compSceneJson); // トラック 1 のインサート 0 はコンプレッサー
 engine.canSetLaneSidechain(1, 0, 1);  // { ok: false, reason: 'selfKey' }
 engine.canSetLaneSidechain(1, 0, 2);  // { ok: true, reason: null }
 ```
@@ -342,7 +353,7 @@ engine.canSetLaneSidechain(1, 0, 2);  // { ok: true, reason: null }
 
 `RealtimeEngine` は、[`setTrackStripInsertParamByName`](#グループルーティング・サイドチェイン・ライブストリップ操作) のストリップインサートパラメータとは別に、エンジンレベルのパラメータレジストリを持ちます。`addParameter(info)` でパラメータを 1 度登録し、`setParameter(id, value, renderFrame?)`（ランプには `setParameterSmoothed(...)`）でライブに変更するか、`setAutomationLane(id, points)` でタイムライン上にスケジュールします。
 
-メタデータは `parameterInfo(id)` で調べられます。ホストが登録した id に加えて、ホストしたインストゥルメントのパラメータ、ミキサーのフェーダー／パン／ステレオ幅（`width`）のターゲット、エンジンがストリップ仕様を保持しているチャンネルストリップのインサートパラメータに対応する予約 id も解決します。予約 id のメタデータはコンパイル時の既定値とインサートカタログに基づき、現在の音声状態を表しません。インストゥルメントの既定値はロード前のパッチの値で、外部でバインドしたストリップにはインサートを説明する仕様が保持されません。`parameterCount()` と `parameterInfoByIndex(index)` が列挙するのはホストが登録したパラメータだけです。予約 id は `parameterInfo(id)` で取得できますが、この列挙には含まれません。Python は `parameter_info`、`parameter_count`、`parameter_info_by_index`、C API は `sonare_engine_parameter_info`、`sonare_engine_parameter_count`、`sonare_engine_parameter_info_by_index` を使います。
+メタデータは `parameterInfo(id)` で調べられます。ホストが登録した id に加えて、バインド済みインストゥルメントのパラメータ、ミキサーのフェーダー／パン／ステレオ幅（`width`）のターゲット、エンジンがストリップ仕様を保持しているチャンネルストリップのインサートパラメータに対応する予約 id も解決します。予約 id のメタデータはコンパイル時の既定値とインサートカタログに基づき、現在の音声状態を表しません。インストゥルメントの既定値はロード前のパッチの値で、外部でバインドしたストリップにはインサートを説明する仕様が保持されません。`parameterCount()` と `parameterInfoByIndex(index)` が列挙するのはホストが登録したパラメータだけです。予約 id は `parameterInfo(id)` で取得できますが、この列挙には含まれません。Python は `parameter_info`、`parameter_count`、`parameter_info_by_index`、C API は `sonare_engine_parameter_info`、`sonare_engine_parameter_count`、`sonare_engine_parameter_info_by_index` を使います。
 
 ```typescript
 // EngineParameterInfo: id, name, unit, min/max/default, rtSafe, defaultCurve（0=linear）
@@ -359,7 +370,7 @@ engine.setAutomationLane(1, [
   { ppq: 4, value: 0 },
 ]);
 
-// あるいはコントロールスレッドから命令的に設定する（renderFrame を省略すると即時）。
+// あるいはコントロールスレッドから命令的に設定する（renderFrame を省略すると次のブロック先頭で適用）。
 engine.setParameter(1, 0.5);
 ```
 
@@ -372,13 +383,13 @@ if (faderId < 0 || busId < 0) throw new Error('declare the lane and bus first');
 engine.setAutomationLane(faderId, [{ ppq: 0, value: 0 }, { ppq: 8, value: -12 }]);
 ```
 
-トラックにレーンがない、またはバスが設定されていないときは、どちらも `-1` を返します（Python は `SonareError` を送出します。`resolve_track_lane_automation_id`、`resolve_bus_automation_id`。C は `sonare_engine_resolve_track_lane_automation_id`、`sonare_engine_resolve_bus_automation_id`）。id は位置ではなくトラックまたはバスそのものを指すため、`setTrackLanes` や `setTrackBuses` の並べ替え、他のストリップの削除をまたいでも同じストリップを駆動し続けます。そのトラックまたはバス自身が削除されると、何も適用しなくなります。マスターのフェーダー、パン、幅の id は固定で、解決は不要です。予約済みのミキサー id 名前空間（`0x4D58xxxx`）で受け付けるのはマスターの id だけです。`setParameter`、`setParameterSmoothed`、`setAutomationLane` は、それ以外の id を `InvalidParameter` で拒否します。トラックとバスの id は、計算で組み立てず、必ずリゾルバーか `automationParamId` から受け取ってください。`SonareEngine` ワークレット API の `automationParamId(target, 'faderDb' | 'pan')` と `busAutomationParamId(busId)` も同種の id を返し、初回利用時にミキサーのレーン／バスを宣言します。
+トラックにレーンがない、またはバスが設定されていないときは、どちらも `-1` を返します（Python は `SonareError` を送出します。`resolve_track_lane_automation_id`、`resolve_bus_automation_id`。C は `sonare_engine_resolve_track_lane_automation_id`、`sonare_engine_resolve_bus_automation_id`）。id は位置ではなくトラックまたはバスそのものを指すため、`setTrackLanes` や `setTrackBuses` の並べ替え、他のストリップの削除をまたいでも同じストリップを駆動し続けます。そのトラックまたはバス自身が削除されると、何も適用しなくなります。マスターのフェーダー、パン、幅の id は固定で、解決は不要です。`SonareEngine` ファサードでは `automationParamId('master', 'faderDb' | 'pan')` がそれを返します。予約済みのミキサー id 名前空間（`0x4D58xxxx`）で受け付けるのはマスターの id だけです。`setParameter`、`setParameterSmoothed`、`setAutomationLane` は、それ以外の id を `InvalidParameter` で拒否します。トラックとバスの id は、計算で組み立てず、必ずリゾルバーか `automationParamId` から受け取ってください。`SonareEngine` worklet API の `automationParamId(target, 'faderDb' | 'pan')` と `busAutomationParamId(busId)` も同種の id を返し、初回利用時にミキサーのレーン／バスを宣言します。
 
 インサートパラメータも同じオートメーションレーンで動かせますが、先に予約 id を取得します。`resolveTrackInsertAutomationId(trackId, insertIndex, paramName)`、`resolveMasterInsertAutomationId(...)`、`resolveBusInsertAutomationId(...)` のいずれかを呼び、その戻り値を `setAutomationLane`、`setParameter`、`setParameterSmoothed` に渡してください。`insertIndex` はストリップの pre インサート、続いて post インサートを連結した列を指し、`paramName` は `masteringInsertParamInfo` が返す JSON キーです。未知のストリップ／インサート／キーでは WASM/Node は `-1`、Python は `SonareError` を返します。
 
 トラック、バス、マスターのインサート id は、同じ寿命の規則に従います。id はストリップをその識別子と、スロットにあるプロセッサの種類（`effects.gsEfx` では EFX タイプも）で指します。`setTrackLanes` や `setTrackBuses` の並べ替え、他のストリップの削除をまたいでも有効です。ストリップが削除されるか、スロットが別の種類のプロセッサに替わると無効になります。その id は何も適用せず、キュー済みの編集は破棄され、再発行もされないので、新しいプロセッサに対しては解決し直してください。エンジンが保持できるインサート id のエントリーは 8192 個で、それを超えるストリップ、バス、レーンの変更は `InvalidParameter` で拒否されます。`insertParameterConstructedValue(paramId)` は、現在のライブ値やオートメーション値ではなく、そのインサートパラメータの構築時に使った不変値を返します。
 
-ストリップインサートとして使える `eq.*`、`dynamics.*`、`saturation.*`、`spectral.*`、`stereo.*`、`maximizer.*`、`multiband.*` は、すべてこの方法で id を解決でき、音声ブロック単位で動かせます。一方、信号全体を扱う `repair.*`、`loudness`、マッチ系のマスタリング段にはインサート形式もオートメーション id もありません。これらは信号全体をバッファリングするため、リアルタイム経路では動作しません。
+ストリップインサートとして使える `eq.*`、`dynamics.*`、`saturation.*`、`spectral.*`、`stereo.*`、`maximizer.*`、`multiband.*` は、すべてこの方法で id を解決でき、音声ブロック単位で動かせます。`repair.decrackle`（median）、`repair.dehum`、`repair.denoiseClassical`、`repair.dereverbClassical` もリアルタイムインサートとして動きます。オフライン関数と同じ結果を、インサートが報告するレイテンシぶん遅らせて返しますが、パラメータは automation id を解決しません。信号全体を必要とする段（`loudness`、マッチ系、残りの `repair.*`）にはインサート形式がありません。
 
 ```typescript
 const thresholdId = engine.resolveBusInsertAutomationId(1, 0, 'thresholdDb');
@@ -391,14 +402,14 @@ engine.setAutomationLane(thresholdId, [
 
 ### ホストしたインストゥルメントをオートメーションする
 
-MIDI デスティネーションにバインドしたシンセにもオートメーション可能なパラメータがあり、インサートパラメータとまったく同じ手順で解決できます。`resolveInstrumentAutomationId(destinationId, paramName)` は、ホストしたインストゥルメントの連続パラメータを JSON キー名（`'cutoffHz'` など）で指定し、`setAutomationLane`・`setParameter`・`setParameterSmoothed` にそのまま渡せる予約 id へ変換します。これによりホストは、シンセのカットオフやビブラートの深さをコントロールスレッドから小刻みに更新するのではなく、オートメーションレーンからオーディオブロック精度で駆動できます。解決されたレーンはオーディオスレッド上でスムージングされるため、ライブ再生とオフラインレンダリングの結果は一致します。
+MIDI デスティネーションにバインドしたシンセにもオートメーション可能なパラメータがあり、インサートパラメータとまったく同じ手順で解決できます。`resolveInstrumentAutomationId(destinationId, paramName)` は、バインド済みインストゥルメントの連続パラメータを JSON キー名（`'cutoffHz'` など）で指定し、`setAutomationLane`・`setParameter`・`setParameterSmoothed` にそのまま渡せる予約 id へ変換します。これによりホストは、シンセのカットオフやビブラートの深さをコントロールスレッドから小刻みに更新するのではなく、オートメーションレーンからオーディオブロック精度で駆動できます。解決されたレーンはオーディオスレッド上でスムージングされるため、ライブ再生とオフラインレンダリングの結果は一致します。
 
 先に `setSynthInstrument` または `setSf2Instrument` でインストゥルメントをバインドしてから解決してください。解決はコントロールスレッド専用で、オーディオ側の状態には触れません。
 
 ::: code-group
 
 ```typescript [node]
-engine.setSynthInstrument(0, patch);
+engine.setSynthInstrument(patch, 0);
 
 const cutoffId = engine.resolveInstrumentAutomationId(0, 'cutoffHz');
 if (cutoffId < 0) throw new Error('cutoffHz is not automatable on this instrument');
@@ -425,13 +436,9 @@ engine.set_automation_lane(cutoff_id, [
 
 :::
 
-::: warning Python だけ引数の順序が逆です
-WASM と Node では `resolveInstrumentAutomationId(destinationId, paramName)` と、デスティネーションが先です。Python は `resolve_instrument_automation_id(param_name, destination_id=0)` と **名前が先** で、デスティネーションは既定値 `0` を持ちます。名前の位置にデスティネーション id を渡すと解決されずに例外になるので取り違えはすぐ表面化しますが、ホストを両者のあいだで移植するときは一度確認しておいてください。
-:::
+WASM と Node は `resolveInstrumentAutomationId(destinationId, paramName)`、Python は `resolve_instrument_automation_id(param_name, destination_id=0)` と、名前が先です。名前の位置にデスティネーション id を渡すと、解決されずに例外になります。
 
 この id はパラメータだけでなくデスティネーションのスロットも符号化しているため、**同じ** `destination_id` に対するアンバインドと再バインドをまたいでも有効なままで、そのデスティネーションに何もバインドされていないあいだは単に何も適用しません。プリセット、エンジンモード、波形、フィルタモデル、ユニゾン、最大同時発音数といった構造的なフィールドはオートメーションできません。これらはボイスプールのサイズを変えたり DSP のトポロジを差し替えたりするため、オーディオスレッド上では安全に扱えないからです。こうした変更には、新しいパッチでインストゥルメントを再バインドしてください。
-
-再バインドと解除は、トランスポートが走っている最中でも反映されます。生のエンジンでも worklet の `SonareEngine` でも同じです（`setBuiltinInstrument`、`setSynthInstrument`、`setSf2Instrument`、`loadSoundFont`、`setMidiFx`、`clearMidiFx`）。外れるインストゥルメントはブロック境界で切られず 10 ms かけてフェードアウトし、呼び出しが戻った時点で破棄してかまいません。新しいインストゥルメントは既定のチャンネル状態から始まります。エンジンはプログラム、バンク、コントローラーの状態を再送しないので、それらが必要なホストは差し替えのあとで送り直してください。
 
 エンジンが持つインストゥルメントオートメーションのスロットは **32** 個です。使い切ったあとの解決は、既存のレーンを付け替えるのではなく失敗します。キーが未知のとき、そのデスティネーションに何もバインドされていないとき、インストゥルメントがオートメーション可能なパラメータを持たないとき、スロットが満杯のときは、WASM と Node が `-1` を、C の入口 `sonare_engine_resolve_instrument_automation_id` が `SONARE_ERROR_INVALID_PARAMETER` を返します。レーンに渡す前に必ず戻り値を確認してください。アレンジメントサブシステムを含まないビルドでは C の入口が `SONARE_ERROR_NOT_SUPPORTED` を返し、そのビルドはケイパビリティ JSON に `instrumentParamAutomation: false` を報告します。ホストはこれを見て、リゾルバが応答しないことを事前に判別できます。[`capabilities()`](./js-api.md#capabilities) を参照してください。
 
@@ -456,7 +463,7 @@ WASM と Node では `resolveInstrumentAutomationId(destinationId, paramName)` �
 
 レーンをクリアするには空の点配列を渡します: `setAutomationLane(id, [])`。オーディオスレッドがクリアを取り込むと、対象は `setParameter` または `setParameterSmoothed` で最後に明示的に送った値へ戻ります。その id に手動値を一度も送っていなければ、現在値をそのまま保ちます。手動書き込みとレーンのクリアのどちらを先にオーディオスレッドが取り込んでも、この結果は変わりません。Python では `[]` を渡し、C API では `point_count == 0` にします。
 
-## オーディオクリップ — ワープモードとページアンダーラン
+## オーディオクリップ: ワープモードとページアンダーラン
 
 `setClips(clips)` は、エンジンのオーディオクリップスケジュール全体をコントロールスレッドから 1 回の呼び出しで置き換えます。クリップは **直接** 型（`channels`: チャンネルごとに 1 本の `Float32Array`）か **ページ** 型（`pageProvider`: ホストがページ単位で供給するプロバイダ。[クリップ音声のページストリーミング](./wasm-streaming.md#クリップ音声のページストリーミング) を参照）のどちらかです。`startPpq` で配置し、`lengthSamples`・`clipOffsetSamples`・`loop`・`gain`・フェード長で形を整え、`warpMode` と `warpAnchors` でテンポマップへの追従の仕方を決めます。Python では同じ呼び出しを `set_clips`、`warp_mode` と綴ります。
 
@@ -496,29 +503,27 @@ engine.setClips([{
 
 サラウンドの `channelLayout`（`SonareChannelLayout`: `0` モノラル、`1` ステレオ、`2` 5.1、`3` 7.1）で宣言したバスは**サラウンドグループバス**になります。バスはプレーンごとにマスターへ合算し、プレーン別メーターを公開します。そこへルーティングしたレーンは点音源へフォールドされた後、ストリップの [`surroundPan`](./mixing.md#サラウンドとマルチチャンネル) に従って配置されます。`azimuth`、`divergence`、`lfe` は有効で、`elevation` と `distance` は予約です。[ミキサーグラフとプロジェクトバウンス](./project-bounce.md#バウンスオプション)も同じ幅でサラウンドバスをレンダリングし、同じ規則に従います。ステレオ専用なのは単体の `Mixer`（`processStereo`）だけです。
 
-サラウンドバスから信号を受けるストリップ ── バス出力やセンドの先にあるリターンストリップ ── は、ベッドをステレオへ畳んでから再度散布するのではなく、そのバス自身の幅で動作します。フェーダー・インサート・センドはすべてのプレーンに作用し、主出力がステレオ（またはそれ以下）のストリップだけがパン／幅のステージを保ちます。バスの幅より狭い宛先 ── 別のバス、レンダリング時のチャンネル数でのマスター、あるいは常にステレオであるサイドチェインのキータップ ── は、前方ペアだけを取るのではなく [ITU-R BS.775](https://www.itu.int/rec/R-REC-BS.775) ダウンミックスを受け取ります。広い宛先は送り元のプレーンをそのままのインデックスで受け取ります。サラウンドバス、そしてステレオより広く構築されたマスターは、パンをすでに拒否しているのと同じ理由で、既定以外のパンや幅を拒否します ── スピーカーベッドには、狭めたり広げたり動かしたりするステレオ像がありません。
+サラウンドバスから信号を受けるストリップ（バス出力やセンドの先にあるリターンストリップ）は、ベッドをステレオへ畳んでから再度散布するのではなく、そのバス自身の幅で動作します。フェーダー・インサート・センドはすべてのプレーンに作用し、主出力がステレオ（またはそれ以下）のストリップだけがパン／幅のステージを保ちます。バスの幅より狭い宛先（別のバス、レンダリング時のチャンネル数でのマスター、あるいは常にステレオであるサイドチェインのキータップ）は、前方ペアだけを取るのではなく [ITU-R BS.775](https://www.itu.int/rec/R-REC-BS.775) ダウンミックスを受け取ります。広い宛先は送り元のプレーンをそのままのインデックスで受け取ります。サラウンドバス、そしてステレオより広く構築されたマスターは、パンをすでに拒否しているのと同じ理由で、既定以外のパンや幅を拒否します。スピーカーベッドには、狭めたり広げたり動かしたりするステレオ像がないからです。
 
 ```typescript
 engine.setTrackBuses([{ busId: 1, channelLayout: 2 }]);  // 5.1 のグループバス
 engine.setTrackLanes([{ trackId: 1, outputBusId: 1 }]);  // レーンをそこへルーティング
 engine.setTrackStripJson(1, JSON.stringify({
-  strips: [{ id: 'source', surroundPan: { azimuth: -30, divergence: 0, lfe: 0 } }],
-  buses: [],
-  connections: [],
+  strips: [{ id: 'source', surroundPan: { azimuth: -30, divergence: 0, lfe: 0 } }], buses: [], connections: [],
 }));
 ```
 
 トラックレーンの `sourceChannelLayout` はステレオ（既定）でなければなりません。モノラル、5.1、7.1 を指定した `setTrackLanes` は拒否されます（WASM は `RangeError`、それ以外は `InvalidParameter`）。レーンの音声は、サラウンド配置の前に必ずステレオから点音源へフォールドされるためです。C で `SonareEngineTrackLane` をゼロ初期化するとモノラル扱いになるので、`SONARE_CHANNEL_LAYOUT_STEREO` を設定してください。
 
-レーンの定位はライブで `setTrackStripSurroundPan(trackId, { azimuth, divergence, lfe })` により動かせます（`RealtimeEngine`、および `SonareEngine` ワークレットファサードではトラック ID または名前を指定）。省略したフィールドは中央のポイントソースになり、非有限のフィールドやレーンストリップを持たないトラックは例外になります。定位はクリックを出さず、時定数およそ 5 ms で滑らかに移動し、移動中も合計のパワーは一定に保たれます。
+レーンの定位はライブで `setTrackStripSurroundPan(trackId, { azimuth, divergence, lfe })` により動かせます（`RealtimeEngine`、および `SonareEngine` worklet ファサードではトラック ID または名前を指定）。省略したフィールドは中央の点音源になり、非有限のフィールドやレーンストリップを持たないトラックは例外になります。定位はクリックを出さず、時定数およそ 5 ms で滑らかに移動し、移動中も合計のパワーは一定に保たれます。
 
 出力プレーン順は 5.1 が `L R C LFE Ls Rs`、7.1 が `L R C LFE Ls Rs Lss Rss` の正準順です。`SonareEngine` の `channelCount` を 6 または 8 にするとそのプレーン数で出力しますが、Web Audio の既定のデスティネーションは 2 チャンネルの `'speakers'` なので、アプリが先に `audioContext.destination.channelCount` を（`destination.maxChannelCount` まで）引き上げない限り、ブラウザはステレオへダウンミックスします。解釈（interpretation）が効くのはチャンネル数が一致しない間だけです。`'speakers'` はモノラル、ステレオ、クワッド、5.1 に対するダウンミックスのみを定義しており、8 のようなそれ以外の数では `'discrete'` 相当になります。`'discrete'` は先頭のプレーンをコピーして残りを捨てます。チャンネル数が一致していれば、どちらのモードでもプレーンはそのまま通ります。
 
-`setTrackLanes` で `outputBusId: 0` を指定する（または、このメソッドを持つ `SonareEngine` ワークレットファサード側で `setTrackOutputBus(1, 0)` を呼ぶ）と、レーンをマスターミックスへ戻せます。
+`setTrackLanes` で `outputBusId: 0` を指定するか、`setTrackOutputBus(1, 0)` を（生のエンジンでも `SonareEngine` ファサードでも）呼ぶと、レーンをマスターミックスへ戻せます。
 
 メインスレッドまたはオフラインのエンジンでは、サラウンドメーターを `drainMeterTelemetryWide(maxRecords?)` で読み取ります。プレーンごとの（ワイドな）レコードが返り、ステレオターゲットの左右はプレーン 0 と 1 として扱われます。これが唯一のメータードレインで、`drainMeterTelemetry()` はステレオの高速パスのままです。ドレインどうしは同じシングルコンシューマのテレメトリキューを消費するため、1 つのエンジンインスタンスにつき 1 つだけを呼んでください。2 つ回すと互いのレコードを奪い合います。
 
-AudioWorklet では、`SonareEngine` のメータースナップショットが、ステレオより広いターゲットに対して、ステレオ用のフィールドに加えて `channelCount` とチャンネルごとの配列 `peakDb`、`rmsDb`、`truePeakDb`、`inputPeakDb` を持ちます。postMessage と SharedArrayBuffer リングの両方の経路で届きます。ワークレットはメーター間隔をターゲットごとに保持するので、あるターゲットのレコードが別のターゲットのレコードを遅らせることはありません。
+AudioWorklet では、`SonareEngine` のメータースナップショットが、ステレオより広いターゲットに対して、ステレオ用のフィールドに加えて `channelCount` とチャンネルごとの配列 `peakDb`、`rmsDb`、`truePeakDb`、`inputPeakDb` を持ちます。postMessage と SharedArrayBuffer リングの両方の経路で届きます。worklet はメーター間隔をターゲットごとに保持するので、あるターゲットのレコードが別のターゲットのレコードを遅らせることはありません。
 
 ## MIDI クリップスケジューリングと `sampleAtPpq`
 
@@ -539,17 +544,13 @@ const start = engine.sampleAtPpq(8);                  // テンポマップを�
 const length = engine.sampleAtPpq(16) - start;
 
 engine.setMidiClips([{
-  id: 1,
-  trackId: 1,
-  destinationId: 0,            // このイベントをレンダーする楽器の宛先
-  startSample: start,
-  startPpq: 8,
-  lengthSamples: length,
-  loop: true,
-  loopLengthSamples: length,
+  id: 1, trackId: 1,
+  destinationId: 0,            // このイベントをレンダーする楽器のデスティネーション
+  startSample: start, startPpq: 8,
+  lengthSamples: length, loop: true, loopLengthSamples: length,
   events: [
-    // renderFrame はエンジンタイムライン上の絶対サンプル。1 ワードの
-    // MIDI 1.0 イベントでは wordCount を省略できる（word0 から推論される）。
+    // renderFrame はエンジンタイムライン上の絶対サンプル。1 ワードの MIDI 1.0 イベントでは
+    // wordCount を省略できる（word0 から推論される）。
     { renderFrame: start,                          word0: noteOn(0, 60, 100) },
     { renderFrame: start + Math.floor(length / 2), word0: noteOff(0, 60) },
   ],
@@ -558,14 +559,24 @@ engine.setMidiClips([{
 
 ループするクリップは `loopLengthSamples` ごとにイベントリストを繰り返します。スケジュールを空にするには `setMidiClips([])` を呼びます。*プロジェクト*レベル（PPQ 単位のノート、テイク、コンピング）で作業したい場合は、[プロジェクト編集](./project-editing.md)でアレンジを組んでバウンスしてください。このリアルタイムスケジュールは、DAW フロントエンドがコンパイルして渡す低レベル側の API です。
 
-クリップは `gain`（リニア、既定 `1`）、`fadeInSamples`、`fadeOutSamples`（既定 `0`。内部ループの 1 周ごとではなく、クリップ全長に対して 1 回）を持ち、イベント自体（ノートのタイミングや強さ）ではなく、宛先のレンダー後の楽器出力に適用されます。宛先ごとに、アクティブなクリップのうち最も新しく開始したものがエンベロープを決めます。そのクリップが終了しても、先に開始したクリップがまだアクティブなら、そちらのエンベロープに戻ります。アクティブなクリップがなくなった場合に限り、最後に終了したクリップの終了時点の値（フェードアウトがあれば `0`、なければ `gain`）を保持します。同時に開始したクリップは id が大きいほうが優先されます。宛先上のどのクリップもまだ開始していない間は、宛先はユニティで再生されます。同じ宛先へルーティングされた複数のトラックはこのエンベロープを共有します ── トラックごとではなく、選ばれたクリップが宛先全体を決めます。`lengthSamples` が `0`（オープンエンド）のとき `fadeOutSamples` を `0` より大きくすると拒否されます。終わりのないクリップにはフェードしていく先がありません。C ABI 上でゼロ初期化された `SonareEngineMidiClipSchedule` は無音です（`gain` が `0` になります）。JS と Python のバインディングは、省略された `gain` を `0` ではなく `1` として扱います。
+クリップは `gain`（リニア、既定 `1`）、`fadeInSamples`、`fadeOutSamples`（既定 `0`。内部ループの 1 周ごとではなく、クリップ全長に対して 1 回）を持ち、イベント自体（ノートのタイミングや強さ）ではなく、宛先のレンダー後の楽器出力に適用されます。宛先ごとに、アクティブなクリップのうち最も新しく開始したものがエンベロープを決めます。そのクリップが終了しても、先に開始したクリップがまだアクティブなら、そちらのエンベロープに戻ります。アクティブなクリップがなくなった場合に限り、最後に終了したクリップの終了時点の値（フェードアウトがあれば `0`、なければ `gain`）を保持します。同時に開始したクリップは id が大きいほうが優先されます。宛先上のどのクリップもまだ開始していない間は、宛先はユニティで再生されます。同じ宛先へルーティングされた複数のトラックはこのエンベロープを共有します。トラックごとではなく、選ばれたクリップが宛先全体を決めます。`lengthSamples` が `0`（オープンエンド）のとき `fadeOutSamples` を `0` より大きくすると拒否されます。終わりのないクリップにはフェードしていく先がありません。C ABI 上でゼロ初期化された `SonareEngineMidiClipSchedule` は無音です（`gain` が `0` になります）。JS と Python のバインディングは、省略された `gain` を `0` ではなく `1` として扱います。
+
+### 再生中にインストゥルメントを差し替える
+
+デスティネーションのインストゥルメントの再バインドと解除は、トランスポートが走っている最中でも反映されます。生のエンジンでも `SonareEngine` ファサードでも同じです。対象の呼び出しは `setBuiltinInstrument`、`setSynthInstrument`、`setSf2Instrument`、`loadSoundFont`、`setMidiFx`、`clearMidiFx` です。
+
+| 対象 | 動作 |
+|------|------|
+| 外れるインストゥルメント | ブロック境界で切られず、10 ms かけてフェードアウトします。呼び出しが戻った時点で破棄してかまいません。 |
+| 新しいインストゥルメント | 既定のチャンネル状態から始まります。エンジンはプログラム、バンク、コントローラーの状態を再送しないので、必要なものは差し替えのあとで送り直してください。 |
+| テールの長さ | `tailSamples()` は可聴テールの保守的な上限です。バウンスやフリーズの長さは、10 ms のフェードではなくこの値から決めてください。 |
 
 ## AudioWorklet でエンジンを動かす
 
-通常の WASM パッケージは、この `RealtimeEngine` クラスを直接公開します。リアルタイム音声スレッドで動かすには、Worklet ブリッジが同じ embind ベースのエンジンを `AudioWorkletGlobalScope` 内でホストし、より高レベルの `SonareEngine` ファサードがエンジンのほぼ全面をコントロールメッセージ経由で Worklet にミラーします。ブリッジの設定、`SonareEngine` ファサードの一覧、Worklet 側のスコープスナップショットは [リアルタイムとストリーミング — AudioWorklet での使い分け](./realtime-streaming.md#audioworklet-での使い分け) を参照してください。
+通常の WASM パッケージは、この `RealtimeEngine` クラスを直接公開します。リアルタイム音声スレッドで動かすには、worklet ブリッジが同じ embind ベースのエンジンを `AudioWorkletGlobalScope` 内でホストし、より高レベルの `SonareEngine` ファサードがエンジンのほぼ全面をコントロールメッセージ経由で worklet にミラーします。ブリッジの設定、`SonareEngine` ファサードの一覧、worklet 側のスコープスナップショットは [リアルタイムとストリーミングの AudioWorklet での使い分け](./realtime-streaming.md#audioworklet-での使い分け) を参照してください。
 
 ## 関連
 
-- [リアルタイムとストリーミング](./realtime-streaming.md) — `StreamAnalyzer`、テンポグラム、AudioWorklet ブリッジ、クリップのページストリーミング、波形ピーク
-- [ミキシングエンジン](./mixing.md) — このエンジンのレーンミキサーとストリップモデルを共有する単体のストリップ／バス／センドミキサー
-- [MIDI 入力](./midi-input.md) · [録音とテイク](./recording-and-takes.md) — エンジンへのライブ MIDI 入力と、再生内容のキャプチャ
+- [リアルタイムとストリーミング](./realtime-streaming.md): `StreamAnalyzer`、テンポグラム、AudioWorklet ブリッジ、クリップのページストリーミング、波形ピーク
+- [ミキシングエンジン](./mixing.md): このエンジンのレーンミキサーとストリップモデルを共有する単体のストリップ／バス／センドミキサー
+- [MIDI 入力](./midi-input.md) · [録音とテイク](./recording-and-takes.md): エンジンへのライブ MIDI 入力と、再生内容のキャプチャ

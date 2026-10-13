@@ -21,9 +21,33 @@ Across the browser demos:
 
 ## What Still Loads From The Network
 
-The page, JavaScript bundle, WASM file, fonts, and site analytics script may load from the web like the rest of the site. That is different from uploading your audio for processing.
+The page, the JavaScript bundle, the WASM file, and the web fonts load from the web like the rest of the site. That is code and styling arriving; your audio is never part of it. Once the code has loaded, source audio, reference audio, analysis buffers, and rendered output are not uploaded for processing, so even sensitive material stays on the device.
 
-Once the code is loaded, the audio processing path itself is local.
+To check this yourself, open the browser's Network panel while a demo renders. After the page, the WASM file, and the fonts have loaded, no request carries audio. Outside the browser there is no server component to check: the Node package, the Python package, and the CLI all run the engine in your own process on local files.
+
+::: code-group
+
+```typescript [Browser]
+import { init, lufs } from '@libraz/libsonare';
+
+await init();   // fetches the WASM file once
+
+// From here on, calls are local function calls; nothing goes over the network.
+const { integratedLufs } = lufs(samples, sampleRate);
+```
+
+```python [Python]
+import libsonare as sonare
+
+# The engine is a local shared library loaded into the Python process.
+integrated = sonare.Audio.from_file("song.wav").lufs().integrated_lufs
+```
+
+```bash [CLI]
+sonare lufs song.wav   # reads the file from disk and prints the result
+```
+
+:::
 
 ## Tradeoffs
 
@@ -40,10 +64,6 @@ It also has limits:
 - Mobile browsers can be more constrained.
 - Browser codec support differs by platform.
 - There is no server fallback if the local device cannot render the job.
-
-## Worth Keeping In Mind
-
-Even when working with sensitive material, the page code and WASM still load from the network like any other site. The important property is that after loading, source audio, reference audio, analysis buffers, and rendered output are not uploaded for processing.
 
 When a large file feels slow, the bottleneck is the device's CPU and memory rather than a busy server. Practical responses are testing a shorter excerpt first, trying another browser, or running the demo on a desktop machine.
 

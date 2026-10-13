@@ -5,9 +5,9 @@ description: Beginner-friendly guide to libsonare's headless-DAW edit API — th
 
 # Project & Arrangement Editing
 
-**Want to build a song's arrangement in code — without opening a DAW?** That is what `Project` is for. A **project** is the timeline that holds everything a song is made of: audio tracks, MIDI tracks, the clips placed on them, the tempo map, time signatures, and markers. libsonare ships a `Project` model — a small, headless DAW editing API — so you can build, edit, and serialize that timeline **inside your own app**, with no DAW host required.
+**Want to build a song's arrangement in code, without opening a DAW?** That is what `Project` is for. A **project** is the timeline that holds everything a song is made of: audio tracks, MIDI tracks, the clips placed on them, the tempo map, time signatures, and markers. `Project` is libsonare's small, headless DAW editing API, so you can build, edit, and serialize that timeline **inside your own app**, with no DAW host required.
 
-The workflow is a short loop: you assemble an arrangement, edit it with undoable operations, [compile](./project-save-load.md#compiling-the-arrangement) it into a renderable timeline, save it to JSON, and finally [render audio](./project-bounce.md) — see [Project MIDI](./project-editing-midi.md), [Project Save & Load](./project-save-load.md), and [Offline Vocal Editing](./vocal-editing.md) for those parts of the workflow. `Project` is an **offline, control-thread API** (it never runs on the audio thread), and it behaves identically in the browser (WASM), Node, and Python.
+The workflow is a short loop. You assemble an arrangement, edit it with undoable operations, [compile](./project-save-load.md#compiling-the-arrangement) it into a renderable timeline, save it to JSON, and [render audio](./project-bounce.md). Key and chord annotations live on [Project MIDI](./project-editing-midi.md), persistence on [Project Save & Load](./project-save-load.md), and monophonic vocal work on [Offline Vocal Editing](./vocal-editing.md). `Project` is an **offline, control-thread API** (it never runs on the audio thread), and it behaves identically in the browser (WASM), Node, and Python.
 
 ::: info Three words to know first
 A **track** is one lane in the timeline (an audio lane or a MIDI lane). A **clip** is one block of content placed on a track — a slice of recorded audio or a region of MIDI notes. **PPQ** ("pulses per quarter note") is how libsonare measures musical time: every clip start, length, and event position is given in quarter-note units, so `lengthPpq: 4` is four quarter notes long regardless of tempo.
@@ -28,9 +28,9 @@ A project nests a few simple parts, each one a container for the next:
 - Each **track** holds **clips** (blocks of content placed on the timeline).
 - An audio clip can carry alternate **takes** plus a **comp** that stitches the best parts of those takes into one performance.
 - An audio clip can carry an offline vocal-edit sidecar that records the original source, derived render, committed revision, and persisted session state.
-- A track can have **automation lanes** — recorded curves that move a parameter (volume, a filter cutoff, …) over time, the way a fader moving on its own would.
+- A track can have **automation lanes**: recorded curves that move a parameter (volume, a filter cutoff, …) over time, the way a fader moving on its own would.
 - A MIDI track points at an instrument **destination** — the synth or sampler that will actually make its notes audible (defined just below).
-- Every track routes through a strip in the **mixer scene** — its channel of EQ, fader, pan, and sends — on its way to the master.
+- Every track routes through a strip in the **mixer scene** (its channel of EQ, fader, pan, and sends) on its way to the master.
 
 <ProjectModelFigure title="The project model on the timeline" />
 
@@ -100,22 +100,23 @@ When `compile()` comes back with errors, the fix is not a dead end — you corre
 - `compile()` does not make sound; it validates and prepares the arrangement.
 - Plain `bounce()` renders audio tracks only. MIDI tracks need an instrument-bound bounce such as `bounceWithSynthInstrument(...)` or `bounceWithSf2Instrument(...)`.
 
-## What You Will Learn
+## Which call for which task
 
-By the end of this page you should be able to:
-
-- create a `Project`, add audio and MIDI tracks, and place clips on them;
-- edit clips (split, trim, move, gain, fade, loop, re-source, duplicate, remove) and tracks (add, rename, route, change kind, remove) through **undoable** operations;
-- place musical time correctly using PPQ, a tempo map with tempo segments, time signatures, and markers;
-- choose a clip overlap policy and a warp mode (`off` / `repitch` / `tempo-sync` / `time-stretch`) with warp anchors;
-- write key/chord annotations and automation lanes onto the project;
-- analyse and edit a monophonic vocal take, then apply its committed render and persisted state to an audio clip;
-- compile to a renderable timeline and read its structured diagnostics and non-fatal warnings;
-- save and load with deterministic JSON, and exchange MIDI through SMF (Standard MIDI File) and the MIDI 2.0 Clip File format.
+| Task | Calls | Section |
+|------|-------|---------|
+| Build a project, tracks, and clips | `Project.create`, `addTrack`, `addClip`, `addMidiClip` | [Create a project](#create-a-project-and-add-content) |
+| Split, trim, move, fade, loop, duplicate clips | `splitClip`, `trimClip`, `moveClip`, `setClipFade`, `setClipLoop` | [Editing clips](#editing-clips) |
+| Route, mute, or pan tracks | `setTrackRoute`, `setTrackGain`, `setTrackPan` | [Editing tracks](#editing-tracks) |
+| Tempo, time signatures, markers | `setTempoSegments`, `setTimeSignatures`, `setMarker` | [Musical time](#musical-time-ppq-tempo-time-signatures-markers) |
+| Stretch audio to the grid | `setWarpMap`, `setClipWarpRef`, `setClipWarpMode` | [Warp](#warp-stretching-clips-to-the-grid) |
+| Automate fader, pan, or a host parameter | `addAutomationLane`, `editAutomationLane` | [Automation lanes](#automation-lanes) |
+| Store keys and chords | `annotateKeys`, `annotateChords` | [Project MIDI](./project-editing-midi.md#key-and-chord-annotation-write-back) |
+| Check, save, and reload | `compile`, `toJson`, `fromJson` | [Save & Load](./project-save-load.md) |
+| Render audio | `bounce`, `bounceWithSynthInstrument` | [Project Bounce](./project-bounce.md) |
 
 ## Create a project and add content
 
-Every project starts empty. Set a sample rate, add tracks, then add clips. `addTrack` and `addClip` return stable integer ids you reuse for every later edit. Positions and lengths are in **PPQ**.
+Every project starts empty. Set a sample rate (a whole number of hertz between 8000 and 384000), add tracks, then add clips. `addTrack` and `addClip` return stable integer ids you reuse for every later edit. Positions and lengths are in **PPQ**.
 
 ::: code-group
 
@@ -168,7 +169,7 @@ with sonare.Project() as project:
 
 :::
 
-Use `project.trackCount()` and `project.clipCount()` to update project summaries or validate imported arrangements without walking the serialized JSON. Python exposes the same values as `track_count()` and `clip_count()`.
+`audioSampleRate` (8000 to 384000 Hz) is required whenever `audio` is given. Use `project.trackCount()` and `project.clipCount()` to update project summaries or validate imported arrangements without walking the serialized JSON. Python exposes the same values as `track_count()` and `clip_count()`.
 
 ::: danger Always release the project
 `Project`, like every WASM-backed object, holds a heap handle that JavaScript's garbage collector cannot reclaim. In the WASM package, construct it with `Project.create()` and call `project.delete()` in a `finally` block. In Node native, construct it with `Project.create()` and call `project.destroy()` or `project.delete()`. In Python use `Project` as a context manager (`with sonare.Project() as project:`) or call `project.close()`. Leaking handles slowly exhausts native or WASM memory in long sessions.
@@ -202,11 +203,31 @@ project.setClipLoop(tailId, 'loop', 2, 0.05); // loop the tail every two beats w
 const copyId = project.duplicateClip(tailId, 8);
 ```
 
-Fade curves are `'linear'`, `'equal-power'`, `'exponential'`, and `'logarithmic'`. Each fade length is clamped to the clip length, so an oversized fade cannot start before the clip; a negative length is rejected outright. Loop mode is `'off'` or `'loop'`; a positive `loopLengthPpq` is required when looping. `loopCrossfadePpq` is an optional equal-power crossfade at the loop seam. `0` keeps a hard loop; positive values blend the loop tail with the pre-roll source material. The engine clamps the value to the available source offset and half the loop length, and disables the seam crossfade for warped clips.
+Fade curves are `'linear'`, `'equal-power'`, `'exponential'`, and `'logarithmic'`. Each fade length is clamped to the clip length, so an oversized fade cannot start before the clip; a negative length is rejected outright. Loop mode is `'off'` or `'loop'`. `loopLengthPpq` is the loop period: omit it (or pass `0`) to loop the whole clip. A negative or non-finite value is rejected. `loopCrossfadePpq` is an optional equal-power crossfade at the loop seam. `0` keeps a hard loop; positive values blend the loop tail with the pre-roll source material. The engine clamps the value to the available source offset and half the loop length, and disables the seam crossfade for warped clips.
 
 ::: warning `setClipGain` / `setClipFade` shape a MIDI clip's rendered audio, not its events
-The compiler still copies a MIDI clip's note-on / note-off events verbatim into the render schedule — gain and fade never touch velocity or timing. What they shape instead is the bound instrument's *rendered output* at the clip's MIDI destination: while this clip is the most recently started one still active on that destination, its output follows `gain` and glides through the fade region the same way an audio clip's samples do. When it ends, an older clip that is still active takes over again. Only when no clip remains active does the destination hold the most recently ended clip's end value (`0` after a fade-out, `gain` otherwise). If clips start together, the larger clip id wins. Several tracks sharing one destination therefore share this envelope — the selected clip governs the whole destination, not each track independently. The **track gain** (`setTrackGain(trackId, gain)`, folded into the channel-strip fader in the [mixer scene](./mixing.md)) still layers underneath and is unaffected; a track gain of `0` silences the track's MIDI notes entirely regardless of any clip gain or fade.
+On a MIDI clip, gain and fade scale the bound instrument's output; they never touch velocity or timing (the note-on and note-off events are copied verbatim into the render schedule). The envelope belongs to the clip's MIDI destination, and one clip governs it at a time:
+
+- The most recently started clip that is still active on the destination wins; its output follows `gain` and glides through the fade region the way an audio clip's samples do.
+- When that clip ends, an older clip that is still active takes over again.
+- When no clip is active, the destination holds the last ended clip's end value (`0` after a fade-out, `gain` otherwise).
+- Clips that start together are ordered by clip id; the larger id wins.
+
+Several tracks sharing one destination therefore share this envelope. The **track gain** (`setTrackGain(trackId, gain)`, folded into the channel-strip fader in the [mixer scene](./mixing.md)) layers underneath and is unaffected; a track gain of `0` silences the track's MIDI notes regardless of any clip gain or fade.
 :::
+
+### Refused values
+
+Edits that take positions, gains, or rates reject out-of-range values with an `Invalid parameter` error instead of clamping them (`Invalid state` for `splitClip` at a negative position).
+
+| Call | Refused |
+|------|---------|
+| `setSampleRate`, `bounce({ sampleRate })` | A non-integer, a value outside 8000 to 384000, or (for bounce) a rate that differs from the project rate |
+| Any PPQ or frame position: `startPpq`, `trimClip`, `splitClip`, `moveClip`, markers, tempo and time-signature segments, loop-recording `startPpq`, stem `startFrame` | A negative value |
+| `setClipGain`, `setTrackGain`, `setTrackPan` | A non-finite value, or (gains) a negative one |
+| `setClipFade` length | A negative value |
+| `setWarpMap` | Id `0`, fewer than two anchors, or a negative anchor sample |
+| `setTempoSegments` | `bpm <= 0` |
 
 In Python the same operations are snake_case, and fades take separate length/curve arguments:
 
@@ -257,7 +278,7 @@ project.set_track_route(drums, "strip-drums", "master")  # wire to a mixer scene
 
 :::
 
-An **aux** track carries no clips of its own — it is a routing/return lane (for example an effect return or a submix) rather than a place to record content.
+An **aux** track is a routing/return lane (for example an effect return or a submix). The API does not stop you from adding a clip to it, but it is not where recorded content belongs.
 
 `setTrackRoute` links a project track to a strip in the project's [mixer scene](./mixing-scene-json.md) (set with `setMixerSceneJson`) so the bounced track flows through that channel strip's processing. `setMixerSceneJson` returns the scene's load warnings as a list of strings (empty when clean), so a misspelled key such as `faderDB` shows up as `unknown scene key 'strips[0].faderDB'` instead of leaving the fader at its default unnoticed.
 
@@ -301,6 +322,10 @@ All positions are in **PPQ** (quarter notes as a floating-point value, so fracti
 ### Tempo map and tempo segments
 
 The **tempo map** is a list of tempo segments. Each segment starts at a PPQ position and sets a BPM; an optional `endBpm` makes the segment ramp linearly to a new tempo.
+
+Drag the tempo to see how segments turn quarter notes into seconds.
+
+<SonareDemo id="tempo-grid" />
 
 ::: code-group
 
@@ -484,16 +509,16 @@ A warp map is a first-class, id-keyed object: `setWarpMap({ id, name, anchors })
 ::: warning Anchors are yours to maintain, and two of them are the minimum
 Anchors are absolute sample-to-sample pairs, and the engine never re-derives them from the tempo map. Editing the tempo with `setTempoSegments(...)` therefore does **not** restretch a warped clip — it moves the clip's start and length on the timeline, so a different amount of the same fixed warp curve gets played. When the tempo changes and the audio should follow it, recompute the anchors in your app and push a new map with `setWarpMap(...)`.
 
-A map also needs at least two anchors before it describes a stretch at all. A `'tempo-sync'` clip with no registered warp map (and no pre-baked warped audio) is a compile error — a dangling source ref, reported by `compile()`. A `'repitch'` or `'time-stretch'` clip with no warp ref at all is not an error: it silently plays at its native rate, exactly as if the mode were `'off'`. What *is* an error in every mode is a clip that references a warp map id nobody registered, which `compile()` reports as the same dangling source ref.
+`setWarpMap` needs a non-zero `id` and at least two anchors with non-negative sample positions; anything else is rejected with `Invalid parameter`. A `'tempo-sync'` clip with no registered warp map (and no pre-baked warped audio) is a compile error, reported by `compile()`. A `'repitch'` or `'time-stretch'` clip with no warp ref at all is not an error: it plays at its native rate, exactly as if the mode were `'off'`. What *is* an error in every mode is a clip that references a warp map id nobody registered, which `compile()` reports as the same dangling source ref.
 :::
 
 ## Takes and comp lanes
 
-A clip can carry alternate **takes** and a **comp** (composite) that stitches the best parts of several takes into one performance. Existing take and comp selection is first-class on `Project` (`setClipTakes`, `setClipCompSegments`, `addLoopRecordingTakes`) and is covered in depth — including loop-recording capture — on the dedicated page. Physical source offsets, loop anchors, and comp render parts are preserved in the JSON/native model; the current JavaScript surface has no setters for those fields. See [Recording & Takes](./recording-and-takes.md).
+A clip can carry alternate **takes** and a **comp** (composite) that stitches the best parts of several takes into one performance. Existing take and comp selection is first-class on `Project` (`setClipTakes`, `setClipCompSegments`, `addLoopRecordingTakes`) and is covered in depth, including loop-recording capture, on the dedicated page. Physical source offsets, loop anchors, and comp render parts are preserved in the JSON/native model; the current JavaScript surface has no setters for those fields. See [Recording & Takes](./recording-and-takes.md).
 
 ## Automation lanes
 
-An **automation lane** changes one host-defined parameter over time with breakpoints. Each breakpoint has a PPQ position, a value, and a curve to the next point (`'linear'`, `'exponential'`, `'hold'`, `'scurve'`).
+An **automation lane** changes one host-defined parameter over time with breakpoints. Each breakpoint has a PPQ position, a value, and a curve to the next point (`'linear'`, `'exponential'`, `'hold'`, `'s-curve'`; the older `'scurve'` is still accepted).
 
 ::: code-group
 
@@ -558,25 +583,12 @@ Typed lanes use `targetKind: 'track-fader-db'` or `'track-pan'` to target the ow
 :::
 
 
-## Where the sections went
-
-| Section | Moved to |
-|---|---|
-| Key and chord annotation write-back | [MIDI, Compile & Save/Load](./project-editing-midi.md#key-and-chord-annotation-write-back) |
-| Assist sidecars | [MIDI, Compile & Save/Load](./project-editing-midi.md#assist-sidecars) |
-| MIDI content | [Edit MIDI Clips](./midi-editing.md#midi-content) |
-| Auto-tempo and snap-to-grid | [MIDI, Compile & Save/Load](./project-editing-midi.md#auto-tempo-and-snap-to-grid) |
-| Compiling the arrangement | [Compile, Save, and Load Projects](./project-save-load.md#compiling-the-arrangement) |
-| Save and load: deterministic JSON | [Compile, Save, and Load Projects](./project-save-load.md#save-and-load-deterministic-json) |
-| MIDI interchange: SMF and MIDI 2.0 Clip File | [MIDI 2.0, UMP, and Clip Files](./midi2.md#midi-2-0-clip-file-smf2clip) |
-| Rendering audio | [Project Bounce & Rendering](./project-bounce.md) |
-
 ## Related
 
 - [Editing Basics](./glossary/concepts/editing-basics.md) — the vocabulary, for newcomers
 - [Project Bounce & Rendering](./project-bounce.md) — render the timeline to audio, with or without instruments
 - [Recording & Takes](./recording-and-takes.md) — takes, comp lanes, and loop-recording capture
-- [Offline Monophonic Vocal Editing](./vocal-editing.md) — analyse, edit, render, persist, and apply a mono vocal take
+- [Offline Monophonic Vocal Editing](./vocal-editing.md) — analyze, edit, render, persist, and apply a mono vocal take
 - [Native Synth](./native-synth.md) · [SoundFont Player](./soundfont-player.md) — make MIDI tracks audible
 - [MIDI Input](./midi-input.md) — play a project live from a controller
 - [Edit MIDI Clips](./midi-editing.md) — edit, validate, route, and bake project MIDI events

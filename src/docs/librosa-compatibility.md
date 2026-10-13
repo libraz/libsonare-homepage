@@ -127,7 +127,7 @@ These reference tests establish agreement on the covered low-level helper, not w
 | `librosa.decompose.decompose()` | `decompose()` | NMF factor matrices from a row-major spectrogram |
 | `librosa.decompose.decompose(init=...)` | `decomposeWithInit()` / `decompose_with_init()` | NMF with selectable init: `init='random'` (default) or `init='nndsvd'` (SVD warm start) |
 | `librosa.decompose.nn_filter()` | `nnFilter()` / `nn_filter()` | Nearest-neighbor filtering |
-| _(no librosa equivalent)_ | `decomposeStems()` / `decompose_stems()` | NMF-based stem separation: builds a per-component soft mask from the same factorisation and applies it to the original **complex** spectrogram, so every component keeps the source's phase and the components sum back to the input |
+| _(no librosa equivalent)_ | `decomposeStems()` / `decompose_stems()` | NMF-based stem separation ([Source Separation](./source-separation.md)): builds a per-component soft mask from the same factorisation and applies it to the original **complex** spectrogram, so every component keeps the source's phase and the components sum back to the input |
 | ITU-R BS.1770 / EBU R128 | `lufsInterleaved()` / `lufs_interleaved()` | Multichannel integrated loudness from interleaved samples |
 | EBU Tech 3342 LRA | `ebur128LoudnessRange()` / `ebur128_loudness_range()` | Loudness range in LU |
 
@@ -185,20 +185,20 @@ librosa's strength is low-level DSP — higher-level music understanding is typi
 | libsonare | Description |
 |-----------|-------------|
 | `KeyAnalyzer` | Musical key detection (Krumhansl-Schmuckler profiles) |
-| `ChordAnalyzer` | Chord recognition (24 qualities across 12 roots when the full template set is enabled — see [Which chords can it recognise?](/docs/faq#which-chords-can-it-recognise) for the triads-only default inside `analyze()`) |
+| `ChordAnalyzer` | Chord recognition (24 qualities across 12 roots when the full template set is enabled — see [Which chords can it recognize?](/docs/faq#which-chords-can-it-recognize) for the triads-only default inside `analyze()`) |
 | `SectionAnalyzer` | Song structure analysis (intro / verse / chorus, etc.) |
 | `TimbreAnalyzer` | Timbre characteristics (brightness, warmth, density, …) |
 | `DynamicsAnalyzer` | Loudness, dynamic range, crest factor |
 | `RhythmAnalyzer` | Time signature, groove, syncopation, regularity |
 
 ::: info Streaming
-`StreamAnalyzer` — realtime BPM / key / chord estimates that update as audio arrives — is also libsonare-specific. librosa has no streaming API.
+[`StreamAnalyzer`](./realtime-streaming.md) — realtime BPM / key / chord estimates that update as audio arrives — is also libsonare-specific. librosa has no streaming API.
 :::
 
 ## Function Mapping
 
 The libsonare snippets below assume `import libsonare as sonare` (Python) or the
-named imports from `@libraz/libsonare` (Browser).
+named imports from `@libraz/libsonare` (JavaScript). The JavaScript snippets run unchanged in the browser and in Node; the C++ forms are in the [C++ API](./cpp-api.md).
 
 ### STFT
 
@@ -216,7 +216,7 @@ S = librosa.stft(
 
 **libsonare:**
 ::: code-group
-```typescript [Browser]
+```typescript [JavaScript (WASM / Node)]
 const result = stft(samples, sampleRate, 2048, 512);
 ```
 ```python [Python]
@@ -252,7 +252,7 @@ mel_db = librosa.power_to_db(mel, ref=np.max)
 
 **libsonare:**
 ::: code-group
-```typescript [Browser]
+```typescript [JavaScript (WASM / Node)]
 const mel = melSpectrogram(samples, sampleRate, 2048, 512, 128);
 // mel.power - power spectrum
 // mel.db - dB scale
@@ -281,7 +281,7 @@ mfcc = librosa.feature.mfcc(
 
 **libsonare:**
 ::: code-group
-```typescript [Browser]
+```typescript [JavaScript (WASM / Node)]
 const result = mfcc(samples, sampleRate, 2048, 512, 128, 13);
 // result.coefficients - [nMfcc x nFrames]
 ```
@@ -308,7 +308,7 @@ y_harm, y_perc = librosa.effects.hpss(y, kernel_size=31)
 
 **libsonare:**
 ::: code-group
-```typescript [Browser]
+```typescript [JavaScript (WASM / Node)]
 const result = hpss(samples, sampleRate, 31, 31);
 // result.harmonic
 // result.percussive
@@ -333,7 +333,7 @@ beat_times = librosa.frames_to_time(beats, sr=sr, hop_length=512)
 
 **libsonare:**
 ::: code-group
-```typescript [Browser]
+```typescript [JavaScript (WASM / Node)]
 const bpm = detectBpm(samples, sampleRate);
 const beats = detectBeats(samples, sampleRate);  // Already in seconds
 ```
@@ -384,7 +384,7 @@ mel = 2595 * log10(1 + f / 700)
 libsonare provides Slaney conversion helpers publicly and supports HTK Mel
 filterbank generation through Mel configuration in the C++ core:
 ::: code-group
-```typescript [Browser]
+```typescript [JavaScript (WASM / Node)]
 const melSlaney = hzToMel(hz);     // Slaney (default)
 ```
 ```python [Python]
@@ -421,8 +421,8 @@ This can slightly change downstream features after resampling.
 
 ### 2. CQT
 
-- **librosa**: CQT/VQT APIs with librosa-specific parameterization
-- **libsonare**: CQT and VQT implementations with libsonare-specific APIs
+- **librosa**: `cqt()` and `vqt()` return complex coefficients
+- **libsonare**: the JavaScript and Python `cqt()` and `vqt()` return the magnitude, with `frequencies` beside it; the C++ result also holds the complex coefficients. Defaults (C1 `fmin`, 84 bins, 12 bins per octave) match librosa, and an omitted `gamma` selects the automatic bandwidth
 
 ### 3. Window Normalization
 
@@ -440,12 +440,12 @@ partly silent material that changes a level which was already correct.
 
 ### 4. Chroma Tuning Reference
 
-- **librosa**: `chroma_stft` defaults to `tuning=None`, which runs `estimate_tuning()` on the signal and re-centres the pitch-class grid on the recording
+- **librosa**: `chroma_stft` defaults to `tuning=None`, which runs `estimate_tuning()` on the signal and re-centers the pitch-class grid on the recording
 - **libsonare**: the standalone `chroma()` reads a fixed concert A440 and takes no `tuning`. The music-analysis calls (`analyze`, `detectChords`, `detectKey`) take `tuning`, default `0`, and measure it from the audio with `tuning: 'auto'` (Python `tuning="auto"`)
 
 On material recorded away from A440 the two chromagrams diverge structurally,
-not within a tolerance: libsonare's bins smear across neighbouring pitch classes
-and key/chord results degrade. For key and chords, pass `tuning: 'auto'`; each
+not within a tolerance: libsonare's bins smear across neighboring pitch classes
+and key/chord results degrade. For key and chords, pass `tuning: 'auto'` (see [Music Analysis](./analysis.md)); each
 result reports the semitone fraction it used. To match librosa's chromagram
 itself, estimate the offset with `estimateTuning()` / `estimate_tuning()` and
 apply it in your own pipeline; at 12 bins per octave it is the same unit the

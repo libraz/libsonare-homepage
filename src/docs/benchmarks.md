@@ -9,7 +9,7 @@ Lower latency means the operation finished faster for this exact workload. A spe
 :::
 
 ::: danger Native numbers are not browser numbers
-Every figure on this page is labelled **native** or **browser (WebAssembly)**, and they are not interchangeable.
+Every figure on this page is labeled **native** or **browser (WebAssembly)**, and they are not interchangeable.
 
 The native build runs its transforms on SIMD FFT kernels: PFFFT serves every transform length it can factor, and KissFFT keeps the rest. The WebAssembly configuration keeps KissFFT alone — `CMakeLists.txt` forces `SONARE_USE_PFFFT=OFF` under `BUILD_WASM`, because carrying both FFTs costs the analysis-only module more than its size budget allows.
 
@@ -121,7 +121,7 @@ If you need beats along with anything else, call `analyze()` instead. The pipeli
 
 ## Is It Right? Accuracy On The Same Fixture
 
-Speed says how fast an answer arrives, not whether it is correct. The fixture is synthesised from an explicit tempo, beat grid, chord progression and key, and `generate_audio.py` writes that description out beside the WAV — so unlike a real recording, this benchmark comes with an answer key.
+Speed says how fast an answer arrives, not whether it is correct. The fixture is synthesized from an explicit tempo, beat grid, chord progression and key, and `generate_audio.py` writes that description out beside the WAV — so unlike a real recording, this benchmark comes with an answer key.
 
 | What | Reference | Result |
 |------|-----------|--------|
@@ -211,9 +211,9 @@ The browser pays one cost the native build never does: fetching the module. Thes
 | Asset | Raw | gzip |
 |-------|-----|------|
 | `sonare.wasm`, the full entry | ~{{ wasmMeta.wasm.sizeKB }} KB | ~{{ wasmMeta.wasm.gzipKB }} KB |
-| Every WebAssembly and JavaScript asset the site copies, realtime worklet module included | ~{{ wasmMeta.total.sizeKB }} KB | ~{{ wasmMeta.total.gzipKB }} KB |
+| `sonare.wasm`, `sonare.js` and `index.js` together | ~{{ wasmMeta.total.sizeKB }} KB | ~{{ wasmMeta.total.gzipKB }} KB |
 
-The gzip column is what crosses the wire; the raw column is what the engine compiles and holds in memory. Neither scales with anything you do — the module is the same size for a 10-second clip and a two-hour one, and a page that loads it once keeps it for the session. The analysis-only entry behind `@libraz/libsonare/analysis` is substantially smaller than the full one; the [WebAssembly Guide](/docs/wasm#bundle-size) has the per-file breakdown and the loader trade-offs.
+The total leaves out the realtime worklet bundle (`worklet.js`), which loads only on a page that runs the realtime engine in an AudioWorklet. The gzip column is what crosses the wire; the raw column is what the engine compiles and holds in memory. Neither scales with anything you do — the module is the same size for a 10-second clip and a two-hour one, and a page that loads it once keeps it for the session. The analysis-only entry behind `@libraz/libsonare/analysis` is substantially smaller than the full one; the [WebAssembly Guide](/docs/wasm#bundle-size) has the per-file breakdown and the loader trade-offs.
 
 ## Where the Big Wins Come From (Native)
 
@@ -281,7 +281,7 @@ Three things follow. The gain is per frame, so the ratio holds at any clip lengt
 
 ## Wins That Do Reach the Browser
 
-The FFT backend is why most of the table above is native-only. These two are not: they are properties of how the work is organised rather than of the instruction set, so a tab gets them in full. Both are before/after pairs, and each is the effect of one change measured on one input; neither is part of the `sonare_bench` suite (`sonare_true_peak_bench` measures the realtime meter's streaming path, which is a different thing), so the inputs are stated here in full.
+The FFT backend is why most of the table above is native-only. These two are not: they are properties of how the work is organized rather than of the instruction set, so a tab gets them in full. Both are before/after pairs, and each is the effect of one change measured on one input; neither is part of the `sonare_bench` suite (`sonare_true_peak_bench` measures the realtime meter's streaming path, which is a different thing), so the inputs are stated here in full.
 
 | Measurement | Input | Before | After | What grows with input length |
 |-------------|-------|--------|-------|------------------------------|
@@ -297,7 +297,7 @@ This is the figure that decides whether a long file fits in a tab. The shipped W
 ## What's Not Faster (And Where)
 
 - **STFT itself**: natively libsonare comes out 1.85x ahead, because its transform runs on SIMD kernels while librosa delegates to `scipy.fft`. In the browser there is no SIMD backend to run on, and the tables above put the WebAssembly STFT behind librosa on the same fixture — so this row reverses depending on where you run it.
-- **Mel / MFCC / Onset Strength**: dominated by their underlying STFT cost — once that is paid, the per-frame Mel filterbank multiplication and DCT are too cheap for a different language to matter. They therefore inherit whatever the transform does: natively about 1.25x in libsonare's favour on all three, and in the browser roughly 3x the native cost, which puts them behind librosa there.
+- **Mel / MFCC / Onset Strength**: dominated by their underlying STFT cost — once that is paid, the per-frame Mel filterbank multiplication and DCT are too cheap for a different language to matter. They therefore inherit whatever the transform does: natively about 1.25x in libsonare's favor on all three, and in the browser roughly 3x the native cost, which puts them behind librosa there.
 - **Beat tracking**: *slower* than librosa when called standalone, on either runtime, and by the widest margin of any row. Use `analyze()`, which shares the onset envelope, if you need beats alongside anything else.
 - **Pipeline use cases**: inside `analyze()` these same features cost between 0.47 ms and 8.75 ms apiece natively — onset strength 0.47 ms, MFCC 0.89 ms, chroma 1.10 ms, spectral centroid 2.65 ms, mel spectrogram 8.75 ms — because the STFT and Mel are computed once and shared. The standalone numbers above represent the "what does it cost to call this in isolation" view, not the in-pipeline cost.
 
@@ -345,4 +345,4 @@ The native column above measures libsonare's C++ performance directly. If you ca
 - Numbers are hardware-dependent. Apple M5 Max here; relative gaps are stable across machines, absolute milliseconds are not. Ratios are the part worth carrying to your own hardware.
 - Synthetic test audio (deterministic chord progression + percussive bursts) is generated locally by a committed script rather than shipped as a binary, along with the ground truth the accuracy section scores against.
 - WASM builds are single-threaded, so the speedups that come from fanning out across cores shrink there — HPSS most of all. They also keep KissFFT alone, so the transform-bound rows shrink for a second, independent reason. The paths that are neither threaded nor transform-bound, the pYIN lattice among them, carry over almost unchanged. Build the WASM bench above and measure it on the runtime you care about rather than scaling the native figures by guesswork.
-- The offline LUFS and true-peak behaviour described under [Wins That Do Reach the Browser](#wins-that-do-reach-the-browser) is the exception: it is algorithmic, so it holds on every runtime.
+- The offline LUFS and true-peak behavior described under [Wins That Do Reach the Browser](#wins-that-do-reach-the-browser) is the exception: it is algorithmic, so it holds on every runtime.

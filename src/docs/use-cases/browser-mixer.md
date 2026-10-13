@@ -7,7 +7,9 @@ description: Build a mixing-only web app from the Mixing Studio demo, with one p
 
 A mixing-only web app needs file loading, synchronized playback, track controls, and a rendered download. libsonare supplies the DSP and routing; the app owns the interface, audio storage, and WAV encoding. MIDI editing, instruments, and recording can be left out.
 
-The [Mixing Studio](/mixing) is a working example: load local stems, place and fade clips, adjust trim, a six-band EQ, gate, compressor, de-esser, ducking, pan, width, sends to a plate reverb and a delay, and a master glue compressor and limiter, then bounce and download a stereo WAV. Start with **Load demo**, listen with **Play**, change a fader, and use **Bounce WAV**. The app processes audio locally.
+The [Mixing Studio](/mixing) is a working example: load local stems, place and fade clips, adjust trim, a six-band EQ, gate, compressor, de-esser, ducking, pan, width, sends to a plate reverb and a delay, routing each track to the master or one of two subgroup buses, and a master glue compressor and limiter, then bounce and download a stereo WAV. Start with **Load demo**, listen with **Play**, change a fader, and use **Bounce WAV**. The app processes audio locally. The three lanes below are the engine's own channel strips, the controls the studio is built from.
+
+<SonareDemo id="engine-lane-mixer" />
 
 ## Choose the playback and rendering API
 
@@ -17,13 +19,87 @@ The [Mixing Studio](/mixing) is a working example: load local stems, place and f
 | Run a focused stem mixer with a custom playback bridge | [`Mixer`](../mixing.md#scene-based-mixing-mixer) | Feed blocks, manage transport, communicate UI changes, and render the same graph offline |
 | Keep timeline playback, controls, automation, and offline rendering together | [`SonareEngine`](../realtime-streaming.md#audioworklet-notes) from `@libraz/libsonare/worklet` | Load clips, declare lanes and routing, connect the output, and provide the UI and persistence |
 
-For a new app with interactive playback and export, start from the existing [SonareEngine setup and control table](../realtime-streaming.md#mastering-preview-in-the-render-realm). The facade mirrors controls to an AudioWorklet engine and an offline engine. Its `renderOffline` result is PCM, and `bounceOffline` returns an interleaved buffer with the raw engine's options (see [Offline render, bounce, and freeze](../realtime-streaming.md#offline-render-bounce-and-freeze)); encoding and downloading a WAV remain app work. Long offline jobs need a worker strategy: an async method alone does not move computation off the main thread.
+For a new app with interactive playback and export, start from the [SonareEngine setup and control table](../realtime-streaming.md#audioworklet-notes). The facade mirrors controls to an AudioWorklet engine and an offline engine. Its `renderOffline` result is PCM, and `bounceOffline` returns an interleaved buffer with the raw engine's options (see [Offline render, bounce, and freeze](../realtime-streaming.md#offline-render-bounce-and-freeze)); encoding and downloading a WAV remain app work. Long offline jobs need a worker strategy: an async method alone does not move computation off the main thread.
 
-Mixing Studio uses the third row. The facade plays the project live, and a worker bounces the same project on a plain `RealtimeEngine`. Continuous controls reach the engine through setters, so a fader move during playback keeps processor state such as reverb history. The few construction-only parameters, such as a gate's hold time, rebuild the strip's inserts, so the page applies them when the control is released.
+Mixing Studio uses the third row. The facade plays the project live, and a worker bounces the same project on a plain `RealtimeEngine`. Continuous controls reach the engine through setters, so a fader move during playback keeps processor state such as reverb history. The few construction-only parameters, such as a gate's hold time, rebuild the strip's inserts, so the page applies them when the control is released. A track's output, the master or a subgroup bus, is set with `setTrackOutputBus` as one more operation in the same list, so the preview and the bounce route identically.
+
+## Render a mix in one call
+
+The smallest working mixer is `mixStereo`: decode the stems, pad them to one length, mix, and encode the result. Fader, pan, trim and width take one value per stem; `mix.meters[i]` holds each stem's meter for the block. `files` is the `File[]` from your picker, and the zeros stand in for values from your UI.
+
+```typescript
+import { init, mixStereo } from '@libraz/libsonare';
+
+await init();
+const ctx = new AudioContext();
+
+// Decode at the context rate, then pad every stem to the longest one.
+const buffers = await Promise.all(
+  files.map(async (f) => ctx.decodeAudioData(await f.arrayBuffer())),
+);
+const length = Math.max(...buffers.map((b) => b.length));
+const channel = (b: AudioBuffer, i: number) => {
+  const out = new Float32Array(length);
+  out.set(b.getChannelData(Math.min(i, b.numberOfChannels - 1))); // mono feeds both sides
+  return out;
+};
+
+const mix = mixStereo(
+  buffers.map((b) => channel(b, 0)),
+  buffers.map((b) => channel(b, 1)),
+  ctx.sampleRate,
+  { faderDb: buffers.map(() => 0), pan: buffers.map(() => 0) },
+);
+
+// 16-bit stereo WAV.
+function encodeWav(left: Float32Array, right: Float32Array, sampleRate: number): Blob {
+  const n = left.length;
+  const view = new DataView(new ArrayBuffer(44 + n * 4));
+  const tag = (o: number, s: string) => [...s].forEach((c, i) => view.setUint8(o + i, c.charCodeAt(0)));
+  tag(0, 'RIFF'); view.setUint32(4, 36 + n * 4, true); tag(8, 'WAVEfmt ');
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 2, true);
+  view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 4, true);
+  view.setUint16(32, 4, true); view.setUint16(34, 16, true);
+  tag(36, 'data'); view.setUint32(40, n * 4, true);
+  const s16 = (x: number) => Math.round(Math.max(-1, Math.min(1, x)) * 32767);
+  for (let i = 0; i < n; i++) {
+    view.setInt16(44 + i * 4, s16(left[i]), true);
+    view.setInt16(46 + i * 4, s16(right[i]), true);
+  }
+  return new Blob([view.buffer], { type: 'audio/wav' });
+}
+
+const url = URL.createObjectURL(encodeWav(mix.left, mix.right, mix.sampleRate));
+```
+
+The rest of this page is what an app adds around that call: live playback, edits that stay in sync with the export, and project files.
 
 ## Keep audio, project state, and engine operations separate
 
-1. Decode all files with one `AudioContext`. A mono input is copied to both sides, and inputs with more than two channels use only the first two, so a surround app needs an explicit channel mapping instead. The demo keeps both channels at the context's sample rate: a mono analysis buffer cannot replace stereo playback audio.
+<FlowDiagram
+  title="One state, one op list, two engines"
+  direction="TB"
+  :nodes="[
+    { id: 'state', label: 'Project state', col: 1, row: 0 },
+    { id: 'diff', label: 'mixingEngine.ts diff', col: 1, row: 1 },
+    { id: 'ops', label: 'EngineOp[]', col: 1, row: 2, variant: 'accent' },
+    { id: 'live', label: 'SonareEngine (AudioWorklet)', col: 0, row: 3, variant: 'accent' },
+    { id: 'worker', label: 'RealtimeEngine (Worker)', col: 2, row: 3, variant: 'accent' },
+    { id: 'preview', label: 'Live preview', col: 0, row: 4, variant: 'success' },
+    { id: 'bounce', label: 'Bounced PCM', col: 2, row: 4, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'state', to: 'diff', label: 'prev → next' },
+    { from: 'diff', to: 'ops' },
+    { from: 'ops', to: 'live', label: 'createFacadeTarget' },
+    { from: 'ops', to: 'worker', label: 'createRawTarget' },
+    { from: 'live', to: 'preview' },
+    { from: 'worker', to: 'bounce' }
+  ]"
+  caption="engineApply.ts interprets the same operations over the live facade and over the export Worker's raw engine, so the preview and the bounce are one render."
+/>
+
+1. Decode all files with one `AudioContext`. A mono input is copied to both sides. A 5.1 or 7.1 file is folded to stereo with the engine's `downmix` (centre and surrounds at −3 dB, LFE dropped), and any other channel count above two is folded to mono, so an app that keeps surround channels separate needs its own channel mapping. The demo keeps both channels at the context's sample rate: a mono analysis buffer cannot replace stereo playback audio.
 2. Keep PCM arrays in an audio registry keyed by track id, outside the project state. A clip has a start position, a trim into the source, a length, and fades. Imported stems start together at zero; moving a clip is an explicit timeline edit.
 3. Keep the project as one plain, serializable object: tracks, buses, master, VCA gains, and loop. Every edit is a pure function from one state to the next, the difference between two states becomes a list of engine operations, and undo and redo take the same path. The [mixer scene](../mixing-scene-json.md) format describes a standalone `Mixer` graph; the demo drives the realtime engine directly and does not use it.
 4. Save the [project JSON](../mixing-demo-project-json.md) separately. It holds the state without audio; a reopened project lists its tracks as waiting for audio, and each file added attaches to the track with the same name, otherwise to the next one in order.
@@ -61,7 +137,7 @@ The demo imports copied engine assets through `@/wasm`. In a separate app, use t
 | Channel delay | Applied only while stopped; an edit made during playback waits for the transport to stop |
 | Auto-mix A/B | Switches the live mix between yours and the suggestion, loudness-matched at the monitor stage only; the louder side is turned down, and the match never reaches the bounce or the project |
 | Preview and bounce | Render bit-exact from the same state |
-| Effect tails and graph latency | The bounce extends past the last clip by the longest bus tail and path latency |
+| Effect tails and graph latency | The bounce runs to the last clip's end plus the engine's reported graph latency (`graphLatencySamplesQ8`) and tail (`tailSamples()`) |
 | Project file | v2 holds the state without audio; a v1 file is converted when opened |
 
 The worker receives the track PCM transferred from the registry, so while a bounce, an analysis, or a loudness measurement runs the arrays are detached and editing is locked; they return to the registry when the job ends. Each source is held in the page, in the engine, and in the bounce worker, which raises peak memory use.

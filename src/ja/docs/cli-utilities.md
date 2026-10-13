@@ -7,7 +7,7 @@ description: librosa 互換のためにネイティブ sonare CLI が持つ低�
 
 ネイティブの `sonare-cli` には、`librosa.util` と librosa の変換関数に対応する低レベルのヘルパーがあります。フレーム／サンプル変換、4 種のデシベル変換、フレーム分割、パディング、長さ調整、ピーク検出、ベクトル正規化です。librosa から移植したスクリプトの数値を、バインディングを書かずにエンジン側と突き合わせるためのもので、想定する読者は [CLI コマンド](./cli-commands.md) とは異なります。曲を解析する人ではなく、計算を再現する人向けです。このページの例は `sonare` と書いていますが、ネイティブ CLI のみと記したコマンドは `sonare-cli` に読み替えてください。
 
-12 個の数値ヘルパーはオーディオファイルを取りません。`frames-to-samples --frames N` と `samples-to-frames --samples N` の 2 つは整数を 1 つ受け取り、残りの 10 個は `--values` でカンマ区切りの数列を受け取ります。`--values` は必須で、空の列や解釈できない要素は拒否されます（`invalid float value in --values: x`）。通常の出力は結果をカンマ区切りで 1 行に並べたもので、`--json` は素の JSON 配列を返します。例外は各表に記しています。ページ末尾の 2 つはさらに性格が違い、`tune-to-midi` はオーディオファイルを取って両方の CLI にあり、`system-info` は引数を一切取りません。
+12 個の数値ヘルパーはオーディオファイルを取りません。`pcen` も `--values` を取りますが特徴量コマンドなので、[CLI コマンド](./cli-commands.md#その他の特徴量) に載せています。`frames-to-samples --frames N` と `samples-to-frames --samples N` の 2 つは整数を 1 つ受け取り、残りの 10 個は `--values` でカンマ区切りの数列を受け取ります。`--values` は必須で、空の列や解釈できない要素は拒否されます（`invalid float value in --values: x`）。通常の出力は結果をカンマ区切りで 1 行に並べたもので、`--json` は素の JSON 配列を返します。例外は各表に記しています。ページ末尾の 2 つはさらに性格が違い、`tune-to-midi` はオーディオファイルを取って両方の CLI にあり、`system-info` は引数を一切取りません。
 
 ## フレームとサンプルの変換
 
@@ -37,7 +37,7 @@ sonare samples-to-frames --samples 6144 --json    # {"frames": 10}
 
 ```bash
 sonare amplitude-to-db --values 1,0.1          # 0,-20
-sonare db-to-amplitude --values 0,-20 --json   # [1, 0.1]
+sonare db-to-amplitude --values 0,-20 --json   # [1, 0.100000001]
 ```
 
 ## フレーム分割、パディング、長さ調整
@@ -115,4 +115,4 @@ Parallel Configuration
   Strategy: aggressive_parallel
 ```
 
-戦略は `sequential_only`、`conservative_parallel`、`balanced_parallel`、`aggressive_parallel` のいずれかで、論理コア数 1、2、4、8 を境に選ばれます。`--json` は同じ値を `cpu`、`memory`、`parallel` の下に入れ子で返します。バッチが想定より遅いときや、`sonare` プロセスをいくつ並べて走らせるか決める前に実行してください。ビルドが何をデコードでき、どの機能群がコンパイルされているかを知るコマンドは [`doctor`](./cli.md#doctor) です。
+戦略は `sequential_only`、`conservative_parallel`、`balanced_parallel`、`aggressive_parallel` のいずれかで、論理コア数 1、2、4、8 を境に選ばれます。`--json` は同じ値を `cpu`、`memory`、`parallel` の下に入れ子で返します。バッチが想定より遅いときや、`sonare` プロセスをいくつ並べて実行するか決める前に実行してください。ビルドが何をデコードでき、どの機能群がコンパイルされているかを知るコマンドは [`doctor`](./cli.md#doctor) です。

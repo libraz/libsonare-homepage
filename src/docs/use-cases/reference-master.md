@@ -93,11 +93,11 @@ sonare mastering-profile reference.wav --json
                 "sub_rms_db": 11.07, "low_rms_db": 21.40, "air_rms_db": -14.28 },
   "dynamics": { "short_term_lufs_std": 3.21, "attack_density": 4.15,
                 "sustain_ratio": 0.58 },
-  "defects": { "measured": false }
+  "defects": { "measured": false, /* ... */ }
 }
 ```
 
-The CLI renders the binding's camelCase profile keys as snake_case. One call gives you tempo, loudness, spectral shape, and dynamics for the file you are chasing — the same measured fields [Mastering Assistant](../mastering-assistant.md) profiles for your own mix. Read this before the comparison: a reference at -24.56 LUFS integrated is quiet by streaming standards, which matters later when you decide whether to actually chase its loudness or just its tone.
+The CLI renders the binding's camelCase profile keys as snake_case. `defects` is abbreviated: `measured` is `false` and the damage fields hold defaults unless you ask for the measurement with `--params detectDefects=1`. One call gives you tempo, loudness, spectral shape, and dynamics for the file you are chasing — the same measured fields [Mastering Assistant](../mastering-assistant.md) profiles for your own mix. Read this before the comparison: a reference at -24.56 LUFS integrated is quiet by streaming standards, which matters later when you decide whether to actually chase its loudness or just its tone.
 
 Three of those `loudness` fields are what the meter below reports on a playing clip: integrated LUFS is the single number the next step will compare against your mix, true peak is the ceiling, and LRA is how far the loudness moves over the programme. A reference with a wide LRA hides a lot of motion behind its one integrated figure — matching that figure alone will not make your mix move the same way.
 
@@ -105,16 +105,34 @@ Three of those `loudness` fields are what the meter below reports on a playing c
 
 ## Step 2 — Measure the loudness gap
 
-```bash
+::: code-group
+
+```bash [CLI]
 sonare mastering-pair-analyze mix.wav --reference reference.wav \
   --analysis match.referenceLoudness --json
 ```
+
+```typescript [Node]
+import { masteringPairAnalyze } from '@libraz/libsonare-native';
+
+// mix, reference: mono Float32Array at the same sample rate
+const result = JSON.parse(masteringPairAnalyze('match.referenceLoudness', mix, reference, 48000));
+```
+
+```python [Python]
+import json
+import libsonare as sonare
+
+result = json.loads(sonare.mastering_pair_analyze("match.referenceLoudness", mix, reference, 48000))
+```
+
+:::
 
 ```json
 { "gain_to_match_db": -1.70, "reference_lufs": -24.56, "source_lufs": -22.86 }
 ```
 
-`gain_to_match_db` is the gain that lands the source on the reference's loudness: `source_lufs + gain_to_match_db = reference_lufs`. Here the mix is 1.7 dB hotter than the reference, so a negative number brings it down to match.
+The library calls return the same fields in camelCase (`gainToMatchDb`, `referenceLufs`, `deviationDb`), and take one mono array per file. `gain_to_match_db` is the gain that lands the source on the reference's loudness: `source_lufs + gain_to_match_db = reference_lufs`. Here the mix is 1.7 dB hotter than the reference, so a negative number brings it down to match.
 
 ::: tip Matching loudness is not the same as choosing a target
 This number says "your mix and the reference differ by 1.7 dB," not "master to -24.56 LUFS." A reference pulled from a different era or platform can sit well off a current delivery target — see [Delivery Targets](../glossary/mastering/delivery-targets.md) before treating `reference_lufs` as the number to land on.
@@ -122,10 +140,28 @@ This number says "your mix and the reference differ by 1.7 dB," not "master to -
 
 ## Step 3 — Measure the tonal gap, band by band
 
-```bash
+::: code-group
+
+```bash [CLI]
 sonare mastering-pair-analyze mix.wav --reference reference.wav \
   --analysis match.tonalBalance --json
 ```
+
+```typescript [Node]
+import { masteringPairAnalyze } from '@libraz/libsonare-native';
+
+// mix, reference: mono Float32Array at the same sample rate
+const result = JSON.parse(masteringPairAnalyze('match.tonalBalance', mix, reference, 48000));
+```
+
+```python [Python]
+import json
+import libsonare as sonare
+
+result = json.loads(sonare.mastering_pair_analyze("match.tonalBalance", mix, reference, 48000))
+```
+
+:::
 
 ```json
 {
@@ -148,10 +184,19 @@ A deviation that swings smoothly from positive at one end to negative at the oth
 
 Read the tilt amount off the two extreme bands: the low band needs about -2 dB, the high band needs about +2 dB, so `tiltDb ≈ (low-band deviation) - (high-band deviation) = 2.00 - (-2.00) = 4.0`. Treat that as a starting point, not a final answer — the whole reason for Step 6 is to confirm it rather than trust the arithmetic.
 
-Two other tools are usable here, and each fits a different deviation shape:
+The demo sweeps `tilt` on a full mix. The spectrum rotates around the pivot, so the low and high sides move in opposite directions.
 
-- **`eq.shelving`** applies an independent low shelf and high shelf, each with its own corner frequency and gain. Reach for it when the low and high corrections do not share one sensible pivot — for example when the low end needs trimming below 250 Hz but the lift should only start above 8 kHz, not at 1 kHz. Run against this fixture (`lowFrequencyHz=250, lowGainDb=-2, highFrequencyHz=2000, highGainDb=2`) it closed the gap to 0.27 / 0.12 / -0.13 / -0.001 dB — good, but not as clean as the tilt, because two shelves cannot reproduce one continuous slope exactly.
-- **`eq.equalizer`** is a full parametric EQ with up to two dozen bands (`band0.*` through `band23.*`), each independently typed as peak, shelf, or tilt. Reach for it when the deviation is not tilt- or shelf-shaped at all — a narrow dip or peak sitting inside one of the four tonal-balance bands, which neither a single pivot nor two shelves can isolate.
+<SonareDemo id="tilt-eq" />
+
+Three processors can make the correction, and the shape of the deviation picks one:
+
+| Deviation shape | Processor | Key params | Result on this fixture |
+|---|---|---|---|
+| One smooth swing that crosses zero once | `eq.tilt` | `tiltDb`, `pivotHz` (1000 Hz by default) | 0.00 dB in all four bands |
+| Low and high corrections with different pivots, such as trimming below 250 Hz but lifting only above 8 kHz | `eq.shelving` | `lowFrequencyHz`, `lowGainDb`, `highFrequencyHz`, `highGainDb` | 0.27 / 0.12 / -0.13 / -0.001 dB with `lowFrequencyHz=250, lowGainDb=-2, highFrequencyHz=2000, highGainDb=2` |
+| A narrow dip or peak inside one band, which neither a single pivot nor two shelves can isolate | `eq.equalizer` (up to 24 bands, each a peak, shelf, or tilt) | `band0.*` through `band23.*` | Not used |
+
+Two shelves cannot reproduce one continuous slope exactly, which is why `eq.shelving` lands close but not as clean as the tilt.
 
 This fixture's deviation is a clean tilt, so `eq.tilt` is the right tool and the one this page carries through.
 

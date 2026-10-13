@@ -42,7 +42,7 @@ For live browser processing, call `init()` and `prepare(sampleRate, maxBlockSize
 | `maxBlockSize` | The largest block you will pass to `processMono(...)`. For the standard AudioWorklet render quantum, `128` is a good starting point. |
 | `channels` | The examples here are mono, so pass `1`. For interleaved input, use `processInterleaved(...)`. |
 | Output buffer | Use `processMono(...)` for a simple implementation. In an AudioWorklet hot path, write into preallocated output with `processMonoInto(...)` or the heap-backed buffer path. |
-| Cleanup | Call `delete()` exactly once when the component unmounts, the worklet stops, or recording ends. |
+| Cleanup | Call `delete()` when the component unmounts, the worklet stops, or recording ends. It releases the handle once; repeating it does nothing. |
 
 *Interleaved* means the channels are stored alternately in one array (L, R, L, R…), whereas *mono* is a single channel; use `processInterleaved(...)` for the former and `processMono(...)` for the latter.
 
@@ -109,7 +109,7 @@ The `eq` block configures both ends of the chain: `highpassHz` is the cleanup hi
 ::: info Voice-chain terms in one place
 - **High-pass** — a cleanup filter at the front that removes sub-bass rumble and DC before any other stage.
 - **Gate** — mutes the signal when it drops below a threshold, removing low-level mic/room noise between phrases.
-- **Retune** — moves the whole signal up or down by a fixed interval; separate from formant, which changes vocal character without moving the note. It is a transposer, not an auto-tuner — nothing here listens to what note you sang.
+- **Retune** — moves the whole signal up or down by a fixed interval; separate from formant, which changes vocal character without moving the note. It shifts by a fixed amount and is not automatic pitch correction; nothing here listens to what note you sang.
 - **Formant** — the resonances that make a voice sound large/small or male/female; shifting them changes vocal character without changing the note.
 - **Compressor** — automatically evens out loud and quiet parts so the level stays steady.
 - **De-esser** — tames harsh "s"/"sh" sounds (sibilance).
@@ -195,14 +195,14 @@ sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
 :::
 
 ::: warning Cleanup differs by binding
-The construct/process flow is shared, but each runtime releases its native handle differently — release it exactly once.
+The construct/process flow is shared, but each runtime releases its native handle differently.
 
-- **Browser / WASM** — call `delete()` (in the `finally`, on component unmount, or when the worklet stops).
-- **Node native** — call `destroy()`; `using` (Node 22+) can free it automatically.
-- **Python** — the `with` block releases the handle; outside a `with`, call `close()`.
+- **Browser / WASM**: call `delete()` (`destroy()` is an alias) in the `finally`, on component unmount, or when the worklet stops, or declare the changer with `using`. The call is idempotent.
+- **Node native**: call `destroy()`; `using` (Node 22+) can free it automatically.
+- **Python**: the `with` block releases the handle; outside a `with`, call `close()`.
 :::
 
-For AudioWorklet-style loops, use the heap-backed realtime buffers documented in [Browser / WASM](./wasm-streaming.md#realtime-voice-changer). They avoid allocating a new output array on every render quantum, which the browser example's plain `processMono(...)` does.
+For AudioWorklet-style loops, use the heap-backed realtime buffers documented in [Browser / WASM](./wasm-streaming.md#realtime-voice-changer). They avoid allocating a new output array on every render quantum, which the browser example's plain `processMono(...)` does. The package also ships a ready-made processor, `registerSonareRealtimeVoiceChangerWorkletProcessor` from `@libraz/libsonare/worklet`; see [In an AudioWorklet](./wasm-streaming.md#in-an-audioworklet).
 
 ## CLI Modes
 
@@ -280,7 +280,7 @@ document carries exactly one of the two sections — supplying both `dsp` and
 between them.
 
 Each 0–1 macro maps onto its target's valid range rather than being written
-through raw — `macros.space` at `1.0` reaches the reverb mix ceiling of `0.45`,
+through raw: `macros.space` at `1.0` reaches the reverb mix ceiling of `0.45`,
 it does not write `1.0` into a parameter that would reject it.
 
 ## Formant mode
@@ -294,9 +294,13 @@ By default (`formantMode: 'relative'`) the formant stage runs after the retune, 
 | Latency | Reported `latencySamples()` | One analysis frame more (1024 samples at 48 kHz, measured) |
 | Reachable range | `formantFactor` within its parameter bounds | `formantFactor / 2^(retuneSemitones / 12)` within [0.55, 1.65] |
 
-The mode is fixed when the changer is created and prepared. A config carrying a different mode is refused (`SonareError`, "formant mode is fixed at prepare()"), and so is an absolute config outside the reachable range; the error names the `formantFactor` range that is reachable at that pitch shift and the `formantFactor` bound that range is intersected with (at +12 semitones: reachable `[1.1, 1.65]`, the warp reaching `[1.1, 3.3]`, limited by `formantFactor`'s `[0.55, 1.65]`). Automation clamps instead of refusing.
+The mode is fixed when the changer is created and prepared. In the JSON the key is optional and defaults to `relative`; in the flat POD config the field is required. A config carrying a different mode is refused (`SonareError`, "formant mode is fixed at prepare()"), and so is an absolute config outside the reachable range; the error names the `formantFactor` range that is reachable at that pitch shift and the `formantFactor` bound that range is intersected with (at +12 semitones: reachable `[1.1, 1.65]`, the warp reaching `[1.1, 3.3]`, limited by `formantFactor`'s `[0.55, 1.65]`). Automation clamps instead of refusing.
 
 ```typescript
+import { init, RealtimeVoiceChanger, realtimeVoiceChangerPresetConfig } from '@libraz/libsonare';
+
+await init();
+
 const cfg = realtimeVoiceChangerPresetConfig('neutral-monitor');
 const changer = new RealtimeVoiceChanger({
   ...cfg,
@@ -304,10 +308,15 @@ const changer = new RealtimeVoiceChanger({
   retuneSemitones: 5,
   formantFactor: 1, // +5 semitones, formants unmoved
 });
-changer.prepare(48000, 128, 1);
+try {
+  changer.prepare(48000, 128, 1);
+  console.log(changer.latencySamples()); // one analysis frame more than relative mode
+} finally {
+  changer.delete();
+}
 ```
 
-The flat POD config that `realtimeVoiceChangerPresetConfig(...)` returns and `setPodConfig(...)` accepts requires every field, `formantMode` included; omitting it throws a `TypeError`. The C struct carries a leading `struct_version` and `formant_mode`, and `SONARE_VOICE_CHANGER_ABI_VERSION` is 3, so C callers rebuild against the current header.
+The flat POD config that `realtimeVoiceChangerPresetConfig(...)` returns, and that the constructor, `setConfig(...)` and `setPodConfig(...)` accept, requires every field, `formantMode` included; omitting it throws a `TypeError`. In C, start from `sonare_realtime_voice_changer_config_default()`; `struct_version` of 0 or 1 gives the current 152-byte layout. `SONARE_VOICE_CHANGER_ABI_VERSION` is 3, so C callers rebuild against the current header.
 
 ## As a mixer insert
 

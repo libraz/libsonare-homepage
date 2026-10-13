@@ -59,8 +59,6 @@ The UI separates local errors from worker errors:
 
 Those object URLs are revoked when replaced, so repeated attempts do not leak browser memory. The same design keeps the residual footprint small if a long render is interrupted by closing the tab mid-process.
 
-The validation script exercises the mastering presets with generated signals and checks that each preset produces finite loudness, bounded peaks, and expected stage names. That does not prove every user file will succeed, but it catches broken processor wiring before release.
-
 ::::
 
 Related: [Repair and Input Controls](./repair.md), [Dynamics Controls](./dynamics.md), [Delivery Targets](./delivery-targets.md)

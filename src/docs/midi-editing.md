@@ -50,7 +50,7 @@ project.setMidiEvents(midiClip, [
   Project.midiNoteOn(0, 0, 0, 60, 100),  // (ppq, group, channel, note, velocity)
   Project.midiNoteOff(2, 0, 0, 60),
   Project.midiNoteOn(2, 0, 0, 64, 100),
-  Project.midiNoteOff(4, 0, 0, 64),
+  Project.midiNoteOff(3.75, 0, 0, 64),
 ]);
 project.setProgram(midiClip, 4);          // GM program (e.g. 4 = electric piano)
 // Keep `project` for the following edit steps; call project.delete() when done.
@@ -66,7 +66,7 @@ project.set_midi_events(midi_clip, [
     sonare.Project.midi_note_on(0.0, 0, 0, 60, 100),  # (ppq, group, channel, note, velocity)
     sonare.Project.midi_note_off(2.0, 0, 0, 60),
     sonare.Project.midi_note_on(2.0, 0, 0, 64, 100),
-    sonare.Project.midi_note_off(4.0, 0, 0, 64),
+    sonare.Project.midi_note_off(3.75, 0, 0, 64),
 ])
 project.set_program(midi_clip, 4)          # GM program (e.g. 4 = electric piano)
 # Keep `project` for the following edit steps; call project.close() when done.
@@ -74,12 +74,16 @@ project.set_program(midi_clip, 4)          # GM program (e.g. 4 = electric piano
 
 :::
 
+A clip like this, drawn as a piano roll and played:
+
+<SonareDemo id="midi-piano-roll" />
+
 In Python the static packers are `Project.midi_note_on(...)` / `Project.midi_note_off(...)`, each returning a `(ppq, data0, data1)` tuple, and the events list is any sequence of those tuples.
 
-`setProgram` takes an optional third `bank` argument — `setProgram(clipId, program, bank?)`. Omit it and no Bank Select is emitted; pass a value `>= 0` to emit a Bank Select ahead of the program change. A negative `bank` is refused (`RangeError` on Node and WASM, `SonareValueError` in Python); `-1` is not a way to say "none". To change the program on a specific UMP (Universal MIDI Packet) group and channel rather than the clip default, use `setProgramOnChannel(clipId, group, channel, program, bank?)`. Both take the same optional `bank` across the WASM, Node, and Python bindings (`set_program(clip_id, program, bank=None)`, `set_program_on_channel(clip_id, group, channel, program, bank=None)`).
+`setProgram` takes an optional third `bank` argument: `setProgram(clipId, program, bank?)`. Omit it and no Bank Select is emitted; pass a value `>= 0` to emit a Bank Select ahead of the program change. A negative `bank` is refused (`RangeError` on Node and WASM, `SonareValueError` in Python); `-1` is not a way to say "none". To change the program on a specific UMP (Universal MIDI Packet) group and channel rather than the clip default, use `setProgramOnChannel(clipId, group, channel, program, bank?)`. Both take the same optional `bank` across the WASM, Node, and Python bindings (`set_program(clip_id, program, bank=None)`, `set_program_on_channel(clip_id, group, channel, program, bank=None)`).
 
 ::: warning `ppq` is in quarter notes, not ticks
-The `ppq` argument is a **position in quarter notes** (a float), *not* a MIDI tick count. `Project.midiNoteOn(1, …)` is one quarter note in; `Project.midiNoteOn(0.5, …)` is an eighth note in. Despite the name, it is **not** 480-ticks-per-quarter — `Project.midiNoteOn(480, …)` schedules the note 480 quarter notes (120 bars) away, almost always far past your render window, so it silently never sounds. If you are converting from a tick-based source (an SMF at 480 PPQ, say), divide by the source's ticks-per-quarter first. The same unit applies to `addMidiClip(startPpq, lengthPpq)` and every clip/automation position on this page.
+The `ppq` argument is a **position in quarter notes** (a float), *not* a MIDI tick count. `Project.midiNoteOn(1, …)` is one quarter note in; `Project.midiNoteOn(0.5, …)` is an eighth note in. Despite the name, it is **not** 480-ticks-per-quarter: `Project.midiNoteOn(480, …)` schedules the note 480 quarter notes (120 bars) away, almost always far past your render window, so it silently never sounds. If you are converting from a tick-based source (an SMF at 480 PPQ, say), divide by the source's ticks-per-quarter first. The same unit applies to `addMidiClip(startPpq, lengthPpq)` and every clip/automation position on this page.
 :::
 
 Every shipped static packer returns one or more MIDI 1.0 UMP words ready to drop into a `setMidiEvents` list:
@@ -93,15 +97,17 @@ Every shipped static packer returns one or more MIDI 1.0 UMP words ready to drop
 | Bank + program | `Project.midiBankProgram(ppq, group, channel, bankMsb, bankLsb, program)` | Bank-select + program-change (returns multiple events) |
 | Poly pressure | `Project.midiPolyPressure(ppq, group, channel, note, pressure)` | Per-note aftertouch |
 | Channel pressure | `Project.midiChannelPressure(ppq, group, channel, pressure)` | Channel aftertouch |
-| Pitch bend | `Project.midiPitchBend(ppq, group, channel, bend)` | Pitch-bend; `bend` is unsigned 14-bit (`0`..`16383`, center `8192`) — out-of-range throws `RangeError` |
+| Pitch bend | `Project.midiPitchBend(ppq, group, channel, bend)` | Pitch-bend; `bend` is unsigned 14-bit (`0`..`16383`, center `8192`); out-of-range throws `RangeError` |
 
 The event-level `Project.midiProgram(...)` packer places a program-change word inside a clip's event list; it is distinct from the clip-level `project.setProgram(midiClip, program)` convenience shown above, which sets the clip's default program directly.
 
 ### `validateMidiNotes`
 
-Before bouncing, check a MIDI clip for hanging notes — a note-on with no matching note-off (or vice versa) plays a stuck note. `validateMidiNotes` pairs note-ons and note-offs FIFO per channel + note and reports the result.
+Before bouncing, check a MIDI clip for hanging notes: a note-on with no matching note-off (or vice versa) plays a stuck note. `validateMidiNotes` pairs note-ons and note-offs FIFO per channel + note within the clip's playback window and reports the result. A note-off at or after the clip's end falls outside that window, so end notes before `lengthPpq`; the first example above ends its last note at `3.75` in a 4-quarter-note clip for that reason.
 
-```typescript
+::: code-group
+
+```typescript [Browser / Node]
 const check = project.validateMidiNotes(midiClip);
 // { ok: true, unmatchedNoteOns: 0, unmatchedNoteOffs: 0 }
 if (!check.ok) {
@@ -109,11 +115,20 @@ if (!check.ok) {
 }
 ```
 
-To make a MIDI arrangement audible you bind an instrument at render time — see [Rendering audio](./project-editing-midi.md#rendering-audio), the [native synth](./native-synth.md), and the [SoundFont player](./soundfont-player.md). For driving a project live from a controller, see [MIDI input](./midi-input.md).
+```python [Python]
+check = project.validate_midi_notes(midi_clip)
+# check.ok, check.unmatched_note_ons, check.unmatched_note_offs
+if not check.ok:
+    print(f"hanging notes: {check.unmatched_note_ons} on / {check.unmatched_note_offs} off")
+```
+
+:::
+
+To make a MIDI arrangement audible you bind an instrument at render time; see [Rendering audio](./project-editing-midi.md#rendering-audio), the [native synth](./native-synth.md), and the [SoundFont player](./soundfont-player.md). For driving a project live from a controller, see [MIDI input](./midi-input.md).
 
 ### Route a captured MIDI stream
 
-`Project.midiRouteEvents(events, config?)` is a static helper that runs a captured `ProjectMidiEvent` stream through the native `MidiRouter` (filter / remap / channel-thru) — the same router the live runtime uses — and returns a `ProjectMidiRouteResult`. Use it to pre-filter or remap recorded input offline before building clips.
+`Project.midiRouteEvents(events, config?)` is a static helper that runs a captured `ProjectMidiEvent` stream through the native `MidiRouter` (filter / remap / channel-thru), the same router the live runtime uses, and returns a `ProjectMidiRouteResult`. Use it to pre-filter or remap recorded input offline before building clips.
 
 ```typescript
 const routed = Project.midiRouteEvents(capturedEvents, {
@@ -128,7 +143,40 @@ const routed = Project.midiRouteEvents(capturedEvents, {
 project.setMidiEvents(midiClip, routed.events);
 ```
 
-Config fields are all optional and camelCase in JS/WASM (`filterGroup`, `filterChannel`, `remapChannel`, `thru`); a `null` or omitted filter field means "any", and an omitted `remapChannel` leaves the channel unchanged. Python uses snake_case (`filter_group`, `filter_channel`, `remap_channel`, `thru`). The helper ships across WASM, Node, and Python. Pair it with the offline MIDI-learn flow (`Project.midiCcLearn`, covered in [MIDI input](./midi-input.md)).
+Config fields are all optional and camelCase in JS/WASM (`filterGroup`, `filterChannel`, `remapChannel`, `thru`); a `null` or omitted filter field means "any", and an omitted `remapChannel` leaves the channel unchanged. Python uses snake_case (`filter_group`, `filter_channel`, `remap_channel`, `thru`). The helper ships across WASM, Node, and Python. Pair it with the offline [CC learn](#learn-a-cc-and-turn-it-into-automation) flow below.
+
+### Learn a CC and turn it into automation
+
+For an offline "wiggle a knob, capture which CC moved" flow, `Project.midiCcLearn(events, paramId, options?)` scans a captured event stream, picks the controller that moved, and returns a binding descriptor for the parameter `paramId` (or `null` when nothing qualifies). `midiCcToBreakpoint(bindings, event)` then turns a CC event into an automation breakpoint, and `midiParamToCc(bindings, paramId, unitValue, group, ppq?)` turns a parameter value back into a CC event. All three work on captured `ProjectMidiEvent` data, not on the live engine; for live CC-to-parameter binding see [MIDI input](./midi-input.md#binding-midi-ccs-to-engine-parameters).
+
+::: code-group
+
+```typescript [Browser / Node]
+const cc = (ppq: number, value: number) => Project.midiCc(ppq, 0, 0, 1, value); // CC1 on channel 0
+const events = [cc(0, 10), cc(0.5, 100)];
+
+const binding = Project.midiCcLearn(events, /* paramId */ 42, { minMovement: 20 });
+// { ccNumber: 1, channel: 0, kind: 0, paramId: 42, minValue: 0, maxValue: 1, ... }
+
+const point = Project.midiCcToBreakpoint([binding!], events[1]);
+// { ppq: 0.5, value: 0.787, curveToNext: 0 }
+
+const back = Project.midiParamToCc([binding!], 42, 0.5, /* group */ 0, /* ppq */ 1);
+// a CC event at ppq 1
+```
+
+```python [Python]
+cc = lambda ppq, value: sonare.Project.midi_cc(ppq, 0, 0, 1, value)  # CC1 on channel 0
+events = [cc(0.0, 10), cc(0.5, 100)]
+
+binding = sonare.Project.midi_cc_learn(events, 42, min_movement=20)
+point = sonare.Project.midi_cc_to_breakpoint([binding], events[1])   # (ppq, value, curve_to_next)
+back = sonare.Project.midi_param_to_cc([binding], 42, 0.5, 0, 1.0)   # (ppq, data0, data1)
+```
+
+:::
+
+`minMovement` (Python `min_movement`) is an integer from `0` through `127` (default `0`), measured in 7-bit CC units; a value outside that range throws. With `0`, the first observed standalone controller value binds immediately; a low-numbered CC (`0..31`) is held until the next message so it can still form a 14-bit pair. With a positive threshold, the controller must move by at least that many 7-bit units from its first value on the same UMP group and channel. MIDI 2.0 32-bit CC values are downscaled to those 7-bit units. The threshold applies only to standalone 7-bit controllers; 14-bit pairs and RPN/NRPN sequences are assembled without this gate.
 
 ### Bake a MIDI-FX chain into a clip
 
@@ -150,9 +198,9 @@ const { sourceIndex } = project.bakeMidiFx({
 });
 ```
 
-`previewMidiFxCount(...)` runs the same deterministic transform without changing the project, so its result is the exact number of events the following bake produces. The positional `bakeMidiFx(clipId, configJson)` form remains available and returns no provenance. Python uses `project.preview_midi_fx_count(clip_id, config_json)` and `project.bake_midi_fx(clip_id, config_json, with_source_index=True)`.
+`previewMidiFxCount(...)` runs the same deterministic transform without changing the project, so its result is the exact number of events the following bake produces. The positional `bakeMidiFx(clipId, configJson)` form remains available and returns no provenance. In Python, `project.preview_midi_fx_count(clip_id, config_json)` returns the count and `project.bake_midi_fx(clip_id, config_json, with_source_index=True)` returns the source indexes (without the flag it returns `None`).
 
-The config is a JSON object whose **stages are keyed by their parameters** — include a stage's keys to enable it, omit them to skip it. Unknown keys are ignored, so a typo silently does nothing:
+The config is a JSON object whose **stages are keyed by their parameters**: include a stage's keys to enable it, omit them to skip it. Unknown keys are ignored, so a typo silently does nothing:
 
 | Stage | Keys |
 |-------|------|
@@ -163,7 +211,7 @@ The config is a JSON object whose **stages are keyed by their parameters** — i
 | Chord | `chord_intervals` (array of semitone offsets, 1-8 entries) |
 | Arpeggiator | `arpeggiator_intervals` (array of semitone offsets, 1-16 entries), `arpeggiator_step_ppq` (>0), `arpeggiator_gate_ppq` (defaults to the step length, capped to it) |
 
-`chord_intervals` is capped at 8 entries and `arpeggiator_intervals` at 16 — an empty array, or one past either limit, makes `bakeMidiFx` throw `SONARE_ERROR_INVALID_PARAMETER` rather than silently truncating.
+`chord_intervals` is capped at 8 entries and `arpeggiator_intervals` at 16; an empty array, or one past either limit, makes `bakeMidiFx` throw an `InvalidParameter` error (`SonareError` in JS) rather than silently truncating.
 
 ```typescript
 // Turn each held note into a three-step up-arpeggio, one sixteenth per step.
@@ -174,7 +222,7 @@ project.bakeMidiFx(midiClip, JSON.stringify({
 }));
 ```
 
-Because the rewrite is destructive, it is an undoable edit like any other — `undo()` restores the original events.
+Because the rewrite is destructive, it is an undoable edit like any other, and `undo()` restores the original events.
 
 ## Related
 

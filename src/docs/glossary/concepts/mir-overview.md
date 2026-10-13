@@ -51,22 +51,56 @@ Most MIR features are derived from a small set of intermediate representations. 
 Sharing these intermediates only pays off inside a single whole-track analysis. `analyze` (`MusicAnalyzer`) computes the STFT and its derivatives once and reuses them across BPM, key, chord, and section results.
 
 ::: warning The per-feature helpers do not share anything
-`detectBpm`, `detectKey`, `detectChords`, and the section helpers each start again from the raw samples: four back-to-back calls mean four STFTs, two independent chromagrams, and a second onset envelope. There is no cache keyed on the audio. If you want more than one answer about the same track, call the whole-track analysis once instead of assembling it from the individual helpers.
+`detectBpm`, `detectKey`, `detectChords`, and the section helpers each start again from the raw samples, and there is no cache keyed on the audio. If you want more than one answer about the same track, call the whole-track analysis once instead of assembling it from the individual helpers: it computes the STFT and chroma a single time.
 :::
 
 ## Which question, which feature
 
-| You want to answer… | Reach for | Built on |
-|---------------------|-----------|----------|
-| How fast is it? Where are the beats? | BPM / beat tracking | onset strength |
-| What key is it in? | key detection | chroma |
-| What chord is playing? | chord recognition | chroma |
-| Where does the chorus start? | section analysis | MFCC (timbre) + chroma (harmony) + energy |
-| What note is the melody? | pitch / melody tracking | pitch tracking (see Separation and pitch below) |
-| What does it *sound* like (timbre)? | MFCC | mel spectrogram |
-| Can I separate drums from the rest? | HPSS | spectrogram structure |
-| What is the raw frequency content over time? | STFT / spectrogram | the waveform |
-| What does the recording space sound like? | room-acoustic analysis | impulse-response (IR) decay or blind free-decay estimates |
+| You want to answer… | Reach for | Built on | Call (JavaScript / Python) | CLI |
+|---------------------|-----------|----------|----------------------------|-----|
+| How fast is it? Where are the beats? | BPM / beat tracking | onset strength | `detectBpm`, `detectBeats` / `detect_bpm`, `detect_beats` | `bpm`, `beats` |
+| What key is it in? | key detection | chroma | `detectKey` / `detect_key` | `key` |
+| What chord is playing? | chord recognition | chroma | `detectChords` / `detect_chords` | `chords` |
+| Where does the chorus start? | section analysis | MFCC (timbre) + chroma (harmony) + energy | `analyzeSections` / `analyze_sections` | `sections` |
+| What note is the melody? | pitch / melody tracking | pitch tracking (see Separation and pitch below) | `pitchPyin`, `pitchYin` / `pitch_pyin`, `pitch_yin` | `pitch` |
+| What does it *sound* like (timbre)? | MFCC | mel spectrogram | `mfcc` / `mfcc` | none |
+| Can I separate drums from the rest? | HPSS | spectrogram structure | `hpss` / `hpss` | `hpss` |
+| What is the raw frequency content over time? | STFT / spectrogram | the waveform | `stft` / `stft` | none |
+| What does the recording space sound like? | room-acoustic analysis | impulse-response (IR) decay or blind free-decay estimates | `analyzeImpulseResponse`, `detectAcoustic` / `analyze_impulse_response`, `detect_acoustic` | `acoustic` |
+
+Every call takes the samples and the file's real sample rate. See [Audio Basics](./audio-basics.md) for why the rate matters.
+
+::: code-group
+
+```typescript [Browser]
+import { init, detectBpm, detectKey, analyze } from '@libraz/libsonare';
+
+await init();
+
+const bpm = detectBpm(samples, sampleRate);     // one question, one pass
+const key = detectKey(samples, sampleRate);
+
+const result = analyze(samples, sampleRate);    // the whole track in one pass
+// result.bpm, result.key, result.chords, result.sections
+```
+
+```python [Python]
+import libsonare as sonare
+
+audio = sonare.Audio.from_file("song.wav")
+bpm = audio.detect_bpm()                        # one question, one pass
+key = audio.detect_key()
+
+result = sonare.analyze(audio.data, audio.sample_rate)   # the whole track in one pass
+```
+
+```bash [CLI]
+sonare bpm song.wav
+sonare key song.wav
+sonare analyze song.wav    # the whole track in one pass
+```
+
+:::
 
 ## Timing: BPM, beat, onset, section
 
@@ -152,7 +186,7 @@ The browser demos are built for interactive use, but each one emphasizes a diffe
 
 | Demo | Main role |
 |------|-----------|
-| [Music Analysis Studio](/music-analysis) | Full-file MIR: BPM, key, chords, sections, and related analysis. |
+| [Music Analysis Studio](/music-analysis) | Full-file MIR: BPM and a local tempo curve, key, chords with their Roman-numeral function, sections, and the A4 tuning estimate. |
 | Realtime views | BPM, key, and chord estimates that update over time through `StreamAnalyzer`. |
 | [Mastering Studio](/mastering) | Measurement-style APIs such as loudness measurement, reference comparison, and report export. |
 

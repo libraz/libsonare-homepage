@@ -46,7 +46,7 @@ A **variation tone** is what lives on the other shelves: the same slot, voiced d
     { from: 'lsb', to: 'slot', label: 'tone map', style: 'dashed' },
     { from: 'slot', to: 'voice' }
   ]"
-  caption="The Program Change alone is enough — it names the GM instrument. The two Bank Select halves narrow it further, and a device that does not recognise what they ask for still has the capital tone to sound."
+  caption="The Program Change alone is enough — it names the GM instrument. The two Bank Select halves narrow it further, and a device that does not recognize what they ask for still has the capital tone to sound."
 />
 
 The two halves of Bank Select do different jobs here. One picks the variation; the other picks the **tone map**, which is the generation of the sound set the variation number is read against. The same variation number means different things in a 1991 tone set and a 1998 one, and the tone map is how a file says which it was written for. The `::: details` block below gives the exact assignment.

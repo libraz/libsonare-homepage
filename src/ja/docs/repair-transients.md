@@ -1,17 +1,17 @@
 ---
 title: クリップ、クリック、クラックルのリペア
-description: libsonare の declip、declick、decrackle 段で過渡的な欠陥を検出・修復し、ステレオの契約を守る方法です。
+description: libsonare の declip、declick、decrackle 段で過渡的な欠陥を検出・リペアし、ステレオの契約を守る方法です。
 ---
 
 # クリップ、クリック、クラックルのリペア
 
-クリップ、クリック、クラックルはいずれも短時間の欠陥ですが、根拠は別々です。クリップは上限付近の連続区間を作り、クリックは孤立した不連続、クラックルはサンプル単位の偏差が密集したものです。修復方法を選ぶ前に、それぞれの欠陥を検出してください。
+クリップ、クリック、クラックルはいずれも短時間の欠陥ですが、根拠は別々です。クリップは上限付近の連続区間を作り、クリックは孤立した不連続、クラックルはサンプル単位の偏差が密集したものです。リペア方法を選ぶ前に、それぞれの欠陥を検出してください。
 
 ## 検出器を選ぶ
 
 | 欠陥 | 検出器 | リペア段 | 確認するもの |
 |---|---|---|---|
-| 平らな頂部または上限を超えたピーク | `masteringRepairDetectClipping` | `masteringRepairDeclip` | `sampleCount`、`runCount`、`longestRunSamples`。長い区間は補間フォールバックを使う。 |
+| 平らな頂部または上限を超えたピーク | `masteringRepairDetectClipping` | `masteringRepairDeclip` | `clipThreshold` 以上のサンプルについて `sampleCount`、`runCount`、`longestRunSamples`。長い区間は補間フォールバックを使う。クリップの後でゲインを下げた素材では、代わりに `flatRunCount`、`longestFlatRunSamples`、`flatSampleCount`、`flatLevel` を見る。 |
 | 孤立したインパルス状の不連続 | `masteringRepairDetectClicks` | `masteringRepairDeclick` | `count`、`rejected`、`longestRunSamples`、`perSecond`。 |
 | 密集したサンプル単位の表面損傷 | `masteringRepairDetectCrackle` | `masteringRepairDecrackle` | `sampleCount`、`sampleFraction`、`perSecond`。 |
 
@@ -36,8 +36,12 @@ await init();
 
 let repaired = samples;
 const clipping = masteringRepairDetectClipping(repaired, sampleRate);
-if (clipping.sampleCount > 0) {
-  repaired = masteringRepairDeclip(repaired, sampleRate);
+if (clipping.sampleCount > 0 || clipping.flatRunCount > 0) {
+  repaired = masteringRepairDeclip({
+    samples: repaired,
+    sampleRate,
+    clipThreshold: clipping.sampleCount > 0 ? 0.98 : clipping.flatLevel,
+  });
 }
 
 const clicks = masteringRepairDetectClicks(repaired, sampleRate);
@@ -51,13 +55,15 @@ if (crackle.sampleCount > 0) {
 }
 ```
 
+`sampleCount` が数えるのは、しきい値（既定は 0.98）以上のサンプルだけです。クリップしてからレベルを下げた素材では平らな頂部がもっと低い位置にあるため、`sampleCount` は 0 になり、既定のままの declip は何も変えません。平坦区間のフィールドならそうした頂部も見つかり、渡すべきしきい値は `flatLevel` です。[`masteringRepairAnalyze`](./audio-repair.md#測定とリペアを-1-回の呼び出しで行う) はこのしきい値を自動で選び、より大きな未クリップ部分まで書き換えてしまう場合は declip を見送ります。
+
 件数が 0 より大きいかで分けるだけでは出発点にすぎません。波形を確認して各変更を試聴してください。検出器は、クリップに見える波形が意図したものかどうかを判断できません。
 
 ## 過渡的なリペア A/B を聴く
 
 <SonareDemo id="repair-clicks" />
 
-この A/B は、損傷したビニール盤風クリップに実際の WASM デクリック処理を適用します。ノイズの注入、ラウドネス整合、declip／decrackle／dehum は行いません。素材にはハム、ヒス、クラックル、音楽的なアタックが残るため、すべての欠陥が消える例ではなく、局所的なクリック修復を聴く例として使ってください。
+この A/B は、損傷したビニール盤風クリップに実際の WASM デクリック処理を適用します。ノイズの注入、ラウドネス整合、declip／decrackle／dehum は行いません。素材にはハム、ヒス、クラックル、音楽的なアタックが残るため、すべての欠陥が消える例ではなく、局所的なクリックのリペアを聴く例として使ってください。
 
 ## ステレオ像を保つ
 
@@ -88,9 +94,11 @@ const decrackled = masteringRepairDecrackleStereo({
 console.log(decrackled.leftReport, decrackled.rightReport);
 ```
 
-`declipStereo` は左右のクリップ区間の和集合を使います。和集合の区間にクリップしたサンプルがないチャンネルは、その区間を変更しません。各チャンネルは自身の再構成とレポートを持ちます。`declickStereo` はどちらかのチャンネルが選んだ区間を両方で修復しますが、補間には各チャンネル自身のサンプルと LPC モデルを使います。表面傷は共通イベントにならないため、`decrackleStereo` はチャンネルごとに独立して処理します。
+`declipStereo` は左右のクリップ区間の和集合を使います。和集合の区間にクリップしたサンプルがないチャンネルは、その区間を変更しません。各チャンネルは自身の再構成とレポートを持ちます。`declickStereo` はどちらかのチャンネルが選んだ区間を両方でリペアしますが、補間には各チャンネル自身のサンプルと LPC モデルを使います。表面傷は共通イベントにならないため、`decrackleStereo` はチャンネルごとに独立して処理します。
 
 ## レポートを読む
+
+モノラル形式はサンプルだけを返します。これらのレポートフィールドが必要なときは、`*Stereo` 形式（`leftReport` と `rightReport` を返します）か `masteringRepairApply` を使ってください。
 
 | 段 | 役立つレポートフィールド | 解釈 |
 |---|---|---|
@@ -102,9 +110,11 @@ console.log(decrackled.leftReport, decrackled.rightReport);
 
 チェーン設定や上書きでは、`repair.decrackle.mode` に指定できるのは `median`（0）または `waveletShrinkage`（1）で、それ以外の値は `unknown decrackle mode` で拒否されます。
 
+<SonareDemo id="repair-crackle" />
+
 ## 設定と受け付ける範囲
 
-すべてのオプションに上限があります。上限を超える値は、名前付きプロセッサー経由を含むすべての環境で `InvalidParameter` を投げます。
+すべてのオプションに上限があります。上限を超える値は、名前付きプロセッサ経由を含むすべての環境で `InvalidParameter` を投げます。
 
 | 段 | オプション | 既定値 | 受け付ける範囲 |
 |---|---|---|---|
@@ -120,10 +130,10 @@ console.log(decrackled.leftReport, decrackled.rightReport);
 | Decrackle | `threshold` | `0.4` | `(0, 1000]` |
 | Decrackle | `levels` | `4` | `[1, 24]` |
 
-Declick は、選ばれたすべての区間を先に両端のサンプルへアンカーした線形補間で埋め、その後で AR モデルによる解を求めます。そのため AR の計算が読む文脈に、まだ修復されていないクリックが含まれることはありません。接する、または重なる区間は、ステレオ形式で別々のチャンネルが選んだものも含めて 1 つの領域に結合されます。隣接するクリックは補間の起点にできないためです。
+Declick は、選ばれたすべての区間を先に両端のサンプルへアンカーした線形補間で埋め、その後で AR モデルによる解を求めます。そのため AR の計算が読む文脈に、まだリペアされていないクリックが含まれることはありません。接する、または重なる区間は、ステレオ形式で別々のチャンネルが選んだものも含めて 1 つの領域に結合されます。隣接するクリックは補間の起点にできないためです。
 
 因果的な段は、メディアンモードの decrackle も含めてリアルタイムインサートとしても動作します。declick と declip は動作しません。[オーディオリペアの流れ](./audio-repair.md#リアルタイムインサート) を参照してください。
 
 ## 限界と共通の順序
 
-完全なリペア順は `declip → declick → decrackle → dehum → denoise → dereverb` です。平らな区間はクリックを隠すことがあるためクリップ修復を先に置き、残りの過渡的な段をスペクトルノイズと残響の推定より前に置きます。ここでの関数はオフラインの全バッファ処理 (decrackle にはリアルタイムインサートもあります) で、LUFS 整合は行いません。判断の流れは [オーディオリペアの流れ](./audio-repair.md)、正確なオプション型は [JavaScript マスタリング API](./js-api-mastering.md) を参照してください。
+完全なリペア順は `declip → declick → decrackle → dehum → denoise → dereverb` です。平らな区間はクリックを隠すことがあるためクリップのリペアを先に置き、残りの過渡的な段をスペクトルノイズと残響の推定より前に置きます。ここでの関数はオフラインの全バッファ処理（decrackle にはリアルタイムインサートもあります）で、LUFS 整合は行いません。判断の流れは [オーディオリペアの流れ](./audio-repair.md)、正確なオプション型は [JavaScript マスタリング API](./js-api-mastering.md) を参照してください。

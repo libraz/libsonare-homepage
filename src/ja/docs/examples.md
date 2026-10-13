@@ -6,37 +6,22 @@
 
 このページを読むと、次のことを判断・実行できるようになります。
 
-- ブラウザ、Python、CLI、Node ネイティブの小さな動作パターンを 1 つコピーして試せる。
+- 自分の実行環境で、一括解析やサーバーサイドの解析を動かせる。
 - 同じ処理が実行環境ごとにどう変わるかを見比べられる。
 - 「音声を読み込む／デコードする」処理と「libsonare を呼ぶ」処理を区別できる。
 - オプションや戻り値の形が必要になったときに、レシピから該当 API リファレンスへ移れる。
 
 ## ユースケース別
 
-以下はいずれも小さな出発点のパターンです。素材ファイルから納品物まで、制作作業をまるごと通した手順 — ステムから完成マスターまで、CI で回る納品前チェック、テイクの一括整音など — は [実践ユースケース](./use-cases.md) にあります。
+ファイル 1 つを解析する最初のプログラムは、実行環境ごとに [はじめに](./getting-started.md#最初の結果) にあります。以下のパターンはその次の一歩です。素材ファイルから納品物まで、制作作業をまるごと通した手順（ステムから完成マスターまで、CI で回る納品前チェック、テイクの一括整音など）は [実践ユースケース](./use-cases.md) にあります。
 
-### ブラウザアプリで BPM とキーを表示する
+### 音楽フォルダを一括解析する
 
-音声をブラウザ内で扱う場合は、npm の WebAssembly パッケージを使います。ファイルは先に Web Audio API でデコードし、モノラルの `Float32Array` サンプルを libsonare に渡します。
+どの版もファイルごとに、名前、BPM、キーを 1 行ずつ表示します。CLI 版は代わりにファイルごとの JSON サマリーを書き出します。
 
-```typescript
-import { init, detectBpm, detectKey } from '@libraz/libsonare';
+::: code-group
 
-await init();
-
-const audioCtx = new AudioContext();
-const decoded = await audioCtx.decodeAudioData(await file.arrayBuffer());
-const samples = decoded.getChannelData(0);
-
-const bpm = detectBpm(samples, decoded.sampleRate);
-const key = detectKey(samples, decoded.sampleRate);
-```
-
-### ターミナルで音楽フォルダを一括解析する
-
-CLI は、ターミナルでの確認やスクリプト向け JSON サマリー出力に向いています。CLI は npm ではなく PyPI からインストールします。
-
-```bash
+```bash [CLI]
 pip install libsonare
 
 for f in *.mp3; do
@@ -44,33 +29,59 @@ for f in *.mp3; do
 done
 ```
 
-### Python でメタデータを抽出する
-
-Python は、スクリプト、ノートブック、librosa に近いワークフローでネイティブ C++ バックエンドを使いたい場合に向いています。
-
-```python
+```python [Python]
+from pathlib import Path
 from libsonare import Audio
 
-with Audio.from_file("song.mp3") as audio:
-    result = audio.analyze()
-
-print(result.bpm, result.key, len(result.beat_times))
+for path in sorted(Path(".").glob("*.mp3")) + sorted(Path(".").glob("*.wav")):
+    with Audio.from_file(str(path)) as audio:
+        result = audio.analyze()
+    print(f"{path.name}\t{result.bpm:.1f}\t{result.key.name}")
 ```
 
-### Node.js でアップロード音源を解析する
+```js [Node.js（WASM）]
+import { readdirSync, readFileSync } from 'node:fs';
+import { init, Audio } from '@libraz/libsonare';
 
-サーバーサイドでファイル読み込みやネイティブ性能が必要な場合は、Node.js ネイティブバインディングを使います。現在はソースビルド前提です。
+await init();
+for (const name of readdirSync('.').filter((f) => /\.(mp3|wav)$/i.test(f))) {
+  const result = Audio.fromMemory(new Uint8Array(readFileSync(name))).analyze();
+  console.log(`${name}\t${result.bpm.toFixed(1)}\t${result.key.name}`);
+}
+```
 
-```typescript
+:::
+
+### サーバーでアップロード音源を解析する
+
+WASM パッケージはアップロードされたバイト列をメモリ内でデコードするので、ディスクには何も書きません。ネイティブアドオンはパスから読み込み、ソースからビルドします（[ネイティブバインディング](./native-bindings.md)）。
+
+::: code-group
+
+```js [Node.js（WASM）]
+import { init, Audio } from '@libraz/libsonare';
+
+await init();
+
+// body はアップロードされた WAV または MP3 ファイル（Buffer か Uint8Array）
+export function analyzeUpload(body) {
+  const result = Audio.fromMemory(new Uint8Array(body)).analyze();
+  return { bpm: result.bpm, key: result.key.name, chords: result.chords.length };
+}
+```
+
+```typescript [Node.js（ネイティブ）]
 import { Audio } from '@libraz/libsonare-native';
 
-const audio = Audio.fromFile('/tmp/upload.wav');
-const result = audio.analyze();
-
+const result = Audio.fromFile('/tmp/upload.wav').analyze();
 console.log(result.bpm, result.key.name);
 ```
 
+:::
+
 ## C++
+
+これらのプログラムがインクルードする `<sonare.h>` は、ソースツリーでも `cmake --install` 後でも解決できます。インストールされた `sonare::` ターゲットが `include/sonare/cpp` をインクルードパスに加えるためです。`<sonare/cpp/sonare.h>` は、名前空間付きのパスで同じヘッダーを指す書き方です（[C++ ライブラリのインストール](./installation.md#c-ライブラリのインストール)）。
 
 ### 基本的な使い方
 
@@ -207,6 +218,9 @@ int main() {
 
 static const char* kPitchNames[] = {
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+// SonareMode の値で引く。SONARE_MODE_MAJOR (0) から SONARE_MODE_LOCRIAN (6) まで
+static const char* kModeNames[] = {
+    "major", "minor", "dorian", "phrygian", "lydian", "mixolydian", "locrian"};
 
 int main() {
   SonareAudio* audio = NULL;
@@ -232,7 +246,7 @@ int main() {
   if (err == SONARE_OK) {
     printf("Key: %s %s (confidence: %.0f%%)\n",
            kPitchNames[key.root],
-           key.mode == SONARE_MODE_MAJOR ? "major" : "minor",
+           kModeNames[key.mode],
            key.confidence * 100);
   }
 
@@ -292,19 +306,3 @@ sonare time-stretch --rate 0.8 song.wav -o practice.wav
 # ドラムとメロディを分離
 sonare hpss song.wav -o separated
 ```
-
-### バッチ処理
-
-```bash
-# すべての MP3 ファイルを解析
-for f in *.mp3; do
-  echo "処理中: $f"
-  sonare analyze "$f" --json > "${f%.mp3}.json"
-done
-```
-
-## 各節の移動先
-
-| 節 | 移動先 |
-|---|---|
-| 機能別レシピ | [機能別レシピ](./examples-recipes.md) |

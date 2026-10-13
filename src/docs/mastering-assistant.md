@@ -81,6 +81,17 @@ const preview    = JSON.parse(masteringStreamingPreview(samples, sampleRate, [
 ]));
 ```
 
+```typescript [Node]
+import { masteringAudioProfile, masteringAssistantSuggest, masteringStreamingPreview } from '@libraz/libsonare-native';
+
+const profile    = JSON.parse(masteringAudioProfile(samples, sampleRate));
+const suggestion = JSON.parse(masteringAssistantSuggest(samples, sampleRate, { preset: 'pop', targetLufs: -14, ceilingDb: -1 }));
+const preview    = JSON.parse(masteringStreamingPreview(samples, sampleRate, [
+  { name: 'YouTube',  targetLufs: -14, ceilingDb: -1 },
+  { name: 'Podcast',  targetLufs: -16, ceilingDb: -1 },
+]));
+```
+
 ```python [Python]
 import json
 import libsonare as sonare
@@ -120,24 +131,22 @@ profile.defects.measured;       // boolean
 `MasteringAssistantResult.profile` is the flat `MasteringAssistantProfile` (`integratedLufs` is `null` for a silent or below-gate input), `chainConfig` is a `MasteringChainConfigDocument` (`version: 1 | 2`), and each streaming-preview row has `integratedLufs: number | null`. Python declares `MasteringAudioProfile`, `MasteringAssistantResult`, and `MasteringStreamingPreviewResult` as `TypedDict`s in `libsonare`.
 
 ::: warning Short clips: profile and suggest work, but need real spectral content to be meaningful
-`masteringAudioProfile` and `masteringAssistantSuggest` run a full [STFT](./glossary/analysis/spectrogram-stft.md) (short-time Fourier transform — a frequency analysis taken over short successive windows) based analysis (default `nFft` = 2048). They only reject a **completely empty** buffer (`SonareError`, "audio input must be a non-empty buffer") — any non-empty buffer, however short, is accepted and processed. The `nFft`-sized window (default 2048 samples) is advisory, not an error condition: a buffer shorter than one full window has too little spectral content to produce a meaningful profile, so treat "shorter than `nFft`" as a quality warning to show the user, not a failure to guard against. `masteringStreamingPreview` only measures loudness, so it tolerates any non-empty audio buffer; an empty `platforms` list is also fine — it falls back to a built-in default set (Spotify, Apple Music, YouTube). When feeding short captures or file-picker selections from the UI, wrap the profile/suggest calls in `try`/`catch` using `isSonareError` to handle the empty-buffer case, and consider a soft length hint (rather than a hard block) for buffers shorter than `nFft`.
+`masteringAudioProfile` and `masteringAssistantSuggest` run [STFT](./glossary/analysis/spectrogram-stft.md) analysis over overlapping windows. Their default `nFft` is 2048 samples at 48 kHz; the window is rescaled to the input rate. A valid non-empty buffer is accepted even when shorter than one window, but its spectral profile has limited evidence. Show a duration hint for short clips instead of refusing them.
 
-```typescript [Browser]
-import { masteringAudioProfile, isSonareError } from '@libraz/libsonare';
+Node and WASM throw `RangeError` for empty buffers, non-finite samples, or invalid sample rates, and `TypeError` for a buffer of the wrong type. `isSonareError` does not catch those argument errors. Guard an empty selection before calling, and use `isSonareError` for coded library failures. `masteringStreamingPreview` also accepts short valid buffers; an empty `platforms` list selects the built-in defaults (Spotify, Apple Music, YouTube).
 
-const ONE_ANALYSIS_WINDOW = 2048; // default nFft — a quality hint, not a hard limit
-const shortClip = samples.length < ONE_ANALYSIS_WINDOW; // show a "limited spectral content" note
+```typescript
+import { masteringAudioProfile } from '@libraz/libsonare';
 
-try {
+const ANALYSIS_WINDOW_SEC = 2048 / 48000; // approximate duration; a quality hint
+const shortClip = samples.length / sampleRate < ANALYSIS_WINDOW_SEC;
+
+if (samples.length === 0) {
+  // Ask the user to select audio before running analysis.
+} else {
   const profile = JSON.parse(masteringAudioProfile(samples, sampleRate));
   if (shortClip) {
     // Still succeeded — flag the result as low-confidence in the UI.
-  }
-} catch (err) {
-  if (isSonareError(err)) {
-    // Only a completely empty buffer reaches here.
-  } else {
-    throw err;
   }
 }
 ```
@@ -147,11 +156,13 @@ try {
 
 A read-only summary of the input: how loud it is, how its energy is spread across the spectrum, how dynamic it is, and whether the optional defect detectors found damage. Nothing is processed.
 
-Optional `params` accept either JS-style or Python-style names: `nFft`/`n_fft` (default `2048`), `hopLength`/`hop_length` (default `512`) — both are sample counts at 48 kHz, rescaled to the input's rate, and band levels are normalised so they agree across rates, `truePeakOversample`/`true_peak_oversample` (default `4`), and `detectDefects`/`detect_defects` (default `false`).
+Optional `params` accept either JS-style or Python-style names: `nFft`/`n_fft` (default `2048`), `hopLength`/`hop_length` (default `512`) — both are sample counts at 48 kHz, rescaled to the input's rate, and band levels are normalized so they agree across rates, `truePeakOversample`/`true_peak_oversample` (default `4`), and `detectDefects`/`detect_defects` (default `false`).
 
 ::: info Why oversample for true peak?
 Stored samples have fixed positions, but a band-limited reconstruction can peak *between* them. Here, a 4× interpolation filter estimates those inter-sample peaks. The reported `truePeakDb` approximates the reconstructed signal under that filter; it is not a measurement of a particular converter's analogue output. Higher factors can improve the estimate but cost more CPU.
 :::
+
+<SonareDemo id="inter-sample-peak" />
 
 Use this result to explain the input, not to judge it. A profile can tell you that the source is already loud, dark, dense, or transient-heavy. It does not mean the source has passed or failed mastering.
 
@@ -207,10 +218,8 @@ They are dBFS on the mean-square convention of the profile's noise fields, so a 
 
 ::: details What do loudness range, attack density, and sustain ratio mean?
 - **Loudness range (LRA, in LU)** — how much the perceived loudness swings across the track. A high value means it gets noticeably quieter and louder (a dynamic classical piece); a low value means it stays at roughly one level (a dense EDM master). "LU" (loudness units) is the same scale as LUFS, measured as a spread rather than an absolute.
-- **Attack density** — roughly how many sharp note/drum onsets happen per second. Only onset peaks above a fixed floor of percussive rise count, so a steady tone reads 0. High = busy and percussive, low = sparse or sustained.
+- **Attack density** — roughly how many sharp note/drum onsets happen per second. Only onset peaks above a fixed floor of percussive rise count, so a steady tone reads 0. High = busy and percussive, low = sparse or sustained. It measures against the event maximum with the loudest events set aside: one per 10 s of audio, up to two (under 10 s nothing is set aside).
 - **Sustain ratio** (0–1) — whether the material is dominated by long held tones (near 1) or short bursts and attacks (near 0). It is measured separately from attack density (from the RMS envelope, not the onsets) but usually moves in the opposite direction.
-
-Attack density, sustain ratio, and the mixing classifier's hit detection measure against the event maximum with the loudest events set aside: one per 10 s of audio, up to two. Under 10 s nothing is set aside.
 - **Short-term LUFS std-dev** — how much the moment-to-moment loudness wobbles. A higher number means the level is restless; near zero means it sits very steadily.
 :::
 
@@ -225,7 +234,16 @@ Builds on the profile to propose a ready-to-render mastering chain, plus a human
 Accepted keys are `preset`, `targetPlatform`/`target_platform`, `targetLufs`/`target_lufs`, `ceilingDb`/`ceiling_db`, `enableRepair`/`enable_repair`, `preferStreamingSafe`/`prefer_streaming_safe`, and `speechMonoAmount`/`speech_mono_amount`. `preset` and `targetPlatform` take names; the other keys are numeric or boolean.
 
 ::: details What the optional intent keys do
-`preset` chooses the chain to start from and defaults to `streaming`; the assistant never infers it from the audio. `targetPlatform` applies its loudness and ceiling only for targets with an explicit rule (`broadcast`, `podcast`, `club`, or `cd`), and only for values you have not supplied. `streaming`, `youtube`, `audiobook`, and `cinema` are accepted names but leave the assistant's current target and ceiling unchanged. `enableRepair` turns on the cleanup stages (declick, denoise, etc.) when the source has defects. The declip stage is proposed only when runs of samples sit pinned at one level and no channel holds audio louder than that level, since the shared threshold would otherwise rewrite unclipped audio; mono input is held to the same rule, and the `explanation` then reads `declip withheld`. `preferStreamingSafe` selects the streaming-safe denoise estimator when repair is enabled. `speechMonoAmount` (0–1) controls how much the speech preset collapses side energy below its 120 Hz mono-maker crossover.
+`preset` chooses the chain to start from and defaults to `streaming`; the assistant never infers it from the audio. It must be a genre preset: the five restoration presets are refused. `targetPlatform` applies its loudness only to values you have not supplied, and only for platforms with an explicit rule; `masteringPlatformNames()` lists every accepted name.
+
+| `targetPlatform` | Loudness target | True-peak ceiling |
+|---|---:|---:|
+| `broadcast` | −23 LUFS | −1 dBTP |
+| `podcast` | −16 LUFS | −1 dBTP |
+| `club` | −9 LUFS | −0.3 dBTP |
+| `cd` | −9 LUFS | −0.3 dBTP |
+
+`streaming`, `youtube`, `audiobook`, and `cinema` are accepted names but leave the preset's target and ceiling unchanged (the default `streaming` preset aims for −14 LUFS under −1 dBTP). `enableRepair` turns on the cleanup stages (declick, denoise, etc.) when the source has defects, using the same selection as [`masteringRepairAnalyze`](./audio-repair.md#measure-and-repair-in-one-call). The declip stage is proposed only when runs of samples sit pinned at one level and no channel holds audio louder than that level, since the shared threshold would otherwise rewrite unclipped audio; mono input is held to the same rule, and the `explanation` then reads `declip withheld`. `preferStreamingSafe` selects the streaming-safe denoise estimator when repair is enabled. `speechMonoAmount` (0–1) controls how much the speech preset collapses side energy below its 120 Hz mono-maker crossover.
 :::
 
 Think of this helper as a preset generator with an explanation. It returns a full starting point that your app can render directly, but the intended workflow is still editable.
@@ -404,7 +422,13 @@ preview = json.loads(sonare.mastering_streaming_preview_stereo(left, right, samp
 The stereo profile measures its `loudness` block from both channels — integrated LUFS and LRA from the channel-summed program, true peak as the larger of the two. The `spectral`, `dynamics`, and tempo fields describe shape and timing rather than absolute level, so they are still measured on the downmix. That is deliberate: it keeps them directly comparable with `masteringAudioProfile` on the same material.
 :::
 
-`masteringAssistantSuggestStereo` profiles through `masteringAudioProfileStereo`, so its loudness stage is built on the channel-summed program rather than on a downmix reading 6 dB low. The rest of the suggestion — the processor selection and the rationale text — has the same shape as the mono call.
+`masteringAssistantSuggestStereo` profiles through `masteringAudioProfileStereo`, so its loudness stage is built on the channel-summed program rather than on a downmix reading 6 dB low. The rest of the suggestion, the processor selection and the rationale text, has the same shape as the mono call.
+
+```typescript
+const suggestion = JSON.parse(
+  masteringAssistantSuggestStereo({ left, right, sampleRate, params: { preset: 'pop', targetLufs: -14 } }),
+);
+```
 
 ## Related
 

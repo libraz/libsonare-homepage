@@ -23,13 +23,15 @@ percussive = audio.percussive()
 stretched = audio.time_stretch(rate=1.5)       # 1.5倍速
 shifted = audio.pitch_shift(semitones=2.0)     # 2半音上げ
 
-# ノーマライズと無音トリム
+# 正規化と無音トリム
 normalized = audio.normalize(target_db=-3.0)
 trimmed = audio.trim(threshold_db=-60.0)
 
 # リサンプリング
 resampled = audio.resample(target_sr=44100)
 ```
+
+<SonareDemo id="hpss-separation" />
 
 時間／周波数の領域指定編集には `spectral_edit(samples, sample_rate, [SpectralRegionOp(...)])` を使います。詳しくは [スペクトル編集](./spectral-editing.md) を参照してください。
 
@@ -44,6 +46,7 @@ resampled = audio.resample(target_sr=44100)
 | 音声から実用的な部屋モデルを推定する | `estimate_room(...)` |
 | 寸法からモノラルのルームインパルス応答（RIR）を作る | `synthesize_rir(...)` |
 | 目標ルームの響きを音作り効果として足す | `room_morph(...)` |
+| 同じ響きをステレオ録音に足す（間隔をあけた 2 つのレシーバーで聞く） | `room_morph_stereo(left, right, sample_rate, length_m, width_m, height_m, ...)` |
 
 ::: info 既定値と用語
 `analyze_impulse_response(...)` と `detect_acoustic(...)` は `AcousticResult` を返し、RT60、EDT、C50、C80、D50、バンド別配列、信頼度、`is_blind` を含みます。これらの `sample_rate` の既定値は `48000` で、多くの楽曲解析ヘルパーの `22050` とは異なります。RIR は room impulse response（ルームインパルス応答）の略です。RT60 は残響時間で、残響が 60 dB 減衰するまでの長さを指します。C50 と C80 は、初期エネルギーと後期エネルギーの比で明瞭度を表します。
@@ -65,7 +68,7 @@ print(blind.is_blind, blind.rt60_bands)
 
 estimate = sonare.estimate_room(room_recording, sample_rate, n_octave_bands=6)
 print(estimate.volume, estimate.length_m, estimate.width_m, estimate.height_m)
-print(estimate.drr_db, estimate.confidence, estimate.absorption_bands)
+print(estimate.drr_db, estimate.confidence, estimate.band_absorption)
 
 rir = sonare.synthesize_rir(7.0, 5.0, 3.0, absorption=0.2, sample_rate=sample_rate)
 print(rir.sample_rate, len(rir.rir), rir.diagnostics)  # 警告のみ
@@ -77,13 +80,16 @@ rir = sonare.synthesize_rir(**geometry, sample_rate=sample_rate, material_preset
 morphed = sonare.room_morph(room_recording, sample_rate, 12.0, 9.0, 4.0, wet=0.6)
 ```
 
-注意点は 3 つです。
+<SonareDemo id="room-decay" />
+
+次の点に注意してください。
 
 - `estimate_room(...)` は実空間そのものではなく等価ルームを返すため、`confidence` を確認してください。
-- `synthesize_rir(...)` は、音源や聴取位置が部屋の外にあるなど使えない形状では `SonareValueError` を送出します。メッセージは診断コード（`acoustic.source_outside_room` など）で始まります。正常に返った `RirResult` の `diagnostics` には警告だけが入ります。
+- `synthesize_rir(...)` は、音源や聴取位置が部屋の外にあるなど使えない形状では `SonareError`（コード `INVALID_PARAMETER`。`except ValueError` では捕捉されません）を送出します。メッセージは診断コード（`acoustic.source_outside_room` など）で始まります。正常に返った `RirResult` の `diagnostics` には警告だけが入ります。
 - `material_preset`（既定 `"none"`。ほかに `"concrete"`、`"wood"`、`"curtain"`、`"carpet"`、`"glass"`）と `estimate_room` の `mode`（既定 `"auto"`。ほかに `"blind"`、`"impulse_response"`）は名前だけを受け付けます。数値は `TypeError`、未知の名前は `SonareValueError` です。
-- `room_geometry_from_estimate(estimate, source=None, listener=None)` は `synthesize_rir` のキーワード引数の辞書（`length_m`、`width_m`、`height_m`、必要に応じて `absorption_bands`、`source`、`listener`）を返します。計測できる寸法がない推定結果（NaN）は `SonareValueError` になります。
+- `room_geometry_from_estimate(estimate, source=None, listener=None)` は、`synthesize_rir` のキーワード引数となる `RoomGeometry` 辞書を返します。`length_m`、`width_m`、`height_m`、`source`、`listener`（既定の配置を推定ルームに合わせて拡大縮小したもの。引数で渡せば置き換わる）は常に含まれ、推定が収束していれば `absorption`（有限バンドの平均）と `band_absorption` も含まれます。計測できる寸法がない推定結果（NaN）は `SonareValueError` になります。
 - `room_morph(...)` は音作り効果であり、残響除去ではありません。
+- `room_morph_stereo(...)` は `room_morph` のキーワード引数をすべて受け取り、加えて (0, 4] m の `receiver_spacing_m`（`None` は 0.5 m）を受け取ります。戻り値は `left`、`right`、`sample_rate`、`diagnostics` を持つ `RoomMorphStereoResult` です。壁までの距離が間隔の半分より小さいリスナーは `SonareError` になります。
 
 値の読み方とブラインド推定を使う場面は [ルーム音響解析](./acoustic-analysis.md) を参照してください。
 
@@ -98,25 +104,29 @@ morphed = sonare.room_morph(room_recording, sample_rate, 12.0, 9.0, 4.0, wet=0.6
 | `time_stretch(samples, sample_rate, rate, n_fft?, hop_length?)` | `list[float]` | ピッチを変えずにテンポ変更。既定は `n_fft=2048`、`hop_length=512` |
 | `pitch_shift(samples, sample_rate, semitones, n_fft?, hop_length?)` | `list[float]` | テンポを変えずにピッチ変更。既定は `n_fft=2048`、`hop_length=512` |
 | `pitch_correct_to_midi(samples, sample_rate, current_midi?, target_midi?)` | `list[float]` | 目標 MIDI ノートへピッチ補正 |
-| `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sample_rate?, hop_length?, voiced?, voiced_prob?)` | `list[float]` | コントゥアに沿うピッチ補正。フレームごとの `f0_hz` コントゥアに沿って、有声フレームを `target_midi` へ寄せます。ビブラートやドリフトを平坦化せず保持します |
-| `note_stretch(samples, sample_rate, onset_sample?, offset_sample?, stretch_ratio?)` | `list[float]` | 単一ノート区間をその場でストレッチ |
-| `note_move(samples, sample_rate, onset_sample?, offset_sample?, target_onset_sample?)` | `list[float]` | ノート区間の長さを変えずに、新しいオンセット位置へ移動 |
+| `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sample_rate?, hop_length?, voiced?, voiced_prob?)` | `list[float]` | 輪郭に沿うピッチ補正。フレームごとの `f0_hz` の輪郭に沿って、有声フレームを `target_midi` へ寄せます。ビブラートやドリフトを平坦化せず保持します |
+| `pitch_correct_timevarying(samples, f0_hz, sample_rate?, hop_length?, *, mode="midi", target_midi?, scale_root?, scale_mode_mask?, reference_midi?, retune_amount?, max_correction_semitones?, retune_speed_ms?, vibrato_threshold_cents?, voiced?, voiced_prob?)` | `list[float]` | 同じ輪郭に沿う補正を、固定のノート（`mode="midi"`）またはスケールの最も近い構成音（`mode="scale"`）へ向けて行う。`scale_mode_mask` にはマスク、`Mode`、モード名を渡せ、リチューン系のつまみで自然さと機械的な効き方を調整できる |
+| `auto_tune(samples, sample_rate?, key="detect", *, strength?, retune_speed_ms?, vibrato_threshold_cents?, max_correction_semitones?, reference_midi?)` | `AutoTuneResult` | 単音のテイクを、検出した（`"detect"`）または指定した（`Key`、`{"root", "mode"}`、`(root, mode)`）キーに合わせる。`.samples` が補正後の音声、`.key` が使われたキー |
+| `note_stretch(samples, sample_rate, onset_sample?, offset_sample?, stretch_ratio?, *, onset_sec?, offset_sec?)` | `list[float]` | 単一ノート区間をその場でストレッチ |
+| `note_move(samples, sample_rate, onset_sample?, offset_sample?, target_onset_sample?, *, onset_sec?, offset_sec?, target_onset_sec?)` | `list[float]` | ノート区間の長さを変えずに、新しいオンセット位置へ移動 |
 | `voice_change(samples, sample_rate, pitch_semitones?, formant_factor?, formant_mode?)` | `list[float]` | ピッチとフォルマントを独立にシフト。`formant_mode` は `"relative"`（既定。`formant_factor` はピッチシフトの後にかけるワープ）か `"absolute"`（`formant_factor` はピッチシフトに関係なく入力に対するフォルマントのシフト量。`1.0` ならフォルマントは元の位置のまま）。ワープ `formant_factor / 2**(pitch_semitones / 12)` が [0.55, 1.65] を外れる absolute の指定は、到達できる `formant_factor` の範囲を示した `SonareValueError` になります |
 | `voice_change_realtime(samples, sample_rate?, preset?, channels?)` | `np.ndarray` | リアルタイム音声プリセットチェーンで 1 回レンダリング |
-| `normalize(samples, sample_rate, target_db?)` | `list[float]` | ピークを目標 dB にノーマライズ（既定値: 0.0） |
-| `normalize_rms(samples, sample_rate, target_db?)` | `list[float]` | RMS を目標 dB にノーマライズ（既定値: -20.0） |
-| `normalize_stereo(left, right, sample_rate?, target_db?, *, validate?)` | `NormalizeStereoResult` | ペア共通の 1 つのゲインでピークノーマライズ（`target_db` 既定 `0.0`） |
-| `normalize_rms_stereo(left, right, sample_rate?, target_db?, *, validate?)` | `NormalizeStereoResult` | ペア共通の 1 つのゲインで RMS ノーマライズ（`target_db` 既定 `-20.0`） |
+| `normalize(samples, sample_rate, target_db?)` | `list[float]` | ピークを目標 dB に正規化（既定値: 0.0） |
+| `normalize_rms(samples, sample_rate, target_db?)` | `list[float]` | RMS を目標 dB に正規化（既定値: -20.0） |
+| `normalize_stereo(left, right, sample_rate?, target_db?, *, validate?)` | `NormalizeStereoResult` | ペア共通の 1 つのゲインでピークを正規化（`target_db` 既定 `0.0`） |
+| `normalize_rms_stereo(left, right, sample_rate?, target_db?, *, validate?)` | `NormalizeStereoResult` | ペア共通の 1 つのゲインで RMS を正規化（`target_db` 既定 `-20.0`） |
 | `remix(samples, intervals, sample_rate?, align_zeros?)` | `np.ndarray` | 区間スライスで並べ替え／連結。`align_zeros` は既定 `False` |
 | `remix_aligned_intervals(samples, intervals, sample_rate?, align_zeros?)` | `list[int]` | `remix` が使う切り出し位置だけを解決する（切り出しはしない）。`align_zeros` は既定 `True` |
 | `trim(samples, sample_rate, threshold_db?, frame_length?, hop_length?)` | `list[float]` | 無音区間をトリム（既定: `-60.0` dB、`frame_length=2048`、`hop_length=512`） |
 | `resample(samples, src_sr, target_sr)` | `list[float]` | 目標サンプルレートへリサンプリング |
 
+編集位置はサンプル数か秒（`*_sec`）のどちらか一方で指定します。両方を渡すと拒否されます。`SpectralRegionOp` も同様に `start_sec` / `end_sec` を受け取ります。
+
 `trim(...)` は単純なしきい値ベースの編集ヘルパーです。下の librosa 互換 `trim_silence(...)` はフレーム RMS と `top_db` を使い、トリム後の音声と元音源上のサンプル範囲を返します。
 
-### ステレオペアのノーマライズ
+### ステレオペアの正規化
 
-Python はステレオ用のノーマライザを 2 つに分けて持っています。ピーク用の `normalize_stereo` と RMS 用の `normalize_rms_stereo` です（JavaScript 側は 1 つの関数と `mode` 引数で表現します）。どちらもレベルをペア全体で測り、**1 つの共通ゲインを両チャンネルに適用**します。これがステレオイメージを保つ仕組みです。チャンネルごとに自前のゲインでノーマライズすると、2 つのピークが揃うまで小さい側が持ち上がり、レベルではなく定位バランスが変わってしまいます。ゲインが共通なので `NormalizeStereoResult.applied_gain_db` はチャンネルごとの組ではなく単一の値で、すでに無音のペアはそのまま返り、ゲインはちょうど `0` になります。結果は `left`／`right` に加えて、ペア共通のサンプル数 `length` を保持します。
+Python はステレオ用の正規化関数を 2 つに分けて持っています。ピーク用の `normalize_stereo` と RMS 用の `normalize_rms_stereo` です（JavaScript 側は 1 つの関数と `mode` 引数で表現します）。どちらもレベルをペア全体で測り、**1 つの共通ゲインを両チャンネルに適用**します。これがステレオイメージを保つ仕組みです。チャンネルごとに自前のゲインで正規化すると、2 つのピークが揃うまで小さい側が持ち上がり、レベルではなく定位バランスが変わってしまいます。ゲインが共通なので `NormalizeStereoResult.applied_gain_db` はチャンネルごとの組ではなく単一の値で、すでに無音のペアはそのまま返り、ゲインはちょうど `0` になります。結果は `left`／`right` に加えて、ペア共通のサンプル数 `length` を保持します。
 
 どちらかのチャンネルが空の場合、および 2 つのチャンネルの長さが一致しない場合は拒否されます。C のエントリポイントはペアに対して 1 つのサンプルレートを取るので、2 つのチャンネルがサンプルレートで食い違うことはありません。
 
@@ -127,9 +137,9 @@ print(result.length, result.applied_gain_db)
 
 ### マルチチャンネル素材を共通のフレームで切る
 
-`remix(..., align_zeros=True)` はスライス境界を信号のゼロクロスへスナップしますが、これは信号ごとの判断です。`remix` をチャンネルごとに呼ぶと各チャンネルが別々のフレームへスナップされ、ステレオ素材がずれていきます。`remix_aligned_intervals(...)` は 1 つのチャンネルから切り出し位置を 1 セットだけ解決し（クランプ済みの `(start, end)` ペアのフラットなリスト）、同じフレームで全チャンネルを切り出せるようにします。既定値が意図的に非対称な点に注意してください。`remix` は `align_zeros=False`、`remix_aligned_intervals` は `True` です。
+`remix(..., align_zeros=True)` はスライス境界を信号のゼロクロス位置に合わせますが、これは信号ごとの判断です。`remix` をチャンネルごとに呼ぶと各チャンネルが別々のフレームに合わせられ、ステレオ素材がずれていきます。`remix_aligned_intervals(...)` は 1 つのチャンネルから切り出し位置を 1 セットだけ解決し（クランプ済みの `(start, end)` ペアのフラットなリスト）、同じフレームで全チャンネルを切り出せるようにします。既定値が意図的に非対称な点に注意してください。`remix` は `align_zeros=False`、`remix_aligned_intervals` は `True` です。
 
-スナップでスライスが消えないよう、ガードが 2 つあります。符号変化がまったくない信号（無音、DC オフセット、あらゆる定数）はスナップされません。また、内容があったのにスナップ後に空へ潰れるスライスは、スナップ前の境界を保ちます。
+位置合わせでスライスが消えないよう、ガードが 2 つあります。符号変化がまったくない信号（無音、DC オフセット、あらゆる定数）は位置合わせされません。また、内容があったのに位置合わせ後に空へ潰れるスライスは、元の境界を保ちます。
 
 ```python
 cuts = sonare.remix_aligned_intervals(left, [0, 48000, 96000, 144000], sample_rate=48000)
@@ -139,11 +149,7 @@ right_out = sonare.remix(right, cuts, sample_rate=48000)
 
 ## リアルタイムボイスチェンジャー
 
-`RealtimeVoiceChanger` は、WASM / Node ネイティブと同じプリセット式のライブ音声チェーンを Python から扱うオブジェクトです。
-
-ハイパス、ゲート、リチューン、フォルマント、EQ、コンプレッサー、ディエッサー、リバーブ、リミッターの状態をブロック間で保持します。
-
-マイク入力やストリームを処理する場合は、オフラインの `voice_change(...)` ではなくこちらを使います。
+`RealtimeVoiceChanger` は、WASM / Node ネイティブと同じプリセット式のライブ音声チェーンを Python から扱うオブジェクトです。ハイパス、ゲート、リチューン、フォルマント、EQ、コンプレッサー、ディエッサー、リバーブ、リミッターの状態をブロック間で保持します。マイク入力やストリームを処理する場合は、オフラインの `voice_change(...)` ではなくこちらを使います。
 
 ```python
 import json
@@ -161,7 +167,7 @@ with sonare.RealtimeVoiceChanger(48000, preset="bright-idol", max_block_size=128
     changer.set_config(json.loads(preset_json))
     print(changer.latency_samples(), changer.config_json(), out.shape)
 
-# 同じリアルタイムチェーンを使う単発レンダー。
+# 同じリアルタイムチェーンを使う単発のレンダリング。
 processed = sonare.voice_change_realtime(vocal, sample_rate=48000, preset="soft-whisper")
 ```
 
@@ -171,21 +177,21 @@ JSON ではなく解決済みの POD 設定が必要な場合は、`realtime_voi
 
 `realtime_voice_changer_preset_pod(preset)` は互換用のエイリアスとして残っています。
 
+`formant_mode`（既定は `"relative"`、もうひとつは `"absolute"`）はボイスチェンジャーの作成時に固定されます（プリセットキーは `dsp.formant.mode`）。`"absolute"` は解析 1 フレーム分のレイテンシが増え、[0.55, 1.65] を外れるワープは拒否されます。ステレオ入力では、作成時に `channels=2` を指定して `process_planar_stereo(left, right)` または `process_interleaved(samples, channels)` を呼びます。`StreamingRetune(semitones=, mix=, grain_size=)` は、リチューン段だけをブロック単位で単独実行します。
+
 ## librosa 互換ヘルパー
 
-対応する `librosa` 関数の挙動に
-合わせています。各ヘルパーが対応する librosa 関数は
-[librosa 互換性](./librosa-compatibility.md) を参照してください。
+対応する `librosa` 関数の挙動に合わせています。各ヘルパーが対応する librosa 関数は [librosa 互換性](./librosa-compatibility.md) を参照してください。
 
 ::: tip 各ヘルパーの位置づけ
-- **`preemphasis` / `deemphasis`** — 高域を持ち上げる／戻す古典的な 1 タップ IIR の前処理。
-- **`trim_silence` / `split_silence`** — 前後無音のトリムや、無音区間での区切り出し。
-- **`frame_signal` / `pad_center` / `fix_length` / `fix_frames`** — 固定フレーム DSP に通す前のフレーミング・サイズ揃え。
-- **`peak_pick` / `vector_normalize`** — オンセット強度のような 1 次元信号からのピーク検出と、ベクトルのノルム正規化。
-- **`pcen`** — メルスペクトログラム向けの動的レンジ圧縮（ノイズ・音量変動に強い特徴量）。
-- **`tonnetz`** — クロマグラムを 6 次元のハーモニック空間へ射影。コード関係や転調解析に有効。
-- **`tempogram` / `plp`** — オンセット包絡線から構築するテンポ表現（自己相関、または `mode="cosine"`）と、支配的なパルスの抽出。
-- **`fourier_tempogram` / `cyclic_tempogram` / `tempogram_ratio`** — FFT ベースのテンポグラム、オクターブ畳み込みの循環テンポグラム、テンポ比特徴量。
+- **`preemphasis` / `deemphasis`**：高域を持ち上げる／戻す古典的な 1 タップ IIR の前処理。
+- **`trim_silence` / `split_silence`**：前後無音のトリムや、無音区間での区切り出し。
+- **`frame_signal` / `pad_center` / `fix_length` / `fix_frames`**：固定フレーム DSP に通す前のフレーミング・サイズ揃え。
+- **`peak_pick` / `vector_normalize`**：オンセット強度のような 1 次元信号からのピーク検出と、ベクトルのノルム正規化。
+- **`pcen`**：メルスペクトログラム向けの動的レンジ圧縮（ノイズ・音量変動に強い特徴量）。
+- **`tonnetz`**：クロマグラムを 6 次元のハーモニック空間へ射影。コード関係や転調解析に有効。
+- **`tempogram` / `plp`**：オンセット包絡線から構築するテンポ表現（自己相関、または `mode="cosine"`）と、支配的なパルスの抽出。
+- **`fourier_tempogram` / `cyclic_tempogram` / `tempogram_ratio`**：FFT ベースのテンポグラム、オクターブ畳み込みの循環テンポグラム、テンポ比特徴量。
 :::
 
 | 関数 | 戻り値 | 説明 |
@@ -195,14 +201,15 @@ JSON ではなく解決済みの POD 設定が必要な場合は、`realtime_voi
 | `trim_silence(samples, top_db?, frame_length?, hop_length?)` | `tuple[list[float], int, int]` | `librosa.effects.trim`。`(audio, start_sample, end_sample)` を返す |
 | `split_silence(samples, top_db?, frame_length?, hop_length?)` | `list[tuple[int, int]]` | `librosa.effects.split`。非無音区間をサンプル単位で返す |
 | `split_silence_common(signals, top_db?, frame_length?, hop_length?)` | `list[tuple[int, int]]` | 同じパートの複数テイクがすべて無音になっている区切り位置。`signals` はシーケンスのシーケンスを 1 つ取るため、信号数と各信号の長さが食い違うことがない |
-| `frame_signal(samples, frame_length, hop_length)` | `tuple[int, list[float]]` | `librosa.util.frame`。`(n_frames, row-major フレーム)` を返す |
-| `pad_center(values, size, pad_value?)` | `list[float]` | `librosa.util.pad_center` |
-| `fix_length(values, size, pad_value?)` | `list[float]` | `librosa.util.fix_length` |
+| `split_silence_common_with_report(signals, top_db?, frame_length?, hop_length?)` | `tuple[list[tuple[int, int]], SilenceCommonReport]` | 同じ区切り位置に加えて、`silence_ceiling_db`、`max_signal_intervals`、`min_signal_intervals` を持つレポートを返す |
+| `frame_signal(samples, frame_length, hop_length)` | `tuple[int, list[float]]` | `librosa.util.frame`。`(n_frames, 行優先のフレーム列)` を返す |
+| `pad_center(values, target_size, pad_value?)` | `list[float]` | `librosa.util.pad_center` |
+| `fix_length(values, target_size, pad_value?)` | `list[float]` | `librosa.util.fix_length` |
 | `fix_frames(frames, x_min?, x_max?, pad?)` | `list[int]` | `librosa.util.fix_frames`。`x_max` は上限（その値を含む）で、省略（`None`）すると上限なしです。`-1` は拒否されます |
 | `peak_pick(values, pre_max, post_max, pre_avg, post_avg, delta, wait)` | `list[int]` | `librosa.util.peak_pick`。ピーク位置のインデックスを返す |
 | `vector_normalize(values, norm_type?, threshold?)` | `list[float]` | `librosa.util.normalize`。`norm_type`: 0=inf, 1=L1, 2=L2, 3=power |
-| `pcen(values, n_bins, n_frames, sample_rate?, hop_length?, time_constant?, gain?, bias?, power?, eps?)` | `list[float]` | `librosa.pcen`。入力は row-major の `[n_bins x n_frames]` メル |
-| `tonnetz(chromagram, n_chroma, n_frames)` | `list[float]` | `librosa.feature.tonnetz`。row-major の `[6 x n_frames]` を返す |
+| `pcen(values, n_bins, n_frames, sample_rate?, hop_length?, time_constant?, gain?, bias?, power?, eps?)` | `list[float]` | `librosa.pcen`。入力は行優先の `[n_bins x n_frames]` メル |
+| `tonnetz(chromagram, n_chroma, n_frames)` | `list[float]` | `librosa.feature.tonnetz`。行優先の `[6 x n_frames]` を返す |
 | `tempogram(onset_envelope, sample_rate?, hop_length?, win_length?, center?, norm?, mode?)` | `tuple[int, list[float]]` | `librosa.feature.tempogram`。`mode`: `"autocorrelation"`（既定）または `"cosine"` |
 | `fourier_tempogram(onset_envelope, sample_rate?, hop_length?, win_length?, center?, norm?)` | `tuple[int, list[float]]` | FFT ベースのテンポグラム（オンセット包絡線の STFT）|
 | `cyclic_tempogram(onset_envelope, sample_rate?, hop_length?, win_length?, bpm_min?, n_bins?)` | `tuple[int, list[float]]` | オクターブ畳み込みの循環テンポグラム |

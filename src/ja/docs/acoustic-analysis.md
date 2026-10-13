@@ -83,6 +83,8 @@ libsonare には、部屋や録音環境の響きを説明するためのルー�
 
 ## 使い方
 
+音響系の関数は `sampleRate` の既定が 48000 です。必ず録音のレートを渡してください。
+
 ::: code-group
 
 ```typescript [ブラウザ]
@@ -97,7 +99,57 @@ import {
 
 await init();
 
-const measured = analyzeImpulseResponse(irSamples, sampleRate, 6);
+const measured = analyzeImpulseResponse(irSamples, sampleRate, 6, 30); // バンド数, フィット幅（dB）
+console.log(measured.rt60, measured.edt, measured.c50, measured.c80);
+
+const blind = detectAcoustic(roomRecording, sampleRate, {
+  nOctaveBands: 6,            // オクターブバンド数
+  nThirdOctaveSubbands: 24,   // ブラインド推定で使う 1/3 オクターブ相当のサブバンド数
+  minDecayDb: 30,             // 有効な減衰として扱う最小 dB
+  noiseFloorMarginDb: 10,     // ノイズフロアに対する余裕 dB
+});
+console.log(blind.confidence, blind.isBlind);
+
+const estimate = estimateRoom(roomRecording, sampleRate, {
+  referenceAbsorption: 0.15,
+  nOctaveBands: 6,
+});
+console.log(estimate.volume, estimate.lengthM, estimate.widthM, estimate.heightM);
+console.log(estimate.drrDb, estimate.confidence, estimate.bandAbsorption, estimate.rt60Bands);
+
+// 使えない形状（例: acoustic.source_outside_room）は、コード付きの SonareError を投げる
+const { rir, diagnostics: rirWarnings } = synthesizeRir({
+  lengthM: 7,
+  widthM: 5,
+  heightM: 3,
+  sourceX: 1,
+  sourceY: 1,
+  sourceZ: 1.2,
+  listenerX: 5,
+  listenerY: 4,
+  listenerZ: 1.7,
+  absorption: 0.2,
+  sampleRate,
+});
+
+const { audio: morphed, diagnostics } = roomMorph(dryVoice, sampleRate, {
+  lengthM: 12,
+  widthM: 9,
+  heightM: 4,
+  wet: 0.6,
+});
+```
+
+```typescript [Node]
+import {
+  analyzeImpulseResponse,
+  detectAcoustic,
+  estimateRoom,
+  synthesizeRir,
+  roomMorph,
+} from '@libraz/libsonare-native';
+
+const measured = analyzeImpulseResponse(irSamples, sampleRate, 6, 30); // バンド数, フィット幅（dB）
 console.log(measured.rt60, measured.edt, measured.c50, measured.c80);
 
 const blind = detectAcoustic(roomRecording, sampleRate, {
@@ -143,7 +195,7 @@ import libsonare as sonare
 
 audio = sonare.Audio.from_file("room-clap.wav")
 
-measured = sonare.analyze_impulse_response(audio.data, audio.sample_rate, n_octave_bands=6)
+measured = sonare.analyze_impulse_response(audio.data, audio.sample_rate, n_octave_bands=6, min_decay_db=30.0)
 print(measured.rt60, measured.edt, measured.c50, measured.c80)
 
 blind = sonare.detect_acoustic(
@@ -174,7 +226,7 @@ morphed = sonare.room_morph(
 ```
 
 ```bash [CLI]
-# 通常の録音からのブラインド推定（バンド数・閾値はデフォルト）
+# 通常の録音からのブラインド推定（バンド数・しきい値は既定値）
 sonare acoustic room-recording.wav
 
 # インパルス応答モード（拍手／風船破裂音／スターターピストル音／スイープ由来 IR）
@@ -195,43 +247,111 @@ sonare room-morph dry.wav --length 12 --width 9 --height 4 --wet 0.6 -o morphed.
 
 :::
 
-Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_response(...)` と `audio.detect_acoustic(...)`。幾何ベースのルーム音響ヘルパー（`synthesizeRir`・`estimateRoom`・`roomMorph`）は、Python ではモジュールレベル関数、WASM パッケージではスタンドアロン関数です。
+Python の `Audio` からは、計測系の呼び出しをインスタンスメソッドとして使えます: `audio.analyze_impulse_response(...)` と `audio.detect_acoustic(...)`。`synthesizeRir`・`estimateRoom`・`roomMorph` は、Python ではモジュールレベル関数、WASM パッケージではスタンドアロン関数です。
+
+## 等価ルームの推定
+
+`estimateRoom(...)` は、録音から等価ルームを推定します。正確な実空間を復元するものではなく、実用上のモデルとして扱ってください。通常録音には部屋の減衰がはっきり出ていないことがあるため、必ず `confidence` を確認します。結果には `volume`、`lengthM`、`widthM`、`heightM`、`drrDb`、`confidence`、`bandAbsorption`、`rt60Bands` が入ります（Python ではスネークケースの名前です）。
+
+| オプション | 既定値 | 意味 |
+|------------|--------|------|
+| `mode` | `'auto'` | `'auto'` はインパルス状の入力をインパルス応答解析へ、それ以外をブラインド経路へ回します。`'blind'` と `'impulse_response'` は経路を固定します。名前だけを受け付け、数値は `TypeError` です。 |
+| `aspectHintLw` / `aspectHintLh` | `1` / `1` | 長さ : 幅、長さ : 高さの比です。`widthM = lengthM / aspectHintLw`、`heightM = lengthM / aspectHintLh` になります。 |
+| `referenceAbsorption` | `0.15` | 部屋の大きさを決める壁の平均吸音率です（下記）。`[0.01, 0.99]` に丸められます。 |
+| `preferEyring` | `true` | 減衰の逆算に Eyring（`true`）と Sabine（`false`）のどちらを使うか。 |
+| `nOctaveBands`, `minDecayDb`, `noiseFloorMarginDb` | `6`, `30`, `10` | `detectAcoustic(...)` と同じです。`0` は既定値を選びます。 |
+
+::: warning `estimateRoom(...)` が実際に解いているもの
+解いているのは、与えた形状と吸音率の前提のもとでの*大きさ*だけで、形状そのものは復元しません。
+
+- `aspectHintLw` / `aspectHintLh` を渡さないと、3 つの寸法は同じ値（立方体）で返ります。ヒントを渡していないのに、`lengthM`・`widthM`・`heightM` を復元した比率として見せないでください。
+- 1 つの減衰が決めるのは `V / A`（`A` は等価吸音面積）の比で、体積と吸音率を別々には決められません。形状を固定すると、表面積は線寸法の 2 乗、体積は 3 乗で増えるため、大きい部屋が同じ RT60 を保つには平均吸音率が高くなければなりません。足りない前提を埋めて体積を決めるのが `referenceAbsorption` です。Sabine では報告される体積がこの前提のおよそ 3 乗に比例し、既定の Eyring では対応する `-ln(1 − α)` の項を使うので、3 乗則は Sabine での近似です。録音どうしを比べるときは固定しておきます。
+
+前提は拒否されずに丸められるため、範囲外の値でも推定は成功し、丸めた値で計算されます。下限側では、報告される体積が 3 桁ずれます。
+:::
+
+::: warning 明示した `referenceAbsorption: 0` はどこでも「既定値」になるわけではない
+Python と C は明示した `0` を既定値（`0.15`）として読みますが、Node と WASM は `0.01` に丸めます。その場合、普通の部屋が数分の 1 立方メートルとして、高い信頼度のまま報告されます。既定値が欲しいときは指定を省略し、下限が欲しいときは `0.01` と書いてください。
+:::
+
+## 結果の読み方
+
+| フィールド | 意味 |
+|------------|------|
+| `rt60` | 残響が 60 dB 減衰するまでの推定時間。大きいほど響きが長い部屋です。 |
+| `edt` | 最初の 10 dB に当てはめた初期減衰時間。体感上の残響感に近いことがあります。独立に当てはめられるのはインパルス応答モードのときだけです。 |
+| `c50` | 音声向けの明瞭度。高いほど子音や会話が聞き取りやすい傾向があります。インパルス応答モード専用です。 |
+| `c80` | 音楽向けの明瞭度。直接音・初期反射が後期残響に対してどれだけ強いかを示します。インパルス応答モード専用です。 |
+| `d50` | 定義度。最初の 50 ms に含まれるエネルギーの割合（`0`〜`1`）です。インパルス応答モード専用です。 |
+| `rt60Bands`, `edtBands`, `c50Bands`, `c80Bands` | 各測定値のバンド別配列。Python では snake_case 名も使えます。 |
+| `confidence` | `0` から `1` の信頼度。低い場合は、十分にきれいな減衰が取れていません。 |
+| `isBlind` / `is_blind` | インパルス応答前提ではなくブラインド推定で得た結果かどうか。 |
+
+::: warning ブラインド解析が返すのは減衰だけです
+`detectAcoustic(...)` は常にブラインド経路で動き、その経路が復元するのは後期減衰の速さだけです。`c50`・`c80`・`d50` は `NaN` で返り、`c50Bands` と `c80Bands` は空で返ります。直接音の到達時刻がなく、0 から −10 dB の独立した当てはめができないため、`edt` は `NaN` です。`edtBands` は要求したバンド数を保ちますが、全要素が `NaN` になります。明瞭度の数値や本来の EDT が必要なときは、手拍子・破裂音・逆畳み込み済みのスイープ由来 IR に対して `analyzeImpulseResponse(...)` を呼んでください。また、これらのフィールドを UI に表示する前に `NaN` を必ず確認してください。
+:::
+
+::: details RT60・EDT・C50/C80・D50 は何を測る？
+いずれも、音が止まったあとに空間でどう減衰するかから求める標準的なルーム音響指標です。
+
+- **RT60**：残響が 60 dB 減衰するまでの秒数。「どれだけ響くか」を表す代表値で、小さな部屋なら約 0.3 秒、大聖堂なら数秒になります。
+- **EDT**（早期減衰時間）：減衰の最初の部分から測った減衰速度を 60 dB 降下に換算したもの。体感上の響きの豊かさは、RT60 より EDT の方がよく一致することが多いです。
+- **C50 / C80**（明瞭度）：初期エネルギー（最初の 50 ms / 80 ms）と、その後の残響との比を dB で表したもの。高いほど明瞭で直接音的です。C50 は会話、C80 は音楽の基準です。
+- **D50**（定義度）：全エネルギーのうち最初の 50 ms に到達する割合（0〜1）。高いほど直接音的で、ぼやけが少なくなります。
+:::
+
+## 実用上の注意
+
+信頼できる値が必要なら、きれいなインパルス応答を録音してください。
+
+- 静かな環境で録る。
+- クリップしないレベルにする。
+- インパルス後の無音を十分に残す。
+- 解析前に不要なノイズをトリムする。
+
+ブラインド推定は「このテイクは響きすぎているかも」といった比較や警告には便利です。ただし、建築音響の正式な測定値として扱うものではありません。
 
 ## 幾何ベースのルーム音響
 
 ここは、録音を測るだけでなく、部屋モデルを作る・適用する API の説明です。
 
+<FlowDiagram
+  title="録音から合成ルームまで"
+  :nodes="[
+    { id: 'rec', label: '録音', col: 0, row: 1 },
+    { id: 'est', label: 'ルーム推定', col: 1, row: 1 },
+    { id: 'geo', label: 'ルーム形状', col: 2, row: 1 },
+    { id: 'own', label: '自分で決めた形状', col: 2, row: 0, variant: 'muted' },
+    { id: 'rir', label: 'ルームインパルス応答', col: 3, row: 1, variant: 'success' },
+    { id: 'out', label: 'モーフ後の音声', col: 3, row: 2, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'rec', to: 'est', label: 'estimateRoom' },
+    { from: 'est', to: 'geo', label: 'roomGeometryFromEstimate' },
+    { from: 'geo', to: 'rir', label: 'synthesizeRir' },
+    { from: 'own', to: 'rir', label: 'synthesizeRir', style: 'dashed' },
+    { from: 'geo', to: 'out', label: 'roomMorph / roomMorphStereo' }
+  ]"
+  caption="形状は推定結果からも手書きでも用意でき、どちらも合成器とモーフに渡せます。"
+/>
+
 `synthesizeRir(...)` は、直方体の部屋からモノラル RIR を作ります。寸法はメートル、壁は一様な吸音率、音源と聴取位置は部屋の内側の座標で指定します。音源や聴取位置が部屋の外にあるなど、使えない形状は、コード付きの `SonareError` として例外になります。メッセージは診断コード（例: `acoustic.source_outside_room`）で始まり、Python では `SonareValueError` です。正常に返った呼び出しの `diagnostics` には警告だけが入ります。
 
-`estimateRoom(...)` は、録音から等価ルームを推定します。正確な実空間を復元するものではありません。通常録音には部屋の減衰がはっきり出ていないことがあるため、必ず `confidence` を確認してください。`mode` オプションは解析器の経路を名前で選びます。`'auto'`（既定）、`'blind'`、`'impulse_response'` のいずれかで、数値を渡すと `TypeError` になります。
-
-::: warning `estimateRoom(...)` が実際に解いているもの
-この関数が解くのは、呼び出し側が与えた形状と吸音率の事前値のもとでの**スケール**で、形そのものではありません。
-
-- 奥行き : 幅 : 高さの比は `aspectHintLw` ／ `aspectHintLh` で決まります（既定はどちらも `1`）。これらを省いた呼び出しは常に 3 つとも同じ寸法 — 立方体 — を返すので、ヒントを渡していない限り `lengthM`・`widthM`・`heightM` を「復元された比率」として提示しないでください。
-- 1 本の減衰が拘束するのは、等価吸音面積 `A` に対する容積 `V` の比 `V / A` で、容積と吸音率を別々には決められません。形状を固定すると、表面積は線寸法の 2 乗、容積は 3 乗で増えるため、同じ RT60 を保つには大きい部屋ほど平均吸音率を高くする必要があります。足りない情報を事前値 `referenceAbsorption`（既定 `0.15`）で補って容積を決めます。サビーンでは報告される容積が事前値のおおむね 3 乗で変わります。既定のアイリングでは対応する `-ln(1 − α)` の項を使うため、3 乗の規則はサビーンでの近似として扱ってください。録音どうしを比較するときは、この値を固定してください。
-
-この事前値は拒否されず `[0.01, 0.99]` にクランプされます。範囲外の値を渡しても推定は成功しますが、計算に使われるのはクランプ後の値です。低い側では、報告される容積が 3 桁ずれることになります。
-:::
-
-::: info C では事前値の 0 は「既定値を使う」の意味です
-`SonareRoomEstimateConfig` の float はすべて `0` を「未設定」として読み、`reference_absorption` も例外ではありません。`0` はライブラリ既定値の `0.15` を選びます。C ヘッダが想定している書き方は `SonareRoomEstimateConfig cfg = {};` です。ここで 0 をそのまま値として扱うと、解析側の下限 `0.01` に張り付きます。推定される部屋のスケールは事前値で決まるため、普通の広さの部屋が 1 立方メートル未満として、しかも confidence は最大のまま報告され、その推定値を `sonare_synthesize_rir` に渡すと無関係な残響ができてしまいます。サビーンではこの容積が事前値の **3 乗**に近い形で変わり、既定のアイリングでは `-ln(1 − α)` の項で変わります。Node・Python・WASM は `0.15` を明示的に渡しており、動作は同じです。ほぼ剛壁の事前値が本当に必要な場合は、`0` ではなく `0.01` を指定してください。
-:::
-
-`roomMorph(...)` はオフラインの音作り効果です。合成した目標ルームの響きを足し、既存の残響尾部を少し弱めることがあります。この出力を残響除去として扱ったり説明したりしないでください。ルームの響きを足す処理であり、既存の残響を取り除く処理ではありません。
+`roomMorph(...)` はオフラインの音作り効果です。合成した目標ルームの響きを足し、既存の残響テールを少し弱めることがあります。この出力を残響除去として扱ったり説明したりしないでください。ルームの響きを足す処理であり、既存の残響を取り除く処理ではありません。
 
 ### ルームモーフの結果を読む
 
-`roomMorph(...)` は `RoomMorphResult` を返します。モーフ後のサンプルは `audio`（入力長に目標ルームの残響テイルを足した長さで、足した残響が途中で切れることはありません）、そのサンプルレートは `sampleRate`、そして目標ルームの合成が結果を出すために変更した内容の一覧が `diagnostics` です。モーフは `synthesizeRir(...)` と同じコードで目標ルームを合成するため、同じ警告を報告します。どの警告も「指定したのとは別の部屋でレンダリングされた」ことを意味し、音を聴いただけでは分かりません。分かるのはこの一覧だけです。
+`roomMorph(...)` は `RoomMorphResult` を返します。モーフ後のサンプルは `audio`（入力長に目標ルームの残響テールを足した長さで、足した残響が途中で切れることはありません）、そのサンプルレートは `sampleRate`、そして目標ルームの合成が結果を出すために変更した内容の一覧が `diagnostics` です。モーフは `synthesizeRir(...)` と同じコードで目標ルームを合成するため、同じ警告を報告します。どの警告も「指定したのとは別の部屋でレンダリングされた」ことを意味し、音を聴いただけでは分かりません。分かるのはこの一覧だけです。
 
 | `code` | 起きたこと | 対処 |
 |--------|-----------|------|
 | `acoustic.ism_order_clamped` | `ismOrder` が安全上限の `12` を超えていたため、上限まで下げられました。 | `12` 以下を指定して、要求とレンダリング結果を一致させます。 |
-| `acoustic.rir_length_clamped` | 部屋本来の応答が上限より長く、テイルが切られました。どの上限かはメッセージが示します。`maxSeconds`、または `maxSeconds` が `0` のときは RIR の共有リソース上限です。 | `maxSeconds` を指定していたなら上げます。指定していないなら、その部屋の減衰は上限に収まらない長さなので、部屋を小さくするか吸音率を上げます。 |
+| `acoustic.rir_length_clamped` | 部屋本来の応答が上限より長く、テールが切られました。どの上限かはメッセージが示します。`maxSeconds`、または `maxSeconds` が `0` のときは RIR の共有リソース上限です。 | `maxSeconds` を指定していたなら上げます。指定していないなら、その部屋の減衰は上限に収まらない長さなので、部屋を小さくするか吸音率を上げます。 |
 | `acoustic.rir_length_floored` | `maxSeconds` が直接音の到達より前に終わるため、直接音が収まるまで延長されました。結果は要求より長くなります。 | `maxSeconds` を上げるか、聴取位置を音源に近づけます。 |
-| `acoustic.no_late_tail` | 混合時刻の時点で使える拡散テイルがなく、目標ルームは初期反射だけになりました。全バンドで吸音率が `0` の完全な剛壁か、逆に吸音が強すぎてクロスオーバーの前にテイルが終わっているかのどちらかです。 | 吸音率を両極端から離すか、`mixingTimeMs` を下げます。 |
+| `acoustic.rir_tail_truncated` | `maxSeconds` が最も長く響く帯域の RT60 より短く、その帯域の 60 dB 減衰を RIR から計測できません。 | `maxSeconds` をその帯域の RT60 以上にするか、`0` でリソース上限内の自然な長さを選びます。 |
+| `acoustic.no_late_tail` | 混合時刻の時点で使える拡散テールがなく、目標ルームは初期反射だけになりました。全バンドで吸音率が `0` の完全な剛壁か、逆に吸音が強すぎてクロスオーバーの前にテールが終わっているかのどちらかです。 | 吸音率を両極端から離すか、`mixingTimeMs` を下げます。 |
 
-`RoomMorphResult` にも `RirResult` にもエラーフラグはありません。生成できないモーフ — 不正な形状、部屋の外にある聴取位置、物理的にありえない気象条件 — は `InvalidParameter` として例外になる（`synthesizeRir(...)` も同様に投げる）ため、`diagnostics` に入るのは「結果は得られたが注意が要る」警告だけです。分岐は `code` で行ってください。`message` は人が読むための文字列で、返ってきたモーフに付く `severity` はすべて `'warning'` です。
+`RoomMorphResult` にも `RirResult` にもエラーフラグはありません。生成できないモーフ（不正な形状、部屋の外にある聴取位置、物理的にありえない気象条件）は `InvalidParameter` として例外になる（`synthesizeRir(...)` も同様に投げる）ため、`diagnostics` に入るのは「結果は得られたが注意が要る」警告だけです。分岐は `code` で行ってください。`message` は人が読むための文字列で、返ってきたモーフに付く `severity` はすべて `'warning'` です。
 
 この形はどの環境から呼んでも同じです。Node とブラウザは [JavaScript API の型](./js-api-types.md#roommorphresult) にある `RoomMorphResult` を返します。Python は `RoomMorphResult` データクラスを返し、その `diagnostics` は `RirDiagnostic` のリストです。C ABI では `sonare_room_morph` が成功したあとに `sonare_last_diagnostic_count()` / `sonare_last_diagnostic_code(i)` からエントリを読めます（[C++ API](./cpp-api-effects.md#c-abi-からのルームモーフ) 参照）。`sonare room-morph` コマンドは各警告を `warning: <code>: <message>` の形で stderr に出力し、出力ファイルと `--json` のサマリは stdout 側に残ります。
 
@@ -239,7 +359,7 @@ Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_
 
 `roomMorphStereo({ left, right, sampleRate, ...options })`（Python は `room_morph_stereo(left, right, sample_rate, length_m, width_m, height_m, ...)`、C は `sonare_room_morph_stereo`、CLI は 2 チャンネルファイルに対する `sonare room-morph`）は、モノラルではなくステレオ録音をモーフします。`roomMorph` のオプションをすべて受け取るほか、`receiverSpacingM`（Python は `receiver_spacing_m`、CLI は `--receiver-spacing`）を取ります。目標ルームは、聴取位置をはさんでこの距離だけ離れた 2 本の無指向性レシーバーで聴いた響きとして扱われ、既定は `0.5` m です。(0, 4] m の範囲外の間隔や、長さの異なる左右チャンネルは `RangeError`（Python では `SonareValueError`）で拒否されます。
 
-各チャンネルは、自分側のレシーバーの応答とたたみ込まれます。初期反射はレシーバーごとに異なり、後期テールはその距離だけ離れた 2 点の拡散音場コヒーレンスに従うため、低域は左右で相関を保ち、高域は保ちません。結果は `{ left, right, sampleRate, diagnostics }` で、両チャンネルとも入力長に目標ルームの残響テイルを足した長さです。`diagnostics` には上の表と同じコードが入ります。元の残響尾部を抑える処理は、音量の大きいほうのチャンネルから求めたゲインを両チャンネルに同じだけ適用するため、抑制によってステレオイメージがずれることはありません。
+各チャンネルは、自分側のレシーバーの応答とたたみ込まれます。初期反射はレシーバーごとに異なり、後期テールはその距離だけ離れた 2 点の拡散音場コヒーレンスに従うため、低域は左右で相関を保ち、高域は保ちません。結果は `{ left, right, sampleRate, diagnostics }` で、両チャンネルとも入力長に目標ルームの残響テールを足した長さです。`diagnostics` には上の表と同じコードが入ります。元の残響テールを抑える処理は、音量の大きいほうのチャンネルから求めたゲインを両チャンネルに同じだけ適用するため、抑制によってステレオイメージがずれることはありません。
 
 ```typescript
 const { left: wetL, right: wetR } = roomMorphStereo({
@@ -249,11 +369,13 @@ const { left: wetL, right: wetR } = roomMorphStereo({
 });
 ```
 
-モノラルに合算すると、足された響きは約 300 Hz 以上で、両チャンネルが同じ応答を共有した場合より約 3 dB 小さくなります。2 つのテールが同位相で足し合わさらないためです。オフラインのモノラル `roomMorph(...)` は単一の聴取点の応答で、レシーバーのペアは置きません。`effects.reverb.room` と `effects.acoustic.roomMorph` のインサートは、ステレオストリップでこのペアを使います。どちらかのレシーバーが部屋の外に出る配置は `InvalidParameter` で拒否されるため、側壁までの距離が間隔の半分（既定では 0.25 m）より近い聴取位置は、モノラルのストリップでも拒否されます。機能カタログの測定済み境界もこれに合わせてあり、`listenerX` と `listenerY` には壁の内側に収まる最小値と最大値が載り、`lengthM` と `widthM` の最小値はそれに応じて大きくなっています。
+モノラルに合算すると、足された響きは約 300 Hz 以上で、両チャンネルが同じ応答を共有した場合より約 3 dB 小さくなります。2 つのテールが同位相で加算されないためです。オフラインのモノラル `roomMorph(...)` は単一の聴取位置の応答で、レシーバーのペアは置きません。`effects.reverb.room` と `effects.acoustic.roomMorph` のインサートは、ステレオストリップでこのペアを使います。どちらかのレシーバーが部屋の外に出る配置は `InvalidParameter` で拒否されるため、側壁までの距離が間隔の半分（既定では 0.25 m）より近い聴取位置は、モノラルのストリップでも拒否されます。機能カタログの測定済み境界もこれに合わせてあり、`listenerX` と `listenerY` には壁の内側に収まる最小値と最大値が載り、`lengthM` と `widthM` の最小値はそれに応じて大きくなっています。
+
+間隔が 2 つのテールを帯域ごとにどう変えるかは、[間隔を空けたレシーバーとチャンネル間コヒーレンス](./glossary/acoustics/spaced-receivers.md)で実測しています。
 
 ### 推定結果から RIR を合成する
 
-`estimateRoom(...)` の結果は `synthesizeRir(...)` が受け取る名前（`lengthM`、`widthM`、`heightM`、`bandAbsorption`）をそのまま使っているので、`roomGeometryFromEstimate(...)` は位置情報を足すだけで、そのまま渡せる形状を返します。推定結果には音源や聴取位置が含まれません。`{ x, y, z }`（メートル）で渡さないと合成側の既定値が使われ、小さな推定ルームでは部屋の外になることがあります。収束しなかった吸音バンドは省かれ、スカラーの `absorption` が適用されます。計測できる寸法がない推定（`NaN`、`confidence` が `0`）は `RangeError`（Python では `SonareValueError`）になります。
+`estimateRoom(...)` の結果は `synthesizeRir(...)` が受け取る名前（`lengthM`、`widthM`、`heightM`、`bandAbsorption`）をそのまま使っているので、`roomGeometryFromEstimate(...)` はそのまま渡せる形状を返します。推定結果には音源や聴取位置が含まれないため、結果側で配置します。合成側の既定の音源とリスナーの位置を、既定の 7 × 5 × 3 m の部屋から推定した寸法へ軸ごとに縮尺した位置です（7 × 5 × 3 m なら既定の配置そのもの）。小さな推定ルームでも両方が室内に収まります。`source` / `listener` を `{ x, y, z }`（メートル）で渡すと、その位置が優先されます。結果にはスカラーの `absorption`（有限なバンドの平均）も含まれ、収束しなかった吸音バンドは `bandAbsorption` から省かれます。計測できる寸法がない推定（`NaN`、`confidence` が `0`）は `RangeError`（Python では `SonareValueError`）になります。
 
 ::: code-group
 
@@ -292,7 +414,7 @@ rir = sonare.synthesize_rir(**geometry, sample_rate=audio.sample_rate)
 `bandScattering` はこの優先順位の外にあります。吸音率の優先順位が選んだ壁材質に対して適用されるので、プリセットと散乱配列を同時に渡す指定も成り立ちます。プリセットの吸音率に、指定した粗さが重なります。
 
 ::: warning 散乱配列は常に反映されます
-`bandScattering` が無視されることはありません。`materialPreset` と併用した場合も同じです。散乱は鏡面的な初期反射からエネルギーを拡散させるため、ミキシングタイムと初期／後期のバランスが動きます。つまり、渡せばレンダリング結果は変わります。`synthesizeRir(...)` や `roomMorph(...)` に、実際には効かせたくない散乱配列を渡しているコードがあるなら、プリセットで打ち消されることを当てにせず、配列そのものを外してください。
+`bandScattering` が無視されることはありません。`materialPreset` と併用した場合も同じです。散乱は鏡面的な初期反射からエネルギーを拡散させるため、混合時刻と初期／後期のバランスが動きます。つまり、渡せばレンダリング結果は変わります。`synthesizeRir(...)` や `roomMorph(...)` に、実際には効かせたくない散乱配列を渡しているコードがあるなら、プリセットで打ち消されることを当てにせず、配列そのものを外してください。
 :::
 
 ::: warning 範囲外の吸音率はクランプされず拒否されます
@@ -375,48 +497,12 @@ ON にすると主に大きな部屋の高域が短くなり、小さな部屋�
 空気吸収がモデル化するのは、伝搬経路上、つまり空気の中での損失です。境界での損失をモデル化する `absorption`・`bandAbsorption`・`materialPreset` の代わりにはならず、鏡像音源による初期反射にはまったく触れません。変わるのは統計的テールの減衰速度だけです。壁が反射的なせいで高域が鳴りすぎる部屋に必要なのは、より吸音的な壁材です。湿度では直りませんし、空気吸収項が無視できるほど小さい低域は動きません。
 :::
 
-## 結果の読み方
-
-| フィールド | 意味 |
-|------------|------|
-| `rt60` | 残響が 60 dB 減衰するまでの推定時間。大きいほど響きが長い部屋です。 |
-| `edt` | 最初の 10 dB に当てはめた初期減衰時間。体感上の残響感に近いことがあります。独立に当てはめられるのはインパルス応答モードのときだけです。 |
-| `c50` | 音声向けの明瞭度。高いほど子音や会話が聞き取りやすい傾向があります。インパルス応答モード専用です。 |
-| `c80` | 音楽向けの明瞭度。直接音・初期反射が後期残響に対してどれだけ強いかを示します。インパルス応答モード専用です。 |
-| `d50` | 定義度。最初の 50 ms に含まれるエネルギーの割合（`0`〜`1`）です。インパルス応答モード専用です。 |
-| `rt60Bands`, `edtBands`, `c50Bands`, `c80Bands` | 各測定値のバンド別配列。Python では snake_case 名も使えます。 |
-| `confidence` | `0` から `1` の信頼度。低い場合は、十分にきれいな減衰が取れていません。 |
-| `isBlind` / `is_blind` | インパルス応答前提ではなくブラインド推定で得た結果かどうか。 |
-
-::: warning ブラインド解析が返すのは減衰だけです
-`detectAcoustic(...)` は常にブラインド経路で動き、その経路が復元するのは後期減衰の速さだけです。`c50`・`c80`・`d50` は `NaN` で返り、`c50Bands` と `c80Bands` は空で返ります。直接音の到達時刻がなく、0 から −10 dB の独立した当てはめができないため、`edt` は `NaN` です。`edtBands` は要求したバンド数を保ちますが、全要素が `NaN` になります。明瞭度の数値や本来の EDT が必要なときは、手拍子・破裂音・逆畳み込み済みのスイープ由来 IR に対して `analyzeImpulseResponse(...)` を呼んでください。また、これらのフィールドを UI に表示する前に `NaN` を必ず確認してください。
-:::
-
-::: details RT60・EDT・C50/C80・D50 は何を測る？
-いずれも、音が止まったあとに空間でどう減衰するかから求める標準的なルーム音響指標です。
-
-- **RT60** — 残響が 60 dB 減衰するまでの秒数。「どれだけ響くか」を表す代表値で、小さな部屋なら約 0.3 秒、大聖堂なら数秒になります。
-- **EDT**（早期減衰時間） — 減衰の最初の部分から測った減衰速度を 60 dB 降下に換算したもの。体感上の響きの豊かさは、RT60 より EDT の方がよく一致することが多いです。
-- **C50 / C80**（明瞭度） — 初期エネルギー（最初の 50 ms / 80 ms）と、その後の残響との比を dB で表したもの。高いほど明瞭で直接音的です。C50 は会話、C80 は音楽の基準です。
-- **D50**（定義） — 全エネルギーのうち最初の 50 ms に到達する割合（0〜1）。高いほど直接音的で、ぼやけが少なくなります。
-:::
-
-## 実用上の注意
-
-信頼できる値が必要なら、きれいなインパルス応答を録音してください。
-
-- 静かな環境で録る。
-- クリップしないレベルにする。
-- インパルス後の無音を十分に残す。
-- 解析前に不要なノイズをトリムする。
-
-ブラインド推定は「このテイクは響きすぎているかも」といった比較や警告には便利です。ただし、建築音響の正式な測定値として扱うものではありません。
-
 ライブ表示や段階的な BPM/キー/コード推定が必要なら [リアルタイムとストリーミング](./realtime-streaming.md) を使います。楽曲メタデータが必要なら [JavaScript API](./js-api-analysis.md) または [Python API](./python-api.md) を参照してください。
 
 ## 関連
 
-- [残響時間（RT60 と EDT）](./glossary/acoustics/reverberation-time.md) · [明瞭度と明瞭性（C50・C80・D50）](./glossary/acoustics/clarity-definition.md) — 主要な減衰・明瞭度の数値が表すもの
-- [音源距離と DRR](./glossary/acoustics/source-distance.md) · [部屋の形状と容積](./glossary/acoustics/room-geometry.md) — 距離・等価シューボックス・Sabine の容積／吸音のトレードオフ
-- [帯域別の減衰と吸音](./glossary/acoustics/absorption-bands.md) · [逆問題による部屋推定](./glossary/acoustics/inverse-estimation.md) — オクターブ帯域ごとの減衰と、インパルス応答／ブラインド推定と信頼度スコア
-- [空間ルームスキャナー](/ja/spatial) — このパイプライン全体をローカルでインタラクティブな 3D シーンとして実行
+- [残響時間（RT60 と EDT）](./glossary/acoustics/reverberation-time.md) · [明瞭度（C50・C80）と定義度（D50）](./glossary/acoustics/clarity-definition.md)：主要な減衰・明瞭度の数値が表すもの
+- [音源距離と DRR](./glossary/acoustics/source-distance.md) · [部屋の形状と容積](./glossary/acoustics/room-geometry.md)：距離・等価シューボックス・Sabine の容積／吸音のトレードオフ
+- [帯域別の減衰と吸音](./glossary/acoustics/absorption-bands.md) · [逆問題による部屋推定](./glossary/acoustics/inverse-estimation.md)：オクターブ帯域ごとの減衰と、インパルス応答／ブラインド推定と信頼度スコア
+- [空間ルームスキャナー](/ja/spatial)：このパイプライン全体をローカルでインタラクティブな 3D シーンとして実行
+- API リファレンス: [JavaScript](./js-api-effects.md#ルーム音響解析) · [Node.js](./node-api-analysis.md) · [Python](./python-api-effects.md#ルーム音響解析)

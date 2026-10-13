@@ -12,7 +12,7 @@ LUFS（Loudness Units relative to Full Scale）は体感上の音量、つまり
 |--------|----------|
 | -14 LUFS | Spotify や YouTube 系の一般的な音楽配信。 |
 | -16 LUFS | スピーチ、ポッドキャスト、Apple 系、ダイナミクスを残す音楽。 |
-| -12 LUFS | 密度を意図するダンス／クラブ系の大きめのマスター。 |
+| -9 LUFS | エンジンの `club` と `cd` の配信ターゲット（シーリングは -0.3 dBTP）。公開された規格ではなく、密度を優先して選んだ値。 |
 
 ## なぜ重要か
 
@@ -35,7 +35,7 @@ LUFS（Loudness Units relative to Full Scale）は体感上の音量、つまり
     relativeOut: '相対ゲートで落とされる',
     absoluteOut: '絶対ゲートで落とされる',
     absoluteGate: '絶対ゲート -70 LUFS',
-    relativeGate: '相対ゲート — 10 LU 下',
+    relativeGate: '相対ゲート（10 LU 下）',
     integrated: '積分 LUFS',
     blockNote: 'この例では無音と静かなイントロは平均に入らない',
   }"
@@ -48,7 +48,7 @@ LUFS（Loudness Units relative to Full Scale）は体感上の音量、つまり
 
 迷ったら -14 LUFS から始めます。多くの音楽配信や動画プラットフォームで扱いやすく、リミッターを過度に押し込まなくても到達しやすい値です。
 
-スピーチやポッドキャストは、子音・息継ぎ・部屋鳴りが聞き取りやすいことが優先されるため、少し余裕のある -16 LUFS が扱いやすいことがあります。ダンス／クラブ系では -12 LUFS 付近を狙うこともありますが、True Peak、安全な低域、長時間聴いたときの疲れを必ず確認します。
+スピーチやポッドキャストは、子音・息継ぎ・部屋鳴りが聞き取りやすいことが優先されるため、少し余裕のある -16 LUFS が扱いやすいことがあります。ダンス／クラブ系では、フルスケールにかなり近い値を狙うこともあります（エンジンの `club` と `cd` ターゲットは -9 LUFS）。その場合は、True Peak、安全な低域、長時間聴いたときの疲れを必ず確認します。
 
 配信プラットフォーム側で正規化が行われる場合、ターゲットを大きく超えたマスターは結局下げられて再生されます。ターゲットを上回ること自体に音量上の利点があるとは限らず、リミッターを深く動かして得た「数字上のラウドネス」が、再生時には削られたパンチだけ残るという結果になることもあります。
 
@@ -57,6 +57,34 @@ LUFS（Loudness Units relative to Full Scale）は体感上の音量、つまり
 ラウドネス目標に近いことは、マスターが良いことの十分条件ではありません。Integrated LUFS が合っていても、リミッターが強く働きすぎてトランジェントが潰れている、低域が痩せている、歯擦音が痛い、という失敗は起こります。
 
 逆に、素材によっては目標より少し低い方が自然に聴こえることもあります。特にアコースティック・スピーチ・余白の多い音楽では、数字を追い込むより、ラウドネスマッチした A/B と、再生環境ごとの聴こえ方の確認を優先します。
+
+## libsonare で測る
+
+`lufs` は、Integrated の値、ファイル末尾時点の Momentary と Short-term の値、ラウドネスレンジを返します。
+
+::: code-group
+
+```typescript [Browser]
+import { init, lufs } from '@libraz/libsonare';
+
+await init();
+
+const { integratedLufs, shortTermLufs, loudnessRange } = lufs(samples, sampleRate);
+```
+
+```python [Python]
+import libsonare as sonare
+
+result = sonare.Audio.from_file("song.wav").lufs()
+result.integrated_lufs, result.short_term_lufs, result.loudness_range
+```
+
+```bash [CLI]
+sonare lufs song.wav            # Integrated／Momentary／Short-term の LUFS とラウドネスレンジ
+sonare lufs song.wav --series --json   # Momentary と Short-term の時系列を追加
+```
+
+:::
 
 :::: details 実装メモ
 

@@ -9,10 +9,9 @@ librosa-parity helper functions for the libsonare JavaScript/TypeScript package,
 
 ## librosa-Compatible Helpers
 
-These librosa-parity helpers match the corresponding `librosa` functions and are
-exposed across the WASM, Node, and Python bindings. The signatures are below; for
-the librosa function each one maps to argument-for-argument, and when to reach for
-it, see [librosa Compatibility](/docs/librosa-compatibility).
+These librosa-parity helpers match the corresponding `librosa` functions and are exposed across the WASM, Node, and Python bindings. The signatures are below; for the librosa function each one maps to argument-for-argument, and when to reach for it, see [librosa Compatibility](/docs/librosa-compatibility). Every positional form also takes a trailing `{ validate?: boolean }`, as described in [One-shot request objects](./js-api.md#one-shot-request-objects).
+
+Python uses the same function names except for the segmentation family, which drops the `segment_` prefix: `cross_similarity`, `recurrence_matrix`, `recurrence_to_lag`, `lag_to_recurrence`, `path_enhance`, `subsegment`, `agglomerative`.
 
 ### Pre-emphasis / De-emphasis
 
@@ -25,8 +24,7 @@ function deemphasis(samples: Float32Array, coef?: number, zi?: number): Float32A
 
 ### Test-signal generation
 
-Deterministic signals for fixtures, calibration, and click tracks — no asset
-files needed.
+Deterministic signals for fixtures, calibration, and click tracks. No asset files are needed.
 
 ```typescript
 function tone(request?: ToneRequest): Float32Array
@@ -67,9 +65,7 @@ function segmentSubsegment(request: SegmentSubsegmentRequest): Int32Array
 function segmentAgglomerative(request: SegmentAgglomerativeRequest): Int32Array
 ```
 
-`analyzeSections(...)` is the packaged answer for "where are the sections". Reach
-for these when you want the intermediate matrices — to draw a self-similarity
-plot, or to run your own boundary detection over an enhanced recurrence matrix.
+`analyzeSections(...)` is the packaged answer for "where are the sections". Reach for these when you want the intermediate matrices, for example to draw a self-similarity plot or to run your own boundary detection over an enhanced recurrence matrix.
 
 ### Note segmentation
 
@@ -108,12 +104,12 @@ note.
 ::: danger Do not pass `pitchPyin`'s `voicedProb` here
 Despite the field name, this is **not** the place for pYIN's `voicedProb`. That
 value is the frame's voiced observation **mass**, and for a fixed frame length it
-rises with F0 — it tracks pitch height, not confidence. Fed to a fixed threshold
+rises with F0, so it tracks pitch height, not confidence. Fed to a fixed threshold
 it silently returns **no segments at all** for low-register material: a steady
 tone below roughly C5 never reaches `0.5`, so every frame reads as unvoiced and
 the function returns an empty array with no error to explain it.
 
-Pass the **flags** instead — `PitchResult.voicedFlag` converted to `0`/`1` — or,
+Pass the **flags** instead (`PitchResult.voicedFlag` converted to `0`/`1`) or,
 if you must use a probability-like series, lower `voicedThreshold` to suit the
 register you are working in.
 :::
@@ -145,15 +141,13 @@ function splitSilenceCommon(request: {
 
 `trimSilence` (`librosa.effects.trim`) uses frame RMS and a `topDb` distance below
 the peak RMS, returning the trimmed audio plus the original `[startSample, endSample)`
-range — distinct from the simpler `trim(samples, sampleRate, thresholdDb)`.
+range. It differs from the simpler `trim(samples, sampleRate, thresholdDb)`.
 `splitSilence` (`librosa.effects.split`) returns non-silent intervals as sample-index pairs.
 
 `splitSilenceCommon` answers the same question for **several takes of one part at
 once**. What takes have in common is the silence, not the sound: one take breathes
 where another sustains, so a cut point chosen from a single take lands mid-phrase
-in the others. It returns the union of what `splitSilence` reports for each signal,
-merged where intervals touch — so every gap *between* the returned intervals is
-quiet in all of them simultaneously, and a cut placed there is safe in every take.
+in the others. It returns the union of what `splitSilence` reports for each signal, merged where intervals touch. Every gap *between* the returned intervals is therefore quiet in all of them simultaneously, and a cut placed there is safe in every take.
 
 ```typescript
 const cuts = splitSilenceCommon({ signals: [takeA, takeB, takeC], topDb: 55 });
@@ -238,10 +232,12 @@ function tonnetz(
 
 function tempogram(
   onsetEnvelope: Float32Array,
-  sampleRate: number,
+  sampleRate?: number,
   hopLength?: number,         // default 512
   winLength?: number,         // default 384
   mode?: 'autocorrelation' | 'auto' | 'ac' | 'cosine' | 0 | 1,  // default 'autocorrelation'
+  center?: boolean,
+  norm?: boolean,
 ): { nFrames: number; winLength: number; data: Float32Array }
 
 function fourierTempogram(
@@ -249,11 +245,13 @@ function fourierTempogram(
   sampleRate?: number,
   hopLength?: number,
   winLength?: number,
+  center?: boolean,
+  norm?: boolean,
 ): { nBins: number; nFrames: number; data: Float32Array }
 
 function cyclicTempogram(
   onsetEnvelope: Float32Array,
-  sampleRate: number,
+  sampleRate?: number,
   hopLength?: number,
   winLength?: number,
   bpmMin?: number,            // default 60
@@ -270,7 +268,7 @@ function tempogramRatio(
 
 function plp(
   onsetEnvelope: Float32Array,
-  sampleRate: number,
+  sampleRate?: number,
   hopLength?: number,
   tempoMin?: number,          // default 30
   tempoMax?: number,          // default 300
@@ -295,8 +293,8 @@ function scaleQuantizeMidi(root: number, modeMask: number, midi: number, referen
 function scaleCorrectionSemitones(root: number, modeMask: number, midi: number, referenceMidi?: number): number
 // Is pitchClass (0..11) enabled by modeMask relative to root?
 function scalePitchClassEnabled(root: number, modeMask: number, pitchClass: number): boolean
-// The mask of a mode, in that layout. mode is a church-mode name or a Mode ordinal.
-function scaleMaskForMode(root: number, mode: KeyMode | Mode): number
+// The mask of a mode, in that layout. mode is a church-mode name (ScaleName, the same set as KeyMode) or a Mode ordinal.
+function scaleMaskForMode(root: number, mode: ScaleName | Mode): number
 ```
 
 ```typescript
@@ -328,8 +326,8 @@ function tuningToReferenceHz(tuning: number, a4?: number): number   // a4 defaul
 function referenceHzToTuning(hz: number, a4?: number): number
 
 // Time <-> Frames
-function framesToTime(frames: number, sr: number, hopLength: number): number
-function timeToFrames(time: number, sr: number, hopLength: number): number
+function framesToTime(frames: number, sr?: number, hopLength?: number): number
+function timeToFrames(time: number, sr?: number, hopLength?: number): number
 
 // Frames <-> Samples (librosa.frames_to_samples / samples_to_frames)
 function framesToSamples(frames: number, hopLength?: number, nFft?: number): number
@@ -388,19 +386,19 @@ const labelled = chordFunctions({ chords: detected, key });
 console.log(labelled.map((c) => c.roman));  // e.g. ["I", "IV", "V", "I"]
 ```
 
-An unrecognised mode name throws `RangeError`.
+An unrecognized mode name throws `RangeError`.
 
-`detectKey(...)` and `detectKeyCandidates(...)` accept the same
-`KeyDetectionOptions`, and `detectKey(...)` adds `tuning` (`number | 'auto'`). The options include:
+## Key detection options
 
-| Option group | Values |
-|--------------|--------|
-| Controls | `modes`, `profile`, `genreHint`, `useHpss`, `loudnessWeighted`, `highPassHz`, `nFft`, `hopLength` |
-| Mode sets | `'major-minor'`, `'modal'`, `'all'`, or a list of names (`['major', 'minor']`) or `Mode` ordinals |
-| Profile names | `ks`, `krumhansl`, `temperley`, `shaath`, `keyfinder`, `faraldo-edmt` / `edmt`, `faraldo-edma` / `edma`, `faraldo-edmm` / `edmm`, `bellman-budge` / `bellman` |
-| Genre hints | `auto`, `edm`, `electronic`, `dance`, `pop`, `classical`, `jazz` |
+`detectKey(...)` and `detectKeyCandidates(...)` accept the same `KeyDetectionOptions`, and `detectKey(...)` adds `tuning` (`number | 'auto'`, default `0`). The result and the rest of the call are documented under `detectKey` in the [Analysis API](./js-api-analysis.md).
 
-
-
-
-
+| Option | Values | Default |
+|--------|--------|---------|
+| `modes` | `'major-minor'`, `'modal'`, `'all'`, or a list of names (`['major', 'minor']`) or `Mode` ordinals | `'major-minor'` |
+| `profile` | `ks`, `krumhansl`, `temperley`, `shaath`, `keyfinder`, `faraldo-edmt` / `edmt`, `faraldo-edma` / `edma`, `faraldo-edmm` / `edmm`, `bellman-budge` / `bellman` | the engine's own choice |
+| `genreHint` | `auto`, `edm`, `electronic`, `dance`, `pop`, `classical`, `jazz` | `auto` |
+| `useHpss` | Detect on the harmonic component | `false` |
+| `loudnessWeighted` | Weight chroma frames by loudness | `false` |
+| `highPassHz` | High-pass cutoff before the chroma; `0` disables it | `0` |
+| `nFft` | Window length in samples at 22050 Hz, rescaled to the input rate | `4096` |
+| `hopLength` | Hop in samples of your buffer | `512` |

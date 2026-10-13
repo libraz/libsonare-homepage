@@ -29,9 +29,9 @@ Three quick sanity checks catch most setup problems:
 - The sample array is PCM audio (`Float32Array`), not encoded file bytes.
 
 ::: details What are Float32Array, PCM, mono, and downmixing?
-- **PCM samples** are the raw, uncompressed waveform — a long list of amplitude numbers. An MP3/WAV *file* is compressed or wrapped bytes; decoding turns it into PCM.
+- **PCM samples** are the raw, uncompressed waveform: a long list of amplitude numbers. An MP3/WAV *file* is compressed or wrapped bytes; decoding turns it into PCM.
 - **`Float32Array`** is the JavaScript typed array the Web Audio API uses to hold those samples as 32-bit floats (normally in the −1…1 range), one number per sample. libsonare's browser API takes this directly.
-- **Mono / downmixing** — mono is a single channel. Stereo audio has separate left and right channels; *downmixing* combines them into one (typically by averaging) so you can pass a single channel to a mono API.
+- **Mono / downmixing**: mono is a single channel. Stereo audio has separate left and right channels; *downmixing* combines them into one (typically by averaging) so you can pass a single channel to a mono API.
 :::
 
 ## What You Will Learn
@@ -40,7 +40,7 @@ By the end of this page you should be able to:
 
 - install and initialize the WASM package correctly;
 - decode browser files into PCM and pass the right channel/sample-rate pair to libsonare;
-- choose between one-shot functions, `Audio`, `StreamAnalyzer`, `StreamingMasteringChain`, `Mixer`, and `RealtimeEngine`;
+- choose between one-shot functions, `Audio`, [`StreamAnalyzer`](./js-api-streaming.md#streamanalyzer-class), [`StreamingMasteringChain`](./js-api-streaming.md#streamingmasteringchain), `Mixer`, and `RealtimeEngine`;
 - understand the bundle-size and Worker/AudioWorklet tradeoffs before shipping a browser app.
 
 ## Installation
@@ -104,27 +104,21 @@ async function analyzeAudio() {
 }
 ```
 
-CLI equivalent for the same one-file checks:
+::: details CLI equivalents
+The same one-file checks from the `sonare` command line (not available in the browser):
 
 ```bash
 sonare bpm music.mp3
 sonare key music.mp3
 sonare analyze music.mp3 --json
 ```
+:::
 
 The demo below is the same data flow in visual form: decoded samples go in, a time/frequency view comes out. If your browser page can render this kind of result, the WASM package, initialization, decoding, and sample-rate plumbing are all connected.
 
 <SonareDemo id="stft-basics" />
 
-The browser build also exposes the full librosa-parity helper set — functions that mirror the popular Python audio library librosa, so existing librosa recipes port over — grouped by intent:
-
-- **Waveform pre-processing** — `preemphasis` / `deemphasis`, `trimSilence` / `splitSilence`
-- **Framing / size alignment** — `frameSignal`, `padCenter`, `fixLength`, `fixFrames`
-- **1-D post-processing** — `peakPick`, `vectorNormalize`
-- **Features** — `pcen` (mel dynamic-range compression), `tonnetz` (harmonic-space projection), `tempogram` / `plp` (tempo representations)
-- **Unit conversion** — `powerToDb` / `amplitudeToDb` / `dbToPower` / `dbToAmplitude`, `framesToSamples` / `samplesToFrames`
-
-See the [JS API reference](./js-api-analysis.md) for signatures and the [librosa Compatibility](./librosa-compatibility.md) mapping.
+The browser build also exposes the librosa-parity helper set, so existing librosa recipes port over. [Helpers and Conversions](./js-api-helpers.md) lists the functions by intent, and [librosa Compatibility](./librosa-compatibility.md) maps them to their librosa names.
 
 ## Browser Mixing
 
@@ -150,7 +144,8 @@ mixer.delete();
 
 For a full walkthrough, see [Mixing Engine](./mixing.md).
 
-CLI equivalent for rendering a built-in mixer scene:
+::: details CLI equivalents
+Rendering a built-in mixer scene from the `sonare` command line:
 
 ```bash
 sonare mix \
@@ -159,6 +154,7 @@ sonare mix \
   --input music.wav \
   -o mixed.wav
 ```
+:::
 
 ## Audio Class
 
@@ -200,7 +196,8 @@ console.log(`BPM: ${bpm}, Key: ${key.name}`);
 console.log(`Median pitch: ${pitch.medianF0.toFixed(1)} Hz`);
 ```
 
-CLI equivalents for the calls above. All four are available in the Python CLI:
+::: details CLI equivalents
+The same calls from the Python CLI:
 
 ```bash
 sonare analyze music.mp3 --json
@@ -208,22 +205,25 @@ sonare hpss music.mp3 -o separated --json
 sonare pitch-shift music.wav --semitones 2 -o shifted.wav
 sonare pitch music.mp3 --algorithm pyin --json
 ```
+:::
 
-See the [JS API Reference](/docs/js-api-audio#audio-class) for the full list of instance methods.
+The [Audio class reference](./js-api-audio.md#audio-class) lists the instance methods.
 
 ## Browser Mastering
 
-The `/mastering` demo uses the same WASM package described here. Audio decoding happens in the browser, mastering work runs in a Web Worker, and the rendered WAV plus JSON report are created locally.
+The `/mastering` demo uses the same WASM package described here. Audio decoding happens in the browser, mastering work runs in a Web Worker, and the rendered WAV plus JSON report are created locally. The [Mastering reference](./js-api-mastering.md) covers `masterAudio`, `masteringChain`, and the named processors.
 
 For implementation details, see [Mastering Implementation](./mastering-implementation.md), [Browser Local Processing](./glossary/concepts/browser-local-processing.md), [Mastering](./glossary/mastering.md), and [Stereo, Limiter, and Loudness Controls](./glossary/mastering/stereo-limiter-loudness.md).
 
 The mastering API also includes `masteringAssistantSuggest(...)`, `masteringAudioProfile(...)`, and `masteringStreamingPreview(...)` for JSON-driven assistant output, source profiling, and platform preview reporting.
 
-CLI equivalent for a simple loudness-normalized master:
+::: details CLI equivalents
+A simple loudness-normalized master from the `sonare` command line:
 
 ```bash
 sonare mastering track.wav --target-lufs -14 --ceiling-db -1 -o master.wav
 ```
+:::
 
 ## File Input
 
@@ -256,7 +256,26 @@ input.addEventListener('change', async (e) => {
 
 ### Keeping Every Channel
 
-`Audio.fromMemory(...)` folds a multichannel file to mono as it decodes. When you need the channels themselves, `decodeChannels(bytes)` decodes the bytes once and returns `{ sampleRate, channels }`, one `Float32Array` per source channel in the source's own order (5.1 is L R C LFE Ls Rs). `downmix(channels, targetLayout)` folds them to a narrower layout (`0` mono, `1` stereo, `2` 5.1, `3` 7.1) with the ITU-R BS.775 rule: centre and surround at -3 dB, LFE dropped. It cannot upmix. `Audio.fromMemoryWithBrowserFallback(...)` applies the same rule to a multichannel `AudioBuffer`, so a file folds to the same samples whichever decoder ran. `decodeChannelsWithBrowserFallback(bytes, options?)` is the channel-keeping counterpart of that: it returns a promise of the same `{ sampleRate, channels }`, sending formats the native decoder does not carry (AAC, OGG, FLAC) through `decodeAudioData` and keeping every channel the browser returns. `downmix` throws a `RangeError` for a `targetLayout` that is not an integer in the 32-bit range, and a `TypeError` for a non-number.
+`Audio.fromMemory(...)` folds a multichannel file to mono as it decodes. To keep the channels, decode with `decodeChannels`:
+
+| Function | Keeps channels | Decoder | Returns |
+|----------|----------------|---------|---------|
+| `Audio.fromMemory` | No, folds to mono | WAV/MP3 in WASM | `Audio` |
+| `Audio.fromMemoryWithBrowserFallback` | No, folds to mono | WASM, then `decodeAudioData` | `Promise<Audio>` |
+| `decodeChannels` | Yes | WAV/MP3 in WASM | `{ sampleRate, channels }` |
+| `decodeChannelsWithBrowserFallback(bytes, options?)` | Yes | WASM, then `decodeAudioData` (AAC, OGG, FLAC) | `Promise<{ sampleRate, channels }>` |
+| `downmix(channels, targetLayout)` | Narrows | None | `Float32Array[]` |
+
+`channels` holds one `Float32Array` per source channel in the source's own order (5.1 is L R C LFE Ls Rs). `downmix` folds them to a narrower layout, named by `targetLayout`:
+
+| `targetLayout` | Result |
+|----------------|--------|
+| `0` | Mono |
+| `1` | Stereo |
+| `2` | 5.1 |
+| `3` | 7.1 |
+
+It uses the ITU-R BS.775 rule (center and surround at -3 dB, LFE dropped) and cannot upmix. The source layout is read from the channel count (1, 2, 6, or 8); any other count folds only to mono, as the unweighted mean. The `...WithBrowserFallback` functions apply the same rule to a multichannel `AudioBuffer`, so a file folds to the same samples whichever decoder ran. `downmix` throws a `RangeError` for a `targetLayout` that is not an integer in the 32-bit range, and a `TypeError` for a non-number.
 
 ```typescript
 import { decodeChannels, downmix, init } from '@libraz/libsonare';
@@ -289,42 +308,7 @@ const result = analyzeWithProgress(samples, sampleRate, (progress, stage) => {
 
 ## Cancellation
 
-Long-running offline analysis and mastering calls take a `cancel` callback. It
-is polled at the same progress boundaries `onProgress` reports, so a user who
-loads the wrong file does not have to wait out the render.
-
-```typescript
-import {
-  ErrorCode,
-  init,
-  isSonareError,
-  masteringChainWithProgress,
-} from '@libraz/libsonare';
-
-await init();
-
-let abandoned = false;
-cancelButton.onclick = () => { abandoned = true; };
-
-try {
-  const result = masteringChainWithProgress({
-    samples,
-    sampleRate,
-    config,
-    onProgress: (progress, stage) => updateUi(progress, stage),
-    cancel: () => abandoned,
-  });
-  render(result);
-} catch (error) {
-  if (!(isSonareError(error) && error.code === ErrorCode.Cancelled)) throw error;
-  // Expected: the user asked to stop.
-}
-```
-
-Returning `true` from `cancel` aborts the call, which throws with
-`SONARE_ERROR_CANCELLED` (error code 8). A cancelled call leaves its outputs
-unallocated — there is no partial result to read, so treat the throw as "nothing
-happened" rather than "half a master".
+Long-running offline analysis and mastering calls take a `cancel` callback, polled at the same boundaries `onProgress` reports, so a user who loads the wrong file does not have to wait out the render. Returning `true` aborts the call with `SonareError` code 8 (`Cancelled`) and leaves its outputs unallocated: there is no partial result to read, so treat the throw as "nothing happened" rather than "half a master". [Canceling a long call](./js-api.md#canceling-a-long-call) has the full example.
 
 ## Stereo to Mono Conversion
 
@@ -349,45 +333,44 @@ async function getMonoSamples(audioBuffer: AudioBuffer): Promise<Float32Array> {
 
 ## Browser Compatibility
 
+The shipped module is built with WebAssembly SIMD, so the minimums follow the browsers that added it.
+
 | Browser | Minimum Version |
 |---------|-----------------|
-| Chrome | 57+ |
-| Firefox | 52+ |
-| Safari | 11+ |
-| Edge | 16+ |
+| Chrome | 91+ |
+| Edge | 91+ |
+| Firefox | 89+ |
+| Safari | 16.4+ |
 
-Requirements:
-- WebAssembly support
-- Web Audio API
-- ES2017+ (async/await)
+Requirements: WebAssembly SIMD, BigInt, and the Web Audio API. The JavaScript bundles target ECMAScript 2020.
 
 ## Package Artifacts
 
 The published package ships a few coordinated pieces:
 
-- **Main module** — `sonare.js` plus `sonare.wasm`, the Emscripten build behind every analysis, mastering, mixing, and editing API.
-- **Main API entry** — the package `index` (`index.js` / `index.d.ts`) is the tsup bundle behind `import ... from '@libraz/libsonare'`; it exposes the all-in-one analysis, mastering, mixing, and editing API.
-- **AudioWorklet entry** — `worklet.js` / `worklet.d.ts`, a separate, self-contained tsup bundle (no code-splitting, so it is fully portable into an `AudioWorkletGlobalScope`); it carries the `SonareEngine` API, the worklet processor classes and their registration helpers, `SonareStreamAnalyzerNode` (live analysis of an audio-graph branch), and the ring-buffer protocol, and re-exports only `init` / `isInitialized` from the main entry so the worklet realm can initialize its own WASM instance.
-- **Analysis-only module** — `sonare-analysis.js` / `sonare-analysis.wasm` behind the `@libraz/libsonare/analysis` entry (the raw asset is `@libraz/libsonare/wasm/analysis`), compiled without the mastering, mixing, realtime, and project bindings. CI records its size in a report, but size growth alone does not fail the build.
-- **Offline Worker entry** — `worker.js` behind `@libraz/libsonare/worker`, the Worker side of `OfflineWorkerClient`.
-- **Vocal-edit Worker entry** — `vocal_edit_worker.js` behind `@libraz/libsonare/vocal-edit-worker`, the Worker side of `VocalEditWorkerClient`.
-- **Voice-changer JSON Schemas** — both preset schemas ship in the package under `schemas/`, so a host can validate a preset document without fetching anything.
+- **Main module**: `sonare.js` plus `sonare.wasm`, the Emscripten build behind every analysis, mastering, mixing, and editing API.
+- **Main API entry**: the package `index` (`index.js` / `index.d.ts`) is the tsup bundle behind `import ... from '@libraz/libsonare'`; it exposes the all-in-one analysis, mastering, mixing, and editing API.
+- **AudioWorklet entry**: `worklet.js` / `worklet.d.ts`, a separate, self-contained tsup bundle (no code-splitting, so it is fully portable into an `AudioWorkletGlobalScope`); it carries the `SonareEngine` API, the worklet processor classes and their registration helpers, `SonareStreamAnalyzerNode` (live analysis of an audio-graph branch), and the ring-buffer protocol, and re-exports only `init` / `isInitialized` from the main entry so the worklet realm can initialize its own WASM instance.
+- **Analysis-only module**: `sonare-analysis.js` / `sonare-analysis.wasm` behind the `@libraz/libsonare/analysis` entry (the raw asset is `@libraz/libsonare/wasm/analysis`), compiled without the mastering, mixing, realtime, and project bindings. CI records its size in a report, but size growth alone does not fail the build.
+- **Offline Worker entry**: `worker.js` behind `@libraz/libsonare/worker`, the Worker side of `OfflineWorkerClient`.
+- **Vocal-edit Worker entry**: `vocal_edit_worker.js` behind `@libraz/libsonare/vocal-edit-worker`, the Worker side of `VocalEditWorkerClient`.
+- **Voice-changer JSON Schemas**: both preset schemas ship in the package under `schemas/`, so a host can validate a preset document without fetching anything.
 
 ### Instantiating The Module Yourself
 
-`sonare.js` / `sonare.wasm` are the Emscripten module the package wraps, and almost no application needs to touch them directly: importing from `@libraz/libsonare` instantiates the module, keeps one instance per realm, and is the supported entry point. If you do instantiate the module yourself — a custom loader, a non-standard bundler target, a host that manages its own heap — one input shape is worth knowing about.
+`sonare.js` / `sonare.wasm` are the Emscripten module the package wraps, and almost no application needs to touch them directly: importing from `@libraz/libsonare` instantiates the module, keeps one instance per realm, and is the supported entry point. If you do instantiate the module yourself (a custom loader, a non-standard bundler target, a host that manages its own heap), one input shape is worth knowing about.
 
 ::: warning The mastering-chain binding takes the flattened envelope only
-The module's mastering-chain entry accepts exactly one configuration shape: the flattened parameter envelope that the core's own parameter parser reads. Hand it a nested configuration object instead and the call is **refused by name** — it reports the configuration it cannot read rather than applying the part of it that it recognizes and dropping the rest.
+The module's mastering-chain entry accepts exactly one configuration shape: the flattened parameter envelope that the core's own parameter parser reads. Hand it a nested configuration object instead and the call is **refused by name**: it reports the configuration it cannot read rather than applying the part of it that it recognizes and dropping the rest.
 
-**This does not affect the npm package.** `masteringChain` and `masterAudio` flatten a nested `MasteringChainConfig` — repair stages, denoise settings and all — before anything crosses into the module, so code that imports from `@libraz/libsonare` passes nested configs exactly as the JavaScript API describes and is unaffected. Only a caller who instantiates the module directly and passes a nested object straight into the binding meets this, and what they get is a clear error instead of a partly applied chain.
+**This does not affect the npm package.** `masteringChain` and `masterAudio` flatten a nested `MasteringChainConfig` (repair stages, denoise settings and all) before anything crosses into the module, so code that imports from `@libraz/libsonare` passes nested configs exactly as the JavaScript API describes and is unaffected. Only a caller who instantiates the module directly and passes a nested object straight into the binding meets this, and what they get is a clear error instead of a partly applied chain.
 :::
 
 ## Bundle Size
 
 The size table covers the main module and the main API entry. The analysis-only
 module, the realtime runtime, and the worklet bundle are separate artifacts and
-are not listed here — the analysis module is substantially smaller than
+are not listed here; the analysis module is substantially smaller than
 `sonare.wasm` because it leaves the mastering, mixing, realtime, and project
 surfaces out.
 
@@ -440,40 +423,4 @@ for (let start = 0; start < totalDuration; start += CHUNK_DURATION) {
 
 ### Which Error You Get
 
-When the C++ core rejects an input or an object is in the wrong state, the WASM binding throws a structured `SonareError` carrying a numeric `code` and `codeName` — never a raw Emscripten pointer number or an opaque `[object Object]`. Catch it with the exported `isSonareError(...)` guard and branch on `ErrorCode`; see [Error Handling](./js-api.md#error-handling).
-
-An argument the JavaScript binding refuses itself is not a `SonareError`: a wrong type or a missing value is a native `TypeError`, and a value outside its domain (an unknown name, a fractional number where an integer is read, a sample rate outside the supported range, two buffers whose lengths must match, a string with an embedded NUL, empty or non-finite audio) is a `RangeError`. A request object that is `null`, a number or an array, or an audio buffer of the wrong typed array, is a `TypeError` naming the function and the argument (`detectBpm: samples must be a Float32Array`). Handle all three:
-
-```typescript
-import { ErrorCode, init, isSonareError, Mixer } from '@libraz/libsonare';
-
-try {
-  await init();
-  const mixer = Mixer.fromSceneJson(sceneJson, sampleRate, 512);
-  // ...
-} catch (error) {
-  if (error instanceof TypeError || error instanceof RangeError) {
-    // The call was wrong: fix the argument.
-  } else if (isSonareError(error) && error.code === ErrorCode.InvalidFormat) {
-    // The scene document is malformed.
-  } else {
-    throw error;
-  }
-}
-```
-
-The mixing and project entry points report the error code their own C entry point documents rather than the underlying C++ exception. `Mixer.fromSceneJson` on malformed scene JSON throws `InvalidFormat`, and on a scene that names an unknown insert throws `InvalidParameter` with the core's message.
-
-Three state failures are always `InvalidState`: a call to the module before `init()` resolves, any method on a handle that was released with `destroy()`, `delete()`, or `using`, and a second `init()` whose options differ from the first (it names the differing option). A `.wasm` built from a different tree than the JavaScript throws `AbiMismatch` (code 10) from `init()`, which compares the loaded module's ABI version with `EXPECTED_ABI_VERSION`, exported from the package root and from `@libraz/libsonare/worklet`; a test double passed as `moduleFactory` reports that value.
-
-## Where the sections went
-
-| Section | Page |
-|---|---|
-| Web Worker Usage | [WASM Advanced Usage](./wasm-advanced.md) |
-| Performance Tips | [WASM Advanced Usage](./wasm-advanced.md) |
-| React Example | [WASM Advanced Usage](./wasm-advanced.md) |
-| Streaming Analysis | [WASM Streaming and Realtime](./wasm-streaming.md) |
-| Inverse Reconstruction | [WASM Streaming and Realtime](./wasm-streaming.md) |
-| Streaming Retune | [WASM Streaming and Realtime](./wasm-streaming.md) |
-| Realtime Voice Changer | [WASM Streaming and Realtime](./wasm-streaming.md) |
+Failures from the library are a structured `SonareError` with a numeric `code` and `codeName`; an argument the binding refuses itself is a plain `TypeError` or `RangeError`. [Error Handling](./js-api.md#error-handling) has the class table, the failure-to-class table, and an example that handles all three. The [error contract](./binding-parity.md#error-contract) lists the same failures on every other binding. A `.wasm` built from a different tree than the JavaScript throws `AbiMismatch` (code 10) from `init()`; [Installation](./installation.md#abimismatch-when-loading-the-library) covers the usual causes.

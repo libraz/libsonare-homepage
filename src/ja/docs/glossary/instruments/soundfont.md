@@ -1,6 +1,6 @@
 ---
 title: SoundFont とサンプル音源
-description: サンプル音源は録音された音声をバンクとプログラムに整理して再生します — SoundFont（.sf2）とは何か、General MIDI がどうアドレス指定するか、そして MIDI が無音にならないよう libsonare が NativeSynth で補う仕組みを解説します。
+description: サンプル音源は録音された音声をバンクとプログラムに整理して再生します。SoundFont（.sf2）とは何か、General MIDI がどうアドレス指定するか、そして MIDI が無音にならないよう libsonare が NativeSynth で補う仕組みを解説します。
 ---
 
 # SoundFont とサンプル音源

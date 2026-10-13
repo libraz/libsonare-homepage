@@ -13,9 +13,13 @@ This page lists the TypeScript interfaces, unions, and exported type names of th
 interface Key {
   root: number;        // Pitch-class number, 0..11 (C = 0), as on WASM and Python
   mode: KeyMode;       // 'major' | 'minor' | 'dorian' | 'phrygian' | 'lydian' | 'mixolydian' | 'locrian'
-  confidence: number;  // Softmax over every scored candidate, in [0, 1)
+  confidence: number;  // detectKey: softmax share in [0, 1); analyze(): chord-refined, up to 1
   name: string;        // "C major", "A minor"
   shortName: string;   // "C", "Am"
+}
+
+interface KeyDetection extends Key {
+  tuning: number; // semitone fraction used for the chroma (given or measured)
 }
 
 interface TimeSignature {
@@ -58,6 +62,21 @@ interface Chord {
 
 interface ChordAnalysisResult {
   chords: Chord[];
+  tuning: number; // semitone fraction used for the chroma (given or measured)
+}
+
+type ChordFunction = 'tonic' | 'subdominant' | 'dominant' | 'chromatic' | 'none';
+
+// A timed chord plus its place in a key, from chordFunctionalAnalysis(...) and chordFunctions(...).
+type FunctionalChord<T = Chord> = T & {
+  roman: string;            // 'I', 'V7'; 'N.C.' when the chord is unknown
+  function: ChordFunction;
+};
+
+// The key chordFunctions(...) reads; detectKey's result fits as it is.
+interface ChordFunctionsKey {
+  root: string | number;    // pitch-class name or number
+  mode: KeyMode | number;   // mode name or Mode ordinal
 }
 
 // 0=Intro, 1=Verse, 2=PreChorus, 3=Chorus, 4=Bridge, 5=Instrumental,
@@ -85,6 +104,7 @@ interface AnalysisChord {
   end: number;
   confidence: number;
   name: string;        // e.g. "Cmaj7"
+  romanNumeral: string; // relative to AnalysisResult.key; empty for N.C.
 }
 
 // The section shape inside AnalysisResult: the same fields as Section.
@@ -132,6 +152,7 @@ interface AnalysisResult {
   rhythm: AnalysisRhythm;                        // Aggregate rhythm summary
   melody: AnalysisMelody;                        // Melody-contour summary
   form: string;                                  // Musical form label, e.g. "AABA"
+  tuning: number;                                // Semitone fraction used for the chromagrams
 }
 // analyze() returns the full result above. The dedicated detect*/analyze*
 // functions remain available for targeted or parameterized analysis.
@@ -163,6 +184,11 @@ interface MelSpectrogramResult {
   nFrames: number;
   sampleRate: number;
   hopLength: number;
+  nFft: number;
+  fmin: number;            // Lower Mel edge in Hz, as applied
+  fmax: number;            // Upper edge as applied; Nyquist when the request used 0
+  htk: boolean;
+  isDb: boolean;           // false for a forward transform: power is linear
   power: Float32Array;      // nMels × nFrames, row-major
   db: Float32Array;         // nMels × nFrames, row-major
 }
@@ -170,6 +196,15 @@ interface MelSpectrogramResult {
 interface MfccResult {
   nMfcc: number;
   nFrames: number;
+  sampleRate: number;
+  hopLength: number;
+  nFft: number;
+  nMels: number;
+  fmin: number;
+  fmax: number;            // As applied
+  htk: boolean;
+  isDb: boolean;           // Always false: coefficients are a cepstrum
+  lifter: number;          // 0 means none
   coefficients: Float32Array;  // nMfcc × nFrames, row-major
 }
 
@@ -229,14 +264,26 @@ interface MeteringStereoRequest {
   sampleRate?: number;
   validate?: boolean;
 }
+
+// Equivalent-room estimate from estimateRoom(...); lengths in metres.
+interface RoomEstimateResult {
+  volume: number;               // m^3; NaN with confidence 0 when no decay could be measured
+  lengthM: number;
+  widthM: number;
+  heightM: number;
+  drrDb: number;                // direct-to-reverberant ratio
+  confidence: number;
+  bandAbsorption: Float32Array; // per octave band, same length as rt60Bands
+  rt60Bands: Float32Array;      // seconds per octave band
+}
 ```
 
 `Key.root` is a number, the form `detectChords` and `chordFunctions` take back: the `keyRoot` / `keyMode` inputs of `detectChords`, `chordFunctionalAnalysis` and `Audio.chordFunctionalAnalysis` and the `key` of `chordFunctions` accept a pitch-class name (`'C#'`) or number and a mode name or `Mode` ordinal, so a detected key passes straight back. An unknown name is a `RangeError` naming the field. `Chord.root` and `Chord.bass` remain string labels.
 
 ### What `Key.confidence` measures
 
-`Key.confidence` is a softmax over the profile correlation of every scored
-candidate. It lies in `[0, 1)`, the candidates' confidences sum to 1, and a
+`Key.confidence` from `detectKey` and `detectKeyCandidates` is a softmax over the
+profile correlation of every scored candidate. It lies in `[0, 1)`, the candidates' confidences sum to 1, and a
 share of 24 candidates therefore cannot reach 1. It falls as the runner-up
 closes in, so two keys that split the evidence — a relative major and minor,
 typically — each report about half.
@@ -245,6 +292,11 @@ Read it as how decisively the chroma picked one candidate out of the set, **not
 as how often that pick is right**: nothing here is calibrated against annotated
 recordings, so a confident wrong answer is entirely possible. A pipeline that
 branches on it has to pick its own threshold against its own material.
+
+`analyze()` is different. It refines its key against the detected chords, so
+`AnalysisResult.key` can name a different key than `detectKey` on the same
+input, and its `confidence` is a combined score that can reach 1 rather than a
+softmax share. Use `detectKey` when you need the share reading.
 
 ### Chord-tone anagrams
 
@@ -283,7 +335,7 @@ The native package also exports TypeScript helper types for option objects, call
 | Pitch correction | `PitchCorrectOptions`, `VoicedFlags`, `AutoTuneKey`, `AutoTuneOptions`, `AutoTuneResult` |
 | Room acoustics | `AcousticModeName`, `MaterialPresetName`, `RoomGeometryFromEstimateOptions`, `RoomMorphOptions`, `RoomMorphResult`, `RoomMorphStereoResult`, `RoomPlacement` |
 | Mastering chain config | `MasteringChainConfig`, `MasteringChainConfigDocument`, `MultibandCompressorBand` |
-| Synth descriptors | `SynthParamInfo`, `SynthPatch`, `SynthEngineMode` |
+| Synth descriptors | `SynthParamInfo`, `SynthParamCondition`, `SynthPatch`, `SynthEngineMode` |
 | Mixing | `AutomationCurve`, `GoniometerPoint`, `MeterTap`, `MixMeterSnapshot`, `MixResult`, `MixerProcessResult`, `PanLaw`, `PanLawName`, `PanLawInput`, `PanMode`, `SendTiming`, `SidechainCheck`, `SidechainRefusal` |
 | Realtime voice | `VoicePresetId`, `VoicePresetCategory`, `RealtimeVoiceChangerPresetMetadata`, `RealtimeVoiceChangerPreset`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerConfig`, `RealtimeVoiceChangerOptions` |
 | Realtime engine graph | `EngineGraphSpec`, `EngineGraphNode`, `EngineGraphNodeType`, `EngineGraphConnection`, `EngineGraphMix`, `EngineGraphParameterBinding`, `EngineParameterInfo` |
@@ -291,4 +343,4 @@ The native package also exports TypeScript helper types for option objects, call
 | Project metadata and automation | `ExternalInstrument`, `ExternalInstrumentEvent`, `ProjectAssistSidecar`, `ProjectAssistSidecarInput`, `ProjectAutomationTargetKind`, `ProjectAutomationLaneDesc` |
 | Realtime engine jobs/telemetry | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `EngineMeterTelemetry` |
 
-`CapabilityCatalog.masteringPresets` contains entries with `name`, `kind`, `targetLufs`, `truePeakCeilingDb`, and `maxLimiterGainReductionDb`; restoration entries set the three numeric fields to `null`. `CapabilityCatalogProcessor.slots` describes conditional parameter groups, and `MasteringInsertParamInfo` adds the corresponding `slot` to each descriptor. The catalog's `chain` section (`CapabilityCatalogChain`) describes every flat mastering chain key: the stages (`CapabilityCatalogChainStage`), the indexed lists with their item counts (`CapabilityCatalogChainList`), the keys no processor carries, and every alias spelling (`CapabilityCatalogChainAlias`); `presets.playbackRoom` is always present. A descriptor's `unit` is a `MasteringInsertParamUnit` (a closed set, `null` for non-numeric keys), `scale` a `MasteringInsertParamScale` (`'linear'` or `'log'`), and `dependsOn` a list of `MasteringInsertParamDependency` (`key`, `relation`, `factor`, read as `this <relation> factor * sibling`) whose `relation` is a `MasteringInsertParamRelation`; `uiMin` and `uiMax` give the display range. Every processor entry also carries `causal`. `masteringInsertTiming(name, params, sampleRate)` returns `MasteringInsertTiming` with `latencySamples` and `tailSamples`, while `masteringPresetParams(preset)` returns a flat `Record<string, number | boolean>` suitable for `masterAudio({ samples, overrides })`.
+`CapabilityCatalog.masteringPresets` contains entries with `name`, `kind`, `targetLufs`, `truePeakCeilingDb`, and `maxLimiterGainReductionDb`; restoration entries set the three numeric fields to `null`. `CapabilityCatalogProcessor.slots` describes conditional parameter groups, and `MasteringInsertParamInfo` adds the corresponding `slot` to each descriptor. The catalog's `chain` section (`CapabilityCatalogChain`) describes every flat mastering chain key: the stages (`CapabilityCatalogChainStage`), the indexed lists with their item counts (`CapabilityCatalogChainList`), the keys no processor carries, and every alias spelling (`CapabilityCatalogChainAlias`); `presets.playbackRoom` is always present. A descriptor's `unit` is a `MasteringInsertParamUnit` (a closed set, `null` for non-numeric keys), `scale` a `MasteringInsertParamScale` (`'linear'` or `'log'`), and `dependsOn` a list of `MasteringInsertParamDependency` (`key`, `relation`, `factor`, read as `this <relation> factor * sibling`) whose `relation` is a `MasteringInsertParamRelation`; `coupledWith` is a `string[]` of the other siblings that move the key's accepted range (`min` / `max` are measured with them at their defaults); `uiMin` and `uiMax` give the display range. Every processor entry also carries `causal`. `masteringInsertTiming(name, params, sampleRate)` returns `MasteringInsertTiming` with `latencySamples` and `tailSamples`, while `masteringPresetParams(preset)` returns a flat `Record<string, number | boolean>` suitable for `masterAudio({ samples, overrides })`.

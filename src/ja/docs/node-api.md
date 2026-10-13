@@ -28,7 +28,7 @@ console.log(`キー: ${result.key.name}`);     // "C major" など
 console.log(`ビート数: ${result.beatTimes.length}`);
 ```
 
-上のアナライザーはどれも同じスペクトログラムを共有して読み出します。下のデモがたどるのがその変換で、BPM とキーをまとめて求めても片方だけの場合とコストがほとんど変わらないのは、これが理由です。
+`detect*` 関数は、呼び出しごとにサンプルから自前でスペクトログラムを計算します。下のデモがたどるのがその変換です。`analyze()` はパイプライン全体で一度だけ計算するため、1 つのバッファから複数の結果が欲しいときは `analyze()` を使ってください。
 
 <SonareDemo id="stft-basics" />
 
@@ -48,7 +48,7 @@ const percussive = audio.percussive();
 const stretched = audio.timeStretch(1.5);      // 1.5 倍速
 const shifted = audio.pitchShift(2.0);         // 2 半音上げ
 
-// ノーマライズと無音トリム
+// 正規化と無音トリム
 const normalized = audio.normalize(0.0);        // 0 dB
 const trimmed = audio.trim(-60.0);
 ```
@@ -88,8 +88,8 @@ import {
   hzToNote, noteToHz, framesToTime, timeToFrames
 } from '@libraz/libsonare-native';
 
-hzToMel(440);        // → Mel スケール値
-melToHz(549.64);     // → Hz
+hzToMel(440);        // → 6.6（Slaney 式の Mel スケール）
+melToHz(6.6);        // → 440
 hzToMidi(440);       // → 69
 midiToHz(69);        // → 440
 hzToNote(440);       // → "A4"
@@ -105,7 +105,7 @@ timeToFrames(2.32, 22050, 512); // → フレームインデックス
 
 ### 単発 API のリクエストオブジェクト
 
-トップレベルの単発解析・エフェクト・マスタリング・メータリング・特徴量・ミキサー・ボイスチェンジャー関数は、Node でも名前付きリクエストオブジェクトを標準の呼び出し形式として受け取れます。新規コードではこちらを優先してください。位置引数のオーバーロードも互換性のため残り、同じ検証、既定値、結果、エラー、進捗処理へ正規化されます。
+トップレベルの単発解析・エフェクト・マスタリング・メータリング・特徴量・ミキサー・ボイスチェンジャー関数は、Node でも名前付きリクエストオブジェクトを標準の呼び出し形式として受け取れます。位置引数のオーバーロードも互換性のため残り、同じ検証、既定値、結果、エラー、進捗処理へ正規化されます。
 
 ```ts
 const bpm = detectBpm({ samples, sampleRate });
@@ -116,20 +116,11 @@ const result = masterAudio({ samples, sampleRate, preset: 'pop' });
 
 ### エラー
 
-ライブラリ側の失敗は `SonareError` として投げられます。`name` が `'SonareError'` の
-標準 `Error` に、数値の `code`（`ErrorCode` の値）と正規名の `codeName`（例:
-`'InvalidParameter'`）が付いたものです。
+ライブラリ側の失敗は `SonareError` として投げられます。`name` が `'SonareError'` の標準 `Error` に、数値の `code`（`ErrorCode` の値）と正規名の `codeName`（例: `'InvalidParameter'`）が付いたものです。
 
-`SonareError` は型宣言だけの存在ではなく実行時のクラスです。そのため値として
-import しても実体が得られ、このパッケージでも WASM パッケージでも同じ種類のものが
-返ります。共通の TypeScript モジュールがどちらのパッケージから import しても、実行時に同じ
-ものを受け取れます。
+`SonareError` は型宣言だけの存在ではなく実行時のクラスです。そのため値として import しても実体が得られ、このパッケージでも WASM パッケージでも同じ種類のものが返ります。共通の TypeScript モジュールがどちらのパッケージから import しても、実行時に同じものを受け取れます。
 
-`instanceof SonareError` はプロトタイプではなく形状（ブランド）で判定します。その
-ため、形状だけを備えてクラスを生成しないアドオン由来のエラーも、Worker や
-`structuredClone` の境界を越えてプロトタイプを失ったエラーも絞り込めます。
-`isSonareError(value)` は同じ判定を型ガードとして書いたもので、両者は互いに結び付いて
-いるため食い違いません。どちらを使っても構いません。
+`instanceof SonareError` はプロトタイプではなく形状（ブランド）で判定します。そのため、形状だけを備えてクラスを生成しないアドオン由来のエラーも、Worker や `structuredClone` の境界を越えてプロトタイプを失ったエラーも絞り込めます。`isSonareError(value)` は同じ判定を型ガードとして書いたもので、両者は互いに結び付いているため食い違いません。どちらを使っても構いません。
 
 ```typescript
 import { Audio, ErrorCode, isSonareError } from '@libraz/libsonare-native';
@@ -144,13 +135,13 @@ try {
 }
 ```
 
-ライブラリへ届く前に弾かれる引数の問題はネイティブのエラーとして投げられ、
-`isSonareError` では捕捉できません。型が違う、または値がない引数は `TypeError`、
-値が定義域の外（長さの食い違う 2 本の配列、許可されていない文字列の `mode`、整数を
-読む箇所の小数、NUL を含む文字列やオブジェクトプロパティ）の場合はフィールド名を挙げた
-`RangeError` です。リクエストオブジェクト、またはバッファとリクエストの両方を取るエントリポイントのオーディオバッファが、`null`・数値・配列・誤った型付き配列の場合は `TypeError` です（`<function>: request must be an object`、または `<function>: samples must be a Float32Array`）。サンプルとサンプルレートを取るワンショット関数に渡した空または非有限のオーディオ、範囲外または整数ではない `sampleRate` は、コアに届く前に `RangeError` になります。ライブラリやオブジェクトの状態が報告する失敗はコード付きの
-`SonareError` のままです。解放済みまたは破棄済みのハンドルは `InvalidState`、パッケージと
-別のツリーからビルドされたアドオンは、パッケージの require 時に `AbiMismatch`（コード 10）を投げます。
+ライブラリへ届く前に弾かれる引数の問題はネイティブの `TypeError` または `RangeError` として投げられ、`isSonareError` では捕捉できません。メッセージは関数名と引数名を挙げます（`<function>: request must be an object`、`detectBpm: samples must be a Float32Array`、`detectBpm: sampleRate out of supported range [8000, 384000]`）。どの失敗がどのクラスとコードになるかは、ほかのランタイムの分も含めて[エラー契約](./binding-parity.md#エラー契約)にあります。パッケージと別のツリーからビルドされたアドオンは、パッケージの require 時に `AbiMismatch`（コード 10）を投げます。対処は[インストール](./installation.md#ライブラリ読み込み時の-abimismatch)を参照してください。
+
+ほかにも、次の 3 つの拒否があります。
+
+- 埋め込み NUL を含む文字列（名前、ID、キー、JSON テキスト、ファイルパス）は、フィールド名を挙げた `RangeError` になります。
+- `destroy()` 後のハンドルに対する呼び出しは、`SonareError` の `InvalidState` です。
+- `RealtimeEngine` の末尾の `renderFrame` はすべて省略可能で、省略すると即時に適用されます。`-1` を含む負の値は `RangeError` です。
 
 ### Audio
 
@@ -166,19 +157,12 @@ try {
 | `audio.getLength()` | サンプル数 |
 | `audio.destroy()` | ネイティブハンドルを解放。GC でも回収されますが、長時間動くプロセスで確実に解放したい場合に呼び出します |
 
-`Audio` インスタンスは、以下の解析・エフェクト・特徴量関数を同じ既定値で
-メソッドとしても呼び出せます（例: `audio.detectBpm()`、`audio.masteringChain(config)`）。
+`Audio` インスタンスは、主要な解析・エフェクト・特徴量・ラウドネス・マスタリングのヘルパーをメソッドとしても公開しています（例: `audio.detectBpm()`、`audio.masteringChain(config)`）。
 
-`analyzeSections(...)`、`analyzeMelody(...)`、`cqt(...)`、`vqt(...)` などの一部の詳細ヘルパーは
-スタンドアロン関数のままです。これらには `audio.getData()` と `audio.getSampleRate()` を渡します。
+`analyzeSections(...)`、`analyzeMelody(...)`、`cqt(...)`、`vqt(...)` などの一部の詳細ヘルパーはスタンドアロン関数のままです。これらには `audio.getData()` と `audio.getSampleRate()` を渡します。
 
 ::: warning `getData()` はコピーを返します
-呼び出すたびに新しい `Float32Array` を確保するため、返された配列に書き込んでも
-インスタンスが保持する音声は変わりません。あとから `audio.detectBpm()` や
-`audio.masteringChain(...)` を呼んでも、読み取られるのは元のサンプルです。
-編集後のサンプルを処理するには `Audio.fromBuffer(edited, sampleRate)` で
-新しいインスタンスを作ってください。ループ内で読む場合は配列を自分でキャッシュします。
-WASM でも同じ挙動です。
+呼び出すたびに新しい `Float32Array` を確保するため、返された配列に書き込んでもインスタンスが保持する音声は変わりません。あとから `audio.detectBpm()` や `audio.masteringChain(...)` を呼んでも、読み取られるのは元のサンプルです。編集後のサンプルを処理するには `Audio.fromBuffer(edited, sampleRate)` で新しいインスタンスを作ってください。ループ内で読む場合は配列を自分でキャッシュします。WASM でも同じ挙動です。
 :::
 
 ### 全チャンネルのデコード
@@ -194,10 +178,7 @@ const stereo = channels.length > 2 ? downmix(channels, 1) : channels;
 
 ### `using` によるクリーンアップ
 
-ネイティブハンドルを持つクラス（`Audio`、`RealtimeEngine`、`Project`、`Mixer`、
-`ClipPageProvider`）はすべて `[Symbol.dispose]` を実装しています。そのため
-`using` 宣言を使うと、スコープを抜けるときに例外発生時でも
-安全に自動でクリーンアップできます。
+ネイティブハンドルを持つクラス（`Audio`、`RealtimeEngine`、`Project`、`Mixer`、`ClipPageProvider`）はすべて `[Symbol.dispose]` を実装しています。そのため `using` 宣言を使うと、スコープを抜けるときに例外発生時でも安全に自動でクリーンアップできます。
 
 ```typescript
 import { RealtimeEngine } from '@libraz/libsonare-native';
@@ -209,45 +190,39 @@ function render() {
 }
 ```
 
-`using` 構文には TypeScript 5.2 以降（または構文を変換する別のツール）か、ネイティブに解釈できるランタイムが必要です。Node 22 は解釈できないので、その場合は `try/finally` で `destroy()` を呼んでください。
-すべてのハンドルクラスでネイティブの正規の解放メソッドは `destroy()` です。`Project` と
-`Mixer` は WASM 互換のエイリアスとして `delete()` も公開します。ハンドルは最終的に GC でも
-回収されますが、`using` や明示的な解放のほうが決定的なクリーンアップになるため、
-長時間動くプロセスではそちらを推奨します。
+`using` 構文には TypeScript 5.2 以降（または構文を変換する別のツール）か、ネイティブに解釈できるランタイムが必要です。Node 22 は解釈できないので、その場合は `try/finally` で `destroy()` を呼んでください。ハンドルクラスの解放メソッドは `destroy()` です（`ProjectTimeline` は `dispose()`）。`Project`、`Mixer`、`SampleBank` は WASM 互換のエイリアスとして `delete()` も公開します。ハンドルは最終的に GC でも回収されますが、`using` や明示的な解放のほうが決定的なクリーンアップになるため、長時間動くプロセスではそちらを推奨します。
 
-`RealtimeVoiceChanger` も明示的な `destroy()` に加えて `[Symbol.dispose]` を実装しているため、
-`using` を使えます。`StreamingMasteringChain`、`StreamingEqualizer`、`StreamAnalyzer` も同様に
-冪等な `destroy()` と `[Symbol.dispose]` を公開しており、決定的に解放できます。
+`RealtimeVoiceChanger` も明示的な `destroy()` に加えて `[Symbol.dispose]` を実装しているため、`using` を使えます。`StreamingMasteringChain`、`StreamingEqualizer`、`StreamAnalyzer` も同様に冪等な `destroy()` と `[Symbol.dispose]` を公開しており、決定的に解放できます。
 
 ### 逆再構成関数
 
 メルスペクトログラムや MFCC 行列から、スペクトルや音声を再構成します。位相は Griffin-Lim で推定するため往復はロスを伴います。詳細は [逆変換特徴量](./inverse-features.md) を参照してください。
 
-最初の 4 つはリクエストオブジェクトも受け付けます。順方向の `result` も、生の `power` / `coefficients` も持たないリクエストは、欠けているフィールドを挙げた `TypeError` になります（`melToStft: power is required (or pass result)`）。
+<SonareDemo id="griffin-lim" />
+
+6 つすべてがリクエストオブジェクトも受け付けます。メルと MFCC のリクエストは、行列を `power` / `coefficients` と名付けるか、順変換の `result` を渡します。どちらもないリクエストは、欠けているフィールドを挙げた `TypeError` になります（`melToStft: power is required (or pass result)`）。
 
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
-| `melToStft(mel, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `InverseStftResult` | メルスペクトログラムから線形 STFT パワーへ |
-| `melToAudio(mel, nMels, nFrames, sr?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | メルスペクトログラムから音声へ（Griffin-Lim） |
-| `mfccToMel(mfcc, nMfcc, nFrames, nMels?, lifter?)` | `InverseMelResult` | MFCC 係数からメルスペクトログラムへ |
-| `mfccToAudio(mfcc, nMfcc, nFrames, nMels?, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | MFCC 係数から音声へ |
+| `melToStft(power, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `InverseStftResult` | メルスペクトログラムから線形 STFT パワーへ |
+| `melToAudio(power, nMels, nFrames, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | メルスペクトログラムから音声へ（Griffin-Lim） |
+| `mfccToMel(coefficients, nMfcc, nFrames, nMels?, lifter?)` | `InverseMelResult` | MFCC 係数からメルスペクトログラムへ |
+| `mfccToAudio(coefficients, nMfcc, nFrames, nMels?, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?, lifter?)` | `Float32Array` | MFCC 係数から音声へ。`lifter` の既定値は 0 |
 | `cqtToAudio(magnitude, nBins, nFrames, sampleRate?, hopLength?, fmin?, binsPerOctave?, nIter?)` | `Float32Array` | row-major CQT 振幅行列から音声へ（Griffin-Lim） |
 | `vqtToAudio(magnitude, nBins, nFrames, sampleRate?, hopLength?, fmin?, binsPerOctave?, gamma?, nIter?)` | `Float32Array` | row-major VQT 振幅行列から音声へ（Griffin-Lim） |
 
 ### librosa 互換ヘルパー
 
-対応する `librosa` 関数の挙動に
-合わせています。マッピングの全体像は
-[librosa 互換性](./librosa-compatibility.md) を参照してください。
+対応する `librosa` 関数の挙動に合わせています。マッピングの全体像は [librosa 互換性](./librosa-compatibility.md) を参照してください。
 
 ::: tip 各ヘルパーの位置づけ
-- **`preemphasis` / `deemphasis`** — 高域を持ち上げる／戻す古典的な 1 タップ IIR の前処理。
-- **`trimSilence` / `splitSilence`** — 前後無音のトリムや、無音区間での区切り出し。
-- **`frameSignal` / `padCenter` / `fixLength` / `fixFrames`** — 固定フレーム DSP に通すためのフレーミング・サイズ揃え。
-- **`peakPick` / `vectorNormalize`** — 1 次元信号のピーク検出と、ベクトルのノルム正規化。
-- **`pcen`** — メルスペクトログラム向けの動的レンジ圧縮。
-- **`tonnetz`** — クロマを 6 次元のハーモニック空間へ射影。
-- **`tempogram` / `plp`** — オンセット包絡線から構築するテンポ表現と支配的なパルスの抽出。
+- **`preemphasis` / `deemphasis`**：高域を持ち上げる／戻す古典的な 1 タップ IIR の前処理。
+- **`trimSilence` / `splitSilence`**：前後無音のトリムや、無音区間での区切り出し。
+- **`frameSignal` / `padCenter` / `fixLength` / `fixFrames`**：固定フレーム DSP に通すためのフレーミング・サイズ揃え。
+- **`peakPick` / `vectorNormalize`**：1 次元信号のピーク検出と、ベクトルのノルム正規化。
+- **`pcen`**：メルスペクトログラム向けの動的レンジ圧縮。
+- **`tonnetz`**：クロマを 6 次元のハーモニック空間へ射影。
+- **`tempogram` / `plp`**：オンセット包絡線から構築するテンポ表現と支配的なパルスの抽出。
 :::
 
 | 関数 | 戻り値 | 説明 |
@@ -262,12 +237,12 @@ function render() {
 | `fixLength(values, targetSize, padValue?)` | `Float32Array` | `librosa.util.fix_length` |
 | `fixFrames(frames, xMin?, xMax?, pad?)` | `Int32Array` | `librosa.util.fix_frames` |
 | `peakPick(values, preMax, postMax, preAvg, postAvg, delta, wait)` | `Int32Array` | `librosa.util.peak_pick` |
-| `vectorNormalize(values, normType?, threshold?)` | `Float32Array` | `librosa.util.normalize`。`normType`: 0=inf, 1=L1, 2=L2, 3=power。Node wrapper の `threshold` 既定値は `0.0`、WASM は `1e-12` |
+| `vectorNormalize(values, normType?, threshold?)` | `Float32Array` | `librosa.util.normalize`。`normType`: 0=inf, 1=L1, 2=L2, 3=power。`threshold` の既定値は `0`（ライブラリが持つ微小ノルムのガード） |
 | `pcen(values, nBins, nFrames, options?)` | `Float32Array` | `librosa.pcen`（row-major のメル入力） |
 | `tonnetz(chromagram, nChroma, nFrames)` | `Float32Array` | `librosa.feature.tonnetz`（`[6 x nFrames]`） |
-| `tempogram(onsetEnvelope, sr?, hopLength?, winLength?, mode?)` | `{ nFrames: number; winLength: number; data: Float32Array }` | `librosa.feature.tempogram`。`mode` は `'autocorrelation'`（既定）または `'cosine'` |
-| `fourierTempogram(onsetEnvelope, sr?, hopLength?, winLength?)` | `{ nBins: number; nFrames: number; data: Float32Array }` | `librosa.feature.fourier_tempogram` |
-| `cyclicTempogram(onsetEnvelope, sr?, hopLength?, winLength?, center?, norm?, bpmMin?, nBins?)` | `{ nFrames: number; nBins: number; data: Float32Array }` | 巡回（テンポオクターブ不変）テンポグラム |
+| `tempogram(onsetEnvelope, sr?, hopLength?, winLength?, mode?, center?, norm?)` | `{ nFrames: number; winLength: number; data: Float32Array }` | `librosa.feature.tempogram`。`mode` は `'autocorrelation'`（既定）または `'cosine'` |
+| `fourierTempogram(onsetEnvelope, sr?, hopLength?, winLength?, center?, norm?)` | `{ nBins: number; nFrames: number; data: Float32Array }` | `librosa.feature.fourier_tempogram` |
+| `cyclicTempogram(onsetEnvelope, sr?, hopLength?, winLength?, bpmMin?, nBins?)` | `{ nFrames: number; nBins: number; data: Float32Array }` | 巡回（テンポオクターブ不変）テンポグラム。既定は `winLength=384`、`bpmMin=60`、`nBins=60` |
 | `tempogramRatio(tempogramData, winLength?, sr?, hopLength?, factors?)` | `Float32Array` | `librosa.feature.tempogram_ratio`。factors の既定値は `[0.5, 1, 2, 3, 4]` |
 | `plp(onsetEnvelope, sr?, hopLength?, tempoMin?, tempoMax?, winLength?)` | `Float32Array` | `librosa.beat.plp` |
 
@@ -275,8 +250,8 @@ function render() {
 
 | 関数 | 説明 |
 |------|------|
-| `hzToMel(hz)` | ヘルツ → Mel スケール |
-| `melToHz(mel)` | Mel スケール → ヘルツ |
+| `hzToMel(hz)` | ヘルツ → Mel（Slaney 式。`librosa` の既定と同じ） |
+| `melToHz(mel)` | Mel（Slaney 式） → ヘルツ |
 | `hzToMidi(hz)` | ヘルツ → MIDI ノート番号 |
 | `midiToHz(midi)` | MIDI ノート番号 → ヘルツ |
 | `hzToNote(hz)` | ヘルツ → 音名（例: "A4"）。有限でも正でもない周波数は `SonareError`（`InvalidParameter`）を投げる |
@@ -340,7 +315,7 @@ const preview = JSON.parse(
 );
 ```
 
-ステレオ素材ならステレオ版を使ってください。モノラル版は `0.5 * (left + right)` のダウンミックスを計測するため、相関の低い素材では約 6 dB 低く出ます。積分ラウドネス、そこから導かれる正規化ゲイン、天井に当たるリスクの判断が、そろって同じぶんだけ過小に報告されます。相関の低いピンクノイズのペア（48 kHz、4 秒）での実測値は、ダウンミックス経由が -22.55 LUFS、ステレオ版が -16.44 LUFS で、差は 6.11 dB でした。Spotify の `normalizationGainDb` もダウンミックス経由が +8.55、ステレオ版が +2.44 です。
+ステレオ素材ならステレオ版を使ってください。モノラル版は `0.5 * (left + right)` のダウンミックスを計測するため、相関の低い素材では約 6 dB 低く出ます。積分ラウドネス、そこから導かれる正規化ゲイン、シーリングに当たるリスクの判断が、そろって同じぶんだけ過小に報告されます。相関の低いピンクノイズのペア（48 kHz、4 秒）での実測値は、ダウンミックス経由が -22.55 LUFS、ステレオ版が -16.44 LUFS で、差は 6.11 dB でした。Spotify の `normalizationGainDb` もダウンミックス経由が +8.55、ステレオ版が +2.44 です。
 
 ステレオプロファイルのうち、左右両チャンネルから計測されるのは `loudness` ブロックだけです。積分 LUFS と LRA はチャンネル加算したプログラムから求め、True Peak は左右の大きいほうを採ります。スペクトル、ダイナミクス、テンポの各フィールドはダウンミックス上で計測されるため、`masteringAudioProfile` の値とそのまま比較できます。
 
@@ -352,7 +327,7 @@ Node はプロファイル用と提案用で 2 つの型名を宣言していま
 
 `streamingLoudnessGain({ samples, sampleRate, config })`（ステレオは `streamingLoudnessGainStereo({ left, right, ... })`）は、`StreamingMasteringChain` の構築に使うラウドネスの値を、オフラインのチェーンが測るのと同じ位置、つまりラウドネス段の入力で測定します。結果は `{ loudnessStaticGainDb, truePeakDb, integratedLufs }` で、ゲインはシーリングのクランプを含めてオフラインのチェーンが適用するものと等しく、無音では 0 dB です。`loudnessStaticGainDb` と `truePeakDb`（`loudnessStaticGainPeakDb` として）をチェーンのコンストラクタに渡します。
 
-`masteringRepairAnalyze({ channels, sampleRate })` は任意のチャンネル数のリペア対象の欠陥を測定し、設定付きでステージを推奨します。`masteringRepairApply({ channels, sampleRate, stages, onProgress?, cancel? })` は `stages`（各ステージは最大 1 回、未知の設定は拒否）を、配列の順序によらず declip、declick、decrackle、dehum、denoise、dereverb の固定順で適用します。declip・declick・dehum はチャンネル全体で判断してチャンネルごとに報告し、decrackle は各チャンネルを単独で処理し、denoise と dereverb は連動した 1 つのマスクを適用して 1 回だけ報告します。
+`masteringRepairAnalyze({ channels, sampleRate })` は任意のチャンネル数のリペア対象の欠陥を測定し、設定付きで段を推奨します。`masteringRepairApply({ channels, sampleRate, stages, onProgress?, cancel? })` は `stages`（各段は最大 1 回、未知の設定は拒否）を、配列の順序によらず declip、declick、decrackle、dehum、denoise、dereverb の固定順で適用します。declip・declick・dehum はチャンネル全体で判断してチャンネルごとに報告し、decrackle は各チャンネルを単独で処理し、denoise と dereverb は連動した 1 つのマスクを適用して 1 回だけ報告します。
 
 ```typescript
 const analysis = masteringRepairAnalyze({ channels: [left, right], sampleRate: 48000 });
@@ -373,7 +348,7 @@ const { channels, reports } = masteringRepairApply({
 
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
-| `scaleQuantizeMidi(root, modeMask, midi, referenceMidi?)` | `number` | 小数を含む MIDI 番号を最も近い有効なピッチクラスへスナップ |
+| `scaleQuantizeMidi(root, modeMask, midi, referenceMidi?)` | `number` | 小数を含む MIDI 番号を最も近い有効なピッチクラスへ丸める |
 | `scaleCorrectionSemitones(root, modeMask, midi, referenceMidi?)` | `number` | 補正量（量子化後 − 入力）をセミトーンで返す |
 | `scalePitchClassEnabled(root, modeMask, pitchClass)` | `boolean` | `pitchClass`（0..11）が `root` を基準に有効か |
 | `scaleMaskForMode(root, mode)` | `number` | 教会旋法名（`'major'`、`'minor'`、`'dorian'` など）または `Mode` の序数に対応する 12 ビットの `modeMask`。`scaleMaskForMode(0, 'major')` は `0b101010110101` |
@@ -385,7 +360,7 @@ const { channels, reports } = masteringRepairApply({
 | クラス | 用途 |
 |--------|------|
 | `StreamAnalyzer` | ブロック単位の解析。時間とともに更新される BPM/キー推定と `readFramesSoa`／`readFramesI16`／`readFramesU8`。[リアルタイムストリーミング](./realtime-streaming.md) を参照。 |
-| `StreamingEqualizer` | リアルタイムセーフなブロック EQ。 |
+| `StreamingEqualizer` | リアルタイム安全なブロック EQ。 |
 | `StreamingMasteringChain` | ブロックごとに進めるマスタリングレンダリング（[ネイティブバインディング](./native-bindings.md#streamingmasteringchain) で解説）。 |
 | `RealtimeVoiceChanger` | プリセット式のライブ音声チェーン。ブロック処理向け。 |
 | `Mixer` | JSON シーンから構築する永続マルチストリップミキサー。[ミキシングエンジン](./mixing.md) を参照。 |
@@ -397,7 +372,7 @@ import { StreamAnalyzer } from '@libraz/libsonare-native';
 const analyzer = new StreamAnalyzer({ sampleRate: 48000, computeMel: true, computeOnset: true });
 analyzer.process(block);                 // Float32Array のブロックを渡す
 const frames = analyzer.readFramesSoa(analyzer.availableFrames());
-const stats = analyzer.stats();          // stats.estimate.bpm / .key（PitchClass の整数）
+const stats = analyzer.stats();          // stats.estimate.key（ピッチクラス。-1 は該当なし）、.keyName（"C major"）、.chordName
 ```
 
 Node ネイティブでは float の Structure-of-Arrays 読み出しの正式名は `readFramesSoa(...)` です。バインディング間の命名を揃えるためのエイリアス `readFrames(...)` も公開しており、これは WASM パッケージが同じ操作に使う名前と一致します。
@@ -440,24 +415,26 @@ changer.destroy();
 
 `RealtimeEngine` はクラスとしては共有されていますが、実行環境ごとに細部が異なります。
 
-| Runtime | 違い |
+| 実行環境 | 違い |
 |---------|------|
 | WASM | `engineCapabilities()` を追加し、構築前に ABI 互換性を確認します。キャプチャバッファは正規形の `setCaptureBuffer(numChannels, capacityFrames)` で設定します。 |
-| Node ネイティブ | `engineAbiVersion()` を公開します。ブラウザ向けの機能確認ヘルパーはありません。キャプチャバッファは WASM と同じ正規形 `setCaptureBuffer(numChannels, capacityFrames)` に加えて、後方互換のために非推奨の `setCaptureBuffer(channels: Float32Array[])` も残しています。 |
+| Node ネイティブ | パッケージの読み込み時にパックされた ABI を、構築時にエンジンの ABI を確認し（`AbiMismatch`）、`engineAbiVersion()` を公開します。ブラウザ向けの `engineCapabilities()` ヘルパーはありません。キャプチャバッファは WASM と同じ正規形 `setCaptureBuffer(numChannels, capacityFrames)` に加えて、後方互換のために非推奨の `setCaptureBuffer(channels: Float32Array[])` も残しています。 |
 
-`Project.create()` は空のプロジェクトを作成します。`setAssistSidecar(...)` と
-`assistSidecars()` でモジュール固有の不透明なメタデータを保持でき、
-`ProjectAutomationTargetKind` と `targetKind` でオートメーションレーンの対象種別を付けられます。
-`RealtimeEngine.setTrackMonitorMode(laneIndex, mode, renderFrame?)` は `'off'`、
-`'pfl'`（pre-fader listen＝フェーダー前で試聴）、`'afl'`（after-fader listen＝フェーダー後で試聴）、
-および対応する数値序数を受け取ります。トラック／ミキサーのパン則セッターは、下記の
-`PanLawInput` エイリアスを受け取ります。
+`Project.create()` は空のプロジェクトを作成します。`setAssistSidecar(...)` と `assistSidecars()` でモジュール固有の不透明なメタデータを保持でき、`ProjectAutomationTargetKind` と `targetKind` でオートメーションレーンの対象種別を付けられます。`RealtimeEngine.setTrackMonitorMode(laneIndex, mode, renderFrame?)` は `'off'`、`'pfl'`（pre-fader listen＝フェーダー前で試聴）、`'afl'`（after-fader listen＝フェーダー後で試聴）、および対応する数値序数を受け取ります。`renderFrame` を省略すると即時に適用されます。トラック／ミキサーのパン則セッターは、下記の `PanLawInput` エイリアスを受け取ります。
 
-## 各節の移動先
+### 状態を持つオブジェクトの追加メソッド
 
-| 節 | 移動先ページ |
-|----|--------------|
-| 解析関数 | [Node.js ネイティブ 解析・エフェクト API](./node-api-analysis.md) |
-| エフェクト関数 | [Node.js ネイティブ 解析・エフェクト API](./node-api-analysis.md) |
-| 特徴抽出関数 | [Node.js ネイティブ 解析・エフェクト API](./node-api-analysis.md) |
-| 型定義 | [Node.js ネイティブ 型定義](./node-api-types.md) |
+| オブジェクト | メソッドと契約 |
+|--------------|----------------|
+| `Project` のテンポと拍子 | `analyzeTempo(audio, sampleRate, options?)` はプロジェクトを変更せず、順位付き候補を返します。設定済みマップは `tempoSegmentByIndex(index)`、`timeSignatureByIndex(index)`、`timeSignatureCount()` で読み取ります。添字は 0 始まりです。 |
+| `Project` の楽器付きバウンス | `bounceWithBuiltinInstruments(bindings, options?)`、`bounceWithSynthInstruments(bindings, options?)`、`bounceWithSf2Instruments(bindings, options?)` はデスティネーションごとに楽器を結び付けます。[プロジェクトのバウンス](./project-bounce.md)を参照してください。 |
+| `Project` のメタデータ | `assistSidecarCount()` は `assistSidecars()` が返す不透明なサイドカーの件数です。 |
+| `RealtimeEngine` のグラフ | `setGraph(spec)` は `EngineGraphSpec` を設定します。`graphNodeCount()` と `graphConnectionCount()` で規模を確認します。 |
+| `RealtimeEngine` のキャプチャとページ供給 | `countInEndSample(startSample, bars)` はテンポマップからカウントインの終了サンプルを求めます。`createFileClipPageProvider(path, options)` はファイルからページを供給するプロバイダーを作成します。使用後にプロバイダーを破棄してください。 |
+| `RealtimeEngine` のルーティング | `setTrackSends(trackId, sends)` と `setTrackOutputBus(trackId, busId)` は、1 本のレーンのセンドまたは出力バスを置き換えます（`busId` が 0 ならマスターミックス）。トラックは `setTrackLanes` で設定したレーン一覧にあらかじめ含まれている必要があります。`canSetLaneSidechain(trackId, insertIndex, sourceTrackId)`、`canSetBusSidechain(...)`、`canSetMasterSidechain(...)` は、何も変更せずに `SidechainCheck` を返します。 |
+| `RealtimeEngine` のオフラインとクリップ | `primeOfflineParameters(numChannels, blockSize)`、`resetProcessorState(renderFrame?)`、`tailSamples()`、`graphLatencySamplesQ8()`（1/256 サンプル単位のレイテンシ）はオフラインレンダリングを支えます。`upsertClip(clip)` と `removeClip(clipId)` はクリップをその場で編集します。 |
+| `RealtimeEngine` のオートメーション ID | `resolveTrackLaneAutomationId(trackId, 'faderDb' \| 'pan')` と `resolveBusAutomationId(busId, 'faderDb')` は、オートメーションの対象にする ID を返します。 |
+| `RealtimeEngine` の MIDI | `pushMidiProgram(destinationId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)` はプログラムチェンジをキューに積みます。 |
+| `Mixer` のルーティング | `setOutputBus(sourceId, busId)` はソースをバスへルーティングします。`flushMeters()` は保留中の True Peak 区間をメータースナップショットへ反映します。オフラインレンダリングの最後のブロックのあとに呼びます。 |
+| `Project` のバウンスとソース | `bounceWithInstruments(instruments, options?)` と `bounceWithInstrument(instrument, options?)` は外部楽器を使ってバウンスします。`unresolvedAudioSources()` は、まだデコード済み PCM が必要な音声ソースの記述子を、`unresolvedAudioSourceIds()` と同じ順序で返します。 |
+| `Mixer` の診断 | `stripNonFiniteDiscardCount(strip)` と `busNonFiniteDiscardCount(busId)` は、非有限値を含む再帰 DSP 状態を破棄した処理ブロックの累積数です。バスの読み取りにはコンパイル済みバスが必要です。`vcaGroupCount()` は VCA グループ数を返します。 |

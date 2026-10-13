@@ -15,6 +15,7 @@ By the end of this page you should be able to:
 - translate naming conventions between JavaScript, Python, C++, C ABI, Node native, and CLI;
 - identify which features are present in each binding and which are not available from the CLI;
 - account for shape differences such as nested vs flat configs, row-major matrices, scene JSON, and streaming frame buffers;
+- map one failure to the error class, code, and CLI exit status each runtime gives it;
 - choose the authoritative source file to inspect when the docs and runtime need to be checked.
 
 ## Naming Conventions
@@ -28,64 +29,92 @@ By the end of this page you should be able to:
 
 ## Feature Availability
 
-One DSP core, several hand-written runtimes. The core is a single implementation and every runtime calls into it, so a result computed through Python and the same result computed through WASM come from the same code. The API surface wrapped around that core is a different matter: it is written by hand per binding, and it is not identical.
+One C++ core implements the DSP and every runtime calls it, so the same input gives the same result through Python and through WASM. What differs is the API surface around the core, which is written by hand for each binding.
 
-The repository measures that surface rather than asserting it. `tools/parity/surface-coverage.md` is a generated matrix with one row per feature domain — a domain is the public C header a function is declared in, so a new header adds a row on its own — and one column per runtime: Python, Node, WASM, and the two command-line front-ends as separate columns, because the Python `sonare` CLI and the native `sonare-cli` are two binaries whose command sets differ. Each cell is how many of that domain's C ABI entry points the runtime reaches, and a final row totals every domain. The numbers are not repeated here on purpose: the matrix is regenerated from the parity checker's extractors by `make surface-coverage`, and `make surface-coverage-check` fails in CI when the tracked copy drifts from the headers, so the file is the only copy that cannot go stale.
+The libsonare repository measures that surface instead of asserting it. `tools/parity/surface-coverage.md` is a generated matrix with one row per feature domain (the public C header a function is declared in) and one column per runtime: Python, Node, WASM, and the Python `sonare` CLI and native `sonare-cli` as separate columns, because their command sets differ. Each cell counts the domain's C ABI entry points the runtime reaches. The numbers are not copied here. `make surface-coverage` regenerates the file, and `make surface-coverage-check` fails CI when the tracked copy drifts from the headers.
 
-Read a cell there as a statement about reach, not quality. Both CLIs are a curated subset by design, and WASM can expose neither the host filesystem nor anything that needs threads, so a shortfall in those columns is expected shape rather than a defect. An entry point counts as reached when the parity checker finds it under the runtime's own naming — a class method, a handle-prefixed rename, or a verified alias all count, and the lifecycle helpers that a facade answers with a constructor or RAII count by construction. An allowlisted divergence still counts as a gap: an allowlist entry records that an absence was reviewed, not that it was filled. When you need to know whether one specific call is reachable from one runtime, the per-domain row narrows the search and the [verification sources](#verification-sources) below settle it.
+Read a cell as reach, not quality. Both CLIs are curated subsets by design, and WASM exposes neither the host filesystem nor anything that needs threads. An entry point counts as reached when the checker finds it under the runtime's own naming (a class method, a handle-prefixed rename or a verified alias). A reviewed gap on the allowlist still counts as a gap. For one specific call, the per-domain row narrows the search and the [verification sources](#verification-sources) settle it.
 
-The table below is the reader-facing companion to that matrix: each feature family with its library-binding status and CLI coverage. Unless a row says otherwise, the feature is present in every library binding. Naming differences follow the [naming conventions](#naming-conventions) above.
+The tables below are the reader-facing companion. **Yes** means WASM, Node, Python and the C ABI, unless the cell names fewer. The CLI column names the command, or says No or Partial. Naming differences follow the [naming conventions](#naming-conventions).
+
+### Analysis, features and metering
 
 | Feature family | Library bindings | CLI |
 |----------------|------------------|-----|
 | Batch analysis | Yes | Yes |
 | Low-level features and librosa helpers | Yes | Common commands |
-| NMF stem separation (`decomposeStems` / `decomposeStemsLinked`, `decompose_stems` / `decompose_stems_linked`) | Yes — WASM, Node, Python, C ABI | `decompose-stems` for mono input only |
-| Constant-Q chroma (`chromaCqt` / `chroma_cqt`) | Yes — WASM, Node, Python, C ABI | No |
+| Constant-Q chroma (`chromaCqt` / `chroma_cqt`) | Yes | No |
+| Chord functions (`chordFunctions` / `chord_functions`; `chordFunctionalAnalysis` returns the same entries) | Yes (`sonare_chord_functions`) | No |
+| Chord and key annotation conversion (`chordSymbolFromAnalysis` / `keyModeFromAnalysis`) | Yes (`sonare_chord_symbol_from_analysis`, `sonare_key_mode_from_analysis`) | No |
+| Measured tuning (`tuning: 'auto'`, `referenceHz: 'auto'`, `tuningToReferenceHz` / `referenceHzToTuning`) | Yes | No |
+| Transcription (`transcribe`, `transcribeToClip`), including the polyphonic tracker limits, `minNoteDivision` and `referenceHz: 'auto'` | Yes. The polyphonic limits (`maxPolyphony`, `minFramePeakRatio`, `minRidgePeakRatio`, `reattackRatio`) apply to the polyphonic path only; see [Audio to MIDI](./audio-to-notes.md#options-and-limits) | `transcribe` on both CLIs, with `--max-polyphony` and `--min-note-division` |
+| NMF stem separation (`decomposeStems` / `decomposeStemsLinked`) | Yes | `decompose-stems`, mono input only |
+| Mel/MFCC inverse reconstruction | Yes | Native CLI only: `mel-to-audio`, `mfcc-to-audio` |
 | Streaming analyzer and processors (`StreamAnalyzer`, `StreamingEqualizer`, `StreamingMasteringChain`) | Yes | No |
-| Mel/MFCC inverse reconstruction | Yes | No |
-| Realtime engine | Yes | No |
-| Engine lane mixer (lanes, buses, sends, channel strips) and MIDI clip schedule | Yes — see [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) | No |
-| Realtime scope and wide meter telemetry | Yes — see [Realtime Engine](./realtime-engine.md#surround-group-buses-and-wide-meters) | No |
-| Per-track PFL/AFL cue monitoring (pre-fader listen / after-fader listen) | Yes — see [Realtime Engine](./realtime-engine.md#track-monitor-taps-off-pfl-and-afl); reachable from the WASM AudioWorklet | No |
-| Mastering presets/chains/processors | Yes | Partial |
-| Mastering assistant/profile/preview JSON | Yes | No dedicated command |
-| Stereo assistant/profile/preview JSON (`masteringAudioProfileStereo`, `masteringAssistantSuggestStereo`, `masteringStreamingPreviewStereo`) | Yes — WASM, Node, Python (`mastering_audio_profile_stereo`, …), C ABI (`sonare_mastering_audio_profile_stereo`, …). They measure the left/right pair instead of a downmix, which under-reports integrated loudness by about 6 dB on decorrelated material — see [Stereo sources](./mastering-assistant.md#stereo-sources) | No dedicated command |
-| Stereo crest factor (`meteringCrestFactorDbStereo` / `metering_crest_factor_db_stereo`) | Yes — WASM, Node, Python, C ABI (`sonare_metering_crest_factor_db_stereo`) | No |
-| Repair in one call (`masteringRepairAnalyze` / `masteringRepairApply`, `mastering_repair_analyze` / `mastering_repair_apply`) | Yes — WASM, Node, Python, C ABI (`sonare_mastering_repair_analyze`, `sonare_mastering_repair_apply`). Any channel count, fixed stage order, progress and cancel — see [Audio Repair Workflow](./audio-repair.md) | No (the native `repair` command is a separate path) |
-| Streaming loudness gain (`streamingLoudnessGain` / `streamingLoudnessGainStereo`, `streaming_loudness_gain` / `streaming_loudness_gain_stereo`) | Yes — WASM, Node, Python, C ABI (`sonare_streaming_loudness_gain[_stereo]`) | No |
-| Mixing engine and scenes | Yes | `mix` (C++ CLI also exports scene presets) |
-| Mixing assistant (`suggestMixScene` / `suggest_mix_scene`) | Yes — WASM, Node, Python, C ABI (`sonare_mixing_assistant_suggest`). General CMake builds can toggle `BUILD_MIXING_ASSISTANT` (default ON); the full Node native addon forces it ON regardless of the cache, while `SONARE_WASM_ANALYSIS_ONLY` forces it off. The entry points stay exported in a build without it and answer `NotSupported` rather than disappearing, so probe the capability catalog instead of probing for the symbol — see [Mixing Assistant](./mixing-assistant.md) | Yes — `suggest-mix` |
-| Surround and multichannel mixing | Project graph/bounce and the realtime engine support 5.1/7.1 output. Realtime engine lanes are panned into 5.1/7.1 group buses from the strip's `surroundPan` position and expose wide-meter telemetry. The standalone offline `Mixer.processStereo` remains stereo-only, and an engine track lane accepts a stereo source only: a lane whose `sourceChannelLayout` is mono, 5.1, or 7.1 is refused with `InvalidParameter` (the WASM worklet facade throws a `RangeError`), and a C caller sets `SONARE_CHANNEL_LAYOUT_STEREO` because a zero-initialised lane reads as mono. See [Surround and multichannel](./mixing.md#surround-and-multichannel). | Yes — `project bounce` supports 1/2/6/8-channel output |
-| Project and arrangement editing (headless DAW) | Yes — see [Project Editing](./project-editing.md) | Yes |
-| Typed automation targets (track fader/pan) | Yes — see [Project Editing](./project-editing.md#automation-lanes) | No |
-| Audio-source owning metadata (`contentHash` / `externalStemRole`) | Yes — see [Project Editing](./project-editing-midi.md#reading-the-model-back-and-rebinding-audio-after-a-load) | No |
-| Built-in instruments (NativeSynth presets/patches) | Yes — see [Built-in Instruments](./native-synth.md) | Yes — `project bounce --synth <preset>` pins a NativeSynth preset (`project synth-presets` lists them), and a bare `--synth` follows GM programs |
-| GM program following in a synth bounce | C ABI (`use_gm_programs`), Python (`auto_select_gm=`), and the WASM/Node synth-bounce bindings (`useGmPrograms`) can follow incoming GM bank/program changes; an explicit patch remains the fallback | Yes — the bare `--synth` flag |
-| Capability catalog and build diagnostics | Yes — `capabilityCatalog()` / `capability_catalog()` and `capabilities()` on every surface, canonical JSON through the C ABI | Yes — `doctor` |
-| Cooperative cancellation of long offline calls | Yes — `cancel?: () => boolean` on Node and WASM, `cancel=` on Python, `SonareCancelCallback` on the C ABI; a cancelled call reports error code 8 and allocates no output | No |
-| SoundFont 2 player | Yes — see [SoundFont 2 Player](./soundfont-player.md) | No (Project API only) |
-| Realtime engine live MIDI input | Yes — see [MIDI Input](./midi-input.md) | No |
-| External MIDI output and clock/transport forwarding | Yes — WASM, Node, Python, C ABI; browser worklets deliver lowered MIDI 1.0 messages through `onMidiOut` | No |
-| Web MIDI bridge (`bindWebMidi`) and microphone helper (`bindMicrophoneInput`) | WASM / browser only | No |
-| External-instrument bounce protocol (`ExternalInstrument`) | Yes — `bounceWithInstruments` / `bounceWithInstrument` on Node and WASM, `bounce_with_instruments` on Python, `sonare_project_bounce_with_instruments` on the C ABI; see [Project Bounce](./project-bounce.md) | No |
+| Metering (meters, clipping, dynamic range, stereo image, spectrum) | Yes | Native CLI only: `meter`, `clipping`, `dynamic-range` |
+| Stereo crest factor (`meteringCrestFactorDbStereo`) | Yes (`sonare_metering_crest_factor_db_stereo`) | No |
+| Scale quantization and scale masks (`scaleMaskForMode`) | Yes | `scale-quantize` on both CLIs; it and `pitch-correct-timevarying` take a mode name or a 12-bit mask. No scale-mask command |
+
+### Editing, repair and mastering
+
+| Feature family | Library bindings | CLI |
+|----------------|------------------|-----|
 | Editing DSP | Yes | Yes |
-| Region-based spectral editing (`spectralEdit`) | Yes — see [Spectral Editing](./spectral-editing.md) | No |
-| Metering (meters, clipping/dynamic-range, stereo image, spectrum) | Yes | C++ CLI only (`meter`, `clipping`, `dynamic-range`) |
-| Scale quantization and scale masks (`scaleMaskForMode` / `scale_mask_for_mode`) | Yes | No |
-| Auto-tune to a detected or named key (`autoTune` / `auto_tune`) | Yes — WASM, Node, Python, C ABI (`sonare_auto_tune`) | No |
-| Chord and key annotation conversion (`chordSymbolFromAnalysis` / `keyModeFromAnalysis`, `chord_symbol_from_analysis` / `key_mode_from_analysis`) | Yes — WASM, Node, Python, C ABI (`sonare_chord_symbol_from_analysis`, `sonare_key_mode_from_analysis`) | No |
-| Stereo room morph (`roomMorphStereo` / `room_morph_stereo`) | Yes — WASM, Node, Python, C ABI (`sonare_room_morph_stereo`) | `room-morph` on both CLIs for a two-channel file |
-| Reference at its own sample rate (`referenceSampleRate` / `reference_sample_rate` on pair processors, pair analyses, A/B loudness match and EQ match) | Yes — WASM, Node, Python, C ABI (`reference_sample_rate` argument; `sonare_eq_match_ex`) | `mastering-pair-analyze` and `mastering-pair-processor` read a reference file at any rate |
-| Synth parameter descriptors (`synthEngineParamInfo` / `synthPatchParamInfo`, `synth_engine_param_info` / `synth_patch_param_info`) and patch `engineParams` / `engine_params` | Yes — WASM, Node, Python, C ABI (`sonare_synth_engine_param_info`, `sonare_synth_patch_param_info`, `SonareSynthPatch.engine_params`) | No |
-| Live program change (`pushMidiProgram`, `pushMidiInputProgram`, `push_midi_program`, `push_midi_input_program`), per-lane `setTrackSends` / `setTrackOutputBus`, and offline `Mixer.setOutputBus` / `set_output_bus` | Yes — WASM, Node, Python, C ABI (`sonare_engine_push_midi_program`, `sonare_engine_set_track_sends`, `sonare_engine_set_track_output_bus`, `sonare_mixer_set_output_bus`) | No |
-| Chord functions (`chordFunctions` / `chord_functions`; `chordFunctionalAnalysis` / `chord_functional_analysis` returns the same timed entries) | Yes — WASM, Node, Python, C ABI (`sonare_chord_functions`) | No |
-| Measured tuning (`tuning: 'auto'` / `tuning="auto"` / `tuning_auto`, `referenceHz: 'auto'`, `tuningToReferenceHz` / `referenceHzToTuning`) | Yes — WASM, Node, Python, C ABI | No |
-| Room acoustics (including `roomGeometryFromEstimate` / `room_geometry_from_estimate`, which turns an `estimateRoom` result into `synthesizeRir` input) | Yes — `roomGeometryFromEstimate` is in WASM, Node, Python, and C ABI (`sonare_room_geometry_from_estimate`) | `sonare acoustic [--ir]`, `estimate-room`, `synthesize-rir`, `room-morph` |
-| File decoding | Native: WAV/MP3 (FFmpeg builds add more); WASM: most APIs take decoded samples, while `Audio.fromMemory(...)` decodes WAV/MP3 bytes and browser decoding can read supported formats | Same as the native build |
-| Multichannel decode and fold (`decodeChannels` / `decode_channels`, `downmix`) | Yes — WASM, Node, Python, C ABI (`sonare_decode_channels`, `sonare_downmix`). `decodeChannels` keeps every source channel; `downmix` folds to a narrower layout with the ITU-R BS.775 rule (centre and surround at -3 dB, LFE dropped). | No |
+| Region-based spectral editing (`spectralEdit`) | Yes, see [Spectral Editing](./spectral-editing.md) | No |
+| Automatic pitch correction to a detected or named key (`autoTune` / `auto_tune`) | Yes (`sonare_auto_tune`) | No |
+| Offline vocal editing (`VocalEditSession`, and the vocal edits stored in a project) | `VocalEditSession` on WASM, Node and Python. The project-level vocal calls are Partial (5 of 10 entry points). See [Offline Monophonic Vocal Editing](./vocal-editing.md) | `vocal-notes` on both CLIs lists a session's notes; no editing or rendering |
+| Repair in one call (`masteringRepairAnalyze` / `masteringRepairApply`) | Yes. Any channel count, fixed stage order, progress and cancel; see [Audio Repair Workflow](./audio-repair.md) | No (the native `repair` command is a separate path) |
+| Mastering presets, chains and processors | Yes | Partial |
+| Mastering assistant, profile and preview JSON | Yes | `mastering-suggest`, `mastering-profile`, `mastering-streaming` on both CLIs (mono or downmix) |
+| Stereo assistant, profile and preview JSON (`masteringAudioProfileStereo`, `masteringAssistantSuggestStereo`, `masteringStreamingPreviewStereo`) | Yes. They measure the left/right pair; a downmix under-reports integrated loudness by about 6 dB on decorrelated material, see [Stereo sources](./mastering-assistant.md#stereo-sources) | No dedicated command |
+| Streaming loudness gain (`streamingLoudnessGain` / `streamingLoudnessGainStereo`) | Yes (`sonare_streaming_loudness_gain[_stereo]`) | No |
+| Reference at its own sample rate (`referenceSampleRate` on pair processors, pair analyses, A/B loudness match and EQ match) | Yes (`reference_sample_rate` argument; `sonare_eq_match_ex`) | `mastering-pair-analyze` and `mastering-pair-processor` read a reference file at any rate |
+| Cooperative cancellation of long offline calls | Yes: `cancel?: () => boolean` on Node and WASM, `cancel=` on Python, `SonareCancelCallback` on the C ABI. A canceled call reports error code 8 and allocates no output | No |
+
+### Mixing and realtime engine
+
+| Feature family | Library bindings | CLI |
+|----------------|------------------|-----|
+| Mixing engine and scenes | Yes | `mix-strip` on both CLIs; the Python CLI also has the scene `mix`; see [CLI](./cli.md) |
+| Mixing assistant (`suggestMixScene` / `suggest_mix_scene`) | Yes (`sonare_mixing_assistant_suggest`). A build without `BUILD_MIXING_ASSISTANT` (default ON; forced ON in the full Node addon, forced off by `SONARE_WASM_ANALYSIS_ONLY`) keeps the entry points and answers `NotSupported`, so probe the capability catalog instead of the symbol. See [Mixing Assistant](./mixing-assistant.md) | `suggest-mix` |
+| Surround and multichannel mixing | Project graph, project bounce and the realtime engine support 5.1/7.1 output; engine lanes pan into 5.1/7.1 group buses from the strip's `surroundPan`. The standalone `Mixer.processStereo` is stereo-only, and an engine track lane takes a stereo source only (see [Channel Formats](./channel-formats.md#channel-handling-by-module)). See [Surround and multichannel](./mixing.md#surround-and-multichannel) | `project bounce` writes 1/2/6/8 channels |
+| Realtime engine | Yes | No |
+| Engine lane mixer (lanes, buses, sends, channel strips) and MIDI clip schedule | Yes, see [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) | No |
+| Scope and wide-meter telemetry | Yes, see [Realtime Engine](./realtime-engine.md#surround-group-buses-and-wide-meters) | No |
+| Per-track PFL/AFL cue monitoring (pre-fader listen / after-fader listen) | Yes, see [Realtime Engine](./realtime-engine.md#track-monitor-taps-off-pfl-and-afl); reachable from the WASM AudioWorklet | No |
+| Per-lane `setTrackSends` / `setTrackOutputBus` and offline `Mixer.setOutputBus` | Yes (`sonare_engine_set_track_sends`, `sonare_engine_set_track_output_bus`, `sonare_mixer_set_output_bus`) | No |
+| Live MIDI input, and external MIDI output with clock and transport forwarding | Yes, see [MIDI Input](./midi-input.md). Browser worklets deliver lowered MIDI 1.0 messages through `onMidiOut` | No |
+| Live program change (`pushMidiProgram`, `pushMidiInputProgram`) | Yes (`sonare_engine_push_midi_program`). The SoundFont player, a NativeSynth bound with GM programs and a drum-kit NativeSynth (as the GS drum-set select) follow it; the built-in synth and other NativeSynth patches ignore it | No |
+
+### Projects, instruments and MIDI
+
+| Feature family | Library bindings | CLI |
+|----------------|------------------|-----|
+| Project and arrangement editing (headless DAW) | Yes, see [Project Editing](./project-editing.md) | Yes |
+| Typed automation targets (track fader and pan) | Yes, see [Project Editing](./project-editing.md#automation-lanes) | No |
+| Audio-source owning metadata (`contentHash` / `externalStemRole`) | Yes, see [Project Editing](./project-save-load.md#reading-the-model-back-and-rebinding-audio-after-a-load) | No |
+| Built-in instruments (NativeSynth presets and patches) | Yes, see [Built-in Instruments](./native-synth.md) | `project bounce --synth <preset>` pins a preset (`project synth-presets` lists them); a bare `--synth` follows GM programs |
+| GM program following in a synth bounce | C ABI `use_gm_programs`, Python `auto_select_gm=`, WASM and Node `useGmPrograms`; an explicit patch remains the fallback | Bare `--synth` flag |
+| Synth parameter descriptors (`synthEngineParamInfo` / `synthPatchParamInfo`) and patch `engineParams` | Yes (`sonare_synth_engine_param_info`, `sonare_synth_patch_param_info`, `SonareSynthPatch.engine_params`) | No |
+| Sample bank (`SampleBank`, the `sample` engine's audio source) | Yes, see [Built-in Instruments](./native-synth.md) | Partial |
+| Part rig (`setPartRig` / `getPartRig` / `clearPartRig`) | Yes, see [GM and GS](./gm-gs.md#part-rigs-and-efx-serial-routing) | No |
+| Composition assist | C ABI and C++ only, by design | No |
+| SoundFont 2 player | Yes, see [SoundFont 2 Player](./soundfont-player.md) | No (Project API only) |
+| External-instrument bounce protocol (`ExternalInstrument`) | `bounceWithInstruments` / `bounceWithInstrument` on Node and WASM, `bounce_with_instruments` on Python, `sonare_project_bounce_with_instruments` on the C ABI; see [Project Bounce](./project-bounce.md) | No |
+| Playback renderer (`PlaybackRenderer`, `renderPlayback` / `render_playback`) | Yes; mono, stereo, 5.1, 7.1 or binaural output, see [Playback](./playback.md) | `playback` on both CLIs |
+
+### Rooms, files and browser-only
+
+| Feature family | Library bindings | CLI |
+|----------------|------------------|-----|
+| Room acoustics (including `roomGeometryFromEstimate`, which turns an `estimateRoom` result into `synthesizeRir` input) | Yes (`sonare_room_geometry_from_estimate`) | `acoustic [--ir]`, `estimate-room`, `synthesize-rir`, `room-morph` |
+| Stereo room morph (`roomMorphStereo` / `room_morph_stereo`) | Yes (`sonare_room_morph_stereo`) | `room-morph` on both CLIs for a two-channel file |
+| Capability catalog and build diagnostics | `capabilityCatalog()` / `capability_catalog()` and `capabilities()` on every surface; canonical JSON through the C ABI | `doctor` |
+| File decoding | Native: WAV/MP3 (FFmpeg builds add more). WASM: most APIs take decoded samples, `Audio.fromMemory(...)` decodes WAV/MP3 bytes, and browser decoding can read supported formats | Same as the native build |
+| Multichannel decode and fold (`decodeChannels` / `decode_channels`, `downmix`) | Yes (`sonare_decode_channels`, `sonare_downmix`); the fold rules are in [Channel Formats](./channel-formats.md) | No |
+| Web MIDI bridge (`bindWebMidi`) and microphone helper (`bindMicrophoneInput`) | WASM / browser only | No |
 | OPFS clip write and import (`writeOpfsClip`, `importOpfsClip`) | WASM / browser only | No |
-| Stream analyzer as an audio-graph node (`SonareStreamAnalyzerNode`, `registerSonareStreamAnalyzerWorkletProcessor`) | WASM / browser only, in `@libraz/libsonare/worklet` | No |
+| Stream analyzer as an audio-graph node (`SonareStreamAnalyzerNode`) | WASM / browser only, in `@libraz/libsonare/worklet` | No |
 
 ## Known Shape Differences
 
@@ -115,7 +144,7 @@ These functions exist across the library bindings but take their arguments diffe
 | Stereo assistant/metering request types | The stereo entry points added alongside the mono ones are **request-object only — no positional overload** on any JS surface. Their request-type names differ: WASM shares one `MasteringStereoParamsRequest` between profile and suggest, while Node splits it into `MasteringAssistantSuggestStereoRequest` and `MasteringAudioProfileStereoRequest` (the latter extends the former and adds nothing). Python takes plain positional/keyword arguments (`left, right, sample_rate=…`), and the C ABI takes `const float* left, const float* right, size_t length` |
 | `StreamingMasteringChain` scope | Block-safe stages only. It rejects repair stages that need lookaround/file context. A `loudness` stage is supported when the caller supplies a precomputed static gain as `loudnessStaticGainDb` (JS) / `loudness_static_gain_db` (Python), with an optional source true-peak field; otherwise the constructor rejects it |
 | `analyze(...)` return | Every binding — C ABI, Python, Node native, and WASM — returns the complete `analyze` result: chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength. The dedicated functions (`detect_chords`, `analyze_sections`, …) stay useful when you need extra parameters or just one family without running the full pipeline |
-| Normalizer defaults and results | Mono peak normalization defaults to `0.0` dBFS everywhere — module-level `normalize(...)` and the `Audio.normalize()` convenience methods on Python, WASM, and Node native. That means normalize the peak to full scale, not apply a gain of zero. RMS defaults to `-20.0` dBFS (Python's `normalize_rms` / `normalize_rms_stereo`, and the library default the CLI follows). The two JS surfaces diverge from their own mono call here: `normalizeStereo`'s `targetDb` defaults **by mode** — `0` for `'peak'` and `-20` for `'rms'` — where `normalize` defaults to `0` in both modes, because a `0` dBFS RMS target drives effectively every peak past full scale. All four stereo entry points measure one level across the pair and apply one shared gain to both channels, so the stereo balance is preserved; the result reports that single `appliedGainDb` / `applied_gain_db` rather than a pair, and a silent pair comes back untouched at `0`. Python's `NormalizeStereoResult` carries a fourth field the JS results do not: the shared `length` |
+| Normalizer defaults and results | Peak normalization defaults to `0.0` dBFS and RMS normalization to `-20.0` dBFS on WASM, Node, and Python, including the mono `normalize` and stereo `normalizeStereo` calls on Node and WASM. C ABI calls require an explicit target. A stereo call measures one level across the pair and applies one shared gain, preserving its balance. The result reports one `appliedGainDb` / `applied_gain_db`; a silent pair is unchanged with gain `0`. Python's `NormalizeStereoResult` also carries the shared `length` |
 | `bounceOffline(...)` LUFS | Same LUFS-normalization default in C API and WASM (LUFS = Loudness Units relative to Full Scale, the broadcast loudness unit — see [LUFS](./glossary/lufs.md)); pass `normalizeLufs` / `normalize_lufs` explicitly when porting older code if the behavior matters |
 | `mfcc` lifter | `mfcc(...)` / `mfcc` takes a trailing `lifter` / `lifter` argument (cepstral liftering, default `0` = no liftering) on every binding; the C-ABI explicit-range entry point is `sonare_mfcc_ex` |
 | `trim` vs `trimSilence` | `trim(...)` uses a simple `thresholdDb` and returns audio only; `trimSilence(...)` / `trim_silence(...)` follow `librosa.effects.trim` with `topDb`, frame RMS, and original sample ranges |
@@ -131,9 +160,11 @@ These functions exist across the library bindings but take their arguments diffe
 | Structural-similarity naming | Python drops the `segment_` prefix the JavaScript bindings use: `cross_similarity` / `recurrence_matrix` / `recurrence_to_lag` / `lag_to_recurrence` / `path_enhance` / `subsegment` / `agglomerative` against `segmentCrossSimilarity` and friends |
 | `Audio` sample access | WASM's `audio.data`, Node's `audio.getData()`, and Python's `audio.data` all return copies; writing into a returned array does not edit the instance, and each access allocates |
 | Distribution | The published artifacts are the WebAssembly npm package, the Python wheel, and the native CLI archives. The Node native binding is marked private and is consumed as a local dependency, so it is always built from source |
-| ABI version checks | Every binding can read the loaded library's interface versions — feature 7 (flat analysis/feature PODs and the shipped general C function contracts), project 2, voice changer 3, acoustic 5, and engine 3, packed as `0x05030207`. Node, WASM, and Python also compare the packed `sonare_abi_version()` value themselves and raise a `SonareError` with `ErrorCode.AbiMismatch` (10): Node when the addon is required, WASM in `init()`, Python on first library use (the Python CLI exits with 13). The engine ABI is outside that packed value: WASM also exports `EXPECTED_ABI_VERSION`, the packed value it checks. Node and WASM export `EXPECTED_ENGINE_ABI_VERSION` (and `EXPECTED_PROJECT_ABI_VERSION`) beside `engineAbiVersion()` / `projectAbiVersion()` and leave the engine comparison to you (WASM's `engineCapabilities().abiCompatible` makes it). A C caller compares `sonare_abi_version()` with its compile-time `SONARE_ABI_VERSION`. See [ABI Versions](./native-bindings.md#abi-versions) |
-| Error types | A failure that comes from the library or from an object's state is a `SonareError` carrying the same C-ABI numeric code on every binding: WASM and Node throw an `Error` subclass with `code` + `codeName`, both packages exporting the `ErrorCode` enum and the `isSonareError(value)` guard; Python raises a `RuntimeError` subclass with `.code`; both CLIs map failures to stable exit codes (`2` usage, `3` invalid parameter, `11` cancelled; see [CLI](./cli.md)), and the Python CLI exits `13` on an ABI mismatch. An argument the JavaScript binding refuses itself is not a `SonareError` on either JS surface: a wrong type or a missing value is a native `TypeError`, a value outside its domain (a fractional number where an integer is read, an unknown name, a mismatched pair of lengths, a string carrying an embedded NUL) is a `RangeError`, and `isSonareError` does not match either. Empty or non-finite audio and an out-of-range or non-integer `sampleRate` passed to an audio-taking one-shot are a `RangeError` on both JS surfaces (and `SonareValueError` in Python), and a request object that is `null`, a number or an array is a `TypeError`. Checks the core makes on its own objects, such as a stream configuration it rejects, still arrive as a coded `SonareError`, so catch both shapes when you validate user input. A released, destroyed, or uninitialised handle throws `SonareError` with `InvalidState` (on WASM that includes an embind object that was already deleted and any call before `init()`), and a second WASM `init()` with options that differ from the first throws `InvalidState` naming the option. Loading a native module whose ABI differs from the package's throws `AbiMismatch` (10). Two binding-specific additions: Python also has `SonareValueError`, which subclasses `SonareError` **and** `ValueError` so an argument-validation failure is caught by either `except` style, and carries `ErrorCode.INVALID_PARAMETER` even though it never reached the C ABI; and Node's `SonareError` is a runtime class whose `instanceof` is brand-based, so it narrows an error the addon raised without constructing the class, and one that lost its prototype crossing a worker boundary. `isSonareError` is the same duck-typed check and the two never disagree |
-| How the same failure surfaces | A failure raised below the binding layer reaches every binding with its code: handing `Mixer.fromSceneJson` malformed JSON is `InvalidFormat` and a scene that names an unknown insert is `InvalidParameter`, as a `SonareError` on WASM, Node, and Python, while the C ABI returns `nullptr` and leaves the code in `sonare_last_error_code()` and the detail in `sonare_last_error_message()`. The detail text and the exact function that raises still differ by runtime, so branch on the code rather than the message, and check the specific call before relying on the type across bindings |
+| ABI version checks | Every binding checks the loaded library's interface versions itself; see [ABI Versions](#abi-versions) |
+| Parameters you do not give | In the JavaScript and Python bindings a parameter you leave out is absent (`undefined`, `None`, an omitted field), never a `-1` placeholder |
+| Room band arrays | `bandAbsorption` / `bandScattering` in JavaScript, `band_absorption` / `band_scattering` in Python, `absorption_bands` / `scattering_bands` in the C ABI and in CLI `--json` output |
+| Edit positions | Every edit request and the punch-in window accept seconds beside samples (`startSec` / `endSec`, `onsetSec` / `offsetSec`, `timeOffsetSec`, `paddingSec`; snake_case in Python). Giving both spellings is refused |
+| Errors | One numeric code per failure on every binding. The class that carries it, and whether the binding refuses an argument before the library sees it, differ by runtime — see the [error contract](#error-contract) |
 | WASM object returns | WASM arrays/objects returned by name-list helpers (`*Names()`), preset-name helpers, `synthPresetPatch`, section, and key-candidate helpers, plus mixer meter snapshots (`meterTap`, `stripMeter`, `busMeter`) and goniometer samples (`readGoniometerLatest`), are re-rooted into the caller's JavaScript realm, so they survive `structuredClone()` / `postMessage()` like ordinary objects. Handles with native methods, such as `Mixer` and `StreamAnalyzer`, remain non-cloneable; send their plain data results instead |
 | CLI availability | Some commands depend on whether you installed the PyPI Python CLI or built the C++ CLI from source — see [CLI](./cli.md) |
 
@@ -150,6 +181,51 @@ When you only need one family — or you want to tune parameters the all-in-one 
 | Dynamics | `analyzeDynamics` / `analyze_dynamics` |
 | Rhythm | `analyzeRhythm` / `analyze_rhythm` |
 :::
+
+## ABI Versions
+
+Every binding can read the loaded library's interface versions. Four of them are packed into one aggregate value.
+
+| Interface | Version | Read with |
+|-----------|---------|-----------|
+| Feature (flat analysis and feature structs, the general C function contracts) | 7 | packed into `abiVersion()` |
+| Project | 2 | packed; `projectAbiVersion()` |
+| Voice changer | 3 | packed; `voiceChangerAbiVersion()` |
+| Acoustic | 5 | packed |
+| Aggregate | `0x05030207` | `abiVersion()`; `EXPECTED_ABI_VERSION` on WASM; `sonare_abi_version()` against the compile-time `SONARE_ABI_VERSION` in C |
+| Engine | 3 | `engineAbiVersion()`; not part of the packed value, so each `RealtimeEngine` constructor checks it separately |
+
+Node, WASM and Python compare the packed value themselves and refuse a mismatch with `AbiMismatch` (10); the [error contract](#error-contract) says where each one raises it. Node and WASM export `EXPECTED_PROJECT_ABI_VERSION`. WASM also exports `EXPECTED_ENGINE_ABI_VERSION`, and its `engineCapabilities().abiCompatible` reports the engine comparison; the Node addon checks the engine ABI when a `RealtimeEngine` is constructed. A mismatched Python CLI exits 13. See also [ABI Versions](./native-bindings.md#abi-versions).
+
+## Error Contract
+
+Every binding reports a failure with the same numeric code, the C ABI's `SonareError` value, so a handler can branch on the cause instead of the message text. Two things differ by runtime: the class that carries the code, and whether an argument is refused by the binding before the library sees it. The table lists each kind of failure once. In a coded row, WASM and Node throw a `SonareError` whose `codeName` is the name shown, and Python raises a `SonareError` whose `.code` is the `ErrorCode` member shown.
+
+| Failure | Code | WASM and Node | Python | C ABI | CLI exit |
+|---------|------|---------------|--------|-------|----------|
+| An argument of the wrong type, or a missing one | — | `TypeError` | `SonareValueError`, code 4 | — | 2 |
+| An argument the binding refuses: empty or non-finite audio, a fractional number where an integer is read (a sample rate included), a name the binding resolves itself (`keyRoot: 'H'`), lengths that must match, a string with an embedded NUL | — | `RangeError` | `SonareValueError`, code 4 | `SONARE_ERROR_INVALID_PARAMETER` | 2 or 3 |
+| A sample rate outside 8000–384000 Hz | 4 | `RangeError` | `INVALID_PARAMETER` | `SONARE_ERROR_INVALID_PARAMETER` | 3 |
+| A value the library refuses, such as `nFft` 0, an unknown preset name, or a scene that names an unknown insert | 4 | `InvalidParameter` | `INVALID_PARAMETER` | `SONARE_ERROR_INVALID_PARAMETER` | 3 |
+| A file that does not exist | 1 | `FileNotFound` (Node; WASM has no file paths) | `FILE_NOT_FOUND` | `SONARE_ERROR_FILE_NOT_FOUND` | 4 |
+| A malformed project, scene or preset document | 2 | `InvalidFormat` | `INVALID_FORMAT`; a project document raises it as `SonareValueError` | `SONARE_ERROR_INVALID_FORMAT` | 5 |
+| Audio that will not decode | 3 | `DecodeFailed` | `DECODE_FAILED` | `SONARE_ERROR_DECODE_FAILED` | 6, or 5 in a build without FFmpeg |
+| An allocation failure | 5 | `OutOfMemory` | `OUT_OF_MEMORY` | `SONARE_ERROR_OUT_OF_MEMORY` | 7 |
+| A feature this build does not carry | 6 | `NotSupported` | `NOT_SUPPORTED` | `SONARE_ERROR_NOT_SUPPORTED` | 8 |
+| A released, closed or uninitialised object, or a WASM call before `init()` | 7 | `InvalidState` | `INVALID_STATE` | `SONARE_ERROR_INVALID_STATE` | 9 |
+| A run canceled from its progress callback | 8 | `Cancelled` | `CANCELLED` | `SONARE_ERROR_CANCELLED` | 11 |
+| An output file that cannot be written | 9 | `EncodeFailed` | `ENCODE_FAILED` | `SONARE_ERROR_ENCODE_FAILED` | 12 |
+| Native code from a different build than the binding | 10 | `AbiMismatch`: Node when the addon loads, WASM in `init()` | `ABI_MISMATCH` on first library use | never returned | 13 (Python CLI only) |
+| Anything else | 99 | `Unknown` | `UNKNOWN` | `SONARE_ERROR_UNKNOWN` | 10 |
+
+Reading the columns:
+
+- **WASM and Node.** `TypeError` and `RangeError` are the binding's own refusals and carry no code, so `isSonareError` does not match them; a handler that validates user input catches both shapes. [Error Handling](./js-api.md#error-handling) has the `ErrorCode` enum and a worked example.
+- **Python.** `SonareValueError` subclasses both `SonareError` and `ValueError`, so either `except` catches it, and its `.code` makes a branch on the code treat it like the library rejection it stands in for. Python passes an out-of-range sample rate on to the library, which is why that row is a coded `SonareError` there and a `RangeError` in JavaScript. See [Python Exceptions](./python-api-types.md#exceptions).
+- **C ABI.** A function returning `SonareError` reports through its return value. A validation early return records no message, so `sonare_error_message(code)` is the readable text; a function returning a handle reports `NULL` and leaves the code in `sonare_last_error_code()` and the detail in `sonare_last_error_message()`. See [C++ Error Handling](./cpp-api.md#error-handling).
+- **CLI.** Both CLIs use this mapping. Exit 2 is the argument parser's, so an argument it rejects exits 2 while one a command handler rejects exits 3. Exit 13 exists only in the Python CLI, because the native CLI links its library statically. `SONARE_LEGACY_EXIT=1` folds every failure to `1`. See [Exit Codes](./cli.md#exit-codes).
+
+The detail text differs by runtime even when the code agrees: a malformed scene reads `failed to build mixer from scene JSON: …` on WASM and Node and `[2] failed to build mixer from scene JSON: …` in Python, where the message carries the code as a prefix.
 
 ## Porting Checklist
 

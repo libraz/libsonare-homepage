@@ -47,7 +47,7 @@ const audio = await Audio.fromMemoryWithBrowserFallback(
 
 ### `downmix(channels, targetLayout)`
 
-Narrows planes to a smaller layout with the ITU-R BS.775 rule: centre and surround enter the front pair at -3 dB and the LFE plane is dropped. `targetLayout` is `0` mono, `1` stereo, `2` 5.1, `3` 7.1; the source layout is named by the channel count (1, 2, 6 or 8), and any other count folds to mono as the unweighted mean. An upmix or unknown layout throws `SonareError` (`InvalidParameter`); no channels, planes of differing length, or a `targetLayout` that is not an integer in the 32-bit range throw `RangeError`, and a non-number `targetLayout` throws `TypeError`.
+Narrows planes to a smaller layout with the ITU-R BS.775 rule: center and surround enter the front pair at -3 dB and the LFE plane is dropped. `targetLayout` is `0` mono, `1` stereo, `2` 5.1, `3` 7.1; the source layout is named by the channel count (1, 2, 6 or 8), and any other count folds to mono as the unweighted mean. An upmix or unknown layout throws `SonareError` (`InvalidParameter`); no channels, planes of differing length, or a `targetLayout` that is not an integer in the 32-bit range throw `RangeError`, and a non-number `targetLayout` throws `TypeError`.
 
 ```typescript
 import { init, decodeChannels, downmix } from '@libraz/libsonare';
@@ -131,11 +131,20 @@ const pitch = audio.pitchPyin();
 const resampled = audio.resample(22050);
 ```
 
-All parameters (e.g., `nFft`, `hopLength`, `nMels`) have the same defaults as the standalone functions.
+All parameters (e.g., `nFft`, `hopLength`, `nMels`) have the same defaults as the standalone functions. The full method list by family:
+
+| Family | Methods |
+|---|---|
+| Analysis | `detectBpm`, `detectKey`, `detectKeyCandidates`, `detectBeats`, `detectDownbeats`, `detectOnsets`, `detectChords`, `chordFunctionalAnalysis`, `analyze`, `analyzeWithProgress` |
+| Separation and editing | `hpss`, `harmonic`, `percussive`, `timeStretch`, `pitchShift`, `pitchCorrectToMidi`, `noteStretch`, `noteMove`, `voiceChange`, `normalize`, `trim`, `resample` |
+| Mastering | `mastering`, `masteringChain`, `masterAudio`, `masteringProcess` (see [Mastering API](./js-api-mastering.md)) |
+| Spectral features | `stft`, `stftDb`, `melSpectrogram`, `mfcc`, `chroma`, `nnlsChroma`, `onsetEnvelope`, `spectralCentroid`, `spectralBandwidth`, `spectralRolloff`, `spectralFlatness`, `zeroCrossingRate`, `rmsEnergy`, `pitchYin`, `pitchPyin` |
+| Loudness | `lufs`, `momentaryLufs`, `shortTermLufs`, `ebur128LoudnessRange` |
+| Level meters | `peakDb`, `rmsDb`, `dcOffset`, `crestFactorDb`, `silenceRatio`, `truePeakDb`, `detectClipping`, `dynamicRange`, `spectrum`, `spectrumFrame` |
 
 ## Metering
 
-Standalone meters report level, dynamics, and stereo-image statistics from a decoded buffer. They are independent of the mastering chain and the streaming engine: pass a `Float32Array` or a left/right pair and get back a value or report. Every function accepts optional `options` with a `validate` flag (default `true`); set `validate: false` on hot paths to skip the O(n) JavaScript-side NaN/Inf pre-scan. It is not a way to push non-finite samples into the core — the native layer always re-validates, so a NaN/Inf buffer still throws, just with a generic native message instead of one naming the offending index. Empty-buffer checks always run.
+Standalone meters report level, dynamics, and stereo-image statistics from a decoded buffer. Background: [Crest factor](./glossary/concepts/crest-factor.md), [Dynamic range](./glossary/concepts/dynamic-range.md), [Mono compatibility](./glossary/concepts/mono-compatibility.md) and [True peak](./glossary/true-peak.md). They are independent of the mastering chain and the streaming engine: pass a `Float32Array` or a left/right pair and get back a value or report. Every function accepts optional `options` with a `validate` flag (default `true`); set `validate: false` on hot paths to skip the O(n) JavaScript-side NaN/Inf pre-scan. It is not a way to push non-finite samples into the core — the native layer always re-validates, so a NaN/Inf buffer still throws, just with a generic native message instead of one naming the offending index. Empty-buffer checks always run.
 
 ### Single-channel level meters
 
@@ -162,6 +171,8 @@ function meteringSilenceRatio(
 ): number
 ```
 
+<SonareDemo id="inter-sample-peak" />
+
 ### Stereo level meters
 
 A level meter that reads both channels instead of the `0.5 * (left + right)` downmix the single-channel meters need. Unlike the meters above, it is **request-object only** — there is no positional overload, and a positional call throws.
@@ -182,7 +193,9 @@ interface MeteringStereoRequest extends ValidateOptions {
 const crestDb = meteringCrestFactorDbStereo({ left, right, sampleRate });
 ```
 
-Reach for it whenever the two channels may be out of phase. An inverted pair cancels in the downmix, which understates RMS and so overstates crest factor: on a fully inverted pair the stereo meter reads **11.64 dB** while the downmix path reads **0.00 dB**.
+Reach for it whenever the two channels may be out of phase. An inverted pair cancels in the downmix, so the single-channel path sees silence: on a fully inverted pair the stereo meter reads the signal's own crest factor (3.01 dB for a sine) while the downmix path reads **0.00 dB**.
+
+<SonareDemo id="mono-fold" />
 
 `meteringStereoCorrelation` and `meteringStereoWidth` accept the same `MeteringStereoRequest` shape alongside their positional forms.
 
@@ -323,9 +336,10 @@ function alignTakeToReference(request: AlignTakeToReferenceRequest): AlignTakeTo
 interface AlignTakeToReferenceRequest {
   reference: Float32Array;  // guide take or backing track; non-empty, all finite
   take: Float32Array;       // the take to place under it; same constraints
-  sampleRate: number;       // of BOTH buffers, [8000, 384000]; resample first if they differ
-  hopLength?: number;       // chroma hop in samples; omit = 512. Positive integer; 0 is refused, not defaulted
-  binsPerOctave?: number;   // CQT bins per octave; omit = 12. Positive multiple of 12; 0 is refused
+  sampleRate: number;       // of reference, [8000, 384000]; also of take unless takeSampleRate is set
+  takeSampleRate?: number;  // of take, [8000, 384000]; omit = sampleRate. Resampled onto sampleRate
+  hopLength?: number;       // chroma hop in samples at sampleRate; omit or 0 = 512. Positive integer
+  binsPerOctave?: number;   // CQT bins per octave; omit or 0 = 12. Positive multiple of 12
 }
 interface AlignTakeToReferenceResult {
   anchors: ProjectWarpAnchor[];   // >= 2 finite, strictly increasing { warpSample, sourceSample }
@@ -333,7 +347,7 @@ interface AlignTakeToReferenceResult {
 }
 ```
 
-Aligns the two chromagrams and reduces the path to anchors `Project.setWarpMap` accepts for the **take's** clip: `warpSample` is a position on the reference timeline, `sourceSample` the matching position in the take. It refuses, with a `RangeError`, an empty or non-finite buffer or a `sampleRate` outside the range, and with `SonareError` `InvalidParameter` a `0` resolution field, a signal too short for two chroma frames, or a pair that yields no two distinct anchors — an unalignable pair is reported rather than answered with a map you cannot use. `alignment` never fails the call: `takeFrames / referenceFrames` is the overall rate difference the anchors encode and `meanResidualFrames` how far the path strayed from a constant rate; apply your own threshold. Where this sits in the capture-and-comp workflow is on [Recording and Takes](./recording-and-takes.md).
+Aligns the two chromagrams and reduces the path to anchors `Project.setWarpMap` accepts for the **take's** clip: `warpSample` is a position on the reference timeline, `sourceSample` the matching position in the take. Anchors and `hopLength` are in samples at `sampleRate`. It refuses, with a `RangeError`, an empty or non-finite buffer or a `sampleRate` or `takeSampleRate` outside the range (including `0`, which is never a default), and with `SonareError` `InvalidParameter` a negative resolution field, a `binsPerOctave` that is not a multiple of 12, a signal too short for two chroma frames, or a pair that yields no two distinct anchors — an unalignable pair is reported rather than answered with a map you cannot use. `alignment` never fails the call: `takeFrames / referenceFrames` is the overall rate difference the anchors encode and `meanResidualFrames` how far the path strayed from a constant rate; apply your own threshold. Where this sits in the capture-and-comp workflow is on [Recording and Takes](./recording-and-takes.md).
 
 ### `splitSilenceCommonWithReport(request)`
 
@@ -373,9 +387,9 @@ interface StripMeteringOptions {
 settle(stripIndex: number): void
 ```
 
-`addStrip` throws on a duplicate id, a `truePeakOversample` outside `[0, 16]`, a wrong-typed metering field, or a `metering` that is not a plain object, and the strip is not added. Metering is fixed when the strip is built — there is no setter. A strip with no explicit connection is routed to the master at compile, so the new strip is audible without a scene edit; what the caller must change is the input: `processStereo` requires one channel pair per strip, so it throws until the arrays grow by one at the new index. Scenes, routing, and compile timing are on [Mixing Engine](./mixing.md).
+`addStrip` throws on a duplicate id, a `truePeakOversample` outside `[0, 16]`, a wrong-typed metering field, or a `metering` that is not a plain object, and the strip is not added. Metering is fixed when the strip is built — there is no setter. A strip with no explicit connection is routed to the master at compile, so the new strip is audible without a scene edit; what the caller may need to change is the input: `processStereo` takes up to one channel pair per strip and renders a strip without a pair as silence, so the new strip stays silent until the arrays grow by one at the new index. `processStereoInto` requires exactly `stripCount()` pairs (a `RangeError` otherwise), so grow its arrays after `addStrip` in a worklet loop. More pairs than strips throws. Scenes, routing, and compile timing are on [Mixing Engine](./mixing.md); the concepts are in [Channel strip](./glossary/mixing/channel-strip.md), [Buses and sends](./glossary/mixing/buses-sends.md) and [Automation and metering](./glossary/mixing/automation-metering.md).
 
-`settle` is required before an **offline render from a freshly configured strip**. Every level control is smoothed for a live fader (~5 ms), so the first block after `setFaderDb` / `setPan` / `setWidth` / `setInputTrimDb` — or after `fromSceneJson` itself, whose fader smoother starts at unity — opens at the smoother's start and glides to the target: a one-strip scene at −3 dB measured 5.8 dB hot on its first sample. Call it after the last control change and before the first block; in a live loop the glide is the point and the call is unnecessary. It clears nothing — automation, meters, and insert state are untouched — and rejects an out-of-range index.
+`settle` is required before an **offline render from a freshly configured strip**. Every level control is smoothed for a live fader (~5 ms), so the first block after `setFaderDb` / `setPan` / `setWidth` / `setInputTrimDb` — or after `fromSceneJson` itself, whose fader smoother starts at unity — opens at the smoother's start and glides to the target: the first sample of a one-strip scene at −3 dB measured 3 dB hot, the full distance from unity to the target. Call it after the last control change and before the first block; in a live loop the glide is the point and the call is unnecessary. It clears nothing — automation, meters, and insert state are untouched — and rejects an out-of-range index.
 
 ## Mixing API
 

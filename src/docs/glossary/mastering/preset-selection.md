@@ -20,6 +20,8 @@ Use the preset that matches the material's density, its transient behavior (how 
 | AI-Generated | Suno/Udio-style sources or generated artifacts. | Denoise, upper-band restoration, controlled polish. |
 | Speech / Podcast | Spoken content, narration, voice-first material. | Voice clarity, conservative width, steady loudness. |
 
+The other 19 genre presets (`masteringPresetNames()` lists all of them) differ mainly in loudness target and dynamics; `capabilityCatalog().masteringPresets` lists each target.
+
 ## How To Decide
 
 If two presets sound close, choose the one that does less harm. A preset that makes the track louder and brighter may feel impressive for a few seconds but become tiring.
@@ -34,7 +36,7 @@ Practical workflow:
 
 ## AI-Generated Sources
 
-AI-generated music can have weak upper harmonics, hiss, smeared transients, or a glossy reverb-like residue. The AI-Generated preset leans on repair and air-band restoration for that reason: in the engine, `aiMusic` is one of the few genre presets that enables repair stages at all, running `declick`, `denoise`, and `dereverb` before its tonal chain.
+AI-generated music can have weak upper harmonics, hiss, smeared transients, or a glossy reverb-like residue. The AI-Generated preset leans on repair and air-band restoration for that reason: in the engine, `aiMusic` is one of only four genre presets that enable repair stages (the others are `speech`, `podcast`, and `audiobook`), running `declick`, `denoise`, and `dereverb` before its tonal chain.
 
 Do not use it automatically on every generated track. If the source is already bright or brittle, a simpler preset may be better.
 

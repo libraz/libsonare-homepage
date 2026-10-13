@@ -5,13 +5,15 @@ description: STFT, mel/MFCC, chroma, spectral features, pitch detection, and the
 
 # JavaScript/TypeScript Feature Extraction API
 
-Feature-extraction functions for the libsonare JavaScript/TypeScript package; see [Analysis API](./js-api-analysis.md) for BPM/key/beat detection, the all-in-one `analyze()` call, and unit conversions.
+Feature-extraction functions for the libsonare JavaScript/TypeScript package; see [Analysis API](./js-api-analysis.md) for BPM/key/beat detection and the all-in-one `analyze()` call, and [Helpers and Conversions](./js-api-helpers.md) for unit conversions.
+
+Every function takes either positional arguments or a request object (`{ samples, sampleRate, ... }`). A positional call also accepts a trailing `{ validate?: boolean }` after the last argument.
 
 ## Feature Extraction
 
 ### `stft(samples, sampleRate, nFft?, hopLength?)` <Badge type="info" text="Medium" />
 
-Compute Short-Time Fourier Transform.
+Compute the Short-Time Fourier Transform. For what the frames, bins and window size mean, see [Spectrogram and STFT](./glossary/analysis/spectrogram-stft.md).
 
 ```typescript
 function stft(
@@ -47,7 +49,9 @@ function stftDb(
 
 ### `melSpectrogram(samples, sampleRate, nFft?, hopLength?, nMels?)` <Badge type="info" text="Medium" />
 
-Compute Mel spectrogram. Frequency representation that matches human pitch perception.
+Compute a Mel spectrogram, a frequency representation spaced to match human pitch perception. See [Mel, MFCC and timbre](./glossary/analysis/mel-mfcc-timbre.md).
+
+<SonareDemo id="mel-spectrogram" />
 
 ```typescript
 function melSpectrogram(
@@ -80,7 +84,7 @@ The result carries the parameters of its forward transform, so it is enough on i
 
 ### `mfcc(samples, sampleRate, nFft?, hopLength?, nMels?, nMfcc?)` <Badge type="info" text="Medium" />
 
-Compute MFCC (Mel-Frequency Cepstral Coefficients). Compact representation of spectral envelope.
+Compute MFCC (Mel-Frequency Cepstral Coefficients), a compact representation of the spectral envelope. See [Mel, MFCC and timbre](./glossary/analysis/mel-mfcc-timbre.md).
 
 ```typescript
 function mfcc(
@@ -122,7 +126,7 @@ repeating the values.
 
 ### `chroma(samples, sampleRate, nFft?, hopLength?)` <Badge type="info" text="Medium" />
 
-Compute chromagram (pitch class distribution). Maps all frequencies to 12 pitch classes (C, C#, D, ..., B).
+Compute a chromagram (pitch class distribution). Maps all frequencies to 12 pitch classes (C, C#, D, ..., B). See [Chroma features](./glossary/analysis/chroma-features.md).
 
 <SonareDemo id="chromagram" />
 
@@ -266,7 +270,7 @@ These functions are not just "more features"; they solve different modeling prob
 | Pitch/tuning offset | `pitchTuning(...)`, `estimateTuning(...)` | Estimate tuning in fractions of a bin from detected frequencies or directly from audio. At 12 bins per octave that is the semitone fraction the analysis options take as `tuning`; `tuningToReferenceHz(...)` and `referenceHzToTuning(...)` convert it to and from a reference pitch in Hz. |
 | Decomposition and remixing | `decompose(...)`, `decomposeWithInit(...)`, `decomposeStems(...)`, `decomposeStemsLinked(...)`, `nnFilter(...)`, `remix(...)`, `remixAlignedIntervals(...)`, `phaseVocoder(...)`, `hpssWithResidual(...)` | NMF factorization, selectable NMF initialization, mono and linked multichannel stem output, nearest-neighbor filtering, interval remixing, channel-consistent cut points, time scaling, and HPSS residual output. |
 | Reconstruct approximate audio/features | `melToStft`, `melToAudio`, `mfccToMel`, `mfccToAudio`, `cqtToAudio`, `vqtToAudio` | Griffin-Lim based inverse paths for visualization, debugging, and feature round-trips. CQT/VQT inputs are magnitude matrices. |
-| Delivery loudness measurements | `lufs`, `lufsInterleaved`, `momentaryLufs`, `shortTermLufs`, `ebur128LoudnessRange` | ITU-R BS.1770 / EBU R128 style loudness values, including multichannel integrated loudness and LRA (loudness range — how much the loudness varies over the program). |
+| Delivery loudness measurements | `lufs`, `lufsInterleaved`, `momentaryLufs`, `shortTermLufs`, `ebur128LoudnessRange` | ITU-R BS.1770 / EBU R128 style loudness values, including multichannel integrated loudness and LRA (loudness range: how much the loudness varies over the program). See [LUFS](./glossary/lufs.md). |
 
 ```typescript
 const cqtResult = cqt(samples, sampleRate, 512, 32.7, 84, 12);
@@ -307,20 +311,21 @@ const vqtPreview = vqtToAudio({
 });
 ```
 
-`chromaCqt(samples, sampleRate?, hopLength?, nChroma?)` is the direct
+`chromaCqt(samples, sampleRate?, hopLength?, nChroma?, binsPerOctave?)` is the direct
 `librosa.feature.chroma_cqt` equivalent (log-frequency / constant-Q pitch
 folding), while `nnlsChroma(samples, sampleRate?, options?)` is a distinct
 note-activation chroma built on NNLS (non-negative least squares) that
-suppresses harmonic leakage — often cleaner
+suppresses harmonic leakage, which is often cleaner
 for chord or bass-register work. Its `options.hopLength` defaults to `512`.
 
-Closest CLI equivalents from the source-built C++ CLI:
+Closest CLI equivalents. `nnls-chroma` and `lufs` exist in both the Python and the C++ CLI; `cqt`, `vqt` and `mel-to-audio` only in the source-built C++ CLI.
 
-```bash [C++ CLI]
-sonare cqt song.wav
-sonare vqt song.wav
+```bash
 sonare nnls-chroma song.wav
 sonare lufs song.wav --json
+# C++ CLI only
+sonare cqt song.wav
+sonare vqt song.wav
 sonare mel-to-audio song.wav -o mel-preview.wav
 ```
 
@@ -366,36 +371,33 @@ linear, the components **sum back to the input**.
 
 `maskPower` sets how hard the masks separate: `1` is the magnitude ratio, `2` is
 the Wiener-style power ratio, which separates more aggressively at the cost of
-more artefacts where partials overlap. Values in between are allowed; below `1`
-is not.
+more artifacts where partials overlap. Values below `1` are refused.
 
-Request-object form only — there is no positional overload. `nComponents` is
-optional here and defaults to `4`, unlike `decompose`, where it is required.
+Request-object form only. `nComponents` is optional here (default `4`), unlike in `decompose`.
 
 **This is not HPSS.** The components carry no label: `components[1]` is whatever
 repeating spectral pattern the factorization settled on, and which index a
 voice or a kick lands in changes with `init`, `nIter` and the material, so
 audition them to learn what each holds. `hpss` and `hpssWithResidual` on
-[Audio Effects](./js-api-effects.md) answer a different question — they split by
-median filtering into exactly two **labelled** parts, harmonic and percussive
+[Audio Effects](./js-api-effects.md) answer a different question: they split by
+median filtering into exactly two **labeled** parts, harmonic and percussive
 (plus the residual). Reach for HPSS when the question is "sustained versus
 struck"; reach for `decomposeStems` when it is "which recurring patterns make up
 this recording".
 
 ::: warning NNDSVD seeding is computed in double precision
 With `init: 'nndsvd'`, the SVD warm start is computed in double precision. This
-is what makes the seed **reproducible**: a magnitude spectrogram's trailing
-singular vectors sit right at single precision's noise floor, so a float seed
-depends on the order the target happened to sum in, and two platforms answer with
-different components for the same input. Double precision removes that
-dependence.
+makes the seed **reproducible**: a magnitude spectrogram's trailing singular
+vectors sit at single precision's noise floor, so a float seed depends on the
+order the target happened to sum in, and two platforms would answer with
+different components for the same input.
 
-It is a reproducibility property, not an accuracy one — shapes, non-negativity
-and reconstruction quality are unaffected. But the factors themselves are not the
-same numbers a float seed produces. **Stored `w`/`h` matrices**, or a stem render
-made with a single-precision seed, will differ; re-derive stored factors rather
-than treating a mismatch as a bug. The
-same applies to `decomposeWithInit(..., 'nndsvd')` and `decomposeStemsLinked(...)`.
+It is a reproducibility property, not an accuracy one: shapes, non-negativity
+and reconstruction quality are unaffected. The factors are not the same numbers a
+float seed produces, so **stored `w`/`h` matrices** or a stem render made with a
+single-precision seed will differ; re-derive them rather than treating a mismatch
+as a bug. The same applies to `decomposeWithInit(..., 'nndsvd')` and
+`decomposeStemsLinked(...)`.
 :::
 
 ### `decomposeStemsLinked(request)` <Badge type="warning" text="Heavy" />
@@ -510,15 +512,12 @@ interface PitchResult {
 }
 ```
 
-YIN returns a finite estimate for every frame, including frames marked unvoiced by `voicedFlag`.
-
-pYIN keeps `NaN` for unvoiced frames by default. Set its `fillNa: true` when a downstream numeric pipeline should use `0` instead.
-
+YIN returns a finite estimate for every frame, including frames marked unvoiced by `voicedFlag`. pYIN keeps `NaN` for unvoiced frames by default; set `fillNa: true` when a downstream numeric pipeline should use `0` instead. Background: [Melody and pitch](./glossary/analysis/melody-pitch.md).
 
 ## Notes and struck sounds
 
 These four sit between analysis and editing: each measures something the audio
-does not state, and hands back an object a host edits and renders.
+does not state, and hands back an object a host edits and renders. [Note Editing](./note-editing.md) covers the editing workflow around them.
 
 ### `analyzePolyphonic(request)` <Badge type="warning" text="Heavy" />
 
@@ -539,7 +538,7 @@ spectrogram, the masks and the per-bin weights never do, and no method reports a
 per-bin figure.
 
 `sampleRate` is required rather than defaulted: every duration in the chain is
-converted to samples with it, so a wrong value analyses differently without
+converted to samples with it, so a wrong value analyzes differently without
 failing.
 
 ### `decomposeNotePitch(request)`
@@ -549,7 +548,7 @@ function decomposeNotePitch(request: DecomposeNotePitchRequest): PitchDecomposit
 ```
 
 Splits one note's pitch curve into the three things it carries at once: the
-centre that was aimed at, the slow wander around it, and the periodic
+center that was aimed at, the slow wander around it, and the periodic
 oscillation on top. Editing any one of them needs them separated first.
 
 `vibratoCutoffHz` is the only thing deciding where drift ends and vibrato
@@ -564,7 +563,7 @@ rate, and cutoff when rendering a curve edit; ordinary note edits do not need
 F0 metadata.
 
 Frames whose F0 is unusable carry no measurement, so the curve is held at the
-nearest usable neighbour across them; both curves therefore have an entry
+nearest usable neighbor across them; both curves therefore have an entry
 everywhere, and a host marking the held ones checks `f0Hz` together with the
 supplied `voiced` flags when present. A note with
 no usable pitch comes back as a zero `centreHz` and two empty curves — that is a

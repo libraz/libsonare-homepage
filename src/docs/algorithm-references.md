@@ -31,7 +31,7 @@ By the end of this page you should be able to:
 | K-weighting | BS.1770 K-weighting biquads: reference coefficients at 48 kHz and analytic design for other rates | `src/rt/biquad_design.h`, `src/rt/biquad_design.cpp` |
 | True-peak interpolation | Self-designed 2x/4x/8x/16x polyphase FIRs matching the BS.1770 target frequency response. Use 4x or higher for standards-compliant measurement; the 2x path is a deliberately non-compliant fast approximation, below BS.1770's 4x minimum. | `src/rt/true_peak_filter.h`, `src/rt/true_peak_filter.cpp` |
 | Classical denoise | Ephraim-Malah MMSE-STSA (1984), Ephraim-Malah LogMMSE (1985), Berouti spectral subtraction with over-subtraction (1979), MCRA, IMCRA | `src/mastering/repair/denoise_classical.h` |
-| Tape hysteresis | Jiles-Atherton hysteresis; Chowdhury, "Real-time Physical Modelling for Analog Tape Machines", DAFx-19 2019, equations 6-10 | `src/mastering/common/hysteresis_ja.cpp`, `src/mastering/saturation/tape.h` |
+| Tape hysteresis | Jiles-Atherton hysteresis; Chowdhury, "Real-time Physical Modeling for Analog Tape Machines", DAFx-19 2019, equations 6-10 | `src/mastering/common/hysteresis_ja.cpp`, `src/mastering/saturation/tape.h` |
 | EQ filters | RBJ biquads, Vicanek matched-Z IIR, Butterworth Q, Linkwitz-Riley crossovers with all-pass phase compensation | `README.md`, `src/rt/biquad_design.h`, `src/rt/biquad_design.cpp`, EQ routing and cut-filter sources |
 | Anti-aliased nonlinearities | ADAA / antiderivative anti-aliasing | `README.md`, `src/rt/adaa.h`, `src/rt/aliasing_control.h` |
 | Sliding maximum | Lemire sliding max | `README.md`, limiter and true-peak helper usage |
@@ -61,7 +61,7 @@ This page cites algorithms by name; here is what the less-obvious ones do.
 
 ## Built-in synthesis and GM/GS compatibility
 
-The data-free [built-in synthesizer](./native-synth.md) is built from published synthesis and physical-modelling literature; its acoustic engines are original implementations of these algorithm families, not sampled or captured instruments.
+The data-free [built-in synthesizer](./native-synth.md) is built from published synthesis and physical-modeling literature; its acoustic engines are original implementations of these algorithm families, not sampled or captured instruments.
 
 | Engine | Algorithm-family basis | Evidence |
 |--------|------------------------|----------|
@@ -70,6 +70,7 @@ The data-free [built-in synthesizer](./native-synth.md) is built from published 
 | Plucked string (buzzing bridge) | Karplus-Strong string with a distributed nonlinear jawari / sawari bridge contact (amplitude-limited loop reflection) for the sitar / koto / harp buzz | `src/midi/synth/plucked_string_voice.*` |
 | Modal | Modal resonator synthesis (Adrien 1991); banded waveguides (Essl-Cook) | `src/midi/synth/modal_voice.*` |
 | Piano | Stiff-string allpass-chain dispersion, nonlinear felt-hammer contact, coupled unison strings, shared modal soundboard, Railsback stretch tuning | `src/midi/synth/piano_voice.*` |
+| Harpsichord | Jack-and-plectrum mechanism driving separate string choirs (two 8' unisons and a 4' octave, one delay line each); the loop loss filter is solved against decay targets at the fundamental and at a named frequency | `src/midi/synth/harpsichord_voice.*` |
 | Bowed string | Digital-waveguide bowed string (McIntyre-Schumacher-Woodhouse 1983; Smith); elasto-plastic bow friction (Dupont 2002; Avanzini-Serafin-Rocchesso 2003) | `src/midi/synth/bowed_string_voice.*` |
 | Reed | Single-reed digital-waveguide woodwind (Smith); tonehole scattering (STK BlowHole family) | `src/midi/synth/reed_voice.*` |
 | Brass | Lip-reed brass waveguide (Smith-Cook); outward-striking lip valve (Fletcher 1979); cuivré wave-steepening (Hirschberg 1996); two-mode lip (Adachi-Sato 1996) | `src/midi/synth/brass_voice.*` |

@@ -1,135 +1,32 @@
 ---
 title: JavaScript/TypeScript API リファレンス
-description: libsonare JavaScript/TypeScript パッケージのリファレンスの入口です。インストール、インポート、初期化と、主題別リファレンスページの一覧を掲載します。
+description: libsonare JavaScript/TypeScript パッケージのリファレンスの入口です。インストール、インポート、初期化、エラー処理と、主題別リファレンスページの一覧を掲載します。
 ---
 
 # JavaScript/TypeScript API リファレンス
 
-libsonare JavaScript/TypeScript パッケージの API リファレンス。
+npm パッケージ `@libraz/libsonare` は、エンジンの WebAssembly ビルドです。解析、マスタリング、ミキシング、編集 DSP、リアルタイムエンジンをブラウザ内で実行します。このページでは、インストール、`init()`、最初の呼び出しと、すべての関数に共通する規約（リクエストオブジェクト、エラー、既定のサンプルレート）を扱います。主題別のリファレンスは[末尾の一覧](#リファレンスのページ構成)から進めます。
 
 ## 概要
 
-libsonare は Web アプリケーション向けのオーディオ解析、マスタリング、ミキシング、編集 DSP を提供します。npm パッケージは WebAssembly ビルドです。実際の呼び出しでは、多くの関数がデコード済みの `Float32Array` PCM を受け取ります。PCM とは、MP3 や WAV などのファイルを展開した後の生のサンプル値です。読み込み用途には `Audio.fromMemory*` ファクトリがあり、エンコード済みバイト列をメモリ内でデコードできます（WAV／MP3 はネイティブ WASM デコーダ、AAC／OGG／FLAC は任意のブラウザデコーダ）。
+多くの関数はファイルではなくデコード済みの PCM を受け取ります。`Float32Array` のサンプルと、そのデコード時の `sampleRate` です。エンコード済みバイト列からサンプルを得るには、Web Audio API（`AudioContext.decodeAudioData`）でデコードするか、`Audio.fromMemory*` ファクトリを使います。ファクトリは WAV／MP3 を同梱 WASM デコーダーで、AAC／OGG／FLAC を必要に応じてブラウザ側で処理します。`decodeChannelsWithBrowserFallback(bytes, options?)` も同じ経路でデコードしますが、モノラルへ折りたたまず全チャンネルを保持します。詳しくは[全チャンネルを保持する](./wasm.md#全チャンネルを保持する)を参照してください。
 
-最初のブラウザ実装では、手順を絞ると迷いにくくなります。
-
-1. アプリ起動時に `await init()` を 1 回呼ぶ。
-2. ユーザーのファイルをサンプルへデコードし、元の `sampleRate` を保持する。
-3. まず `detectBpm(samples, sampleRate)` のような小さな関数を 1 つ呼ぶ。
-4. その後で `analyze`、マスタリング、ミキシング、ストリーミング API へ進む。
-
-| カテゴリ | 関数 | ユースケース |
-|----------|-----------|-----------|
-| **クイック解析** | `detectBpm`, `detectKey`, `detectBeats` | DJアプリ、音楽プレイヤー、ビート同期 |
-| **総合解析** | `analyze`, `analyzeWithProgress` | 音楽制作、楽曲メタデータ |
-| **オーディオエフェクト** | `hpss`, `timeStretch`, `pitchShift`, `spectralEdit` | リミックス、練習ツール、領域補修 |
-| **特徴量** | `melSpectrogram`, `chroma`, `mfcc` | ML 入力、可視化 |
-| **マスタリング** | `masterAudio`, `masteringChain`, `StreamingMasteringChain` | LUFS（Loudness Units relative to Full Scale）ターゲット、True Peak リミッター、プリセット、ストリーミングチェーン |
-| **ミキシング** | `mixStereo`, `Mixer`, `mixingScenePresetNames` | ステムミックス、ルーティング、オートメーション、メーター |
-| **編集 DSP** | `pitchCorrectToMidi`, `noteStretch`, `spectralEdit`, `voiceChange`, `StreamingRetune`, `RealtimeVoiceChanger` | ボーカル補正、ノート編集、ピッチ／フォルマント変更 |
-| **Audio クラス** | `Audio.fromBuffer`, `Audio.fromMemory`, `Audio.fromMemoryWithBrowserFallback`, `decodeChannelsWithBrowserFallback` | ファイル読み込みと、よく使う関数をメソッド形式で呼ぶための補助 |
-
-::: tip 用語について
-オーディオ解析が初めてですか？[用語集](/ja/docs/glossary) で BPM、STFT、Chroma などの用語の説明をご覧ください。
-:::
-
-::: info 多くの関数はファイルパスではなくデコード済み PCM を受け取ります
-ブラウザ版の多くの関数は、MP3 や WAV のパスではなく、デコード済みの PCM サンプルと `sampleRate` を受け取ります。エンコード済みバイト列からサンプルへ変換するには、Web Audio API（`AudioContext.decodeAudioData`）で自分でデコードするか、後述の `Audio.fromMemory` / `Audio.fromMemoryWithBrowserFallback` ファクトリを使います。これらはエンコード済みバイト列をメモリ内でデコードします。WAV／MP3 は同梱 WASM デコーダを使い、AAC／OGG／FLAC は必要に応じてブラウザ側デコードを使います。`decodeChannelsWithBrowserFallback(bytes, options?)` も同じ経路でデコードしますが、モノラルへ折りたたまず全チャンネルを保持します。
-:::
-
-バインディングごとの機能対応は [機能マップ](./api-surface.md) を参照してください。マスタリングプロセッサの登録一覧とミキシングシーン形式は、[マスタリングプロセッサ](./mastering-processors.md) と [ミキシングシーン JSON](./mixing-scene-json.md) にまとめています。
-
-## このリファレンスの読み方
-
-このページは 3 段階で読むと迷いにくくなります。
-
-1. まず [目的から API を選ぶ](#目的から-api-を選ぶ) で、使う関数ファミリーを 1 つ選ぶ。
-2. そのファミリーの節だけを読み、[使用例](./examples.md) から近いレシピを 1 つ動かす。
-3. 戻り値の正確な形、オプション引数、実行環境間の違いが必要になったら、型定義や詳細表に戻る。
-
-ブラウザアプリでは、`await init()` で WASM を初期化し、ファイルを先に PCM へデコードし、`Float32Array` サンプルと元の `sampleRate` を渡す、という基本を常に守ってください。
-
-## 単発 API のリクエストオブジェクト
-
-トップレベルの単発解析・エフェクト・マスタリング・メータリング・特徴量・ミキサー・ボイスチェンジャー API は、名前付きの**リクエストオブジェクト**を標準形式として使います。すべての入力が名前で分かり、引数順を崩さず任意設定を増やせ、TypeScript の `*Request` 型も利用できます。位置引数形式は互換オーバーロードであり、既定値、検証、エラー、結果、進捗コールバックは同じです。
-
-```typescript
-// 推奨: リクエストオブジェクト形式
-const bpm = detectBpm({ samples, sampleRate });
-const mastered = masterAudio({
-  samples,
-  sampleRate,
-  preset: 'pop',
-  overrides: { loudness: { targetLufs: -14 } },
-  onProgress: (progress, stage) => console.log(stage, progress),
-});
-
-// 既存コード向けの位置引数形式も利用可能
-const legacyBpm = detectBpm(samples, sampleRate);
-```
-
-リクエストのフィールド名は Node と WASM で同じ camelCase です。Python は JavaScript 形式の options object ではなく、従来どおりキーワード引数（`detect_bpm(samples, sample_rate=...)`）を使います。
-
-### 長い処理をキャンセルする
-
-進捗を報告するリクエストは `cancel` も受け取ります。これは `onProgress` が発火するのと
-同じネイティブ境界でポーリングされる述語で、`true` を返すと呼び出しが中断されます。
-
-```typescript
-import { ErrorCode, isSonareError, masterAudio } from '@libraz/libsonare';
-
-let abandoned = false;
-cancelButton.onclick = () => { abandoned = true; };
-
-try {
-  const mastered = masterAudio({
-    samples,
-    sampleRate,
-    preset: 'pop',
-    onProgress: (progress, stage) => updateUi(progress, stage),
-    cancel: () => abandoned,
-  });
-} catch (error) {
-  if (!(isSonareError(error) && error.code === ErrorCode.Cancelled)) throw error;
-}
-```
-
-キャンセルされた呼び出しは `SONARE_ERROR_CANCELLED`（エラーコード 8）で例外になり、
-出力を確保しません。途中結果を調べることはできません。Python も同じ述語を `cancel=` で受け取ります。
-
-### 入力は変換されずに検証されます
-
-Node と WASM は、値を黙って解釈し直さずに拒否します。型の合わないリペア・
-ダイナミクスのオプション、未知のトラック種別・キャプチャソース・ピッチ補正モード、
-負のスペクトラム設定、整数を読む箇所の小数、宣言されていない enum の綴りや序数、
-数値でも真偽値でもないマスタリングのオーバーライド値などです。インスタンスメソッドも
-`destroy()` 後は解放済みハンドルに触れずに例外を投げます。不正な値は意外な既定値にならず、
-呼び出し地点でエラーとして現れます。
-
-どのエラークラスになるかは、値を拒否したのが誰かで決まります。
-
-| 拒否した主体 | クラス | 例 |
-|--------------|--------|----|
-| JavaScript バインディング（型違い・欠落） | `TypeError` | サンプルを期待する箇所に文字列を渡した、`Float32Array` ではない `samples`、数値ではない `sampleRate`、`null`・数値・配列のリクエストオブジェクト、必須フィールドがない |
-| JavaScript バインディング（定義域の外） | `RangeError` | 未知の名前、小数の整数引数、長さが揃うべき 2 つのバッファの不一致、NUL を含む文字列、空または非有限のオーディオ、対応範囲外または整数ではない `sampleRate` |
-| ライブラリ、またはオブジェクトの状態 | コード付きの `SonareError` | 拒否されたストリーム設定、壊れたプロジェクトやシーンのドキュメント（`InvalidFormat`）、シーン内の未知の insert（`InvalidParameter`） |
-| 解放済み・破棄済み・未初期化のハンドル | `InvalidState` の `SonareError` | `init()` 前の解析関数の呼び出し、`destroy()` 後のメソッド呼び出し |
-
-`isSonareError` が一致するのは 3 行目と 4 行目だけなので、ユーザー入力の検証では 3 つのクラスすべてを扱う catch にしてください。サンプルとサンプルレートを受け取るワンショット関数はどれも、コアに渡す前にこれらを検査します。空または非有限のオーディオと、範囲外または整数ではない `sampleRate` は `RangeError`、型の誤った引数はその引数名を挙げた `TypeError` で、埋め込みの `BindingError` が呼び出し側へ届くことはありません。コアが自分のオブジェクトに対して行う引数検査（拒否された STFT やストリームの設定）は、コード付きの `SonareError` のままです。コード一覧は[エラー処理](./js-api.md#エラーハンドリング)を参照してください。
-
-## 目的から API を選ぶ
-
-関数数が多いため、まず「何を作りたいか」から最小の API を選ぶのが近道です。
+関数の一覧からではなく、やりたいことから選びます。
 
 | やりたいこと | 最初に使う API | 理由 |
 |--------------|----------------|------|
-| トラックのテンポ、キー、ビートだけ欲しい | `detectBpm`, `detectKey`, `detectBeats` | `analyze(...)` 全体を走らせず、必要な値だけを直接得られます |
-| 曲全体のメタデータが欲しい | `analyze` または個別の `analyze*` ヘルパー | `analyze` は概要、個別ヘルパーは詳細向きです |
-| ライブビジュアライザや更新されていく BPM/キー/コード UI | `StreamAnalyzer` | 小さな音声ブロックを処理し、UI が最新フレームを読み出せます |
-| ブラウザでマスタリングや配信プレビュー | `masterAudio*`, `masteringChain*`, `StreamingMasteringChain` | まずプリセット、必要に応じて名前付きプロセッサへ進めます |
-| ステムのバランス、センド、バス、メーター | `mixStereo` または `Mixer` | まず一括レンダー、ルーティングが必要ならシーンミキサーを使います |
-| ボーカル、ノート、スペクトル領域を編集したい | `pitchCorrectToMidi`, `noteStretch`, `spectralEdit`, `voiceChange`, `StreamingRetune`, `RealtimeVoiceChanger` | 解析ではなく音そのものを変える API です |
-| 部屋の残響、明瞭度、等価ルーム推定、ルーム生成を扱いたい | `analyzeImpulseResponse`, `detectAcoustic`, `estimateRoom`, `synthesizeRir`, `roomMorph` | 楽曲ではなく録音空間を説明・適用します |
+| テンポ、キー、ビートのどれかひとつ | `detectBpm`, `detectKey`, `detectBeats` | `analyze(...)` 全体を走らせず、必要な値だけを直接得られます |
+| 曲全体のメタデータ | `analyze`, `analyzeWithProgress`、または個別の `analyze*` ヘルパー | `analyze` は概要、個別ヘルパーは詳細向きです |
+| ML 入力や可視化向けのスペクトル特徴量 | `melSpectrogram`, `chroma`, `mfcc` | 行列を返します |
+| ライブビジュアライザーや更新されていく BPM／キー／コード UI | `StreamAnalyzer` | 小さな音声ブロックを処理し、UI が最新フレームを読み出せます |
+| リミックス、練習ツール、領域のリペア | `hpss`, `timeStretch`, `pitchShift`, `spectralEdit` | オーディオエフェクトです |
+| ボーカル補正、ノート編集、ピッチ／フォルマント変更 | `pitchCorrectToMidi`, `noteStretch`, `voiceChange`, `StreamingRetune`, `RealtimeVoiceChanger` | 解析ではなく音そのものを変える編集 DSP です |
+| ラウドネスターゲット、True Peak リミッター、配信プレビュー | `masterAudio*`, `masteringChain*`, `StreamingMasteringChain` | まずプリセット、必要に応じて名前付きプロセッサへ進めます |
+| ステムのバランス、センド、バス、メーター | `mixStereo` または `Mixer` | まず一括ミックス、ルーティングが必要ならシーンミキサーを使います |
+| 部屋の残響、明瞭度、等価ルームの推定、ルームの生成 | `analyzeImpulseResponse`, `detectAcoustic`, `estimateRoom`, `synthesizeRir`, `roomMorph`, `roomMorphStereo` | 楽曲ではなく録音空間を説明・適用します |
+| ファイルの読み込み | `Audio.fromBuffer`, `Audio.fromMemory`, `Audio.fromMemoryWithBrowserFallback` | デコードと、よく使う関数のメソッド形式での呼び出し |
+
+BPM、STFT、クロマなどの用語は[用語集](/ja/docs/glossary)にまとめています。バインディングごとの機能対応は[機能マップ](./api-surface.md)、マスタリングプロセッサの登録一覧とミキシングシーン形式は[マスタリングプロセッサ](./mastering-processors.md)と[ミキシングシーン JSON](./mixing-scene-json.md)を参照してください。
 
 ## インストール
 
@@ -151,6 +48,18 @@ pnpm add @libraz/libsonare
 
 ## インポート
 
+パッケージには 5 つのエントリがあります。メインエントリにすべてが入っており、ほかは用途を絞った小さなバンドルです。
+
+| エントリ | インポートパス | 含まれるもの | 使う場面 |
+|----------|----------------|--------------|----------|
+| メイン | `@libraz/libsonare` | 解析、エフェクト、マスタリング、ミキシング、プロジェクト、リアルタイムエンジンの全 API | ほとんどの場合 |
+| 解析 | `@libraz/libsonare/analysis` | 解析と特徴量のみ。マスタリング、ミキシング、リアルタイム、プロジェクトの API は含まれません | 解析だけで足りるときに、ダウンロードを最小にしたい |
+| Worklet | `@libraz/libsonare/worklet` | AudioWorklet 側のランタイム（`EXPECTED_ABI_VERSION` を含む） | `AudioWorkletGlobalScope` 内で動くコード |
+| Worker | `@libraz/libsonare/worker` | `OfflineWorkerClient` の背後にあるオフライン Worker スクリプト | 解析をメインスレッド外で実行する（[Worker](./wasm-advanced.md#web-worker-の使用)を参照） |
+| ボーカル編集 Worker | `@libraz/libsonare/vocal-edit-worker` | `VocalEditWorkerClient` の背後にある Worker スクリプト | ボーカル編集のドラフトとレンダリングジョブをメインスレッド外で実行する |
+
+各エントリが提供するファイルは[パッケージの構成物](./wasm.md#パッケージの構成物)を参照してください。バンドルのターゲットは ECMAScript 2020 です。
+
 ```typescript
 import {
   init,
@@ -169,7 +78,7 @@ import {
 
 ### `init(options?)`
 
-WASM モジュールを初期化します。解析関数を使用する前に呼び出す必要があります。
+WASM モジュールを初期化します。モジュールを必要とする関数を使う前に、一度だけ呼び出します。
 
 ```typescript
 async function init(options?: {
@@ -182,21 +91,35 @@ async function init(options?: {
 }): Promise<void>
 ```
 
-**例:**
+オプションが効くのは最初の呼び出しだけです。オプションなし、または同じオプション（関数は参照で比較）で `init()` を再度呼ぶとすぐに解決します。オプションが異なる 2 回目の呼び出しは、そのオプション名を挙げた `InvalidState` の `SonareError` を投げます。`init()` が解決する前に、モジュールを必要とする関数を呼ぶと `InvalidState` を投げます。
+
+`init()` は読み込んだモジュールの ABI バージョンをパッケージのビルド時のものとも比較し、`.wasm` と JavaScript が別のビルドのもの（古いキャッシュや独自の `wasmBinary` / `locateFile` で起こりえます）なら `AbiMismatch`（コード 10）を投げます。期待するバージョンは `EXPECTED_ABI_VERSION` としてパッケージルートと `@libraz/libsonare/worklet` からエクスポートされるので、`moduleFactory` に渡すテスト用の代替実装は、`init()` が検査するバージョンをこれで報告できます。
+
+### 最初の呼び出し
 
 ```typescript
 import { init, detectBpm } from '@libraz/libsonare';
 
-// 基本的な初期化
-await init();
+await init();                                    // アプリ起動時に一度だけ
 
-// カスタムファイルロケーション
+const bytes = await (await fetch('/song.mp3')).arrayBuffer();
+const ctx = new AudioContext();
+const decoded = await ctx.decodeAudioData(bytes);
+const samples = decoded.getChannelData(0);       // Float32Array（最初のチャンネル）
+
+const bpm = detectBpm({ samples, sampleRate: decoded.sampleRate });
+console.log(`${bpm.toFixed(1)} BPM`);
+```
+
+`sampleRate` には、サンプルをデコードしたときのレートを渡します。`.wasm` を別のパスから配信するには `locateFile` を渡します。
+
+```typescript
 await init({
   locateFile: (path, prefix) => `/custom/wasm/path/${path}`
 });
 ```
 
-オプションが効くのは最初の呼び出しだけです。オプションなし、または同じオプション（関数は参照で比較）で `init()` を再度呼ぶとすぐに解決します。オプションが異なる 2 回目の呼び出しは、そのオプション名を挙げた `InvalidState` の `SonareError` を投げます。`init()` は読み込んだモジュールの ABI バージョンをパッケージのビルド時のものとも比較し、`.wasm` と JavaScript が別のビルドのもの（古いキャッシュや独自の `wasmBinary` / `locateFile` で起こりえます）なら `AbiMismatch`（コード 10）を投げます。期待するバージョンは `EXPECTED_ABI_VERSION` としてパッケージルートと `@libraz/libsonare/worklet` からエクスポートされるので、`moduleFactory` に渡すテスト用の代替実装は、`init()` が検査するバージョンをこれで報告できます。`init()` が解決する前に、モジュールを必要とする関数を呼ぶと `InvalidState` を投げます。
+これが動いたら、`analyze`、マスタリング、ミキシング、ストリーミングへ進んでください。
 
 ### `isInitialized()`
 
@@ -214,10 +137,138 @@ function isInitialized(): boolean
 function version(): string  // 例: "{{ wasmMeta.version }}"
 ```
 
+## 単発 API のリクエストオブジェクト
+
+トップレベルの単発解析・エフェクト・マスタリング・メータリング・特徴量・ミキサー・ボイスチェンジャー API は、名前付きの**リクエストオブジェクト**を標準形式として使います。すべての入力が名前で分かり、引数順を崩さず任意設定を増やせ、TypeScript の `*Request` 型も利用できます。位置引数形式は互換オーバーロードであり、既定値、検証、エラー、結果、進捗コールバックは同じです。位置引数形式の単発関数はどれも、末尾に `{ validate?: boolean }` を受け取ります。`{ validate: false }` は負荷の高い経路で JavaScript 側の NaN／無限大のスキャンを省きます。非有限の入力はネイティブ層が引き続き拒否します。
+
+```typescript
+// 推奨: リクエストオブジェクト形式
+const bpm = detectBpm({ samples, sampleRate });
+const mastered = masterAudio({
+  samples,
+  sampleRate,
+  preset: 'pop',
+  overrides: { loudness: { targetLufs: -14 } },
+  onProgress: (progress, stage) => console.log(stage, progress),
+});
+
+// 位置引数形式
+const legacyBpm = detectBpm(samples, sampleRate);
+```
+
+リクエストのフィールド名は Node と WASM で同じ camelCase です。Python は JavaScript 形式の options object ではなく、従来どおりキーワード引数（`detect_bpm(samples, sample_rate=...)`）を使います。
+
+### 長い処理をキャンセルする
+
+進捗を報告するリクエストは `cancel` も受け取ります。これは `onProgress` が発火するのと同じネイティブ境界でポーリングされる述語で、`true` を返すと呼び出しが中断されます。
+
+```typescript
+import { ErrorCode, isSonareError, masterAudio } from '@libraz/libsonare';
+
+let abandoned = false;
+cancelButton.onclick = () => { abandoned = true; };
+
+try {
+  const mastered = masterAudio({
+    samples,
+    sampleRate,
+    preset: 'pop',
+    onProgress: (progress, stage) => updateUi(progress, stage),
+    cancel: () => abandoned,
+  });
+} catch (error) {
+  if (!(isSonareError(error) && error.code === ErrorCode.Cancelled)) throw error;
+}
+```
+
+キャンセルされた呼び出しは、コード 8（`Cancelled`）の `SonareError` で例外になり、出力を確保しません。途中結果を調べることはできません。Python も同じ述語を `cancel=` で受け取ります。
+
+### 既定のサンプルレート
+
+`sampleRate` を省略できる場合の既定値は、関数ファミリーごとに異なります。バッファの実際のレートが分かっているときは、必ずそれを渡してください。
+
+| ファミリー | 既定値 |
+|------------|--------|
+| 解析、特徴量、ラウドネス、ピッチ、エフェクト（`detectBpm`, `stft`, `melSpectrogram`, `hpss`, `timeStretch` など） | 22050 |
+| `Audio.fromBuffer`, `voiceChangeRealtime`, `roomMorphStereo` | 48000 |
+| `StreamAnalyzer`（`StreamConfig.sampleRate`） | 44100 |
+
+## エラーハンドリング
+
+失敗は、入力を拒否したのが誰かによって 3 つのクラスのどれかで届きます。
+
+| クラス | 投げる主体 | `isSonareError` の一致 |
+|--------|------------|------------------------|
+| `TypeError` | JavaScript バインディング（型の誤りや引数の欠落） | しない |
+| `RangeError` | JavaScript バインディング（値が定義域の外） | しない |
+| `SonareError` | ライブラリ、またはオブジェクトの状態 | する |
+
+`SonareError` は `Error` のサブクラスで、C ABI のエラー enum をそのまま映した数値の `code` と正準名 `codeName` を持ちます。同じ失敗はどのバインディング（WASM / Node ネイティブ / Python / C ABI）でも同じコードを報告するので、メッセージ文字列ではなくコードで分岐してください。パッケージは `ErrorCode` enum、`SonareError` クラス、型ガード `isSonareError(value)` をエクスポートします。
+
+```typescript
+import { ErrorCode, isSonareError, Mixer } from '@libraz/libsonare';
+
+try {
+  const mixer = Mixer.fromSceneJson(sceneJson, 48000, 512);
+} catch (error) {
+  if (error instanceof TypeError || error instanceof RangeError) {
+    // バインディングが引数を拒否した。呼び出し側を直す。
+    console.error(`bad argument: ${error.message}`);
+  } else if (isSonareError(error) && error.code === ErrorCode.InvalidFormat) {
+    console.error(`scene is not valid JSON: ${error.message}`);
+  } else if (isSonareError(error) && error.code === ErrorCode.InvalidParameter) {
+    // 'failed to build mixer from scene JSON: unknown insert processor: nope (strip a)'
+    console.error(`scene field rejected: ${error.message}`);
+  } else {
+    throw error;
+  }
+}
+```
+
+### どの失敗がどのエラーになるか
+
+| 失敗 | 投げられるもの |
+|------|----------------|
+| `init()` が解決する前の関数呼び出し | `SonareError` `InvalidState`（7） |
+| オプションが異なる 2 回目の `init()` | `SonareError` `InvalidState`（7）。オプション名を挙げます |
+| `.wasm` と JavaScript が別のビルド | `SonareError` `AbiMismatch`（10） |
+| 解放済み・破棄済みのハンドルのメソッド | `SonareError` `InvalidState`（7） |
+| JSON として壊れているミキサーシーン（`Mixer.fromSceneJson`、`Project.fromJson`） | `SonareError` `InvalidFormat`（2） |
+| ライブラリが拒否したフィールド。未知のプリセットやインサート、不正なセンドのタイミングなど | `SonareError` `InvalidParameter`（4） |
+| 拒否されたストリームや STFT の設定 | コアが報告するコードの `SonareError` |
+| キャンセルされた呼び出し | `SonareError` `Cancelled`（8） |
+| `null` や型の違う引数（`Float32Array` ではない `samples` など） | `TypeError` |
+| 空または非有限のオーディオ、`[8000, 384000]` の整数ではない `sampleRate`、小数の整数引数、長さが揃うべき 2 つのバッファの不一致、バインディングが解決する名前の未知の値（`keyRoot` など） | `RangeError` |
+| NUL を含む文字列を、それを検査するエントリポイントへ渡した | `RangeError` |
+
+`Mixer.fromSceneJson` は、JSON として壊れているシーンには `InvalidFormat`、ミキサーが拒否したフィールドには `InvalidParameter` を報告します。どのフィールドが問題かは、`failed to build mixer from scene JSON: <内側のメッセージ>` の末尾で分かります。
+
+サンプルとサンプルレートを受け取る単発関数はどれも、コアに渡す前にこれらを検査するので、埋め込みの `BindingError` が呼び出し側へ届くことはありません。コアが自分のオブジェクトに対して行う引数検査は、コード付きの `SonareError` のままです。各ファサードは非有限数、不正な enum／インデックス値、過大なリソースをクランプせずに拒否します。入力不正として扱ってください。オフラインおよびボーカル編集のワーカークライアントは、`TypeError` と `RangeError` をワーカー境界越しに復元します。
+
+### エラーコード
+
+| `ErrorCode` | 値 |
+|-------------|----|
+| `Ok` | `0` |
+| `FileNotFound` | `1` |
+| `InvalidFormat` | `2` |
+| `DecodeFailed` | `3` |
+| `InvalidParameter` | `4` |
+| `OutOfMemory` | `5` |
+| `NotSupported` | `6` |
+| `InvalidState` | `7` |
+| `Cancelled` | `8` |
+| `EncodeFailed` | `9` |
+| `AbiMismatch` | `10` |
+| `Unknown` | `99` |
+
+`AbiMismatch` はバインディングが作るコードで、コアが報告することはありません。ネイティブモジュールの ABI バージョンがパッケージの期待値と異なることを示します（WASM は `init()`、Node はアドオンの読み込み時、Python はライブラリの初回使用時）。原因と直し方は[インストール](./installation.md#ライブラリ読み込み時の-abimismatch)にあります。ほかのコードは Python の `SonareError.code` および C ABI の `SonareError` enum と一致し、Python CLI は同じコードを[終了コード](./cli.md#終了コード)へ対応付けます。Node、Python、C ABI、CLI で同じ失敗がどう現れるかは、[エラー契約](./binding-parity.md#エラー契約)を参照してください。
+
+## ビルドと実行環境
+
 ### `capabilities()`
 
-実際に読み込まれているビルドの内容を返します。CLI が `doctor` で表示するのと同じレポートです。
-同期関数で、`init()` の後にのみ有効です。
+実際に読み込まれているビルドの内容を返します。CLI が `doctor` で表示するのと同じレポートです。同期関数で、`init()` の後にのみ有効です。
 
 ```typescript
 function capabilities(): {
@@ -227,10 +278,16 @@ function capabilities(): {
   features: {
     mastering: boolean;
     mixing: boolean;
+    mixingAssistant: boolean;
     fx: boolean;
     ffmpeg: boolean;
-    mixingAssistant: boolean;
     instrumentParamAutomation: boolean;
+    arrangement: boolean;
+    acousticSim: boolean;
+    pitchEditor: boolean;
+    vocalEdit: boolean;
+    voiceChanger: boolean;
+    playback: boolean;
   };
   decode: { builtin: string[]; ffmpeg: string[] };
   simd: string;
@@ -238,97 +295,41 @@ function capabilities(): {
 }
 ```
 
-推測せず `features` で分岐してください。`mixing` を持たないビルドには `Mixer` がありません。
-また `decode.builtin` を見れば、ブラウザ側のフォールバックを試す前に、そのモジュールが
-どの形式を開けるか分かります。
+推測せず `features` で分岐してください。`decode.builtin` を見れば、ブラウザ側のフォールバックを試す前に、そのモジュールがどの形式を開けるか分かります。同梱ビルドでは `simd` は `"wasm-simd128"` を返します。
 
-`mixingAssistant` と `instrumentParamAutomation` は、ホストにとってもっとも必要でありながら、
-もっとも見落とされやすい 2 つのプローブです。これらが対象とするエントリポイントは、サブシステムの
-有無にかかわらず登録されたままだからです。`suggestMixScene` と楽器パラメータのオートメーション
-ターゲットは、どのモジュールにも関数として存在し、サブシステムを欠くビルドでは呼び出し時に
-**例外を投げます**。したがって関数の存在を調べても何も分からず、`typeof fn === 'function'` は
-ケイパビリティ判定にはなりません。アレンジメントのサブシステムを持たないビルドでは
-`instrumentParamAutomation` が `false` を返します。`mixingAssistant` は解析専用モジュールでは
-コンパイル時に除外されるため、シンボルが存在していても `false` を返します。
+| フラグ | 対象 |
+|--------|------|
+| `mastering` | `masterAudio*`、`masteringChain*`、`StreamingMasteringChain`、名前付きマスタリングプロセッサ |
+| `mixing` | `Mixer`、`mixStereo`、ミキシングシーンの関数 |
+| `mixingAssistant` | `suggestMixScene` |
+| `fx` | エフェクトのサブシステム |
+| `ffmpeg` | FFmpeg によるデコード（ブラウザ向けパッケージでは `false`） |
+| `instrumentParamAutomation` | 楽器パラメータのオートメーションターゲット |
+| `arrangement` | `Project`、クリップ、アレンジメントのサブシステム |
+| `acousticSim` | `analyzeImpulseResponse`、`detectAcoustic`、`estimateRoom`、`synthesizeRir`、`roomMorph*` |
+| `pitchEditor` | ノートとピッチの編集 |
+| `vocalEdit` | ボーカル編集のドラフトとレンダリングジョブ |
+| `voiceChanger` | `RealtimeVoiceChanger`、`voiceChange*` |
+| `playback` | `PlaybackRenderer`（アップミックス、バイノーラル、スピーカー出力） |
+
+`mixingAssistant` と `instrumentParamAutomation` は、ホストにとってもっとも必要でありながら、もっとも見落とされやすい 2 つのプローブです。これらが対象とするエントリポイントは、サブシステムの有無にかかわらず登録されたままだからです。`suggestMixScene` と楽器パラメータのオートメーションターゲットは、どのモジュールにも関数として存在し、サブシステムを欠くビルドでは呼び出し時に**例外を投げます**。したがって `typeof fn === 'function'` は機能の有無の判定になりません。アレンジメントのサブシステムを持たないビルドでは `instrumentParamAutomation` が `false` を返します。`mixingAssistant` は解析専用モジュールではコンパイル時に除外されるため、シンボルが存在していても `false` を返します。
 
 ### `capabilityCatalog()`
 
-各プロセッサ、そのパラメータ記述子、組み込みプリセット一覧を、機械可読なカタログとして
-返します。C ABI が公開し Python が `capability_catalog` として公開しているのと同じ正規
-JSON で、`schemas/capability-catalog.schema.json` で検証されます。
-
-カタログは実際の値を持っています。現行ビルドは 95 個のプロセッサ（うち 84 個がリアルタイムインサート可能）と 5,579 個のパラメータ記述子を公開します。構築用キーにフォールバックがなければ `default` は `null` になります。値域はプロセッサの他のパラメータを既定値に置いて実測されます。`null` は「その側の制限をカタログが把握していない」という意味であって、範囲情報が一般に得られないという意味ではありません。
-
-::: warning 範囲は実測値であり、実測ゆえの注意点がある
-公開される範囲は**送ってよい値の厳密な制約であって、UI の推奨レンジではありません**。しかも、
-そのプロセッサの他のパラメータをすべて既定値に置いた状態で測られています。スライダーを直結
-する前に知っておきたい帰結が 3 つあります。
-
-- **互いを制約し合う 2 つのパラメータは、それぞれ相手の既定値を報告します。**
-  `maximizer.adaptiveRelease` が `minReleaseMs <= 250`、`maxReleaseMs >= 20` と返すのはまさに
-  これが理由で、一方を動かせばもう一方の実際の限界も動きます。
-- **サンプルレートから導かれる範囲は、prepare 前のプロセッサを反映します。**
-  EQ の `band*.frequencyHz` の上限はカタログ上どれも `24000` と読めます。既知のレートで
-  構築したイコライザーは、そのレートのナイキスト周波数（96 kHz なら 30000 Hz）までの
-  バンド周波数を受け付けます。
-- **開区間の境界は、除外される側の値そのものとして報告されます。**
-  `dynamics.compressor.sidechainHpfHz` は `min` に `0` を返しますが、`0` は拒否されます。
-:::
+各プロセッサ、そのパラメータ記述子、組み込みプリセット一覧を、機械可読なカタログとして返します。C ABI が公開し Python が `capability_catalog` として公開しているのと同じ正規 JSON で、`schemas/capability-catalog.schema.json` で検証されます。
 
 ```typescript
 function capabilityCatalog(): {
   version: string;
   abi: { project: number; engine: number };
-  processors: Array<{
-    id: string;
-    kind: 'realtime' | 'offline' | 'pair';
-    realtimeInsertable: boolean;
-    stereoOnly: boolean;
-    latencySamples: number;
-    tailSamples: number;
-    /** リアルタイム処理コストの目安。インサート不可のプロセッサでは必ず null */
-    realtimeCost: 'low' | 'moderate' | 'high' | null;
-    channelPolicy: 'multichannel' | 'stereoPairOnly' | 'perChannel' | 'passthrough';
-    category: string;
-    /** repair.declick、repair.declip、repair.trimSilence では false */
-    causal: boolean;
-    params: Array<{
-      name: string;
-      id: number | null;
-      rtSafe: boolean;
-      type: 'boolean' | 'number' | 'enum' | 'string' | 'array';
-      min: number | null;
-      max: number | null;
-      minExclusive: boolean;
-      maxExclusive: boolean;
-      maxRelativeTo: 'nyquist' | null;
-      default: boolean | number | null;
-      /** 閉じた集合（'dB'、'Hz'、'ms'、's'、'samples' など）のいずれか。数値でないキーでは null */
-      unit: MasteringInsertParamUnit | null;
-      /** コントロールが描画すべき範囲（[min, max] の内側）。受け入れ範囲と同じなら null */
-      uiMin: number | null;
-      uiMax: number | null;
-      scale: 'linear' | 'log';
-      choices: Array<{ name: string; value: number }> | null;
-      slot: string | null;
-      /** このキーの値を制約する兄弟キー。`this <relation> sibling` として読む */
-      dependsOn: Array<{ key: string; relation: 'lt' | 'le' | 'gt' | 'ge'; factor: number }>;
-    }>;
-    slots: Array<{
-      name: string;
-      parent: string | null;
-      activation: 'anyKey' | 'always';
-      minCrossoverCutoffs: number;
-    }>;
-  }>;
-  /** フラットなマスタリングチェーンキーすべての記述。 */
-  chain: CapabilityCatalogChain;
+  processors: CapabilityCatalogProcessor[];   // id、kind、レイテンシ、テール、params、slots など
+  chain: CapabilityCatalogChain;              // フラットなマスタリングチェーンキーすべての記述
   presets: {
     mastering: string[];
     synth: string[];
     mixingScene: string[];
     voiceChanger: string[];
-    playbackRoom: string[];
+    playbackRoom: string[];                   // 常に存在。再生機能がビルドから除かれていれば空
   };
   masteringPresets: Array<{
     name: string;
@@ -340,18 +341,15 @@ function capabilityCatalog(): {
 }
 ```
 
-汎用のパラメータ UI はこれを基に作れます。各スライダーの範囲・既定値・単位・軸（`uiMin` / `uiMax`、
-`scale`）は、手で管理する表ではなくカタログから得られます。各フィールドは
-[インサートエフェクト](./effects-inserts.md#パラメータ記述子)にまとまっています。コアが把握していない範囲は明示的な `null` で報告されるので、
-0 ではなく「上限・下限なし／不明」として扱ってください。
+汎用のパラメータ UI はこれを基に作れます。各スライダーの範囲・既定値・単位・軸（`uiMin` / `uiMax`、`scale`）は、手で管理する表ではなくカタログから得られます。各フィールドは[インサートエフェクト](./effects-inserts.md#パラメータ記述子)にまとまっています。`null` の範囲は、コアがその側の制限を把握していないという意味です。0 ではなく「上限・下限なし／不明」として扱ってください。
 
-`chain` はマスタリングチェーン設定のフラットなキーを記述します。各ステージのキー接頭辞、そのキーがパラメータとなるプロセッサ、`enabled` キー（`CapabilityCatalogChainStage`）、マルチバンドステージの `cutoffsHz` や `bands` などのインデックス付きリストとその項目数（`CapabilityCatalogChainList`）、どのプロセッサにも属さないキーの記述子（`params`）、キーの別名表記すべて（`CapabilityCatalogChainAlias`）です。`presets.playbackRoom` は常に存在し、再生機能がビルドから除かれている場合は空になります。
-
-バンドごとの EQ パラメータは、インデックス付きの各バンドフィールドについて記述子を公開するため、汎用 UI が手書きの表なしにバンドを並べられます。記述子には構築用キーとオートメーション対象の両方が含まれるので、オートメーション対象は `id !== null` で選び、条件付きのバンド群は `slot` とプロセッサの `slots` 配列で扱ってください。記述子を公開しても、どのキーが**読まれた**とみなされるかは変わりません。不完全に渡したバンドは、余分なキーを「無視した」と報告します。
+::: warning 公開される範囲は厳密な制約であり、UI の推奨レンジではありません
+範囲は、そのプロセッサの他のパラメータをすべて既定値に置いた状態で測られています。そのため、互いを制約し合う 2 つのパラメータはそれぞれ相手の既定値を報告します。EQ の `band*.frequencyHz` のようにサンプルレートから導かれる範囲は、prepare 前の `24000` と読めます。開区間の境界は、除外される側の値そのものとして報告されます。それぞれの場合は[カタログの値域の読み方](./mastering-processors.md#カタログの値域の読み方)で説明しています。
+:::
 
 ### `abiVersion()`
 
-C POD 公開 API 全体を集約したネイティブ ABI バージョンを返します。（このビルドでは `0x05030207`、`EXPECTED_ABI_VERSION` と同じ値）。ビルド済みバイナリを読み込む際に保存・比較しておくと、互換性のない JS／ネイティブ成果物の組み合わせを早期に検出できます。
+C POD 公開 API 全体を集約したネイティブ ABI バージョンを返します（`EXPECTED_ABI_VERSION` と同じ値）。ビルド済みバイナリを読み込む際に保存・比較しておくと、互換性のない JS／ネイティブ成果物の組み合わせを早期に検出できます。
 
 ```typescript
 function abiVersion(): number
@@ -382,8 +380,7 @@ function voiceCharacterPresetId(preset: VoicePresetId | number): VoicePresetId |
 function realtimeVoiceChangerPresetConfig(preset: VoicePresetId | number): RealtimeVoiceChangerPodConfig
 ```
 
-`voiceCharacterPresetId(...)` は未知の数値序数で `null` を返します。未知の文字列 ID は例外になります。
-`realtimeVoiceChangerPresetConfig(...)` は解決済み POD 設定を返す必要があるため、無効な序数や未知の ID で例外になります。
+`voiceCharacterPresetId(...)` は未知の数値序数で `null` を返します。未知の文字列 ID は例外になります。`realtimeVoiceChangerPresetConfig(...)` は解決済み POD 設定を返す必要があるため、無効な序数や未知の ID で例外になります。
 
 解決済みの `RealtimeVoiceChangerPodConfig` は両 JavaScript 公開 API で camelCase キー（`inputGainDb`、`wetMix`、`formantFactor`、`formantMode`、`limiterIspCeilingDbtp` など）を使います。対応する C / Python の POD フィールドは snake_case のままです。エンジンに渡し戻す POD 設定は、`formantMode`（`'relative'` または `'absolute'`）を含むすべてのフィールドを持つ必要があります。
 
@@ -407,6 +404,10 @@ function hasFfmpegSupport(): boolean
 
 `hasFfmpegSupport()` は、読み込まれたビルドが FFmpeg 経由のデコードに対応しているかを返します。ブラウザ向け WASM npm パッケージはデコード済み PCM を扱うため通常 `false` で、ファイルの直接デコードは Python/native ビルド側で行います。
 
+### ブラウザサポートとバンドルサイズ
+
+同梱モジュールは WebAssembly SIMD でビルドされているため、ブラウザの最小バージョンは SIMD の対応状況で決まります。一覧は[ブラウザ互換性](./wasm.md#ブラウザ互換性)、ファイルサイズは[バンドルサイズ](./wasm.md#バンドルサイズ)を参照してください。
+
 ## ネイティブハンドルの解放
 
 ネイティブハンドルを所有するクラス（`Mixer`、`StreamAnalyzer`、`Project`、`ProjectTimeline`、`RealtimeEngine`、`ClipPageProvider`、`ClipPageStreamer`、`StreamingEqualizer`、`StreamingMasteringChain`、`StreamingRetune`、`RealtimeVoiceChanger`、`PlaybackRenderer` など）はどれも冪等な `destroy()`（別名 `delete()`）を持ち、`[Symbol.dispose]()` を実装しています。そのため `using` 宣言を使えば、例外が起きてもスコープの終わりで解放されます。`Audio` はネイティブハンドルを持たないので `[Symbol.dispose]()` は何もしませんが、`using` はそのまま使えます。
@@ -427,13 +428,14 @@ await init();
 
 リファレンスは主題ごとに分かれています。以下のページはいずれも、ここまでのインストール・インポート・初期化を前提とします。
 
-- [解析](./js-api-analysis.md) — 楽曲レベルの解析、特徴抽出、ローマ数字によるコード分析。
-- [ヘルパーと変換](./js-api-helpers.md) — librosa 互換ヘルパー、スケール量子化、単位変換、リサンプリング、コード機能。
-- [エフェクト](./js-api-effects.md) — オーディオエフェクト、編集 DSP、ルーム音響の計測。
-- [マスタリング](./js-api-mastering.md) — マスタリングチェーン、名前付きプロセッサ、プリセット、単体のダイナミクス／リペアプロセッサ。
-- [ストリーミングとリアルタイム](./js-api-streaming.md) — ブロック単位のプロセッサ、ストリーミングマスタリングチェーン、逐次処理の `StreamAnalyzer`。
-- [オーディオ、メータリング、ミキシング](./js-api-audio.md) — `Audio` クラス、メータリング、テイクの位置合わせ、ミキサーストリップ、ミキシング API。
-- [型と列挙型](./js-api-types.md) — 型定義、列挙型、型エクスポート索引。エラーハンドリングは[このページ](#エラーハンドリング)にあります。
+- [解析](./js-api-analysis.md): 楽曲レベルの解析、特徴抽出、ローマ数字によるコード分析。
+- [ヘルパーと変換](./js-api-helpers.md): librosa 互換ヘルパー、スケール量子化、単位変換、リサンプリング、コード機能。
+- [エフェクト](./js-api-effects.md): オーディオエフェクト、編集 DSP、ルーム音響の計測。
+- [マスタリング](./js-api-mastering.md): マスタリングチェーン、名前付きプロセッサ、プリセット、単体のダイナミクス／リペアプロセッサ。
+- [ストリーミングとリアルタイム](./js-api-streaming.md): ブロック単位のプロセッサ、ストリーミングマスタリングチェーン、逐次処理の `StreamAnalyzer`。
+- [オーディオ、メータリング、ミキシング](./js-api-audio.md): `Audio` クラス、メータリング、テイクの位置合わせ、ミキサーストリップ、ミキシング API。
+- [型と列挙型](./js-api-types.md): 型定義、列挙型、型エクスポート索引。
+- [Worker](./wasm-advanced.md#web-worker-の使用): オフライン処理をメインスレッド外で実行する `OfflineWorkerClient` と `VocalEditWorkerClient`。
 
 ## プロジェクト、楽器、ライブ MIDI
 
@@ -485,72 +487,3 @@ const audio = project.bounceWithSynthInstrument(synthPresetNames()[0]);
 | `detectBeats` / `detectOnsets` | 低負荷 | フレームベース検出 |
 | 単位変換関数 | 低負荷 | 純粋な計算 |
 | `normalize` / `trim` | 低負荷 | シンプルな処理 |
-
-## バンドルサイズ
-
-| ファイル | サイズ | Gzip |
-|---------|--------|------|
-| `sonare.js` | ~{{ wasmMeta.sonareJs.sizeKB }} KB | ~{{ wasmMeta.sonareJs.gzipKB }} KB |
-| `index.js` | ~{{ wasmMeta.indexJs.sizeKB }} KB | ~{{ wasmMeta.indexJs.gzipKB }} KB |
-| `sonare.wasm` | ~{{ wasmMeta.wasm.sizeKB }} KB | ~{{ wasmMeta.wasm.gzipKB }} KB |
-| **合計** | ~{{ wasmMeta.total.sizeKB }} KB | ~{{ wasmMeta.total.gzipKB }} KB |
-
-## ブラウザサポート
-
-| ブラウザ | 最小バージョン |
-|---------|---------------|
-| Chrome | 57+ |
-| Firefox | 52+ |
-| Safari | 11+ |
-| Edge | 16+ |
-
-要件: WebAssembly、ES2017+ (async/await)、Web Audio API
-
-## エラーハンドリング
-
-モジュールの初期化前に関数を呼ぶと、コード `InvalidState` の `SonareError` がスローされます。まず `await init()` を呼んでください。オプションを変えて `init()` を 2 回目に呼ぶ場合も、そのオプション名を示した `InvalidState` になります（同じオプションの繰り返しは問題ありません）。
-
-ネイティブ（C++）側の失敗は、構造化された **`SonareError`** としてスローされます。`Error` のサブクラスで、C ABI のエラー enum をそのまま映した数値の `code` と正準名 `codeName` を持つため、メッセージ文字列の照合ではなく原因コードで分岐できます。同じ失敗はどのバインディング（WASM / Node ネイティブ / Python / C ABI）でも同じ数値コードを報告します。パッケージは `ErrorCode` enum、`SonareError` クラス、型ガード `isSonareError(value)` をエクスポートします。
-
-各 facade は非有限数、不正な enum／インデックス値、過大なリソースを DSP やシリアライズへ渡す前に一貫して拒否します。これらは入力不正として扱い、バインディングが暗黙にクランプしたり不正値を受理したりすることへ依存しないでください。
-
-バインディング自身が拒否する引数は、素の `TypeError`（型の誤りや欠落）か `RangeError`（範囲外、未知の名前、空または非有限のサンプル、正の整数で範囲内ではない `sampleRate`）になり、`isSonareError` には一致しません。オフラインおよびボーカル編集のワーカークライアントは `TypeError` と `RangeError` をワーカー境界越しに復元し、`node:worker_threads` の Worker か、それを返す `workerFactory` を受け付けます。エンジン側で起きる失敗にはコードが付きます。たとえば `synthesizeRir(...)` で音源が部屋の外にある場合は `InvalidParameter` です。解放済み・破棄済みのハンドルは `SonareError` の `InvalidState` をスローします。
-
-```typescript
-import { ErrorCode, isSonareError, Mixer } from '@libraz/libsonare';
-
-try {
-  const mixer = Mixer.fromSceneJson(sceneJson, 48000, 512);
-} catch (error) {
-  if (isSonareError(error) && error.code === ErrorCode.InvalidState) {
-    // 'failed to build mixer from scene JSON: send timing must be a string ("pre" or "post")'
-    console.error(`scene rejected: ${error.codeName}: ${error.message}`);
-  } else {
-    throw error;
-  }
-}
-```
-
-`Mixer.fromSceneJson` は、フィールド値が拒否された場合も JSON 自体が壊れている場合も、シーンの
-構築に失敗するあらゆる経路で `InvalidParameter` ではなく **`InvalidState`** を報告します。構築が
-ラップされているため、本来の原因は独立したコードではなく
-`failed to build mixer from scene JSON: <内側のメッセージ>` の末尾として届きます。
-`InvalidState` で分岐し、どのフィールドが問題かはメッセージを表示して特定してください。
-
-| `ErrorCode` | 値 |
-|-------------|----|
-| `Ok` | `0` |
-| `FileNotFound` | `1` |
-| `InvalidFormat` | `2` |
-| `DecodeFailed` | `3` |
-| `InvalidParameter` | `4` |
-| `OutOfMemory` | `5` |
-| `NotSupported` | `6` |
-| `InvalidState` | `7` |
-| `Cancelled` | `8` |
-| `EncodeFailed` | `9` |
-| `AbiMismatch` | `10` |
-| `Unknown` | `99` |
-
-`AbiMismatch` はバインディングが作るコードで、コアが報告することはありません。ネイティブモジュールの ABI バージョンがパッケージの期待値と異なることを示します（WASM は `init()`、Node はアドオンの読み込み時、Python はライブラリの初回使用時）。ほかのコードは Python の `SonareError.code` および C ABI の `SonareError` enum と一致し、Python CLI は同じコードを[終了コード](./cli.md#終了コード)へ対応付けます。
-

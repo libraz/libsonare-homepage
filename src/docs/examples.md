@@ -6,39 +6,22 @@ Use this page after [Getting Started](./getting-started.md). The examples are in
 
 By the end of this page you should be able to:
 
-- copy one small working pattern for browser, Python, CLI, or Node native use;
+- run a batch or server-side analysis in the runtime you use;
 - see how the same task changes across runtimes;
 - distinguish "load/decode audio" from "call libsonare";
 - move from a recipe to the matching API reference when you need options and return types.
 
 ## By Use Case
 
-Each one below is a small starting pattern. For a whole production job carried from raw files to a deliverable — stems to a finished master, a delivery gate that runs in CI, a batch of takes cleaned up — see [Use Cases](./use-cases.md).
+The single-file first program for each runtime is on [Getting Started](./getting-started.md#first-result). The patterns below are the next step. For a whole production job carried from raw files to a deliverable (stems to a finished master, a delivery gate that runs in CI, a batch of takes cleaned up), see [Use Cases](./use-cases.md).
 
-### Show BPM and Key in a Browser App
+### Batch Analyze a Music Folder
 
-Use the npm WebAssembly package when audio stays in the browser. Decode files
-with Web Audio API first, then pass mono `Float32Array` samples to libsonare.
+Each version prints one line per file: name, BPM, and key. The CLI version writes a JSON summary per file instead.
 
-```typescript
-import { init, detectBpm, detectKey } from '@libraz/libsonare';
+::: code-group
 
-await init();
-
-const audioCtx = new AudioContext();
-const decoded = await audioCtx.decodeAudioData(await file.arrayBuffer());
-const samples = decoded.getChannelData(0);
-
-const bpm = detectBpm(samples, decoded.sampleRate);
-const key = detectKey(samples, decoded.sampleRate);
-```
-
-### Batch Analyze a Music Folder from the Terminal
-
-Use the CLI when you want quick terminal output or JSON summaries for scripts.
-The CLI is installed from PyPI, not npm.
-
-```bash
+```bash [CLI]
 pip install libsonare
 
 for f in *.mp3; do
@@ -46,35 +29,59 @@ for f in *.mp3; do
 done
 ```
 
-### Extract Metadata in Python
-
-Use Python when you want scripting, notebooks, or a librosa-like workflow with a
-native C++ backend.
-
-```python
+```python [Python]
+from pathlib import Path
 from libsonare import Audio
 
-with Audio.from_file("song.mp3") as audio:
-    result = audio.analyze()
-
-print(result.bpm, result.key, len(result.beat_times))
+for path in sorted(Path(".").glob("*.mp3")) + sorted(Path(".").glob("*.wav")):
+    with Audio.from_file(str(path)) as audio:
+        result = audio.analyze()
+    print(f"{path.name}\t{result.bpm:.1f}\t{result.key.name}")
 ```
 
-### Analyze Uploaded Files in Node.js
+```js [Node.js (WASM)]
+import { readdirSync, readFileSync } from 'node:fs';
+import { init, Audio } from '@libraz/libsonare';
 
-Use the native Node.js binding when you need server-side file loading and native
-performance. It is currently source-build oriented.
+await init();
+for (const name of readdirSync('.').filter((f) => /\.(mp3|wav)$/i.test(f))) {
+  const result = Audio.fromMemory(new Uint8Array(readFileSync(name))).analyze();
+  console.log(`${name}\t${result.bpm.toFixed(1)}\t${result.key.name}`);
+}
+```
 
-```typescript
+:::
+
+### Analyze Uploaded Files on a Server
+
+The WASM package decodes the uploaded bytes in memory, so nothing touches the disk. The native addon reads from a path and is built from source ([Native Bindings](./native-bindings.md)).
+
+::: code-group
+
+```js [Node.js (WASM)]
+import { init, Audio } from '@libraz/libsonare';
+
+await init();
+
+// `body` is the uploaded WAV or MP3 file as a Buffer or Uint8Array.
+export function analyzeUpload(body) {
+  const result = Audio.fromMemory(new Uint8Array(body)).analyze();
+  return { bpm: result.bpm, key: result.key.name, chords: result.chords.length };
+}
+```
+
+```typescript [Node.js (native)]
 import { Audio } from '@libraz/libsonare-native';
 
-const audio = Audio.fromFile('/tmp/upload.wav');
-const result = audio.analyze();
-
+const result = Audio.fromFile('/tmp/upload.wav').analyze();
 console.log(result.bpm, result.key.name);
 ```
 
+:::
+
 ## C++
+
+These programs include `<sonare.h>`, which resolves both in a source tree and after `cmake --install`: the installed `sonare::` targets put `include/sonare/cpp` on the include path. `<sonare/cpp/sonare.h>` is the same header through the namespaced path ([Installing the C++ Library](./installation.md#installing-the-c-library)).
 
 ### Basic Usage
 
@@ -211,6 +218,9 @@ int main() {
 
 static const char* kPitchNames[] = {
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+// Indexed by SonareMode: SONARE_MODE_MAJOR (0) through SONARE_MODE_LOCRIAN (6).
+static const char* kModeNames[] = {
+    "major", "minor", "dorian", "phrygian", "lydian", "mixolydian", "locrian"};
 
 int main() {
   SonareAudio* audio = NULL;
@@ -236,7 +246,7 @@ int main() {
   if (err == SONARE_OK) {
     printf("Key: %s %s (confidence: %.0f%%)\n",
            kPitchNames[key.root],
-           key.mode == SONARE_MODE_MAJOR ? "major" : "minor",
+           kModeNames[key.mode],
            key.confidence * 100);
   }
 
@@ -296,19 +306,3 @@ sonare time-stretch --rate 0.8 song.wav -o practice.wav
 # Separate drums from melody
 sonare hpss song.wav -o separated
 ```
-
-### Batch Processing
-
-```bash
-# Analyze all MP3 files
-for f in *.mp3; do
-  echo "Processing: $f"
-  sonare analyze "$f" --json > "${f%.mp3}.json"
-done
-```
-
-## Where the sections went
-
-| Section | Moved to |
-|---|---|
-| Feature Recipes | [Feature Recipes](./examples-recipes.md) |

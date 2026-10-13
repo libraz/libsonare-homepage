@@ -1,11 +1,33 @@
 ---
 title: CLI Commands
-description: Per-command reference for the sonare CLI, covering the analysis, feature, and extended command groups with their options and output.
+description: Per-command reference for the sonare CLI, covering analysis, features, editing, mastering and repair, rooms, and synthesis, with a task-to-command table and each command's options and output.
 ---
 
 # CLI Commands
 
-The analysis, feature, and extended command groups of the `sonare` CLI, split out from the [CLI Reference](./cli.md) index, which keeps the global options, the mastering walkthrough, exit codes, and format notes.
+The per-command reference for the `sonare` CLI: what each command does, its options and defaults, and what it prints. Global options, exit codes, stereo handling and the list of which CLI carries which command are on the [CLI Reference](./cli.md). Whole shell workflows are on [CLI Examples](./cli-examples.md).
+
+## Which command for which task
+
+| I want to... | Command | Where |
+|--------------|---------|-------|
+| Get tempo, key and a full summary | `analyze`, `bpm`, `key`, `beats` | [Analysis Commands](#analysis-commands) |
+| Find verses, choruses and other sections | `sections`, `boundaries` | [sections](#sections), [boundaries](#boundaries) |
+| Read the chord progression | `chords` | [chords](#chords) |
+| Measure loudness | `lufs`, `dynamics`; `meter` (native only) | [More analysis](#more-analysis) |
+| Summarize spectral features | `mel`, `chroma`, `spectral` | [Feature Commands](#feature-commands) |
+| Track a melody or list a singer's notes | `pitch`, `vocal-notes` | [pitch](#pitch), [Scale correction and vocal notes](./cli-examples.md#scale-correction-and-vocal-notes) |
+| Split a mix into parts | `hpss`, `decompose-stems` | [hpss](#hpss), [decompose-stems](#decompose-stems) |
+| Turn audio into a MIDI file | `transcribe` | [CLI Examples](./cli-examples.md#transcribe) |
+| Fix a damaged recording | `repair`, `declip` | [repair](./cli.md#repair) |
+| Master a track for delivery | `mastering`, `master`, `eq` | [Mastering and Repair](./cli.md#mastering-and-repair) |
+| Change pitch, tempo or level of a file | `pitch-shift`, `time-stretch`, `normalize`, `trim-silence` | [Editing](#editing) |
+| Cut a take at its silences | `split-silence` | [split-silence](#split-silence) |
+| Estimate or simulate a room | `acoustic`, `estimate-room`, `synthesize-rir`, `room-morph` | [Room commands](#acoustic-and-estimate-room) |
+| Mix stems into a scene | `suggest-mix`, `mix`, `mix-strip` | [Mixing Workflow](./cli-examples.md#mixing-workflow) |
+| Render a project or MIDI through the synth | `project bounce`, `midi-render` | [Synthesis](./cli-examples.md#synthesis) |
+| Render movie audio to speakers or headphones | `playback` | [Playback Renderer](./playback.md#one-flow-every-binding) |
+| Check a number or a conversion | `power-to-db`, `frames-to-samples`, ... | [CLI Utilities](./cli-utilities.md) |
 
 ## Analysis Commands
 
@@ -47,64 +69,7 @@ numbers mean.
   > Beats: 240
 ```
 
-**JSON Output:**
-```json
-{
-  "bpm": 120.5,
-  "bpm_confidence": 0.95,
-  "key": {
-    "root": 0,
-    "mode": 0,
-    "confidence": 0.85,
-    "name": "C major"
-  },
-  "time_signature": {
-    "numerator": 4,
-    "denominator": 4,
-    "confidence": 0.91
-  },
-  "beats": [
-    {"time": 0.52, "strength": 0.84},
-    {"time": 1.02, "strength": 0.78}
-  ],
-  "downbeat_indices": [0, 4, 8],
-  "downbeat_phase": 0,
-  "chords": [
-    {"name": "C", "start": 0.0, "end": 2.0, "confidence": 0.88}
-  ],
-  "sections": [
-    {"type": "intro", "start": 0.0, "end": 8.0}
-  ],
-  "timbre": {
-    "brightness": 0.61,
-    "warmth": 0.47,
-    "density": 0.72,
-    "roughness": 0.18,
-    "complexity": 0.56
-  },
-  "dynamics": {
-    "dynamic_range_db": 9.4,
-    "loudness_range_db": 6.8,
-    "crest_factor": 7.2,
-    "is_compressed": false
-  },
-  "rhythm": {
-    "syncopation": 0.32,
-    "groove_type": "straight",
-    "pattern_regularity": 0.89
-  },
-  "form": "IAB"
-}
-```
-
-The arrays above are abbreviated. In particular, `beats` contains one
-`{"time", "strength"}` object per detected beat; it is not a beat count.
-
-`downbeat_indices` indexes into `beats` rather than carrying times of its own, so
-finding the downbeats is a membership test against that array — `beats[i]` is a
-downbeat when `i` appears in `downbeat_indices`. `downbeat_phase` is the beat
-index the first downbeat falls on, which is how many beats of the first bar the
-take starts partway through.
+With `--json`, `analyze` prints one object holding every result above plus timbre, dynamics, rhythm and form; its fields are walked through under [The analyze JSON](./cli-examples.md#the-analyze-json).
 
 ### bpm
 
@@ -184,6 +149,28 @@ Detect onset times (note attacks).
 sonare onsets music.mp3
 sonare onsets music.mp3 --json
 ```
+
+### sections
+
+Split a song into sections (intro, verse, chorus and so on) and name its overall form. See [Section structure](./glossary/analysis/section-structure.md) for what the labels mean.
+
+```bash
+sonare sections music.mp3
+sonare sections music.mp3 --json
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--min-duration` | 4.0 | Shortest section to keep, in seconds |
+| `--threshold` | 0.3 | Native CLI only. Boundary detection threshold |
+| `--n-fft`, `--hop-length` | 2048, 512 | Analysis framing |
+
+**JSON Output:**
+```json
+{"form": "?", "count": 1, "sections": [{"type": "unknown", "start": 0, "end": 6, "energy": 1, "confidence": 0}]}
+```
+
+`form` is the overall pattern as letters, or `?` when no repeated structure was found. `count` is the number of entries in `sections`, each with its `type`, `start` and `end` in seconds, `energy` and `confidence`.
 
 ## Feature Commands
 
@@ -265,6 +252,7 @@ sonare pitch music.mp3 --algorithm yin
 | `--fmin` | 65.0 | Minimum tracked frequency in Hz |
 | `--fmax` | 2093.0 | Maximum tracked frequency in Hz |
 | `--hop-length` | 512 | Hop length in samples (redeclared locally with domain checks, distinct from the global `--hop-length`) |
+| `--frames` | off | With `--json`, add the per-frame `times`, `f0`, `voiced_flag` and `voiced_prob` arrays to the summary |
 
 **Output:**
 ```
@@ -276,7 +264,7 @@ sonare pitch music.mp3 --algorithm yin
 
 ### hpss
 
-Harmonic-Percussive Source Separation (HPSS): splits a mix into its harmonic component (vocals, melody, sustained tones) and its percussive component (drums, transients).
+Harmonic-Percussive Source Separation (HPSS, see [Source Separation](./source-separation.md)): splits a mix into its harmonic component (vocals, melody, sustained tones) and its percussive component (drums, transients).
 
 ```bash
 sonare hpss music.mp3 -o separated
@@ -304,7 +292,7 @@ sonare hpss music.mp3 -o separated --json
 
 ### decompose-stems
 
-Split a mix into non-negative matrix factorization (NMF) components — a
+Split a mix into non-negative matrix factorization (NMF) components (see [Source Separation](./source-separation.md)) — a
 data-driven separation that finds recurring spectral patterns instead of the
 fixed harmonic/percussive split `hpss` applies.
 
@@ -340,7 +328,7 @@ anything.
 
 ## More Commands
 
-The Python CLI ships many more subcommands than the core set above. Audio-file analysis and feature commands share the common options (`--json`, `--n-fft`, etc.) and take a file argument. Listing and preset-inspection commands have their own smaller option sets. Editing commands write a WAV when you pass `-o/--output`.
+Beyond the core set above, both CLIs carry many more subcommands; the ones marked "native CLI only" need `sonare-cli`. Audio-file analysis and feature commands share the common options (`--json`, `--n-fft`, etc.) and take a file argument. Listing and preset-inspection commands have their own smaller option sets. Editing commands write a WAV when you pass `-o/--output`.
 
 ### More analysis
 
@@ -353,16 +341,16 @@ The metrics these commands report are decay and clarity descriptors: **RT60** is
 | Command | Description | Notable options |
 |---------|-------------|-----------------|
 | `sonare downbeats music.mp3` | Downbeat times (seconds) | — |
-| `sonare chords music.mp3` | Chord progression | `--min-duration`, `--smoothing-window`, `--threshold`, `--triads-only`, `--nnls`, `--no-beat-sync`, `--use-hmm`, `--hmm-beam-width`, `--key-context`, `--key-root`, `--key-mode`, `--detect-inversions` |
+| `sonare chords music.mp3` | Chord progression | See [chords](#chords) |
 | `sonare rhythm music.mp3` | Rhythm primitives (syncopation, groove, regularity) | `--start-bpm` (120.0), `--bpm-min` (60.0), `--bpm-max` (200.0) |
 | `sonare dynamics music.mp3` | Dynamics / loudness summary | `--window-sec` (0.4) |
 | `sonare timbre music.mp3` | Timbre / spectral-shape summary | — |
 | `sonare lufs music.mp3` | EBU R128 loudness in LUFS (Loudness Units relative to Full Scale, the standard perceptual loudness unit — see [Delivery targets](./glossary/mastering/delivery-targets.md)) | `--series` (also emit momentary/short-term series) |
-| `sonare acoustic room.wav` | Room-acoustic estimate (RT60/EDT/C50/C80) | `--ir` (treat input as an impulse response), `--n-bands` (6), `--min-decay-db` (30.0), `--noise-floor-margin-db` (10.0) |
-| `sonare estimate-room room.wav` | Equivalent room estimate: volume, dimensions, absorption, DRR, confidence | `--json`, `--aspect-lw`, `--aspect-lh`, `--reference-absorption`, `--sabine`, `--n-octave-bands` |
-| `sonare synthesize-rir --length 7 --width 5 --height 3 -o rir.wav` | Mono RIR from shoebox geometry | `--source-x`, `--source-y`, `--source-z`, `--listener-x`, `--listener-y`, `--listener-z`, `--absorption`, `--sample-rate`, `--ism-order`, `--seed`, `--max-seconds` |
-| `sonare room-morph dry.wav --length 12 --width 9 --height 4 -o wet.wav` | Creative room-character morph toward a target room | `--wet`, `--suppression`, geometry and placement options, `--receiver-spacing` (metres, default 0.5, above 0 up to 4; used for a two-channel file, which is morphed as a stereo pair and written as a stereo file), `--max-seconds` |
-| `sonare boundaries music.mp3` | Structural transitions plus the novelty curve they were picked from | Native CLI only. `--threshold` (0.3), `--absolute-threshold` (0.005), `--kernel-size` (64), `--n-mfcc` (13), `--n-chroma` (12), `--peak-distance` (2.0), `--reference-window` (60), `--no-mfcc`, `--no-chroma`, `--n-fft` (2048), `--hop-length` (512) |
+| `sonare acoustic room.wav` | Room-acoustic estimate (RT60/EDT/C50/C80) | See [acoustic and estimate-room](#acoustic-and-estimate-room) |
+| `sonare estimate-room room.wav` | Equivalent room estimate: volume, dimensions, absorption, DRR, confidence | See [acoustic and estimate-room](#acoustic-and-estimate-room) |
+| `sonare synthesize-rir --length 7 --width 5 --height 3 -o rir.wav` | Mono RIR from shoebox geometry | See [synthesize-rir and room-morph](#synthesize-rir-and-room-morph) |
+| `sonare room-morph dry.wav --length 12 --width 9 --height 4 -o wet.wav` | Creative room-character morph toward a target room | See [synthesize-rir and room-morph](#synthesize-rir-and-room-morph) |
+| `sonare boundaries music.mp3` | Structural transitions plus the novelty curve they were picked from | Native CLI only. See [boundaries](#boundaries) |
 | `sonare melody music.mp3` | Melody contour summary: whether a melody was found, pitch range in octaves, mean frequency, pitch stability, vibrato rate, and the pitch-point count | Native CLI only. `--threshold` (0.1), `--hop-length` (512), `--fmin` (80.0), `--fmax` (1000.0) |
 | `sonare meter music.wav` | Basic level meters: peak, RMS, crest, true peak, clipping ratio, silence ratio, DC offset | Native CLI only. `--clip-threshold`, `--oversample` |
 | `sonare clipping music.wav` | Clipped sample and region detection | Native CLI only. `--threshold`, `--min-region` |
@@ -370,7 +358,82 @@ The metrics these commands report are decay and clarity descriptors: **RT60** is
 | `sonare stereo left.wav --reference right.wav` | Stereo correlation and width from left/right files | Native CLI only |
 | `sonare phase left.wav --reference right.wav` | Phase-scope summary from left/right files | Native CLI only |
 
-`boundaries` exposes the whole detector, and its two thresholds do different jobs: `--threshold` is relative to the largest novelty event within `--reference-window` seconds (a one-sided span, default 60; `0` disables the relative threshold) and so cannot ask whether anything changed at all, while `--absolute-threshold` is the floor that can. [`detectBoundaries(request)`](./js-api-analysis.md#detectboundaries-request) explains the pair and what lowering the floor will and will not recover. `--no-mfcc` and `--no-chroma` each drop one feature stream; giving both is refused, because the two are combined frame for frame and neither leaves nothing to combine.
+#### chords
+
+Chord progression as timed chord symbols. The defaults suit most pop and rock material; reach for the HMM and key-context options when a progression flickers between neighboring chords.
+
+```bash
+sonare chords music.mp3 --json
+sonare chords music.mp3 --use-hmm --key-context --key-root C --key-mode major
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--min-duration` | 0.3 | Shortest chord kept, in seconds |
+| `--smoothing-window` | 2.0 | Chroma smoothing window, in seconds (above 0) |
+| `--threshold` | 0.5 | Chord detection confidence threshold |
+| `--triads-only` | off | Restrict output to triad qualities |
+| `--nnls` | off | Use NNLS chroma instead of the STFT chroma |
+| `--no-beat-sync` | off | Disable beat-synchronous chroma pooling |
+| `--use-hmm` | off | Decode the chord sequence with a hidden Markov model |
+| `--hmm-beam-width` | 24 | HMM decoder beam width; `0` keeps the full search |
+| `--key-context` | off | Bias detection with a key context |
+| `--key-root` | C | Root pitch class for `--key-context` (for example `F#`) |
+| `--key-mode` | major | Mode for `--key-context` (for example `minor`) |
+| `--detect-inversions` | off | Report inversions (bass note) |
+
+#### boundaries
+
+Native CLI only. `boundaries` exposes the whole structural-boundary detector, so it reports the novelty curve along with the boundaries picked from it.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--threshold` | 0.3 | Relative threshold: share of the largest novelty event within `--reference-window` |
+| `--absolute-threshold` | 0.005 | Absolute floor on novelty |
+| `--kernel-size` | 64 | Novelty kernel size in frames |
+| `--n-mfcc` | 13 | MFCC coefficients in the feature stream |
+| `--n-chroma` | 12 | Chroma bins in the feature stream |
+| `--peak-distance` | 2.0 | Minimum spacing between boundaries, in seconds |
+| `--reference-window` | 60 | One-sided span for the relative threshold, in seconds; `0` disables the relative threshold |
+| `--no-mfcc`, `--no-chroma` | off | Drop one feature stream |
+| `--n-fft`, `--hop-length` | 2048, 512 | Analysis framing |
+
+The two thresholds do different jobs. `--threshold` is relative, so it cannot ask whether anything changed at all; `--absolute-threshold` is the floor that can. [`detectBoundaries(request)`](./js-api-analysis.md#detectboundaries-request) explains the pair and what lowering the floor will and will not recover. Giving both `--no-mfcc` and `--no-chroma` is refused, because the two streams are combined frame for frame and neither leaves nothing to combine.
+
+#### acoustic and estimate-room
+
+`acoustic` measures decay and clarity from a recording. `estimate-room` goes one step further and infers an equivalent room.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--ir` | off | `acoustic`: treat the input as an impulse response |
+| `--n-bands` | 6 | `acoustic`: number of octave bands reported |
+| `--min-decay-db` | 30.0 | `acoustic`: minimum decay depth, in dB |
+| `--noise-floor-margin-db` | 10.0 | `acoustic`: margin above the noise floor, in dB |
+| `--aspect-lw` | 1.0 | `estimate-room`: length-to-width prior |
+| `--aspect-lh` | 1.0 | `estimate-room`: length-to-height prior |
+| `--reference-absorption` | 0.15 | `estimate-room`: absorption prior |
+| `--sabine` | off | `estimate-room`: use the Sabine model instead of the default Eyring model |
+| `--n-octave-bands` (alias `--n-bands`) | library default | `estimate-room`: analyzer octave-band count; `0` is the library default |
+
+#### synthesize-rir and room-morph
+
+`synthesize-rir` builds a mono room impulse response from shoebox geometry. `room-morph` moves a dry recording toward a target room as a creative effect. Both take the same room options.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--length`, `--width`, `--height` | 7.0, 5.0, 3.0 | Room dimensions in metres |
+| `--absorption` | 0.2 | Uniform wall absorption, 0 to 1 |
+| `--source-x`, `--source-y`, `--source-z` | 1.0, 1.0, 1.2 | Source position in metres |
+| `--listener-x`, `--listener-y`, `--listener-z` | 5.0, 4.0, 1.7 | Listener position in metres |
+| `--ism-order` | 3 | Image-source reflection order |
+| `--seed` | 1 | Seed for the late tail, so a render repeats exactly |
+| `--max-seconds` | 0 | Cap on the RIR or tail length in seconds; `0` is the natural length |
+| `--sabine` | off | Use the Sabine late-reverb model instead of the default Eyring model |
+| `--sample-rate` | 48000 | `synthesize-rir` only: output sample rate |
+| `--wet` | 0.5 | `room-morph` only: target-room mix, 0 to 1 |
+| `--suppression` | 0.5 | `room-morph` only: how strongly the source room's tail is suppressed, 0 to 1 |
+| `--receiver-spacing` | 0.5 | `room-morph` only: metres between the two receivers (above 0 up to 4). Used for a two-channel file, which is morphed as a stereo pair and written as a stereo file |
 
 ### More features
 
@@ -381,12 +444,12 @@ The metrics these commands report are decay and clarity descriptors: **RT60** is
 | `sonare tempogram music.mp3` | Yes | Yes | Autocorrelation tempogram |
 | `sonare plp music.mp3` | Yes | Yes | Predominant local pulse |
 | `sonare nnls-chroma music.mp3` | Yes | Yes | NNLS chromagram |
-| `sonare cqt music.mp3` | No | Yes | Constant-Q transform summary |
-| `sonare vqt music.mp3` | No | Yes | Variable-Q transform summary |
-| `sonare mel-to-audio music.mp3 -o recon.wav` | No | Yes | Reconstruct audio from a computed Mel spectrogram with Griffin-Lim |
-| `sonare mfcc-to-audio music.mp3 -o recon.wav` | No | Yes | Reconstruct audio from computed MFCCs via Mel + Griffin-Lim |
-| `sonare tonnetz music.mp3` | No | Yes | Tonal centroid features |
-| `sonare pcen --values ... --n-bins 128 --n-frames 10` | No | Yes | Per-channel energy normalization over a flattened matrix |
+| `sonare cqt music.mp3` | No | Yes | Constant-Q transform summary. `--n-bins`, `--bins-per-octave`, `--hop-length`, `--fmin` |
+| `sonare vqt music.mp3` | No | Yes | Variable-Q transform summary. `--n-bins`, `--bins-per-octave`, `--gamma`, `--filter-scale`, `--hop-length`, `--fmin` |
+| `sonare mel-to-audio music.mp3 -o recon.wav` | No | Yes | Reconstruct audio from a computed Mel spectrogram with Griffin-Lim. `--n-iter`, `--n-mels`, `--fmin`, `--fmax` |
+| `sonare mfcc-to-audio music.mp3 -o recon.wav` | No | Yes | Reconstruct audio from computed MFCCs via Mel + Griffin-Lim. `--n-mfcc`, `--n-iter`, `--n-mels`, `--fmin`, `--fmax` |
+| `sonare tonnetz music.mp3` | No | Yes | Tonal centroid features. `--n-fft`, `--hop-length` |
+| `sonare pcen --values ... --n-bins 128 --n-frames 10` | No | Yes | Per-channel energy normalization over a flattened matrix. Takes `--values` like the [numeric helpers](./cli-utilities.md), plus `--n-bins`, `--n-frames`, `--sample-rate`, `--time-constant`, `--gain`, `--bias`, `--power`, `--eps`, `--hop-length` |
 | `sonare fourier-tempogram music.mp3` | No | Yes | Fourier tempogram |
 | `sonare tempogram-ratio music.mp3` | No | Yes | Tempo-ratio features |
 
@@ -394,22 +457,23 @@ The Python CLI intentionally prints summaries for matrix features rather than du
 
 ### Editing
 
-These transform audio and write a WAV with `-o`:
+These transform audio and write a WAV with `-o`. Per-note editing and scale correction are walked through in [CLI Examples](./cli-examples.md#note-editing-workflow).
 
 | Command | Description | Options |
 |---------|-------------|---------|
 | `sonare pitch-correct vocal.wav -o out.wav` | Pitch-correct toward a target MIDI note | `--current-midi` (69.0), `--target-midi` (69.0) |
-| `sonare pitch-correct-timevarying vocal.wav -o out.wav` | Track a pYIN contour and correct it to one note or a scale | `--mode midi\|scale`, `--target-midi`, `--scale-root`, `--scale-mode-mask`, `--reference-midi`, `--hop-length` |
+| `sonare pitch-correct-timevarying vocal.wav -o out.wav` | Track a pYIN contour and correct it to one note or a scale | `--mode midi\|scale`, `--target-midi`, `--scale-root`, `--scale-mode-mask` (a 12-bit mask or a mode name such as `minor`), `--reference-midi`, `--hop-length`, `--retune-amount` (1.0), `--max-correction-semitones` (12), `--retune-speed-ms` (50), `--vibrato-threshold-cents` (20) |
 | `sonare note-move take.wav --target-onset 48000 -o out.wav` | Move one note region to a sample offset | `--onset`, `--offset`, `--target-onset` (sample indices) |
 | `sonare note-stretch take.wav -o out.wav` | Time-stretch a single note region | `--onset`, `--offset` (sample indices), `--ratio` (1.0) |
-| `sonare scale-quantize 68.7` | Quantize one MIDI value to a scale | `--root`, `--mode-mask`, `--reference-midi` |
+| `sonare scale-quantize 68.7` | Quantize one MIDI value to a scale | `--root`, `--mode-mask` (a 12-bit mask or a mode name), `--reference-midi` |
 | `sonare voice-change vocal.wav -o out.wav` | Voice change (pitch + formant) | `--pitch-semitones` (0.0), `--formant-factor` (1.0), `--formant-mode relative\|absolute` (relative) |
 | `sonare pitch-shift vocal.wav --semitones 3 -o out.wav` | Transpose without changing length | `--semitones` (**required**) |
 | `sonare time-stretch take.wav --rate 1.2 -o out.wav` | Change length without changing pitch | `--rate` (**required**) |
 | `sonare normalize mix.wav -o out.wav` | Peak or RMS normalization | `--mode peak\|rms`, `--target-db` |
-| `sonare trim-silence take.wav -o out.wav` | Trim leading/trailing silence | `--top-db`, `--threshold-db` (-60) |
+| `sonare trim-silence take.wav -o out.wav` | Trim leading/trailing silence. By default it cuts below an absolute `-60` dBFS, like the library's `trim`; `--top-db` switches to the peak-relative rule of `trimSilence` | `--top-db`, `--threshold-db` (-60) |
 | `sonare resample music.wav --target-sr 44100 -o out.wav` | Resample | `--target-sr` |
 | `sonare polyphonic-notes chord.wav` | List the notes a polyphonic analysis found | — |
+| `sonare vocal-notes vocal.wav` | List the notes a vocal edit session finds in a monophonic take, with each note's pitch in cents from the nearest note | `--segmentation-threshold-cents` (50), `--min-note-ms` (30), `--fmin-hz` (65), `--fmax-hz` (2093), `--reference-hz` (440), `--frame-length-samples`, `--hop-length-samples`, `--yin-threshold`, `--voiced-threshold`, `--no-centered` |
 | `sonare polyphonic-render chord.wav -o out.wav` | Re-render that analysis with per-note edits | `--edit NOTE.FIELD=VALUE` (repeatable) |
 | `sonare project align-takes --in project.json --reference-source 1 -o aligned.json` | Align every take in a project to one reference source and write the project back with a warp map per take; reads the source files; a take recorded at another rate is resampled onto the reference's grid and the anchors are written at the project rate (see [Recording and Takes](./recording-and-takes.md)) | `--in`, `--reference-source` (**required**), `--audio SOURCE_ID=WAV` (repeatable), `--resolve-audio`, `--hop-length`, `--bins-per-octave` |
 
@@ -417,36 +481,15 @@ These transform audio and write a WAV with `-o`:
 selectors: passing neither defaults `--threshold-db` to `-60`; passing
 `--top-db` switches to a top-dB-relative-to-peak selector instead.
 
-The Python CLI provides the file-writing edit commands above. `hpss` also
+Both CLIs provide the file-writing edit commands above. `hpss` also
 requires `-o` and writes `<base>_harmonic.wav` and `<base>_percussive.wav` while
 printing its energy summary.
 
-#### Per-note editing
-
-`polyphonic-notes` and `polyphonic-render` are a pair: the first prints the notes
-a polyphonic analysis found, numbered from 0, and the second re-renders the take
-with edits addressed by those numbers. Both run the analysis at its own defaults
-and neither takes a framing option, so the index you read from one is the index
-the other acts on.
-
-```bash
-sonare polyphonic-notes chord.wav --json
-sonare polyphonic-render chord.wav -o out.wav \
-  --edit 0.pitch_shift_semitones=2 --edit 3.muted=1
-```
-
-One `--edit` is one `NOTE.FIELD=VALUE` assignment, and the option repeats. The
-fields are `pitch_shift_semitones`, `gain_db`, `time_offset_samples`,
-`time_stretch_ratio`, `formant_shift_semitones`, `vibrato_depth_change`,
-`drift_change`, and `muted`; an unknown field is rejected rather than ignored.
-`polyphonic-render` requires `-o`; `polyphonic-notes` prints to stdout and takes
-no output file.
-
 ::: warning No inert defaults
 `--semitones` and `--rate` have no default, because any default would make the
-command a silent no-op. They are required, and an unknown `--algorithm` for pitch
-shift or an unknown `--mode` for pitch correction is rejected instead of falling
-back.
+command a silent no-op. Leaving either out exits 3. The same rule holds for
+`pitch-correct-timevarying --mode`, which accepts only `midi` or `scale`; anything
+else is a usage error (exit 2) instead of a fallback.
 :::
 
 The native CLI includes the shared edit commands and adds lower-level processing commands:
@@ -487,49 +530,19 @@ Non-silent intervals: 3
 [{"start_sample": 28160, "end_sample": 116224}, {"start_sample": 153088, "end_sample": 241152}, {"start_sample": 287232, "end_sample": 394752}]
 ```
 
+With `--report`, the JSON becomes an object, `{"intervals": [...], "report": {...}}`.
+
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--input WAV` | — | Another take of the same part, repeatable |
 | `--top-db` | 60.0 | Silence threshold below the peak, in dB |
 | `--write-takes PREFIX` | — | Write every take sliced at every interval |
+| `--report` | off | With `--json`, add a `report` object: `silence_ceiling_db` (the largest `--top-db` at which any silence still shows; with several takes, the least headroom among them), plus `max_signal_intervals` and `min_signal_intervals` (the interval counts of the most and least fragmented single take) |
+| `--n-fft`, `--hop-length` | 2048, 512 | Analysis framing |
 
-With more than one take, the intervals become the union of each take's own,
-merged where they touch, so a cut falls only where every take is quiet:
+With more than one take, a cut falls only where every take is quiet. The multi-take form, `--write-takes` and the errors are walked through under [Splitting Takes at Silence](./cli-examples.md#splitting-takes-at-silence).
 
-```bash
-sonare split-silence take1.wav --input take2.wav --input take3.wav
-```
-```
-Non-silent intervals: 3
-  23040 - 121344
-  147968 - 246272
-  282624 - 399872
-```
-
-`--write-takes PREFIX` writes every take sliced at every interval as
-`PREFIX{take:02d}_{interval:03d}.wav`, both indices 1-based — three takes and
-three intervals write nine files:
-
-```bash
-sonare split-silence take1.wav --input take2.wav --input take3.wav \
-  --write-takes cut_
-```
-```
-Wrote 9 take files with prefix cut_
-```
-
-A take that ends earlier than the others is padded rather than shortened, so
-one interval's files come out the same length across every take and stay
-directly comparable. A take whose sample rate differs from the first is
-refused by name instead of resampled:
-
-```
-Error: take sample rate differs: t3_44.wav is 44100 Hz, the first take is 48000 Hz
-```
-
-`-o`/`--output` is still a usage error (exit code 2): the command's result is
-the interval list or the sliced take files, never a single rendered output
-file.
+`-o`/`--output` is a usage error (exit code 2): the command's result is the interval list or the sliced take files, never a single rendered output file.
 
 ### Realtime voice presets
 
@@ -550,20 +563,6 @@ and entry ID form one selector; `--preset-pack` without `--preset` is rejected
 (there is no first-entry fallback). `--preset-json` cannot be combined with a
 pack, and `--set PATH=VALUE` requires a preset selector.
 
-### Synthesis
+### Playback
 
-The native CLI can generate simple test signals, and both CLIs can render a MIDI project through the built-in synth:
-
-| Command | Required or notable option |
-|---------|----------------------------|
-| `sonare tone -o tone.wav` | `--frequency`; optional `--sr` (22050), `--duration` (1.0), `--phase` (0.0), `--amplitude` (1.0) |
-| `sonare chirp -o sweep.wav` | `--fmax`; optional `--fmin`, `--exponential`, `--sr` (22050), `--duration` (1.0) |
-| `sonare clicks -o clicks.wav` | `--times` comma-separated seconds; optional `--sr` (22050), `--length`, `--frequency` (1000.0), `--click-duration` (0.1) |
-| `sonare midi-render --in project.json -o render.wav` | `--in`, `-o`; `--synth PRESET` (omitted, it follows the GM programs), `--sample-rate`, `--frames`, `--block-size`, `--channels` (positive output widths `1`, `2`, `6`, or `8`; default `2`), `--instrument-latency`. Both CLIs: a `project bounce` with the synth always on, so it takes neither `--audio` nor `--resolve-audio` |
-
-`project bounce` and its `midi-render` shorthand support positive output widths
-of `1`, `2`, `6`, or `8`. Omit `--channels` or pass `0` or a negative value to
-select the default two channels. The requested output width cannot exceed the
-scene master's layout, except that mono and stereo masters (and scenes without
-a master) allow up to two channels. A `"5.1"` master permits six channels and a
-`"7.1"` master permits eight.
+`playback` renders movie audio (mono, stereo, 5.1 or 7.1) to speaker layouts or binaural headphones, and is the only command that keeps 5.1 and 7.1 channels. Options: `--target` (`headphones`, `stereo`, `5.1`, `7.1`), `--input-layout` (`auto`, `mono`, `stereo`, `5.1`, `7.1`), `--config FILE`, `--no-upmix`, `--night` (0 to 1), `--dialogue-db` (-12 to 12), `--program-lufs` (-70 to 0; measured from the input when omitted), `--target-lufs` (-40 to -5), `--room` (`none`, `living_room`, `home_theater`, `screening_room`) and `--hrtf FILE`. The stages, config keys and examples are on [Playback Renderer](./playback.md#one-flow-every-binding).

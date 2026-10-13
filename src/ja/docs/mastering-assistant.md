@@ -49,7 +49,7 @@ libsonare は、レンダリング済み音声だけでなく*判断根拠*を�
 | チェーンを提案 | `masteringAssistantSuggest(samples, sr, params)` | `mastering_assistant_suggest(...)` | レンダリング可能なチェーン設定 + 根拠 |
 | 配信をプレビュー | `masteringStreamingPreview(samples, sr, platforms)` | `mastering_streaming_preview(...)` | プラットフォーム別の正規化 |
 
-3 つとも **JSON 文字列**を返します — `JSON.parse`（JS）または `json.loads`（Python）で解析してください。スキーマは C・Node・Python・WASM バインディングで同一です。PyPI 版 `sonare` CLI でも `sonare mastering-profile`・`sonare mastering-suggest`・`sonare mastering-streaming` として同じ JSON を標準出力に得られます。
+3 つとも **JSON 文字列**を返します。`JSON.parse`（JS）または `json.loads`（Python）で解析してください。スキーマは C・Node・Python・WASM バインディングで同一です。PyPI 版 `sonare` CLI でも `sonare mastering-profile`・`sonare mastering-suggest`・`sonare mastering-streaming` として同じ JSON を標準出力に得られます。
 
 3 つにはそれぞれ、1 本のバッファではなく左右のペアを受け取るステレオ版があります。返す JSON スキーマは同じなので、このページの内容は両方にそのまま当てはまります。モノラル版では不十分になる場面については[ステレオ素材](#ステレオ素材)を参照してください。
 
@@ -72,6 +72,17 @@ libsonare は、レンダリング済み音声だけでなく*判断根拠*を�
 ```typescript [ブラウザ]
 import { init, masteringAudioProfile, masteringAssistantSuggest, masteringStreamingPreview } from '@libraz/libsonare';
 await init();
+
+const profile    = JSON.parse(masteringAudioProfile(samples, sampleRate));
+const suggestion = JSON.parse(masteringAssistantSuggest(samples, sampleRate, { preset: 'pop', targetLufs: -14, ceilingDb: -1 }));
+const preview    = JSON.parse(masteringStreamingPreview(samples, sampleRate, [
+  { name: 'YouTube',  targetLufs: -14, ceilingDb: -1 },
+  { name: 'Podcast',  targetLufs: -16, ceilingDb: -1 },
+]));
+```
+
+```typescript [Node]
+import { masteringAudioProfile, masteringAssistantSuggest, masteringStreamingPreview } from '@libraz/libsonare-native';
 
 const profile    = JSON.parse(masteringAudioProfile(samples, sampleRate));
 const suggestion = JSON.parse(masteringAssistantSuggest(samples, sampleRate, { preset: 'pop', targetLufs: -14, ceilingDb: -1 }));
@@ -120,24 +131,22 @@ profile.defects.measured;       // boolean
 `MasteringAssistantResult.profile` は平坦な `MasteringAssistantProfile`（無音またはゲート未満の入力では `integratedLufs` が `null`）、`chainConfig` は `MasteringChainConfigDocument`（`version: 1 | 2`）で、配信プレビューの各行の `integratedLufs` は `number | null` です。Python は `MasteringAudioProfile`、`MasteringAssistantResult`、`MasteringStreamingPreviewResult` を `libsonare` の `TypedDict` として宣言しています。
 
 ::: warning 短いクリップ: profile と suggest は動くが、意味のある結果には実際のスペクトル成分が必要
-`masteringAudioProfile` と `masteringAssistantSuggest` は [STFT](./glossary/analysis/spectrogram-stft.md)（短時間フーリエ変換。短い窓を少しずつずらしながら周波数解析する手法）ベースの解析全体を実行します（既定の `nFft` は 2048）。例外を投げるのは**完全に空のバッファ**だけです（`SonareError`、メッセージは "audio input must be a non-empty buffer"）。どれほど短くても、空でなければバッファは受理され、解析されます。`nFft` サイズの窓（既定 2048 サンプル）はあくまで目安であってエラー条件ではありません。1 窓ぶんより短いバッファは、意味のあるプロファイルを得るにはスペクトル成分が足りないというだけなので、「`nFft` より短い」はガードすべき失敗ではなく、UI に出す品質上の注意として扱ってください。`masteringStreamingPreview` はラウドネスを測るだけなので、空でない音声バッファであればどんなバッファでも受け付けます。`platforms` が空リストでも問題なく、その場合は既定のプラットフォーム集合（Spotify、Apple Music、YouTube）にフォールバックします。UI から短い録音やファイル選択を渡すときは、profile／suggest の呼び出しを `isSonareError` を使った `try`／`catch` で囲んで空バッファのケースに備え、`nFft` より短い場合はハードブロックではなく、長さについての控えめな注意表示を検討してください。
+`masteringAudioProfile` と `masteringAssistantSuggest` は、重なり合う窓で [STFT](./glossary/analysis/spectrogram-stft.md)（短時間フーリエ変換）解析を行います。既定の `nFft` は 48 kHz で 2048 サンプルで、入力レートに合わせて窓長を換算します。有効な空でないバッファは 1 窓分より短くても受理しますが、スペクトルの判断材料は限られます。短いクリップは拒否せず、長さについての注意を表示してください。
 
-```typescript [ブラウザ]
-import { masteringAudioProfile, isSonareError } from '@libraz/libsonare';
+Node と WASM は空バッファ、非有限サンプル、不正なサンプルレートを `RangeError`、型が違うバッファを `TypeError` で拒否します。これらの引数エラーは `isSonareError` では検出できません。空の選択範囲は呼び出し前に確認し、コードつきのライブラリエラーには `isSonareError` を使います。`masteringStreamingPreview` も有効な短いバッファを受け付けます。`platforms` が空リストなら、組み込みの既定値（Spotify、Apple Music、YouTube）を使います。
 
-const ONE_ANALYSIS_WINDOW = 2048; // 既定の nFft — ハード制限ではなく品質のヒント
-const shortClip = samples.length < ONE_ANALYSIS_WINDOW; // 「スペクトル成分が限定的」と注記する
+```typescript
+import { masteringAudioProfile } from '@libraz/libsonare';
 
-try {
+const ANALYSIS_WINDOW_SEC = 2048 / 48000; // おおよその窓の時間。品質の目安です
+const shortClip = samples.length / sampleRate < ANALYSIS_WINDOW_SEC;
+
+if (samples.length === 0) {
+  // 解析前に音声を選択するよう案内します。
+} else {
   const profile = JSON.parse(masteringAudioProfile(samples, sampleRate));
   if (shortClip) {
-    // 成功はしている — UI では低信頼度の結果として表示する
-  }
-} catch (err) {
-  if (isSonareError(err)) {
-    // ここに来るのは完全に空のバッファのときだけ
-  } else {
-    throw err;
+    // 成功はしているので、UI では低信頼度の結果として表示する
   }
 }
 ```
@@ -152,6 +161,8 @@ try {
 ::: info True Peak でオーバーサンプリングする理由
 保存されたサンプルの位置は固定されていますが、帯域制限された波形を再構成すると*サンプル間*でピークが高くなることがあります。ここでは 4 倍の補間フィルターでサンプル間ピークを推定します。`truePeakDb` はそのフィルターによる再構成波形の近似値で、個々のコンバーターのアナログ出力を測った値ではありません。倍率を上げると推定精度を高められますが、CPU 負荷も増えます。
 :::
+
+<SonareDemo id="inter-sample-peak" />
 
 この結果は、元音源を説明するために使います。合否判定ではありません。たとえば「すでに大きい」「暗い」「密度が高い」「アタックが多い」といった事実を UI に出すためのものです。
 
@@ -188,11 +199,11 @@ try {
 | グループ | フィールド | 意味 |
 |----------|-----------|------|
 | `loudness` | `integratedLufs` | 全体の[ラウドネス](./glossary/lufs.md)（EBU R128） |
-| | `lraLu` | ラウドネスレンジ — 時間方向のラウドネス変動 |
+| | `lraLu` | ラウドネスレンジ。時間方向のラウドネス変動 |
 | | `truePeakDb` | サンプル間ピークを含む [True Peak](./glossary/true-peak.md) |
-| | `crestFactorDb` | ピーク対 RMS の差 — 大 = パンチ、小 = 密度（[クレストファクター](./glossary/concepts/crest-factor.md)） |
+| | `crestFactorDb` | ピーク対 RMS の差。大 = パンチ、小 = 密度（[クレストファクター](./glossary/concepts/crest-factor.md)） |
 | `spectral` | `subRmsDb` … `airRmsDb` | 帯域ごとのエネルギー（sub → air）。ノイズ系フィールドと同じ平均二乗の規約による dBFS で、フルスケールの正弦波はその帯域で −3.01 dBFS になる |
-| | `centroidHz` | スペクトルの「重心」— 明るさの目安 |
+| | `centroidHz` | スペクトルの「重心」。明るさの目安 |
 | | `flatness` | 0 = トーン的、1 = ノイズ的 |
 | | `rolloffHz` | エネルギーの大半が収まる周波数 |
 | `dynamics` | `attackDensity` | 打撃的な立ち上がりが固定の下限を超えたオンセットの 1 秒あたりの数。持続音は 0 になる |
@@ -206,12 +217,10 @@ try {
 :::
 
 ::: details ラウドネスレンジ・アタック密度・サステイン比とは？
-- **ラウドネスレンジ**（LRA、単位 LU） — 体感ラウドネスが曲全体でどれだけ変動するか。値が大きいほど、はっきり静かになったり大きくなったりします（ダイナミックなクラシック曲）。小さいほど、ほぼ一定の音量です（密度の高い EDM マスター）。「LU」（ラウドネス単位）は LUFS と同じ尺度で、絶対値ではなく振れ幅として測ります。
-- **アタック密度** — 1 秒あたりおおよそ何回、鋭いノート／ドラムのオンセットが起こるか。打撃的な立ち上がりが固定の下限を超えたオンセットだけを数えるので、持続音は 0 になります。高い＝忙しく打撃的、低い＝まばらまたは持続的。
-- **サステイン比**（0〜1） — 素材が長く伸びた音（1 に近い）に支配されているか、短いバーストやアタック（0 に近い）に支配されているか。アタック密度とは別に（オンセットではなく RMS 包絡から）測られますが、傾向としては逆向きに動きます。
-
-アタック密度、サステイン比、ミキシング分類器のヒット検出は、イベント最大値を基準に測り、最も大きいイベントを除外します。除外数は 10 秒ごとに 1 つ、最大 2 つで、10 秒未満では何も除外しません。
-- **短時間 LUFS の標準偏差** — 瞬間ごとのラウドネスがどれだけ揺れるか。値が大きいほどレベルが落ち着かず、ゼロに近いほど非常に安定して保たれています。
+- **ラウドネスレンジ**（LRA、単位 LU）：体感ラウドネスが曲全体でどれだけ変動するか。値が大きいほど、はっきり静かになったり大きくなったりします（ダイナミックなクラシック曲）。小さいほど、ほぼ一定の音量です（密度の高い EDM マスター）。「LU」（ラウドネス単位）は LUFS と同じ尺度で、絶対値ではなく振れ幅として測ります。
+- **アタック密度**：1 秒あたりおおよそ何回、鋭いノート／ドラムのオンセットが起こるか。打撃的な立ち上がりが固定の下限を超えたオンセットだけを数えるので、持続音は 0 になります。高い＝忙しく打撃的、低い＝まばらまたは持続的。イベント最大値を基準に測り、最も大きいイベントを除外します。除外数は 10 秒ごとに 1 つ、最大 2 つで、10 秒未満では何も除外しません。
+- **サステイン比**（0〜1）：素材が長く伸びた音（1 に近い）に支配されているか、短いバーストやアタック（0 に近い）に支配されているか。アタック密度とは別に（オンセットではなく RMS 包絡から）測られますが、傾向としては逆向きに動きます。
+- **短時間 LUFS の標準偏差**：瞬間ごとのラウドネスがどれだけ揺れるか。値が大きいほどレベルが落ち着かず、ゼロに近いほど非常に安定して保たれています。
 :::
 
 ::: warning これらは測定値であって評価ではない
@@ -225,7 +234,16 @@ try {
 受け付けるキーは `preset`、`targetPlatform`/`target_platform`、`targetLufs`/`target_lufs`、`ceilingDb`/`ceiling_db`、`enableRepair`/`enable_repair`、`preferStreamingSafe`/`prefer_streaming_safe`、`speechMonoAmount`/`speech_mono_amount` です。`preset` と `targetPlatform` は名前を渡し、それ以外は数値または真偽値を渡します。
 
 ::: details 任意の意図キーの働き
-`preset` は出発点にするチェーンを選び、省略時は `streaming` になります。アシスタントは音源からプリセットを推測しません。`targetPlatform` は、対象に固有の規則（`broadcast`、`podcast`、`club`、`cd`）があり、対応する値を明示していない場合だけラウドネスと天井を適用します。`streaming`、`youtube`、`audiobook`、`cinema` も受け付けますが、アシスタントの現在のターゲットと天井は変更しません。`enableRepair` は、ソースに不具合があるときにクリーンアップ段（declick、denoise など）を有効にします。declip 段が提案されるのは、サンプルが同じレベルに張り付いた区間があり、かつそのレベルより大きい音がどのチャンネルにもない場合だけです（共有のしきい値がクリップしていない音まで書き換えてしまうため）。モノラル入力にも同じ規則が適用され、その場合 `explanation` は `declip withheld` と表示します。`preferStreamingSafe` は、リペアを有効にしたときにストリーミング向けの denoise 推定器を選びます。`speechMonoAmount`（0〜1）は、speech プリセットの 120 Hz モノメーカー・クロスオーバーより下にあるサイド成分をモノラルへ寄せる量です。
+`preset` は出発点にするチェーンを選び、省略時は `streaming` になります。アシスタントは音源からプリセットを推測しません。ジャンル用のプリセットでなければならず、5 つのレストレーション用プリセットは拒否されます。`targetPlatform` は、固有の規則があるプラットフォームについて、対応する値を明示していない場合だけラウドネスを適用します。受け付ける名前の一覧は `masteringPlatformNames()` で取得できます。
+
+| `targetPlatform` | ラウドネス目標 | True Peak シーリング |
+|---|---:|---:|
+| `broadcast` | −23 LUFS | −1 dBTP |
+| `podcast` | −16 LUFS | −1 dBTP |
+| `club` | −9 LUFS | −0.3 dBTP |
+| `cd` | −9 LUFS | −0.3 dBTP |
+
+`streaming`、`youtube`、`audiobook`、`cinema` も受け付けますが、プリセットのターゲットとシーリングは変更しません（既定の `streaming` プリセットは −1 dBTP のもとで −14 LUFS を目指します）。`enableRepair` は、ソースに不具合があるときに、[`masteringRepairAnalyze`](./audio-repair.md#測定とリペアを-1-回の呼び出しで行う) と同じ選択でクリーンアップ段（declick、denoise など）を有効にします。declip 段が提案されるのは、サンプルが同じレベルに張り付いた区間があり、かつそのレベルより大きい音がどのチャンネルにもない場合だけです（共有のしきい値がクリップしていない音まで書き換えてしまうため）。モノラル入力にも同じ規則が適用され、その場合 `explanation` は `declip withheld` と表示します。`preferStreamingSafe` は、リペアを有効にしたときにストリーミング向けの denoise 推定器を選びます。`speechMonoAmount`（0〜1）は、speech プリセットの 120 Hz モノメーカー・クロスオーバーより下にあるサイド成分をモノラルへ寄せる量です。
 :::
 
 このヘルパーは「根拠つきのプリセット生成」と考えると分かりやすいです。すぐレンダリングできる出発点を一式返しますが、想定ワークフローはユーザーが編集できる形です。
@@ -268,7 +286,7 @@ try {
 | `profile` | ソースプロファイルの平坦化コピー。提案が自己完結します。 |
 
 ::: details params オブジェクトは既定チェーン全体
-上の例は省略版です。実際の `params` マップは、選択したプリセットのチェーンにある**すべて**のパラメータを含みます。リペア、EQ、ダイナミクス、サチュレーション、ステレオ、True Peak リミッター、ラウドネス段などが対象で、それぞれに全パラメータと `enabled` フラグが付きます。アシスタントは指定したプリセットを土台に、ターゲットと天井を適用します。`speech` プリセットでは低域のサイド成分をまとめるモノメーカー段（120 Hz のクロスオーバー）を追加し、`enableRepair` を有効にすると測定した不具合に対応するリペア段を有効にします。マップは疎な差分ではなく、チェーン全体を上書きできるスナップショットとして扱ってください。
+上の例は省略版です。実際の `params` マップは、選択したプリセットのチェーンにある**すべて**のパラメータを含みます。リペア、EQ、ダイナミクス、サチュレーション、ステレオ、True Peak リミッター、ラウドネス段などが対象で、それぞれに全パラメータと `enabled` フラグが付きます。アシスタントは指定したプリセットを土台に、ターゲットとシーリングを適用します。`speech` プリセットでは低域のサイド成分をまとめるモノメーカー段（120 Hz のクロスオーバー）を追加し、`enableRepair` を有効にすると測定した不具合に対応するリペア段を有効にします。マップは疎な差分ではなく、チェーン全体を上書きできるスナップショットとして扱ってください。
 :::
 
 ### 提案をマスターとしてレンダリングする
@@ -319,7 +337,7 @@ sonare mastering source.wav --chain-config suggestion-chain.json \
 
 :::
 
-戻り値にはトップレベルのラウドネス値に加え、処理前後を UI で比較するための `report` が入ります。処理前後の各値は、統合・最大モーメンタリ・最大ショートターム LUFS、True Peak、ラウドネスレンジです。レポートには適用ゲイン、最大ゲインリダクション、ピーク上限によってラウドネスターゲットが制限されたかどうか、処理後と処理前の差を示す 32 帯域のエネルギー差も含まれます。CLI に `--report` を渡すと、同じ形を snake_case キーで書き出します。両 CLI とも `--chain-config` と `--params` は 1 つのパラメータ一覧として読み込まれます。ドキュメントと `--params` にまたがって同じフィールドが 2 通りの綴りで指定されると、両方のキー名を示して拒否されます。ドキュメントの `<stage>.enabled: false` は、`--params` がそのステージのフィールドを設定しても、ステージを無効のまま保ちます。
+戻り値にはトップレベルのラウドネス値に加え、処理前後を UI で比較するための `report` が入ります。処理前後の各値は、統合・最大モーメンタリ・最大ショートターム LUFS、True Peak、ラウドネスレンジです。レポートには適用ゲイン、最大ゲインリダクション、ピーク上限によってラウドネスターゲットが制限されたかどうか、処理後と処理前の差を示す 32 帯域のエネルギー差も含まれます。CLI に `--report` を渡すと、同じ形を snake_case キーで書き出します。両 CLI とも `--chain-config` と `--params` は 1 つのパラメータ一覧として読み込まれます。ドキュメントと `--params` にまたがって同じフィールドが 2 通りの綴りで指定されると、両方のキー名を示して拒否されます。ドキュメントの `<stage>.enabled: false` は、`--params` がその段のフィールドを設定しても、ステージを無効のまま保ちます。
 
 ::: tip suggest と render の間でユーザーに編集させる
 意図したパターンは、`chainConfig.params` を編集可能な UI コントロールへ展開し、ユーザーに値を調整させてから、*編集後*のマップを `masterAudio` へ渡すことです。`explanation[]` の文字列は、各段を有効にした理由を短く添える表示に向いています。
@@ -364,14 +382,14 @@ sonare mastering source.wav --chain-config suggestion-chain.json \
 
 上の 3 つのヘルパーは 1 本のバッファを受け取ります。ステレオトラックに使うには `0.5 * (left + right)` のダウンミックスを渡すことになりますが、このダウンミックスはペアの中立な代用にはなりません。左右で異なる成分は加算時に部分的に打ち消し合うため、実際のプログラムより小さく測定されます。
 
-誤差の大きさは左右の相関の度合いで決まります。無相関のピンクノイズペア（48 kHz、4 秒）で測ると、ステレオ経路が **−12.43 LUFS** と報告するのに対し、ダウンミックスは **−18.45 LUFS** — **6.03 dB** の過小評価です。左右が同一のペアでは差は 3.01 dB にとどまりますが、この分はすべてステレオ側に由来します。BS.1770 が 2 チャンネルの平均二乗を合算する一方、左右が同一ならダウンミックスは減衰しないからです（`0.5 * (L + L)` は `L` そのものです）。無相関ペアで残る約 3 dB が、ダウンミックス側で実際に打ち消し合って失われる分です。広がりのある素材、残響の多い素材、ステレオイメージを強く作り込んだ素材は、大きい方の値に近づきます。
+誤差の大きさは左右の相関の度合いで決まります。無相関のピンクノイズペア（48 kHz、4 秒）で測ると、ステレオ経路が **−12.43 LUFS** と報告するのに対し、ダウンミックスは **−18.45 LUFS** で、**6.03 dB** の過小評価です。左右が同一のペアでは差は 3.01 dB にとどまりますが、この分はすべてステレオ側に由来します。BS.1770 が 2 チャンネルの平均二乗を合算する一方、左右が同一ならダウンミックスは減衰しないからです（`0.5 * (L + L)` は `L` そのものです）。無相関ペアで残る約 3 dB が、ダウンミックス側で実際に打ち消し合って失われる分です。広がりのある素材、残響の多い素材、ステレオイメージを強く作り込んだ素材は、大きい方の値に近づきます。
 
 この 1 つの測定値は、そのまま後段へ波及します。
 
 | 過小に読まれるもの | 結果 |
 |--------------------|------|
 | プロファイルの積分ラウドネス | ソースが実際より小さく見える |
-| 提案されるラウドネスステージ | 不要なゲインを加える前提でチェーンが組まれる |
+| 提案されるラウドネス段 | 不要なゲインを加える前提でチェーンが組まれる |
 | 配信プレビューの `normalizationGainDb` | プラットフォームが実際より大きく持ち上げるように見える |
 | `ceilingRisk` | このラウドネスから導かれるため、実際にはリスクがあっても安全と読まれうる |
 
@@ -384,7 +402,7 @@ import { init, masteringAudioProfileStereo, masteringStreamingPreviewStereo } fr
 
 await init();
 
-// Request form only — these entry points have no positional overload.
+// リクエストオブジェクト形式のみ。これらのエントリポイントに位置引数の形式はありません。
 const profile = JSON.parse(masteringAudioProfileStereo({ left, right, sampleRate }));
 console.log(profile.loudness.integratedLufs);
 
@@ -404,10 +422,16 @@ preview = json.loads(sonare.mastering_streaming_preview_stereo(left, right, samp
 ステレオ版のプロファイルが両チャンネルから測るのは `loudness` ブロックだけです。積分 LUFS と LRA はチャンネル加算したプログラムから、True Peak は左右の大きい方から求めます。`spectral`・`dynamics` とテンポの各フィールドは絶対レベルではなく形と時間構造を表すため、引き続きダウンミックス上で測定されます。これは意図的な設計で、同じ素材に対する `masteringAudioProfile` の結果とそのまま比較できる状態を保つためです。
 :::
 
-`masteringAssistantSuggestStereo` は `masteringAudioProfileStereo` を通してプロファイルを取るため、ラウドネスステージは 6 dB 低く読まれたダウンミックスではなく、チャンネル加算したプログラムを土台に組まれます。提案のそれ以外の部分 — プロセッサの選択と根拠テキスト — はモノラル版と同じ形です。
+`masteringAssistantSuggestStereo` は `masteringAudioProfileStereo` を通してプロファイルを取るため、ラウドネス段は 6 dB 低く読まれたダウンミックスではなく、チャンネル加算したプログラムを土台に組まれます。提案のそれ以外の部分、つまりプロセッサの選択と根拠テキストは、モノラル版と同じ形です。
+
+```typescript
+const suggestion = JSON.parse(
+  masteringAssistantSuggestStereo({ left, right, sampleRate, params: { preset: 'pop', targetLufs: -14 } }),
+);
+```
 
 ## 関連
 
-- [マスタリングプロセッサ](./mastering-processors.md) — 提案が参照するプロセッサ id とプリセット
-- [マスタリング実装](./mastering-implementation.md) — 実際にレンダリングするチェーン経路
+- [マスタリングプロセッサ](./mastering-processors.md)：提案が参照するプロセッサ id とプリセット
+- [マスタリング実装](./mastering-implementation.md)：実際にレンダリングするチェーン経路
 - [配信ターゲット](./glossary/mastering/delivery-targets.md) · [メーターの読み方](./glossary/mastering/meter-reading.md) · [品質チェックリスト](./glossary/mastering/quality-checklist.md)

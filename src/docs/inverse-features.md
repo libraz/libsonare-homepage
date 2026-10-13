@@ -26,6 +26,8 @@ By the end of this page you should be able to:
 
 ## What "inverse" means here
 
+An inverse does not undo a feature transform. It builds something that sounds plausible from the features. Think of keeping only the outline of a color photograph, then redrawing the photo from that outline: the shapes come back, but the fine detail and the colors do not.
+
 A forward feature transform is **lossy on purpose**. Two kinds of information are thrown away, and no inverse can invent them back:
 
 - **The mel filterbank is not square.** A mel spectrogram folds the frequency bins of the STFT (short-time Fourier transform) — ~1025 bins for `nFft = 2048`, i.e. `nFft/2 + 1` — down to, say, 128 mel bands. Inverting it spreads each mel band's energy back across the bins it came from — a least-squares best guess, not the original detail.
@@ -87,6 +89,10 @@ The helper solves the non-negative least-squares problem in the power domain and
 
 If forward MFCC used a nonzero `lifter`, pass the same value to `mfccToMel` or `mfccToAudio`. The inverse then removes it.
 
+::: warning The inverses refuse long inputs
+`melToStft`, `melToAudio` and `mfccToAudio` throw `input exceeds the inverse resource limit` above 4096 frames or an `nFft` above 8192. That is about 95 s of audio at 22050 Hz with hop 512, and about 48 s at 44100 Hz. `mfccToMel` alone is not capped. To invert a full song, cut it into sections and invert one at a time.
+:::
+
 ## Invert a result directly
 
 A mel or MFCC result carries the parameters of the transform that made it: `nFft`, `hopLength`, `sampleRate`, `fmin` and `fmax` as applied, `htk`, and for MFCC also `nMels` and `lifter`. In JavaScript the inverse takes the result itself as a request, so nothing has to be repeated and nothing can drift:
@@ -103,7 +109,9 @@ const fromMfcc = mfccToAudio({ result: coeffs, nIter: 32 });
 
 A field set beside `result` must agree with it, or the call throws `RangeError` naming both values, so an override can only restate what the forward transform used (`nIter` is free). A mel result already in dB (`isDb`) is refused with a message pointing to `dbToPower`; convert it first. The matrix-based request forms name the matrix `power` for mel and `coefficients` for MFCC (`melToStft({ power, nMels, nFrames, ... })`, `mfccToMel({ coefficients, nMfcc, nFrames, ... })`); any other field name for the matrix throws. A request with neither `result` nor the matrix field, or an argument that is not an object, throws a `TypeError` naming the missing field (`melToStft: power is required (or pass result)`).
 
-In Python the same thing is `mel_result_to_stft(mel)`, `mel_result_to_audio(mel, n_iter=32)`, `mfcc_result_to_mel(coeffs)` and `mfcc_result_to_audio(coeffs, n_iter=32)`. The positional librosa-style functions below are unchanged.
+In Python the same thing is `mel_result_to_stft(mel)`, `mel_result_to_audio(mel, n_iter=32)`, `mfcc_result_to_mel(coeffs)` and `mfcc_result_to_audio(coeffs, n_iter=32)`. The positional librosa-style functions below take the same inputs one by one.
+
+Nothing here has gone back to a waveform yet: the result is a table of energy per frequency. When you are checking a model's intermediate output or a visualization, inspecting it at this stage often finds the cause faster than listening to a reconstruction.
 
 ::: code-group
 
@@ -150,7 +158,11 @@ Both inputs are **row-major** matrices: the mel `power` is `[nMels x nFrames]`, 
 
 `melToAudio` and `mfccToAudio` produce a mono `Float32Array` you can play or write to a file. Because the features carry no phase, both run **Griffin-Lim**: start from the magnitude with random (or zero) phase, repeatedly STFT → keep the new phase → impose the known magnitude → inverse-STFT, until the phase settles into something self-consistent.
 
+Expect the preview to keep the outline and rhythm of the original while sounding smeared, metallic or grainy. That is the limit of estimating a discarded phase, not a bug in the wiring.
+
 `cqtToAudio` and `vqtToAudio` use the same iterative idea for the row-major magnitude matrix returned by `cqt(...)` or `vqt(...)` — the constant-Q and variable-Q transforms, which space their frequency bins logarithmically instead of linearly. Keep the forward transform's `sampleRate`, `hopLength`, `fmin`, and `binsPerOctave` (plus `gamma` for VQT, omitted when the forward call omitted it) unchanged. As with mel/MFCC reconstruction, this is an approximate mono preview, not a restoration.
+
+Pass the forward result when you have it. The positional form below is the librosa-style spelling for when you only hold the matrix and its settings.
 
 ::: code-group
 
@@ -160,6 +172,13 @@ import { init, melSpectrogram, melToAudio, mfcc, mfccToAudio } from '@libraz/lib
 await init();
 
 const mel = melSpectrogram(samples, sampleRate, 2048, 512, 128);
+const coeffs = mfcc(samples, sampleRate, 2048, 512, 128, 20);
+
+// From the forward result: no settings to repeat.
+const previewFromResult = melToAudio({ result: mel, nIter: 32 });
+const fromMfccResult = mfccToAudio({ result: coeffs, nIter: 32 });
+
+// Positional, librosa-style.
 const preview = melToAudio(
   mel.power, mel.nMels, mel.nFrames, // the mel matrix and its shape
   sampleRate,
@@ -170,7 +189,6 @@ const preview = melToAudio(
   32,   // nIter     (Griffin-Lim iterations)
 );
 
-const coeffs = mfcc(samples, sampleRate, 2048, 512, 128, 20);
 const fromMfcc = mfccToAudio(
   coeffs.coefficients, coeffs.nMfcc, coeffs.nFrames,
   128,  // nMels — NOTE: this extra argument comes before sampleRate
@@ -187,10 +205,16 @@ const fromMfcc = mfccToAudio(
 import libsonare as sonare
 
 mel = sonare.mel_spectrogram(samples, sample_rate, n_fft=2048, hop_length=512, n_mels=128)
+coeffs = sonare.mfcc(samples, sample_rate, n_fft=2048, hop_length=512, n_mels=128, n_mfcc=20)
+
+# From the forward result: no settings to repeat.
+preview_from_result = sonare.mel_result_to_audio(mel, n_iter=32)
+from_mfcc_result = sonare.mfcc_result_to_audio(coeffs, n_iter=32)
+
+# Positional, librosa-style.
 preview = sonare.mel_to_audio(mel.power, mel.n_mels, mel.n_frames, sample_rate=sample_rate, n_iter=32)
 # n_iter=32 (Griffin-Lim iterations)
 
-coeffs = sonare.mfcc(samples, sample_rate, n_fft=2048, hop_length=512, n_mels=128, n_mfcc=20)
 from_mfcc = sonare.mfcc_to_audio(coeffs.coefficients, coeffs.n_mfcc, coeffs.n_frames, n_mels=128, sample_rate=sample_rate, n_iter=32)
 # note the n_mels (128) argument before sample_rate
 ```
@@ -229,7 +253,7 @@ Everything above reconstructs from a magnitude, so everything above has to inven
 
 `decompose` factors a **magnitude** spectrogram into components and activations. Those factors carry no phase, so turning one component back into sound means multiplying it out and handing the result to Griffin-Lim — the same approximation as `melToAudio`, with the same smeared character. What comes back is a preview of what that component *is*. It is not a stem: play the components together and you do not get the input back.
 
-`decomposeStems` takes the other route. It runs the same factorisation, then builds a per-component **soft mask** — each component's share of the total magnitude at every time-frequency point — and applies that mask to the **original complex** spectrogram. Nothing is estimated. Every component keeps the source's own phase, and because the masks divide each point rather than approximate it, the components **sum back to the input**.
+`decomposeStems` takes the other route. It runs the same factorization, then builds a per-component **soft mask** — each component's share of the total magnitude at every time-frequency point — and applies that mask to the **original complex** spectrogram. Nothing is estimated. Every component keeps the source's own phase, and because the masks divide each point rather than approximate it, the components **sum back to the input**.
 
 For a multichannel recording, use `decomposeStemsLinked` (or `decompose_stems_linked` in Python). It averages the channels' magnitudes to fit one NMF model and one set of masks, then applies each mask unchanged to every channel's own complex spectrogram. Interchannel level and phase differences stay in place. Pass at least one same-length channel and no more than 64 channels. The result stores component `k` on channel `c` in `components[k][c]`, alongside the shared `w` and `h` factors. Its NMF defaults match `decomposeStems`: 4 components, `nFft` 2048, `hopLength` 512, 100 iterations, `beta` 2, `init: 'random'`, and `maskPower` 1. Both `decomposeStems` and `decomposeStemsLinked` default an omitted sample rate to 22050; pass the recording’s actual rate. With one channel, the result is bit-identical to `decomposeStems` with the same options.
 

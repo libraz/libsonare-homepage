@@ -5,7 +5,7 @@ description: ブラウザの /mixing デモが保存・再読み込みするプ�
 
 # ミキシングデモのプロジェクト JSON
 
-[ミキシングスタジオ](/ja/mixing)は、ミックス全体の状態を `libsonare-mix-project.json` に保存します。クリップを含むトラック、ストリップ、センド、オートメーション、2 本の AUX バス、マスター、VCA ゲイン、ループ範囲が入り、デコード済み音源は含みません。**プロジェクト JSON を保存**で書き出し、**プロジェクト JSON を開く**で読み込みます。開いた直後のトラックは音声待ちの状態で、追加したファイルは同じ名前のトラックへ、なければ次のトラックへ順に割り当てられます。アプリの構成と参考にするソースは、[ブラウザでミキシングアプリを作る](./use-cases/browser-mixer.md)を参照してください。
+[ミキシングスタジオ](/ja/mixing)は、ミックス全体の状態を `libsonare-mix-project.json` に保存します。クリップを含むトラック、ストリップ、センド、出力先、オートメーション、2 本の AUX バス、2 本のサブグループバス、マスター、VCA ゲイン、ループ範囲が入り、デコード済み音源は含みません。**プロジェクト JSON を保存**で書き出し、**プロジェクト JSON を開く**で読み込みます。開いた直後のトラックは音声待ちの状態で、追加したファイルは同じ名前のトラックへ、なければ次のトラックへ順に割り当てられます。アプリの構成と参考にするソースは、[ブラウザでミキシングアプリを作る](./use-cases/browser-mixer.md)を参照してください。
 
 ::: warning これはミキサーシーンの形式ではありません
 これは [ミキシングシーン JSON](./mixing-scene-json.md) リファレンスとは別の交換形式です。*シーン*はストリップ・バス・VCA グループ・接続からなるミキサーグラフ全体を記述し、`Mixer.toSceneJson()` / `fromSceneJson()` で往復します。以下のデモのプロジェクトファイルは、構成が固定されたコンソールの状態で、ブラウザデモだけが読みます。エンジンの `fromSceneJson(...)` は受け付けず、デモもシーンファイルを拒否します。
@@ -45,6 +45,7 @@ description: ブラウザの /mixing デモが保存・再読み込みするプ�
       "soloed": false,
       "soloSafe": false,
       "vcaGroup": null,
+      "outputBus": null,
       "eq": [
         { "type": "HighPass", "frequencyHz": 30, "gainDb": 0, "q": 0.707, "enabled": false }
       ],
@@ -69,6 +70,7 @@ description: ブラウザの /mixing デモが保存・再読み込みするプ�
     "reverb": { "gainDb": 0, "params": { "decay": 0.566, "damping": 0.5, "preDelayMs": 20, "dryWet": 1 } },
     "delay": { "gainDb": 0, "params": { "delayTimeLMs": 250, "delayTimeRMs": 250, "feedback": 0.25, "pingPong": 0, "dryWet": 1 } }
   },
+  "groups": { "group1": { "gainDb": 0 }, "group2": { "gainDb": 0 } },
   "master": {
     "faderDb": 0,
     "slots": {
@@ -84,6 +86,7 @@ description: ブラウザの /mixing デモが保存・再読み込みするプ�
 - `id` は正の整数で、ファイル内で重複できません。`-60` dB 以下のセンドはルーティングされません。`lengthSec: null` はソースの残りをすべて再生します。
 - `eq` はちょうど 6 バンドです。`type` はエンジンの EQ バンド種別（`Peak`、`LowShelf`、`HighShelf`、`LowPass`、`HighPass`、`BandPass`、`Notch`、`TiltShelf`、`FlatTilt`、`AllPass`）のいずれかです。
 - `curve` は `linear`、`exponential`、`hold`、`s-curve` のいずれかで、次のポイントまでの区間の形を決めます。レーンは `fader`（dB）、`pan`、`width` の 3 種類です。
+- `outputBus` は `"group1"`、`"group2"`、またはマスターを表す `null` で、それ以外の値は拒否します。`groups` は各サブグループバスの `gainDb`（既定 0）を持ちます。サブグループバスはインサートのない加算用フェーダーです。どちらも省略できるので、これらを含まない v2 ファイルも開け、その場合は全トラックがマスターへ出力されます。
 - `vcaGroup` は `"A"`、`"B"`、`"C"`、`null` のいずれかです。`duckKeyTrackId` は `duck` スロットのキーにするトラックを指し、`null` ならそのトラック自身の入力をキーにします。
 - ファイルに入るトラックは最大 8 本です。
 
@@ -118,5 +121,5 @@ v1 のファイルには `masterFaderDb`、`reverb`、`vcaGains`、`tracks` の�
 
 ## 関連
 
-- [ミキシングシーン JSON](./mixing-scene-json.md) — エンジンのミキサーシーン交換形式（`fromSceneJson` で読み込むのはこちら）
-- [ミキシングエンジン](./mixing.md) — API ガイドと信号フロー
+- [ミキシングシーン JSON](./mixing-scene-json.md)：エンジンのミキサーシーン交換形式（`fromSceneJson` で読み込むのはこちら）
+- [ミキシングエンジン](./mixing.md)：API ガイドと信号フロー

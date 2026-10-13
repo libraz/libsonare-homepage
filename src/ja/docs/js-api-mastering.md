@@ -7,23 +7,62 @@ description: libsonare JavaScript/TypeScript パッケージのマスタリン�
 
 このページは libsonare JavaScript/TypeScript パッケージのオフラインマスタリングの入口を扱います。チェーンとプリセットの呼び出し、説明可能なマスタリングのヘルパー、単体のダイナミクス／リペアプロセッサです。関連する 2 つのリファレンスが並んで存在します。[ストリーミング／リアルタイム API](./js-api-streaming.md) は `StreamingEqualizer`、`StreamingRetune`、`RealtimeVoiceChanger`、`voiceChangeRealtime(...)`、`StreamingMasteringChain` を扱い、`MasteringChainConfig` のスキーマと結果型は [型と列挙型](./js-api-types.md#masteringchainconfig) にあります。
 
-## 各節の移動先
-
-| 節 | ページ |
-|---|---|
-| StreamingEqualizer | [ストリーミング／リアルタイム API](./js-api-streaming.md) |
-| StreamingRetune | [ストリーミング／リアルタイム API](./js-api-streaming.md) |
-| RealtimeVoiceChanger | [ストリーミング／リアルタイム API](./js-api-streaming.md) |
-| `voiceChangeRealtime(samples, sampleRate?, preset?, options?)` | [ストリーミング／リアルタイム API](./js-api-streaming.md) |
-| StreamingMasteringChain | [ストリーミング／リアルタイム API](./js-api-streaming.md) |
-| MasteringChainConfig | [型と列挙型](./js-api-types.md) |
-| ミキシング API | [オーディオ、メータリング、ミキシング API](./js-api-audio.md#ミキシング-api) |
-
 ## マスタリング API
 
 ブラウザ向けパッケージには、`/ja/mastering` デモがリアルタイムエンジンのインサートとして動かしているのと同じ名前付きマスタリングプロセッサが含まれます。Web Audio API などでデコードした `Float32Array` のチャンネルバッファを渡し、戻り値のサンプルをアプリ側で WAV などに書き出します。
 
 この節では JS の入口と、その結果／設定の型を一覧します。各プロセッサの働き、プリセット一覧、解析／アシスタントが返す JSON は、[マスタリングプロセッサ](./mastering-processors.md) と [マスタリングアシスタント](./mastering-assistant.md) を参照してください。
+
+### どの入口を使うか
+
+| 手元にあるもの | 使うもの |
+|---|---|
+| 名前付きプロセッサ 1 つ | `masteringProcess()` |
+| プリセット（必要なら上書き付き） | `masterAudio()` / `masterAudioStereo()` |
+| 完全なステージ設定 | `masteringChain()` / `masteringChainStereo()` |
+| ブロック単位で届く音声 | `StreamingMasteringChain`（ラウドネス段には `streamingLoudnessGain()`） |
+| どこから始めるか分からない | `masteringAssistantSuggestChain()` の後に `masterAudio({ overrides })` |
+
+### 名前付きの関数
+
+| 目的 | 関数 |
+|------|----------|
+| シンプルなラウドネスマスタリングを実行 | `mastering()` |
+| 組み込みプリセットの一覧 | `masteringPresetNames()` |
+| 1 つのプリセットをフラットなチェーンパラメータへ展開 | `masteringPresetParams(preset)` |
+| プリセットをモノラルに適用 | `masterAudio()` |
+| プリセットをステレオに適用 | `masterAudioStereo()` |
+| プリセットをモノラルに適用（進捗付き） | `masterAudioWithProgress()` |
+| プリセットをステレオに適用（進捗付き） | `masterAudioStereoWithProgress()` |
+| フルチェーン実行（モノラル） | `masteringChain()` |
+| フルチェーン実行（ステレオ） | `masteringChainStereo()` |
+| ブロック単位の EQ | `StreamingEqualizer` |
+| 進捗付きフルチェーン実行（モノラル） | `masteringChainWithProgress()` |
+| 進捗付きフルチェーン実行（ステレオ） | `masteringChainStereoWithProgress()` |
+| ストリーミング（ブロック単位）チェーン | `StreamingMasteringChain` |
+| ストリーミングチェーンに渡すラウドネス値を測定 | `streamingLoudnessGain()` / `streamingLoudnessGainStereo()` |
+| マスタリング判断用の音源プロファイルを取得 | `masteringAudioProfile()` |
+| ステレオペアの音源プロファイルを取得 | `masteringAudioProfileStereo()` |
+| 音源解析からマスタリングの提案を取得 | `masteringAssistantSuggest()` |
+| ステレオペアからマスタリングの提案を取得 | `masteringAssistantSuggestStereo()` |
+| 提案されたチェーンだけを `overrides` に使える形で取得 | `masteringAssistantSuggestChain()` / `masteringAssistantSuggestChainStereo()` |
+| 配信先ごとのラウドネス見込みをプレビュー | `masteringStreamingPreview()` |
+| ステレオペアの配信ラウドネスをプレビュー | `masteringStreamingPreviewStereo()` |
+| 名前付きプロセッサ一覧（モノラル／ステレオ） | `masteringProcessorNames()` |
+| プロセッサ分類カタログを取得 | `masteringProcessorCatalog()` |
+| チェーンのインサートプロセッサ一覧 | `masteringInsertNames()` |
+| インサートが受け付けるパラメータキー一覧 | `masteringInsertParamNames(name)` |
+| 構築用キーとリアルタイムインサートパラメータを記述 | `masteringInsertParamInfo(name, sampleRate?)` |
+| 構成済みインサートのレイテンシとテールを測定 | `masteringInsertTiming(name, params, sampleRate)` |
+| モノラル音声を処理 | `masteringProcess()` |
+| ステレオ音声を処理 | `masteringProcessStereo()` |
+| ペアプロセッサ一覧 | `masteringPairProcessorNames()` |
+| ソース／リファレンスのペアを処理 | `masteringPairProcess()` / `masteringPairProcessStereo()` |
+| ペア解析の一覧 | `masteringPairAnalysisNames()` |
+| ソース／リファレンスのペアを解析 | `masteringPairAnalyze()` |
+| ステレオ解析の一覧 | `masteringStereoAnalysisNames()` |
+| ステレオチャンネルを解析 | `masteringStereoAnalyze()` |
+| 任意のチャンネル数を 1 回の呼び出しで解析・リペア | `masteringRepairAnalyze()` / `masteringRepairApply()`（[オーディオリペアの流れ](./audio-repair.md#測定とリペアを-1-回の呼び出しで行う)を参照） |
 
 ```typescript
 import { init, masterAudioStereo, masteringChainStereo } from '@libraz/libsonare'
@@ -49,6 +88,10 @@ const presetResult = masterAudioStereo(left, right, sampleRate, 'pop', {
 })
 ```
 
+::: warning リクエストオブジェクト形式では、ステージ設定を `config` の下に置く
+`masteringChain({ samples, sampleRate, config: { loudness: { targetLufs: -14 } } })` なら目標が反映されます。`samples` と並べて `loudness` キーを書いた場合（`masteringChain({ samples, sampleRate, loudness: { targetLufs: -14 } })`）は、エラーにならずに無視され、チェーンは既定のレベルで動きます。`masteringChainStereo` と `*WithProgress` 変種も同様です。位置引数形式では設定を最後の引数に渡し、`masterAudio` は上書きを `overrides` として受け取ります。
+:::
+
 これらにはそれぞれ `(progress, stage) => void` のコールバックを取る `*WithProgress` 変種があります。`masteringProcess(...)` / `masteringProcessStereo(...)` は名前付きプロセッサを 1 つ実行し、`masteringStereoAnalyze(...)` は JSON レポートを返します。
 
 オフラインのチェーン／プリセット結果には、`outputTruePeakDbtp`、`outputLra`、`loudnessTargetLimited`、`stageGainReductions` が含まれます。
@@ -57,8 +100,7 @@ const presetResult = masterAudioStereo(left, right, sampleRate, 'pop', {
 
 #### `report` — 処理前後を 1 つのオブジェクトで
 
-オフラインチェーンの結果は `report` も持ちます。これは「実際に何が起きたか」の要約で、
-自分で入力を測り直して組み立てる必要がなくなります。
+オフラインチェーンの結果は `report` も持ちます。これは「実際に何が起きたか」の要約で、自分で入力を測り直して組み立てる必要がなくなります。
 
 ```typescript
 interface MasteringReport {
@@ -87,8 +129,7 @@ console.log(report.after.loudnessRange - report.before.loudnessRange, 'LU 変化
 drawTiltCurve(report.bandEnergyDeltaDb);   // 32 バンド。正なら処理後の方が明るい
 ```
 
-同じオブジェクトが C ABI・ctypes・Node・Python・両 CLI のレポートファイルにも同じ形で
-含まれるため、CLI から書き出したレポートとブラウザで読むレポートは同じ形になります。
+同じオブジェクトが C ABI・ctypes・Node・Python・両 CLI のレポートファイルにも同じ形で含まれるため、CLI から書き出したレポートとブラウザで読むレポートは同じ形になります。
 
 説明可能なマスタリングのヘルパー（`masteringAudioProfile(...)`、`masteringAssistantSuggest(...)`、`masteringStreamingPreview(...)`）は、それぞれ `TypedJson<MasteringAudioProfile>`、`TypedJson<MasteringAssistantResult>`、`TypedJson<MasteringStreamingPreviewResult>` として型付けされた JSON 文字列を返します（パース後の型は `JsonResult<J>` で取り出せます）。正確な形、受け付けるオプション、提案をレンダー済みマスターに変換する方法は [マスタリングアシスタント](./mastering-assistant.md) を参照してください。リファレンストラック用途では `masteringPairProcessorNames()` と `masteringPairAnalyze()` を使います（サンプルレートを揃え、長さも近づける）。`masteringPairProcess()` はモノラルの 2 入力 `match.*` プロセッサを実行し、そのステレオ版である `masteringPairProcessStereo()` は後述します。
 
@@ -146,10 +187,7 @@ const preview = JSON.parse(
 
 #### ドキュメント全体ではなくチェーンだけを受け取る
 
-`masteringAssistantSuggest(...)` はアシスタントのドキュメント全体を JSON 文字列で返し、
-提案されたチェーンはそのなかの 1 ブロックです。チェーンだけが必要なときは、こちらが
-`{ キー: number | boolean }` のフラットなマップをそのまま返します。JSON のパースも、
-目的のブロックを掘り出す手間も要りません。
+`masteringAssistantSuggest(...)` はアシスタントのドキュメント全体を JSON 文字列で返し、提案されたチェーンはそのなかの 1 ブロックです。チェーンだけが必要なときは、こちらが `{ キー: number | boolean }` のフラットなマップをそのまま返します。JSON のパースも、目的のブロックを掘り出す手間も要りません。
 
 ```typescript
 function masteringAssistantSuggestChain(
@@ -161,17 +199,14 @@ function masteringAssistantSuggestChainStereo(
 ): Record<string, number | boolean>
 ```
 
-このマップは `mastering(...)` や `masterAudio(...)`、ステレオなら `masterAudioStereo(...)` が
-`overrides` として受け取る形そのものなので、変換をはさまずに適用できます。
+このマップは `mastering(...)` や `masterAudio(...)`、ステレオなら `masterAudioStereo(...)` が `overrides` として受け取る形そのものなので、変換をはさまずに適用できます。
 
 ```typescript
 const chain = masteringAssistantSuggestChainStereo({ left, right, sampleRate });
 const mastered = masterAudioStereo({ left, right, sampleRate, overrides: chain });
 ```
 
-どちらもリクエストオブジェクト専用です。ステレオ版が左右のペアを直接計測するのは、ほかの
-ステレオ用エントリポイントと同じ理由によります。Python での綴りは
-`mastering_assistant_suggest_chain` と `mastering_assistant_suggest_chain_stereo` です。
+どちらもリクエストオブジェクト専用です。ステレオ版が左右のペアを直接計測するのは、ほかのステレオ用エントリポイントと同じ理由によります。Python での綴りは `mastering_assistant_suggest_chain` と `mastering_assistant_suggest_chain_stereo` です。
 
 #### `streamingLoudnessGain(request)`
 
@@ -276,7 +311,7 @@ function lufsSeriesInterleaved(samples: Float32Array, channels: number, sampleRa
 interface LufsSeriesInterleavedRequest {
   samples: Float32Array;   // インターリーブ: frames * channels 個の値
   channels: number;        // 正の整数
-  sampleRate?: number;     // 既定 22050 — バッファの実際のレートを渡すこと
+  sampleRate?: number;     // 既定 22050。バッファの実際のレートを渡すこと
   validate?: boolean;
 }
 
@@ -291,47 +326,6 @@ interface LufsSeriesResult {
 この関数があるのは、マルチチャンネルの系列はモノラルの系列から組み立てられないからです。BS.1770 は K 特性で重み付けしたチャンネルごとのブロックエネルギーを合算してから LUFS に変換するため、`momentaryLufs` をチャンネルごとに走らせて dB で合成すると別の数値になります。`0.5 * (left + right)` のダウンミックスも、相関の低い素材では低く出ます。これは上のステレオ版ヘルパーが避けようとしているのと同じ罠です。2 つの系列は 1 回の K 特性処理からまとめて得られるため、結果は常に両方を持ちます。片方だけを求めても節約にはなりません。`channels: 1` なら 2 つの系列はモノラルのメーターと要素ごとに一致します。
 
 `sampleRate` はバッファの実際のレートでなければなりません。K 特性はサンプルレートに依存するため、既定値の `22050` のままだと実際の音声に対してはエラーではなく誤った答えが返ります。ウィンドウより短い信号では、その系列はエラーではなく空配列になります。したがって `momentary` が空でなくても `shortTerm` は空になり得ます。
-
-名前付きマスタリング API は次の系統に分かれます。
-
-| 目的 | 関数 |
-|------|----------|
-| シンプルなラウドネスマスタリングを実行 | `mastering()` |
-| 組み込みプリセットの一覧 | `masteringPresetNames()` |
-| 1 つのプリセットをフラットなチェーンパラメータへ展開 | `masteringPresetParams(preset)` |
-| プリセットをモノラルに適用 | `masterAudio()` |
-| プリセットをステレオに適用 | `masterAudioStereo()` |
-| プリセットをモノラルに適用（進捗付き） | `masterAudioWithProgress()` |
-| プリセットをステレオに適用（進捗付き） | `masterAudioStereoWithProgress()` |
-| フルチェーン実行（モノラル） | `masteringChain()` |
-| フルチェーン実行（ステレオ） | `masteringChainStereo()` |
-| ブロック単位の EQ | `StreamingEqualizer` |
-| 進捗付きフルチェーン実行（モノラル） | `masteringChainWithProgress()` |
-| 進捗付きフルチェーン実行（ステレオ） | `masteringChainStereoWithProgress()` |
-| ストリーミング（ブロック単位）チェーン | `StreamingMasteringChain` |
-| ストリーミングチェーンに渡すラウドネス値を測定 | `streamingLoudnessGain()` / `streamingLoudnessGainStereo()` |
-| マスタリング判断用の音源プロファイルを取得 | `masteringAudioProfile()` |
-| ステレオペアの音源プロファイルを取得 | `masteringAudioProfileStereo()` |
-| 音源解析からマスタリングの提案を取得 | `masteringAssistantSuggest()` |
-| ステレオペアからマスタリングの提案を取得 | `masteringAssistantSuggestStereo()` |
-| 提案されたチェーンだけを `overrides` に使える形で取得 | `masteringAssistantSuggestChain()` / `masteringAssistantSuggestChainStereo()` |
-| 配信先ごとのラウドネス見込みをプレビュー | `masteringStreamingPreview()` |
-| ステレオペアの配信ラウドネスをプレビュー | `masteringStreamingPreviewStereo()` |
-| 名前付きプロセッサ一覧（モノラル／ステレオ） | `masteringProcessorNames()` |
-| プロセッサ分類カタログを取得 | `masteringProcessorCatalog()` |
-| チェーンのインサートプロセッサ一覧 | `masteringInsertNames()` |
-| インサートが受け付けるパラメータキー一覧 | `masteringInsertParamNames(name)` |
-| 構築用キーとリアルタイムインサートパラメータを記述 | `masteringInsertParamInfo(name, sampleRate?)` |
-| 構成済みインサートのレイテンシとテールを測定 | `masteringInsertTiming(name, params, sampleRate)` |
-| モノラル音声を処理 | `masteringProcess()` |
-| ステレオ音声を処理 | `masteringProcessStereo()` |
-| ペアプロセッサ一覧 | `masteringPairProcessorNames()` |
-| ソース／リファレンスのペアを処理 | `masteringPairProcess()` / `masteringPairProcessStereo()` |
-| ペア解析の一覧 | `masteringPairAnalysisNames()` |
-| ソース／リファレンスのペアを解析 | `masteringPairAnalyze()` |
-| ステレオ解析の一覧 | `masteringStereoAnalysisNames()` |
-| ステレオチャンネルを解析 | `masteringStereoAnalyze()` |
-| 任意のチャンネル数を 1 回の呼び出しで解析・リペア | `masteringRepairAnalyze()` / `masteringRepairApply()`（[オーディオリペアの流れ](./audio-repair.md#測定と修復を-1-回の呼び出しで行う)を参照） |
 
 ### アンププリセットのカタログ
 
@@ -381,17 +375,15 @@ function masteringRepairDereverbClassical(samples: Float32Array, sampleRate: num
 function masteringRepairTrimSilence(samples: Float32Array, sampleRate: number, options?: TrimSilenceOptions): Float32Array
 ```
 
+<SonareDemo id="compressor-curve" />
+
 単発のリペアヘルパーとチェーン設定のリペア段はオフライン処理です。`StreamingMasteringChain` は `repair.declick`、`repair.declip`、`repair.decrackle`、`repair.dehum`、`repair.dereverb` を拒否し、`repair.denoise` は因果的なノイズ推定器（`mcra`、`imcra`、既定の `spp`）で受け付けます。`quantile` は名前を示して拒否されます。`repair.decrackle`、`repair.dehum`、`repair.denoiseClassical`、`repair.dereverbClassical` の 4 つは、同じ id の因果的なリアルタイムインサートとしても使えます（[リアルタイムインサート](./audio-repair.md#リアルタイムインサート)を参照）。[ダイナミクス](./glossary/mastering/dynamics.md)と[リペア](./glossary/mastering/repair.md)を参照してください。
+
+<SonareDemo id="repair-denoise" />
 
 #### ステレオ／リンクされたリペア
 
-各リペアプロセッサには、チャンネルペアをまとめて受け取るステレオ版があります。リペアの判断は
-常にチャンネルごとに下せるとは限らないからです。クリックは左右に共通する 1 つの物理的事象です
-し、チャンネルごとに異なるマスクを作るノイズリダクションは、処理しながらステレオイメージを
-動かしてしまいます。以下のエントリポイントはいずれもリクエストオブジェクト**と**位置引数の
-両方を受け付けます。位置引数形式では `sampleRate` が必須で、リクエスト形式では既定値 `22050`
-が使われます。チャンネル長は一致している必要があり、オプションはモノラル版と同じ
-インターフェースです。
+各リペアプロセッサには、チャンネルペアをまとめて受け取るステレオ版があります。リペアの判断は常にチャンネルごとに下せるとは限らないからです。クリックは左右に共通する 1 つの物理的事象ですし、チャンネルごとに異なるマスクを作るノイズリダクションは、処理しながらステレオイメージを動かしてしまいます。以下のエントリポイントはいずれもリクエストオブジェクト**と**位置引数の両方を受け付けます。位置引数形式では `sampleRate` が必須で、リクエスト形式では既定値 `22050` が使われます。チャンネル長は一致している必要があり、オプションはモノラル版と同じインターフェースです。
 
 ```typescript
 function masteringRepairDeclickStereo(request: MasteringRepairDeclickStereoRequest): MasteringRepairDeclickStereoResult
@@ -407,68 +399,28 @@ function masteringRepairDenoiseClassicalLinked(request: MasteringRepairDenoiseCl
 function masteringRepairDereverbClassicalLinked(request: MasteringRepairDereverbClassicalLinkedRequest): MasteringRepairDereverbClassicalLinkedResult
 ```
 
-結果の**形がリンクの度合いを表して**おり、形は 3 種類あります。
+結果の**形がリンクの度合いを表します**。レポートが 2 つなら、チャンネルを別々に処理したためにそれぞれ必要だったということで、1 つなら 1 つの判断が両チャンネルに及んだということです。
 
-| 結果の形 | エントリポイント | 形が意味すること |
-|----------|------------------|------------------|
-| `{ left, right, leftReport, rightReport }` | declick / declip / decrackle / dehum | チャンネルごとに別々に処理されたので、レポートも 2 つ。 |
-| `{ left, right, report }` | denoise / dereverb | 1 つの判断を両チャンネルに適用したので、レポートは 1 つ。 |
-| `{ left, right, report, leftRange, rightRange }` | 無音トリム | カットは 1 つ。加えて検査用に各チャンネルの検出範囲も返る。 |
+| プロセッサ | 共有するもの | 結果の形 | 補足 |
+|---|---|---|---|
+| declick | *選択*。どちらかのチャンネルが検出した区間は両方でリペアされ、埋める処理は各チャンネル自身のサンプルと AR モデルを使います | `{ left, right, leftReport, rightReport }` | 2 つのレポートは実際に異なります。結合された区間は `maxClickSamples` を超えることがあります |
+| declip | 両チャンネルのクリップ区間の和集合。クリップしたサンプルがないチャンネルは手つかずのまま残します | `{ left, right, leftReport, rightReport }` | 片側だけがクリップした平坦部では `linkedRuns` は `0` です。512 サンプルを超える区間は補間にフォールバックします。固定の上限で、`lpcOrder` やサンプルレートから導かれる値ではありません |
+| decrackle | 何も共有しません。クラックルは共通の事象を持たない表面的な損傷だからです | `{ left, right, leftReport, rightReport }` | このエントリポイントは、レポートとチャンネル長の検査を 1 回の呼び出しにまとめるためにあります。選ばなかったモードに属するフィールドは `0` を返します |
+| dehum | `adaptive` を指定したときだけ。トラッカーがチャンネル平均を読み、2 つのカスケードが 1 つの周波数に追従します | `{ left, right, leftReport, rightReport }` | `appliedFundamentalHz` と `fundamentalDriftHz` はどちらのレポートでも同一になりますが、`detected` は各チャンネルを計測したままです。既定の `adaptive` 無効時は 2 つのチャンネルは独立です |
+| denoise, dereverb | すべて。ゲインマスクはチャンネル加算したパワーから作られ、そのまま全チャンネルに適用されます | `{ left, right, report }` | チャンネル間のレベルと位相は動きません。`Linked` 版は `channels: Float32Array[]` を受け取り、1 チャンネルならモノラル版とビット単位で、2 チャンネルならステレオ版とプレーン単位で一致します |
+| 無音トリム | 各チャンネルの残す範囲の和集合。トリムは破壊的なので残す方向に倒します。ダウンミックスは読みません | `{ left, right, report, leftRange, rightRange }` | `leftRange` と `rightRange` は検査用の、各チャンネル自身の検出範囲です |
 
-リンクのされ方は次のとおりです。
+すべてのリペアプロセッサと検出関数は、`nFft` より短い入力を拒否せずにゼロ詰めします。
 
-- **declick** は*選択*を共有します。どちらかのチャンネルが検出した区間は両方で修復されますが、
-  埋める処理は各チャンネル自身のサンプルと AR モデルを使うため、2 つのレポートは実際に異なり
-  ます。結合された区間は `maxClickSamples` を超えることがあります。
-- **declip** は両チャンネルのクリップ区間の和集合を取りますが、クリップしたサンプルがない
-  チャンネルはその区間で手つかずのまま残します。したがって片側だけがクリップした平坦部では
-  `linkedRuns` は `0` になり、両側が異なる範囲でクリップしている箇所でのみ非ゼロになります。
-  512 サンプルを超える区間は補間にフォールバックします。これは固定の上限で、`lpcOrder` や
-  サンプルレートから導かれる値ではありません。
-- **decrackle** は何もリンクしません。クラックルは共通の事象を持たない表面的な損傷なので、
-  チャンネルは完全に独立です。このエントリポイントは、2 チャンネル分のレポートとチャンネル長の
-  検査を 1 回の呼び出しにまとめるためだけにあります。選ばなかったモードに属するフィールドは `0` を返しますが、これは未設定
-  ではなく想定どおりの値です。
-- **dehum** は `adaptive` を指定したときにだけリンクします。このときトラッカーはチャンネル平均
-  を読み、2 つのカスケードが 1 つの周波数に追従するため、`appliedFundamentalHz` と
-  `fundamentalDriftHz` は構造上どちらのレポートでも同一になります。一方で `detected` は各自の
-  チャンネルを計測したままです。既定である `adaptive` 無効時は、2 つのチャンネルは独立です。
-- **denoise** と **dereverb** は**完全にリンク**します。ゲインマスクはチャンネル加算したパワー
-  から作られ、そのまま全チャンネルに適用されるため、チャンネル間のレベルと位相は動きようが
-  ありません。単一の `report` を返すのはこのためです。`Linked` 版は同じプロセッサを
-  `channels: Float32Array[]` に対して適用したもので、1 チャンネルならモノラル版とビット単位で、
-  2 チャンネルならステレオ版とプレーン単位で一致します。
-- **無音トリム** は各チャンネルを走査し、残す範囲の**和集合**を取ります。トリムは破壊的な操作
-  なので、残す方向に倒します。ダウンミックスを読むことはありません。
-
-::: warning denoise と dereverb で挙動が食い違う 2 点
-**短い入力。** `masteringRepairDenoiseClassical*` は `nFft` より短いバッファを**拒否**し、
-`masteringRepairDereverbClassical*` は**ゼロ詰め**します。同じ短いテイクでも、一方では例外に
-なり、もう一方では成功します。
-
-**チャンネル数をまたいだレポートの比較。** `DenoiseReport.detected` は*絶対値*で、加算した集合
-に対して計測されます。したがって同一内容の N チャンネルは 1 チャンネルより `10*log10(N)` だけ
-高く読めます。2 チャンネルで約 +3.01 dB、3 チャンネルで約 +4.77 dB です。ステレオの
-`floorDbfs` をモノラルのそれと比較することはできません。`DereverbReport` は比と割合だけで
-構成されるためチャンネル数に依存せず、そのまま比較できます。
+::: warning チャンネル数をまたいだレポートの比較
+`DenoiseReport.detected` は*絶対値*で、加算した集合に対して計測されます。したがって同一内容の N チャンネルは 1 チャンネルより `10*log10(N)` だけ高く読めます。2 チャンネルで約 +3.01 dB、3 チャンネルで約 +4.77 dB です。ステレオの `floorDbfs` をモノラルのそれと比較することはできません。`DereverbReport` は比と割合だけで構成されるためチャンネル数に依存せず、そのまま比較できます。
 :::
 
-`masteringRepairTrimSilenceStereo` は、入力を短くする**唯一の**リペアエントリポイントです。
-`result.left.length` が出力長で、左右は同じ長さで返ります。どちらのチャンネルにも信号がない
-ペアは、**空の配列 2 本を返して成功します**。例外も `null` も返りません。このとき
-`report.range` は `(入力長, 入力長)` となるため、`removedHeadSamples` が入力全体、
-`removedTailSamples` が 0 になります。合計は正しいままで、恣意的なのは内訳だけです。
-オプションの有効性は `mode` に従い、`threshold` は `'peak'` でのみ、`gateLufs` と `windowMs` は
-`'lufsGated'` でのみ作用します。無効なオプションを指定してもエラーにはならず、黙って無視され
-ます。ゲートモードでは `windowMs` の窓にわたる**重み付けなしの RMS** を `gateLufs` と比較する
-ため、ゲートの対象量は BS.1770 のラウドネスではなく dBFS です。
+`masteringRepairTrimSilenceStereo` は、入力を短くする**唯一の**リペアエントリポイントです。`result.left.length` が出力長で、左右は同じ長さで返ります。どちらのチャンネルにも信号がないペアは、**空の配列 2 本を返して成功します**。例外も `null` も返りません。このとき `report.range` は `(入力長, 入力長)` となるため、`removedHeadSamples` が入力全体、`removedTailSamples` が 0 になります。合計は正しいままで、恣意的なのは内訳だけです。オプションの有効性は `mode` に従い、`threshold` は `'peak'` でのみ、`gateLufs` と `windowMs` は `'lufsGated'` でのみ作用します。無効なオプションを指定してもエラーにはならず、黙って無視されます。ゲートモードでは `windowMs` の窓にわたる**重み付けなしの RMS** を `gateLufs` と比較するため、ゲートの対象量は BS.1770 のラウドネスではなく dBFS です。
 
 #### リペアを伴わない検出
 
-以下はリペアプロセッサの解析部分だけを実行し、オーディオに触れる前に止まります。何もレンダ
-リングせずに、リペアが必要かどうかを判断し、その理由をユーザーに示せます。いずれもレポート
-だけを返します。オプションは対応するプロセッサと同じインターフェースで、リクエスト
-オブジェクトと位置引数の両方を受け付けます。
+以下はリペアプロセッサの解析部分だけを実行し、オーディオに触れる前に止まります。何もレンダリングせずに、リペアが必要かどうかを判断し、その理由をユーザーに示せます。いずれもレポートだけを返します。オプションは対応するプロセッサと同じインターフェースで、リクエストオブジェクトと位置引数の両方を受け付けます。
 
 ```typescript
 function masteringRepairDetectClicks(request: MasteringRepairDetectClicksRequest): ClickDetection
@@ -486,50 +438,22 @@ interface TrimRange {
 }
 ```
 
-それぞれが実際に測っているもののうち、直感と食い違う点は次のとおりです。
+| 関数 | 測るもの | 注意点 |
+|---|---|---|
+| `masteringRepairDetectClicks` | リペアと同じ LPC 解析。数えられた区間はリペアが実際に手を入れる区間です | 数はリペア用オプションに左右されます。`rejected` が大きい場合、素材がきれいなのではなく `maxClickSamples` や `neighborRatio` が厳しすぎます |
+| `masteringRepairDetectClipping` | オプションから読むのは `clipThreshold` だけ。`lpcOrder`・`iterations`・`lpcBlend` は検証されたあと読まれず、`sampleRate` は検証されるだけで一度も読まれません | 補間へのフォールバックを予測するには `longestRunSamples` を 512 サンプルの上限と比べます。4 つのフラットトップ系フィールドは、ピークから 1 dB 以内でビット単位に一致するサンプルが 3 個以上、という基準で、クリップ後に減衰された素材を捕まえます |
+| `masteringRepairDetectCrackle` | `mode` の指定にかかわらず常にメディアン基準。ウェーブレット収縮はサンプルがクラックルで*ある*という判定を一切下さないからです | この数値は、ウェーブレットモードのリペアが何を除去するかを説明しません。その代わり、モードを決める前でも同じ答えが得られます |
+| `masteringRepairDetectHum` | `adaptive` の指定にかかわらず常に推定パス。固定パスはハムを探さないためです | `fundamentalProminence` は最も強い候補の射影エネルギーを候補の中央値で割った値なので、**`1.0` はピークがまったく見つからなかったことを意味します**。ロック状態のフラグではありません。`harmonicDbfs` はノッチをかけた帯域だけでなく、そのサンプルレートが表現できる `k*f0` すべてを含み、ナイキスト以上の倍音は dB のフロア値を返します |
+| `masteringRepairDetectNoiseFloor` | ゲインマスクの手前で止まるため、減衰量の値はありません | `floorDbfs` は絶対値なので、同じチャンネル数で取った値とだけ比較してください |
+| `masteringRepairDetectReverb` | どれだけ減算するかを決める過程でデリバーブ自身が計測している値。**ISO 3382 の RT60 ではありません**（それには `estimateRoom(...)` を使います） | `lateDecayRatioDb` は直感と逆向きで、*負の度合いが小さい*ほど残響が*多い*ことを表します。既定の設定では WPE 段が `wpeEnabled` を指定したときにしか動かないため、`latePredictability` はちょうど `0` になります |
+| `masteringRepairDetectTrimRange` | リペアが「そこまでカットする」範囲。`paddingSamples` はすでにその内側に含まれており、検出された信号の範囲そのものではありません | しきい値を超えるものが何もなければ `(長さ, 長さ)` が返ります |
+| `masteringRepairDetectTrimRangeStereo` | チャンネルごとの範囲の和集合 | しきい値を超えるものがないチャンネルは、バッファ端を範囲の端とするのではなく、**範囲の計算に一切加わりません**。そのため無音チャンネルと有音チャンネルの和集合は、有音チャンネルの範囲そのものになります |
 
-- **`masteringRepairDetectClicks`** はリペアと同じ LPC 解析を実行するため、数えられた区間は
-  リペアが実際に手を入れる区間です。そして数はリペア用オプションに左右されます。`rejected` が
-  大きい場合、素材がきれいなのではなく `maxClickSamples` や `neighborRatio` が厳しすぎます。
-- **`masteringRepairDetectClipping`** がオプションから読むのは `clipThreshold` だけです。
-  `lpcOrder`・`iterations`・`lpcBlend` は検証されたあと読まれず、`sampleRate` は検証されるだけで
-  一度も読まれません。補間へのフォールバックを予測するには `longestRunSamples` を 512 サンプル
-  の上限と比べてください。4 つのフラットトップ系フィールドは別の問題に答えています。ピークから
-  1 dB 以内でビット単位に一致するサンプルが 3 個以上、という基準で、クリップ後に減衰された素材
-  を捕まえます。失敗のしかたも 2 つとも現実に起こります。本当に平坦な波形は偽陽性になり、
-  ダウンミックス・リサンプル・非可逆圧縮といったサンプル単位の変化は本物のフラットトップを
-  消します。**ステレオはダウンミックス前にチャンネルごとに検出し、ミックスダウン後の信号に
-  対しては決して実行しないでください。**
-- **`masteringRepairDetectCrackle`** は `mode` の指定にかかわらず常にメディアン基準で計測します。
-  ウェーブレット収縮はサンプルがクラックルで*ある*という判定を一切下さないからです。したがって
-  この数値は、ウェーブレットモードのリペアが何を除去するかを説明しません。その代わり、モードを
-  決める前でも同じ答えが得られます。
-- **`masteringRepairDetectHum`** は `adaptive` の指定にかかわらず常に推定パスを実行します。固定
-  パスはハムを探さないためです。`fundamentalProminence` は最も強い候補の射影エネルギーを候補の
-  中央値で割った値なので、**`1.0` はピークがまったく見つからなかったことを意味します**。ロック
-  状態のフラグではなく、1 に近い値こそが陰性の結果です。`harmonicDbfs` はノッチされたものだけ
-  でなく、そのサンプルレートが表現できる `k*f0` すべてを含み、ナイキスト以上の倍音は
-  dB のフロア値を返します。
-- **`masteringRepairDetectNoiseFloor`** はゲインマスクの手前で止まるため、減衰量の値はありま
-  せん。`nFft` より短いバッファでは**例外を投げます**。`floorDbfs` は絶対値なので、同じチャンネル
-  数で取った値とだけ比較してください。
-- **`masteringRepairDetectReverb`** は **ISO 3382 の RT60 ではありません**。それには
-  `estimateRoom(...)` を使ってください。これは、どれだけ減算するかを決める過程でディリバーブ
-  自身が計測している値を報告します。`nFft` より短いバッファは**ゼロ詰め**され、ノイズフロア検出
-  とは逆の挙動になります。`lateDecayRatioDb` は直感と逆向きで、*負の度合いが小さい*ほど残響が
-  *多い*ことを表します。既定の設定では WPE 段が `wpeEnabled` を指定したときにしか動かないため、
-  `latePredictability` はちょうど `0` になります。
-- **`masteringRepairDetectTrimRange`** は、リペアが「そこまでカットする」範囲を返します。
-  `paddingSamples` はすでにその範囲の内側に含まれており、検出された信号の範囲そのものではあり
-  ません。しきい値を超えるものが何もなければ `(長さ, 長さ)` が返ります。
-- **`masteringRepairDetectTrimRangeStereo`** はチャンネルごとに走査して和集合を取りますが、
-  しきい値を超えるものがないチャンネルは、バッファ端を範囲の端とするのではなく、**範囲の
-  計算に一切加わりません**。そのため無音チャンネルと有音チャンネルの和集合は、有音チャンネルの範囲その
-  ものになります。単純な min/max なら末尾全体を残してしまうところです。
+フラットトップの検出には失敗のしかたが 2 つあります。本当に平坦な波形は偽陽性になり、ダウンミックス・リサンプル・非可逆圧縮といったサンプル単位の変化は本物のフラットトップを消します。**ステレオはダウンミックス前にチャンネルごとに検出し、ダウンミックス後の信号に対しては決して実行しないでください。**
 
 #### `masteringRepairDereverbConfigForRoom(...)`
 
-室内音響の測定結果をディリバーブ設定に変換します。
+ルーム音響の測定結果をデリバーブ設定に変換します。
 
 ```typescript
 function masteringRepairDereverbConfigForRoom(
@@ -541,19 +465,9 @@ function masteringRepairDereverbConfigForRoom(
 ): Required<DereverbClassicalOptions>
 ```
 
-`estimateRoom(...)` の結果から読むのは `volume` と `rt60Bands` だけで、返るのは**完全な**設定
-です。すべてのフィールドが揃っており、省略可能なものはありません。そのため実行前にユーザーへ
-内容を提示できます。変更されて返ってくるのはちょうど 2 つのフィールドで、`t60Sec`（中音域の
-残響時間。500 Hz と 1 kHz のオクターブバンドの平均）と `lateDelayMs`（Polack の混合時間、
-`sqrt(volume)` ミリ秒）です。
+`estimateRoom(...)` の結果から読むのは `volume` と `rt60Bands` だけで、返るのは**完全な**設定です。すべてのフィールドが揃っており、省略可能なものはありません。そのため実行前にユーザーへ内容を提示できます。変更されて返ってくるのはちょうど 2 つのフィールドで、`t60Sec`（中音域の残響時間。500 Hz と 1 kHz のオクターブバンドの平均）と `lateDelayMs`（Polack の混合時間、`sqrt(volume)` ミリ秒）です。
 
-`attenuation`・`threshold`・`overSubtraction`・`spectralFloor` は**一切書き換えられません**。
-残響をどれだけ取り除くかは測定ではなく好みの問題であり、この関数は推測を避けます。収束しな
-かったバンドは自分のフィールドをそのまま残し、`confidence` が低い推定であっても適用されます。
-これが望ましくない場合は、推定結果を自分で選別してください。省略した設定フィールドは 0 では
-なくライブラリの既定値に解決されます。注意点が 1 つあります。中音域のどちらのバンドも収束
-しなかった場合、`t60Sec` は収束したバンドの平均にフォールバックするため、その時点でもはや
-中音域の値ではありません。
+`attenuation`・`threshold`・`overSubtraction`・`spectralFloor` は**一切書き換えられません**。残響をどれだけ取り除くかは測定ではなく好みの問題であり、この関数は推測を避けます。収束しなかったバンドは自分のフィールドをそのまま残し、`confidence` が低い推定であっても適用されます。これが望ましくない場合は、推定結果を自分で選別してください。省略した設定フィールドは 0 ではなくライブラリの既定値に解決されます。注意点が 1 つあります。中音域のどちらのバンドも収束しなかった場合、`t60Sec` は収束したバンドの平均にフォールバックするため、その時点でもはや中音域の値ではありません。
 
 #### `masteringRepairNoiseBandBins(...)`
 
@@ -567,14 +481,6 @@ interface MasteringRepairNoiseBandBinsRequest {
 }
 ```
 
-`NoiseDetection.bandFloorDbfs` の背後にあるビン添字を **33 個**返します。32 バンド分に終端の
-1 個を加えたもので、単調非減少です。バンド `k` は片側スペクトルのビン `[bins[k], bins[k+1])` を
-覆い、ビン `b` は `b * sampleRate / nFft` Hz に位置します。グリッドを決めるのは解析側の FFT 設定
-だけなので、ノイズリダクションの設定は受け取りません。
+`NoiseDetection.bandFloorDbfs` の背後にあるビン添字を **33 個**返します。32 バンド分に終端の 1 個を加えたもので、単調非減少です。バンド `k` は片側スペクトルのビン `[bins[k], bins[k+1])` を覆い、ビン `b` は `b * sampleRate / nFft` Hz に位置します。グリッドを決めるのは解析側の FFT 設定だけなので、ノイズリダクションの設定は受け取りません。
 
-この関数は、ある特定のあいまいさを解消するためにあります。等比で決まるバンド境界はビンに丸め
-られるため、ビン間隔より狭いバンドは**空**になり（`bins[k] === bins[k + 1]`）、その
-`bandFloorDbfs[k]` はフロアのセンチネル値を返します。そこが静かだったからではなく、ビンが
-1 つも入らなかったからです。バンド配列だけでは両者を区別できず、バンド数からも復元できま
-せんが、このグリッドなら判別できます。空のバンドはフロア値の棒としてプロットするのではなく、
-「未計測」として表示してください。
+この関数は、ある特定のあいまいさを解消するためにあります。等比で決まるバンド境界はビンに丸められるため、ビン間隔より狭いバンドは**空**になり（`bins[k] === bins[k + 1]`）、その `bandFloorDbfs[k]` はフロアのセンチネル値を返します。そこが静かだったからではなく、ビンが 1 つも入らなかったからです。バンド配列だけでは両者を区別できず、バンド数からも復元できませんが、このグリッドなら判別できます。空のバンドはフロア値の棒としてプロットするのではなく、「未計測」として表示してください。

@@ -37,19 +37,22 @@ By the end of this page you should be able to:
 | Mastering | `tests/mastering/*_test.cpp` covers chain config, latency, EQ, dynamics, multiband, saturation, repair, spectral, stereo, match, maximizer, EBU R128, loudness ceiling, presets, golden hashes, property checks, and assistant output |
 | Mixing | `tests/mixing/*_test.cpp`, `bindings/node/tests/mixing.test.ts`, `bindings/python/tests/test_mixing.py`, and WASM tests cover routing, insert automation, no-allocation process checks, scene presets, meters, goniometer, and binding smoke tests |
 | Realtime engine | `tests/engine/*_test.cpp`, `bindings/python/tests/test_engine.py`, and WASM worklet tests cover transport, tempo sync, metronome, capture, graph runtime, monitor runtime, mono monitor/bounce parity, telemetry, offline bounce, concurrency, and AudioWorklet runtime behavior |
-| NativeSynth voice calibration | `tools/voicematch/` renders the provisional GM fallback voices against a dry FluidSynth/SoundFont oracle and reports timbre metrics; `autofit.py` can tune selected numeric constants in an isolated build directory. This is a calibration harness, not proof that the physical models are finished |
+| NativeSynth voice calibration | `tools/voicematch/` renders the GM fallback voices against a dry FluidSynth/SoundFont oracle and reports timbre metrics; `autofit.py` can tune selected numeric constants in an isolated build directory. This is a calibration harness, not proof that a voice is a finished instrument simulation; see [NativeSynth](./native-synth.md) for each engine's status |
 | Bindings | `bindings/wasm/tests/*.test.ts`, `bindings/node/tests/*.test.ts`, `bindings/python/tests/*.py`, and typing smoke tests cover exported API shape, structured-clone-safe WASM returns, input-validation guards, and cross-binding behavior |
 | Cross-binding parity | `tools/parity` checks default values, constants/enums, and parameter names across C++, C ABI, Python, Node, and WASM so API drift is caught before release, and renders the per-runtime capability matrix described under [Surface Coverage](#surface-coverage) |
-| CLI | `tests/cli/cli_test.cpp` and Python CLI parser coverage exercise terminal entry points |
+| Playback renderer | `tests/playback/*_test.cpp` cover speaker layouts and layout conversion, binaural rendering, the HRTF set format, night-mode dynamics, loudness metering, latency and sample-rate handling, plus a no-allocation process check |
+| Composition assist | `tests/assist/*_test.cpp` cover the assist modules, the seam they plug into, and the music-theory helpers |
+| CLI | `tests/cli/cli_{analysis,effects,mastering,project,contract}_test.cpp` and Python CLI parser coverage exercise terminal entry points |
+| Public contract | `make conformance` runs the checks in `tools/conformance/` and `tests/conformance/` over the public input corpus, the CLI command contract recorded in `cli_contract_v2.json`, and cross-binding conventions, so a change to a documented contract fails before release |
 | Performance | `benchmarks/*.cpp`, `benchmarks/results.json`, and `benchmarks/results_cpp.json` cover spectrum, streaming mel/chroma, mastering support, ISP (inter-sample peak) detection, stereo, mixing, EQ, and resampling-related hot paths |
 
 ::: details What do "golden hashes", "property checks", and "no-allocation checks" mean?
 These are the kinds of automated test used above.
 
-- **Reference / regression tests** — compare current output against saved known-good values. If the numbers drift unexpectedly, the test fails, catching an accidental change.
-- **Golden hashes** — a compact checksum of a known-good render. Re-processing the same input with the same settings must reproduce the same hash, so any change to the audio output is caught immediately.
-- **Property checks** — assert an invariant that must hold for *any* input (e.g. "output never exceeds the ceiling", "a mono-summed imager doesn't flip polarity"), tested across many random inputs rather than one fixed case.
-- **No-allocation process checks** — verify that real-time code never allocates memory (no `new`/`malloc`) inside the audio callback, since an allocation could stall and cause a dropout.
+- **Reference / regression tests** compare current output against saved known-good values. If the numbers drift unexpectedly, the test fails, catching an accidental change.
+- **Golden hashes** are a compact checksum of a known-good render. Re-processing the same input with the same settings must reproduce the same hash, so any change to the audio output is caught immediately.
+- **Property checks** assert an invariant that must hold for *any* input (e.g. "output never exceeds the ceiling", "a mono-summed imager doesn't flip polarity"), tested across many random inputs rather than one fixed case.
+- **No-allocation process checks** verify that real-time code never allocates memory (no `new`/`malloc`) inside the audio callback, since an allocation could stall and cause a dropout.
 :::
 
 ## Realtime Safety
@@ -75,15 +78,6 @@ Three properties make it evidence rather than a claim:
 - **Reviewed absences stay visible.** The allowlist that lets a reviewed divergence pass the parity check does not put the capability back: an allowlisted gap is still counted as a gap, so the table cannot be made to look complete by review alone.
 
 A gap in the table is therefore a measured absence. Whether it is a defect is a separate question that [Binding Parity](./binding-parity.md#feature-availability) answers per runtime — both CLIs are a curated subset by design, and WASM cannot reach the host filesystem or threads.
-
-## Voice Calibration Harness
-
-The NativeSynth physical voices are intentionally documented as **provisional** while their voicing is being tuned. The repository includes `tools/voicematch/` for that work:
-
-- `voicematch.py` renders the libsonare GM fallback side and an oracle side, then compares harmonic balance, intonation error, tonal-to-noise ratio, and envelope-related measurements.
-- `autofit.py` reads a JSON spec of numeric constants to try, rebuilds an isolated shared library, re-renders the comparison, and searches for lower mismatch. It restores source text on interruption and can run in `--dry-run` mode.
-
-Use these tools to guide calibration changes. Do not read their existence as a claim that violin, brass, reed, flute, piano, guitar, or bass models are already final production-grade instrument simulations.
 
 ## Accuracy Boundaries
 

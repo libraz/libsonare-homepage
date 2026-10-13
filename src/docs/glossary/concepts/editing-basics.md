@@ -9,7 +9,7 @@ description: The vocabulary of audio editing — pitch vs time, semitones and ce
 
 It is different from **analysis**, which only *measures* a track and leaves it untouched. It is also different from **mixing**, which *balances* several parts together.
 
-This page defines the words you need before reading the [Editing DSP](../../editing-dsp.md) guide. It is concepts only; no code.
+This page defines the words you need before reading the [Editing DSP](../../editing-dsp.md) guide. A short example near the end shows the two main edits as calls.
 
 ::: tip Where editing sits
 You usually **edit** individual parts (fix timing, tune a note, change a voice), then **mix** them together, then **master** the finished stereo file for delivery. Editing is the per-part repair-and-shape step. Conservative edits keep the part natural; aggressive edits are a creative effect.
@@ -72,6 +72,35 @@ Moving both together too aggressively creates the familiar artificial "chipmunk"
 ## Samples vs seconds
 
 Editing functions that act on a *region* (like note stretch) take **sample offsets**, because sample positions are exact and never drift. Most also accept the same position in seconds under a `*Sec` name (`onsetSec`, `offsetSec`, `startSec`, `endSec`, `paddingSec`), converted at the call's sample rate; give one spelling or the other, never both. The conversion is `samples = round(seconds × sampleRate)` — at 48 kHz, 0.25 s is sample 12000. See [Audio Basics](./audio-basics.md) for what a sample and sample rate are.
+
+## Try it in libsonare
+
+Time stretch and pitch shift are one call each. A `rate` of `0.5` plays at half speed, so the result is twice as long at the same pitch; `semitones: 12` raises the pitch an octave and keeps the length.
+
+::: code-group
+
+```typescript [Browser]
+import { init, timeStretch, pitchShift } from '@libraz/libsonare';
+
+await init();
+
+const slower = timeStretch(samples, sampleRate, 0.5);   // twice as long, same pitch
+const higher = pitchShift(samples, sampleRate, 12);     // one octave up, same length
+```
+
+```python [Python]
+import libsonare as sonare
+
+slower = sonare.time_stretch(samples, sample_rate, 0.5)   # twice as long, same pitch
+higher = sonare.pitch_shift(samples, sample_rate, 12)     # one octave up, same length
+```
+
+```bash [CLI]
+sonare time-stretch take.wav --rate 0.5 -o slower.wav
+sonare pitch-shift take.wav --semitones 12 -o higher.wav
+```
+
+:::
 
 :::: details How libsonare implements editing DSP
 

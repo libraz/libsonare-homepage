@@ -5,13 +5,9 @@ description: BPM／キー検出、総合解析、ルーム音響、HPSS、オー
 
 # 機能別レシピ
 
-このページは [使用例](./examples.md) の続きで、各機能をより詳しく、実行環境ごとに示すレシピです。
+このページは [使用例](./examples.md) の続きで、機能ごとに 1 つのレシピを実行環境別に示します。libsonare を動かす環境のタブを選んでください。ブラウザ例ではデコード済みのモノラル `Float32Array` サンプルを渡します。入力がエンコード済みバイト列の場合は、先に `Audio.fromMemory*`、Web Audio、または別の JavaScript デコーダーでデコードします。Python パッケージと `sonare` CLI は WAV/MP3 ファイルを直接読み込めます。C++ プログラムは [使用例](./examples.md#c) にあります。
 
-## 機能別レシピ
-
-各レシピは同じ処理を実行環境ごとに示します。libsonare を動かす環境のタブを選んでください。ブラウザ例ではデコード済みのモノラル `Float32Array` サンプルを渡します。入力がエンコード済みバイト列の場合は、その前段で Web Audio、別の JavaScript デコーダ、または `Audio.fromMemory*` を使います。Python パッケージと `sonare` CLI は WAV/MP3 ファイルを直接読み込めます。C++ プログラムは下の C++ セクションにまとめています。
-
-### 基本的な BPM とキー検出
+## 基本的な BPM とキー検出
 
 ::: code-group
 
@@ -55,13 +51,9 @@ sonare key song.mp3
 
 :::
 
-### 総合的な音楽解析
+## 総合的な音楽解析
 
-ブラウザでも Python でも `analyze()` がコード・セクション・楽曲形式（form）に加えて、音色・ダイナミクス・リズム・メロディまで一度に返します。`detect_chords()` や `analyze_sections()` は、解析全体を実行せずにその要素だけが欲しいときのオプションとして残しています。
-
-::: tip Python：関数とメソッドの違い
-モジュールレベルの `analyze(samples, sample_rate)` 関数は総合的な結果を返します。`Audio.analyze()` メソッドは基本サマリー（BPM・キー・拍子・ビート）のみを返すので、コード・セクション・楽曲形式をまとめて取得したいときはサンプルを関数に渡してください。
-:::
+どの実行環境でも `analyze()` がコード・セクション・楽曲形式（form）に加えて、音色・ダイナミクス・リズム・メロディまで一度に返します。Python の `Audio.analyze()` とモジュールレベルの `analyze(samples, sample_rate)` は同じ結果を返します。`detect_chords()` や `analyze_sections()` は、その要素だけが欲しいときの単体の呼び出しとして使えます。Python では `timbre`、`dynamics`、`rhythm`、`melody` の型が省略可能なので、使う前に `None` でないことを確認してください。
 
 ::: warning `analyze()` が返すのはトライアドです
 総合解析の経路は `useTriadsOnly` を `true` にしてコード検出を実行するため、`result.chords` にはトライアドが返ります。曲中のセブンスは、その中に含まれるトライアドとして報告されます。この経路でも拡張コードが必要な場合は `analyze()` に `useTriadsOnly: false` を渡すか、既定で拡張コードまで探索する `detectChords()` を単体で呼んでください。
@@ -95,10 +87,10 @@ console.log(`\n楽曲形式: ${result.form}`);
 ```
 
 ```python [Python]
-from libsonare import Audio, analyze
+from libsonare import Audio
 
 with Audio.from_file("song.mp3") as audio:
-    result = analyze(audio.data, audio.sample_rate)
+    result = audio.analyze()
 
 print("=== 音楽解析 ===")
 print(f"BPM: {result.bpm} (信頼度: {result.bpm_confidence * 100:.0f}%)")
@@ -129,12 +121,23 @@ sonare analyze song.mp3 --json > analysis.json
 ::: details 「セクション」と「フォーム」とは？
 **セクション** は曲の構造的なパートです。イントロ、Aメロ、サビ、ブリッジ、アウトロのように、音楽的な性格が変わる場所から検出します。
 
-**フォーム** は、それらのセクションをコンパクトなパターンで表した曲全体の構成です。たとえば `イントロ-Aメロ-サビ-Aメロ-サビ-アウトロ` や `ABABCB` のように書きます。
+**フォーム** は曲全体の構成を、セクション 1 つにつき 1 文字の文字列で表したものです。たとえば `IABABCO` のようになります。
+
+| 文字 | セクション |
+|------|------------|
+| `I` | イントロ |
+| `A` | Aメロ |
+| `P` | Bメロ（プリコーラス） |
+| `B` | サビ |
+| `C` | ブリッジ |
+| `S` | 間奏 |
+| `O` | アウトロ |
+| `?` | 不明 |
 
 両者は「この曲が時間軸上でどう構成されているか」に答えます。
 :::
 
-### ルーム音響メトリクス
+## ルーム音響メトリクス
 
 まず、手元の入力や目的から選びます。
 
@@ -213,7 +216,7 @@ sonare room-morph recording.wav --length 12 --width 9 --height 4 --wet 0.6 -o mo
 
 :::
 
-### HPSS（倍音／打撃成分の分離）
+## HPSS（倍音／打撃成分の分離）
 
 ::: code-group
 
@@ -224,7 +227,7 @@ await init();
 
 const result = hpss(samples, sampleRate);
 
-// result.harmonic   — 倍音成分（ボーカル／メロディ／和音）
+// result.harmonic   — 倍音成分（ボーカル／メロディ／コード）
 // result.percussive — 打撃成分（ドラム／パーカッション）
 
 // ドラムやトランジェントはクロマ推定をにじませるため、倍音成分だけで
@@ -237,7 +240,7 @@ from libsonare import Audio, detect_key
 
 with Audio.from_file("song.mp3") as audio:
     result = audio.hpss()
-    # result.harmonic   — 倍音成分（ボーカル／メロディ／和音）
+    # result.harmonic   — 倍音成分（ボーカル／メロディ／コード）
     # result.percussive — 打撃成分（ドラム／パーカッション）
 
 # ドラムやトランジェントはクロマ推定をにじませるため、倍音成分だけで
@@ -255,7 +258,7 @@ sonare hpss song.mp3 -o separated --json
 
 :::
 
-### オーディオエフェクト
+## オーディオエフェクト
 
 ::: code-group
 
@@ -297,7 +300,7 @@ sonare trim-silence song.wav -o trimmed.wav
 
 :::
 
-### 特徴抽出
+## 特徴抽出
 
 ::: code-group
 
@@ -344,9 +347,9 @@ sonare chroma song.mp3 --json
 
 :::
 
-### ピッチ検出
+## ピッチ検出
 
-ピッチ検出は F0（基本周波数。周期的な音の最も低い周波数で、人が音の高さとして聞き取る成分）をフレームごとに推定します。単旋律の音声からメロディラインを取り出すのはこの値です。
+ピッチ検出は F0（基本周波数。周期的な音の最も低い周波数で、人が音の高さとして聞き取る成分）をフレームごとに推定します。モノフォニックの音声からメロディラインを取り出すのはこの値です。
 
 ::: code-group
 
@@ -392,7 +395,7 @@ sonare pitch song.mp3 --algorithm pyin --json
 
 <SonareDemo id="melody-contour" />
 
-### ストリーミング解析
+## ストリーミング解析
 
 ビジュアライゼーションとライブモニタリング用のリアルタイム音声解析。
 
@@ -449,63 +452,6 @@ function checkEstimates() {
 }
 ```
 
-### AudioWorklet でのストリーミング
+## AudioWorklet でのストリーミング
 
-```typescript
-// analyzer-processor.ts (AudioWorklet)
-import { init, StreamAnalyzer } from '@libraz/libsonare';
-
-class AnalyzerProcessor extends AudioWorkletProcessor {
-  private analyzer?: StreamAnalyzer;
-
-  constructor() {
-    super();
-    void init().then(() => {
-      this.analyzer = new StreamAnalyzer({
-        sampleRate,
-        nFft: 2048,
-        hopLength: 512,
-        nMels: 64,
-        emitEveryNFrames: 4,
-      });
-    });
-  }
-
-  process(inputs: Float32Array[][]): boolean {
-    const input = inputs[0]?.[0];
-    if (!input || !this.analyzer) return true;
-
-    this.analyzer.process(input);
-
-    const available = this.analyzer.availableFrames();
-    if (available >= 4) {
-      const frames = this.analyzer.readFrames(available);
-      this.port.postMessage({ type: 'frames', data: frames }, [
-        frames.timestamps.buffer,
-        frames.mel.buffer
-      ]);
-    }
-
-    return true;
-  }
-}
-
-registerProcessor('analyzer-processor', AnalyzerProcessor);
-```
-
-```typescript
-// main.ts
-const audioCtx = new AudioContext();
-await audioCtx.audioWorklet.addModule('analyzer-processor.js');
-
-const worklet = new AudioWorkletNode(audioCtx, 'analyzer-processor');
-worklet.port.onmessage = (e) => {
-  if (e.data.type === 'frames') {
-    renderSpectrogram(e.data.data);
-  }
-};
-
-const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-audioCtx.createMediaStreamSource(stream).connect(worklet);
-```
-
+ライブの Web Audio グラフでは、`SonareStreamAnalyzerNode` がグラフの分岐を受け取り、メインスレッドで解析します。プロセッサを書く必要はありません（[オーディオグラフの一部を解析する](./wasm-streaming.md#オーディオグラフの一部を解析する)）。`StreamAnalyzer` をオーディオスレッドで動かす場合は、自分の `AudioWorkletProcessor` の中で WASM モジュールをインスタンス化します。プロセッサの全体は [独自の analyzer worklet](./wasm-streaming.md#独自の-analyzer-worklet) にあります。

@@ -5,15 +5,15 @@ description: プロジェクト単位の MIDI 注釈、テンポ、交換、お�
 
 # プロジェクト MIDI
 
-このページはプロジェクト単位の MIDI ハブです。イベント編集、音声のトランスクリプション、音声内のノート編集、MIDI 2.0、永続化の詳細は各タスクページに分けています。以前のレイアウトからのリンクに対応するため、移動したセクションのアンカーはこのページに残しています。
+このページでは、プロジェクト単位の MIDI として、キーとコードの注釈、アシストサイドカー、テンポ検出、SMF の取り込みと書き出し、外部 MIDI 機器を扱います。イベント編集、採譜、MIDI 2.0、永続化の詳細は下のタスクページを参照してください。
 
 | 目的 | ガイド |
 |---|---|
 | 音声をノートイベントへ変換する | [音を MIDI ノートに変換する](./audio-to-notes.md) |
 | 音声内の計測ノートを編集する | [音声内の音符を編集する](./note-editing.md) |
-| MIDI クリップを編集する | [MIDI クリップを編集する](./midi-editing.md) |
+| MIDI クリップの編集、ノート対の検証、キャプチャしたストリームのルーティング、MIDI-FX の焼き込み | [MIDI クリップを編集する](./midi-editing.md) |
 | MIDI 2.0 の値と UMP ワードを保つ | [MIDI 2.0・UMP・クリップファイル](./midi2.md) |
-| プロジェクトをコンパイル、保存、読み込む | [プロジェクトのコンパイル・保存・読み込み](./project-save-load.md) |
+| コンパイル、保存、読み込み、音声の再バインド、ステムの取り込み | [プロジェクトのコンパイル・保存・読み込み](./project-save-load.md) |
 
 ## キーとコードの注釈書き戻し
 
@@ -33,7 +33,7 @@ project.annotateChords([
 
 ```python [Python]
 project.annotate_keys([
-    (0.0, 16.0, 0, 1),  # (start_ppq, end_ppq, tonic_pc, mode) — C メジャー
+    (0.0, 16.0, 0, 1),  # (start_ppq, end_ppq, tonic_pc, mode): C メジャー
 ])
 project.annotate_chords([
     {"start_ppq": 0.0, "end_ppq": 4.0, "root_pc": 0, "quality": 1, "roman_numeral": "I"},
@@ -48,7 +48,7 @@ Python では `annotate_keys` が `(start_ppq, end_ppq, tonic_pc, mode)` タプ�
 数値フィールドはいずれも小さな固定エンコーディングです。
 
 - **ピッチクラス**（`tonicPc`・`rootPc`）: `0..11` で、C = 0、C#/Db = 1、… B = 11。`255` は不明を表します。
-- **キーモード**（`mode`）: `1` = major、`2` = minor。
+- **キーモード**（`mode`）: `0` 不明、`1` major、`2` minor、`3` dorian、`4` phrygian、`5` lydian、`6` mixolydian、`7` locrian。解析側のモードを対応づけるには `keyModeFromAnalysis` を使います。
 - **コードクオリティ**（`quality`）: `1` = major、`2` = minor、`3` = diminished、`4` = augmented、`5` = dominant、`6` = half-diminished、`7` = suspended。`extensions` はスケール度数（`7`・`9`・`13`、サスペンションなら `2` / `4`。最大 32 個）で、同じ系統内の種類を区別します（検出側のクオリティは[コード認識](./glossary/analysis/chord-recognition.md)を参照）。
 
 つまり `{ tonicPc: 0, mode: 1 }` は C メジャー、`{ rootPc: 7, quality: 1 }` は G メジャーコードです。
@@ -70,6 +70,8 @@ project.annotateKeys([
   { startPpq: 0, endPpq: 16, tonicPc: key.root, mode: keyModeFromAnalysis(key.mode) },
 ]);
 ```
+
+注釈になる前に解析器が何を返すかは、[コード認識](./glossary/analysis/chord-recognition.md)と[キー検出](./glossary/analysis/key-detection.md)を参照してください。
 
 ## アシストサイドカー
 
@@ -95,73 +97,72 @@ project.getAssistSidecar(0);  // { moduleId, schemaVersion, targetTrackId,
 
 上の記述子形式が **WASM と Node** の標準 JavaScript API です。WASM には互換性のため、従来の位置引数形式 `setAssistSidecar(moduleId, schemaVersion, targetTrackId, regionStartPpq, regionEndPpq, payload)` も残っています。どちらの JavaScript バインディングにも件数、インデックスアクセサー、全件をまとめて読む `assistSidecars()` があります。**Python** は `set_assist_sidecar(module_id, payload, *, schema_version=0, target_track_id=0, region_start_ppq=0.0, region_end_ppq=0.0)` を使い（マッピング記述子も受け付けます）、`assist_sidecar_count()`、`get_assist_sidecar(index)`、`assist_sidecars()` で読み取ります。C ABI は位置引数の `sonare_project_set_assist_sidecar(...)` と、対応する count/get/free 関数です。
 
-## MIDI の内容
-
-MIDI クリップの作成、ノート対の検証、キャプチャしたストリームのルーティング、MIDI-FX の焼き込みは[MIDI クリップを編集する](./midi-editing.md#midi-の内容)に移動しました。
-
-### `validateMidiNotes`
-
-[`validateMidiNotes`（MIDI クリップを編集する）](./midi-editing.md#validatemidinotes)を参照してください。
-
-### キャプチャした MIDI ストリームをルーティングする
-
-[キャプチャした MIDI ストリームをルーティングする](./midi-editing.md#キャプチャした-midi-ストリームをルーティングする)を参照してください。
-
-### MIDI-FX チェーンをクリップに焼き込む
-
-[MIDI-FX チェーンをクリップに焼き込む](./midi-editing.md#midi-fx-チェーンをクリップに焼き込む)を参照してください。
-
 ## 自動テンポとグリッドスナップ
 
 編集を拍に合わせる 2 つのヘルパーがあります。
 
-- **`autoTempo(audio, sampleRate)`** はモノラルバッファからテンポを検出し、テンポマップとして設定し、主要な BPM を返します。
-- **`snapToGrid(ppq, strength)`** は PPQ 座標をプロジェクトグリッドの最近接拍へスナップします。`strength` は `0..1`（1 で完全にスナップ）です。
+`autoTempo(audio, sampleRate, candidateIndex?, applyTimeSignatures?, options?)` はモノラルバッファからテンポを検出し、テンポマップとして設定して BPM を返します。`analyzeTempo(audio, sampleRate, options?)` は候補（`primary` / `half` / `double`）を順位つきで返すだけで、プロジェクトは変更しません。候補の番号を `candidateIndex` に渡すとその候補を設定できます。その場合は両方の呼び出しに同じ `options` を渡してください。`options` はスコアリングの設定です。
 
-```typescript
-const bpm = project.autoTempo(monoMix, 48000); // テンポを検出して設定し、約 120 を返す
+| オプション | 既定値 | 意味 |
+|------------|--------|------|
+| `adaptiveTempo` | `false` | 録音の途中でテンポが動く演奏にビートトラッキングを追従させる。クリックに合わせた素材では無効のままにする |
+| `tempoUpdateIntervalBeats` | ネイティブの既定値 | 局所テンポの推定に使う拍数（`adaptiveTempo` が有効なときだけ使用） |
+| `rampThreshold` | `0.02` | 1 つのセグメントを閉じて次を開くテンポの相対変化量。小さいほど演奏に細かく追従する |
+| `includeOctaveCandidates` | `true` | 主候補と並べて、半分・倍のテンポの候補も順位づけする |
+
+`adaptiveTempo` を有効にすると、テンポが揺れる演奏は複数のテンポセグメントになり、[SMF では段階的なテンポイベントとして書き出されます](#標準-midi-ファイル-smf)。テンポ解析そのものは[解析](./analysis.md)で説明しています。
+
+`snapToGrid(ppq, strength, division)` は PPQ 座標をプロジェクトグリッドの線へ丸めます。`strength` は `0..1`（1 で完全に丸める）です。`division` は `0` で小節、`1` で拍（既定）、それ以上は 1 拍あたりの分割数です（16 分音符なら `4`）。
+
+::: code-group
+
+```typescript [ブラウザ / WASM]
+const bpm = project.autoTempo(monoMix, 48000); // テンポを検出して設定し、検出した BPM を返す
 const snapped = project.snapToGrid(1.2, 1.0);  // 1.2 -> 1（最近接拍）
 ```
 
-### 音声を MIDI クリップへ変換する
+```python [Python]
+bpm = project.auto_tempo(mono_mix, 48000)      # キーワードオプション: adaptive_tempo=True、ramp_threshold=0.05
+snapped = project.snap_to_grid(1.2, 1.0)       # 1.2 -> 1（最近接拍）
+```
 
-[音を MIDI ノートに変換する](./audio-to-notes.md#音声を-midi-クリップへ変換する)を参照してください。
-
-## アレンジをコンパイルする
-
-[プロジェクトのコンパイル・保存・読み込み](./project-save-load.md#アレンジをコンパイルする)を参照してください。
-
-## 保存と読み込み: 決定的な JSON
-
-[保存と読み込み: 決定的な JSON](./project-save-load.md#保存と読み込み-決定的な-json)を参照してください。
-
-### モデルを読み戻し、読み込み後に音声を再バインドする
-
-[モデルを読み戻し、読み込み後に音声を再バインドする](./project-save-load.md#モデルを読み戻し、読み込み後に音声を再バインドする)を参照してください。
-
-### ホスト側で分離したステムを取り込む
-
-[ホスト側で分離したステムを取り込む](./project-save-load.md#ホスト側で分離したステムを取り込む)を参照してください。
+:::
 
 ## MIDI 交換: SMF と MIDI 2.0 クリップファイル
 
-交換形式にはそれぞれ役割があります。[MIDI 2.0 ガイド](./midi2.md)はフル解像度 UMP とクリップファイルの忠実度を扱い、このハブにはファイル形式を選ぶときに必要な SMF 互換性の事実を残します。
+交換形式にはそれぞれ役割があります。SMF は互換性を重視した 480 ティックの形式で、このページで扱います。MIDI 2.0 の値を損失なく保つにはクリップファイル（`SMF2CLIP`）を使います。詳しくは [MIDI 2.0・UMP・クリップファイル](./midi2.md#midi-2-0-クリップファイル-smf2clip)を参照してください。
 
 ### 標準 MIDI ファイル (SMF)
 
 `exportSmf` は常にフォーマット 1（マルチトラック）で書き出します。トラック 0 がテンポ／拍子マップを、以降は各クリップが 1 つの MTrk となり、4 分音符あたり 480 ティックに量子化されます。低レベルの SMF エクスポーターでは、0 以外の PPQN は正の 15 ビット範囲 `0x0001`–`0x7fff` に収める必要があり、0 は既定値の 480 を選びます。インポーターはフォーマット 0 と 1 を受け付けますが、フォーマット 0 のヘッダーはトラック数をちょうど 1 としなければなりません。フォーマット 2、SMPTE タイミング、入力ヘッダーの PPQN 0 は拒否されます。
 
-```typescript
-const smf = project.exportSmf();        // Uint8Array<ArrayBuffer> — SMF フォーマット1、480 PPQN
+::: code-group
+
+```typescript [ブラウザ / WASM]
+const smf = project.exportSmf();        // Uint8Array<ArrayBuffer>: SMF フォーマット 1、480 PPQN
 // … `smf` を .mid ファイルへ書き出す …
 
-const fresh = new Project();
+const fresh = Project.create();
 try {
   const firstClip = fresh.importSmf(smf); // 最初に追加されたクリップ ID を返す
 } finally {
   fresh.delete();
 }
 ```
+
+```python [Python]
+smf = project.export_smf()              # bytes: SMF フォーマット 1、480 PPQN
+# … `smf` を .mid ファイルへ書き出す …
+
+with sonare.Project() as fresh:
+    first_clip = fresh.import_smf(smf)  # 最初に追加されたクリップ ID を返す
+```
+
+:::
+
+Node はブラウザ版パッケージと同じ呼び出しです。
+
+SMF は離散的な Set Tempo イベントでテンポを表します。エクスポーターはテンポランプを 16 分音符ごとの段階に分け、各境界の時刻がプロジェクトのテンポマップに合うように書き出します。ティックとマイクロ秒単位の量子化による誤差は残ります。長いランプでは間隔を広げ、1 つのランプを最大 4096 イベントに収めます。最初のテンポセグメントが PPQ 0 より後に始まる場合は、その開始テンポをティック 0 にも書き込みます。これにより、セグメントより前のテンポもプロジェクトと一致します。読み込み直したマップは、元の連続的なランプではなく、書き出した段階的なテンポになります。
 
 `exportSmf()` と `exportClipFile()` の返り値は `Uint8Array<ArrayBuffer>` で、`Blob` / `File` コンストラクタがそのまま受け取る型です。`new Blob([project.exportSmf()])` は `new Uint8Array(...)` で複製を挟まずにコンパイルが通ります。
 
@@ -172,10 +173,6 @@ try {
 SMF が往復させているのは *演奏* です。それを記譜すれば、その同じノートのリストが楽譜になります。下の大譜表は MIDI クリップの記譜ビューです。再生すると、そこに保存されたイベントが鳴ります。
 
 <SonareDemo id="midi-score" />
-
-### MIDI 2.0 クリップファイル (`SMF2CLIP`)
-
-損失のない MIDI 2.0 経路は[MIDI 2.0 クリップファイル](./midi2.md#midi-2-0-クリップファイル-smf2clip)を参照してください。
 
 ### SMF を参照メロディにする: ノートターゲット
 
@@ -190,13 +187,11 @@ SMF が往復させているのは *演奏* です。それを記譜すれば、
 const audio = project.bounce({ numChannels: 2 });
 ```
 
-アレンジがエラーなくコンパイルできたら、次は MIDI トラックを鳴らすことも含めて音声へ変換する番です。[プロジェクトバウンス & レンダリング](./project-bounce.md)へ進んでください。
-
 ## トラックを外部 MIDI 機器へ送る
 
-**内部デスティネーション**は libsonare 内の NativeSynth／SF2 インストゥルメントで MIDI をレンダーします。**外部デスティネーション**はそのインストゥルメントを通さず、ホストがハードウェアや別アプリへ送るための MIDI 1.0 バイト列を出力キューへ入れます。libsonare はメッセージの変換と時刻付けを行いますが、OS／Web MIDI ポートを開くのはホスト側の役割です。
+**内部デスティネーション**は libsonare 内の NativeSynth／SF2 の楽器で MIDI をレンダリングします。**外部デスティネーション**はその楽器を通さず、ホストがハードウェアや別アプリへ送るための MIDI 1.0 バイト列を出力キューへ入れます。libsonare はメッセージの変換と時刻付けを行いますが、OS／Web MIDI ポートを開くのはホスト側の役割です。
 
-デスティネーションを外部に設定し、通常どおり音声処理した後、出力キューを高頻度でドレインします。生エンジンのメソッド名はバインディング間で共通で、ブラウザと Node は camelCase、Python は snake_case です。
+デスティネーションを外部に設定し、通常どおり音声処理した後、出力キューを高頻度に取り出します。生エンジンのメソッド名はバインディング間で共通で、ブラウザと Node は camelCase、Python は snake_case です。
 
 ::: code-group
 
@@ -252,9 +247,9 @@ dropped = engine.external_midi_dropped_count()
 
 :::
 
-各イベントは `destinationId`、`renderFrame`、`bytes`（1〜3 バイトの変換済み MIDI 1.0 メッセージ 1 個。Python では snake_case の `destination_id` ／ `render_frame`）を持ちます。クロック／トランスポートはデスティネーションの番兵値 `0xFFFFFFFF` を使い、チャンネルメッセージは元のデスティネーション id を保ちます。`maxRecords` は戻り値のメッセージ数を制限し、残りは次回のドレインまでキューに残ります。`externalMidiDroppedCount()`（Python では `external_midi_dropped_count()`）が増え続ける場合、ホストが読み出す前に固定容量のリアルタイムキューが満杯になっています。
+各イベントは `destinationId`、`renderFrame`、`bytes`（1〜3 バイトの変換済み MIDI 1.0 メッセージ 1 個。Python では snake_case の `destination_id` ／ `render_frame`）を持ちます。クロック／トランスポートはデスティネーションの番兵値 `0xFFFFFFFF` を使い、チャンネルメッセージは元のデスティネーション id を保ちます。`maxRecords` は戻り値のメッセージ数を制限し、残りは次回の取り出しまでキューに残ります。`externalMidiDroppedCount()`（Python では `external_midi_dropped_count()`）が増え続ける場合、ホストが読み出す前に固定容量のリアルタイムキューが満杯になっています。
 
-`SonareEngine` AudioWorklet ファサード（ブラウザ専用）では `setMidiDestinationExternal(trackId, true)` と `onMidiOut(callback)` を使います。ワークレットはレンダーブロックごとに内部エンジンをすでにドレインし、メインスレッドへバッチを送るため、別の消費側として生のドレインを呼ばないでください。
+`SonareEngine` AudioWorklet ファサード（ブラウザ専用）では `setMidiDestinationExternal(trackId, true)` と `onMidiOut(callback)` を使います。worklet はレンダーブロックごとに内部エンジンからすでに取り出し、メインスレッドへバッチを送るため、別の消費側として生の取り出し呼び出しを使わないでください。
 
 ```typescript
 engine.setMidiDestinationExternal('hardware-lead', true);

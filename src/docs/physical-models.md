@@ -1,19 +1,19 @@
 ---
 title: Physical Models
-description: How libsonare's physical-model voices work — the waveguide loop they share, the acoustic quantity each model is built around, with the identifiers, defaults and ranges the engine uses, and how far to trust them today.
+description: How libsonare's physical-model voices work — the waveguide loop they share, the acoustic quantity each model is built around, with the identifiers, struct defaults and ranges the engine uses, and how far to trust them today.
 ---
 
 # Physical Models
 
 Most of the [built-in synthesizer](./native-synth.md)'s engines start from a waveform and shape it. The acoustic-style engines start from an instrument instead — a string under a hammer, a bore under a reed, a metal tongue swinging through a slot, or a glottal source through formants. They compute each note from a mechanism rather than from a recording. Each note is a small simulation running at the sample rate, and what you hear is whatever that simulation radiates.
 
-This page is about that family: what the model is actually computing, which acoustic quantity each voice is built around, what tuning work is complete, and what still awaits adjustment.
+This page is about that family: what the model is actually computing, which acoustic quantity each voice is built around, and how far to trust each voice today.
 
 <MaturityNote
   item="physical-model-maturity"
   :labels="{
-    title: 'Current tuning status',
-    body: 'The piano has been tuned. Every other physical model still awaits adjustment and calibration, including the harpsichord, modal and membrane models. Further tuning is planned for future patch releases.'
+    title: 'Calibration status',
+    body: 'Only the acoustic piano is calibrated against a reference recording. Every other physical model, including the harpsichord, modal and membrane models, is provisional: it is meant for data-free preview and as the fallback floor, and its sound can change across patch releases.'
   }"
 />
 
@@ -31,7 +31,7 @@ That is the whole trick, and it has two consequences worth knowing before you us
 
 **Each voice costs compute.** A sampler reads memory and advances a playback voice; a model solves its physics once per sample per voice, and each voice carries its own delay lines, loss filters and body resonators. Polyphony, not disk, is the budget you spend here. A dense arrangement of bowed strings is a heavier render than the same arrangement played from samples.
 
-**And it is a model, not a recording.** It reproduces the mechanism, so it gets the behaviour a sample cannot: a hard blow is brighter *because* the felt compresses further, not because a second sample was recorded. What it does not get for free is the specific voice of a specific instrument, which requires adjustment and calibration.
+**And it is a model, not a recording.** It reproduces the mechanism, so it gets the behavior a sample cannot: a hard blow is brighter *because* the felt compresses further, not because a second sample was recorded. What it does not get for free is the specific voice of a specific instrument, which requires adjustment and calibration.
 
 ## The loop and model-specific stages
 
@@ -67,9 +67,11 @@ Most entries above use waveguides in the sense the figure describes. `vocal` is 
 
 The identifiers below are the engine's own field names. They are how each model is voiced, and they are what the named presets set — and a patch overrides them one by one through `engineParams`, spelled in lowerCamelCase; see [Reaching them from code](#reaching-them-from-code).
 
+The **Struct default** column is the value the voice starts from before any preset is applied. `synthEngineParamInfo(mode)` reports something else as `default`: the value of the engine's base preset (the violin for `bowed-string`), which differs from the struct default for most voiced fields. Ranges are the same in both.
+
 ### `piano` — hammer, unison strings, soundboard
 
-| Field | Default | Range | What it is |
+| Field | Struct default | Range | What it is |
 |---|---|---|---|
 | `piano.strike_position` | `0.085` | `0 – 0.5` | Where the hammer meets the string, as a fraction of its length. It notches the partials that have a node there — on a grand, roughly the eighth. |
 | `piano.hammer_exponent` | `2.5` | `1.5 – 4` | The felt's compression law, force against compression. It sets how much shorter and brighter a hard blow is than a soft one. |
@@ -78,13 +80,13 @@ The identifiers below are the engine's own field names. They are how each model 
 | `piano.detune_cents` | `1.6` | `0 – 50` | Micro-detune across the unison. The strings fall out of step, and the prompt sound gives way to the long aftersound. |
 | `piano.dispersion` | `1.0` | `0 – 1` | Scale on the keyboard-graded stiffness stretch; `0` is a perfectly harmonic string. |
 
-Three things this model does that a knob-driven plucked string cannot. **Inharmonicity follows a U-shaped curve** with its minimum around C2, rather than climbing monotonically toward the treble: the wound bass strings turn it back upward, so the very bottom of the keyboard is more inharmonic than the notes just above it. **Longitudinal string modes are modelled** — a struck string stretches along its length as well as across it, and the tension change radiates the inharmonic growl that fills a low note's attack. Without them the bass is felt more than heard. The current piano tuning also gives the voice an explicit output gain, so its level can be set when it is mixed with other fallback voices.
+Three things this model does that a knob-driven plucked string cannot. **Inharmonicity follows a U-shaped curve** with its minimum around C2, rather than climbing monotonically toward the treble: the wound bass strings turn it back upward, so the very bottom of the keyboard is more inharmonic than the notes just above it. **Longitudinal string modes are modeled** — a struck string stretches along its length as well as across it, and the tension change radiates the inharmonic growl that fills a low note's attack. Without them the bass is felt more than heard. The current piano tuning also gives the voice an explicit output gain, so its level can be set when it is mixed with other fallback voices.
 
 ### `pipe-organ` — a flue pipe on a shared wind chest
 
-| Field | Default | Range | What it is |
+| Field | Struct default | Range | What it is |
 |---|---|---|---|
-| `pipe_organ.breath` | `0.35` | `0 – 1` | Mouth pressure driving the jet. It colours the tone rather than setting the level — the pipe self-oscillates across the whole band, and loudness rides the amp envelope. |
+| `pipe_organ.breath` | `0.35` | `0 – 1` | Mouth pressure driving the jet. It colors the tone rather than setting the level — the pipe self-oscillates across the whole band, and loudness rides the amp envelope. |
 | `pipe_organ.brightness` | `0.5` | `0 – 1` | How brightly the open end reflects the upper partials: principal at the top, stopped flute at the bottom. |
 | `pipe_organ.stopped` | `false` | — | A covered pipe. Fundamental-dominant, octave pump muted, reflection darkened. |
 | `pipe_organ.rank_count` | `0` | `0 – 8` | How many ranks sound together. `0` is a single implicit 8′ built from the two fields above. |
@@ -95,7 +97,7 @@ The wind supply is shared across the ranks rather than per note, which is what m
 
 ### `bowed-string` — stick and slip
 
-| Field | Default | Range | What it is |
+| Field | Struct default | Range | What it is |
 |---|---|---|---|
 | `bowed_string.bow_position` | `0.13` | `0.02 – 0.5` | Contact point as a fraction of the string length from the bridge. Small is *sul ponticello* — near the bridge, bright and edgy; larger is *sul tasto*, over the fingerboard and soft. `0.13` is the natural playing point. |
 | `bowed_string.bow_force` | `0.5` | `0 – 1` | Downward pressure. It widens the sticking region of the friction curve: low is a light, whistly bow that barely captures the string, high is firm and slightly rough. |
@@ -108,7 +110,7 @@ Bow position and bow force are the pair a player actually controls, and they are
 
 ### `reed` — a valve the breath opens
 
-| Field | Default | Range | What it is |
+| Field | Struct default | Range | What it is |
 |---|---|---|---|
 | `reed.breath_pressure` | `0.6` | `0 – 1` | Steady mouth pressure — the dynamic level. The reed only speaks above a threshold, so very low values approach silence. |
 | `reed.reed_stiffness` | `0.5` | `0 – 1` | Slope of the reed table: soft and dark through hard, bright and buzzy. |
@@ -121,12 +123,12 @@ Bow position and bow force are the pair a player actually controls, and they are
 
 ### `brass` — the lip is the valve
 
-| Field | Default | Range | What it is |
+| Field | Struct default | Range | What it is |
 |---|---|---|---|
 | `brass.breath_pressure` | `0.7` | `0 – 1` | Steady mouth pressure driving the lip valve. |
-| `brass.lip_tension` | `0.5` | `0 – 1` | Embouchure: where the lip resonance sits relative to the bore. Tighter puts it a touch above, the outward-striking point that gives brass its edge; looser is a broader, more slotted centre. |
+| `brass.lip_tension` | `0.5` | `0 – 1` | Embouchure: where the lip resonance sits relative to the bore. Tighter puts it a touch above, the outward-striking point that gives brass its edge; looser is a broader, more slotted center. |
 | `brass.lip_damping` | `0.5` | `0 – 1` | The lip resonator's pole radius. Low is a tight, buzzing lip; high is soft and rounded. |
-| `brass.conical` | `false` | — | Cylindrical body (trumpet, trombone) against conical (horn, tuba, cornet, flugelhorn). Both radiate the full series; the flag colours the bell reflection. |
+| `brass.conical` | `false` | — | Cylindrical body (trumpet, trombone) against conical (horn, tuba, cornet, flugelhorn). Both radiate the full series; the flag colors the bell reflection. |
 | `brass.brightness` | `0.5` | `0 – 1` | Bell reflection openness. |
 | `brass.damping` | `0.4` | `0 – 1` | Bore loop loss. |
 
@@ -134,7 +136,7 @@ Unlike a reed, a brass lip has a resonance of its own, and the note is where the
 
 ### `flute` — a jet across an edge
 
-| Field | Default | Range | What it is |
+| Field | Struct default | Range | What it is |
 |---|---|---|---|
 | `flute.jet_ratio` | `0.5` | `0.1 – 0.9` | The jet's convection time as a fraction of the bore period. Around `0.5` the jet drives the fundamental; smaller ratios drive the octave and above, so this is the physical seat of the register. |
 | `flute.breath_pressure` | `0.55` | `0 – 1` | Mouth pressure — dynamic level and jet drive. |
@@ -147,7 +149,7 @@ The defining quantity for the flute is a *ratio of two times*: the jet's travel 
 
 ### `plucked-string` — the bridge the string grazes
 
-| Field | Default | Range | What it is |
+| Field | Struct default | Range | What it is |
 |---|---|---|---|
 | `plucked_string.pick_position` | `0.2` | `0 – 0.5` | Plucking point as a fraction of the period; the excitation comb notches the harmonics with a node there. `0` is no comb. |
 | `plucked_string.buzz` | `0.0` | `0 – 1` | How hard the curved bridge limits and sprays the returning wave into the upper partials. `0` is a cleanly terminated harp or koto; higher is the shimmering rattle of a sitar's jawari or a shamisen's sawari. |
@@ -160,7 +162,7 @@ The defining quantity for the flute is a *ratio of two times*: the jet's travel 
 
 ### `vocal` — a source and five formants
 
-| Field | Default | Range | What it is |
+| Field | Struct default | Range | What it is |
 |---|---|---|---|
 | `vocal.vowel` | `0` | `0 – 4` | `/a/`, `/e/`, `/i/`, `/o/`, `/u/`. Selects the formant table. |
 | `vocal.brightness` | `0.5` | `0 – 1` | Tilts the glottal source and opens the upper formants. |
@@ -172,7 +174,7 @@ The defining quantity for the flute is a *ratio of two times*: the jet's travel 
 
 ### `free-reed` — a tongue through a slot
 
-| Field | Default | Range | What it is |
+| Field | Struct default | Range | What it is |
 |---|---|---|---|
 | `free_reed.breath_pressure` | `0.7` | `0 – 1` | Bellows pressure — the dynamic level and the drive. |
 | `free_reed.reed_stiffness` | `0.5` | `0 – 1` | Asymmetry of the tongue nonlinearity: softer is rounder, stiffer is buzzier. |
@@ -187,7 +189,7 @@ The defining quantity for the flute is a *ratio of two times*: the jet's travel 
 
 ### `karplus-strong` — the plain plucked loop
 
-| Field | Default | Range | What it is |
+| Field | Struct default | Range | What it is |
 |---|---|---|---|
 | `ks.pick_position` | `0.18` | `0 – 0.5` | Plucking point as a fraction of the period. |
 | `ks.decay_s` | `3.0` | `0.05 – 60` | String t60 at A4. |
@@ -196,11 +198,11 @@ The defining quantity for the flute is a *ratio of two times*: the jet's travel 
 | `ks.exc_brightness` | `0.85` | `0 – 1` | Excitation lowpass openness at full velocity. |
 | `ks.release_damp_s` | `0.08` | `0.01 – 10` | Damped t60 at note-off. |
 
-This is the cleanly terminated plucked string, and it is what a great many GM programs fall back to — the guitars, the basses and the harp. Compared with `plucked-string` the difference is the bridge: here it reflects and that is all, so the note decays smoothly rather than shimmering. Several richer behaviours live in this engine and default to off, including fret slap, a second polarization and bridge coupling between the two planes.
+This is the cleanly terminated plucked string, and it is what a great many GM programs fall back to — the guitars, the basses and the harp. Compared with `plucked-string` the difference is the bridge: here it reflects and that is all, so the note decays smoothly rather than shimmering. Several richer behaviors live in this engine and default to off, including fret slap, a second polarization and bridge coupling between the two planes.
 
 ### `harpsichord` — a quill, and three string choirs
 
-| Field | Default | Range | What it is |
+| Field | Struct default | Range | What it is |
 |---|---|---|---|
 | `harpsichord.pluck_8a` | `0.14` | `0 – 0.5` | Plucking point of the first 8′ choir, as a fraction of the string. |
 | `harpsichord.pluck_8b` | `0.22` | `0 – 0.5` | The second 8′ choir, plucked at a different point — which is what makes the two registrations sound different rather than merely louder. |
@@ -209,7 +211,7 @@ This is the cleanly terminated plucked string, and it is what a great many GM pr
 | `harpsichord.velocity_range_db` | `5.0` | `0 – 24` | The whole dynamic range key speed buys. A real instrument gives three to six decibels, and not even monotonically — past a certain speed the plectrum slips off sooner and the note gets *quieter*. |
 | `harpsichord.rear_coupling` | `0.35` | `0 – 1` | How much of the short undamped segment behind the bridge reaches the output. This is where the instrument's inharmonic shimmer comes from; the speaking partials stay harmonic to within a couple of cents. |
 
-This model, like every physical model other than the piano, still awaits adjustment and calibration. Registration uses separate string choirs: two 8′ unisons and a 4′ octave are three independent delay lines at three periods, not one string with a mix control.
+Registration uses separate string choirs: two 8′ unisons and a 4′ octave are three independent delay lines at three periods, not one string with a mix control.
 
 ::: warning Trim the gain before you A/B it
 Raw output levels are not matched across engines, so a harpsichord can sit substantially higher or lower than the voice beside it. Lower the patch `gain` before putting a harpsichord next to another engine, and audition the pair at a matched level.
@@ -217,17 +219,17 @@ Raw output levels are not matched across engines, so a harpsichord can sit subst
 
 ## Hear the contrast
 
-The demo below plays one note through several engine modes. Listen to the **onset** above all — that is where the models and the waveform part company hardest. Subtractive starts loud and gets carved; the plucked loops start with a burst and immediately begin losing energy; the bowed string takes a few periods to grip before the tone locks in; the wind voices ramp their pressure and speak with a chiff. The cutoff control acts on the shared filter, so it has the same meaning across these voices. Raw levels are not matched between engines, so match `gain` before judging tone.
+The demo below plays one note through each of the sixteen engines that sound without a sample bank, the waveguide models on this page and the non-waveguide ones beside them. Listen to the **onset** above all — that is where the models and the waveform part company hardest. Subtractive starts loud and gets carved; the plucked loops start with a burst and immediately begin losing energy; the bowed string takes a few periods to grip before the tone locks in; the wind voices ramp their pressure and speak with a chiff. The cutoff control acts on the shared filter, so it has the same meaning across these voices. Raw levels are not matched between engines, so match `gain` before judging tone.
 
 <SonareDemo id="physical-voice-audition" />
 
 ## Where the family ends
 
-Two engines use physical ideas without being waveguides, and they are documented on [Built-in Synthesizer](./native-synth.md) rather than here. `modal` is a bank of tuned resonators struck at once — the right model for a bar or a bell, where the modes are known and none of them travels. `percussion` is a Rayleigh circular membrane with filtered noise and, for shakers and scrapers, a stochastic particle source; it is a modal model with a noise bed, not a loop. `additive` is additive synthesis: it sums drawbar partials rather than modelling a physical object.
+Of the non-waveguide engines in the demo above, three sit close enough to this family to need a word. They are documented on [Built-in Synthesizer](./native-synth.md) rather than here. `modal` is a bank of tuned resonators struck at once — the right model for a bar or a bell, where the modes are known and none of them travels. `percussion` is a Rayleigh circular membrane with filtered noise and, for shakers and scrapers, a stochastic particle source; it is a modal model with a noise bed, not a loop. `additive` is additive synthesis: it sums drawbar partials rather than modeling a physical object.
 
 The percussion engine does carry one pair of fields worth stating here, because a kit tuned against an older build will need retrimming:
 
-| Field | Default | Range | What it is |
+| Field | Struct default | Range | What it is |
 |---|---|---|---|
 | `percussion.wire_threshold` | `0.1` | `0 – 1` | How far the head must swing before the snare wires make contact, **as a fraction of the swing a full-velocity strike reaches on that piece**. `0` is always in contact and `1` is never, so the whole interval means the same thing on every kit piece. Strike velocity enters the same comparison, which is the nonlinearity a strainer actually is: a soft hit can stay under the threshold for its whole length. |
 | `percussion.wire_decay_ms` | `0.0` | `0 – 2000` | Damping of the wire bed in its own right, so the rattle can outlive the head that started it — which is why a snare's tail is broadband after its head tone has gone. At `0` the rattle is a plain gate, which is what every piece without a strainer uses. |
@@ -250,7 +252,7 @@ const names = synthPresetNames();
 
 const patch = synthPresetPatch('cello');
 // The wrapper sections only — patch.engineMode is 'bowed-string', and the
-// the bow's own voicing is not returned; override it with engineParams.
+// bow's own voicing is not returned; override it with engineParams.
 
 const audio = project.bounceWithSynthInstrument(
   { preset: 'cello', cutoffHz: 3600, ampAttackMs: 40 },
@@ -263,7 +265,7 @@ names = sonare.synth_preset_names()
 patch = sonare.synth_preset_patch("clarinet")
 
 audio = project.bounce_with_synth_instrument(
-    {"preset": "clarinet", "cutoff_hz": 3600},
+    sonare.SynthPatch(preset="clarinet", cutoff_hz=3600.0),
     total_frames=48000,
     num_channels=2,
 )
@@ -273,7 +275,9 @@ audio = project.bounce_with_synth_instrument(
 
 **Override the engine's own fields.** Put them in `engineParams` on a patch (`engine_params` in Python). Absent keys keep the preset's value. An unknown key, a key of another engine, a non-finite or fractional-for-integer value, or a value outside the field's range is refused by name rather than clamped. The values are calibrated per preset, so change one or two at a time and listen.
 
-```typescript
+::: code-group
+
+```typescript [Browser / Node]
 const audio = project.bounceWithSynthInstrument(
   { preset: 'cello', engineParams: { bowForce: 0.7, bowPosition: 0.1 } },
   { totalFrames: 48000, numChannels: 2 },
@@ -281,7 +285,20 @@ const audio = project.bounceWithSynthInstrument(
 const keys = synthEngineParamInfo('bowed-string'); // name, min, max, default, unit
 ```
 
-**Override the shared layer on top of it.** Anything in the wrapper — filter cutoff and resonance, both envelopes, the LFOs, glide, body mix, stereo spread, gain — applies over whichever engine the preset selected. The percussion engine is the exception: of these it honours only gain. The same fields are resolvable as continuous automation targets through `resolveInstrumentAutomationId`. What you cannot automate that way is structure: preset, engine mode, waveform, filter model, polyphony and the mod routings are refused rather than smoothed.
+```python [Python]
+audio = project.bounce_with_synth_instrument(
+    sonare.SynthPatch(preset="cello", engine_params={"bowForce": 0.7, "bowPosition": 0.1}),
+    total_frames=48000,
+    num_channels=2,
+)
+keys = sonare.synth_engine_param_info("bowed-string")   # name, min, max, default, unit
+```
+
+:::
+
+The keys stay lowerCamelCase in Python. A few bowed-string fields are gated: `stribeck` reaches the voice only while `elastoPlastic` is on, and `corpusScale` / `corpusTiltHz` only with `body: 'violin'` and `bodyMix > 0`. Those conditions are the entry's `activeWhen` (the same camelCase key in Python's `SynthParamInfo`); see [Gated fields](./native-synth.md#gated-fields-activewhen).
+
+**Override the shared layer on top of it.** Anything in the wrapper — filter cutoff and resonance, both envelopes, the LFOs, glide, body mix, stereo spread, gain — applies over whichever engine the preset selected. The percussion engine is the exception: of these it honors only `gain`, `busDrive` and `polyphony`. The same fields are resolvable as continuous automation targets through `resolveInstrumentAutomationId`. What you cannot automate that way is structure: preset, engine mode, waveform, filter model, polyphony and the mod routings are refused rather than smoothed.
 
 **Play the exciter live, through the excitation axes.** This is the route that moves the physics during a note. Besides the static `engineParams` fields, the engine defines four abstract axes — force, position, brightness and morph — that a controller gesture or a mod-matrix route can move mid-note, and each engine declares which of them it reads.
 

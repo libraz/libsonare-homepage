@@ -66,7 +66,7 @@ In Python, `project.compile()` returns the same shape (`has_timeline`, `diagnost
 
 ## Save and load: deterministic JSON
 
-`toJson()` serializes the whole project — tracks, clips, MIDI content, loop crossfades, tempo map, time signatures, markers, annotations, warp maps, automation, and part-rig selections — to **deterministic JSON**: the same project always produces byte-identical text. `Project.fromJson(...)` restores it. Loop crossfade fields are omitted when they are zero, so older hard-loop projects keep the same JSON shape. Loading requires a numeric integer `version`; a missing or non-integer value, schema `0`, and a version above the supported `5` are rejected.
+`toJson()` serializes the whole project (tracks, clips, MIDI content, loop crossfades, tempo map, time signatures, markers, annotations, warp maps, automation, and part-rig selections) to **deterministic JSON**: the same project always produces byte-identical text. `Project.fromJson(...)` restores it. Loop crossfade fields are omitted when they are zero, so hard-loop projects keep a compact JSON shape. Loading requires an integer `version` from `1` to the supported `5`.
 
 The serializer selects the lowest schema needed by the model. A project with no typed or physical fields uses schema `1`; a typed automation lane raises it to schema `2`; a clip or take with a physical source offset in seconds, or a clip with a loop anchor, raises it to schema `3`; comp render parts use schema `4`; at least one part-rig entry uses schema `5`. The physical source-offset, loop-anchor, comp-render-part, and part-rig fields are JSON/native-model data, so the current JavaScript surface has no setters for the first three; preserve them through the JSON/native model when exchanging projects. A project without these fields keeps the lower schema and its existing content.
 
@@ -97,15 +97,26 @@ try {
 
 Python mirrors this with `project.to_json()`, `Project.from_json(json)`, and `Project.from_json_with_diagnostics(json)`.
 
-A document that cannot load fails with the C ABI's own code on every surface, and the message starts with a diagnostic name: a malformed document is `InvalidFormat` (`malformed_json: …`), and so is a `sample_rate` that is not a whole number of hertz in the supported range (`invalid_sample_rate: …`). WASM and Node throw `SonareError`; Python raises `SonareValueError` carrying the same `code`. The Python CLI exits `5` for a malformed project document, as the native CLI does.
+A document that cannot load fails with the C ABI's `InvalidFormat` code on every surface, and the message starts with a diagnostic name. WASM and Node throw `SonareError`; Python raises `SonareValueError` carrying the same `code`. The Python CLI exits `5` for a malformed project document, as the native CLI does.
 
-Warnings from a successful load come back as text in `diagnostics`. A key in the embedded mixer scene that the scene reader does not consume is reported as `unknown_scene_key` with its path from the document root, for example `scene.strips[0].faderDB`; keys starting with `$` or `x-` are exempt. The rest of the project document is not checked for unknown keys. See [Mixing Scene JSON](./mixing-scene-json.md) for the same check on a standalone scene.
+| Diagnostic | Cause | Fatal |
+|------------|-------|-------|
+| `malformed_json` | The text is not a JSON object | Yes |
+| `missing_version` | `version` is absent or not a number | Yes |
+| `invalid_version` | `version` is `0`, or not a non-negative integer | Yes |
+| `unsupported_schema_version` | `version` is newer than the supported `5` | Yes |
+| `invalid_sample_rate` | `sample_rate` is not a whole number of hertz in 8000 to 384000 | Yes |
+| `unknown_scene_key` | A key in the embedded mixer scene that the scene reader does not consume | No, returned in `diagnostics` |
+
+An `unknown_scene_key` warning carries its path from the document root, for example `scene.strips[0].faderDB`; keys starting with `$` or `x-` are exempt. The rest of the project document is not checked for unknown keys. See [Mixing Scene JSON](./mixing-scene-json.md) for the same check on a standalone scene.
 
 ### Reading the model back, and rebinding audio after a load
 
 Project JSON stores the *arrangement*, not the PCM. A loaded project therefore knows it has a source, but has no samples behind it. Three read-only descriptor families plus the PCM and source-metadata setters close that loop.
 
-```typescript
+::: code-group
+
+```typescript [Browser / WASM]
 const loaded = Project.fromJson(json);
 
 for (let i = 0; i < loaded.trackCount(); i++) {
@@ -129,9 +140,35 @@ for (let i = 0; i < loaded.sourceCount(); i++) {
 const audio = loaded.bounce({ sampleRate: 48000 });
 ```
 
+```python [Python]
+loaded = sonare.Project.from_json(json_text)
+
+for i in range(loaded.track_count()):
+    track = loaded.track_by_index(i)
+    print(track.id, track.name)
+for i in range(loaded.clip_count()):
+    clip = loaded.clip_by_index(i)
+    print(clip.id, clip.start_ppq, clip.length_ppq)
+
+unresolved = set(loaded.unresolved_audio_source_ids())
+for i in range(loaded.source_count()):
+    source = loaded.source_by_index(i)
+    if source.kind != 0 or source.id not in unresolved:  # 0 = audio; skip MIDI
+        continue
+    pcm = decode_from_your_storage(source.name_or_uri)
+    loaded.set_source_audio(source.id, pcm, source.channel_count, int(source.sample_rate_hint))
+    loaded.set_audio_source_metadata(source.id, "sha256:...", "lead-vocal")
+
+audio = loaded.bounce(sample_rate=48000)
+```
+
+:::
+
+From the command line, `sonare project bounce --resolve-audio` opens the `file://` URIs the sources carry (see [Bounce from the Python CLI](./project-bounce.md#bounce-from-the-python-cli)).
+
 `trackByIndex` / `clipByIndex` / `sourceByIndex` are 0-based over the stored order, paired with `trackCount()` / `clipCount()` / `sourceCount()`. They are descriptors, not handles: mutating the returned object changes nothing. Use them to render a project the host loaded from disk, or to build a UI over a project your own code did not construct.
 
-`setSourceAudio(sourceId, samples, channels, sampleRate)` rebinds decoded PCM to a source before a bounce — the step that turns "loaded arrangement" into "renderable project".
+`setSourceAudio(sourceId, samples, channels, sampleRate)` rebinds decoded PCM to a source before a bounce, the step that turns "loaded arrangement" into "renderable project".
 
 `unresolvedAudioSources()` (Python `unresolved_audio_sources()`) returns the full descriptors of those sources in the same order, so a loader can read each `nameOrUri` without a second lookup; `sourceByIndex` and the descriptors return the URI untruncated.
 

@@ -11,14 +11,9 @@ description: Audio effects, editing DSP, and room-acoustics measurement and synt
 
 Harmonic-Percussive Source Separation. Splits audio into tonal (vocals, synths) and transient (drums) components.
 
-::: info Use Cases
-- **Remixing**: Isolate drums or remove them
-- **Karaoke**: Extract instrumental by removing vocals (use harmonic)
-- **Better Analysis**: Use harmonic-only for cleaner chord detection
-- **Drum Extraction**: Get just the percussion for sampling
-:::
-
 <SonareDemo id="hpss-separation" />
+
+`nFft` must be an even integer of at least 4; mixed-radix FFT sizes are accepted. `hopLength` must be an integer in `(0, nFft / 2]`. Both median kernels must be positive odd integers at most 524287. The underlying STFT window and `winLength` must provide overlap-add coverage without gaps; these JavaScript helpers use the default window geometry. Invalid geometry is refused instead of returning periodic dropouts.
 
 ::: tip Performance
 HPSS requires STFT (short-time Fourier transform) computation and median filtering. Processing time scales with audio duration.
@@ -76,14 +71,7 @@ function percussive(samples: Float32Array, sampleRate?: number): Float32Array  /
 
 ### `timeStretch(samples, sampleRate, rate, nFft?, hopLength?)` <Badge type="warning" text="Heavy" />
 
-Time-stretch audio without changing pitch. Rate < 1.0 = slower, > 1.0 = faster.
-
-::: info Use Cases
-- **Practice Tools**: Slow down music to learn difficult passages
-- **DJ Mixing**: Match tempos between tracks
-- **Podcast Editing**: Speed up/slow down speech
-- **Music Production**: Fit samples to project tempo
-:::
+Time-stretch audio without changing pitch. Rate < 1.0 = slower, > 1.0 = faster. See [Phase vocoder and time stretching](./glossary/editing/phase-vocoder-stretch.md).
 
 <SonareDemo id="time-stretch" />
 
@@ -103,14 +91,7 @@ function timeStretch(
 
 ### `pitchShift(samples, sampleRate, semitones, nFft?, hopLength?)` <Badge type="warning" text="Heavy" />
 
-Pitch-shift audio without changing duration. Measured in semitones (+12 = one octave up).
-
-::: info Use Cases
-- **Key Matching**: Transpose songs to match for mixing
-- **Vocal Tuning**: Correct or adjust vocal pitch
-- **Creative Effects**: Create harmonies, chipmunk/deep voice effects
-- **Instrument Practice**: Transpose to comfortable key
-:::
+Pitch-shift audio without changing duration. Measured in semitones (+12 = one octave up). See [Phase vocoder and time stretching](./glossary/editing/phase-vocoder-stretch.md).
 
 ::: tip Performance
 Combines time stretching and resampling. Processing time increases with audio duration.
@@ -130,14 +111,14 @@ function pitchShift(
 
 These functions change the signal itself rather than only analyzing it. They are
 also available as `Audio` instance methods, where the stored `sampleRate` is
-used automatically.
+used automatically. Background: [Pitch correction](./glossary/editing/pitch-correction.md) and [Voice and formants](./glossary/editing/voice-formant.md). Like the other one-shot functions, each also takes a request object and, after its last positional argument, `{ validate?: boolean }`.
 
 ```typescript
 function pitchCorrectToMidi(
   samples: Float32Array,
-  sampleRate: number,
-  currentMidi: number,
-  targetMidi: number,
+  sampleRate?: number,       // default 22050
+  currentMidi?: number,
+  targetMidi?: number,
 ): Float32Array
 
 // Retune a tracked pitch contour to a fixed target note, frame by frame.
@@ -149,13 +130,13 @@ function pitchCorrectToMidiTimevarying(
   samples: Float32Array,
   f0Hz: Float32Array,
   targetMidi: number,
-  sampleRate: number,
-  hopLength: number,
-  voiced?: VoicedFlags,
-  voicedProb?: Float32Array,
+  sampleRate?: number,       // default 22050
+  hopLength?: number,        // default 512
+  voiced?: VoicedFlags | null,
+  voicedProb?: Float32Array | null,
 ): Float32Array
 
-// Snap a tracked pitch contour to a musical scale (auto-tune) or a fixed note.
+// Snap a tracked pitch contour to a musical scale or a fixed note.
 // mode 'scale' pulls every voiced frame to the nearest enabled scale tone;
 // mode 'midi' (the default) behaves like pitchCorrectToMidiTimevarying.
 function pitchCorrectTimevarying(
@@ -215,6 +196,8 @@ the Nyquist frequency (`sampleRate / 2`); violating this rejects the call. An
 unvoiced frame may use `NaN` (a finite value from `0` through Nyquist is also
 accepted), but `NaN` is never valid for a voiced frame.
 
+A track with an unvoiced (`NaN`) frame needs a voicing source. Calling `pitchCorrectTimevarying(samples, f0Hz)` with such a track and neither `voiced` nor `voicedProb` throws `SonareError` `InvalidParameter` with the generic message `Invalid parameter`, which names no field. Pass `voiced` (for example `{ voiced: pitch.voicedFlag }`).
+
 ::: warning `voicedProb` decides voicing, and nothing else
 `voicedProb` exists for one purpose: to derive a per-frame voiced/unvoiced
 decision when `voiced` is not supplied. When `voiced` is supplied, `voicedProb`
@@ -234,7 +217,7 @@ function noteStretch(
   samples: Float32Array,
   sampleRate: number,
   options?: {
-    onsetSample?: number,    // note onset position in samples
+    onsetSample?: number,    // note onset position in samples; >= 0
     offsetSample?: number,   // note offset position in samples
     stretchRatio?: number,   // >1 lengthens the region, <1 shortens it
   },
@@ -253,7 +236,7 @@ function noteMove(
 ): Float32Array
 ```
 
-`Audio.noteStretch(options?)` and `Audio.noteMove(options?)` are the equivalent instance methods on an `Audio` wrapper (sample rate taken from the instance).
+`Audio.noteStretch(options?)` and `Audio.noteMove(options?)` are the equivalent instance methods on an `Audio` wrapper (sample rate taken from the instance). Negative sample positions (`onsetSample`, `offsetSample`, `targetOnsetSample`) are refused with a `RangeError` naming the field.
 
 ```typescript
 function spectralEdit(
@@ -301,7 +284,9 @@ sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.05 -o voice
 const out = voiceChange(vocal, 48000, { pitchSemitones: 4, formantFactor: 1, formantMode: 'absolute' });
 ```
 
-`pitchCorrectTimevarying(...)` is the scale-snap auto-tune path; see [Editing DSP](./editing-dsp.md) for the scale masks, `mode`, and retune-feel options in full. See [Spectral Editing](./spectral-editing.md) for region examples and option notes.
+`spectralEdit` requires `nFft` to be a power of two in `[4, 262144]`; any other value throws `SonareError` `InvalidParameter` (`SpectralEditConfig: nFft must be a power of two in [4, 262144]`), and a negative region sample position is a `RangeError`. See [Spectral Editing](./spectral-editing.md) for region examples and option notes.
+
+`pitchCorrectTimevarying(...)` is the scale-snap pitch correction path; see [Editing DSP](./editing-dsp.md) for the scale masks, `mode`, and retune-feel options in full.
 
 ### `normalize(samples, sampleRate, targetDb?, mode?)`
 
@@ -312,7 +297,7 @@ use `'rms'` to target RMS level instead.
 function normalize(
   samples: Float32Array,
   sampleRate: number,
-  targetDb?: number,        // default: 0.0 (full scale)
+  targetDb?: number,        // default: 0 for peak, -20 for rms
   mode?: 'peak' | 'rms'     // default: 'peak'
 ): Float32Array
 ```
@@ -343,19 +328,15 @@ interface NormalizeStereoResult {
 The level is read from the pair and the resulting gain goes to **both** channels
 unchanged. That is the whole point: normalizing each channel to its own target
 would change the balance rather than the level, turning a deliberate pan into a
-centred mix. Because the decision is shared, `appliedGainDb` is a single figure
+centered mix. Because the decision is shared, `appliedGainDb` is a single figure
 and not a per-channel pair. In `'peak'` mode the louder channel reaches
 `targetDb` and the quieter one keeps its distance below it. In `'rms'` mode the
 quantity driven to `targetDb` is the RMS over both channels' samples together —
 the quadratic mean of the per-channel figures, not their average — and the output
 is hard-clipped to `[-1, 1]`.
 
-::: warning `targetDb` defaults by mode here, unlike the mono `normalize`
-`normalizeStereo` defaults `targetDb` to **`0`** for `mode: 'peak'` and **`-20`**
-for `mode: 'rms'`, matching the other language surfaces. The mono `normalize` on
-this surface defaults to `0` in both modes, which is the wrong figure for RMS —
-0 dBFS RMS clips every peak in the signal. If you are porting a mono call to the
-stereo entry point, do not carry an explicit `targetDb: 0` across with it.
+::: warning Choose an RMS target with peak headroom
+Both `normalize` and `normalizeStereo` default `targetDb` to **`0`** for `mode: 'peak'` and **`-20`** for `mode: 'rms'`. An explicit RMS target of 0 dBFS can drive peaks beyond full scale; the output is hard-clipped to `[-1, 1]`. Leave the target omitted or choose an explicit RMS target with enough headroom for the signal's peaks.
 :::
 
 A pair whose channels differ in length throws a `RangeError`
@@ -388,7 +369,7 @@ range, use `trimSilence(...)` below.
 
 ## Room Acoustics
 
-These functions describe or apply the recording space rather than the song itself.
+These functions describe or apply the recording space rather than the song itself. Background: [Reverberation time](./glossary/acoustics/reverberation-time.md), [Room geometry](./glossary/acoustics/room-geometry.md) and [Spaced receivers](./glossary/acoustics/spaced-receivers.md).
 
 | Goal | Use |
 |------|-----|
@@ -398,6 +379,7 @@ These functions describe or apply the recording space rather than the song itsel
 | Turn that estimate into `synthesizeRir` input | `roomGeometryFromEstimate(...)` |
 | Create a mono room impulse response from dimensions | `synthesizeRir(...)` |
 | Add a target-room character as an effect | `roomMorph(...)` |
+| Add the same character to a stereo recording, heard at two spaced receivers | `roomMorphStereo({ left, right, sampleRate, ... })` |
 
 ::: info RIR and room morphing
 **RIR** means room impulse response: samples that describe how a room reacts to a short sound. `roomMorph(...)` is a creative effect, not dereverberation.
@@ -426,7 +408,7 @@ console.log(estimate.drrDb, estimate.confidence, estimate.bandAbsorption);
 const rir = synthesizeRir({ lengthM: 7, widthM: 5, heightM: 3, absorption: 0.2, materialPreset: 'none' });
 console.log(rir.sampleRate, rir.rir.length, rir.diagnostics);
 
-// An estimate already uses synthesizeRir's names; the helper adds the placement.
+// An estimate already uses synthesizeRir's names; the helper adds a placement scaled into the estimated room; source and listener override it.
 const geometry = roomGeometryFromEstimate(estimate, {
   source: { x: 1, y: 1, z: 1.2 },
   listener: { x: 2, y: 1.5, z: 1.5 },
@@ -439,6 +421,6 @@ const morphed = roomMorph(samples, sampleRate, { lengthM: 12, widthM: 9, heightM
 `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)`
 uses `minDecayDb` to set the decay-fit threshold (default `30`).
 
-`materialPreset` (`'none' | 'concrete' | 'wood' | 'curtain' | 'carpet' | 'glass'`, type `MaterialPresetName`) and the `estimateRoom` `mode` option (`'auto' | 'blind' | 'impulse_response'`, type `AcousticModeName`) take names only: a number is a `TypeError`, an unknown name a `RangeError`. `roomGeometryFromEstimate(estimate, { source?, listener? })` takes `RoomPlacement` (`{ x, y, z }` in meters) positions and returns `RoomGeometryOptions`; it throws a `RangeError` for an estimate with no measurable dimensions.
+`materialPreset` (`'none' | 'concrete' | 'wood' | 'curtain' | 'carpet' | 'glass'`, type `MaterialPresetName`) and the `estimateRoom` `mode` option (`'auto' | 'blind' | 'impulse_response'`, type `AcousticModeName`) take names only: a number is a `TypeError`, an unknown name a `RangeError`. `roomGeometryFromEstimate(estimate, { source?, listener? })` takes `RoomPlacement` (`{ x, y, z }` in meters) positions and returns `RoomGeometryOptions`, with the default placement scaled into the estimated room (each position given replaces it) and `absorption` as the mean of the finite bands; it throws a `RangeError` for an estimate with no measurable dimensions.
 
 See [Room Acoustics](./acoustic-analysis.md) for how to interpret RT60, EDT, C50, C80, D50, band arrays, room estimates, generated RIRs, and confidence.

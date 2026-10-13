@@ -29,6 +29,8 @@ auto db = mel.to_db();
 auto mfcc = mel.mfcc(13);  // 13 係数
 ```
 
+<SonareDemo id="mel-spectrogram" />
+
 ### Chroma <Badge type="info" text="Medium" />
 
 ```cpp
@@ -43,6 +45,8 @@ auto features = chroma.features();
 // ピッチクラスごとの平均エネルギー
 auto energy = chroma.mean_energy();
 ```
+
+<SonareDemo id="chromagram" />
 
 ### スペクトル特徴
 
@@ -124,8 +128,7 @@ Griffin-Lim は、位相を持たない振幅のみのスペクトルから、�
 :::
 
 ::: danger 非推奨関数
-逆変換関数 `icqt()` および `ivqt()` は、現行 C++ ヘッダー上で**非推奨**です。
-新しいコードでは Griffin-Lim または位相ボコーダ系の再構成経路を優先してください。
+逆変換関数 `icqt()` および `ivqt()` は、現行 C++ ヘッダー上で**非推奨**です。新しいコードでは Griffin-Lim または位相ボコーダ系の再構成経路を優先してください。
 
 ```cpp
 // 非推奨 - 新しいコードでは使用しないでください
@@ -151,8 +154,7 @@ auto reconstructed_vqt = griffinlim_vqt(vqt_result, vqt_result.sample_rate());
 
 ### NNLS クロマ
 
-NNLS クロマは CQT の hop 長を設定できます。既定値は `512` サンプルです。
-別のフレームグリッドに合わせる場合は `NnlsChromaConfig::cqt` に指定します。
+NNLS クロマは CQT の hop 長を設定できます。既定値は `512` サンプルです。別のフレームグリッドに合わせる場合は `NnlsChromaConfig::cqt` に指定します。
 
 ```cpp
 NnlsChromaConfig nnls_config;
@@ -167,6 +169,8 @@ auto nnls_result = nnls_chroma(audio, nnls_config);
 
 | 関数 | 用途 |
 |------|------|
+| `sonare_detect_chords_ex(samples, length, sample_rate, &options, &result)` | `SonareChordDetectionOptions` を使うコード検出（`_default()` はなく、全フィールドを設定します。[バージョン付き構造体](./cpp-api.md#バージョン付き構造体と既定値)を参照）。結果は `struct_version` と `tuning` を持ち、`sonare_free_chord_analysis_result` で解放します |
+| `sonare_chord_functional_analysis(samples, length, sample_rate, &options, key_root, key_mode, &chords, &roman, &functions)` | コードを検出し、キーに対する各コードのローマ数字と和声機能を付けます。`chords` は `SonareChordAnalysisResult`、`roman` と `functions` はコードと同じ個数の `SonareStringArray` 2 つで、`sonare_free_string_array` で解放します |
 | `sonare_detect_key_with_tuning(...)` | 録音の `tuning`（半音の端数、`[-0.5, 0.5)`）を指定するか、`tuning_auto` で測定させるキー検出。`out_tuning` に使われた値が入ります |
 | `sonare_chord_functions(chords, count, key_root, key_mode, &roman, &functions)` | 既に手元にあるコードのローマ数字と和声機能を、`count` 個ずつの `SonareStringArray` 2 つで返します。解放は `sonare_free_string_array`。音声は解析しません |
 | `sonare_chord_symbol_from_analysis(...)`、`sonare_key_mode_from_analysis(mode, &out_mode)` | 検出したコードやキーを、ライブラリ自身の変換表を通してアレンジ注釈（`SonareProjectChordSymbol`、`SonareProjectKeySegment`）のフィールドへ変換します。宣言は `sonare_c_project_annotate.h` |
@@ -179,23 +183,23 @@ auto nnls_result = nnls_chroma(audio, nnls_config);
 
 ## 構造境界
 
-`BoundaryDetector` は、MFCC とクロマの特徴量に対するチェッカーボードカーネルのノヴェルティ曲線から、セクションの転換点を見つけます。`BoundaryConfig` は検出器のパラメータを公開し、2 つのしきい値は役割が違います。
+`BoundaryDetector` は、MFCC とクロマの特徴量に対するチェッカーボードカーネルのノベルティ曲線から、[セクションの転換点](./glossary/analysis/section-structure.md)を見つけます。`BoundaryConfig` は検出器のパラメータを公開し、2 つのしきい値は役割が違います。
 
 ```cpp
 BoundaryConfig config;
-config.threshold = 0.3f;            // 相対: 局所ノヴェルティ最大値に対する割合
+config.threshold = 0.3f;            // 相対: 局所ノベルティ最大値に対する割合
 config.absolute_threshold = 0.005f; // 生の応答に対する下限: そもそも変化があったか
 config.reference_window = 60.0f;    // 相対しきい値を測る片側の秒数
 
 BoundaryDetector detector(audio, config);
 for (const Boundary& b : detector.boundaries()) {
-  // b.time（秒）、b.strength（曲全体の最大値で正規化したノヴェルティ）
+  // b.time（秒）、b.strength（曲全体の最大値で正規化したノベルティ）
 }
 ```
 
-`threshold` は、ピークから `reference_window` 秒以内で最大の生ノヴェルティイベントに対して測られ、孤立した支配的イベント（`reference_window` 内の他のどのイベントも 30% 以内に達しないもの）は除かれます。そのため、窓より遠くにある支配的な変化が、より弱い変化を締め出すことはありません。`0` は各フレームを自分自身の基準にして `threshold` を無効にし、曲の長さ以上の値は基準を曲全体にします（孤立した支配的イベントを除く点は同じです）。基準が局所的なため、`Boundary::strength`（曲全体の最大値で正規化した曲内の順位）は `threshold` を下回ることがあります。
+`threshold` は、ピークから `reference_window` 秒以内で最大の生ノベルティイベントに対して測られ、孤立した支配的イベント（`reference_window` 内の他のどのイベントも 30% 以内に達しないもの）は除かれます。そのため、窓より遠くにある支配的な変化が、より弱い変化を締め出すことはありません。`0` は各フレームを自分自身の基準にして `threshold` を無効にし、曲の長さ以上の値は基準を曲全体にします（孤立した支配的イベントを除く点は同じです）。基準が局所的なため、`Boundary::strength`（曲全体の最大値で正規化した曲内の順位）は `threshold` を下回ることがあります。
 
-C ABI は `sonare_detect_boundaries(samples, length, sample_rate, &options, &out)` で、`SonareBoundaryOptions` は必ず `sonare_boundary_options_default()` から始めます。ゼロ埋めにすると `absolute_threshold` が 0 になり、定常な入力でも区間が切られてしまいます。結果は `sonare_free_boundary_result` で解放します。
+C ABI は `sonare_detect_boundaries(samples, length, sample_rate, &options, &out)` で、`SonareBoundaryOptions` は必ず `sonare_boundary_options_default()` から始めます。ゼロ初期化すると `absolute_threshold` が 0 になり、定常な入力でも区間が切られてしまいます。結果は `sonare_free_boundary_result` で解放します。
 
 ## 型
 
@@ -215,9 +219,11 @@ struct Key {
 std::string key_name(int root, bool minor, bool short_form);
 ```
 
-`KeyConfig::tuning`、`ChordConfig::tuning`、`MusicAnalyzerConfig::tuning` は、録音の A440 からのずれを半音の端数（`[-0.5, 0.5)`）で表します。3 つのいずれでも `auto_tuning = true` にすると、値を読む代わりに音声から測定します（`feature/pitch.h` の `measure_tuning(audio)`）。使われた値は `KeyAnalyzer::tuning()`、`ChordAnalyzer::tuning()`、`MusicAnalyzer::tuning()` が報告し、`AnalysisResult::tuning` にも入ります。`feature/chroma.h` の `tuning_to_reference_hz(tuning, a4 = 440)` と `reference_hz_to_tuning(hz, a4 = 440)` は、基準音を表す Hz との間で変換します。
+キーのチューニングは[キー検出](./glossary/analysis/key-detection.md)で解説しています。`KeyConfig::tuning`、`ChordConfig::tuning`、`MusicAnalyzerConfig::tuning` は、録音の A440 からのずれを半音の端数（`[-0.5, 0.5)`）で表します。3 つのいずれでも `auto_tuning = true` にすると、値を読む代わりに音声から測定します（`feature/pitch.h` の `measure_tuning(audio)`）。使われた値は `KeyAnalyzer::tuning()`、`ChordAnalyzer::tuning()`、`MusicAnalyzer::tuning()` が報告し、`AnalysisResult::tuning` にも入ります。`feature/chroma.h` の `tuning_to_reference_hz(tuning, a4 = 440)` と `reference_hz_to_tuning(hz, a4 = 440)` は、基準音を表す Hz との間で変換します。
 
 ### Chord
+
+背景は[コード認識](./glossary/analysis/chord-recognition.md)を参照してください。
 
 ```cpp
 struct Chord {
@@ -263,7 +269,12 @@ struct AnalysisResult {
   TimeSignature time_signature;
   std::vector<TimeSignature> time_signature_candidates;
   std::vector<Beat> beats;
+  std::vector<int> downbeat_indices; // beats への添字。拍ごとのフラグではありません
+  int downbeat_phase;
+  BeatObservations beat_observations; // 拍に対応するオンセット、低域、コード変化の根拠
+  std::vector<float> beat_local_bpm;  // beats と並行。compute_tempo_curve 未指定なら空
   std::vector<Chord> chords;
+  std::vector<std::string> chord_roman_numerals; // chords と並行。key に対する数字。N.C. は空文字列
   std::vector<Section> sections;
   Timbre timbre;
   Dynamics dynamics;

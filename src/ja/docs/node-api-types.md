@@ -13,9 +13,13 @@ description: '@libraz/libsonare-native パッケージの TypeScript 型定義�
 interface Key {
   root: number;        // ピッチクラス番号 0..11（C = 0）。WASM、Python と同じ
   mode: KeyMode;       // 'major' | 'minor' | 'dorian' | 'phrygian' | 'lydian' | 'mixolydian' | 'locrian'
-  confidence: number;  // 採点した全候補にわたるソフトマックス。[0, 1)
+  confidence: number;  // detectKey: ソフトマックスの取り分 [0, 1)。analyze(): コードで補正した値で、最大 1
   name: string;        // "C major"、"A minor" など
   shortName: string;   // "C"、"Am" など
+}
+
+interface KeyDetection extends Key {
+  tuning: number; // クロマに使用した半音単位の偏差（指定値または測定値）
 }
 
 interface TimeSignature {
@@ -58,6 +62,21 @@ interface Chord {
 
 interface ChordAnalysisResult {
   chords: Chord[];
+  tuning: number; // クロマに使用した半音単位の偏差（指定値または測定値）
+}
+
+type ChordFunction = 'tonic' | 'subdominant' | 'dominant' | 'chromatic' | 'none';
+
+// 時刻付きコードに、キー内での位置を加えたもの。chordFunctionalAnalysis(...) と chordFunctions(...) が返す。
+type FunctionalChord<T = Chord> = T & {
+  roman: string;            // 'I'、'V7'。コードが不明なら 'N.C.'
+  function: ChordFunction;
+};
+
+// chordFunctions(...) が読むキー。detectKey の結果をそのまま渡せる。
+interface ChordFunctionsKey {
+  root: string | number;    // ピッチクラス名または数値
+  mode: KeyMode | number;   // モード名または Mode の序数
 }
 
 // 0=Intro、1=Verse、2=PreChorus、3=Chorus、4=Bridge、5=Instrumental、
@@ -85,6 +104,7 @@ interface AnalysisChord {
   end: number;
   confidence: number;
   name: string;        // 例: "Cmaj7"
+  romanNumeral: string; // AnalysisResult.key に対するローマ数字。N.C. は空文字列
 }
 
 // AnalysisResult の中のセクション。フィールドは Section と同じです。
@@ -131,6 +151,7 @@ interface AnalysisResult {
   rhythm: AnalysisRhythm;                        // リズムの集約サマリー
   melody: AnalysisMelody;                        // 旋律輪郭のサマリー
   form: string;                                  // 楽曲形式ラベル。例: "AABA"
+  tuning: number;                                // クロマグラムに使用した半音単位の偏差
 }
 // analyze() は上記のフル結果を返します。専用の detect*／analyze* 関数は、
 // 個別解析やパラメータ指定の解析向けに引き続き利用できます。
@@ -162,6 +183,11 @@ interface MelSpectrogramResult {
   nFrames: number;
   sampleRate: number;
   hopLength: number;
+  nFft: number;
+  fmin: number;            // 適用された Mel 下限周波数（Hz）
+  fmax: number;            // 適用された上限。指定値が 0 ならナイキスト周波数
+  htk: boolean;
+  isDb: boolean;           // 順変換では false。power は線形パワー
   power: Float32Array;      // nMels × nFrames, row-major
   db: Float32Array;         // nMels × nFrames, row-major
 }
@@ -169,6 +195,15 @@ interface MelSpectrogramResult {
 interface MfccResult {
   nMfcc: number;
   nFrames: number;
+  sampleRate: number;
+  hopLength: number;
+  nFft: number;
+  nMels: number;
+  fmin: number;
+  fmax: number;            // 適用された上限周波数
+  htk: boolean;
+  isDb: boolean;           // 常に false。係数はケプストラム
+  lifter: number;          // 0 はリフタリングなし
   coefficients: Float32Array;  // nMfcc × nFrames, row-major
 }
 
@@ -190,8 +225,8 @@ interface PitchResult {
   meanF0: number;
 }
 
-// Per-frame voicing decision, one entry per f0Hz frame. Accepted by the
-// `voiced` argument and by PitchCorrectOptions.voiced.
+// フレームごとの有声判定。f0Hz の 1 フレームにつき 1 要素。`voiced` 引数と
+// PitchCorrectOptions.voiced が受け取ります。
 type VoicedFlags =
   | Int32Array
   | Uint8Array
@@ -228,42 +263,41 @@ interface MeteringStereoRequest {
   sampleRate?: number;
   validate?: boolean;
 }
+
+// estimateRoom(...) が返す等価ルーム推定。長さの単位はメートル。
+interface RoomEstimateResult {
+  volume: number;               // m^3。減衰を測れなかった場合は NaN（confidence は 0）
+  lengthM: number;
+  widthM: number;
+  heightM: number;
+  drrDb: number;                // 直接音と残響音のエネルギー比
+  confidence: number;
+  bandAbsorption: Float32Array; // オクターブバンドごと。rt60Bands と同じ長さ
+  rt60Bands: Float32Array;      // オクターブバンドごとの秒数
+}
 ```
 
 `Key.root` は数値で、`detectChords` や `chordFunctions` がそのまま受け取れる形です。`detectChords`、`chordFunctionalAnalysis`、`Audio.chordFunctionalAnalysis` の `keyRoot` / `keyMode` と `chordFunctions` の `key` は、ピッチクラス名（`'C#'`）または数値と、モード名または `Mode` 序数を受け付けるので、検出したキーをそのまま渡せます。未知の名前は、フィールド名を挙げた `RangeError` になります。`Chord.root` と `Chord.bass` は引き続き文字列ラベルです。
 
 ### `Key.confidence` が表すもの
 
-`Key.confidence` は、採点したすべての候補のプロファイル相関に対するソフトマックス
-です。範囲は `[0, 1)` で、候補全体の confidence の合計は 1 になるため、24 候補のうちの
-1 つが 1 に到達することはありません。次点が迫るほど値は下がるので、根拠が割れる 2 つの
-キー（多くは平行調どうし）はそれぞれおよそ半分の値になります。
+`detectKey` と `detectKeyCandidates` が返す `Key.confidence` は、採点したすべての候補のプロファイル相関に対するソフトマックスです。範囲は `[0, 1)` で、候補全体の confidence の合計は 1 になるため、24 候補のうちの 1 つが 1 に到達することはありません。次点が迫るほど値は下がるので、根拠が割れる 2 つのキー（多くは平行調どうし）はそれぞれおよそ半分の値になります。
 
-この値は、**当たる頻度ではなく**、クロマが候補集合の中からどれだけはっきり 1 つを
-選んだかを表すものとして読んでください。注釈付き音源に対してキャリブレーションされて
-いないため、確信度が高くても誤ることは十分あり得ます。この値で分岐するパイプラインは、
-自分の素材に合わせてしきい値を自分で決める必要があります。
+この値は、**当たる頻度ではなく**、クロマが候補集合の中からどれだけはっきり 1 つを選んだかを表すものとして読んでください。注釈付き音源に対して較正されていないため、信頼度が高くても誤ることは十分あり得ます。この値で分岐するパイプラインは、自分の素材に合わせてしきい値を自分で決める必要があります。
+
+`analyze()` は別です。検出したコードでキーを補正するため、`AnalysisResult.key` は同じ入力に対する `detectKey` と異なるキーになることがあり、`confidence` もソフトマックスの取り分ではなく 1 に達しうる合成スコアです。取り分としての読み方が必要なときは `detectKey` を使ってください。
 
 ### 同じ構成音になるコード
 
 ::: warning 6th と 7th は同じ構成音を綴ることがあります
-`major6` は短 3 度下の `minor7` と、`minor6` は短 3 度下の `halfDim7` と、
-`dominant7Sus4` は完全 4 度下の `sus2Add4` と、それぞれ同じ 4 つのピッチクラスを
-綴ります。クロマグラムにはこの組を区別する手がかりがないため、既定では慣用的な読み方の
-ままになり、6th へ寄せられるのは低音の根拠がある場合だけです。
+`major6` は短 3 度下の `minor7` と、`minor6` は短 3 度下の `halfDim7` と、`dominant7Sus4` は完全 4 度下の `sus2Add4` と、それぞれ同じ 4 つのピッチクラスを綴ります。クロマグラムにはこの組を区別する手がかりがないため、既定では慣用的な読み方のままになり、6th へ寄せられるのは低音の根拠がある場合だけです。
 :::
 
 ### ビート関連フィールドの読み方
 
-`downbeatIndices` は `beats` への添字です。独立した時系列ではなくビートグリッド上の
-所属判定なので、`beats` と同じ長さにはなりません。`downbeatPhase` は最初の小節が
-始まるビートの添字です。
+`downbeatIndices` は `beats` への添字です。独立した時系列ではなくビートグリッド上の所属判定なので、`beats` と同じ長さにはなりません。`downbeatPhase` は最初の小節が始まるビートの添字です。
 
-各ビートの `strength` は、オンセット包絡線の**生の 1 フレーム**（上限なし）です。
-スケールは素材に依存し、ビート位置の揺れでも値が動きます。ビート周辺で何も平均して
-いないためです。`beatObservations.onsetStrength` はライブラリ自身のダウンビート推定が
-採点している窓付きの値で、アクセントを読むもの（上記の `estimateMeter(...)` や、ビートの
-強弱を描画する処理など）はこちらを使うのが本来の形です。
+各ビートの `strength` は、オンセット包絡線の**生の 1 フレーム**（上限なし）です。スケールは素材に依存し、ビート位置の揺れでも値が動きます。ビート周辺で何も平均していないためです。`beatObservations.onsetStrength` はライブラリ自身のダウンビート推定が採点している窓付きの値で、アクセントを読むもの（上記の `estimateMeter(...)` や、ビートの強弱を描画する処理など）はこちらを使うのが本来の形です。
 
 ネイティブパッケージは、オプション、コールバック、ストリーミングスナップショット、リアルタイムエンジンメッセージ用の TypeScript 補助型もエクスポートしています。アプリ側で同じ構造を再定義せず、これらの型名を使ってください。
 
@@ -279,7 +313,7 @@ interface MeteringStereoRequest {
 | ピッチ補正 | `PitchCorrectOptions`, `VoicedFlags`, `AutoTuneKey`, `AutoTuneOptions`, `AutoTuneResult` |
 | ルーム音響 | `AcousticModeName`, `MaterialPresetName`, `RoomGeometryFromEstimateOptions`, `RoomMorphOptions`, `RoomMorphResult`, `RoomMorphStereoResult`, `RoomPlacement` |
 | マスタリングチェーン設定 | `MasteringChainConfig`, `MasteringChainConfigDocument`, `MultibandCompressorBand` |
-| シンセ記述子 | `SynthParamInfo`, `SynthPatch`, `SynthEngineMode` |
+| シンセ記述子 | `SynthParamInfo`, `SynthParamCondition`, `SynthPatch`, `SynthEngineMode` |
 | ミキシング | `AutomationCurve`, `GoniometerPoint`, `MeterTap`, `MixMeterSnapshot`, `MixResult`, `MixerProcessResult`, `PanLaw`, `PanLawName`, `PanLawInput`, `PanMode`, `SendTiming`, `SidechainCheck`, `SidechainRefusal` |
 | リアルタイム音声 | `VoicePresetId`, `VoicePresetCategory`, `RealtimeVoiceChangerPresetMetadata`, `RealtimeVoiceChangerPreset`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerConfig`, `RealtimeVoiceChangerOptions` |
 | リアルタイムエンジングラフ | `EngineGraphSpec`, `EngineGraphNode`, `EngineGraphNodeType`, `EngineGraphConnection`, `EngineGraphMix`, `EngineGraphParameterBinding`, `EngineParameterInfo` |
@@ -287,4 +321,4 @@ interface MeteringStereoRequest {
 | プロジェクトのメタデータ／オートメーション | `ExternalInstrument`, `ExternalInstrumentEvent`, `ProjectAssistSidecar`, `ProjectAssistSidecarInput`, `ProjectAutomationTargetKind`, `ProjectAutomationLaneDesc` |
 | リアルタイムエンジンのジョブ／テレメトリ | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `EngineMeterTelemetry` |
 
-`CapabilityCatalog.masteringPresets` は `name`、`kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持つ要素を返し、修復プリセットでは 3 つの数値フィールドが `null` になります。`CapabilityCatalogProcessor.slots` は条件付きパラメータ群を表し、`MasteringInsertParamInfo` の各記述子には対応する `slot` があります。カタログの `chain` セクション（`CapabilityCatalogChain`）は、フラットなマスタリングチェーンキーすべてを記述します。ステージ（`CapabilityCatalogChainStage`）、項目数付きのインデックス付きリスト（`CapabilityCatalogChainList`）、どのプロセッサにも属さないキー、別名表記すべて（`CapabilityCatalogChainAlias`）です。`presets.playbackRoom` は常に存在します。記述子の `unit` は `MasteringInsertParamUnit`（閉じた集合で、数値でないキーは `null`）、`scale` は `MasteringInsertParamScale`（`'linear'` または `'log'`）、`dependsOn` は `MasteringInsertParamDependency`（`key`、`relation`、`factor`。`this <relation> factor * sibling` と読む）の配列で、その `relation` は `MasteringInsertParamRelation` です。`uiMin` と `uiMax` は表示範囲を表します。どのプロセッサ項目も `causal` を持ちます。`masteringInsertTiming(name, params, sampleRate)` は `latencySamples` と `tailSamples` を持つ `MasteringInsertTiming` を返し、`masteringPresetParams(preset)` は `masterAudio({ samples, overrides })` に渡せるフラットな `Record<string, number | boolean>` を返します。
+`CapabilityCatalog.masteringPresets` は `name`、`kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持つ要素を返し、修復プリセットでは 3 つの数値フィールドが `null` になります。`CapabilityCatalogProcessor.slots` は条件付きパラメータ群を表し、`MasteringInsertParamInfo` の各記述子には対応する `slot` があります。カタログの `chain` セクション（`CapabilityCatalogChain`）は、フラットなマスタリングチェーンキーすべてを記述します。ステージ（`CapabilityCatalogChainStage`）、項目数付きのインデックス付きリスト（`CapabilityCatalogChainList`）、どのプロセッサにも属さないキー、別名表記すべて（`CapabilityCatalogChainAlias`）です。`presets.playbackRoom` は常に存在します。記述子の `unit` は `MasteringInsertParamUnit`（閉じた集合で、数値でないキーは `null`）、`scale` は `MasteringInsertParamScale`（`'linear'` または `'log'`）、`dependsOn` は `MasteringInsertParamDependency`（`key`、`relation`、`factor`。`this <relation> factor * sibling` と読む）の配列で、その `relation` は `MasteringInsertParamRelation` です。`coupledWith` は、このキーの受け入れ範囲を動かすそのほかの兄弟キーの `string[]` で、`min` / `max` はそれらを既定値にして測った値です。`uiMin` と `uiMax` は表示範囲を表します。どのプロセッサ項目も `causal` を持ちます。`masteringInsertTiming(name, params, sampleRate)` は `latencySamples` と `tailSamples` を持つ `MasteringInsertTiming` を返し、`masteringPresetParams(preset)` は `masterAudio({ samples, overrides })` に渡せるフラットな `Record<string, number | boolean>` を返します。

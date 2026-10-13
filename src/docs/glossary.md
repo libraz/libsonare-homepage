@@ -11,17 +11,37 @@ This glossary is an editorial index, not a generated term dump. Start with the g
 Read [Audio Basics](./glossary/concepts/audio-basics.md) first, then [MIR Overview](./glossary/concepts/mir-overview.md). If you are here for the mastering demo, start with [What Is Mastering?](./glossary/concepts/what-is-mastering.md).
 :::
 
+## Quick Lookup
+
+| Looking for | Go to |
+|-------------|-------|
+| Sample rate, bit depth, dBFS, peak vs RMS, clipping, headroom, latency | [Audio Basics](./glossary/concepts/audio-basics.md) |
+| LUFS, integrated loudness, LRA, the loudness gate | [LUFS](./glossary/lufs.md) |
+| True peak, dBTP, inter-sample peak, limiter ceiling | [True Peak](./glossary/true-peak.md) |
+| Crest factor, dynamic range | [Crest Factor](./glossary/concepts/crest-factor.md), [Dynamic Range](./glossary/concepts/dynamic-range.md) |
+| Stereo width, correlation, phase cancellation | [Mono Compatibility](./glossary/concepts/mono-compatibility.md) |
+| Input gain, trim, headroom between stages | [Gain Staging](./glossary/concepts/gain-staging.md) |
+| Fader, pan, inserts vs sends, buses | [Mixing Basics](./glossary/concepts/mixing-basics.md), [Buses and Sends](./glossary/mixing/buses-sends.md) |
+| BPM, beats, onsets | [Tempo and BPM](./glossary/analysis/tempo-bpm.md), [Onset Detection](./glossary/analysis/onset-detection.md) |
+| Key, chroma, chords | [Key Detection](./glossary/analysis/key-detection.md), [Chord Recognition](./glossary/analysis/chord-recognition.md) |
+| STFT, spectrogram, `nFft`, `hopLength` | [Spectrogram and STFT](./glossary/analysis/spectrogram-stft.md) |
+| Mel, MFCC, timbre | [Mel, MFCC, and Timbre](./glossary/analysis/mel-mfcc-timbre.md) |
+| F0, pitch tracking | [Melody and Pitch](./glossary/analysis/melody-pitch.md) |
+| Semitones, cents, MIDI note numbers, formants | [Editing Basics](./glossary/concepts/editing-basics.md) |
+| Denoise, declip, declick, dehum, dereverb | [Repair and Input Controls](./glossary/mastering/repair.md) |
+| RT60, EDT, clarity | [Reverberation Time](./glossary/acoustics/reverberation-time.md), [Clarity and Definition](./glossary/acoustics/clarity-definition.md) |
+
 ## Foundations
 
 These pages cover the signal and analysis concepts that recur across the API, CLI, WASM, and browser demos.
 
 | Guide | Covers |
 |-------|--------|
-| [Audio Basics](./glossary/concepts/audio-basics.md) | Sample rate, bit depth, mono/stereo, amplitude, dB, clipping, headroom, and latency. |
+| [Audio Basics](./glossary/concepts/audio-basics.md) | Sample rate, bit depth, mono/stereo, amplitude and dB (peak, RMS, loudness), clipping, headroom, and latency. |
 | [MIR Overview](./glossary/concepts/mir-overview.md) | BPM, beats, onsets, key, chords, chroma, FFT, STFT, spectrograms, MFCC, CQT, VQT, HPSS, pitch, and sections. |
-| [Mixing Basics](./glossary/concepts/mixing-basics.md) | Tracks, stems, trim, fader, pan, stereo width, mute, solo, polarity, headroom, and bouncing. |
+| [Mixing Basics](./glossary/concepts/mixing-basics.md) | Tracks and channel strips, trim, fader and gain staging, pan, inserts vs sends, buses and subgroups, automation, and metering. |
 | [Editing Basics](./glossary/concepts/editing-basics.md) | Pitch vs time, semitones and cents, MIDI note numbers, formant, and samples vs seconds. |
-| [Browser Local Processing](./glossary/concepts/browser-local-processing.md) | What stays local in the browser mastering demo, what still loads from the network, and the tradeoffs of local WASM processing. |
+| [Browser Local Processing](./glossary/concepts/browser-local-processing.md) | What stays local in the browser demos, what still loads from the network, and the tradeoffs of local WASM processing. |
 
 ## Analysis Guides
 
@@ -62,14 +82,26 @@ These pages expand the editing-DSP terms behind the [Editing DSP](./editing-dsp.
 | [Pitch Correction and Note Editing](./glossary/editing/pitch-correction.md) | MIDI-targeted correction, note regions, and sample-accurate edits. |
 | [Voice and Formant](./glossary/editing/voice-formant.md) | Formants, the vocal tract, and pitch vs formant independence. |
 
+## Repair Guides
+
+Repair removes damage from a source before tone, dynamics, and limiting. The glossary page explains the six-stage chain and why its order is fixed; the guides show how to measure a recording and apply each stage.
+
+| Guide | Covers |
+|-------|--------|
+| [Repair and Input Controls](./glossary/mastering/repair.md) | The six-stage repair chain, the denoise depth key, and input gain before the main chain. |
+| [Audio Repair Workflow](./audio-repair.md) | Choosing, measuring, and applying the repair stages. |
+| [Repairing Broadband Noise and Hum](./repair-noise.md) | Detecting a noise floor or mains hum and choosing the matching stage. |
+| [Repairing Clipping, Clicks, and Crackle](./repair-transients.md) | Detecting and repairing impulsive defects with declip, declick, and decrackle. |
+| [Repairing Diffuse Reverb](./repair-reverb.md) | Measuring a late diffuse tail and configuring the offline dereverberator. |
+
 ## Instruments and MIDI
 
 These pages explain how libsonare turns MIDI into sound — the built-in [NativeSynth](./native-synth.md), the [SoundFont player](./soundfont-player.md), and the MIDI vocabulary they share.
 
 | Guide | Covers |
 |-------|--------|
-| [Synthesis Basics](./glossary/instruments/synthesis-basics.md) | Oscillators, filters, and the synthesis families NativeSynth uses: subtractive, FM, physical modeling, modal, and additive. |
-| [Envelopes and Modulation](./glossary/instruments/envelopes-modulation.md) | ADSR envelopes, LFOs, velocity, key tracking, and the mod matrix. |
+| [Synthesis Basics](./glossary/instruments/synthesis-basics.md) | Oscillators, filters, the synthesis families NativeSynth uses, and patch fields versus engine parameters. |
+| [Envelopes and Modulation](./glossary/instruments/envelopes-modulation.md) | ADSR and DAHDSR envelopes, one-shot notes, LFOs, per-voice drift, velocity, key tracking, and the mod matrix. |
 | [MIDI Basics](./glossary/instruments/midi-basics.md) | Notes, velocity, channels, CC, program change, banks, General MIDI, pitch bend, and MIDI 2.0. |
 | [SoundFont and Sampled Instruments](./glossary/instruments/soundfont.md) | Sampled vs synthesized sound, SF2 banks and programs, and the General MIDI fallback. |
 | [GM and GS](./glossary/instruments/gm-gs.md) | What a standard that numbers instruments promises: program numbers, the drum channel, Bank Select and variation tones, and what GS adds. |
@@ -98,13 +130,14 @@ These pages expand the realtime/streaming terms used by `StreamAnalyzer`, the `R
 
 ## Room Acoustics
 
-These pages expand the room-acoustic terms used by the [Spatial Room Scanner](/spatial) and the [Acoustic Analysis](./acoustic-analysis.md) guide — what a room's decay reveals about its size, surfaces, and the distance to a source.
+These pages expand the room-acoustic terms used by the [Spatial Room Scanner](/spatial) and the [Room Acoustics](./acoustic-analysis.md) guide — what a room's decay reveals about its size, surfaces, and the distance to a source.
 
 | Guide | Covers |
 |-------|--------|
 | [Reverberation Time (RT60 and EDT)](./glossary/acoustics/reverberation-time.md) | RT60, early decay time, the T20/T30 extrapolation, and why the two measures disagree. |
 | [Clarity and Definition (C50, C80, D50)](./glossary/acoustics/clarity-definition.md) | Early-to-late energy ratios for speech and music, and definition as a percentage. |
 | [Source Distance and DRR](./glossary/acoustics/source-distance.md) | Direct-to-reverberant ratio, critical distance, and why one channel resolves distance but not direction. |
+| [Spaced Receivers and Inter-Channel Coherence](./glossary/acoustics/spaced-receivers.md) | The stereo receiver pair behind `roomMorphStereo` and the room inserts, `receiverSpacingM`, and how spacing sets where the two reverb tails stop moving together. |
 | [Room Geometry and Volume](./glossary/acoustics/room-geometry.md) | The equivalent shoebox, volume, and Sabine's volume/absorption trade-off. |
 | [Per-Band Decay and Absorption](./glossary/acoustics/absorption-bands.md) | Per-band RT60, absorption coefficients, and the high-frequency rolloff. |
 | [Inverse Room Estimation](./glossary/acoustics/inverse-estimation.md) | Impulse-response (IR) based vs blind estimation, and how to read the confidence score. |
@@ -137,6 +170,7 @@ These pages group controls by how they are used in the chain. Individual paramet
 |-------|--------|
 | [Repair and Input Controls](./glossary/mastering/repair.md) | Input gain, denoise, source clipping, and preparation before the main chain. |
 | [Dynamics Controls](./glossary/mastering/dynamics.md) | Threshold, ratio, attack, release, knee, gain reduction, punch, and multiband compression. |
+| [Crossover Slope and Mode](./glossary/mastering/crossover.md) | How multiband processors split bands: slope in dB/oct, Linkwitz-Riley, Butterworth, Bessel and linear-phase FIR, and their latency and phase costs. |
 | [Tone and Air Controls](./glossary/mastering/tone-air.md) | Tilt EQ, exciter amount, air-band amount, and brightness decisions. |
 | [Stereo, Limiter, and Loudness Controls](./glossary/mastering/stereo-limiter-loudness.md) | Stereo width, limiter ceiling, loudness target, and final rendering. |
 | [Reference Match](./glossary/mastering/reference-match.md) | Reference import, level matching, spectral comparison, and match strength. |

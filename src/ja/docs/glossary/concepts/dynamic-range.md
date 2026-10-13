@@ -13,6 +13,25 @@ description: 小さい部分と大きい部分の差、そしてマスタリン�
 
 <SonareDemo id="loudness-meter" />
 
+## どの数値がダイナミックレンジか
+
+libsonare には、どこかで「ダイナミックレンジ」と呼ばれる読み値が 3 つあります。答える問いがそれぞれ違うので、別の読み値を期待して呼ぶと違う数値が返ります。
+
+| 読み値 | 測るもの | 呼び出し |
+|--------|----------|----------|
+| LRA（ラウドネスレンジ） | 短時間ラウドネスの 10〜95 パーセンタイルの幅。小さい音や無音のブロックはゲートで除外。単位は LU | `lufs().loudnessRange` |
+| 窓 RMS レンジ | ゲートなしの 3 秒 RMS 窓に、同じパーセンタイルを適用した幅。単位は dB | `meteringDynamicRange` |
+| クレストファクター | バッファ全体のピークと平均レベルの差 | `meteringCrestFactorDb` |
+
+マクロダイナミクス（後述）は上の 2 行、ミクロダイナミクスはクレストファクターに対応します。最初の 2 つはゲートの有無で差が出ます。サイン波を 10 秒、続けて 20 dB 小さい同じサイン波を 10 秒鳴らすと、どちらの読み値も 20 になります。ここにピーク -66 dBFS の 10 秒を足すと、2 つの値が分かれます。
+
+| 信号 | LRA | 窓 RMS レンジ |
+|------|-----|---------------|
+| 大きい音のあとに 20 dB 小さい音 | 20.0 LU | 20.0 dB |
+| 同じ信号に -66 dBFS の末尾を追加 | 20.1 LU | 60.0 dB |
+
+LRA は、ほぼ無音の末尾が相対ゲートを下回るため無視します。ゲートなしの窓レンジはその末尾も数えます。番組全体がどう動くかを表すなら LRA、静かな区間もすべて数えたいなら窓 RMS レンジを使います。
+
 ## 大きな起伏と短い動き
 
 ダイナミクスは、次の 2 つに分けて考えると判断しやすくなります。
@@ -47,11 +66,42 @@ description: 小さい部分と大きい部分の差、そしてマスタリン�
 
 逆に動きを残しすぎると、小型スピーカーやノイズの多い環境で聴こえにくくなります。マスタリングの狙いは「動きを消すこと」ではなく、意図した動きが過不足なく伝わるレンジに整えることです。
 
-## libsonare での扱い
+## libsonare で測る
 
-libsonare デモでは、Quick タブの Dynamics マクロと Studio タブのコンプレッサーコントロールでダイナミクスを調整します。メーターパネルにはクレスト情報も表示され、ピークと平均の関係をひと目で確認できます。
+::: code-group
 
-主要なコンプレッサーコントロールは [ダイナミクスコントロール](../mastering/dynamics.md) にまとめています。
+```typescript [Browser]
+import { init, lufs, meteringDynamicRange, meteringCrestFactorDb } from '@libraz/libsonare';
+
+await init();
+
+const { loudnessRange } = lufs(samples, sampleRate);                    // LRA（LU）
+const { dynamicRangeDb } = meteringDynamicRange(samples, sampleRate);   // 窓 RMS レンジ（dB）
+const crest = meteringCrestFactorDb(samples, sampleRate);               // ピーク - RMS（dB）
+
+// 窓の長さ、ホップ、パーセンタイルはオプションです。省略すると 3 秒、1 秒、0.10、0.95 になります。
+const wide = meteringDynamicRange(samples, sampleRate, { windowSec: 1, hopSec: 0.5 });
+```
+
+```python [Python]
+import libsonare as sonare
+
+audio = sonare.Audio.from_file("song.wav")
+loudness_range = audio.lufs().loudness_range
+report = sonare.metering_dynamic_range(audio.data, audio.sample_rate)
+window_rms_range = report.dynamic_range_db
+crest = audio.crest_factor_db()
+```
+
+```bash [CLI]
+sonare lufs song.wav            # ラウドネスレンジ（LRA）を含む
+sonare dynamic-range song.wav   # ネイティブ CLI のみ: 窓 RMS レンジ（--window-sec、--hop-sec、--low-percentile、--high-percentile）
+sonare meter song.wav           # ネイティブ CLI のみ: クレストファクターを含む
+```
+
+:::
+
+libsonare デモでは、Quick タブの Dynamics マクロと Studio タブの[コンプレッサー](../mastering/dynamics.md)コントロールでダイナミクスを調整します。メーターパネルにはクレスト情報も表示され、ピークと平均の関係をひと目で確認できます。主要なコンプレッサーコントロールは [ダイナミクスコントロール](../mastering/dynamics.md) にまとめています。
 
 :::: details 実装メモ
 

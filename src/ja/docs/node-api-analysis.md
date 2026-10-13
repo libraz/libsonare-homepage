@@ -12,9 +12,9 @@ description: '@libraz/libsonare-native パッケージの解析関数・エフ�
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
 | `detectBpm(samples, sampleRate?)` | `number` | テンポ（BPM） |
-| `detectKey(request)` / `detectKey(samples, sampleRate?, options?)` | `KeyDetection` | ルート（ピッチクラスの数値、C = 0）、モード（`'major'` や `'dorian'` のような名前）、確信度、そしてクロマの構築に使った `tuning`。`options` は `detectKeyCandidates` のオプションに `tuning`（`[-0.5, 0.5)` の数値または `'auto'`）を加えたものです |
+| `detectKey(request)` / `detectKey(samples, sampleRate?, options?)` | `KeyDetection` | ルート（ピッチクラスの数値、C = 0）、モード（`'major'` や `'dorian'` のような名前）、信頼度、そしてクロマの構築に使った `tuning`。`options` は `detectKeyCandidates` のオプションに `tuning`（`[-0.5, 0.5)` の数値または `'auto'`）を加えたものです |
 | `detectBeats(samples, sampleRate?)` | `Float32Array` | ビート位置 |
-| `detectOnsets(samples, sampleRate?)` | `Float32Array` | オンセット位置 |
+| `detectOnsets(samples, sampleRate?, options?)` | `Float32Array` | オンセット位置。`options`（`OnsetDetectOptions`）: `nFft`、`hopLength`、`threshold`、`preMax`、`postMax`、`preAvg`、`postAvg`、`delta`、`wait`、`backtrack`、`backtrackRange` |
 | `detectChords(request)` / `detectChords(samples, sampleRate?, options?)` | `ChordAnalysisResult` | コード進行（開始／終了時刻付き）と、使われた `tuning`。`threshold` 未満のフレームは明示的な `N.C.` 区間として返ります。オプション形式では HMM 平滑化・キーコンテキスト・転回形・クロマ手法（既定 `'stft'`）・`tuning`（数値または `'auto'`）を指定できます（従来の位置引数形式も利用可能） |
 | `chordFunctionalAnalysis(request)` / `chordFunctionalAnalysis(samples, keyRoot, keyMode?, sampleRate?, options?)` | `FunctionalChord[]` | コードを検出したうえで、`roman`（`'I'`、`'V7'`、`'vi'`）と `function`（`'tonic'`、`'subdominant'`、`'dominant'`、`'chromatic'`、`'none'`）を加えた時刻付きエントリを返します。`keyRoot` と `keyMode` はピッチクラスの数値または名前、モード名または序数を受け付けるため、`detectKey` の結果をそのまま渡せます |
 | `chordFunctions(request)` | `FunctionalChord[]` | すでに手元にあるコードに、再検出せず `request.key` の中での `roman` と `function` を付けます。`request.chords` は `detectChords` の結果かその `chords`、`request.key` は `{ root, mode }` なので、`detectKey` の結果をそのまま渡せます（`root` はピッチクラス名か序数、`mode` は名前か序数） |
@@ -23,7 +23,7 @@ description: '@libraz/libsonare-native パッケージの解析関数・エフ�
 | `analyze(samples, sampleRate?, options?)` | `AnalysisResult` | 1 回の呼び出しで、BPM と順位付き BPM 仮説、キー、拍子と順位付き拍子候補、ビート、コード（検出キーを基準にした `romanNumeral` 付き）、セクション、音色、ダイナミクス、リズム、メロディ、フォームを解析。以下の専用 `detect*`／`analyze*` 関数は、個別解析やパラメータ指定の解析向けに引き続き利用できます |
 | `analyzeWithProgress(request)` / `analyzeWithProgress(samples, sampleRate, onProgress, options?)` | `AnalysisResult` | `analyze` と同じ結果を `(progress, stage)` で通知します。リクエスト形式では `options` と `cancel`、位置引数形式では `onProgress` の後ろの解析オプションを指定できます |
 | `estimateMeter(request)` | `MeterEstimate` | 呼び出し側が渡したビート列に対して拍子を採点します。音声も再解析も不要。リクエスト専用で `EstimateMeterRequest` を受け取ります |
-| `analyzeBpm(samples, sampleRate?, options?)` | `BpmAnalysisResult` | 確信度と候補付きテンポ。`options`: `bpmMin`、`bpmMax`、`startBpm`、`nFft`、`hopLength`、`maxCandidates` |
+| `analyzeBpm(samples, sampleRate?, options?)` | `BpmAnalysisResult` | 信頼度と候補付きテンポ。`options`: `bpmMin`、`bpmMax`、`startBpm`、`nFft`、`hopLength`、`maxCandidates` |
 | `analyzeRhythm(samples, sampleRate?, options?)` | `RhythmResult` | 拍子・グルーブ・シンコペーション。`options`: `bpmMin`、`bpmMax`、`startBpm`、`nFft`、`hopLength` |
 | `analyzeDynamics(samples, sampleRate?, options?)` | `DynamicsResult` | ダイナミックレンジ・ラウドネスレンジ・クレストファクター。`options`: `windowSec`、`hopLength`、`compressionThreshold` |
 | `analyzeTimbre(samples, sampleRate?, options?)` | `TimbreResult` | 明るさ・暖かさ・密度・粗さ・複雑さと、窓ごとの `timbreOverTime`。`options`: `nFft`、`hopLength`、`nMels`、`nMfcc`、`windowSec` |
@@ -32,14 +32,16 @@ description: '@libraz/libsonare-native パッケージの解析関数・エフ�
 | `analyzeMelody(samples, sampleRate?, options?)` | `MelodyResult` | 主旋律の輪郭（フレームごとの F0）。`options`: `fmin`、`fmax`、`frameLength`、`hopLength`、`threshold`、`usePyin`、`center` |
 | `detectAcoustic(samples, sampleRate?, options?)` | `AcousticResult` | 録音からのルーム音響（残響が 60 dB 減衰するまでの時間である RT60 など）。`options`: `nOctaveBands`、`nThirdOctaveSubbands`、`minDecayDb`、`noiseFloorMarginDb` |
 | `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)` | `AcousticResult` | 測定済みインパルス応答（IR）からのルーム音響。`minDecayDb` は減衰フィットのしきい値（既定 `30`） |
-| `estimateRoom(samples, sampleRate?, options?)` | `RoomEstimateResult` | 体積、寸法、DRR（直接音と残響音のエネルギー比）、吸音率バンド、RT60 バンド、信頼度を含む等価ルーム推定 |
-| `synthesizeRir(options?)` | `RirResult` | シューボックス形状からのモノラル RIR（ルームインパルス応答） |
+| `estimateRoom(samples, sampleRate?, options?)` | `RoomEstimateResult` | 等価ルーム推定。`volume`、寸法 `lengthM`／`widthM`／`heightM`、`drrDb`（直接音と残響音のエネルギー比）、帯域吸音率 `bandAbsorption`、`rt60Bands`、`confidence` を返します。`options.mode` は `'auto'`（既定）、`'blind'`、`'impulse_response'` のいずれかで、数値は `TypeError` です |
+| `synthesizeRir(options?)` | `RirResult` | シューボックス形状からのモノラル RIR（ルームインパルス応答）を `{ rir, sampleRate, diagnostics }` で返します。`materialPreset` は名前（`'none'`、`'concrete'`、`'wood'`、`'curtain'`、`'carpet'`、`'glass'`）のみで、数値は `TypeError` です。不正な形状はコード付きの `SonareError`（`InvalidParameter`）を投げます |
+| `roomGeometryFromEstimate(estimate, options?)` | `RoomGeometryOptions` | `estimateRoom` の結果を `synthesizeRir` の入力へ変換します。音源とリスナーは推定したルーム内に配置され（`options.source`／`options.listener` で上書き可）、各帯域の平均がスカラーの `absorption` になります。寸法を測れない推定結果では `InvalidParameter` を投げます |
 | `roomMorph(samples, sampleRate, options?)` | `RoomMorphResult` | 目標ルームへ寄せるオフラインのルームモーフィング。モーフィング後のサンプルは `.audio`、サンプルレートは `.sampleRate`、診断情報は `.diagnostics` から読み取ります |
-| `lufs(samples, sampleRate?)` | `LufsResult` | 統合値、最後のモーメンタリー／ショートターム窓、EBU R128 の最大値（Max-M / Max-S）、ラウドネスレンジ |
+| `roomMorphStereo(request)` | `RoomMorphStereoResult` | `roomMorph` のステレオ版です。`request` は `{ left, right, sampleRate?, receiverSpacingM?, ...options }` で、目標ルームを `receiverSpacingM`（(0, 4] m、既定 0.5 m）だけ離れた 2 つのレシーバーで聞くため、チャンネルごとに別の応答が使われます。結果は `.left`、`.right`、`.sampleRate`、`.diagnostics` から読み取ります |
+| `lufs(samples, sampleRate?, options?)` | `LufsResult` | 統合ラウドネス（Integrated）、最後のモーメンタリー／ショートターム窓、EBU R128 の最大値（Max-M / Max-S）、ラウドネスレンジ |
 | `lufsInterleaved(samples, channels, sampleRate?)` | `LufsResult` | インターリーブサンプルからチャンネル重み付きマルチチャンネルラウドネスを測定 |
 | `ebur128LoudnessRange(samples, sampleRate?)` | `number` | EBU R128 準拠のラウドネスレンジ（LRA、LU 単位） |
-| `momentaryLufs(samples, sampleRate?)` | `Float32Array` | モーメンタリーラウドネス（400ms）の時系列 |
-| `shortTermLufs(samples, sampleRate?)` | `Float32Array` | ショートタームラウドネス（3s）の時系列 |
+| `momentaryLufs(samples, sampleRate?, options?)` | `Float32Array` | モーメンタリーラウドネス（400ms）の時系列 |
+| `shortTermLufs(samples, sampleRate?, options?)` | `Float32Array` | ショートタームラウドネス（3s）の時系列 |
 | `version()` | `string` | ライブラリバージョン |
 | `voiceChangerAbiVersion()` | `number` | リアルタイムボイスチェンジャー POD 設定の ABI バージョン。プリセット JSON の `schemaVersion` とは別 |
 | `voiceCharacterPresetId(preset)` | `VoicePresetId \| null` | 正規の voice-character プリセット ID。未知の数値序数は `null`、未知の文字列 ID は例外 |
@@ -51,7 +53,7 @@ description: '@libraz/libsonare-native パッケージの解析関数・エフ�
 | ヘルパー | 既定の `sampleRate` |
 |----------|-------------------------|
 | 楽曲解析、エフェクト、特徴量、ラウドネス系ヘルパー | `22050` |
-| ネイティブ版の `analyzeImpulseResponse`、`detectAcoustic`、`estimateRoom`、`synthesizeRir` | `48000` |
+| ネイティブ版の `analyzeImpulseResponse`、`detectAcoustic`、`estimateRoom`、`synthesizeRir`、`roomMorph`、`roomMorphStereo` | `48000` |
 
 主要なヘルパーは `Audio` インスタンスメソッドとしても利用できます。ただし、`analyzeSections(...)`、`analyzeMelody(...)`、`cqt(...)`、`vqt(...)` など一部の詳細ヘルパーは、スタンドアロン関数として `audio.getData()` と `audio.getSampleRate()` を渡します。
 
@@ -59,9 +61,7 @@ description: '@libraz/libsonare-native パッケージの解析関数・エフ�
 
 ### `analyze()` のオプション
 
-`analyze(...)` は第 3 引数にオプションオブジェクトを受け取ります。リクエスト
-オブジェクト形式では同じフィールドを直接指定できます。パイプライン全体の設定が
-ここにまとまっています。
+`analyze(...)` は第 3 引数にオプションオブジェクトを受け取ります。リクエストオブジェクト形式では同じフィールドを直接指定できます。パイプライン全体の設定がここにまとまっています。
 
 | オプション | 既定値 | 説明 |
 |------------|--------|------|
@@ -81,28 +81,16 @@ description: '@libraz/libsonare-native パッケージの解析関数・エフ�
 | `tuning` | `0` | 半音の分数単位の録音チューニングずれ。範囲は `[-0.5, 0.5)`、または音声から測定する `'auto'`。キー・コード・セクションに使うクロマへ反映され、使われた値は結果の `tuning` になります。`estimateTuning(...)` は 12 ビン／オクターブのとき同じ単位を返します |
 
 ::: warning ここでは `useTriadsOnly` の既定値が逆向きです
-統合された `analyze()` の経路では `useTriadsOnly` が **`true`** で、スタンドアロンの
-`detectChords(...)` では `false` です。つまり `analyze()` は呼び出し側が
-`useTriadsOnly: false` を渡すまで三和音だけを探索し、7th やテンションは報告しません。
+統合された `analyze()` の経路では `useTriadsOnly` が **`true`** で、スタンドアロンの `detectChords(...)` では `false` です。つまり `analyze()` は呼び出し側が `useTriadsOnly: false` を渡すまで三和音だけを探索し、7th やテンションは報告しません。
 :::
 
-`computeTempoCurve` が既定で無効なのは、この曲線が解析の精度を上げるものではなく
-追加の出力だからです。ほかのフィールドは何も変わらないため、曲線を読まない
-呼び出し側はビートグリッド全体のデコードコストを無駄に負うことになります。また曲線は
-デコード元のビートグリッドを記述したものであり、ビートトラッキングは
-`adaptiveTempo` を併用しない限り固定のテンポ事前分布を保持します。実際に動くテンポを
-測るには両方のオプションが必要です。
+`computeTempoCurve` が既定で無効なのは、この曲線が解析の精度を上げるものではなく追加の出力だからです。ほかのフィールドは何も変わらないため、曲線を読まない呼び出し側はビートグリッド全体のデコードコストを無駄に負うことになります。また曲線はデコード元のビートグリッドを記述したものであり、ビートトラッキングは `adaptiveTempo` を併用しない限り固定のテンポ事前分布を保持します。実際に動くテンポを測るには両方のオプションが必要です。
 
-`analyzeWithProgress(...)` は `analyze(...)` と同じ `MusicAnalyzeOptions` を受け取ります。
-リクエスト形式では `options` の下に入れ、`cancel` は `true` を返してキャンセルを要求する別のコールバックです。位置引数形式では `onProgress` の後ろにオプションオブジェクトを置きます。
+`analyzeWithProgress(...)` は `analyze(...)` と同じ `MusicAnalyzeOptions` を受け取ります。リクエスト形式では `options` の下に入れ、`cancel` は `true` を返してキャンセルを要求する別のコールバックです。位置引数形式では `onProgress` の後ろにオプションオブジェクトを置きます。
 
 ### `estimateMeter(...)`
 
-`estimateMeter(...)` は、**呼び出し側が渡したビート列**に対して拍子を採点します。
-読むのはビートごとの時刻とアクセント値だけで音声は読まないため、既存の解析結果
-（あるいはその任意の区間）をパイプラインを再実行せずに採点し直せます。概念的な
-背景は [拍子とグルーピング](./glossary/analysis/meter-and-grouping.md) を参照して
-ください。
+`estimateMeter(...)` は、**呼び出し側が渡したビート列**に対して拍子を採点します。読むのはビートごとの時刻とアクセント値だけで音声は読まないため、既存の解析結果（あるいはその任意の区間）をパイプラインを再実行せずに採点し直せます。概念的な背景は [拍子とグルーピング](./glossary/analysis/meter-and-grouping.md) を参照してください。
 
 ```typescript
 const result = analyze(samples, sampleRate);
@@ -121,37 +109,20 @@ console.log(meter.searched, meter.timeSignature.numerator, meter.grouping);
 | `beatTimes` | — | ビート位置（秒）。単調非減少であること |
 | `beatStrengths` | — | ビートごとのアクセント値。`beatTimes` と同じ長さ。採点前に系列自身の最大値で割られるため、事前のスケーリングは不要です |
 | `candidateNumerators` | `[3, 4, 6]` | 採点する分子。最大 16 個、各値は `[2, 32]` |
-| `denominator` | `4` | 検出された拍子として報告する分母 |
+| `denominator` | `4` | 検出された拍子として報告する分母。指定どおりに報告されるため、3+3 でアクセントが付いた 6 拍子も、この分母のまま `grouping` が `[3, 3]` で返ります |
+| `compoundSubdivisionThreshold` | `0.85` | 6 の候補を複合拍子（x/8）として報告する細分化スコアの境目。ビートごとのアクセントは細分化の情報を持たないため、この関数の結果は変わりません |
 | `downbeatWeight` / `measureWeight` / `subdivisionWeight` | `1` / `0.5` / `0.15` | 小節頭のアクセント、小節間のアクセント一致、細分化パターンに対する重み |
 
-`beatStrengths` の入力元として想定しているのは 2 つです。`beatObservations.onsetStrength`
-（ライブラリ自身のダウンビート推定が採点している窓付きの値）と、`beats[].strength`
-（同じ包絡線の窓なし 1 フレーム）です。各ビートについて `onsetEnvelope(...)` を
-`timeToFrames(...)` の位置で読む方法は 3 つ目にはなりません。サンプル数で数えるホップは
-レートごとに異なる長さの時間を 1 フレームに収めるため、同じ波形を 32000 Hz・44100 Hz・
-48000 Hz で（ビート時刻は同一のまま）採点すると、最上位になる分子は 6、3、4 と変わりました。
-各ビートの周辺を窓で読んでもこの依存は消えません。
+<SonareDemo id="meter-estimate" />
+
+`beatStrengths` の入力元として想定しているのは 2 つです。`beatObservations.onsetStrength`（ライブラリ自身のダウンビート推定が採点している窓付きの値）と、`beats[].strength`（同じ包絡線の窓なし 1 フレーム）です。各ビートについて `onsetEnvelope(...)` を `timeToFrames(...)` の位置で読む方法は 3 つ目にはなりません。サンプル数で数えるホップはレートごとに異なる長さの時間を 1 フレームに収めるため、同じ波形を 32000 Hz・44100 Hz・48000 Hz で（ビート時刻は同一のまま）採点すると、最上位になる分子は 6、3、4 と変わりました。各ビートの周辺を窓で読んでもこの依存は消えません。
 
 結果が意味を持つかどうかは、次の 2 点で決まります。
 
-- **既定の候補集合は `{3, 4, 6}` です。** 分子を明示的に挙げたときだけその拍子が
-  報告されるため、7 拍子を検出したいなら候補に 7 を入れる必要があります。
-- **ビート列が 8 ビート未満のとき `searched` は `false` になります。** このとき
-  ほかのフィールドはすべて測定結果ではなく固定のフォールバック値で、
-  `timeSignature.confidence` は `0` です。確認せずに読んだ場合は中程度の検出ではなく
-  「判断不能」の側に倒れます。短い区間の答えを検出結果として扱う前に `searched` を
-  確認してください。
+- **既定の候補集合は `{3, 4, 6}` です。** 分子を明示的に挙げたときだけその拍子が報告されるため、7 拍子を検出したいなら候補に 7 を入れる必要があります。
+- **ビート列が 8 ビート未満のとき `searched` は `false` になります。** このときほかのフィールドはすべて測定結果ではなく固定のフォールバック値で、`timeSignature.confidence` は `0` です。確認せずに読んだ場合は中程度の検出ではなく「判断不能」の側に倒れます。短い区間の答えを検出結果として扱う前に `searched` を確認してください。
 
-`grouping` は小節がアクセントのグループへどう分かれるかを表すため、7 拍子は素の 7 では
-なく `[3, 2, 2]` のように返り、合計は必ず分子に一致します。要素が 1 つだけの場合は
-内部の分割が解決できなかったことを意味します。`candidateScores` は標準化された符号
-付きの値で、リクエストで分子を並べた順に格納されます。拍子を持たないビートに対して
-分子が到達する水準が 0 なので、意味を持つのは順序と値の差だけです。またスコアは
-採点したビート数の平方根に比例して大きくなります。一方 `candidates` は支持の高い順に
-並ぶため、両者は添字ではなく `numerator` で突き合わせてください。
-`confidence` も現れる場所で意味が変わります。`timeSignature` 側は次点との差から導かれる値、
-`candidates` の各要素ではその候補が支持の総和に占める割合（要素の合計は 1）なので、
-両者に同じしきい値を使ってはいけません。
+`grouping` は小節がアクセントのグループへどう分かれるかを表すため、7 拍子は素の 7 ではなく `[3, 2, 2]` のように返り、合計は必ず分子に一致します。要素が 1 つだけの場合は内部の分割が解決できなかったことを意味します。`candidateScores` は標準化された符号付きの値で、リクエストで分子を並べた順に格納されます。拍子を持たないビートに対して分子が到達する水準が 0 なので、意味を持つのは順序と値の差だけです。またスコアは採点したビート数の平方根に比例して大きくなります。一方 `candidates` は支持の高い順に並ぶため、両者は添字ではなく `numerator` で突き合わせてください。`confidence` も現れる場所で意味が変わります。`timeSignature` 側は次点との差から導かれる値、`candidates` の各要素ではその候補が支持の総和に占める割合（要素の合計は 1）なので、両者に同じしきい値を使ってはいけません。
 
 ### 非同期版（Node 専用）
 
@@ -163,7 +134,7 @@ Node アドオンは、Promise 返却版も公開しています。これらは 
 
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
-| `analyzeAsync(samples, sampleRate?)` | `Promise<AnalysisResult>` | `analyze(...)` の非同期版 |
+| `analyzeAsync(samples, sampleRate?, options?)` | `Promise<AnalysisResult>` | `analyze(...)` の非同期版 |
 | `masterAudioAsync(samples, sampleRate?, presetName?, overrides?)` | `Promise<MasteringChainResult>` | `masterAudio(...)` の非同期版 |
 | `masterAudioStereoAsync(left, right, sampleRate?, presetName?, overrides?)` | `Promise<MasteringChainStereoResult>` | `masterAudioStereo(...)` の非同期版 |
 
@@ -180,55 +151,34 @@ Node アドオンは、Promise 返却版も公開しています。これらは 
 | `pitchShift(samples, sampleRate, semitones, nFft?, hopLength?)` | `Float32Array` | 長さを変えずにピッチを変更。既定は `nFft=2048`、`hopLength=512` |
 | `remix(samples, intervals, sr?, alignZeros?)` | `Float32Array` | サンプル区間の並べ替え／連結 |
 | `remixAlignedIntervals(samples, intervals, sr?, alignZeros?)` | `Int32Array` | `remix` が使う切り貼り位置を、切らずに返します。入力区間ごとにクランプ済みの `(start, end)` を 1 組ずつ並べた平坦な配列。ここでは `alignZeros` の既定値が `true` |
-| `normalize(samples, sr?, targetDb?, mode?)` | `Float32Array` | 目標ピーク／RMS dB にノーマライズ（`mode`: `'peak'` または `'rms'`、既定 `'peak'`） |
-| `normalizeStereo(request)` | `NormalizeStereoResult` | 両チャンネルにまたがって測ったレベルでステレオペアをノーマライズ。リクエスト専用で `NormalizeStereoRequest` を受け取ります |
+| `normalize(samples, sr?, targetDb?, mode?)` | `Float32Array` | 目標ピーク／RMS dB に正規化（`mode`: `'peak'`（既定）または `'rms'`。`targetDb` の既定値は peak が `0`、rms が `-20`） |
+| `normalizeStereo(request)` | `NormalizeStereoResult` | 両チャンネルにまたがって測ったレベルでステレオペアを正規化。リクエスト専用で `NormalizeStereoRequest` を受け取ります |
 | `trim(samples, sr?, thresholdDb?, frameLength?, hopLength?)` | `Float32Array` | 無音区間をトリム（既定: `-60.0` dB、`frameLength=2048`、`hopLength=512`） |
 | `resample(samples, srcSr, targetSr)` | `Float32Array` | 目標サンプルレートへリサンプリング |
 | `pitchCorrectToMidi(samples, sr, currentMidi, targetMidi)` | `Float32Array` | 保持された音を MIDI ピッチ間で補正 |
 | `pitchCorrectToMidiTimevarying(samples, f0Hz, targetMidi, sr?, hopLength?, voiced?, voicedProb?)` | `Float32Array` | 追跡したピッチ輪郭を、フレーム単位で固定の音へリチューン。`voiced` は `VoicedFlags` を受け取る |
-| `pitchCorrectTimevarying(samples, f0Hz, sr?, hopLength?, options?)` | `Float32Array` | 追跡したピッチ輪郭をスケールまたは固定音へスナップ。`options` は `PitchCorrectOptions` で、その `voiced` フィールドも `VoicedFlags` を受け取る |
-| `noteStretch(samples, sr?, options?)` | `Float32Array` | 1 つの音の区間をその場でタイムストレッチ。`options` は `{ onsetSample, offsetSample, stretchRatio }` |
-| `voiceChange(samples, sr?, options?)` | `Float32Array` | ボイス変換のためのピッチ＋フォルマントシフト。`options` は `{ pitchSemitones, formantFactor }` |
+| `pitchCorrectTimevarying(samples, f0Hz, sr?, hopLength?, options?)` | `Float32Array` | 追跡したピッチ輪郭をスケールまたは固定音へ寄せる。`options` は `PitchCorrectOptions` で、その `voiced` フィールドも `VoicedFlags` を受け取る |
+| `autoTune(request)` | `AutoTuneResult` | 録音全体をキーに合わせて補正します。`request` は `{ samples, sampleRate?, key?, strength?, retuneSpeedMs?, vibratoThresholdCents?, maxCorrectionSemitones?, referenceMidi? }` で、`key` は `'detect'`（既定）または `{ root, mode }` です。戻り値は `{ samples, key }`。[編集 DSP](./editing-dsp.md) を参照 |
+| `noteStretch(samples, sr?, options?)` | `Float32Array` | 1 つの音の区間をその場でタイムストレッチ。`options` は `{ onsetSample | onsetSec, offsetSample | offsetSec, stretchRatio }`。位置はサンプル（`onsetSample`）か秒（`onsetSec`）のどちらか一方で指定します |
+| `voiceChange(samples, sr?, options?)` | `Float32Array` | ボイス変換のためのピッチ＋フォルマントシフト。`options` は `{ pitchSemitones, formantFactor, formantMode }`。`formantMode` は `'relative'`（既定）か `'absolute'`（フォルマントを絶対周波数に固定）です |
 
-`trim(...)` は単純なしきい値ベースの編集ヘルパーです。下の `trimSilence(...)` は
-librosa 互換のフレーム RMS ベースのヘルパーで、元音源上のサンプル範囲も返します。
+`trim(...)` は単純なしきい値ベースの編集ヘルパーです。下の `trimSilence(...)` は librosa 互換のフレーム RMS ベースのヘルパーで、元音源上のサンプル範囲も返します。
 
-`hpss(...)` と `hpssWithResidual(...)` は、メディアンフィルターのカーネルを既定で
-`kernelHarmonic=31`、`kernelPercussive=31` とします。リクエストオブジェクト形式でも
-位置引数形式と同じ `nFft`、`hopLength`、`hardMask` の名前を使います。
+`hpss(...)` と `hpssWithResidual(...)` は、メディアンフィルターのカーネルを既定で `kernelHarmonic=31`、`kernelPercussive=31` とします。リクエストオブジェクト形式でも位置引数形式と同じ `nFft`、`hopLength`、`hardMask` の名前を使います。
 
 ### `remix` でステレオ素材を切る
 
-ゼロクロスへのスナップは信号ごとの判断です。そのため `remix(...)` をチャンネル
-ごとに呼ぶと、各チャンネルが別々のフレームへスナップし、ステレオ素材の左右が
-ずれていきます。片方のチャンネルから `remixAlignedIntervals(...)` で切り貼り位置を
-1 組だけ決め、それを全チャンネルへ適用してください。既定値は両者で逆向きです。
-`remix` の `alignZeros` は false、`remixAlignedIntervals` は true です。
+ゼロクロスへの位置合わせは信号ごとの判断です。そのため `remix(...)` をチャンネルごとに呼ぶと、各チャンネルが別々のフレームへ位置合わせされ、ステレオ素材の左右がずれていきます。片方のチャンネルから `remixAlignedIntervals(...)` で切り貼り位置を 1 組だけ決め、それを全チャンネルへ適用してください。既定値は両者で逆向きです。`remix` の `alignZeros` は false、`remixAlignedIntervals` は true です。
 
-スナップで区間が消えないように、2 つのガードがあります。符号の変化がまったくない
-信号（無音、DC オフセット、あらゆる定数）はスナップされません。また、内容が
-あったのにスナップ後に空へ潰れる区間は、スナップ前の境界を保ちます。
+位置合わせで区間が消えないように、2 つのガードがあります。符号の変化がまったくない信号（無音、DC オフセット、あらゆる定数）は位置合わせされません。また、内容があったのに位置合わせ後に空へ潰れる区間は、位置合わせ前の境界を保ちます。
 
-### ステレオペアのノーマライズ
+### ステレオペアの正規化
 
-`normalizeStereo({ left, right, sampleRate?, targetDb?, mode? })` は、両チャンネルへ
-**1 つの**ゲインを適用するため、ステレオイメージが保たれます。チャンネルごとの
-ゲインは、小さいほうを持ち上げて左右のレベルを揃えてしまうため、ノーマライズでは
-なくバランス変更になります。結果が `appliedGainDb` を 1 つだけ返し、ペアが無音の
-ときはちょうど `0` を返して何も変えないのはこのためです。`mode: 'peak'`（既定）は
-ペアのピークを `targetDb` へ合わせるため、大きいほうのチャンネルが `targetDb` に
-届き、もう一方はその差を保ちます。`mode: 'rms'` は両チャンネルのサンプルをまとめた
-二乗平均平方根（チャンネルごとの値の平均ではなく二乗平均）を合わせ、結果を
-[-1, 1] にハードクリップします。
+`normalizeStereo({ left, right, sampleRate?, targetDb?, mode? })` は、両チャンネルへ **1 つの**ゲインを適用するため、ステレオイメージが保たれます。チャンネルごとのゲインは、小さいほうを持ち上げて左右のレベルを揃えてしまうため、正規化ではなくバランス変更になります。結果が `appliedGainDb` を 1 つだけ返し、ペアが無音のときはちょうど `0` を返して何も変えないのはこのためです。`mode: 'peak'`（既定）はペアのピークを `targetDb` へ合わせるため、大きいほうのチャンネルが `targetDb` に届き、もう一方はその差を保ちます。`mode: 'rms'` は両チャンネルのサンプルをまとめた二乗平均平方根（チャンネルごとの値の平均ではなく二乗平均）を合わせ、結果を [-1, 1] にハードクリップします。
 
-モノラルの `normalize(...)` は `targetDb` の既定値がどちらのモードでも `0` ですが、
-`normalizeStereo` は **モードによって既定値が変わります**。`'peak'` では `0`、
-`'rms'` では `-20` です。0 dBFS の RMS は実用的な目標ではありません。ピークは RMS
-よりはるかに上にあるため、事実上すべてのピークがクリップします。
+`normalize(...)` も `normalizeStereo(...)` も、`targetDb` の既定値は **モードによって変わります**。`'peak'` では `0`、`'rms'` では `-20` です。0 dBFS の RMS は実用的な目標ではありません。ピークは RMS よりはるかに上にあるため、事実上すべてのピークがクリップします。
 
-`VoicedFlags` は `Int32Array | Uint8Array | Float32Array | readonly number[] |
-readonly boolean[]` です。`PitchResult.voicedFlag` が返す `boolean[]` を、変換なしで
-そのままピッチ補正へ渡せます。
+`VoicedFlags` は `Int32Array | Uint8Array | Float32Array | readonly number[] | readonly boolean[]` です。`PitchResult.voicedFlag` が返す `boolean[]` を、変換なしでそのままピッチ補正へ渡せます。
 
 ```typescript
 const pitch = pitchPyin(samples, sampleRate);
@@ -242,21 +192,13 @@ const tuned = pitchCorrectToMidiTimevarying(
 );
 ```
 
-`voicedProb` から有声判定を導くのは、`voiced` を省略したときだけです（0.5 以上の
-フレームを有声とみなします）。`voiced` を渡した場合、`voicedProb` は完全に無視され
-ます。特にフレームごとの補正量へ重みを掛けることはないため、両方渡しても `voiced`
-だけを渡した場合と結果は同じです。`pitchCorrectTimevarying(...)` の
-`PitchCorrectOptions.voicedProb` も同じ挙動です。
+`voicedProb` から有声判定を導くのは、`voiced` を省略したときだけです（0.5 以上のフレームを有声とみなします）。`voiced` を渡した場合、`voicedProb` は完全に無視されます。特にフレームごとの補正量へ重みを掛けることはないため、両方渡しても `voiced` だけを渡した場合と結果は同じです。`pitchCorrectTimevarying(...)` の `PitchCorrectOptions.voicedProb` も同じ挙動です。
 
 ::: warning 補正の強さは `voicedProb` で重み付けされません
-補正が `voicedProb` でスケールされる前提のコードは、**低音域でより強く補正される**
-ことになります。pYIN の有声確率は、確信度ではなく基音の高さとともに増える周波数依存
-の観測量です。これを重みとして使うと、低音域の補正が気付かないうちに弱まってしまいます。
+補正が `voicedProb` でスケールされる前提のコードは、**低音域でより強く補正される** ことになります。pYIN の有声確率は、信頼度ではなく基音の高さとともに増える周波数依存の観測量です。これを重みとして使うと、低音域の補正が気付かないうちに弱まってしまいます。
 :::
 
-`voiced` と `voicedProb` は、どちらも `f0Hz` と同じ長さである必要があります。長さが
-食い違うと `RangeError`（`'voiced must have the same length as f0Hz'`）を投げます。
-`SonareError` ではないため `isSonareError` では捕捉できません。
+`voiced` と `voicedProb` は、どちらも `f0Hz` と同じ長さである必要があります。長さが食い違うと `RangeError`（`'voiced must have the same length as f0Hz'`）を投げます。`SonareError` ではないため `isSonareError` では捕捉できません。
 
 ## 特徴抽出関数
 
@@ -264,7 +206,7 @@ const tuned = pitchCorrectToMidiTimevarying(
 |------|--------|------|
 | `stft(samples, sr?, nFft?, hopLength?)` | `StftResult` | 短時間フーリエ変換 |
 | `stftDb(samples, sr?, nFft?, hopLength?)` | `StftDbResult` | dB 単位の STFT |
-| `melSpectrogram(samples, sr?, nFft?, hopLength?, nMels?)` | `MelSpectrogramResult` | メルスペクトログラム。結果にはマトリクスのほか `nFft`、適用された `fmin`／`fmax`、`htk`、`isDb` が含まれます |
+| `melSpectrogram(samples, sr?, nFft?, hopLength?, nMels?, fmin?, fmax?, htk?)` | `MelSpectrogramResult` | メルスペクトログラム。結果にはマトリクスのほか `nFft`、適用された `fmin`／`fmax`、`htk`、`isDb` が含まれます |
 | `mfcc(samples, sr?, nFft?, hopLength?, nMels?, nMfcc?, fmin?, fmax?, htk?, lifter?)` | `MfccResult` | メル周波数ケプストラム係数（`lifter` 既定 0 = リフタリングなし）。結果には計算に使ったメルのパラメータと `lifter` が含まれます |
 | `chroma(samples, sr?, nFft?, hopLength?)` | `ChromaResult` | クロマ特徴量 |
 | `spectralCentroid(samples, sr?, nFft?, hopLength?)` | `Float32Array` | フレームごとのスペクトル重心 |
@@ -284,39 +226,32 @@ const tuned = pitchCorrectToMidiTimevarying(
 | `tuningToReferenceHz(tuning, a4?)` / `referenceHzToTuning(hz, a4?)` | `number` | 解析の単位（セミトーン端数）と Hz 単位の基準ピッチを相互に変換します。`a4` の既定は `440` |
 | `cqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | 定 Q 変換の振幅 |
 | `vqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?, gamma?)` | `CqtResult` | 可変 Q 変換の振幅（`gamma` で Q を制御。省略で自動値、`0` は CQT と等価、負または有限でない値は拒否） |
-| `chromaCqt(samples, sr?, hopLength?, nChroma?)` | `{ nChroma, nFrames, data }` | Constant-Q クロマグラム（`librosa.feature.chroma_cqt` 相当） |
+| `chromaCqt(samples, sr?, hopLength?, nChroma?, binsPerOctave?)` | `{ nChroma, nFrames, data }` | Constant-Q クロマグラム（`librosa.feature.chroma_cqt` 相当） |
 | `nnlsChroma(samples, sr?, options?)` | `{ nChroma, nFrames, data }` | NNLS クロマグラム（音符活性化クロマ）。`options.hopLength` の既定値は `512` |
 | `decompose(s, nFeatures, nFrames, nComponents, nIter?, beta?, init?)` | `DecomposeResult` | 行優先スペクトログラムから NMF（非負値行列因子分解）の分解行列を返す。`init` を選択できる（`'random'` 既定、`'nndsvd'`） |
 | `decomposeStems(request)` | `DecomposeStemsResult` | 元の位相を保持する NMF 分離。各成分をそのまま音として再生できます。リクエスト専用で `DecomposeStemsRequest` を受け取ります |
 | `decomposeStemsLinked(request)` | `DecomposeStemsLinkedResult` | 1 つ以上の同じ長さのチャンネル（最大 64）で NMF モデルとソフトマスクを共有し、各チャンネルの元の複素スペクトルへ適用してチャンネル間のレベルと位相を保ちます。リクエスト専用で、`components[k][c]` を返します。既定値は `decomposeStems` と同じで、1 チャンネルならビット単位で一致します |
 | `melToStft(request)` / `melToAudio(request)` / `mfccToMel(request)` / `mfccToAudio(request)` | `InverseStftResult` / `Float32Array` / `InverseMelResult` / `Float32Array` | 近似逆変換。リクエストは行列を `power`（メル）または `coefficients`（MFCC）と名付けるか、順変換の結果を `{ result, ...overrides }` として渡して全パラメータを読み取らせます。結果と食い違う上書きは `RangeError`、dB の結果も `RangeError` です（先に `dbToPower` で変換してください）。位置引数形式は `librosa.feature.inverse` に準じます |
-| `noteSegments(request)` | `NoteSegment[]` | 呼び出し側が渡した単旋律の F0 系列を、安定した音符区間へ分割します。リクエスト専用で `NoteSegmentsRequest` を受け取ります |
+| `noteSegments(request)` | `NoteSegment[]` | 呼び出し側が渡したモノフォニックの F0 系列を、安定した音符区間へ分割します。リクエスト専用で `NoteSegmentsRequest` を受け取ります |
 | `hybridCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | ハイブリッド CQT 振幅（低域は真の CQT、高域は擬似 CQT） |
 | `pseudoCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | 近似（擬似）CQT 振幅（単一 FFT） |
 | `bassChroma(samples, sr?, hopLength?, nChroma?)` | `ChromaResult` | 低域重視クロマ（低音域のピッチクラス分布） |
-| `chromaCens(samples, sr?, hopLength?, nChroma?)` | `ChromaResult` | CENS エネルギー正規化・平滑化クロマ |
+| `chromaCens(samples, sr?, hopLength?, nChroma?, binsPerOctave?)` | `ChromaResult` | CENS エネルギー正規化・平滑化クロマ |
 | `onsetStrengthMulti(samples, sr?, nFft?, hopLength?, nMels?, nBands?)` | `{ nBands, nFrames, data }` | マルチバンドオンセット強度（`nBands` 既定 3、`data` は行優先 `[nBands x nFrames]`） |
 | `nnFilter(s, nFeatures, nFrames, aggregate?, k?, width?)` | `Matrix2dResult` | 近傍フィルタ |
 | `onsetEnvelope(samples, sr?, nFft?, hopLength?, nMels?)` | `Float32Array` | オンセット強度の包絡線。フレームごとにエネルギーがどれだけ急に立ち上がったかを表し、テンポグラム系の入力になります |
 
 主な既定値は、`nFft=2048`、`hopLength=512`、`nMels=128`、`nMfcc=20`、ピッチ検出の `fmin=65.0`、`fmax=2093.0`、`threshold=0.1`、`rollPercent=0.85` です。
 
-CQT/VQT は `fmin=32.70319566` Hz（C1）、`nBins=84`、`binsPerOctave=12` を使います。VQT は `gamma` を省略すると ERB 由来の帯域幅を自動選択します。`chromaCqt` の既定は `nChroma=12`、`nBins=252`、`binsPerOctave=36` です。`bassChroma` と `chromaCens` は `nChroma=12`、`onsetStrengthMulti` は `nBands=3`、`decompose` は `nIter=50`・`beta=2`・`init='random'` が既定です。
+CQT/VQT は `fmin=32.70319566` Hz（C1）、`nBins=84`、`binsPerOctave=12` を使います。VQT は `gamma` を省略すると ERB 由来の帯域幅を自動選択します。`chromaCqt` の既定は `nChroma=12`、`nBins=252`、`binsPerOctave=36` です。`chromaCens` は `nChroma=12` と `binsPerOctave=36`、`bassChroma` は `nChroma=12`、`onsetStrengthMulti` は `nBands=3`、`decompose` は `nIter=50`・`beta=2`・`init='random'` が既定です。
 
 ### `decompose` と `decomposeStems` の違い
 
-`decompose(...)` が返すのは*振幅*スペクトログラムの W／H 因子です。この因子は位相を
-持たないため、そこから再構成するには位相推定が必要で、推定した位相ではステムとして
-使える品質になりません。`decomposeStems(...)` は同じ因子分解から成分ごとのソフト
-マスクを作り、それを**元の複素**スペクトログラムへ適用します。そのため各成分は元音源の
-位相をそのまま保ちます。マスクはモデルにエネルギーがある場所で総和が 1 になり、逆 STFT
-は線形なので、成分を足し合わせると入力へ戻ります。
+`decompose(...)` が返すのは*振幅*スペクトログラムの W／H 因子です。この因子は位相を持たないため、そこから再構成するには位相推定が必要で、推定した位相ではステムとして使える品質になりません。`decomposeStems(...)` は同じ因子分解から成分ごとのソフトマスクを作り、それを**元の複素**スペクトログラムへ適用します。そのため各成分は元音源の位相をそのまま保ちます。マスクはモデルにエネルギーがある場所で総和が 1 になり、逆 STFT は線形なので、成分を足し合わせると入力へ戻ります。
 
-`maskPower` は分離の強さを決めます。`1`（既定）は振幅比、`2` は Wiener 型のパワー比で、
-より強く分離する代わりに倍音が重なる箇所でアーティファクトが増えます。
-`decomposeStems` の既定値は `nComponents=4`、`nFft=2048`、`hopLength=512`、`nIter=100`、
-`beta=2`、`init='random'` です。戻り値は成分ごとの信号 `components`（それぞれ入力と同じ
-長さ）と、`w`／`h` 行列、`sampleRate` です。
+`maskPower` は分離の強さを決めます。`1`（既定）は振幅比、`2` は Wiener 型のパワー比で、より強く分離する代わりに倍音が重なる箇所でアーティファクトが増えます。`decomposeStems` の既定値は `nComponents=4`、`nFft=2048`、`hopLength=512`、`nIter=100`、`beta=2`、`init='random'` です。戻り値は成分ごとの信号 `components`（それぞれ入力と同じ長さ）と、`w`／`h` 行列、`sampleRate` です。
+
+<SonareDemo id="stem-decompose" />
 
 マルチチャンネル入力には `decomposeStemsLinked({ channels, sampleRate, ... })` を使います。各チャンネルの振幅を平均して 1 つの NMF モデルとマスクを作り、そのマスクを各チャンネルの元の複素スペクトルへ同じまま適用します。チャンネル間のレベル差と位相差が保たれます。`channels` には同じ長さの `Float32Array` を少なくとも 1 つ、最大 64 チャンネルまで渡します。結果の `components[k][c]` が成分を表し、`w` と `h` は共有された因子分解を表します。既定値は `decomposeStems` と同じで、1 チャンネルならビット単位で一致します。
 
@@ -332,26 +267,25 @@ const firstRight = linked.components[0][1];
 ```
 
 ::: warning NNDSVD の因子は単精度のものと一致しません
-NNDSVD の初期化は倍精度で計算されます。振幅スペクトログラムの末尾の特異ベクトルは
-単精度のノイズフロアに埋もれているため、単精度の初期化は加算順序に依存し、wasm32 と
-arm64 とで異なる成分が返ってしまいます。倍精度の初期化により、ビルドをまたいで再現する
-結果になります。形状、非負性、再構成品質には影響しません（精度ではなく再現性の話です）。
-ただし**保存済みの因子**や、単精度の初期化で書き出したステムは、
-`init: 'nndsvd'` の結果と一致しません。
+NNDSVD の初期化は倍精度で計算されます。振幅スペクトログラムの末尾の特異ベクトルは単精度のノイズフロアに埋もれているため、単精度の初期化は加算順序に依存し、wasm32 と arm64 とで異なる成分が返ってしまいます。倍精度の初期化により、ビルドをまたいで再現する結果になります。形状、非負性、再構成品質には影響しません（精度ではなく再現性の話です）。ただし**保存済みの因子**や、単精度の初期化で書き出したステムは、`init: 'nndsvd'` の結果と一致しません。
 :::
 
 ### `noteSegments`
 
-`noteSegments({ f0Hz, voicedProb, frameRate, ... })` は、呼び出し側が渡した単旋律の F0
-系列を安定した音符区間へ分割し、区間ごとに `frameStart`、`frameEnd`、`startSeconds`、
-`endSeconds`、`medianCents` を持つ `NoteSegment` を返します。調整用のフィールドは
-`segmentationThresholdCents`（既定 `50`）、`minNoteMs`（既定 `30`）、`referenceHz`
-（既定 `440`）、そして `voicedThreshold`（既定 `0.5`）で、最後のものはフレームを有声と
-みなす `voicedProb` の下限です。
+`noteSegments({ f0Hz, voicedProb, frameRate, ... })` は、呼び出し側が渡したモノフォニックの F0 系列を安定した音符区間へ分割し、区間ごとに `frameStart`、`frameEnd`、`startSeconds`、`endSeconds`、`medianCents` を持つ `NoteSegment` を返します。調整用のフィールドは `segmentationThresholdCents`（既定 `50`）、`minNoteMs`（既定 `30`）、`referenceHz`（既定 `440`）、そして `voicedThreshold`（既定 `0.5`）で、最後のものはフレームを有声とみなす `voicedProb` の下限です。
 
 ::: warning pYIN の `voicedProb` をそのまま渡さないでください
-`voicedProb` はフレームの有声**観測量**であり、フレーム長が固定なら F0 とともに増え、
-確信度を表しません。そのため固定のしきい値では、低音域の素材に対して気付かないうちに
-**区間がまったく返らなくなります**。`pitchPyin` の `voicedFlag` を `0`／`1` へ変換して
-渡すか、`voicedThreshold` を下げてください。
+`voicedProb` はフレームの有声**観測量**であり、フレーム長が固定なら F0 とともに増え、信頼度を表しません。そのため固定のしきい値では、低音域の素材に対して気付かないうちに **区間がまったく返らなくなります**。`pitchPyin` の `voicedFlag` を `0`／`1` へ変換して渡すか、`voicedThreshold` を下げてください。
 :::
+
+## 採譜・注釈・シンセ記述子
+
+| 関数 | 戻り値 | 説明 |
+|------|--------|------|
+| `transcribe(request)` | `TranscribeResult` | モノラル音声を、一定テンポのグリッド上の MIDI ノートイベントへ変換し、`{ events, noteCount, tempoBpm, tuning }` で返します。`Project.setMidiEvents` にそのまま渡せます。テンポと音長の設定のほか、リクエストは `maxPolyphony`、`minFramePeakRatio`、`minRidgePeakRatio`、`reattackRatio`、`minNoteDivision`、`referenceHz`（数値または `'auto'`）を受け取ります。[音を MIDI ノートに変換する](./audio-to-notes.md) を参照 |
+| `alignTakeToReference(request)` | `AlignTakeToReferenceResult` | テイクをリファレンスのタイムラインへ対応付けるワープのアンカーを返します。`takeSampleRate` の既定値は `sampleRate` です |
+| `chordSymbolFromAnalysis(chord)` | `ChordSymbolFields` | `detectChords` や `analyze` のコードを、`Project.annotateChords` に渡すコード注釈のフィールドへ変換します。[プロジェクト MIDI](./project-editing-midi.md) を参照 |
+| `keyModeFromAnalysis(mode)` | `number` | キーのモード名（`'minor'`）を、`Project.annotateKeys` に渡すキー注釈の `mode` へ変換します |
+| `synthEngineParamInfo(engineMode)` | `SynthParamInfo[]` | シンセのエンジンモードが持つ数値パラメータすべての範囲、既定値、単位。[内蔵シンセサイザー](./native-synth.md) を参照 |
+| `synthPatchParamInfo()` | `SynthParamInfo[]` | `SynthPatch` の数値フィールドについての同じ記述子 |
+| `masteringInsertParamInfo(name, sampleRate?)` | `MasteringInsertParamInfo[]` | マスタリングのインサートプロセッサ 1 つのパラメータ記述子 |

@@ -5,7 +5,7 @@ description: Keeping signal levels sensible before, during, and after mastering.
 
 # Gain Staging
 
-Gain staging means keeping signal levels in a useful range as audio moves through a chain. In mastering, it prevents the compressor, exciter (a processor that adds harmonic brightness), stereo stage, limiter, and loudness optimizer from reacting to a misleading level.
+Gain staging means keeping signal levels in a useful range as audio moves through a chain. In mastering, it prevents the [compressor](../mastering/dynamics.md), exciter (a processor that adds harmonic brightness), stereo stage, [limiter](./true-peak-safety.md), and [loudness stage](../mastering/stereo-limiter-loudness.md) from reacting to a misleading level.
 
 Good gain staging is not about making everything quiet. It is about leaving enough room for processing decisions to remain meaningful.
 
@@ -14,7 +14,19 @@ Good gain staging is not about making everything quiet. It is about leaving enou
   caption="Each bar spans a stage's average level up to its peak level. Read this way the three separate decisions stop overlapping: the space above the peaks is headroom, the compressor threshold is a level the incoming signal is compared against, and the ceiling is a peak-safety limit — not a loudness target, which is set later and measured in LUFS instead."
 />
 
-<SonareDemo id="engine-lane-mixer" />
+## Reference Levels
+
+The figure uses these levels. The first row is the figure's example source; the rest are controls and their defaults.
+
+| Point in the chain | Level |
+|--------------------|-------|
+| Source in the figure | Peak about -6 dBFS, average about -20 dBFS |
+| Input Gain (demo control) | 0 dB by default, adjustable from -12 to +12 dB |
+| Compressor threshold | -18 dB by default (ratio 2:1, attack 10 ms, release 100 ms) |
+| True-peak ceiling | -1 dBTP by default |
+| Delivery loudness | Set by `loudness.targetLufs`, separately from the ceiling |
+
+On a mixer strip the same idea is the input trim: `inputTrimDb` in `mixStereo`, ahead of the fader. See [Mixing Basics](./mixing-basics.md).
 
 ## Why It Matters
 
@@ -41,6 +53,45 @@ Input Gain is not the place to set "how loud the listener hears it." It is the p
 Gain staging is about how processors react inside the chain. Loudness target is about where the final rendered file lands. Do not solve one with the other.
 
 If the master is too dense, lowering the loudness target may help, but you should also check threshold, ratio, attack, release, and input level.
+
+## Measure it in libsonare
+
+Run the loudness stage and read what it did. `appliedGainDb` is the static gain the stage added, before any limiter gain reduction. `loudnessTargetLimited` is `true` when the ceiling stopped the stage short, so `outputLufs` is the level actually reached rather than the target.
+
+::: code-group
+
+```typescript [Browser]
+import { init, masteringChain } from '@libraz/libsonare';
+
+await init();
+
+const r = masteringChain(samples, sampleRate, {
+  loudness: { targetLufs: -14, ceilingDb: -1 },
+});
+
+console.log(r.inputLufs, r.appliedGainDb, r.outputLufs, r.loudnessTargetLimited);
+// For the site's mix.wav: -18.6, 4.6, -14.8, true (the ceiling stopped it 0.8 LU short)
+```
+
+```python [Python]
+import libsonare as sonare
+
+r = sonare.mastering_chain(
+    samples, sample_rate,
+    {"loudness": {"targetLufs": -14, "ceilingDb": -1}},
+)
+
+print(r.input_lufs, r.applied_gain_db, r.output_lufs, r.loudness_target_limited)
+```
+
+```bash [CLI]
+sonare mastering track.wav --target-lufs -14 --ceiling-db -1 -o master.wav
+# prints input LUFS, output LUFS and the applied gain
+```
+
+:::
+
+In the request-object form, `masteringChain({ samples, sampleRate, config })`, the stage settings go under `config`.
 
 :::: details Implementation notes
 

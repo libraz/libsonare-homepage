@@ -5,13 +5,13 @@ description: PlaybackRenderer turns decoded mono/stereo/5.1/7.1 movie audio into
 
 # Playback Renderer
 
-`PlaybackRenderer` turns decoded movie audio into what a listener actually hears. It takes mono, stereo, 5.1 or 7.1 PCM — nothing else, no bitstream decoding, no container, no video — and renders it to headphones (binaural, head tracking, room model) or to stereo, 5.1 or 7.1 speakers (upmix, speaker calibration, bass management). Loudness alignment, a night-mode dynamics curve, and a static dialogue-level gain apply on every target.
+`PlaybackRenderer` turns decoded movie audio into what a listener actually hears. It accepts only mono, stereo, 5.1 or 7.1 PCM (no bitstream decoding, no container, no video) and renders it to headphones (binaural, head tracking, room model) or to stereo, 5.1 or 7.1 speakers (upmix, speaker calibration, bass management). Loudness alignment, a night-mode dynamics curve, and a static dialogue-level gain apply on every target.
 
 Use it after your own decoder has produced PCM: a WebCodecs pipeline, a `<video>` element's `MediaElementAudioSourceNode`, a decoded file read from disk. For the input/output channel conventions this page assumes, see [Channel Formats](./channel-formats.md).
 
 ## Stage Pipeline
 
-Processing runs through twelve named stages. The first six only depend on the *source* channel bed and run once regardless of target; the last two branch by target and converge on a shared output limiter.
+Processing runs through twelve named stages. The first six depend only on the *source* channel bed and run once regardless of target. The remaining stages split into a speakers branch (2 stages) and a headphones branch (3 stages), which converge on a shared output limiter.
 
 <FlowDiagram
   title="Playback renderer stages"
@@ -81,7 +81,7 @@ Configuration is one JSON document following `schemas/playback-renderer-config.s
 | `target.bass_management.lfe_gain_db` | number, [-10, 15] | `10` | Gain applied to the LFE channel when feeding a subwoofer |
 | `lfe_mix_db` | number, [-60, 10] | `0` | LFE level folded into L/R when the target has no LFE channel, or bass management has no subwoofer |
 | `upmix.enabled` | boolean | `true` | Stereo input only; toggling it does not change the reported latency |
-| `upmix.center_width` | number, [0.05, 1] | `0.2` | Width of the centre-extraction window on the panning index |
+| `upmix.center_width` | number, [0.05, 1] | `0.2` | Width of the center-extraction window on the panning index |
 | `upmix.front_ambience` | number, [0, 1] | `0.5` | Power share of ambient content kept in the front pair rather than sent to the surrounds |
 | `upmix.lfe_from_upmix` | boolean | `false` | Derive an LFE signal from the low-passed front sum |
 | `dialogue_level_db` | number, [-12, 12] | `0` | Static gain on the discrete centre channel of 5.1 / 7.1 input; a no-op on mono or stereo |
@@ -212,15 +212,43 @@ const out = renderer.processInterleaved(samples, 6);
 console.log(renderer.latencySamples(), renderer.diagnostics());
 ```
 
-```typescript [WASM / Worklet]
-// Realtime, in an AudioWorklet — the flagship use of this renderer: bind a
-// video element's own multichannel decode straight into binaural headphones.
-// 5.1 input from the browser's own decoder is spec-defined and matches
-// libsonare's canonical channel order; 7.1 channel order is not yet
-// confirmed across browsers (see Channel Formats), so keep worklet input at
-// mono/stereo/5.1 until that is checked.
-await context.audioWorklet.addModule(playbackWorkletUrl);
-const hrtf = await (await fetch(hrtfUrl)).arrayBuffer();
+```typescript [WASM]
+import { HrtfSet, PlaybackRenderer, renderPlayback } from '@libraz/libsonare';
+
+// bytes: the package's hrtf/default.shrf (see HRTF Sets below)
+using hrtf = HrtfSet.fromBytes(bytes);
+using renderer = new PlaybackRenderer({
+  config: { target: { kind: 'headphones' } },
+  hrtf,
+  sampleRate: 48000,
+});
+const out = renderer.processInterleaved(samples, 6);
+
+// Whole-buffer render through the same config:
+const rendered = renderPlayback({ samples, channels: 6, sampleRate: 48000, config: { target: { kind: 'headphones' } } });
+```
+
+```typescript [Worklet]
+// Realtime, in an AudioWorklet: bind a video element's own multichannel decode
+// straight into binaural headphones. 5.1 input from the browser's decoder is
+// spec-defined and matches libsonare's canonical channel order; 7.1 channel
+// order is not yet confirmed across browsers (see Channel Formats), so keep
+// worklet input at mono/stereo/5.1 until that is checked.
+
+// playback-worklet.ts (the worklet module). The processor builds its renderer
+// in the worklet's own realm, so the WASM module must be initialized there first.
+import { init, registerSonarePlaybackWorkletProcessor } from '@libraz/libsonare/worklet';
+import createModule from './sonare.js'; // the Emscripten factory beside the package's WASM glue
+
+// wasmBinary: the sonare.wasm bytes, inlined into this module by your bundler.
+await init({ moduleFactory: createModule, wasmBinary, locateFile: (path) => path });
+registerSonarePlaybackWorkletProcessor(); // 'sonare-playback-processor'
+
+// main.ts
+import { createSonarePlaybackNode } from '@libraz/libsonare/worklet';
+
+await context.audioWorklet.addModule('/playback-worklet.js');
+const hrtf = await (await fetch(hrtfUrl)).arrayBuffer(); // @libraz/libsonare/hrtf/default.shrf
 const node = createSonarePlaybackNode(context, {
   config: { input: { layout: 'auto' }, target: { kind: 'headphones' } },
   hrtf,
@@ -233,12 +261,15 @@ video.addEventListener('seeking', () => node.port.postMessage({ type: 'reset' })
 # Renders a whole file in one call; --program-lufs measures the input itself
 # when omitted.
 sonare playback movie-5.1.wav -o headphones.wav --target headphones
-sonare playback movie-5.1.wav -o out-7.1.wav --target 7.1 --room home_theater --night 0.5
+sonare playback movie-5.1.wav -o out-7.1.wav --target 7.1 --night 0.5
+sonare playback movie-5.1.wav -o room.wav --target headphones --room home_theater
 ```
 
 :::
 
-The one-shot form — `renderPlayback`/`render_playback`/`sonare_playback_render_interleaved`/`sonare playback` — builds a renderer internally, feeds a whole signal through it, and trims the renderer's own latency off the front of the result so the output lines up sample-for-sample with the input.
+Omit `sampleRate` in `createSonarePlaybackNode`. It defaults to the `AudioContext` rate, and any other value throws a `RangeError`. In the worklet, a block with no input or an unsupported channel count renders silence, and the unsupported ones are counted as `unsupported_input_blocks` in the diagnostics reply. The worklet needs the WASM module initialized in its own realm, and the processor options carry no `wasmBinary`, so the bytes have to be bundled into the worklet module. The default HRTF asset is `@libraz/libsonare/hrtf/default.shrf`.
+
+The one-shot form (`renderPlayback`, `render_playback`, `sonare_playback_render_interleaved`, `sonare playback`) builds a renderer internally, feeds a whole signal through it, and trims the renderer's own latency off the front of the result so the output lines up sample-for-sample with the input.
 
 ## Non-Goals
 
@@ -256,7 +287,7 @@ The one-shot form — `renderPlayback`/`render_playback`/`sonare_playback_render
 
 - [Channel Formats](./channel-formats.md)
 - [Surround group buses and wide meters](./realtime-engine.md#surround-group-buses-and-wide-meters)
-- [Acoustic Analysis](./acoustic-analysis.md)
+- [Room Acoustics](./acoustic-analysis.md)
 - [CLI Reference](./cli.md)
 - [JavaScript API](./js-api.md)
 - [Python API](./python-api.md)

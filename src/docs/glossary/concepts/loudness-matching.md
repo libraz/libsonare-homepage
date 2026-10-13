@@ -9,8 +9,6 @@ Loudness matching means comparing two versions at the same perceived volume. It 
 
 Without loudness matching, the louder version usually wins the first impression. That can be useful when checking final delivery level, but it is a poor way to judge whether EQ, compression, stereo width, saturation, or limiting actually improved the track.
 
-<SonareDemo id="loudness-meter" />
-
 ## Why Louder Feels Better
 
 When two similar sounds are played back at different levels, the louder one often seems clearer, brighter, wider, and more exciting. This happens even when the only difference is gain.
@@ -39,11 +37,75 @@ Use loudness matching while making creative or technical judgments:
 
 If the processed version only sounds better when matching is off, the processing may mainly be a gain increase. In that case, reduce the effect and compare again.
 
+<SonareDemo id="loudness-meter" />
+
 ## What It Does Not Tell You
 
 Loudness matching is not a delivery target. A file can compare fairly in A/B mode and still be too loud, too quiet, or unsafe for release.
 
 It also does not replace metering. Use [LUFS](../lufs.md) (Loudness Units relative to Full Scale, the broadcast/streaming unit for perceived loudness) and [true-peak](../true-peak.md) readings to check delivery constraints, then use matched listening to decide whether the processing is musically useful.
+
+## Measure it in libsonare
+
+Measure each version's integrated LUFS, then attenuate the louder one down to the quieter one. The gain is never positive, so matching only ever turns something down. On the site's `comp-take-a.wav` (-8.3 LUFS) and `comp-take-b.wav` (-10.8 LUFS), take A plays 2.5 dB lower and take B is untouched.
+
+::: code-group
+
+```typescript [Browser]
+import { init, lufs, masteringAbMatchLoudness } from '@libraz/libsonare';
+
+await init();
+
+const a = lufs(samplesA, sampleRate).integratedLufs;
+const b = lufs(samplesB, sampleRate).integratedLufs;
+const anchor = Math.min(a, b);
+const gainA = anchor - a;   // dB to apply to A
+const gainB = anchor - b;   // dB to apply to B
+
+// Or let the engine bring one take to the other's loudness:
+const { samples: matched, appliedGainDb, matchedTruePeakDbtp } = masteringAbMatchLoudness({
+  source: samplesB,
+  reference: samplesA,
+  sampleRate,
+});
+```
+
+```python [Python]
+import libsonare as sonare
+
+a = sonare.lufs(samples_a, sample_rate).integrated_lufs
+b = sonare.lufs(samples_b, sample_rate).integrated_lufs
+anchor = min(a, b)
+gain_a = anchor - a   # dB to apply to A
+gain_b = anchor - b   # dB to apply to B
+
+# Or let the engine bring one take to the other's loudness:
+matched, match = sonare.mastering_ab_match_loudness(samples_b, samples_a, sample_rate)
+```
+
+```bash [CLI]
+sonare lufs take-a.wav   # integrated LUFS of A
+sonare lufs take-b.wav   # integrated LUFS of B
+# subtract the lower value from each to get the two gains
+```
+
+:::
+
+`masteringAbMatchLoudness` raises the source to the reference's level with no headroom limit, so it can push the peak past 0 dBTP. Read `matchedTruePeakDbtp` before you export what it returns.
+
+### Engine delivery targets
+
+The mastering assistant knows these targets by name (`masteringPlatformNames()` lists them). They are the engine's own settings, not any streaming service's current policy.
+
+| `targetPlatform` | Integrated loudness | True-peak ceiling |
+|------------------|---------------------|-------------------|
+| `streaming`, `youtube` | None of their own; the assistant defaults of -14 LUFS apply | -1 dBTP |
+| `broadcast` | -23 LUFS | -1 dBTP |
+| `podcast` | -16 LUFS | -1 dBTP |
+| `club`, `cd` | -9 LUFS | -0.3 dBTP |
+| `audiobook`, `cinema` | None; the values you pass stand | None |
+
+`club` and `cd` trade headroom for density: -0.3 dBTP gives up part of the margin the other rows keep. `masteringStreamingPreview` goes the other way and shows what a platform's normalization would do to your master. By default it covers Spotify and YouTube at -14 LUFS and Apple Music at -16 LUFS, each with a -1 dBTP ceiling, and returns `normalizationGainDb` and `ceilingRisk` per platform.
 
 ## In The libsonare Demo
 

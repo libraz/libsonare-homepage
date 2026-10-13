@@ -26,7 +26,7 @@ Python パッケージは、呼び出しを C++ ライブラリと同じネイ�
 
 最初のスクリプトは、これくらい小さく始めるのがおすすめです。
 
-1. `audio = sonare.Audio.from_file("song.mp3")`
+1. `audio = sonare.Audio.from_file("song.mp3")` で読み込む。
 2. `sonare.detect_bpm(audio.data, audio.sample_rate)` または `sonare.analyze(audio.data, audio.sample_rate)` を呼ぶ。
 3. 結果を表示するか、JSON として保存する。
 
@@ -131,10 +131,10 @@ print(f"ビート数: {len(result.beat_times)}")
 |---------------------|--------|-----------|
 | ネイティブライブラリが OK 以外のコードを返したとき | `SonareError`（`RuntimeError` のサブクラス） | `[4] ` という数値接頭辞が付きます |
 | バインディングまたはオブジェクトの状態が呼び出しを拒否したとき（読み込んだライブラリにエントリポイントがない、閉じたオブジェクトを使った、ネイティブの結果が健全性検査に通らない） | `NOT_SUPPORTED`、`INVALID_STATE`、`UNKNOWN` のいずれかを持つ `SonareError` | 同じ `[code] ` 接頭辞が付き、素の `RuntimeError` にはなりません |
-| 読み込んだネイティブライブラリがバインディングと一致しないとき | `ABI_MISMATCH`（10）を持つ `SonareError` | ライブラリを最初に使う時点で、呼び出しが行われる前に送出されます |
+| 読み込んだネイティブライブラリがバインディングと一致しないとき | `ABI_MISMATCH`（10）を持つ `SonareError`（`sonare` CLI は終了コード 13） | ライブラリを最初に使う時点で、呼び出しが行われる前に送出されます |
 | C ABI に到達する前に、Python 側の引数・バッファ検証が呼び出しを拒否したとき | `SonareValueError` | 検証メッセージのみで、数値接頭辞は付きません |
 
-`SonareValueError` は `SonareError` と `ValueError` の**両方**を継承します。そのため `except ValueError:` でも `except sonare.SonareError:` でも捕捉でき、どちらの書き方のハンドラも、個々のエントリポイントがどちらのクラスを選ぶかを知る必要がありません。`.code` は `ErrorCode.INVALID_PARAMETER` なので、`.code` で分岐するコードから見ると、同じ入力を C ABI 側で拒否された場合とまったく同じ扱いになります。`SonareError.code` は JS バインディングが `ErrorCode` として公開するのと同じ C ABI の値で（[エラーハンドリング](./js-api.md#エラーハンドリング)を参照）、`.code_name` はバインディング間で共通の名称を返します。CLI はこれらのコードを[終了コード](./cli.md#終了コード)へ対応付けます（`ABI_MISMATCH` は 13）。パッケージのビルド時と ABI バージョンが異なるライブラリ、またはバインディングが必要とするシンボルを持たないライブラリは、`libsonare ABI mismatch` で始まるメッセージとともに `ABI_MISMATCH` で失敗します。ライブラリをビルドし直すか、`SONARE_LIB_PATH` を一致するビルドに向けてください。
+`SonareValueError` は `SonareError` と `ValueError` の**両方**を継承します。そのため `except ValueError:` でも `except sonare.SonareError:` でも捕捉でき、どちらの書き方のハンドラも、個々のエントリポイントがどちらのクラスを選ぶかを知る必要がありません。`.code` は引数の拒否なら `ErrorCode.INVALID_PARAMETER`、読み込めないプロジェクト文書なら C ABI のコード（壊れた JSON は `INVALID_FORMAT`）です。そのため `.code` で分岐するコードから見ると、同じ入力を C ABI 側で拒否された場合とまったく同じ扱いになります。`SonareError.code` は JS バインディングが `ErrorCode` として公開するのと同じ C ABI の値で、`.code_name` はバインディング間で共通の名称を返します。どの失敗がどのクラスとコードになるかは、ほかのバインディングと [CLI の終了コード](./cli.md#終了コード)も含めて[エラー契約](./binding-parity.md#エラー契約)にあります。パッケージのビルド時と ABI バージョンが異なるライブラリ、またはバインディングが必要とするシンボルを持たないライブラリは、`libsonare ABI mismatch` で始まるメッセージとともに `ABI_MISMATCH` で失敗します。対処は[インストール](./installation.md#ライブラリ読み込み時の-abimismatch)を参照してください。
 
 ```python
 try:
@@ -174,13 +174,11 @@ spectral_centroid: samples contains NaN or Inf at index 0
 
 値を持たない任意の数値引数は、省略するか `None` を渡します。`-1` は「未指定」の綴りではなく、`SonareValueError` で拒否されます。対象は、すべてのトランスポート・パラメータ・MIDI 呼び出しにおけるエンジンの `render_frame`（`None` は次のブロック先頭で適用）、`SpectralRegionOp.end_sample`（`None` は信号の末尾まで）、`fix_frames(x_max=...)`、`set_program(bank=...)` と `set_program_on_channel(bank=...)`（`None` は Bank Select を送出しない）、`metering_dynamic_range` と `Audio.dynamic_range` のパーセンタイル、`vqt` と `vqt_to_audio` の `gamma`（`None` は帯域幅の自動選択）です。C ABI では `-1` がそのまま使われます。
 
-CLI の**使い方**の誤りは `SonareValueError` ではなくプレーンな `ValueError` を送出します。API 引数ではなくコマンドラインの誤りを報告するものだからです。どちらも終了コードは `3` です。
+`sonare` CLI の引数パーサーが検出する使い方の誤り（未知のフラグや引数不足）は終了コード `2` です。コマンドが値を拒否した場合は、API 引数ではなくコマンドラインの誤りを報告するため、`SonareValueError` ではなくプレーンな `ValueError` を送出し、`SonareValueError` と同じ `3` で終了します。ABI 不一致は `13` です。[CLI の終了コード](./cli.md#終了コード)を参照してください。
 
 ### このビルドで何ができるか
 
-`capabilities()` は `sonare doctor` が表示するのと同じビルド診断レポートを返します。
-`capability_catalog()` は、`schemas/capability-catalog.schema.json` で検証された
-機械可読なプロセッサ／パラメータ／プリセットのカタログを返します。
+`capabilities()` は `sonare doctor` が表示するのと同じビルド診断レポートを返します。`capability_catalog()` は、`schemas/capability-catalog.schema.json` で検証された機械可読なプロセッサ／パラメータ／プリセットのカタログを返します。
 
 ```python
 import libsonare as sonare
@@ -196,15 +194,13 @@ for processor in catalog["processors"]:
         build_slider(processor["id"], param)
 ```
 
-手で管理した表ではなくカタログで分岐してください。パラメータの範囲・既定値・単位・
-リアルタイム安全性は、すべて読み込まれているビルドから得られます。Node と WASM では
-同じデータが `capabilities()` / `capabilityCatalog()` です。`catalog["masteringPresets"]` には、組み込みのマスタリングおよび修復プリセットが並びます。各要素は `name`、`kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持ち、修復プリセットでは 3 つの数値フィールドが `None` になります。プロセッサ要素には条件付きパラメータ群を表す `slots` もあり、`name`、`parent`、`activation`、`minCrossoverCutoffs` を持ちます。
+手で管理した表ではなくカタログで分岐してください。パラメータの範囲・既定値・単位・リアルタイム安全性は、すべて読み込まれているビルドから得られます。Node と WASM では同じデータが `capabilities()` / `capabilityCatalog()` です。
+
+`catalog["masteringPresets"]` には、組み込みのマスタリングおよび修復プリセットが並びます。各要素は `name`、`kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持ち、修復プリセットでは 3 つの数値フィールドが `None` になります。プロセッサ要素には条件付きパラメータ群を表す `slots` もあり、`name`、`parent`、`activation`、`minCrossoverCutoffs` を持ちます。
 
 ### 長い処理をキャンセルする
 
-進捗を報告する解析・マスタリングの呼び出しは `cancel` も受け取ります。これは同じネイティブ
-境界でポーリングされる述語で、`True` を返すと呼び出しが中断され、`SonareError` のコード `8`
-（`SONARE_ERROR_CANCELLED`）になります。途中結果は残りません。
+進捗を報告する解析・マスタリングの呼び出しは `cancel` も受け取ります。これは同じネイティブ境界でポーリングされる述語で、`True` を返すと呼び出しが中断され、`SonareError` のコード `8`（`SONARE_ERROR_CANCELLED`）になります。途中結果は残りません。
 
 ```python
 import threading
@@ -254,6 +250,49 @@ Python からもブラウザデモと同じ名前付きマスタリングプロ�
   caption="有効化したステージだけが処理されますが、有効なステージは常にこの順で実行されます。"
 />
 
+目的から入口を選ぶには、次の表を使います。
+
+| 目的 | 関数 |
+|------|------|
+| シンプルなラウドネスマスタリング | `mastering()` |
+| 組み込みプリセット一覧 | `mastering_preset_names()` |
+| 組み込みプリセットのフラットなチェーンパラメータを取得 | `mastering_preset_params(preset)` |
+| プリセットをモノラルに適用 | `master_audio()` |
+| プリセットをステレオに適用 | `master_audio_stereo()` |
+| フルチェーン実行（モノラル） | `mastering_chain()` |
+| フルチェーン実行（ステレオ） | `mastering_chain_stereo()` |
+| ブロック単位のストリーミング | `StreamingMasteringChain` |
+| マスタリング判断用の音源プロファイルを取得 | `mastering_audio_profile()` |
+| ステレオ両チャンネルから音源プロファイルを取得 | `mastering_audio_profile_stereo()` |
+| 音源解析からマスタリングの提案を取得 | `mastering_assistant_suggest()` |
+| ステレオ両チャンネルからマスタリングの提案を取得 | `mastering_assistant_suggest_stereo()` |
+| アシスタントの提案を JSON ではなくチェーンパラメータとして取得 | `mastering_assistant_suggest_chain()`、`mastering_assistant_suggest_chain_stereo()` |
+| 配信先ごとのラウドネス見込みをプレビュー | `mastering_streaming_preview()` |
+| ステレオ両チャンネルから配信先ごとのラウドネス見込みをプレビュー | `mastering_streaming_preview_stereo()` |
+| 組み込みの配信先一覧 | `mastering_platform_names()` |
+| 名前付きプロセッサ一覧（モノラル／ステレオ） | `mastering_processor_names()` |
+| プロセッサ分類カタログを取得 | `mastering_processor_catalog()` |
+| ギターアンプのプリセットとそのパラメータ一覧 | `mastering_amp_preset_catalog()` |
+| チェーンのインサートプロセッサ一覧 | `mastering_insert_names()` |
+| インサートが受け付けるパラメータキー一覧 | `mastering_insert_param_names(name)` |
+| インサートの構築キーとオートメーション対象の記述子 | `mastering_insert_param_info(name)` |
+| 構成したインサートのレイテンシとテールを取得 | `mastering_insert_timing(name, params, sample_rate)` |
+| モノラルプロセッサを単体で実行 | `mastering_process()` |
+| ステレオプロセッサを単体で実行 | `mastering_process_stereo()` |
+| ペアプロセッサ一覧 | `mastering_pair_processor_names()` |
+| ソース／リファレンスのペア処理 | `mastering_pair_process()` |
+| ステレオのソース／リファレンスのペア処理 | `mastering_pair_process_stereo()` |
+| ペア解析の一覧 | `mastering_pair_analysis_names()` |
+| ソース／リファレンスのペア解析 | `mastering_pair_analyze()` |
+| ソースのラウドネスをリファレンスへ合わせる | `mastering_ab_match_loudness()` |
+| ステレオソースのラウドネスをステレオリファレンスへ合わせる | `mastering_ab_match_loudness_stereo()` |
+| ステレオ解析の一覧 | `mastering_stereo_analysis_names()` |
+| ステレオチャンネル解析 | `mastering_stereo_analyze()` |
+
+関連するマスタリングガイド: [プリセット選択](./glossary/mastering/preset-selection.md)、[配信ターゲット](./glossary/mastering/delivery-targets.md)、[メーターの読み方](./glossary/mastering/meter-reading.md)、[品質チェックリスト](./glossary/mastering/quality-checklist.md)。
+
+### 単体プロセッサの実行
+
 ```python
 import json
 import libsonare as sonare
@@ -281,7 +320,11 @@ print(json.loads(report))
 
 catalog = sonare.mastering_processor_catalog()
 insert_params = sonare.mastering_insert_param_info("eq.parametric")
+```
 
+### プリセットとフルチェーン
+
+```python
 # プリセット式のチェーン（一括処理）
 sonare.mastering_preset_names()
 # -> ['pop', 'edm', 'acoustic', 'hipHop', 'aiMusic', 'speech', 'streaming', 'youtube', 'broadcast', 'podcast', 'audiobook', 'cinema', 'jpop', 'ambient', 'lofi', 'classical', 'drumAndBass', 'techno', 'metal', 'trap', 'rnb', 'jazz', 'kpop', 'trance', 'gameOst', 'vinyl', 'tapeHiss', 'fieldRecording', 'voiceMemo', 'shellac78']
@@ -301,6 +344,11 @@ print(chain_result.stage_gain_reductions)
 if chain_result.report is not None:
     print(chain_result.report.before, chain_result.report.after)
     print(chain_result.report.band_energy_delta_db)
+```
+
+### ストリーミングチェーン
+
+```python
 # ブロック単位のストリーミング処理
 with sonare.StreamingMasteringChain({
     "eq.tilt.tiltDb": 0.5,
@@ -314,6 +362,15 @@ with sonare.StreamingMasteringChain({
         if not tail:
             break
         output.extend(tail)
+```
+
+`prepare()` のあとに `chain.set_parameter(key, value)` を呼ぶと、ストリーミングで安全なパラメータをブロック境界で 1 つ変更できます。この呼び出しは処理、フラッシュ、リセット、prepare と直列化されます。未知のキー、構造を変えるキー、無効化したステージのキーは変更前に拒否されるため、失敗してもチェーンと音声履歴は変わりません。パラメータ変更に自動スムージングはありません。
+
+ストリーミング入力の最終ブロック後は、空のリストが返るまで `flush_mono()` を呼び、ステレオでは 2 つの空リストが返るまで `flush_stereo()` を呼びます。
+
+### アシスタント・プロファイル・プレビュー
+
+```python
 profile = json.loads(sonare.mastering_audio_profile(samples, sample_rate=sample_rate, params={
     "n_fft": 2048,
     "hop_length": 512,
@@ -343,21 +400,25 @@ stereo_suggestions = json.loads(sonare.mastering_assistant_suggest_stereo(left, 
 stereo_preview = json.loads(sonare.mastering_streaming_preview_stereo(left, right, sample_rate=sample_rate))
 ```
 
-`prepare()` のあとに `chain.set_parameter(key, value)` を呼ぶと、ストリーミングで安全なパラメータをブロック境界で 1 つ変更できます。この呼び出しは処理、フラッシュ、リセット、prepare と直列化されます。未知のキー、構造を変えるキー、無効化したステージのキーは変更前に拒否されるため、失敗してもチェーンと音声履歴は変わりません。パラメータ変更に自動スムージングはありません。
+3 つの JSON ヘルパーにはそれぞれ `_stereo` 版があります。バッファ 1 本ではなく `left` と `right` を受け取り、`params` / `platforms` は同じもの、戻り値も同じ JSON 文字列です。2 チャンネルの素材を扱うときは常にこちらを使ってください。モノラル側の入口は `0.5 * (left + right)` のダウンミックスを測定するため、相関の低いステレオ素材では約 6 dB 低く出ます。その分だけ、インテグレーテッドラウドネス、そこから導かれる正規化ゲイン、ピーク余裕の判定がまとめて過小評価されます。
 
-3 つの JSON ヘルパーにはそれぞれ `_stereo` 版があります。バッファ 1 本ではなく `left` と `right` を受け取り、`params` / `platforms` は同じもの、戻り値も同じ JSON 文字列です。2 チャンネルの素材を扱うときは常にこちらを使ってください。モノラル側の入口は `0.5 * (left + right)` のダウンミックスを測定するため、相関の低いステレオ素材では約 6 dB 低く出ます。その分だけ、インテグレーテッドラウドネス、そこから導かれるノーマライズゲイン、ピーク余裕の判定がまとめて過小評価されます。相関を落としたピンクノイズのペア（48 kHz・4 秒）では、ダウンミックス経由が -22.55 LUFS、ステレオ経由が -16.44 LUFS で、差は 6.11 dB でした。同じ差が Spotify の `normalizationGainDb` を +2.44 から +8.55 に押し上げます。相関の高いペアでは差は 3.01 dB にとどまり、これはダウンミックスで振幅が半分になる分です。残りの約 3 dB が相関の低さによるものです。
+::: details ステレオ版を使う理由
+相関を落としたピンクノイズのペア（48 kHz・4 秒）では、ダウンミックス経由が -22.55 LUFS、ステレオ経由が -16.44 LUFS で、差は 6.11 dB でした。同じ差が Spotify の `normalizationGainDb` を +2.44 から +8.55 に押し上げます。相関の高いペアでは差は 3.01 dB にとどまり、これはダウンミックスで振幅が半分になる分です。残りの約 3 dB が相関の低さによるものです。
+:::
 
 ステレオプロファイルのうち、両チャンネルから測るのは `loudness` ブロックだけです。インテグレーテッド LUFS と LRA はチャンネルを合算したプログラムから求め、True Peak は 2 つのうち大きい方を採ります。スペクトル・ダイナミクス・テンポの各フィールドは絶対レベルではなく形と時間構造を表すため、ダウンミックス基準のまま据え置き、モノラル呼び出しの結果とそのまま比較できます。
 
-`mastering_audio_profile()` は任意のプロファイル設定として `n_fft`、`hop_length`、`true_peak_oversample` を受け取れます。`mastering_assistant_suggest()` は `target_lufs`、`ceiling_db`、`enable_repair`、`prefer_streaming_safe`、`speech_mono_amount` を受け取ります。共有ネイティブパーサーを通るため、camelCase の別名も使えます。
+### オプションと結果フィールド
 
-マスタリング helper では、リミッターのリリースと静的ゲイン段の位置も指定できます。単発の `mastering()` helper は `release_ms`（`0` なら 50 ms のライブラリ既定値を維持）と `apply_gain_at_input_rate` を使います。プリセット／チェーンの上書きではフラットキーの `"maximizer.truePeakLimiter.releaseMs"` と `"maximizer.truePeakLimiter.applyGainAtInputRate"` を使い、渡した上書き値がそのまま適用されます。
+| エントリポイント／結果 | キー | 備考 |
+|----------------------|------|------|
+| `mastering_audio_profile(params=)` | `n_fft`、`hop_length`、`true_peak_oversample` | すべて任意です。 |
+| `mastering_assistant_suggest(params=)` | `target_lufs`、`ceiling_db`、`enable_repair`、`prefer_streaming_safe`、`speech_mono_amount` | 共有ネイティブパーサーを通るため、camelCase の別名も使えます。 |
+| `mastering(...)` | `release_ms`、`apply_gain_at_input_rate` | リミッターのリリースと静的ゲイン段の位置です。`release_ms=0` は 50 ms のライブラリ既定値を維持します。プリセットやチェーンの上書きではフラットキーの `"maximizer.truePeakLimiter.releaseMs"` と `"maximizer.truePeakLimiter.applyGainAtInputRate"` を使い、渡した値がそのまま適用されます。 |
+| オフラインのチェーン／プリセット結果 | `output_true_peak_dbtp`、`output_lra`、`stage_gain_reductions` | True Peak は設定したラウドネス用オーバーサンプル倍率で測ります。`output_lra` は EBU R128 のラウドネスレンジ（LU）です。各リダクションには、ダイナミクスまたはマキシマイザーのステージ名と、その直近のゲインリダクション（0 以下の dB）が入ります。 |
+| `result.report` | `before`、`after`、`band_energy_delta_db` | `before` と `after` にはそれぞれ `integrated_lufs`、`max_momentary_lufs`、`max_short_term_lufs`、`true_peak_dbtp`、`loudness_range` が入ります。`band_energy_delta_db` は処理前後の対数スペクトルエネルギー変化を示す 32 バンドの値です。レポートには適用ゲイン、最大ゲインリダクション、ピークの余裕によってラウドネス目標が制限されたかどうかも入ります。 |
 
-オフラインのチェーン／プリセット結果は、設定したラウドネス用オーバーサンプル倍率での `output_true_peak_dbtp`、EBU R128 ラウドネスレンジ（LU）の `output_lra`、`stage_gain_reductions` も報告します。各リダクションには、報告したダイナミクス／マキシマイザーステージと、その直近のゲインリダクション（0 以下の dB）が入ります。
-
-`result.report` が存在する場合、その `before` と `after` にはそれぞれ `integrated_lufs`、`max_momentary_lufs`、`max_short_term_lufs`、`true_peak_dbtp`、`loudness_range` が入ります。レポートには適用ゲイン、最大ゲインリダクション、ピークの余裕によってラウドネス目標が制限されたかどうか、処理前後の対数スペクトルエネルギー変化を示す 32 バンドの `band_energy_delta_db` も入ります。
-
-ストリーミング入力の最終ブロック後は、空のリストが返るまで `flush_mono()` を呼び、ステレオでは 2 つの空リストが返るまで `flush_stereo()` を呼びます。
+### リファレンストラックを使う処理
 
 リファレンストラックを使う処理では `mastering_pair_processor_names()`、`mastering_pair_process()`、`mastering_pair_process_stereo()`、`mastering_pair_analysis_names()`、`mastering_pair_analyze()` を使います。モノラルの `mastering_pair_process(processor_name, source, reference, sample_rate=22050, params=None, *, reference_sample_rate=None)` は `MasteringResult` を返し、ソースとリファレンスの長さが異なっていても処理できます。ステレオ版は `source_left`、`source_right`、`reference_left`、`reference_right` を受け取り、`left`、`right`、`sample_rate`、`input_lufs`、`output_lufs`、`applied_gain_db`、`latency_samples`、`loudness_target_limited`、`non_finite_substitution_count` を持つ `MasteringStereoResult` を返します。各ソースペアと各リファレンスペアは左右の長さを揃える必要がありますが、ソースペアとリファレンスペアの長さは異なって構いません。ステレオの `match.abCrossfade` は短い方のペア長を使います。ペアプロセッサ、ペア解析、A/B マッチはいずれも `reference_sample_rate`（既定は `sample_rate`）を受け取ります。別のレートのリファレンスはソースのレートへリサンプルされ、遅延推定はソースのレートのサンプル数で返ります。
 
@@ -365,11 +426,7 @@ stereo_preview = json.loads(sonare.mastering_streaming_preview_stereo(left, righ
 
 ### 単発のダイナミクスとリペア
 
-名前付きの各ステージは、単発のモジュールレベル関数としても利用できます。チェーンを組まずに 1 つのプロセッサだけを実行できます。
-
-パラメータはキーワード専用で、対応する `MasteringChainConfig` のキーを snake_case にしたものです。
-
-ダイナミクス系は `(processed_samples, latency_samples)` のタプルを返し、`latency_samples` は `int` です。リペア系は処理後サンプル（`np.ndarray`）を返します。
+名前付きの各ステージは、単発のモジュールレベル関数としても利用できます。チェーンを組まずに 1 つのプロセッサだけを実行できます。パラメータはキーワード専用で、対応する `MasteringChainConfig` のキーを snake_case にしたものです。ダイナミクス系は `(processed_samples, latency_samples)` のタプルを返し、`latency_samples` は `int` です。リペア系は処理後サンプル（`np.ndarray`）を返します。
 
 | 関数 | 戻り値 | 主なパラメータ |
 |------|--------|----------------|
@@ -379,12 +436,14 @@ stereo_preview = json.loads(sonare.mastering_streaming_preview_stereo(left, righ
 | `mastering_repair_declick(samples, sample_rate?, *, ...)` | `np.ndarray` | `threshold=0.8`、`neighbor_ratio=4.0`、`max_click_samples=8`、`lpc_order=20`、`residual_ratio=8.0` |
 | `mastering_repair_declip(samples, sample_rate?, *, ...)` | `np.ndarray` | `clip_threshold=0.98`、`lpc_order=36`、`iterations=2`、`lpc_blend=0.65` |
 | `mastering_repair_decrackle(samples, sample_rate?, *, ...)` | `np.ndarray` | `threshold=0.4`、`mode='median'`、`levels=4` |
-| `mastering_repair_dehum(samples, sample_rate?, *, ...)` | `np.ndarray` | `fundamental_hz=50.0`、`harmonics=4`、`q=20.0`、`adaptive`、`search_range_hz`、`adaptation`、`frame_size`、`pll_bandwidth` |
-| `mastering_repair_denoise_classical(samples, sample_rate?, *, ...)` | `np.ndarray` | `mode='logMmse'`、`noise_estimator='quantile'`、`n_fft=1024`、`hop_length=256`、`dd_alpha=0.98`、`gain_floor=0.05`、`over_subtraction=2.0`、`spectral_floor=0.05`、`noise_estimation_quantile=0.1`、`speech_presence_gain`、`gain_smoothing` |
-| `mastering_repair_dereverb_classical(samples, sample_rate?, *, ...)` | `np.ndarray` | `threshold=0.05`、`attenuation=0.5`、`n_fft=1024`、`hop_length=256`、`t60_sec=0.4`、`late_delay_ms=50.0`、`over_subtraction`、`spectral_floor`、`wpe_enabled`、`wpe_iterations`、`wpe_taps`、`wpe_strength` |
-| `mastering_repair_trim_silence(samples, sample_rate?, *, ...)` | `np.ndarray` | `threshold=0.001`、`padding_samples=0`、`mode='peak'`、`gate_lufs=-60.0`、`window_ms=400.0` |
+| `mastering_repair_dehum(samples, sample_rate?, *, ...)` | `np.ndarray` | `fundamental_hz=50.0`、`harmonics=4`、`q=20.0`、`adaptive`、`search_range_hz`、`adaptation`、`frame_size`、`pll_bandwidth`、`mode='subtract'` |
+| `mastering_repair_denoise_classical(samples, sample_rate?, *, ...)` | `np.ndarray` | `mode='logMmse'`、`noise_estimator='quantile'`、`n_fft=1024`、`hop_length=256`、`dd_alpha=0.98`、`reduction_db=26.0`、`over_subtraction=2.0`、`spectral_floor=0.05`、`noise_estimation_quantile=0.1`、`speech_presence_gain`、`gain_smoothing` |
+| `mastering_repair_dereverb_classical(samples, sample_rate?, *, ...)` | `np.ndarray` | `threshold=0.0`、`attenuation=1.0`、`n_fft=1024`、`hop_length=256`、`t60_sec=0.4`、`late_delay_ms=50.0`、`over_subtraction=1.0`、`spectral_floor=0.08`、`wpe_enabled`、`wpe_iterations`、`wpe_taps`、`wpe_strength` |
+| `mastering_repair_trim_silence(samples, sample_rate?, *, ...)` | `np.ndarray` | `threshold=0.001`、`padding_samples` または `padding_sec`（どちらか一方）、`mode='peak'`、`gate_lufs=-60.0`、`window_ms=400.0` |
 
 信号全体を対象とするリペアステージ（declick、declip、decrackle、dehum、dereverb）は `StreamingMasteringChain` では拒否されます。これらの単発ヘルパー、または `mastering_chain*` / `master_audio*` の中で実行してください。リアルタイムエンジンでは、decrackle、dehum、クラシックなデノイザー、クラシックなデリバーブがカタログ ID のインサートとしても使えます。declick と declip はオフラインのままです。
+
+リペア系の各ヘルパーには `_stereo` 版があり、デノイザーとデリバーブにはチャンネルを 1 つのプログラムとして扱う `_linked` 版もあります。`mastering_repair_detect_*` 関数は、音声を変えずに欠陥（クリック、ノイズフロア、クリッピング、クラックル、ハム、残響、トリム範囲）を測定します。`mastering_repair_dereverb_config_for_room(estimate)` は `RoomEstimate` から完全なデリバーブ設定を作ります。
 
 任意のチャンネル数の音声は 2 回の呼び出しでリペアできます。`mastering_repair_analyze(channels, sample_rate)` はチャンネルごとの欠陥を測定し、アシスタントが実行するステージを `recommended` として返します（そのまま渡せます。デリバーブは推奨されません）。`mastering_repair_apply(channels, sample_rate, stages=[...])` はそれを実行します。ステージはリストの順序に関わらず、declip、declick、decrackle、dehum、denoise、dereverb の固定順で実行され、重複したステージや未知の設定は拒否されます。結果には、リペア後のチャンネルと、ステージごとのレポート（チャンネルごと、またはリンクされた denoise と dereverb では 1 回）が入り、`on_progress` / `cancel` は[進捗コールバック](#進捗コールバック)と同じ使い方です。
 
@@ -397,8 +456,7 @@ result = sonare.mastering_repair_apply([left, right], 48000, stages=analysis["re
 
 ### 進捗コールバック
 
-`mastering_chain()`、`mastering_chain_stereo()`、`master_audio()`、
-`master_audio_stereo()` は、オプションの `on_progress=callable` キーワードを受け取ります。
+`mastering_chain()`、`mastering_chain_stereo()`、`master_audio()`、`master_audio_stereo()` は、オプションの `on_progress=callable` キーワードを受け取ります。
 
 このコールバックは、各ステージ完了時に `(progress: float, stage: str)` で呼び出されます。
 
@@ -421,51 +479,15 @@ result = sonare.mastering_chain(
 )
 ```
 
-`mastering_insert_param_info(name, sample_rate=None)` は、インサートが構築時に読むキーとリアルタイムオートメーション対象の記述子を返します。型、範囲、既定値、選択肢、条件付きの `slot` を確認できます。`sample_rate` を渡すと、ナイキスト周波数で決まる上限がそのレートで解決され、オフラインのリペアステージを含むすべてのカタログ id に答えます。`mastering_insert_timing(name, params, sample_rate)` はそのパラメータでインサートを構築し、`latencySamples` と `tailSamples` を返します。インサートが読まないキーは拒否されます。`params` は記述子が宣言するあらゆる値の型（数値、真偽値、列挙名、文字列、数値のリスト）を受け付け、型の違う値は `TypeError`、有限でない数値は `SonareValueError` です。`mastering_preset_params(preset)` はプリセットのフラットな上書きマップを返し、そのまま `master_audio(..., overrides=...)` に渡せます。
+### 設定キーとインサート記述子
 
 設定 dict からは、任意バンド数のマルチバンドコンプレッサーも扱えます。`dynamics.multibandComp` は `crossover`（`cutoffsHz`、`slope`、`mode`、`firKernelSize`）と `bands`（バンドごとの dict）を受け付けます。`overrides` ではフラットキーの `dynamics.multibandComp.crossover.cutoffsHz.<i>` と `dynamics.multibandComp.bands.<i>.<field>` も使えます。バンド数は 2 から 64 で、`cutoffsHz` はカットオフ一覧を置き換えて、バンド数を要素数 + 1 に決めます。列挙型のキーは数値と並んで `choices` の名前でも指定できます（`"repair.denoise.noiseEstimator": "spp"`、`dynamics.compressor.detector`、マルチバンドのスロープ・モード・ディテクターのキー）。`mastering_process`、`mastering_process_stereo`、`mastering_insert_timing` の params も同じ名前を受け付けます。`repair.denoise.enabled` を有効にしたストリーミングチェーンは、ノイズ推定器の既定が `spp` で、`quantile` は名前を示して拒否されます。
 
-マスタリング API は次の系統に分かれます。
-
-| 目的 | 関数 |
-|------|------|
-| シンプルなラウドネスマスタリング | `mastering()` |
-| 組み込みプリセット一覧 | `mastering_preset_names()` |
-| 組み込みプリセットのフラットなチェーンパラメータを取得 | `mastering_preset_params(preset)` |
-| プリセットをモノラルに適用 | `master_audio()` |
-| プリセットをステレオに適用 | `master_audio_stereo()` |
-| フルチェーン実行（モノラル） | `mastering_chain()` |
-| フルチェーン実行（ステレオ） | `mastering_chain_stereo()` |
-| ブロック単位のストリーミング | `StreamingMasteringChain` |
-| マスタリング判断用の音源プロファイルを取得 | `mastering_audio_profile()` |
-| ステレオ両チャンネルから音源プロファイルを取得 | `mastering_audio_profile_stereo()` |
-| 音源解析からマスタリングの提案を取得 | `mastering_assistant_suggest()` |
-| ステレオ両チャンネルからマスタリングの提案を取得 | `mastering_assistant_suggest_stereo()` |
-| 配信先ごとのラウドネス見込みをプレビュー | `mastering_streaming_preview()` |
-| ステレオ両チャンネルから配信先ごとのラウドネス見込みをプレビュー | `mastering_streaming_preview_stereo()` |
-| 名前付きプロセッサ一覧（モノラル／ステレオ） | `mastering_processor_names()` |
-| プロセッサ分類カタログを取得 | `mastering_processor_catalog()` |
-| チェーンのインサートプロセッサ一覧 | `mastering_insert_names()` |
-| インサートが受け付けるパラメータキー一覧 | `mastering_insert_param_names(name)` |
-| インサートの構築キーとオートメーション対象の記述子 | `mastering_insert_param_info(name)` |
-| 構成したインサートのレイテンシとテールを取得 | `mastering_insert_timing(name, params, sample_rate)` |
-| モノラルプロセッサを単体で実行 | `mastering_process()` |
-| ステレオプロセッサを単体で実行 | `mastering_process_stereo()` |
-| ペアプロセッサ一覧 | `mastering_pair_processor_names()` |
-| ソース／リファレンスのペア処理 | `mastering_pair_process()` |
-| ステレオのソース／リファレンスのペア処理 | `mastering_pair_process_stereo()` |
-| ペア解析の一覧 | `mastering_pair_analysis_names()` |
-| ソース／リファレンスのペア解析 | `mastering_pair_analyze()` |
-| ソースのラウドネスをリファレンスへ合わせる | `mastering_ab_match_loudness()` |
-| ステレオソースのラウドネスをステレオリファレンスへ合わせる | `mastering_ab_match_loudness_stereo()` |
-| ステレオ解析の一覧 | `mastering_stereo_analysis_names()` |
-| ステレオチャンネル解析 | `mastering_stereo_analyze()` |
-
-関連するマスタリングガイド: [プリセット選択](./glossary/mastering/preset-selection.md)、[配信ターゲット](./glossary/mastering/delivery-targets.md)、[メーターの読み方](./glossary/mastering/meter-reading.md)、[品質チェックリスト](./glossary/mastering/quality-checklist.md)。
+`mastering_insert_param_info(name, sample_rate=None)` は、インサートが構築時に読むキーとリアルタイムオートメーション対象の記述子を返します。型、範囲、既定値、選択肢、条件付きの `slot`、範囲を動かす兄弟キーを示す `dependsOn` / `coupledWith` を確認できます。`sample_rate` を渡すと、ナイキスト周波数で決まる上限がそのレートで解決され、オフラインのリペアステージを含むすべてのカタログ id に答えます。`mastering_insert_timing(name, params, sample_rate)` はそのパラメータでインサートを構築し、`latencySamples` と `tailSamples` を返します。インサートが読まないキーは拒否されます。`params` は記述子が宣言するあらゆる値の型（数値、真偽値、列挙名、文字列、数値のリスト）を受け付け、型の違う値は `TypeError`、有限でない数値は `SonareValueError` です。`mastering_preset_params(preset)` はプリセットのフラットな上書きマップを返し、そのまま `master_audio(..., overrides=...)` に渡せます。
 
 ## ミキシング API
 
-Python からも libsonare のミキシングエンジンを使えます。ステムを一括でレンダーするだけなら `mix_stereo(...)`、センド、バス、オートメーション、メーター、シーンの保存が必要ならシーン JSON から読み込む `Mixer` を使います。組み込みのシーンプリセット一覧は `mixing_scene_preset_names()` で取得できます。
+Python からも libsonare のミキシングエンジンを使えます。ステムを一括でレンダリングするだけなら `mix_stereo(...)`、センド、バス、オートメーション、メーター、シーンの保存が必要ならシーン JSON から読み込む `Mixer` を使います。組み込みのシーンプリセット一覧は `mixing_scene_preset_names()` で取得できます。
 
 ```python
 import libsonare as sonare
@@ -492,29 +514,25 @@ with sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512)
 
 `mixer.process_stereo(...)` は `MixerStereoResult` 名前付きタプルを返します。`.left` と `.right`（`list[float]`）、`.sample_rate`（`int`）を持ち、Node/WASM の `{left, right, sampleRate}` と同じ形です。
 
-`Mixer.set_pan_law(...)` と `RealtimeEngine.set_track_strip_pan_law(...)` は、
-`PanLaw` enum、整数の序数、または大文字小文字を区別しない文字列エイリアスを受け取ります。
-`const3db`、`const-3db`、`-3db`、`const4.5db`、`const-4.5db`、`-4.5db`、
-`const6db`、`const-6db`、`-6db`、`linear0db`、`linear-0db`、`linear`、`0db` が使え、
-アンダースコアはハイフンとして扱われます。
+`Mixer.set_pan_law(...)` と `RealtimeEngine.set_track_strip_pan_law(...)` は、`PanLaw` enum、整数の序数、または大文字小文字を区別しない文字列エイリアスを受け取ります。`const3db`、`const-3db`、`-3db`、`const4.5db`、`const-4.5db`、`-4.5db`、`const6db`、`const-6db`、`-6db`、`linear0db`、`linear-0db`、`linear`、`0db` が使え、アンダースコアはハイフンとして扱われます。
 
 ルーティングの考え方、シーンプリセット、リアルタイム処理の注意点は [ミキシングエンジン](./mixing.md) を参照してください。
 
 ## プロジェクト・インストゥルメント・ライブ MIDI
 
-ヘッドレス DAW の機能群は Python からも利用できます。`Project` でアレンジを作り、内蔵インストゥルメントでレンダーし、ライブ MIDI をリアルタイムエンジンへ送れます。詳細は各専用ガイドにあります。ここは Python の入口をまとめたマップです。
+ヘッドレス DAW の機能群は Python からも利用できます。`Project` でアレンジを作り、内蔵インストゥルメントでレンダリングし、ライブ MIDI をリアルタイムエンジンへ送れます。詳細は各専用ガイドにあります。ここは Python の入口をまとめたマップです。
 
 | やりたいこと | API | ガイド |
 |--------------|-----|--------|
 | トラック、クリップ、テンポ、マーカー、undo/redo を編集する | `Project`（コンテキストマネージャ。`with` を使う） | [プロジェクト編集](./project-editing.md) |
-| 内蔵シンセサイザー（NativeSynth）で MIDI をレンダーする | `Project.bounce_with_synth_instrument(...)`、`synth_preset_names()`、`synth_preset_patch(name)`、`SynthPatch` | [内蔵シンセサイザー](./native-synth.md)、[プロジェクトのバウンス](./project-bounce.md) |
-| SoundFont で MIDI をレンダーする | `Project.load_soundfont(data)`、`Project.bounce_with_sf2_instrument(...)` | [SoundFont プレイヤー](./soundfont-player.md) |
-| バウンス中に自前のインストゥルメントをホストする | `ExternalInstrument` プロトコルを使う `Project.bounce_with_instruments(...)`。`render(channels, num_frames)` コールバックに加え、任意の `prepare`/`on_event` フックと `latency_samples` を持ちます。Node と WASM には、コールバック形式が `bounceWithInstruments` / `bounceWithInstrument` としてあります。 | [プロジェクトのバウンス](./project-bounce.md#自前のインストゥルメントをホストする) |
-| MIDI イベントからインストゥルメントをライブ演奏し、送出先（デスティネーション）の MIDI FX を差し替える | `RealtimeEngine.set_synth_instrument(...)`、`RealtimeEngine.load_soundfont(...)`、`RealtimeEngine.set_midi_fx(...)`、およびエンジンの MIDI 入力キュー | [MIDI 入力](./midi-input.md) |
+| 内蔵シンセサイザー（NativeSynth）で MIDI をレンダリングする | `Project.bounce_with_synth_instrument(...)`、`synth_preset_names()`、`synth_preset_patch(name)`、`SynthPatch` | [内蔵シンセサイザー](./native-synth.md)、[プロジェクトのバウンス](./project-bounce.md) |
+| SoundFont で MIDI をレンダリングする | `Project.load_soundfont(data)`、`Project.bounce_with_sf2_instrument(...)` | [SoundFont プレイヤー](./soundfont-player.md) |
+| バウンス中に自前のインストゥルメントをホストする | `ExternalInstrument` プロトコルを使う `Project.bounce_with_instruments(...)`。`render(channels, num_frames)` コールバックに加え、任意の `prepare`/`on_event` フックと `latency_samples` を持ちます。Node と WASM には、コールバック形式が `bounceWithInstruments` / `bounceWithInstrument` としてあります。 | [プロジェクトのバウンス](./project-bounce.md#自前の楽器を組み込む) |
+| MIDI イベントからインストゥルメントをライブ演奏し、送出先（デスティネーション）の MIDI FX を差し替える | `RealtimeEngine.set_synth_instrument(...)`、`RealtimeEngine.load_soundfont(...)`、`RealtimeEngine.set_midi_fx(...)`、エンジンの MIDI 入力キュー、`push_midi_program(...)` / `push_midi_input_program(...)`（バンク指定を含められるプログラムチェンジを 1 回の呼び出しで送る。SoundFont プレイヤーと GM プログラムを割り当てたシンセはバンクに従う） | [MIDI 入力](./midi-input.md) |
 | ライブエンジンへ MIDI クリップをサンプル精度でスケジュールする | `EngineMidiClipSchedule` / `EngineMidiEvent` を渡す `RealtimeEngine.set_midi_clips([...])`、`RealtimeEngine.sample_at_ppq(ppq)`。ppq は音楽的時間の単位で、四分音符あたりのパルス数です | [リアルタイムエンジン](./realtime-engine.md#midi-クリップスケジューリングと-sampleatppq) |
 | トラック単位のキューモニタリングを設定する | `RealtimeEngine.set_track_monitor_mode(lane_index, mode, render_frame=None)`。`EngineTrackMonitorMode`（`off`／`pfl`／`afl`）を使います。PFL はフェーダー前、AFL はフェーダー後を試聴します | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
-| デスティネーションを外部 MIDI ハードウェアへ送る | `set_midi_destination_external(...)`、`set_external_midi_clock_enabled(...)`、`drain_external_midi(...)`、`external_midi_dropped_count()` | [リアルタイムエンジン](./project-editing-midi.md#トラックを外部-midi-機器へ送る) |
-| エンジンのトラックをライブミックス／自動化する | レーン／ストリップ操作に加え、`set_bus_strip_insert_param_by_name(...)`、`set_bus_strip_insert_bypassed(...)`、`resolve_track_insert_automation_id(...)`、`resolve_master_insert_automation_id(...)`、`resolve_bus_insert_automation_id(...)`、`set_param_smoothing_ms(...)` | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
+| デスティネーションを外部 MIDI ハードウェアへ送る | `set_midi_destination_external(...)`、`set_external_midi_clock_enabled(...)`、`drain_external_midi(...)`、`external_midi_dropped_count()` | [プロジェクト編集：MIDI](./project-editing-midi.md#トラックを外部-midi-機器へ送る) |
+| エンジンのトラックをライブミックス／自動化する | レーン／ストリップ操作に加え、`set_track_sends(track_id, sends)`、`set_track_output_bus(track_id, bus_id)`、`set_bus_strip_insert_param_by_name(...)`、`set_bus_strip_insert_bypassed(...)`、`resolve_track_insert_automation_id(...)`、`resolve_master_insert_automation_id(...)`、`resolve_bus_insert_automation_id(...)`、`set_param_smoothing_ms(...)` | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
 | ワイドメーターとスコープを読む | `drain_meter_telemetry_wide(...)`、`configure_scope_telemetry(...)`、`drain_scope_telemetry(...)` | [リアルタイムエンジン](./realtime-engine.md#サラウンドグループバスとワイドメーター) |
 
 ```python
@@ -527,7 +545,7 @@ with sonare.Project() as project:
     audio = project.bounce_with_synth_instrument("e-piano", num_channels=2)
 ```
 
-`Project` と `Mixer` は `with` による自動クリーンアップに対応します。
+ネイティブメモリを所有するオブジェクト（`Audio`、`Project`、`Mixer`、`RealtimeEngine`、`StreamAnalyzer`、`RealtimeVoiceChanger`、`StreamingMasteringChain`、`StreamingEqualizer` など）はすべて `close()` を持ち、コンテキストマネージャとして使えます。`close()` のあとにメソッドを呼ぶと、`INVALID_STATE` を持つ `SonareError` になります。
 
 シンセプリセットの確認には `synth_preset_patch(name)` を使います。名前付きカタログプリセットを `SynthPatch` として返すので、バインドする前にフィールドを確認・調整できます（不明な名前では `SonareError` を送出し、`'va:'` ルーティング接頭辞も受け付けます）。`synth_enum_tables()` は実行時の enum 名テーブル（`dict[str, tuple[str, ...]]`）を返し、`SynthModRouting` のソース／デスティネーション名を、読み込まれたビルドに対して検証できます。
 
@@ -545,35 +563,23 @@ with sonare.Project() as project:
 |------|-----|-------|
 | 検出済みのコードに、再検出なしでローマ数字と機能を付ける | `chord_functions(chords, key)`（`FunctionalChord` のリストを返す） | [解析](./analysis.md) |
 | 解析にチューニングを測定させ、Hz に変換する | `analyze`、`detect_chords`、`detect_key` の `tuning="auto"`（`KeyDetection` が使った `tuning` を持つ）、`transcribe` の `reference_hz="auto"`、`tuning_to_reference_hz`、`reference_hz_to_tuning` | [音声からノートへ](./audio-to-notes.md) |
-| モノフォニックなテイクを、検出または指定したキーに合わせる | `auto_tune(samples, sample_rate, key="detect")`（`AutoTuneResult` を返す）、`scale_mask_for_mode(root, mode)` | [Python エフェクト API](./python-api-effects.md) |
+| モノフォニックなテイクを、検出または指定したキーに合わせる | `auto_tune(samples, sample_rate, key="detect")`（`AutoTuneResult` を返す。[Python エフェクト API](./python-api-effects.md#エフェクト関数)）、`scale_mask_for_mode(root, mode)`（[Python 解析 API](./python-api-analysis.md#スケール量子化)） | [Python エフェクト API](./python-api-effects.md#エフェクト関数) |
 | パラメータを言い直さずに Mel／MFCC の結果を逆変換する | `mel_result_to_stft`、`mel_result_to_audio`、`mfcc_result_to_mel`、`mfcc_result_to_audio` | [逆変換](./inverse-features.md) |
-| ルーム推定を `synthesize_rir` の入力にする | `room_geometry_from_estimate(estimate, source=..., listener=...)`（`RoomGeometry` を返す） | [音響解析](./acoustic-analysis.md) |
+| 検出したコードやキーをアレンジの注釈に変換する | `chord_symbol_from_analysis(chord)`、`key_mode_from_analysis(mode)` | [プロジェクト編集：MIDI](./project-editing-midi.md) |
+| ルーム推定を `synthesize_rir` の入力にする | `room_geometry_from_estimate(estimate, source=..., listener=...)`（`RoomGeometry` を返し、`source`、`listener`、`absorption` は上書きしない限り推定結果から導かれます） | [音響解析](./acoustic-analysis.md) |
 | デコードした全チャンネルを保持する、またはチャンネルを狭いレイアウトに畳み込む | `decode_channels(data)`（`(channels, sample_rate)` を返す）、`downmix(channels, target_layout)`（センターとサラウンドは -3 dB、LFE は破棄） | [チャンネル形式](./channel-formats.md) |
 | サイドチェイン接続が受理されるか、されないならなぜかを尋ねる | `RealtimeEngine.can_set_lane_sidechain`、`can_set_bus_sidechain`、`can_set_master_sidechain`（`SidechainCheck` を返す） | [リアルタイムエンジン](./realtime-engine.md) |
 | エンジンのクリップ集合を 1 クリップずつ編集する | `RealtimeEngine.upsert_clip`、`remove_clip` | [リアルタイムエンジン](./realtime-engine.md) |
 | プロセッサのリセット、繰り返しレンダリングの準備、テールとレイテンシの読み取り | `reset_processor_state`、`prime_offline_parameters`、`tail_samples`、`graph_latency_samples_q8` | [リアルタイムエンジン](./realtime-engine.md) |
 | フェーダーとパンのオートメーションをトラックやバスで指定する | `resolve_track_lane_automation_id`、`resolve_bus_automation_id` | [リアルタイムエンジン](./realtime-engine.md) |
-| 信号の終わりでTrue Peakメーターの保留ウィンドウを反映する | `Mixer.flush_meters()` | [ミキシングエンジン](./mixing.md) |
+| 信号の終わりで True Peak メーターの保留ウィンドウを反映する | `Mixer.flush_meters()` | [ミキシングエンジン](./mixing.md) |
 | プロジェクトで解決できなかったオーディオソースを列挙する | `Project.unresolved_audio_sources()` | [プロジェクト編集](./project-editing.md) |
 | ミキサーシーンの認識されないキーを読む | `Mixer.scene_warnings()` | [ミキシングシーン JSON](./mixing-scene-json.md) |
 
-## 各節の移動先
+## リファレンスの所在
 
-| 節 | 移動先 |
-|----|--------|
-| オーディオエフェクト | [Python エフェクト API](./python-api-effects.md#オーディオエフェクト) |
-| 特徴抽出 | [Python 解析 API](./python-api-analysis.md#特徴抽出) |
-| 単位変換 | [Python 解析 API](./python-api-analysis.md#単位変換) |
-| API リファレンス（Audio、解析関数） | [Python 解析 API](./python-api-analysis.md#api-リファレンス) |
-| ルーム音響解析 | [Python エフェクト API](./python-api-effects.md#ルーム音響解析) |
-| エフェクト関数 | [Python エフェクト API](./python-api-effects.md#エフェクト関数) |
-| リアルタイムボイスチェンジャー | [Python エフェクト API](./python-api-effects.md#リアルタイムボイスチェンジャー) |
-| 特徴抽出関数 | [Python 解析 API](./python-api-analysis.md#特徴抽出関数) |
-| 逆再構成関数 | [Python 解析 API](./python-api-analysis.md#逆再構成関数) |
-| メータリング関数 | [Python 解析 API](./python-api-analysis.md#メータリング関数) |
-| スケール量子化 | [Python 解析 API](./python-api-analysis.md#スケール量子化) |
-| librosa 互換ヘルパー | [Python エフェクト API](./python-api-effects.md#librosa-互換ヘルパー) |
-| 変換関数 | [Python 解析 API](./python-api-analysis.md#変換関数) |
-| 型定義 | [Python 型定義](./python-api-types.md#型定義) |
-| ストリーミング解析 API | [Python 解析 API](./python-api-analysis.md#ストリーミング解析-api) |
-| ストリーミング EQ API | [Python エフェクト API](./python-api-effects.md#ストリーミング-eq-api) |
+| ページ | 内容 |
+|--------|------|
+| [Python 解析 API](./python-api-analysis.md) | Audio、解析関数、特徴抽出、逆再構成、メータリング、スケール量子化、変換、ストリーミング解析 |
+| [Python エフェクト API](./python-api-effects.md) | オーディオエフェクト、ルーム音響解析、エフェクト関数、リアルタイムボイスチェンジャー、librosa 互換ヘルパー、ストリーミング EQ |
+| [Python 型定義](./python-api-types.md) | 結果とオプションの型、例外 |

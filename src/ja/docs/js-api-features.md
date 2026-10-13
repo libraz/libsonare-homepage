@@ -5,20 +5,22 @@ description: libsonare JavaScript/TypeScript パッケージの STFT、mel/MFCC�
 
 # JavaScript/TypeScript 特徴抽出 API
 
-libsonare JavaScript/TypeScript パッケージの特徴抽出関数です。BPM・キー・ビート検出、総合解析の `analyze()`、単位変換については [解析 API](./js-api-analysis.md) を参照してください。
+libsonare JavaScript/TypeScript パッケージの特徴抽出関数です。BPM・キー・ビート検出と総合解析の `analyze()` は [解析 API](./js-api-analysis.md)、単位変換は [ヘルパーと変換](./js-api-helpers.md) を参照してください。
+
+どの関数も、位置引数かリクエストオブジェクト（`{ samples, sampleRate, ... }`）のどちらでも呼び出せます。位置引数の呼び出しでは、最後の引数の後ろに `{ validate?: boolean }` も渡せます。
 
 ## 特徴抽出
 
 ### `stft(samples, sampleRate, nFft?, hopLength?)` <Badge type="info" text="中負荷" />
 
-短時間フーリエ変換（STFT）を計算します。
+短時間フーリエ変換（STFT）を計算します。フレーム、ビン、ウィンドウ長の意味は [スペクトログラムと STFT](./glossary/analysis/spectrogram-stft.md) を参照してください。
 
 ```typescript
 function stft(
   samples: Float32Array,
-  sampleRate?: number, // デフォルト: 22050
-  nFft?: number,      // デフォルト: 2048
-  hopLength?: number  // デフォルト: 512
+  sampleRate?: number, // 既定: 22050
+  nFft?: number,      // 既定: 2048
+  hopLength?: number  // 既定: 512
 ): StftResult
 
 interface StftResult {
@@ -39,26 +41,28 @@ STFT を計算し、dB スケールで返します。
 ```typescript
 function stftDb(
   samples: Float32Array,
-  sampleRate?: number, // デフォルト: 22050
-  nFft?: number,      // デフォルト: 2048
-  hopLength?: number  // デフォルト: 512
+  sampleRate?: number, // 既定: 22050
+  nFft?: number,      // 既定: 2048
+  hopLength?: number  // 既定: 512
 ): { nBins: number; nFrames: number; db: Float32Array }
 ```
 
 ### `melSpectrogram(samples, sampleRate, nFft?, hopLength?, nMels?)` <Badge type="info" text="中負荷" />
 
-メルスペクトログラムを計算します。人間のピッチ知覚に合わせた周波数表現。
+メルスペクトログラムを計算します。人間のピッチ知覚に合わせた周波数表現です。[メル・MFCC・音色](./glossary/analysis/mel-mfcc-timbre.md) も参照してください。
+
+<SonareDemo id="mel-spectrogram" />
 
 ```typescript
 function melSpectrogram(
   samples: Float32Array,
-  sampleRate?: number, // デフォルト: 22050
-  nFft?: number,      // デフォルト: 2048
-  hopLength?: number, // デフォルト: 512
-  nMels?: number,     // デフォルト: 128
-  fmin?: number,      // デフォルト: 0（librosa の既定）
-  fmax?: number,      // デフォルト: 0 = sampleRate / 2
-  htk?: boolean       // デフォルト: false = Slaney 式。true で HTK
+  sampleRate?: number, // 既定: 22050
+  nFft?: number,      // 既定: 2048
+  hopLength?: number, // 既定: 512
+  nMels?: number,     // 既定: 128
+  fmin?: number,      // 既定: 0（librosa の既定）
+  fmax?: number,      // 既定: 0 = sampleRate / 2
+  htk?: boolean       // 既定: false = Slaney 式。true で HTK
 ): MelSpectrogramResult
 
 interface MelSpectrogramResult {
@@ -80,20 +84,20 @@ interface MelSpectrogramResult {
 
 ### `mfcc(samples, sampleRate, nFft?, hopLength?, nMels?, nMfcc?)` <Badge type="info" text="中負荷" />
 
-MFCC（メル周波数ケプストラム係数）を計算します。スペクトル包絡のコンパクトな表現。
+MFCC（メル周波数ケプストラム係数）を計算します。スペクトル包絡のコンパクトな表現です。[メル・MFCC・音色](./glossary/analysis/mel-mfcc-timbre.md) も参照してください。
 
 ```typescript
 function mfcc(
   samples: Float32Array,
-  sampleRate?: number, // デフォルト: 22050
-  nFft?: number,      // デフォルト: 2048
-  hopLength?: number, // デフォルト: 512
-  nMels?: number,     // デフォルト: 128
-  nMfcc?: number,     // デフォルト: 20
-  fmin?: number,      // デフォルト: 0（librosa の既定）
-  fmax?: number,      // デフォルト: 0 = sampleRate / 2
-  htk?: boolean,      // デフォルト: false = Slaney 式。true で HTK
-  lifter?: number     // デフォルト: 0 = リフタリングなし
+  sampleRate?: number, // 既定: 22050
+  nFft?: number,      // 既定: 2048
+  hopLength?: number, // 既定: 512
+  nMels?: number,     // 既定: 128
+  nMfcc?: number,     // 既定: 20
+  fmin?: number,      // 既定: 0（librosa の既定）
+  fmax?: number,      // 既定: 0 = sampleRate / 2
+  htk?: boolean,      // 既定: false = Slaney 式。true で HTK
+  lifter?: number     // 既定: 0 = リフタリングなし
 ): MfccResult
 
 interface MfccResult {
@@ -116,16 +120,16 @@ interface MfccResult {
 
 ### `chroma(samples, sampleRate, nFft?, hopLength?)` <Badge type="info" text="中負荷" />
 
-クロマグラム（ピッチクラス分布）を計算します。すべての周波数を12のピッチクラス（C, C#, D, ..., B）にマッピング。
+クロマグラム（ピッチクラス分布）を計算します。すべての周波数を 12 のピッチクラス（C, C#, D, ..., B）にマッピングします。[クロマ特徴量](./glossary/analysis/chroma-features.md) も参照してください。
 
 <SonareDemo id="chromagram" />
 
 ```typescript
 function chroma(
   samples: Float32Array,
-  sampleRate?: number, // デフォルト: 22050
-  nFft?: number,      // デフォルト: 2048
-  hopLength?: number  // デフォルト: 512
+  sampleRate?: number, // 既定: 22050
+  nFft?: number,      // 既定: 2048
+  hopLength?: number  // 既定: 512
 ): ChromaResult
 
 interface ChromaResult {
@@ -260,7 +264,7 @@ interface WaveformPeaksReport {
 | ピッチ／チューニングずれ | `pitchTuning(...)`, `estimateTuning(...)` | 検出済み周波数または音声から、ビン単位のチューニングずれを推定します。12 ビン／オクターブのとき、解析オプションの `tuning` が受け取るセミトーン端数と一致します。`tuningToReferenceHz(...)` と `referenceHzToTuning(...)` で Hz 単位の基準ピッチと相互に変換できます。 |
 | 分解とリミックス | `decompose(...)`, `decomposeWithInit(...)`, `decomposeStems(...)`, `decomposeStemsLinked(...)`, `nnFilter(...)`, `remix(...)`, `remixAlignedIntervals(...)`, `phaseVocoder(...)`, `hpssWithResidual(...)` | NMF 分解、初期化方式を選べる NMF、モノラル／連動マルチチャンネルのステム出力、近傍フィルタ、区間リミックス、チャンネル間で一貫したカット位置、時間スケーリング、残差付き HPSS。 |
 | 特徴量や音声の近似復元 | `melToStft`, `melToAudio`, `mfccToMel`, `mfccToAudio`, `cqtToAudio`, `vqtToAudio` | 可視化、デバッグ、特徴量の往復確認に使います。CQT/VQT の入力は振幅行列です。 |
-| 配信向けラウドネス測定 | `lufs`, `lufsInterleaved`, `momentaryLufs`, `shortTermLufs`, `ebur128LoudnessRange` | ITU-R BS.1770 / EBU R128 系のラウドネス値。マルチチャンネル Integrated LUFS と LRA（ラウドネスレンジ。曲全体でラウドネスがどれだけ変動するか）も含みます。 |
+| 配信向けラウドネス測定 | `lufs`, `lufsInterleaved`, `momentaryLufs`, `shortTermLufs`, `ebur128LoudnessRange` | ITU-R BS.1770 / EBU R128 系のラウドネス値。マルチチャンネル Integrated LUFS と LRA（ラウドネスレンジ。曲全体でラウドネスがどれだけ変動するか）も含みます。[LUFS](./glossary/lufs.md) も参照してください。 |
 
 ```typescript
 const cqtResult = cqt(samples, sampleRate, 512, 32.7, 84, 12);
@@ -301,15 +305,16 @@ const vqtPreview = vqtToAudio({
 });
 ```
 
-`chromaCqt(samples, sampleRate?, hopLength?, nChroma?)` は `librosa.feature.chroma_cqt` に直接対応します（対数周波数／Constant-Q でのピッチ畳み込み）。一方 `nnlsChroma(samples, sampleRate?, options?)` は別物の音符活性化クロマで、NNLS（非負最小二乗法）で倍音の漏れを抑えます。コードや低音域の処理ではこちらの方がすっきりする場合が多いです。`options.hopLength` の既定値は `512` です。
+`chromaCqt(samples, sampleRate?, hopLength?, nChroma?, binsPerOctave?)` は `librosa.feature.chroma_cqt` に直接対応します（対数周波数／Constant-Q でのピッチ畳み込み）。一方 `nnlsChroma(samples, sampleRate?, options?)` は別物の音符活性化クロマで、NNLS（非負最小二乗法）で倍音の漏れを抑えます。コードや低音域の処理ではこちらの方がすっきりする場合が多いです。`options.hopLength` の既定値は `512` です。
 
-ソースビルド C++ CLI で近いコマンド:
+近い CLI コマンドです。`nnls-chroma` と `lufs` は Python CLI と C++ CLI の両方にあり、`cqt`、`vqt`、`mel-to-audio` はソースビルドの C++ CLI だけにあります。
 
-```bash [C++ CLI]
-sonare cqt song.wav
-sonare vqt song.wav
+```bash
 sonare nnls-chroma song.wav
 sonare lufs song.wav --json
+# C++ CLI のみ
+sonare cqt song.wav
+sonare vqt song.wav
 sonare mel-to-audio song.wav -o mel-preview.wav
 ```
 
@@ -342,39 +347,18 @@ interface DecomposeStemsResult {
 }
 ```
 
-ステムが欲しいときに使うのはこちらで、`decompose` ではありません。`decompose` は**振幅**
-スペクトログラムを分解して `w` と `h` を返します。振幅には位相が含まれないため、因子をオーディオ
-へ戻すには位相推定器が必要で、出てくるのは録音の一部ではなく再構成です。`decomposeStems` は
-同じ分解を行いますが、それを使って成分ごとの**ソフトマスク**を作り、**元の複素**スペクトログラム
-に適用します。したがって各成分は音源自身の位相を保ちます。モデルにエネルギーがある領域では
-マスクの総和が 1 になり、逆 STFT は線形であるため、成分は**加算すると入力に戻ります**。
+ステムが欲しいときに使うのはこちらで、`decompose` ではありません。`decompose` は**振幅**スペクトログラムを分解して `w` と `h` を返します。振幅には位相が含まれないため、因子をオーディオへ戻すには位相推定器が必要で、出てくるのは録音の一部ではなく再構成です。`decomposeStems` は同じ分解を行いますが、それを使って成分ごとの**ソフトマスク**を作り、**元の複素スペクトログラム**に適用します。したがって各成分は音源自身の位相を保ちます。モデルにエネルギーがある領域ではマスクの総和が 1 になり、逆 STFT は線形であるため、成分は**加算すると入力に戻ります**。
 
-`maskPower` はマスクの分離の強さを決めます。`1` は振幅比、`2` は Wiener 型のパワー比で、後者は
-より強く分離する代わりに、倍音が重なる箇所でアーティファクトが増えます。中間の値も使えますが、
-`1` 未満は使えません。
+`maskPower` はマスクの分離の強さを決めます。`1` は振幅比、`2` は Wiener 型のパワー比で、後者はより強く分離する代わりに、倍音が重なる箇所でアーティファクトが増えます。中間の値も使えますが、`1` 未満は使えません。
 
-受け取るのはリクエストオブジェクトのみで、位置引数形式はありません。`nComponents` はここでは
-省略可能で既定値は `4` です（`decompose` では必須）。
+受け取るのはリクエストオブジェクトのみで、位置引数形式はありません。`nComponents` はここでは省略可能で既定値は `4` です（`decompose` では必須）。
 
-**これは HPSS ではありません。** 成分にラベルは付きません。`components[1]` は分解がたまたま
-行き着いた反復パターンであって、声やキックがどの番号に入るかは `init`、`nIter`、素材によって
-変わります。何が入っているかは聴いて確かめてください。[オーディオエフェクト](./js-api-effects.md)
-の `hpss` と `hpssWithResidual` は別の問いに答えるもので、メディアンフィルタによって
-**ラベルの付いた**倍音成分と打撃成分（および残差）のちょうど 2 つに分けます。「持続音か打撃音か」
-を知りたいときは HPSS、「この録音がどんな反復パターンでできているか」を知りたいときは
-`decomposeStems` です。
+**これは HPSS ではありません。** 成分にラベルは付きません。`components[1]` は分解がたまたま行き着いた反復パターンであって、声やキックがどの番号に入るかは `init`、`nIter`、素材によって変わります。何が入っているかは聴いて確かめてください。[オーディオエフェクト](./js-api-effects.md)の `hpss` と `hpssWithResidual` は別の問いに答えるもので、メディアンフィルタによって**ラベルの付いた**倍音成分と打撃成分（および残差）のちょうど 2 つに分けます。「持続音か打撃音か」を知りたいときは HPSS、「この録音がどんな反復パターンでできているか」を知りたいときは `decomposeStems` です。
 
 ::: warning NNDSVD の初期化は倍精度で計算される
-`init: 'nndsvd'` を指定した場合、SVD によるウォームスタートは倍精度で計算されます。これが
-初期値の**再現性**を担保します。振幅スペクトログラムの末尾の特異ベクトルは単精度のノイズ
-フロアちょうどに位置するため、float の初期値は総和の順序に依存し、同じ入力でもプラットフォーム
-ごとに異なる成分が返ってきます。倍精度にすることでこの依存がなくなります。
+`init: 'nndsvd'` を指定した場合、SVD によるウォームスタートは倍精度で計算されます。これが初期値の**再現性**を担保します。振幅スペクトログラムの末尾の特異ベクトルは単精度のノイズフロアちょうどに位置するため、float の初期値は総和の順序に依存し、同じ入力でもプラットフォームごとに異なる成分が返ってきます。倍精度にすることでこの依存がなくなります。
 
-これは再現性の性質であって精度の話ではありません。形状・非負性・再構成品質は変わりません。
-ただし因子そのものは、単精度の初期値が生成する数値とは異なります。**保存した `w` / `h`** や、
-単精度の初期値でレンダリングしたステムは、値が異なります。不一致をバグと決めつけず、
-保存済みの因子は再計算してください。
-`decomposeWithInit(..., 'nndsvd')` と `decomposeStemsLinked(...)` についても同様です。
+これは再現性の性質であって精度の話ではありません。形状・非負性・再構成品質は変わりません。ただし因子そのものは、単精度の初期値が生成する数値とは異なります。**保存した `w` / `h`** や、単精度の初期値でレンダリングしたステムは、値が異なります。不一致をバグと決めつけず、保存済みの因子は再計算してください。`decomposeWithInit(..., 'nndsvd')` と `decomposeStemsLinked(...)` についても同様です。
 :::
 
 ### `decomposeStemsLinked(request)` <Badge type="warning" text="高負荷" />
@@ -410,8 +394,7 @@ interface DecomposeStemsLinkedResult {
 
 ### `remixAlignedIntervals(...)`
 
-1 つの信号から 1 組のカット位置を確定させ、**同じ**カットをすべてのチャンネルに適用できるように
-します。
+1 つの信号から 1 組のカット位置を確定させ、**同じ**カットをすべてのチャンネルに適用できるようにします。
 
 ```typescript
 function remixAlignedIntervals(request: RemixRequest): Int32Array
@@ -423,18 +406,9 @@ function remixAlignedIntervals(
 ): Int32Array
 ```
 
-ゼロクロッシングへのスナップは**信号ごと**の判断です。左右のチャンネルはゼロを横切る時刻が
-異なるため、最寄りのゼロクロッシングへ寄せたカット位置は左右で別のサンプルに着地します。
-`alignZeros` を有効にしたまま `remix` をチャンネルごとに呼ぶと、各チャンネルが別々のフレームへ
-スナップし、ステレオ素材が少しずつずれていきます。累積する小さなズレなので、マスターに入って
-から気づくことになりがちです。`remixAlignedIntervals` はオーディオではなくスナップ後の
-`(start, end)` ペアをフラットな `Int32Array` として返すため、1 つのチャンネルで一度だけ確定させ、
-同一のリストを `alignZeros: false` の `remix` に各チャンネル分渡せます。
+ゼロクロッシングへのスナップは**信号ごと**の判断です。左右のチャンネルはゼロを横切る時刻が異なるため、最寄りのゼロクロッシングへ寄せたカット位置は左右で別のサンプルに着地します。`alignZeros` を有効にしたまま `remix` をチャンネルごとに呼ぶと、各チャンネルが別々のフレームへスナップし、ステレオ素材が少しずつずれていきます。累積する小さなズレなので、マスターに入ってから気づくことになりがちです。`remixAlignedIntervals` はオーディオではなくスナップ後の `(start, end)` ペアをフラットな `Int32Array` として返すため、1 つのチャンネルで一度だけ確定させ、同一のリストを `alignZeros: false` の `remix` に各チャンネル分渡せます。
 
-既定値が意図的に異なる点に注意してください。`remix` の `alignZeros` は **`false`**、
-`remixAlignedIntervals` は **`true`** です。スナップこそがこの関数の存在理由だからです。
-スナップを安全に保つガードが 2 つあります。符号変化が 1 度もない信号はスナップされず、
-空に潰れてしまうスライスはスナップ前の境界を保ちます。
+既定値が意図的に異なる点に注意してください。`remix` の `alignZeros` は **`false`**、`remixAlignedIntervals` は **`true`** です。スナップこそがこの関数の存在理由だからです。スナップを安全に保つガードが 2 つあります。符号変化が 1 度もない信号はスナップされず、空に潰れてしまうスライスはスナップ前の境界を保ちます。
 
 ```typescript
 const cuts = Int32Array.from([0, sampleRate, 2 * sampleRate, 3 * sampleRate]);
@@ -445,29 +419,31 @@ const outRight = remix(right, aligned, sampleRate, false);
 
 ### ピッチ検出 <Badge type="info" text="中負荷" />
 
+背景は [メロディとピッチ](./glossary/analysis/melody-pitch.md) を参照してください。
+
 ```typescript
 // YIN アルゴリズム
 function pitchYin(
   samples: Float32Array,
-  sampleRate?: number,   // デフォルト: 22050
-  frameLength?: number,  // デフォルト: 2048
-  hopLength?: number,    // デフォルト: 512
-  fmin?: number,         // デフォルト: 65 Hz
-  fmax?: number,         // デフォルト: 2093 Hz
-  threshold?: number,    // デフォルト: 0.1
+  sampleRate?: number,   // 既定: 22050
+  frameLength?: number,  // 既定: 2048
+  hopLength?: number,    // 既定: 512
+  fmin?: number,         // 既定: 65 Hz
+  fmax?: number,         // 既定: 2093 Hz
+  threshold?: number,    // 既定: 0.1
   fillNa?: boolean       // 互換性のために維持。YIN は常に有限の f0 を返す
 ): PitchResult
 
 // pYIN アルゴリズム（確率的 YIN + HMM 平滑化）
 function pitchPyin(
   samples: Float32Array,
-  sampleRate?: number,   // デフォルト: 22050
+  sampleRate?: number,   // 既定: 22050
   frameLength?: number,
   hopLength?: number,
   fmin?: number,
   fmax?: number,
   threshold?: number,
-  fillNa?: boolean       // デフォルト: false。true なら無声音 f0 フレームを 0 にする
+  fillNa?: boolean       // 既定: false。true なら無声音 f0 フレームを 0 にする
 ): PitchResult
 
 interface PitchResult {
@@ -487,7 +463,7 @@ pYIN は既定では無声音の `NaN` を保持します。後段で `0` が必
 
 ## ノートと打撃音
 
-この 4 つは解析と編集の中間にあります。いずれも音声が明示していないものを測り、ホストが編集してレンダリングできるオブジェクトを返します。
+この 4 つは解析と編集の中間にあります。いずれも音声が明示していないものを測り、ホストが編集してレンダリングできるオブジェクトを返します。周辺の編集ワークフローは [ノート編集](./note-editing.md) にまとめています。
 
 ### `analyzePolyphonic(request)` <Badge type="warning" text="高負荷" />
 

@@ -65,15 +65,15 @@ The example follows the fixed repair order: dehum precedes denoise. In an applic
 | Option | Values or default | Use |
 |---|---|---|
 | `mode` | `logMmse` (default), `mmseStsa`, `spectralSubtraction` | Select the gain function. Spectral subtraction also reads `overSubtraction` and `spectralFloor`. |
-| `noiseEstimator` | `quantile` (default), `mcra`, `imcra`, `spp` | Select how the noise spectrum is tracked. A chain override takes the same names (`repair.denoise.noiseEstimator`, `repair.denoise.mode`, `repair.dehum.mode`). The streaming mastering chain defaults to `spp` and refuses `quantile` by name. |
-| `nFft` / `hopLength` | `1024` / `256` by default | Set the STFT geometry. `nFft` must be a power of two from `4` through `524288`; `hopLength` must be positive, no greater than `nFft / 2`, and reconstructible with the Hann overlap. |
+| `noiseEstimator` | `quantile` (default), `mcra`, `imcra`, `spp` | Select how the noise spectrum is tracked. A chain override takes the same names (`repair.denoise.noiseEstimator`, `repair.denoise.mode`, `repair.dehum.mode`). The streaming mastering chain defaults to `spp` and refuses `quantile` by name; the capability catalog describes that realtime insert, so it lists `spp` as the default and leaves out `quantile`. |
+| `nFft` / `hopLength` | `1024` / `256` by default | Set the STFT window length and hop. See the constraints below. |
 | `reductionDb` | `26` by default, finite and in `[0, 120]` | Set the deepest attenuation of any gain-mask bin. It is a residual-noise floor, not a target loudness. |
 | `noiseEstimationQuantile` | `0.1` by default | Fraction of the quietest frames used by the quantile estimator. |
 | `ddAlpha`, `speechPresenceGain`, `gainSmoothing` | See the API type | Control decision-directed smoothing and the MMSE gain path. |
 
 At `reductionDb: 26`, the mask floor is a linear gain of about `0.0501`, or a maximum per-bin attenuation of 26 dB; it does not promise that the broadband noise itself becomes 26 dB quieter. A larger value allows deeper attenuation, but it does not make the estimate more reliable. The report's `maxReductionDb` and `floorLimitedFraction` show whether this bound controlled the result.
 
-The accepted `nFft` values are the powers of two from `4` through `524288`, inclusive. `hopLength` must be in `(0, nFft / 2]`, and the periodic-Hann analysis window with the symmetric-Hann synthesis window must leave every overlap residue covered; a pair with an uncovered residue is rejected. This geometry and reconstruction check is shared by offline mono, stereo, and linked repair and by `StreamingDenoise`, including the `StreamingMasteringChain` live path. Streaming additionally requires a recursive estimator (`mcra`, `imcra`, or `spp`); the whole-signal `quantile` estimator is rejected.
+`nFft` must be a power of two from `4` through `524288`. `hopLength` must be in `(0, nFft / 2]`, and the periodic-Hann analysis window with the symmetric-Hann synthesis window must cover every overlap residue; a pair that leaves one uncovered is rejected. Offline mono, stereo, and linked repair and `StreamingDenoise` (including the `StreamingMasteringChain` live path) share this check. Streaming additionally requires a recursive estimator (`mcra`, `imcra`, or `spp`).
 
 ## Dehum settings
 
@@ -91,6 +91,8 @@ The accepted `nFft` values are the powers of two from `4` through `524288`, incl
 | `frameSize` | `2048` | `[16, 16384]` | Analysis frame of the adaptive tracker. |
 
 In `subtract` mode each harmonic canceller starts from a joint least-squares fit of all the harmonic references over the opening window instead of from zero, so a short clip is attenuated from its first samples. When the window is too short to tell the harmonics apart, the cancellers are left unseeded. On a 0.25 s clip carrying 50 Hz and 100 Hz hum under a 440 Hz tone at 22.05 kHz, the RMS of the first 1000 samples fell from 0.1675 to 0.0355, which is the tone alone.
+
+<SonareDemo id="repair-dehum" />
 
 ## Channel handling
 
@@ -110,7 +112,7 @@ const stereo = masteringRepairDenoiseClassicalStereo({
 });
 
 const linked = masteringRepairDenoiseClassicalLinked({
-  channels: [frontLeft, frontRight, centre],
+  channels: [frontLeft, frontRight, center],
   sampleRate,
   reductionDb: 26,
 });
@@ -118,11 +120,13 @@ const linked = masteringRepairDenoiseClassicalLinked({
 
 The stereo and linked forms build the mask from summed channel power and apply it unchanged to every channel. This keeps interchannel level and phase differences from moving. Their report has one pair- or set-level measurement. `floorDbfs` is absolute and rises by about 3.01 dB for two identical channels and 4.77 dB for three, so compare it only with a measurement made over the same channel count. All input channels must have the same length; one shorter than `nFft` is padded for the analysis.
 
-The stereo linked path, `masteringRepairDehumStereo`, keeps independent filter or canceller state per channel. With `adaptive: true`, it chooses the channel with the stronger hum as the tracking reference, searches from the summed projected energy of both original channels, and sends one tracked fundamental to both paths. Hum on only one side and opposite-phase hum therefore remain visible to the tracker, while each channel's amplitude and phase are handled by its own state. With the default `adaptive: false`, each channel filters the configured frequency independently.
+`masteringRepairDehumStereo` keeps independent filter or canceller state per channel, but with `adaptive: true` it tracks one fundamental for both. It chooses the channel with the stronger hum as the tracking reference, searches from the summed projected energy of both original channels, and sends one tracked fundamental to both paths. Hum on only one side and opposite-phase hum therefore remain visible to the tracker, while each channel's amplitude and phase are handled by its own state. With the default `adaptive: false`, each channel filters the configured frequency independently.
 
 ## Read the result
 
-`masteringRepairDetectNoiseFloor` reports `floorDbfs` and a 32-band `bandFloorDbfs` shape before any gain mask is applied. It does not report attenuation. `masteringRepairNoiseBandBins({ nFft, sampleRate })` returns the 33 bin edges of those 32 bands, so band `k` spans bins `bins[k]` to `bins[k + 1]`; a band whose edges coincide is empty and its level is a sentinel, not a measurement. The denoise report does:
+`masteringRepairDetectNoiseFloor` reports `floorDbfs` and a 32-band `bandFloorDbfs` shape before any gain mask is applied. It does not report attenuation. `masteringRepairNoiseBandBins({ nFft, sampleRate })` returns the 33 bin edges of those 32 bands, so band `k` spans bins `bins[k]` to `bins[k + 1]`; a band whose edges coincide is empty, and its level is a fixed placeholder value, not a measurement.
+
+The mono denoise call returns only the samples. For the attenuation numbers, call `masteringRepairDenoiseClassicalStereo` or `masteringRepairDenoiseClassicalLinked` (a one-channel linked call works) or `masteringRepairApply`. Their report contains:
 
 - `meanReductionDb` is the mean attenuation of the mask;
 - `maxReductionDb` is the deepest attenuation applied;
@@ -130,12 +134,12 @@ The stereo linked path, `masteringRepairDehumStereo`, keeps independent filter o
 
 These values describe what the processor did. They are not LUFS matching and they do not prove that the remaining noise is inaudible. Measure integrated loudness separately if the delivery target requires it.
 
-## Listen to the existing demo
+## Listen to a denoise A/B
 
 <SonareDemo id="repair-denoise" />
 
-This is the existing classical denoise A/B. It compares the processed buffer without added loudness matching, so changes in noise and timbre remain audible.
+This A/B uses the classical denoiser and applies no loudness matching, so changes in noise and timbre remain audible.
 
 ## Limits
 
-The denoiser estimates noise from the buffer itself. A calibration tone, drone, or long held note can be treated as noise by the estimator and attenuated along with the floor. Classical denoise is also not DNN restoration or source separation. The detector and classical helper calls are offline; `StreamingDenoise` and `StreamingMasteringChain` provide block processing for denoise with `mcra`, `imcra`, or `spp`, while the whole-signal `quantile` estimator is rejected. See [Audio Repair Workflow](./audio-repair.md) for the shared order and [JavaScript mastering API](./js-api-mastering.md) for exact report types.
+The denoiser estimates noise from the buffer itself. A calibration tone, drone, or long held note can be treated as noise by the estimator and attenuated along with the floor. Classical denoise is not a learned model either: speech-enhancement networks generally remove noise from voice more cleanly, especially noise that changes over time, while this denoiser is deterministic and needs no model weights. See [Signal processing versus learned models](./source-separation.md#signal-processing-versus-learned-models). The detector and classical helper calls are offline; `StreamingDenoise` and `StreamingMasteringChain` provide block processing for denoise with `mcra`, `imcra`, or `spp`, while the whole-signal `quantile` estimator is rejected. See [Audio Repair Workflow](./audio-repair.md) for the shared order and [JavaScript mastering API](./js-api-mastering.md) for exact report types.

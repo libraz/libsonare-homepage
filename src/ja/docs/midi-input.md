@@ -100,10 +100,12 @@ const engine = new RealtimeEngine(48000, /* maxBlockSize */ 128);
 engine.setSynthInstrument('saw-lead', 0);
 
 // 複数のデスティネーションを同時に動かし、それぞれに楽器を持たせられる
-engine.setSf2Instrument({ destinationId: 1, gain: 1 }, 1);
+engine.setSf2Instrument({ gain: 1 }, 1);
 ```
 
 `clearMidiInstrument(destinationId)` で 1 つのバインドを解除し、`midiInstrumentCount()` で現在の数を確認できます。複数デスティネーションを使えば、1 つのエンジンに重ねたリグ（`0` にリードシンセ、`1` にドラム、など）を持たせられます。
+
+トランスポートが走っている間にデスティネーションを再バインドすると、鳴っていた楽器は 10 ms でフェードアウトし、新しい楽器は既定のチャンネル状態から始まります。プログラムやバンクは、再バインドの後で [`pushMidiProgram`](#プログラムチェンジに従う受信側) を使って送り直してください。[リアルタイムエンジン](./realtime-engine.md#再生中にインストゥルメントを差し替える)も参照してください。
 
 ## ライブイベントのキューイング
 
@@ -111,10 +113,18 @@ engine.setSf2Instrument({ destinationId: 1, gain: 1 }, 1);
 
 キューイングの経路は 2 つあり、デスティネーションごとにどちらかを選びます。目安として、イベントを自分のコードで生成する場合（シーケンサーのステップ、オンスクリーンキーボード）は**即時コマンド**を使い、ハードウェアキーボードのように外部から独自のタイムスタンプ付きでイベントが届く場合（`bindWebMidi` 経由）は**入力ソース**を使います。後者のレーンは、Web MIDI ブリッジが必要とするポートごとのタイムスタンプを運ぶためです。
 
-- **即時エンジンコマンド** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` はそれぞれ `destinationId` と省略可能な `renderFrame` を取り、省略すると「できるだけ早く」発音します。`pushMidiPanic(renderFrame?)` は省略可能な `renderFrame` のみを取り、すべてのデスティネーションの発音中ノートを一括で解放します。負の `renderFrame` は拒否されます（Node と WASM は、生の embind エンジンを含めて `RangeError`、Python は `SonareValueError`）。「指定なし」は引数の省略で表し、`-1` では表しません。
-- **プログラムチェンジ** — `pushMidiProgram(destinationId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)` と `pushMidiInputProgram(group, channel, program, bankValid?, bankMsb?, bankLsb?, portTimeSamples?)`（Python は `push_midi_program`、`push_midi_input_program`、C は `sonare_engine_push_midi_program`、`sonare_engine_push_midi_input_program`）は、ノートや CC と同じタイミングで MIDI 2.0 のプログラムチェンジを 1 件キューに入れます。バンクは省略可能で、`bankValid` が true のときだけ適用されます。`bankValid` が false のまま `bankMsb` / `bankLsb` に 0 以外を渡すと拒否されます。`SonareEngine` の worklet ファサードは `pushMidiProgram(trackId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)` です。メッセージは受信側自身のプログラム受信条件に従うため、プログラムを選ばない受信側（内蔵シンセ、RX PROGRAM CHANGE をオフにしたパート）は受け付けたうえで無視します。
-- **引数の範囲** — ライブ push はすべて、MIDI の範囲外の値を、引数名と範囲を示すエラーで拒否します（`channel must be in [0, 15]`、`bend14 must be in [0, 16383]` など）。デスティネーション向けの push も入力ソース向けの push も同じで、Node と WASM は `RangeError`、Python は `SonareValueError`、C は `InvalidParameter` です。いずれも呼び出した関数名が先頭に付きます。
-- **エンジン側のライブ入力ソース** — `setMidiInputSource(destinationId)` で専用の入力レーンを開き、`pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` で `portTimeSamples` タイムスタンプ付きのイベントを送ります。`pushMidiInputPitchBend`、`pushMidiInputChannelPressure`、`pushMidiInputPolyPressure`、`pushMidiInputProgram`、`pushMidiInputUmp` で表現情報、プログラムチェンジ、完全な UMP パケットも送れます。Web MIDI ブリッジはこのレーンへイベントを流します。入力ソースが無効のときの push は `InvalidState`、入力キューが満杯のときは `OutOfMemory` で失敗します。入力ソースを含まない WASM ビルドでは `NotSupported` が投げられます。
+| 呼び出し | 対象 | タイミング引数 | 備考 |
+|----------|------|----------------|------|
+| `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` | 1 つのデスティネーション | `renderFrame?` | 省略すると、できるだけ早く発音します |
+| `pushMidiProgram` | 1 つのデスティネーション | `renderFrame?` | MIDI 2.0 のプログラムチェンジ 1 件。[後述](#プログラムチェンジに従う受信側) |
+| `pushMidiSysex` | 1 つのデスティネーション | `renderFrame?` | `0xF0` から `0xF7` までの完全なフレーム（1〜512 バイト） |
+| `pushMidiUmp` | 1 つのデスティネーション | `renderFrame?` | 1〜4 ワード。MT `0x4` は値の幅を保ち、MT `0x3` / `0x5` は拒否します |
+| `pushMidiPanic` | すべてのデスティネーション | `renderFrame?` | 発音中のノートをすべて解放します |
+| `pushMidiInput*`（`NoteOn`、`NoteOff`、`Cc`、`PitchBend`、`ChannelPressure`、`PolyPressure`、`Program`、`Ump`） | 入力ソース | `portTimeSamples` | `setMidiInputSource(destinationId)` が必要。Web MIDI ブリッジが使うレーンです |
+
+- **即時エンジンコマンド** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` はそれぞれ `destinationId` と省略可能な `renderFrame` を取り、省略すると「できるだけ早く」発音します。`pushMidiPanic(renderFrame?)` は省略可能な `renderFrame` のみを取り、すべてのデスティネーションの発音中ノートを一括で解放します。
+- **拒否される値** — ライブ push はすべて、MIDI の範囲外の値を、引数名と範囲を示すエラーで拒否します（`channel must be in [0, 15]`、`bend14 must be in [0, 16383]` など）。デスティネーション向けの push も入力ソース向けの push も同じで、Node と WASM のパッケージのクラスは `RangeError`（生の embind エンジンは `CppException`）、Python は `SonareValueError`、C は `InvalidParameter` です。いずれも呼び出した関数名が先頭に付きます。負の `renderFrame` も同様に拒否されます。「指定なし」は引数の省略で表し、`-1` では表しません。
+- **エンジン側のライブ入力ソース** — `setMidiInputSource(destinationId)` で専用の入力レーンを開き、`pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` で `portTimeSamples` タイムスタンプ付きのイベントを送ります。`pushMidiInputPitchBend`、`pushMidiInputChannelPressure`、`pushMidiInputPolyPressure`、`pushMidiInputProgram`、`pushMidiInputUmp` で表現情報、プログラムチェンジ、完全な UMP パケットも送れます。入力ソースが無効のときの push は `InvalidState`、入力キューが満杯のときは `OutOfMemory` で失敗します。入力ソースを含まない WASM ビルドでは `NotSupported` が投げられます。
 - **ライブ SysEx** — `pushMidiSysex(destinationId, data, renderFrame?)` は、デスティネーションへ完全な SysEx（System Exclusive。メーカー独自の自由形式メッセージ）フレームをキューイングします。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なメッセージ（1〜512 バイト）で、`renderFrame` はほかの `pushMidi*` 呼び出しと同じく、省略すると即時になります。主な用途は、再生を止めずに、ライブの SF2 バインド済みデスティネーションへ GS/GM リセットや GS インサーションエフェクト（EFX）の選択を届けることです。そのバイト列が何を選ぶかは [SoundFont プレイヤー](./soundfont-player.md) を参照してください。
 - **UMP メッセージ** — `pushMidiUmp(destinationId, words, renderFrame?)` は、1〜4 個の 32 ビットワードからなる配列または `Uint32Array` を最上位ワードから順に受け取ります。個数は先頭ワードのメッセージ種別と一致させます。MIDI 2.0 チャンネルボイス（MT `0x4`）は値の幅を保ったまま処理し、SysEx7／データメッセージ（MT `0x3`／`0x5`）は拒否するため `pushMidiSysex` を使います。`SonareEngine` の worklet ファサードも `pushMidiUmp(trackId, words, renderFrame?)` で同じ完全なパケットを受け付けます（従来の 1 ワードの数値指定も使えます）。`pushMidiInputUmp(words, portTimeSamples = 0)` はエンジン側のライブ入力ソースへ送ります。
 
@@ -165,6 +175,19 @@ engine.pushMidiInputNoteOff(0, 0, 60, 0, 0);
 
 `group` と `channel` は MIDI ニブル（0..15）、`note`・`velocity`・`controller`・`value` は 7 ビット（0..127）です。ベロシティ `0` のノートオンは、MIDI 仕様どおりノートオフとして扱われます。
 
+### プログラムチェンジに従う受信側
+
+`pushMidiProgram(destinationId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)` と `pushMidiInputProgram(group, channel, program, bankValid?, bankMsb?, bankLsb?, portTimeSamples?)`（Python は `push_midi_program`、`push_midi_input_program`、C は `sonare_engine_push_midi_program`、`sonare_engine_push_midi_input_program`）は、ノートや CC と同じタイミングで MIDI 2.0 のプログラムチェンジを 1 件キューに入れます。バンクは省略可能で、`bankValid` が true のときだけ適用されます。`bankValid` が false のまま `bankMsb` / `bankLsb` に 0 以外を渡すと拒否されます。`SonareEngine` の worklet ファサードは `pushMidiProgram(trackId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)` です。
+
+メッセージは受信側自身のプログラム受信条件に従うため、実際に反映するのは一部の受信側だけです。
+
+| 受信側 | プログラムチェンジに従うか |
+|--------|----------------------------|
+| SoundFont プレイヤー | 従う（RX PROGRAM CHANGE と RX BANK SELECT の条件のもとで） |
+| `useGmPrograms: true` でバインドした NativeSynth（Python は `use_gm_programs`） | 従う。バンクとプログラムから各チャンネルの音色を決める |
+| GM キットを鳴らす NativeSynth（`drum-kit` プリセット、または `gmKit` をオンにした打楽器パッチ） | 従う。プログラムが全チャンネルで GS ドラムセットの選択になる |
+| 内蔵シンセ、ほかの NativeSynth パッチ、RX PROGRAM CHANGE をオフにしたパート、MPE のメンバーチャンネル | 受け付けたうえで無視する |
+
 ## MIDI CC をエンジンパラメータへバインドする
 
 CC は二役を果たせます。楽器へ届くと同時に、エンジンのオートメーションパラメータも動かせます。`bindMidiCc(channel, controller, paramId, options)` は、コントローラーの 7 ビット値を登録済みパラメータの `[minValue, maxValue]` へマッピングし、その間も CC はデスティネーション楽器へ流れ続けます。
@@ -178,14 +201,16 @@ engine.bindMidiCc(/* channel */ 0, /* controller */ 1, /* paramId */ 42, { minVa
 // engine.clearMidiCcBindings() -> すべてのマッピングを削除
 ```
 
-高分解能のコントローラーには、記述子を渡す `bindMidiCcBinding(...)` を使います。`kind` はコントローラーの形式です。
+高分解能のコントローラーには、記述子を渡す `bindMidiCcBinding(...)` を使います。`kind` はコントローラーの形式と、読まれるフィールドを決めます。
 
-- `0`: 7 ビット CC
-- `1`: 14 ビットの CC ペア
-- `2`: RPN
-- `3`: NRPN
+| `kind` | 形式 | 使うフィールド |
+|--------|------|----------------|
+| `0` | 7 ビット CC | `ccNumber` |
+| `1` | 14 ビットの CC ペア | `ccNumber`、`ccLsbNumber` |
+| `2` | RPN | `selectorMsb`、`selectorLsb` |
+| `3` | NRPN | `selectorMsb`、`selectorLsb` |
 
-14 ビット CC の LSB は `ccLsbNumber`、RPN／NRPN 番号は `selectorMsb` と `selectorLsb` で指定します。`channel: 255` にすると、すべての MIDI チャンネルに一致します。
+`channel: 255` にすると、すべての MIDI チャンネルに一致します。
 
 ```typescript
 engine.bindMidiCcBinding({
@@ -203,9 +228,7 @@ engine.bindMidiCcBinding({
 `addParameter` は `unit`（表示用の文字列）・`rtSafe`・`defaultCurve` も受け取ります。ここで効いてくるのは **`rtSafe`**（既定は `true`）です。これは、音声スレッドが再生中にそのパラメータを変更してよいかを宣言します。演奏中に鳴らしながら CC バインドで動かしたいものは `true` のままにしてください。`rtSafe: false` で登録すると、オートメーションからでもバインド済み CC からでも、直接の `setParameter(...)` 呼び出しからでも、そのパラメータへのライブ書き込みは、トランスポートの再生中・停止中を問わずすべて拒否されます。
 
 ::: tip CC ラーンのワークフロー
-オフラインで「ツマミを動かし、どの CC が動いたか取り込む」流れには、プロジェクト API の `Project.midiCcLearn(events, paramId, options)` と、録音した CC ストリームをオートメーションへ変換する `midiCcToBreakpoint` / `midiParamToCc` があります。これらはライブエンジンではなく、取り込んだ `ProjectMidiEvent` データを対象とします。[プロジェクト編集](./project-editing.md) を参照してください。
-
-`options.minMovement` は 7 ビット CC 単位で測る `0`〜`127` の整数（既定 `0`）です。`0` なら最初に観測したスタンドアロンのコントローラー値ですぐにバインドします。ただし番号の小さい CC（`0..31`）は、次のメッセージと 14 ビットペアを作れるよう一時的に保持します。正のしきい値を指定すると、同じ UMP グループとチャンネルで最初に観測した値から、その値以上動いたときにバインドします。MIDI 2.0 の 32 ビット CC 値も 7 ビット単位へ縮小して比較します。このしきい値はスタンドアロンの 7 ビットコントローラーだけに適用し、14 ビットペアと RPN／NRPN シーケンスはこのゲートを通らずに組み立てます。
+オフラインで「ツマミを動かし、どの CC が動いたか取り込む」流れの `Project.midiCcLearn` は、ライブエンジンではなく、取り込んだ `ProjectMidiEvent` データを対象とします。[CC をラーンしてオートメーションにする](./midi-editing.md#cc-をラーンしてオートメーションにする)を参照してください。
 :::
 
 ## デバイスのジェスチャーを表現軸に割り当てる
@@ -259,14 +282,14 @@ sonare_engine_clear_midi_fx(engine, /* destination_id */ 0);
 
 :::
 
-設定 JSON は [`bakeMidiFx`](./project-editing.md) と同じスキーマです。各ステージはそのパラメータをキーにするので、ステージのキーを含めれば有効になり、省けばスキップされます。主なキーは `transpose_semitones`、`velocity_scale` / `velocity_offset` / `velocity_gamma`、`quantize_ppq` / `quantize_strength`、`chord_intervals`、`arpeggiator_intervals` / `arpeggiator_step_ppq` / `arpeggiator_gate_ppq` です。キーの全一覧と例は [プロジェクト編集](./project-editing.md) を参照してください。
+設定 JSON は [`bakeMidiFx`](./midi-editing.md#midi-fx-チェーンをクリップに焼き込む) と同じスキーマです。各ステージはそのパラメータをキーにするので、ステージのキーを含めれば有効になり、省けばスキップされます。主なキーは `transpose_semitones`、`velocity_scale` / `velocity_offset` / `velocity_gamma`、`quantize_ppq` / `quantize_strength`、`chord_intervals`、`arpeggiator_intervals` / `arpeggiator_step_ppq` / `arpeggiator_gate_ppq` です。キーの全一覧は [MIDI-FX チェーンの焼き込み](./midi-editing.md#midi-fx-チェーンをクリップに焼き込む)を参照してください。
 
-`setMidiFx` は楽器のボイスをリセットせずにインサートをその場で*置き換え*ます。ただし、すでにアクティブなデスティネーションへの差し替えは、そのデスティネーションの鳴っているノートを解放します。呼び出しのたびに世代（generation）カウンタが進み、音声スレッドは次のブロックで、現在の世代と一致しないデスティネーションをすべてフラッシュ（all-notes-off）するためです。鍵を押したまま FX を変える場合の注意点が 2 つあります。
-
-この呼び出しは制御スレッドから不変の設定を publish し、音声スレッドが次のブロック境界で採用するため、エンジンの処理中にも実行できます。
+`setMidiFx` は楽器のボイスをリセットせずにインサートをその場で*置き換え*ますが、すでに FX があるデスティネーションへの差し替えは、そのデスティネーションの鳴っているノートを解放します。FX の設定が変わったデスティネーションを、音声スレッドが次のブロックでフラッシュ（all-notes-off）するためです。鍵を押したまま FX を変える場合の注意点が 2 つあります。
 
 - そのデスティネーションにまだアクティブな FX が無い状態での最初の `setMidiFx` 呼び出しは、何もフラッシュしません。置き換える対象の設定がまだ存在しないためです。
-- すでにアクティブなデスティネーションへのそれ以降の差し替えは、そのデスティネーションの鳴っているノートを自動的に解放するため、クリアのために差し替え後のパニックを送る必要はありません。ただし、差し替えによって鳴っているノートを途中で切りたくない場合は、ノートのサステイン中ではなく、ノートとノートの間で差し替えてください。
+- それ以降の差し替えは、鳴っているノートを自動的に解放するため、クリアのためのパニックは要りません。差し替えで鳴っているノートを途中で切りたくない場合は、サステイン中ではなく、ノートとノートの間で差し替えてください。
+
+この呼び出しは制御スレッドから不変の設定を発行し、音声スレッドが次のブロック境界で採用するため、エンジンの処理中にも実行できます。
 
 ## MIDI パニックとスタックノート復帰
 
@@ -359,19 +382,19 @@ Web MIDI の対応はまちまちなので、`isWebMidiAvailable()` で実行時
 「キーボードを挿した」から「スピーカーから音が出る」までの、実装全体が見えるレシピです。処理が 2 つのスレッドにまたがるため、ファイルも 2 つになります。
 
 - **音声スレッド** — AudioWorklet プロセッサがエンジンをホストし、レンダークォンタムごとにブロックをレンダリングします。エンジンはここに置く必要があります。メインスレッドのエンジンでは `process(...)` が音声コールバックから呼ばれないため、音が出ないままになります。
-- **メインスレッド** — Web MIDI アクセス（`bindWebMidi`）を持ち、すべてのイベントをノードのポート経由でワークレットへ転送します。
+- **メインスレッド** — Web MIDI アクセス（`bindWebMidi`）を持ち、すべてのイベントをノードのポート経由で worklet へ転送します。
 
 ::: info 代役オブジェクトが bindWebMidi を満たせる理由
-`bindWebMidi` は、渡されたエンジンのライブ入力メソッドだけを呼びます。必須なのは `setMidiInputSource`、`bindMidiCc`、3 つの `pushMidiInput*` メソッド、close 時の `clearMidiInputSource` です。ピッチベンド、チャンネルプレッシャー、ポリプレッシャー、完全な UMP パケット用のメソッドがあれば、それらも使います。必須メソッドを実装したフォワーダーで各イベントをワークレットのポートへ送れます。MIDI 2.0 の値の幅を保持する場合は、フォワーダーにも `pushMidiInputUmp` を実装します。省略すると 7 ビット／14 ビットの簡易メソッドへ縮小されます。
+`bindWebMidi` は、渡されたエンジンのライブ入力メソッドだけを呼びます。必須なのは `setMidiInputSource`、`bindMidiCc`、3 つの `pushMidiInput*` メソッド、close 時の `clearMidiInputSource` です。ピッチベンド、チャンネルプレッシャー、ポリプレッシャー、完全な UMP パケット用のメソッドがあれば、それらも使います。必須メソッドを実装したフォワーダーで各イベントを worklet のポートへ送れます。MIDI 2.0 の値の幅を保持する場合は、フォワーダーにも `pushMidiInputUmp` を実装します。省略すると 7 ビット／14 ビットの簡易メソッドへ縮小されます。
 :::
 
-### 音声スレッド: ワークレットがエンジンをホストする
+### 音声スレッド: worklet がエンジンをホストする
 
 `AudioWorkletGlobalScope` は動的 `import()` を禁止しているため、通常のパッケージ入口は使えません（その `init()` は WASM モジュールを動的にインポートします）。代わりに Emscripten ファクトリ `sonare.js` を静的にインポートし、それが公開する低レベルのエンジンを呼び出します。この低レベル入口について知っておくことは次のとおりです。
 
-- ワークレットは `.wasm` のバイト列も fetch できません。メインスレッドで fetch して `processorOptions` 経由で渡します。
-- 生の embind の `RealtimeEngine` コンストラクタは 4 つの引数 `(sampleRate, maxBlockSize, commandCapacity, telemetryCapacity)` を取ります。高レベルの `RealtimeEngine` クラスは末尾の 2 つを既定値 `1024` にするため、このページ前半の 2 引数の呼び出しが成立しますが、embind のクラスには既定引数がないので、ワークレットでは 2 つを明示的に渡す必要があります。`commandCapacity` はキューイングした MIDI／オートメーションコマンドのリングバッファ容量、`telemetryCapacity` はテレメトリ／メーター読み出しの容量です。
-- 一部の引数順が通常の JS パッケージ入口と異なります。特に `setSynthInstrument(destinationId, patch)` です。
+- worklet は `.wasm` のバイト列も fetch できません。メインスレッドで fetch して `processorOptions` 経由で渡します。
+- 生の embind の `RealtimeEngine` コンストラクタは 4 つの引数 `(sampleRate, maxBlockSize, commandCapacity, telemetryCapacity)` を取ります。高レベルの `RealtimeEngine` クラスは末尾の 2 つを既定値 `1024` にするため、このページ前半の 2 引数の呼び出しが成立しますが、embind のクラスには既定引数がないので、worklet では 2 つを明示的に渡す必要があります。`commandCapacity` はキューイングした MIDI／オートメーションコマンドのリングバッファ容量、`telemetryCapacity` はテレメトリ／メーター読み出しの容量です。
+- 一部の引数順が通常の JS パッケージ入口と異なります。特に `setSynthInstrument(destinationId, patch)` と `setSf2Instrument(destinationId, config)` では、生のエンジンはデスティネーション ID が先頭です。
 
 ```js
 // synth-worklet.js — context.audioWorklet.addModule(...) で読み込む。
@@ -452,9 +475,9 @@ class KeyboardSynthProcessor extends AudioWorkletProcessor {
 registerProcessor('keyboard-synth', KeyboardSynthProcessor);
 ```
 
-### メインスレッド: Web MIDI がワークレットへ流し込む
+### メインスレッド: Web MIDI が worklet へ流し込む
 
-ここに `init()` はありません。この構成では WASM は音声スレッドだけで動きます。メインスレッドはワークレットを起動し、ライブ入力メソッドの呼び出しをポートへ送るフォワーダーを `bindWebMidi` に渡します。
+ここに `init()` はありません。この構成では WASM は音声スレッドだけで動きます。メインスレッドは worklet を起動し、ライブ入力メソッドの呼び出しをポートへ送るフォワーダーを `bindWebMidi` に渡します。
 
 ```typescript
 import { bindWebMidi, isWebMidiAvailable, type RealtimeEngine } from '@libraz/libsonare';
@@ -528,7 +551,7 @@ async function startKeyboardSynth() {
 `timestampToSamples` を省略すると、すべてのイベントは次のレンダーブロックの先頭で発火します。ライブ演奏にはこれで十分なタイトさです。ブロック内精度が必要なら、前述の「タイムスタンプからサンプルへの変換が重要な理由」のとおりタイムスタンプを変換し、フォワーダーの最後の引数を `0` の代わりにその値にして渡してください。
 
 ::: warning ブラウザのジェスチャーと後始末
-`AudioContext` はユーザージェスチャー（クリック）から生成／再開する必要があり、多くのブラウザはセキュアコンテキストからのみ MIDI アクセスを促します。`bindWebMidi` には必ず `binding.close()` を組み合わせ、ページ破棄時には `AudioContext` を close してください。このレシピでは、それがワークレットとエンジンのネイティブメモリを解放する手段です。
+`AudioContext` はユーザージェスチャー（クリック）から生成／再開する必要があり、多くのブラウザはセキュアコンテキストからのみ MIDI アクセスを促します。`bindWebMidi` には必ず `binding.close()` を組み合わせ、ページ破棄時には `AudioContext` を close してください。このレシピでは、それが worklet とエンジンのネイティブメモリを解放する手段です。
 :::
 
 ## ほかの実行環境では
@@ -565,8 +588,7 @@ C++ ソースビルドでは、既定で無効の CMake オプション `BUILD_C
 - [内蔵シンセサイザー](./native-synth.md) — デスティネーションへバインドするパッチ駆動の楽器
 - [SoundFont プレイヤー](./soundfont-player.md) — デスティネーションでの GS/GM `.sf2` 再生
 - [録音とテイク](./recording-and-takes.md) — 演奏（およびマイク音声入力）の取り込み
-- [プロジェクト編集](./project-editing.md) — MIDI クリップ、CC ラーン、CC からオートメーションへの変換
-- [MIDI クリップ編集](./midi-editing.md) — プロジェクトのイベント列、検証、ルーティング、MIDI-FX のベイク
+- [MIDI クリップ編集](./midi-editing.md) — プロジェクトのイベント列、検証、ルーティング、CC ラーン、MIDI-FX の焼き込み
 - [MIDI 2.0・UMP・クリップファイル](./midi2.md) — フル解像度 UMP ビルダー、ライブ送信、ファイルの忠実度
 - [プロジェクトバウンス](./project-bounce.md) — MIDI 演奏のオフラインレンダー
 - [リアルタイムとストリーミング](./realtime-streaming.md) — 音声出力を動かす AudioWorklet エンジンブリッジ

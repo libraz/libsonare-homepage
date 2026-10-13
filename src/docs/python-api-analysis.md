@@ -96,6 +96,7 @@ Python, unlike the JavaScript `segment*` names:
 | `Audio.from_file(path)` | Load WAV/MP3 from disk; also FFmpeg-supported formats when the library is built with FFmpeg |
 | `Audio.from_buffer(data, sample_rate)` | Create from float samples |
 | `Audio.from_memory(data)` | Decode encoded audio bytes with the same format support as `from_file` |
+| `Audio.from_file_channel(path, channel_index)` | Load one channel of a file instead of the downmix; pair it with `file_channel_count` and load each channel in turn |
 | `Audio.file_channel_count(path)` | Probe the source channel count encoded in an audio file, without decoding; unlike `from_file`, it never downmixes to mono |
 | `audio.data` | Raw float samples |
 | `audio.sample_rate` | Sample rate (Hz) |
@@ -127,16 +128,16 @@ with Audio.from_file("music.mp3") as audio:
 | `detect_chords(samples, sample_rate, ...)` | `ChordAnalysisResult` | Chord segments over time plus the `tuning` used; frames below the detection threshold are explicit `N.C.` intervals |
 | `analyze(samples, sample_rate)` | `AnalysisResult` | All-in-one analysis: BPM and its candidates, key, time signature and its candidates, beats, chords (each with `roman_numeral` relative to the detected key), sections, timbre, dynamics, rhythm, melody, form |
 | `analyze_with_progress(samples, sample_rate, on_progress?)` | `AnalysisResult` | Same result and analysis keyword options as `analyze`, with an optional `(progress, stage)` callback and keyword-only `cancel` callback |
-| `transcribe(samples, sample_rate, ...)` | `TranscribeResult` | Mono audio to MIDI events on a constant-tempo PPQ grid; returns `events`, `note_count`, and `tempo_bpm` |
+| `transcribe(samples, sample_rate, ...)` | `TranscribeResult` | Mono audio to MIDI events on a constant-tempo PPQ grid; returns `events`, `note_count`, `tempo_bpm`, and the `tuning` it used |
 | `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | BPM with top candidates |
 | `estimate_meter(beat_times, beat_strengths, ...)` | `MeterEstimate` | Meter and accent grouping scored over a beat series you already have — no audio, no re-analysis |
-| `chord_functional_analysis(samples, key_root, key_mode?, ...)` | `list[FunctionalChord]` | Detects chords, then returns the timed entries (every `Chord` field) with `roman` (`"I"`, `"V7"`, `"vi"`, ...) and `function` (`"tonic"`, `"subdominant"`, `"dominant"`, `"chromatic"`, `"none"`) added |
+| `chord_functional_analysis(samples, key_root, key_mode=Mode.MAJOR, sample_rate=22050, ...)` | `list[FunctionalChord]` | `sample_rate` comes after the key, so pass it by keyword. Detects chords, then returns the timed entries (every `Chord` field) with `roman` (`"I"`, `"V7"`, `"vi"`, ...) and `function` (`"tonic"`, `"subdominant"`, `"dominant"`, `"chromatic"`, `"none"`) added |
 | `chord_functions(chords, key)` | `list[FunctionalChord]` | Labels chords you already have in `key`, without re-detecting. `chords` is a `detect_chords` result or its `chords` list; `key` is a `Key`, a `{"root": ..., "mode": ...}` mapping, or a `(root, mode)` pair |
 | `analyze_rhythm(samples, sample_rate, ...)` | `RhythmResult` | Syncopation, groove type, regularity |
 | `analyze_dynamics(samples, sample_rate, ...)` | `DynamicsResult` | Dynamic range, loudness range, crest factor |
 | `analyze_timbre(samples, sample_rate, ...)` | `TimbreResult` | Brightness, warmth, density, roughness, complexity, plus per-window `timbre_over_time` (`timbreOverTime` alias) |
 | `analyze_sections(samples, sample_rate, ...)` | `SectionResult` | Song-structure sections (intro/verse/chorus/...) |
-| `detect_boundaries(samples, sample_rate=22050, *, n_fft=2048, hop_length=512, kernel_size=64, threshold=0.3, absolute_threshold=0.005, n_mfcc=13, n_chroma=12, peak_distance=2.0, reference_window=60.0, use_mfcc=True, use_chroma=True)` | `BoundaryResult` | Structural transitions plus the `novelty_curve` they were picked from, and the grid both live on. `threshold` is measured against the largest novelty within `reference_window` seconds of a peak (`0` disables it). Reach for it when you want to apply your own threshold rather than take `analyze_sections`' labelled spans |
+| `detect_boundaries(samples, sample_rate=22050, *, n_fft=2048, hop_length=512, kernel_size=64, threshold=0.3, absolute_threshold=0.005, n_mfcc=13, n_chroma=12, peak_distance=2.0, reference_window=60.0, use_mfcc=True, use_chroma=True)` | `BoundaryResult` | Structural transitions plus the `novelty_curve` they were picked from, and the grid both live on. `threshold` is measured against the largest novelty within `reference_window` seconds of a peak (`0` disables it). Reach for it when you want to apply your own threshold rather than take `analyze_sections`' labeled spans |
 | `analyze_melody(samples, sample_rate, ...)` | `MelodyResult` | Monophonic melody contour (YIN) |
 | `analyze_impulse_response(samples, sample_rate=48000, n_octave_bands=6, min_decay_db=30.0)` | `AcousticResult` | Room acoustics from an impulse response (RT60/EDT/C50/C80); `min_decay_db` controls the decay-fit threshold |
 | `detect_acoustic(samples, sample_rate, ...)` | `AcousticResult` | Blind room-acoustic estimation |
@@ -153,7 +154,7 @@ with Audio.from_file("music.mp3") as audio:
 
 ### `transcribe(...)`
 
-`sonare.transcribe` converts mono audio into note events on a constant-tempo PPQ grid. Pass `tempo_bpm` to choose the grid, or omit it to detect the tempo. The returned `TranscribeResult` contains `events`, `note_count`, and the `tempo_bpm` used; it does not install a project tempo map.
+`sonare.transcribe` converts mono audio into note events on a constant-tempo PPQ grid. Pass `tempo_bpm` to choose the grid, or omit it to detect the tempo. The returned `TranscribeResult` contains `events`, `note_count`, the `tempo_bpm` used, and the `tuning` used; it does not install a project tempo map. Pass `reference_hz="auto"` to measure the recording's tuning first; `result.tuning` reports the value used.
 
 ```python
 result = sonare.transcribe(
@@ -167,6 +168,8 @@ project.set_midi_events(clip_id, result.events)
 ```
 
 The polyphonic tracker takes `max_polyphony` (default 10), `min_frame_peak_ratio` (0.20), `min_ridge_peak_ratio` (0.10) and `reattack_ratio` (2.0); the shortest note is `min_note_ms` or, as a note value, `min_note_division` (not both). The monophonic path refuses the four polyphonic limits by name. See [Audio to MIDI](./audio-to-notes.md#options-and-limits).
+
+`velocity_floor_db` only sets the level that maps to velocity 1. A note more than 36 dB under the take's loudest notes, or under -80 dBFS, is dropped regardless.
 
 Use `Project.transcribeToClip(...)` / `project.transcribe_to_clip(...)` when the events should follow a project's tempo map.
 
@@ -318,6 +321,7 @@ labelled = sonare.chord_functions(chords, keys[0].key)
 | `onset_strength_multi(samples, sample_rate?, n_fft?, hop_length?, n_mels?, n_bands?)` | `tuple[int, list[float]]` | Multi-band onset strength; returns `(n_frames, [n_bands x n_frames])` row-major (`n_bands` default 3) |
 | `lufs(samples, sample_rate)` | `LufsResult` | Integrated/final-window [LUFS](./glossary/lufs.md) (Loudness Units relative to Full Scale), Max-M / Max-S, and loudness range (EBU R128) |
 | `lufs_interleaved(samples, channels, sample_rate?)` | `LufsResult` | Channel-weighted multichannel loudness from interleaved samples |
+| `lufs_series_interleaved(samples, channels, sample_rate?, *, validate?)` | `tuple[list[float], list[float]]` | Momentary and short-term LUFS series for interleaved multichannel samples, summed across channels as BS.1770-4 specifies |
 | `ebur128_loudness_range(samples, sample_rate?)` | `float` | EBU R128 loudness range (LRA) in LU |
 | `momentary_lufs(samples, sample_rate)` | `list[float]` | Momentary LUFS per frame |
 | `short_term_lufs(samples, sample_rate)` | `list[float]` | Short-term LUFS per frame |
@@ -332,7 +336,7 @@ Additional effect helpers include `phase_vocoder(samples, sample_rate?, rate?)` 
 
 `decompose` and `decompose_with_init` return the W / H factors of a **magnitude** spectrogram. Those factors carry no phase, so reconstructing audio from them needs a phase estimator, and an estimated phase does not hold up as a stem. `decompose_stems` builds a per-component soft mask from the same factorisation and applies it to the **original complex** spectrogram instead, so every component keeps the source's phase. The masks sum to one wherever the model has energy and the inverse STFT is linear, so the components sum back to the input.
 
-`mask_power` is the soft-mask exponent: `1` (the default) keeps the magnitude ratio, `2` is the Wiener-style power ratio, which separates harder at the cost of more artefacts on overlapping partials. Values below 1 are refused. `init` is `'random'` by default, or `'nndsvd'` for the SVD warm start; `beta` is the divergence (`2` = Frobenius, `1` = Kullback-Leibler).
+`mask_power` is the soft-mask exponent: `1` (the default) keeps the magnitude ratio, `2` is the Wiener-style power ratio, which separates harder at the cost of more artifacts on overlapping partials. Values below 1 are refused. `init` is `'random'` by default, or `'nndsvd'` for the SVD warm start; `beta` is the divergence (`2` = Frobenius, `1` = Kullback-Leibler).
 
 ```python
 stems = sonare.decompose_stems(audio.data, audio.sample_rate, n_components=4, mask_power=2.0)
@@ -371,6 +375,7 @@ Reconstruct a spectrum or audio from a mel spectrogram or MFCC matrix. Phase is 
 
 | Function | Return Type | Description |
 |----------|-------------|-------------|
+| `griffin_lim(magnitude, n_bins, n_frames, sample_rate?, n_fft?, hop_length?, n_iter?, momentum?)` | `list[float]` | Audio from a row-major STFT magnitude matrix; `n_iter` defaults to `32`, `momentum` to `0.99` |
 | `mel_to_stft(mel, n_mels, n_frames, sample_rate?, n_fft?, fmin?, fmax?, htk?)` | `InverseResult` | Linear STFT power from a mel spectrogram |
 | `mel_to_audio(mel, n_mels, n_frames, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?)` | `list[float]` | Audio from a mel spectrogram (Griffin-Lim) |
 | `mfcc_to_mel(mfcc_coeffs, n_mfcc, n_frames, n_mels?, lifter?)` | `InverseResult` | Mel spectrogram (dB) from MFCC coefficients (`lifter` must match the forward `mfcc(...)` call) |
@@ -396,7 +401,7 @@ Standalone level, dynamics, and stereo-image meters. Each accepts a keyword-only
 | `metering_silence_ratio(samples, sample_rate?, threshold_db?, frame_length?, hop_length?, *, validate?)` | `float` | Fraction of analysis frames whose RMS is below `threshold_db` (defaults: `threshold_db=-45.0`, `frame_length=1024`, `hop_length=256`) |
 | `metering_true_peak_db(samples, sample_rate?, oversample_factor?, *, validate?)` | `float` | Inter-sample (true) peak (dBFS); `oversample_factor` is a power of two in 1..16 (0 = default 4) |
 | `metering_detect_clipping(samples, sample_rate?, threshold?, min_region_samples?, *, validate?)` | `ClippingReport` | Clipped-sample runs; `threshold` default `0.999`, `min_region_samples` default `1` |
-| `metering_dynamic_range(samples, sample_rate?, window_sec?, hop_sec?, low_percentile?, high_percentile?, *, validate?)` | `DynamicRangeReport` | Sliding-window dynamic range; pass `0.0` for `window_sec`/`hop_sec` defaults (3 s / 1 s); pass a negative value (the default `-1.0`) for `low_percentile`/`high_percentile` defaults (0.10 / 0.95) — `0.0` requests the 0th percentile, not the default |
+| `metering_dynamic_range(samples, sample_rate?, window_sec?, hop_sec?, low_percentile?, high_percentile?, *, validate?)` | `DynamicRangeReport` | Sliding-window dynamic range; pass `0.0` for `window_sec`/`hop_sec` defaults (3 s / 1 s). Omit `low_percentile`/`high_percentile` or pass `None` for defaults (0.10 / 0.95); `0.0` requests the 0th percentile. Negative values are refused |
 | `metering_stereo_correlation(left, right, sample_rate?, *, validate?)` | `float` | Uncentered correlation (cosine similarity), −1..1 |
 | `metering_stereo_width(left, right, sample_rate?, *, validate?)` | `float` | Mid/side stereo width |
 | `metering_vectorscope(left, right, sample_rate?, max_points?, *, validate?)` | `VectorscopeReport` | Mid/side point series; one point per sample unless `max_points` bounds it |
@@ -462,26 +467,23 @@ Use `StreamAnalyzer` when audio arrives in blocks: live capture, a callback loop
 ```python
 import libsonare as sonare
 
-stream = sonare.StreamAnalyzer(
-    sonare.StreamConfig(
-        sample_rate=44100,
-        n_mels=64,
-        emit_every_n_frames=4,
-    )
+config = sonare.StreamConfig(
+    sample_rate=44100,
+    n_mels=64,
+    emit_every_n_frames=4,
 )
 
-for block in audio_blocks:
-    stream.process(block)
+with sonare.StreamAnalyzer(config) as stream:
+    for block in audio_blocks:
+        stream.process(block)
 
-    frames = stream.read_frames(stream.available_frames())
-    # frames.mel is flattened [n_frames * n_mels]
-    # check frames.feature_flags before optional arrays; chroma uses [n_frames * n_chroma]
+        frames = stream.read_frames(stream.available_frames())
+        # frames.mel is flattened [n_frames * n_mels]
+        # check frames.feature_flags before optional arrays; chroma uses [n_frames * n_chroma]
 
-    stats = stream.stats()
-    if stats.bpm > 0:
-        print(stats.bpm, stats.bpm_confidence)
-
-stream.close()
+        stats = stream.stats()
+        if stats.bpm > 0:
+            print(stats.bpm, stats.bpm_confidence)
 ```
 
 For lower-bandwidth UI transfer, use a quantized read instead of `read_frames(max_frames)`. `output_format` is retained for source compatibility only; omit it or keep it at `0` and choose the desired read method explicitly:
@@ -495,5 +497,5 @@ For lower-bandwidth UI transfer, use a quantized read instead of `read_frames(ma
 
 Both return timestamps as floats. If you synchronize against an external audio clock, feed chunks with `process_with_offset(samples, sample_offset)` so returned timestamps follow that timeline.
 
-`process_with_offset` accepts only contiguous offsets. After a gap, seek, or switching from `process(...)`, call `reset(base_sample_offset)` before feeding the next block. `StreamConfig.max_progression_entries` (default `4096`) bounds each retained chord and bar progression; `stats()` exposes `dropped_chord_progression_entries` and `dropped_bar_progression_entries` when the oldest history is discarded.
+`process_with_offset` accepts only contiguous offsets. After a gap, seek, or switching from `process(...)`, call `reset(base_sample_offset)` before feeding the next block. `StreamConfig.max_progression_entries` (default `4096`) bounds each retained chord and bar progression; `stats()` exposes `dropped_chord_progression_entries` and `dropped_bar_progression_entries` when the oldest history is discarded, and `non_finite_discard_blocks` when NaN or Inf input was replaced.
 

@@ -6,7 +6,7 @@ libsonare C++ インターフェースの API リファレンス。
 
 libsonare は C++ アプリケーション向けに、オーディオ解析、メーター、特徴抽出、編集 DSP、リアルタイムストリーミング、マスタリング、ミキシングを提供します。
 
-`sonare.h` は解析・特徴量系の広い入口です。マスタリング、ミキシング、エンジン、グラフ、編集モジュールは、必要なサブシステムだけをインクルードしたい場合の専用ヘッダーも持っています。 ブロック単位のストリーミングは [C++ ストリーミング API](./cpp-api-streaming.md) で、特徴抽出・ピッチ追跡・主要な結果型は [C++ 解析 API](./cpp-api-analysis.md) で、オーディオエフェクト・ミキシングエンジン・編集ヘルパー・C ABI は [C++ エフェクト API](./cpp-api-effects.md) で扱います。
+`sonare.h` は解析・特徴量系の広い入口です。マスタリング、ミキシング、エンジン、グラフ、編集モジュールは、必要なサブシステムだけをインクルードしたい場合の専用ヘッダーも持っています。ブロック単位のストリーミングは [C++ ストリーミング API](./cpp-api-streaming.md) で、特徴抽出・ピッチ追跡・主要な結果型は [C++ 解析 API](./cpp-api-analysis.md) で、オーディオエフェクト・ミキシングエンジン・編集ヘルパー・幾何ベースのルーム音響は [C++ エフェクト API](./cpp-api-effects.md) で、C ABI は [C ABI リファレンス](./cpp-api-c-abi.md) で扱います。
 
 ## このページで身につくこと
 
@@ -20,7 +20,7 @@ libsonare は C++ アプリケーション向けに、オーディオ解析、�
 | コンポーネント | 目的 | 主なクラス/関数 |
 |-----------|---------|----------------------|
 | **コア** | オーディオI/Oと信号処理 | `Audio`, `Spectrogram` |
-| **Quick API** | 一行解析とルーム音響の入口 | `quick::detect_bpm()`, `quick::detect_key()`, `quick::detect_beats()`, `quick::detect_acoustic()` |
+| **Quick API** | 一行で呼べる解析の入口 | `quick::detect_bpm()`, `quick::detect_key()`, `quick::detect_beats()`, `quick::detect_onsets()` |
 | **幾何ベースのルーム音響** | 等価ルーム推定、RIR 合成、ルームモーフィング | `estimate_room()`, `acoustic::synthesize_rir()`, `effects::acoustic::room_morph()` |
 | **MusicAnalyzer** | コールバック付きの楽曲解析 | `MusicAnalyzer`, `AnalysisResult` |
 | **ストリーミング** | ブロック単位の MIR（音楽情報検索）フレームと更新されていく推定 | `StreamAnalyzer`, `StreamConfig`, `FrameBuffer` |
@@ -28,13 +28,14 @@ libsonare は C++ アプリケーション向けに、オーディオ解析、�
 | **エフェクト／編集** | オーディオ処理と小さな編集部品 | `hpss()`, `time_stretch()`, `pitch_shift()`, pitch editor / voice changer モジュール |
 | **マスタリング** | プリセット、チェーン、名前付きプロセッサ、assistant/profile JSON | `mastering::MasteringChain`, `mastering::api::*` |
 | **ミキシング／エンジン** | シーンベースのミキサーと DAW 風リアルタイムトランスポート | `mixing::api::Scene`, `mixing::ChannelStrip`, `mixing::FxBus`, `RealtimeEngine` |
-| **C ABI** | バインディング向けの安定 FFI | `sonare_c.h` |
+| **C ABI** | バインディング向けの安定 FFI。[C ABI リファレンス](./cpp-api-c-abi.md)で解説 | `sonare_c.h` |
 
 ## C++ でどの入口を使うか
 
 | 目的 | インクルード / API |
 |------|---------------|
-| BPM、キー、ビート、オンセット、音響指標を単発で見る | `#include <sonare.h>` と `sonare::quick::*` |
+| BPM、キー、ビート、オンセットを単発で見る | `#include <sonare.h>` と `sonare::quick::*` |
+| 録音や IR からの音響指標（RT60、C50、DRR） | `analysis/acoustic_analyzer.h` の `detect_acoustic(audio, AcousticConfig)` / `analyze_impulse_response(ir, AcousticConfig)`（`<sonare.h>` に含まれる） |
 | 幾何ベースのルーム推定、RIR 合成、ルームモーフィング | `#include <analysis/room_estimator.h>`, `#include <acoustic/rir_synthesizer.h>`, `#include <effects/acoustic/room_morph.h>` |
 | 同じ音声から複数の楽曲解析結果を得る | `MusicAnalyzer`。中間特徴量を再利用できます |
 | ライブビジュアライザや更新されていく推定 | `#include <streaming/stream_analyzer.h>` |
@@ -44,9 +45,7 @@ libsonare は C++ アプリケーション向けに、オーディオ解析、�
 
 ### この API を切り分けるビルドフラグ
 
-解析、特徴量、エフェクト、メータリングは常にビルドされます。以下のサブシステムは
-個別の CMake オプションで、ソースビルドではすべて既定 `ON` ですが、絞ったビルドでは
-外すことができ、そのとき該当するシンボルはすべて消えます。
+解析、特徴量、エフェクト、メータリングは常にビルドされます。以下のサブシステムは個別の CMake オプションで、ソースビルドではすべて既定 `ON` ですが、絞ったビルドでは外すことができ、そのとき該当するシンボルはすべて消えます。
 
 | オプション | 対象 |
 |------------|------|
@@ -70,36 +69,41 @@ libsonare は C++ アプリケーション向けに、オーディオ解析、�
 
 はじめの 2 つは連鎖します。そしてこれが、削ったつもりが削れていない原因になりがちな組み合わせです。`BUILD_MIXING_ASSISTANT` を既定の `ON` のままにすると、ミキサー・マスタリングライブラリ・ルーティンググラフは、いくつ `OFF` を渡していても再び取り込まれます。
 
-C ABI はプロジェクト系のシンボルを常に *エクスポート* します。`BUILD_ARRANGEMENT`
-なしでビルドした場合、それらは `SONARE_ERROR_NOT_SUPPORTED` を返し、
-`sonare_project_abi_version()` は 0 を返します。
+C ABI はプロジェクト系のシンボルを常に *エクスポート* します。`BUILD_ARRANGEMENT` なしでビルドした場合、それらは `SONARE_ERROR_NOT_SUPPORTED` を返し、`sonare_project_abi_version()` は 0 を返します。
 
-`BUILD_PITCH_EDITOR` も同じ扱いです。`-DBUILD_PITCH_EDITOR=OFF` でビルドすると、
-`sonare_scale_quantize_midi`、`sonare_scale_correction_semitones`、
-`sonare_scale_pitch_class_enabled`、`sonare_note_segments` はエクスポートされたまま
-`SONARE_ERROR_NOT_SUPPORTED` を返します。出力引数は判定の前にゼロクリアされるので、
-この経路で返されたポインタを解放しても安全です。ライブラリはこのオプションを OFF にした
-状態で configure・ビルドできますが、ネイティブ CLI はできません。5 つのコマンドが
-ピッチエディタを直接呼んでいるためです。
+`BUILD_PITCH_EDITOR` も同じ扱いです。`-DBUILD_PITCH_EDITOR=OFF` でビルドすると、`sonare_scale_quantize_midi`、`sonare_scale_correction_semitones`、`sonare_scale_pitch_class_enabled`、`sonare_note_segments` はエクスポートされたまま `SONARE_ERROR_NOT_SUPPORTED` を返します。出力引数は判定の前にゼロクリアされるので、この経路で返されたポインタを解放しても安全です。ライブラリはこのオプションを OFF にした状態で configure・ビルドできますが、ネイティブ CLI はできません。5 つのコマンドがピッチエディタを直接呼んでいるためです。
 
 ### C ABI のバージョン
 
-フラットな POD 構造体を宣言する C ABI ヘッダーは、それぞれ構造体の正確なサイズとメンバーオフセットを保証するバージョンマクロを持ちます。`SONARE_FEATURE_ABI_VERSION` は `sonare_c_types.h` の 7 で、特徴量 POD のレイアウトに加えて、`voiced` 引数を含むノート API など、公開する一般 C 関数のシグネチャも保証します。`SONARE_PROJECT_ABI_VERSION` は `sonare_c_project.h` の 2、`SONARE_VOICE_CHANGER_ABI_VERSION` は `sonare_c_voice_changer.h` の 3、`SONARE_ACOUSTIC_ABI_VERSION` は `sonare_c_acoustic.h` の 5 です。`sonare_c.h` はこれらを `SONARE_ABI_VERSION` に詰め込み（ビット 0〜7 が Feature、8〜15 が Project、16〜23 が Voice changer、24〜31 が Acoustic。よって集約値は `0x05030207`）、`sonare_abi_version()` は読み込まれたライブラリがコンパイル時に持っていた値を返します。リアルタイムのコマンドキューは POD ではなく SharedArrayBuffer のレコードレイアウトを表すため、これとは別に `sonare_engine_abi_version()`（現在は 3）でバージョン管理されます。POD を境界越しに渡す利用側は、最初の呼び出しの前に一度だけ `sonare_abi_version()` を自分のコンパイル時の `SONARE_ABI_VERSION` と比較し、一致しなければ先へ進みません。値が違えば両者の構造体レイアウトまたは保証対象の関数契約は一致しておらず、POD 経路は失敗するのではなくメモリを壊します。JSON の入口はレイアウトのずれを許容するので、この関門は不要です。バージョンは、保証対象の構造体レイアウトまたは Feature の関数シグネチャが変わるたびに進みます（Project のバージョンはレイアウトが変わったリリースごとに 1 回）。したがって値が等しければレイアウトと契約は同一であり、保証対象の構造体へのフィールド追加は「追加的な変更」ではなくバージョンの更新です。各バインディングが読み込み時にどの値を照合するかは [ネイティブバインディング](./native-bindings.md#abi-バージョン) にまとめています。
+フラットな POD 構造体を宣言する C ABI ヘッダーは、それぞれ構造体の正確なサイズとメンバーオフセットを保証するバージョンマクロを持ちます。`sonare_c.h` はこれらを 1 つの集約値 `SONARE_ABI_VERSION` に詰め込み、`sonare_abi_version()` は読み込まれたライブラリがコンパイル時に持っていた値を返します。
+
+| マクロ | 値 | 宣言場所 | 集約値でのビット |
+|--------|----|----------|------------------|
+| `SONARE_FEATURE_ABI_VERSION` | 7 | `sonare_c_types.h` | 0〜7 |
+| `SONARE_PROJECT_ABI_VERSION` | 2 | `sonare_c_project.h` | 8〜15 |
+| `SONARE_VOICE_CHANGER_ABI_VERSION` | 3 | `sonare_c_voice_changer.h` | 16〜23 |
+| `SONARE_ACOUSTIC_ABI_VERSION` | 5 | `sonare_c_acoustic.h` | 24〜31 |
+
+集約値は `0x05030207` です。Feature のバージョンは、特徴量 POD のレイアウトに加えて、`voiced` 引数を含むノート API など、公開する一般 C 関数のシグネチャも保証します。リアルタイムのコマンドキューは POD ではなく SharedArrayBuffer のレコードレイアウトを表すため、これとは別に `sonare_engine_abi_version()`（現在は 3）でバージョン管理されます。
+
+POD を境界越しに渡す利用側は、最初の呼び出しの前に一度だけ `sonare_abi_version()` を自分のコンパイル時の `SONARE_ABI_VERSION` と比較し、一致しなければ先へ進みません。値が違えば両者の構造体レイアウトまたは保証対象の関数契約は一致しておらず、POD 経路は失敗するのではなくメモリを壊します。JSON の入口はレイアウトのずれを許容するので、この関門は不要です。バージョンは、保証対象の構造体レイアウトまたは Feature の関数シグネチャが変わるたびに進みます（Project のバージョンはレイアウトが変わったリリースごとに 1 回）。したがって値が等しければレイアウトと契約は同一であり、保証対象の構造体へのフィールド追加は「追加的な変更」ではなくバージョンの更新です。各バインディングが読み込み時にどの値を照合するかは [ネイティブバインディング](./native-bindings.md#abi-バージョン) にまとめています。
 
 #### バージョン付き構造体と既定値
 
-呼び出し側が埋める保証対象の構造体は自分のレイアウトバージョンを持ち、古いレイアウトでビルドされた呼び出しは、誤ったオフセットで読まれずに拒否されます。構造体をゼロ埋めするのではなく、対応する `*_default()` 関数から始めてください。ゼロ埋めの構造体は既定値ではありません。
+呼び出し側が埋める保証対象の構造体は自分のレイアウトバージョンを持ち、古いレイアウトでビルドされた呼び出しは、誤ったオフセットで読まれずに拒否されます。`*_default()` 関数がある構造体は、そこから始めてください。ゼロ初期化した構造体が既定値になるとは限りません。3 列目に、ゼロ初期化したときの扱いを示します。
 
-| 構造体 | バージョンフィールド | 開始点 |
-|--------|---------------------|--------|
-| `SonareMusicAnalyzeOptions` | 先頭の `struct_version`。`SONARE_MUSIC_ANALYZE_OPTIONS_VERSION`（2）でなければならず、`sonare_analyze_json_ex` は他の値を拒否します | `sonare_music_analyze_options_default()` |
-| `SonareChordDetectionOptions` | 先頭の `struct_version`。0 または `SONARE_CHORD_DETECTION_OPTIONS_VERSION`（2） | ゼロ埋めしてバージョンを設定するか、設定せず 0 のまま |
-| `SonareBoundaryOptions` | なし。44 バイトで、`use_chroma` の後に `reference_window` を持ちます（相対しきい値を測る片側の秒数。既定 60、`0` で相対しきい値を無効化） | `sonare_boundary_options_default()` |
-| `SonareTranscribeConfig` | `struct_version` は 1、2、3 のいずれか。バージョン 2 は `reference_auto`（`reference_hz` を読まずチューニング基準を測定する）を、バージョン 3 はポリフォニックの上限 `max_polyphony`（最大 64、既定 10）、`min_frame_peak_ratio`（0.20）、`min_ridge_peak_ratio`（0.10）、`reattack_ratio`（2.0）と `min_note_division` を末尾に追加します。バージョン 1 と 2 も引き続き読まれます。上限の 4 つは `polyphonic` が 0 のとき、フィールド名を挙げた InvalidParameter で拒否されます | `sonare_transcribe_config_default()` |
-| `SonarePolyphonicConfig` | `struct_version` は 0、1、2 のいずれか。バージョン 2 は `reattack_ratio`（0 なら再打鍵の分割はオフ）を末尾に追加し、バージョン 0 と 1 も引き続き読まれます | ゼロ初期化（NULL の設定も同じ読まれ方） |
-| `SonareSynthPatch` | `struct_version` は `SONARE_SYNTH_PATCH_STRUCT_VERSION`（9）まで。バージョン 8 以前も引き続き読まれ、レイアウトは [C++ エフェクト API](./cpp-api-effects.md) に書かれています | `sonare_synth_preset_patch(name, &patch)`、またはゼロ初期化 |
-| `SonareRoomMorphConfig` | 末尾に `receiver_spacing_m`（ネイティブで 128 バイト、wasm32 で 108 バイト）。0 なら既定の 0.5 m で、`sonare_room_morph` はこのフィールドを読みません | ゼロ初期化 |
-| `SonareRealtimeVoiceChangerConfig` | 先頭の `struct_version`（0 または 1）に続いて `formant_mode`。レイアウトは `SONARE_VOICE_CHANGER_ABI_VERSION` が保証します | `sonare_realtime_voice_changer_config_default()`（ゼロ埋めは ISP リミッターを無効にします） |
+| 構造体 | バージョンフィールド | ゼロ初期化したときの扱い | 開始点 |
+|--------|---------------------|--------------------------|--------|
+| `SonareMusicAnalyzeOptions` | 先頭の `struct_version`。`SONARE_MUSIC_ANALYZE_OPTIONS_VERSION`（2）でなければならず、`sonare_analyze_json_ex` は他の値を拒否します | 拒否される（`meter_candidate_numerator_count` が 0 だと拒否されます） | `sonare_music_analyze_options_default()` |
+| `SonareChordDetectionOptions` | 先頭の `struct_version`。0 または `SONARE_CHORD_DETECTION_OPTIONS_VERSION`（2） | 拒否される。`n_fft`、`hop_length`、`smoothing_window` は正の値が必要で、0 のままでよいのはバージョンだけです | `_default()` はありません。ゼロ初期化したうえで全フィールドを設定します |
+| `SonareBoundaryOptions` | なし。44 バイトで、`use_chroma` の後に `reference_window` を持ちます（相対しきい値を測る片側の秒数。既定 60、`0` で相対しきい値を無効化） | 受理されるが検出結果が変わる（`absolute_threshold` が 0 だと定常入力を区間に分けます） | `sonare_boundary_options_default()` |
+| `SonareTranscribeConfig` | `struct_version` は 1、2、3 のいずれか。バージョン 1 と 2 も引き続き読まれます | `struct_version` を設定すれば既定値になる | `sonare_transcribe_config_default()` |
+| `SonarePolyphonicConfig` | `struct_version` は 0、1、2 のいずれか。バージョン 0 と 1 も引き続き読まれます | 既定値になる（NULL の設定も同じ読まれ方） | ゼロ初期化 |
+| `SonareSynthPatch` | `struct_version` は `SONARE_SYNTH_PATCH_STRUCT_VERSION`（9）まで。バージョン 8 以前も引き続き読まれ、レイアウトは [C ABI リファレンス](./cpp-api-c-abi.md#synthpatch-のバージョン) に書かれています | 初期パッチになる | `sonare_synth_preset_patch(name, &patch)`、またはゼロ初期化 |
+| `SonareRoomMorphConfig` | 末尾に `receiver_spacing_m`（ネイティブで 128 バイト、wasm32 で 108 バイト）。`sonare_room_morph` はこのフィールドを読みません | ジオメトリと配置を設定するまで拒否される。間隔が 0 なら既定の 0.5 m | ゼロ初期化したうえでジオメトリと配置を設定 |
+| `SonareRealtimeVoiceChangerConfig` | 先頭の `struct_version`（0 または 1）と、フォルマント系フィールドの後ろの `formant_mode`（全体で 152 バイト）。`formant_mode` は作成時に固定され、異なるモードの `set_config` は拒否されます。レイアウトは `SONARE_VOICE_CHANGER_ABI_VERSION` が保証します | ISP リミッターが無効になる | `sonare_realtime_voice_changer_config_default()` |
+
+`SonareTranscribeConfig` のバージョン 2 は `reference_auto`（`reference_hz` を読まずチューニング基準を測定する）を末尾に追加します。バージョン 3 はポリフォニックの上限 `max_polyphony`（最大 64、既定 10）、`min_frame_peak_ratio`（0.20）、`min_ridge_peak_ratio`（0.10）、`reattack_ratio`（2.0）と `min_note_division` を追加します。上限の 4 つは `polyphonic` が 0 のとき、フィールド名を挙げた InvalidParameter で拒否されます。`SonarePolyphonicConfig` のバージョン 2 は `reattack_ratio`（0 なら再打鍵の分割はオフ）を追加します。
 
 結果構造体の `SonareChordAnalysisResult`、`SonareMelResult`、`SonareMfccResult`、`SonareTranscribeResult` も先頭に `struct_version` を持ちます。これはライブラリが書き込むので、呼び出し側は読むだけです。結果は使用したチューニングを報告し（`SonareChordAnalysisResult.tuning`、`SonareTranscribeResult.tuning`）、Mel と MFCC の結果は逆変換に必要な順変換のパラメータを持ちます。`SonareProjectLoopRecordingDesc` では Project ABI バージョンは動きません。以前の `reserved` ワードが `flags` になり、`0` または `SONARE_PROJECT_LOOP_RECORDING_DROP_PARTIAL_TAIL` を受け付け、他のビットは拒否されるので、呼び出し側は 0 にしてください。
 
@@ -132,6 +136,17 @@ find_package(sonare REQUIRED COMPONENTS midi)
 
 - **Eigen は利用側の要件ではありません。** インストールされるヘッダーはどれも Eigen を include しないため、利用側に必要なのは C++17 コンパイラと解決可能なスレッドライブラリだけです。パッケージ設定が宣言するのは `Threads`（および FFmpeg 付きでビルドされた場合の FFmpeg）のみです。
 - **同梱の FFT アーカイブは接頭辞付きのファイル名でインストールされます。** `libsonare_kissfft.a` と `libsonare_pffft.a` であり、利用側のライブラリディレクトリで一般的な名前を占有することはありません。CMake のターゲット名は変わりません。
+
+#### インストールされるヘッダー
+
+`cmake --install` は、インクルードルートの下に 2 つのヘッダーツリーを書き出します。
+
+| ツリー | インクルードの書き方 | 内容 |
+|--------|----------------------|------|
+| `include/sonare/` | `<sonare/sonare_c.h>` | C ABI のヘッダー |
+| `include/sonare/cpp/` | `<sonare/cpp/sonare.h>` | `src/` の C++ ヘッダーツリー全体。ヘッダー同士が src 相対パスで互いを include するため、構造を保ったまま置かれます |
+
+エクスポートされるターゲットは `include/sonare/cpp` も利用側のインクルードパスに加えるので、ツリー内の書き方（`<sonare.h>`、`<core/audio.h>`、`<midi/ump.h>`）も解決され、ソースチェックアウトに対して書いたコードがそのままコンパイルできます。名前空間付きの `<sonare/cpp/...>` なら、こうした一般的な名前のルートが利用側のインクルードパスに入りません。C++ ツリーには、WASM ラッパー、macOS のホストバックエンド、C ABI の実装ヘッダーは含まれません。C ABI には `<sonare/sonare_c.h>` を使います。
 
 `sonare.pc` は共有ライブラリ構成でのみインストールされます。pkg-config が正しく記述できるのはその構成だけだからです。静的ライブラリのみのインストールでは生成されません。
 
@@ -175,7 +190,7 @@ float* channels[2] = {left, right};
 instrument.process(channels, 2, 512);
 ```
 
-インストールされたヘッダは 2 通りの書き方で解決します。上の例のようなツリー内と同じパスと、インクルードルート経由の `<sonare/cpp/midi/synth/native_synth.h>` です。
+インストールされたヘッダは 2 通りの書き方で解決します。上の例のようなツリー内と同じパスと、インクルードルート経由の `<sonare/cpp/midi/synth/native_synth.h>` です（[インストールされるヘッダー](#インストールされるヘッダー)を参照）。
 
 この構成を前提に設計する前に、3 つの制限を押さえてください。
 
@@ -226,6 +241,10 @@ static Audio Audio::from_memory(const uint8_t* data, size_t size);
 
 // 同じデコードでダウンミックスなし。要素 i はソースのチャンネル i（ソース自身の順序）
 static std::vector<Audio> Audio::from_memory_channels(const uint8_t* data, size_t size);
+
+// ファイルの 1 チャンネルだけを、ダウンミックスなしで読み込む
+// ファイルにないチャンネルは SonareException（InvalidParameter）
+static Audio Audio::from_file_channel(const std::string& path, int channel_index);
 ```
 
 C ABI では `sonare_decode_channels(data, length, &samples, &frames, &channels, &sample_rate)` が対応します。プレーンをそのまま続けて返し（5.1 の順序は L R C LFE Ls Rs。解放は `sonare_free_floats`）、`sonare_downmix(channels, frames, channel_count, target_layout, &out)` は、プレーナーなチャンネルを、デコーダーと同じ ITU-R BS.775 の規則で、より狭い `SonareChannelLayout` に畳み込みます。センターとサラウンドは -3 dB でフロントペアに入り、LFE プレーンは破棄されます。アップミックスは拒否されます。
@@ -237,9 +256,10 @@ const float* data() const;        // サンプルへのポインタ
 size_t size() const;              // サンプル数
 int sample_rate() const;          // サンプルレート (Hz)
 float duration() const;           // 長さ (秒)
-int channels() const;             // 常に 1 (モノラル)
 bool empty() const;               // サンプルがない場合 true
 ```
+
+`Audio` は常に 1 チャンネルを保持します。ファイルの各チャンネルは `from_file_channel` で個別に、または `from_memory_channels` でまとめて読み込みます。
 
 #### 操作
 
@@ -304,7 +324,7 @@ auto reconstructed = spec.to_audio();
 
 ## Quick API
 
-一般的な解析タスクのためのシンプルな関数群です。1 回限りの BPM・キー・ビート・ダウンビート・オンセット検出やルーム音響解析に向きます。
+一般的な解析タスクのためのシンプルな関数群です。1 回限りの BPM・キー・ビート・ダウンビート・オンセット検出に向きます。
 
 ::: info Quick API と MusicAnalyzer の使い分け
 - **Quick API**（`sonare::quick::...`） — 1 つの結果だけが欲しいとき。内部で必要なステージだけを走らせます。
@@ -319,6 +339,9 @@ namespace sonare::quick {
   // キー検出
   Key detect_key(const float* samples, size_t length, int sample_rate);
   Key detect_key(const float* samples, size_t length, int sample_rate, const KeyConfig& config);
+  // out_tuning は使用したチューニングを受け取る。KeyConfig::auto_tuning なら測定値、それ以外は指定値
+  Key detect_key(const float* samples, size_t length, int sample_rate, const KeyConfig& config,
+                 float* out_tuning);
   std::vector<KeyCandidate> detect_key_candidates(const float* samples, size_t length, int sample_rate,
                                                   const KeyConfig& config = KeyConfig());
 
@@ -330,13 +353,11 @@ namespace sonare::quick {
 
   // オンセット時刻（秒）
   std::vector<float> detect_onsets(const float* samples, size_t length, int sample_rate);
+  std::vector<float> detect_onsets(const float* samples, size_t length, int sample_rate,
+                                   const OnsetDetectConfig& config);
 
   // 総合解析
   AnalysisResult analyze(const float* samples, size_t length, int sample_rate);
-
-  // ルーム音響
-  AcousticParameters detect_acoustic(const float* samples, size_t length, int sample_rate);
-  AcousticParameters analyze_impulse_response(const float* samples, size_t length, int sample_rate);
 }
 ```
 
@@ -384,11 +405,13 @@ enum class Mode {
 enum class ChordQuality {
   Major, Minor, Diminished, Augmented,
   Dominant7, Major7, Minor7, Sus2, Sus4, Unknown,
-  Add9, MinorAdd9, Dim7, HalfDim7, Major9, Dominant9, Sus2Add4
+  Add9, MinorAdd9, Dim7, HalfDim7, Major9, Dominant9, Sus2Add4,
+  Major6, Minor6, MinorMajor7, Dominant7Sus4, Dominant11, Dominant13,
+  Dominant7b9, Dominant7s9
 };
 
 enum class SectionType {
-  Intro, Verse, PreChorus, Chorus, Bridge, Instrumental, Outro, Unknown
+  Intro, Verse, PreChorus, Chorus, Bridge, Instrumental, Outro, Unknown  // PreChorus は SectionAnalyzer が生成しない
 };
 
 enum class WindowType {
@@ -504,6 +527,8 @@ SonareError sonare_metering_crest_factor_db_stereo(const float* left, const floa
 
 `sonare_metering_crest_factor_db_stereo` は逆向きの誤差を正します。ピークは両チャンネルにまたがって取り、RMS は両チャンネルをまとめて計算します。ダウンミックスでは逆相のペアが打ち消し合い、RMS を小さく見積もる分だけクレストファクターが大きく出てしまうためです。位相を反転させたペアでは、ステレオメーターが `11.64` dB、ダウンミックス経由が `0.00` dB になります。
 
+<SonareDemo id="mono-fold" />
+
 ## エラーハンドリング
 
 ```cpp
@@ -523,12 +548,13 @@ try {
 }
 ```
 
-C ABI では、戻り値の `SonareError` が結果で、詳細は `sonare_last_error_message()` にあります。ハンドルやポインタを返す関数は失敗を `NULL` で報告し、`sonare_last_error_code()` がメッセージと並んで記録された `SonareError`（なければ `SONARE_OK`）を返すので、呼び出し側は理由を知ることができます。入口でメッセージをクリアする呼び出しは、このコードもクリアします。`SONARE_ERROR_ABI_MISMATCH`（10）は、バインディングが読み込んだライブラリがビルド時に想定したものと違うと判断したときのためのコードで、C ライブラリ自身が返すことはありません。
+C ABI では、戻り値の `SonareError` が結果で、ライブラリが例外として捕捉した失敗の詳細は `sonare_last_error_message()` にあります。検証による早期リターン（範囲外のサンプルレート、空または非有限のバッファ、`NULL` の出力ポインタ）はコードを返すだけでメッセージを記録しないので、読める文面は `sonare_error_message(code)` で得ます。ハンドルやポインタを返す関数は失敗を `NULL` で報告し、`sonare_last_error_code()` がメッセージと並んで記録された `SonareError`（なければ `SONARE_OK`）を返すので、呼び出し側は理由を知ることができます。入口でメッセージをクリアする呼び出しは、このコードもクリアします。`SONARE_ERROR_ABI_MISMATCH`（10）は、バインディングが読み込んだライブラリがビルド時に想定したものと違うと判断したときのためのコードで、C ライブラリ自身が返すことはありません。これらのコードと、各言語バインディングが送出するものや各 CLI の終了コードとの対応は[エラー契約](./binding-parity.md#エラー契約)にあります。
 
-## 各節の移動先
+## 関連する C++ ページ
 
-| セクション | 移動先 |
+| トピック | ページ |
 |---|---|
 | StreamAnalyzer | [C++ ストリーミング API](./cpp-api-streaming.md) |
 | 特徴抽出、型 | [C++ 解析 API](./cpp-api-analysis.md) |
-| エフェクト、ミキシングエンジン、C API、幾何ベースのルーム音響 | [C++ エフェクト API](./cpp-api-effects.md) |
+| エフェクト、ミキシングエンジン、幾何ベースのルーム音響 | [C++ エフェクト API](./cpp-api-effects.md) |
+| C ABI | [C ABI リファレンス](./cpp-api-c-abi.md) |

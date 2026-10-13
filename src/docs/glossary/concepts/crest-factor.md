@@ -16,13 +16,28 @@ A high crest factor means peaks rise far above the average level. A low crest fa
 
 ## How To Read It
 
-Think of crest factor as a clue, not a verdict.
+Think of crest factor as a clue, not a verdict. It is computed over the whole buffer as peak dB minus RMS dB. These values were measured on synthetic signals and on the clips the site's demos play:
 
-| Crest behavior | Possible meaning |
-|----------------|------------------|
-| High | Open dynamics, strong transients, or uncontrolled peaks. |
-| Moderate | Balanced density and movement. |
-| Low | Dense master, heavy limiting, or intentionally flat material. |
+| Signal | Peak (dBFS) | RMS (dBFS) | Crest (dB) |
+|--------|-------------|------------|------------|
+| Square wave | -6.0 | -6.0 | 0.0 |
+| Sine wave | -6.0 | -9.0 | 3.0 |
+| Synth lead (`lead.wav`) | -1.4 | -6.9 | 5.5 |
+| Comping take (`comp-take-a.wav`) | -1.4 | -8.4 | 7.0 |
+| Chords (`chord-turnaround.wav`) | -3.4 | -12.4 | 9.0 |
+| Pad (`pad.wav`) | -1.7 | -17.5 | 15.8 |
+| Band (`band.wav`) | -1.0 | -17.6 | 16.6 |
+| Mix (`mix.wav`) | -1.0 | -18.7 | 17.7 |
+| Drum loop (`drum.wav`) | -0.7 | -27.5 | 26.8 |
+
+Read against that table, rough ranges look like this. They describe what these clips show, not a standard.
+
+| Crest | Possible meaning |
+|-------|------------------|
+| 0-3 dB | A square wave or a hard-clipped signal. |
+| 5-10 dB | Dense, heavily compressed or limited material. |
+| 12-18 dB | An open mix that keeps its dynamics. |
+| 20 dB and up | Isolated percussion or sparse material. |
 
 A solo snare can have a high crest factor and still be healthy. A dense synth pad can have a low crest factor and still be correct. Context matters.
 
@@ -30,9 +45,11 @@ A solo snare can have a high crest factor and still be healthy. A dense synth pa
 
 Limiters react to peaks. If a mix has a few peaks much louder than the rest, the limiter may work hard on those moments while the overall master remains quieter than expected.
 
-<SonareDemo id="compressor-curve" />
-
 Compression, clipping, saturation, and transient shaping can reduce crest factor. Used carefully, that can make a master feel more controlled. Used carelessly, it removes punch and makes the track tiring. Transient shaping runs both ways: pushed in the attack-boost direction it lifts peaks while barely moving RMS, so it *raises* crest factor instead.
+
+The demo below blends a compressed copy with the dry signal. The dry path is what keeps the original transients.
+
+<SonareDemo id="parallel-compression" />
 
 ## Relationship To Dynamic Range
 
@@ -42,19 +59,46 @@ Use it alongside listening, [LUFS](../lufs.md) (Loudness Units relative to Full 
 
 ## Common Pitfalls
 
-If crest drops sharply and kicks or snares lose their attack at the same time, something in the compressor, saturator, or limiter is shaving transients too aggressively. The opposite pattern — crest stays high but the LUFS target is missed — usually means only a few rare peaks are pushing the limiter while the rest of the mix has not actually become denser.
+If crest drops sharply and kicks or snares lose their attack at the same time, something in the compressor, saturator, or limiter is shaving transients too aggressively. That is not automatically wrong, but it should trigger a listening check for lost punch or groove. The opposite pattern — crest stays high but the LUFS target is missed — usually means only a few rare peaks are pushing the limiter while the rest of the mix has not actually become denser.
 
 In that second case, do not solve it by raising the ceiling. Revisit the earlier dynamics stage, the input gain, and the low-end balance first.
 
-## In libsonare
+## Measure it in libsonare
 
-The mastering demo shows crest information for source, master, and reference material. It is especially useful when comparing a source against a reference track: if the reference has much lower crest, it may be denser, more limited, or simply arranged differently.
+Crest factor is one call. The stereo form takes the peak across both channels and the RMS over both together, so an out-of-phase pair does not cancel out of the RMS the way it would in a mono downmix.
+
+::: code-group
+
+```typescript [Browser]
+import { init, meteringCrestFactorDb, meteringCrestFactorDbStereo } from '@libraz/libsonare';
+
+await init();
+
+const crest = meteringCrestFactorDb(samples, sampleRate);   // peakDb - rmsDb
+const stereoCrest = meteringCrestFactorDbStereo({ left, right, sampleRate });
+```
+
+```python [Python]
+import libsonare as sonare
+
+audio = sonare.Audio.from_file("song.wav")
+crest = audio.crest_factor_db()                  # peak_db - rms_db
+
+# Separate channels:
+stereo_crest = sonare.metering_crest_factor_db_stereo(left, right, sample_rate)
+```
+
+```bash [CLI]
+sonare meter song.wav   # native CLI only: peak, RMS and crest factor, with true peak and clipping
+```
+
+:::
+
+The mastering demo shows crest for the source, the master, and a loaded reference. It is most useful when comparing a source against a reference track: if the reference has much lower crest, it may be denser, more limited, or simply arranged differently.
 
 :::: details Implementation notes
 
 The displayed crest value is computed from peak and RMS on the selected buffer and reported in dB. It is a lightweight diagnostic, not a replacement for a dedicated long-window loudness or dynamics meter.
-
-If crest drops sharply after processing, the compressor, saturation, or limiter may be suppressing transients strongly. That is not automatically wrong, but it should trigger a listening check for lost punch or groove.
 
 ::::
 

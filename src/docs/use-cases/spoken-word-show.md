@@ -7,6 +7,10 @@ description: Host, guest, and a music bed to a ducked, loudness-compliant episod
 
 This page combines a host track, a guest track, and a music bed. It renders them with `commentaryDucking`, masters the result with `speech`, and checks the report.
 
+::: info Which CLI
+This page uses the Python CLI (`pip install libsonare`, command `sonare`). `mix` is not in the native `sonare-cli`; see [Which CLI Are You Using?](../cli.md#which-cli-are-you-using). In code, `Mixer.fromSceneJson` loads the same scene (see [Mixing Engine](../mixing.md#scene-based-mixing-mixer)).
+:::
+
 ## What You Will Learn
 
 By the end of this page you should be able to:
@@ -33,7 +37,7 @@ for strip in scene["strips"]:
     if strip["id"] == "music-bed":
         for insert in strip["inserts"]:
             if insert["processor"] == "dynamics.sidechainRouter":
-                insert["params"] = json.dumps({"rangeDb": 5})
+                insert["params"] = {"rangeDb": 5}
 json.dump(scene, open("scene.json", "w"))
 '
 
@@ -90,9 +94,26 @@ sonare mastering show.wav \
 
 `sonare mixing-presets --json` lists three built-in scenes: `vocalReverbSend`, `drumBusSubgroup`, and `commentaryDucking`. The third is this job:
 
-```bash
+::: code-group
+
+```bash [CLI]
 sonare mixing-preset --preset commentaryDucking --json
 ```
+
+```typescript [Node]
+import { mixingScenePresetJson } from '@libraz/libsonare-native';
+
+const scene = JSON.parse(mixingScenePresetJson('commentaryDucking'));
+```
+
+```python [Python]
+import json
+import libsonare as sonare
+
+scene = json.loads(sonare.mixing_scene_preset_json("commentaryDucking"))
+```
+
+:::
 
 Read the scene before rendering anything — the preset is a starting point, not a black box, and its `strips` say exactly what it does:
 
@@ -122,7 +143,7 @@ for strip in scene["strips"]:
     if strip["id"] == "music-bed":
         for insert in strip["inserts"]:
             if insert["processor"] == "dynamics.sidechainRouter":
-                insert["params"] = json.dumps({"rangeDb": 30})
+                insert["params"] = {"rangeDb": 30}
 json.dump(scene, open("scene.json", "w"))
 '
 sonare mix --scene scene.json \
@@ -133,13 +154,13 @@ cmp show.wav show-r30.wav   # identical — no output
 
 Raising `rangeDb` from the preset's default 18 to 30 changes nothing: `cmp` reports the two renders as byte-identical. On this material the host's level never calls for more than about 7 dB of reduction, so any ceiling at or above roughly 8 dB behaves the same as no ceiling at all. Lower it below that point and the edit is real — `sonare dynamics` on the whole-file mixdown shows the effect, small as it is once averaged over 8 seconds that include long stretches where the host isn't talking:
 
-| `rangeDb` | `rms_db` (whole file) | `peak_db` |
-|-----------|-----------------------|-----------|
-| insert removed entirely | -22.80 | -10.79 |
-| `1` | -22.85 | -10.84 |
-| `5` | -22.95 | -10.92 |
-| `18` (preset default) | -22.96 | -10.92 |
-| `30` | -22.96 (identical bytes to `18`) | -10.92 |
+| `rangeDb` | `rms_db` (whole file) | `peak_db` | Render vs `18` |
+|-----------|-----------------------|-----------|-----------------|
+| — (insert removed entirely) | -22.80 | -10.79 | differs |
+| `1` | -22.85 | -10.84 | differs |
+| `5` | -22.95 | -10.92 | differs |
+| `18` (preset default) | -22.96 | -10.92 | — |
+| `30` | -22.96 | -10.92 | identical bytes |
 
 `rangeDb: 5` is the value the script at the top of this page ships with — a slightly shallower duck than the preset default, verified against the table above rather than guessed.
 

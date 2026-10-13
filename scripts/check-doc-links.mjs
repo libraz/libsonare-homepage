@@ -19,7 +19,7 @@ export const DOMAIN_SIDEBAR_GROUPS = [
   { en: 'Editing', ja: '編集' },
   { en: 'Arrangement & Projects', ja: 'アレンジとプロジェクト' },
   { en: 'Realtime', ja: 'リアルタイム' },
-  { en: 'Room Acoustics', ja: '室内音響' },
+  { en: 'Room Acoustics', ja: 'ルーム音響' },
 ];
 
 // Index sections a split page keeps. Links inside them do not count as inbound

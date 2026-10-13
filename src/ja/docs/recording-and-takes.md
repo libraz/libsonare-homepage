@@ -14,7 +14,7 @@ libsonare はこれを協調する 2 つの層に分けています。[リアル
 :::
 
 ::: info テイクとコンプ
-**テイク**は 1 回分の録音です。**コンプ**は、複数テイクの良い部分をつなげた決定版です。libsonare では元のテイクをクリップ内に残し、コンプセグメントが PPQ 範囲ごとに「どのテイクを鳴らすか」だけを選びます。
+**テイク**は 1 回分の録音です。**コンプ**は、複数テイクの良い部分をつなげた決定版です。libsonare では元のテイクをクリップ内に残し、コンプセグメントが PPQ 範囲ごとに「どのテイクを鳴らすか」だけを選びます。概念は[テイクとコンピング](./glossary/arrangement/takes-and-comping.md)を参照してください。
 :::
 
 ::: tip パイプライン内での録音の位置
@@ -71,7 +71,9 @@ libsonare はこれを協調する 2 つの層に分けています。[リアル
 
 エンジンは Node でも動くため、以下のキャプチャ経路はブラウザの外でも検証できます。ブラウザが必要なのはマイクの節だけです。
 
-```typescript
+::: code-group
+
+```typescript [ブラウザ / Node]
 import { init, RealtimeEngine } from '@libraz/libsonare';
 
 await init();
@@ -94,6 +96,27 @@ try {
   engine.destroy();              // WASM ハンドルは GC されない — 必ず解放する
 }
 ```
+
+```python [Python]
+import libsonare as sonare
+
+engine = sonare.RealtimeEngine(sample_rate=48000.0, max_block_size=128)
+try:
+    engine.set_capture_buffer(2, 48000 * 10)   # num_channels, capacity_frames: 10 秒分
+    engine.arm_capture()
+    engine.play()
+
+    engine.process([block_l, block_r])         # 実アプリでは音声コールバック内
+
+    status = engine.capture_status()
+    # status.captured_frames, overflow_count, armed, punch_enabled, source, record_offset_samples
+
+    channels = engine.captured_audio()         # list[list[float]]、チャンネルごとに 1 本
+finally:
+    engine.close()
+```
+
+:::
 
 ::: danger エンジンは必ず解放する
 `RealtimeEngine` はすべての embind オブジェクトと同様、JavaScript の GC では回収できない WASM ヒープハンドルを保持します。`finally` ブロックで `engine.destroy()` を呼んでください。ハンドルをリークすると、長時間のセッションで WASM メモリが徐々に枯渇します。
@@ -125,7 +148,7 @@ try {
 
 ### 録音オフセット補償
 
-ライブモニタリング経路にはレイテンシがあります。演奏者がクリックを聞いて音を出す頃には、エンジンはすでに先へ進んでいます。`setRecordOffsetSamples(offsetSamples)` は、キャプチャした音声をタイムラインに合わせて再びそろえるようにシフトします。負のオフセットは録音を前へ引きます（往復レイテンシを打ち消す通常の向き）。有効な値は `captureStatus().recordOffsetSamples` に反映されます。
+ライブモニタリング経路にはレイテンシがあります。演奏者がクリックを聞いて音を出す頃には、エンジンはすでに先へ進んでいます。`setRecordOffsetSamples(offsetSamples)` は、`process` へ渡すストリーム上でキャプチャ範囲をずらします。正の値はキャプチャを遅らせます。[パンチ範囲](#パンチイン-アウト)が `[start, end)` のとき、録音されるのは `[start + offsetSamples, end + offsetSamples)` です。演奏者の音が往復レイテンシぶん遅れてエンジンに届く場合は、そのレイテンシと同じ正のオフセットを指定します。オフセットが作用するのはパンチ範囲に対してなので、範囲がなければ何も変わりません。有効な値は `captureStatus().recordOffsetSamples` に反映されます。
 
 ### 入力モニタリング
 
@@ -133,7 +156,16 @@ try {
 
 ### パンチイン／アウト
 
-パンチ録音は、選んだタイムライン範囲の内側だけでキャプチャをアームし、その外側にある確定テイクには手を触れません。`setCapturePunch({ startSample, endSample, enabled? })` は入／出ポイントをタイムラインサンプルで設定します。秒で指定する `setCapturePunch({ startSec, endSec })` もあり、エンジンのサンプルレートで最も近いサンプルに丸められます。境界ごとにどちらか一方の表記を使い、両方の境界を指定してください。負の境界、片方の境界への両表記の併用、境界の欠落は `RangeError` になります。位置引数形式の `setCapturePunch(startSample, endSample, enabled?)` も使え、Python は `start_sample` / `end_sample`、またはキーワード専用の `start_sec` / `end_sec` を受け取ります。`punchEnabled` が true の間は、トランスポート（動いている再生位置）が `[startSample, endSample)` の内側にあるときだけ追記します。`enabled: false`（または `resetCapture()`）で範囲を解除し、自由録音へ戻ります。
+パンチ録音は、選んだタイムライン範囲の内側だけでキャプチャをアームし、その外側にある確定テイクには手を触れません。`punchEnabled` が true の間は、トランスポート（動いている再生位置）が `[startSample, endSample)` の内側にあるときだけ追記します。
+
+| 表記 | 呼び出し |
+|------|----------|
+| サンプル | `setCapturePunch({ startSample, endSample, enabled? })` |
+| 秒 | `setCapturePunch({ startSec, endSec })`。エンジンのサンプルレートで最も近いサンプルに丸められます |
+| 位置引数 | `setCapturePunch(startSample, endSample, enabled?)` |
+| Python | `set_capture_punch(start_sample, end_sample, enabled=True)`、またはキーワード専用の `start_sec` / `end_sec` |
+
+境界ごとにどちらか一方の表記を使い、両方の境界を指定してください。負の境界、片方の境界への両表記の併用、境界の欠落は `RangeError` になります。`enabled: false` で範囲を解除し、自由録音へ戻ります。`resetCapture()` はバッファを空にしますが、パンチ範囲は残します。
 
 :::: details パートを録ってから読み戻す
 ```typescript
@@ -141,7 +173,8 @@ const engine = new RealtimeEngine(48000, 128);
 try {
   engine.setCaptureBuffer(1, 48000 * 8);   // モノラル、最大 8 秒
   engine.setCaptureSource('input');         // ミックスではなくライブ信号を録音
-  engine.setRecordOffsetSamples(-256);      // 約 256 フレームのモニタリングレイテンシを打ち消す
+  engine.setCapturePunch({ startSec: 0, endSec: 8 });
+  engine.setRecordOffsetSamples(256);       // 入力が約 256 フレーム遅れて届くので、256 フレーム遅らせて録る
   engine.setInputMonitor(true, 1.0);        // 演奏者に自分の音を聞かせる
   engine.armCapture();
   engine.play();
@@ -185,13 +218,15 @@ binding.close();             // ソースを切断する（stopTracksOnClose な
 `binding.close()` はソースノードを切断し、マイク音声がエンジンへ送られるのを止めます。`bindMicrophoneInput` には必ず `close()` を組にしてください（通常はユーザーが録音を止めたとき、またはコンポーネントのアンマウント時）。既定ではマイクトラックも停止するため OS の録音インジケーターが消えます。同じストリームをアプリの別部分で使い続ける場合だけ `stopTracksOnClose: false` を渡してください。
 :::
 
-周辺の AudioWorklet 配線（エンジンノードの構築、ワークレットプロセッサの登録、SAB（SharedArrayBuffer）なしのリアルタイム経路）は [リアルタイムストリーミング](./realtime-streaming.md) を参照してください。外部マイクではなくシンセやサンプラーを録音へ*入れたい*場合は、[内蔵シンセサイザー（NativeSynth）](./native-synth.md)と [SoundFont プレイヤー](./soundfont-player.md)、ライブ演奏で鳴らすなら [MIDI 入力](./midi-input.md) を参照してください。
+周辺の AudioWorklet 配線（エンジンノードの構築、worklet プロセッサの登録、SAB（SharedArrayBuffer）なしのリアルタイム経路）は [リアルタイムストリーミング](./realtime-streaming.md) を参照してください。外部マイクではなくシンセやサンプラーを録音へ*入れたい*場合は、[内蔵シンセサイザー（NativeSynth）](./native-synth.md)と [SoundFont プレイヤー](./soundfont-player.md)、ライブ演奏で鳴らすなら [MIDI 入力](./midi-input.md) を参照してください。
 
 ## ループ録音からテイクへ
 
 ループ録音は、演奏しながら同じ音楽的範囲を何度も繰り返し、1 周ごとに 1 つの**テイク**をキャプチャします。`Project.addLoopRecordingTakes(desc)` は、全周分を*連結した*キャプチャ音声を受け取り、1 本の新しいクリップ上の周回ごとのテイクへ分割します。
 
-```typescript
+::: code-group
+
+```typescript [ブラウザ / Node]
 import { init, Project } from '@libraz/libsonare';
 
 await init();
@@ -223,6 +258,31 @@ try {
 }
 ```
 
+```python [Python]
+import libsonare as sonare
+import numpy as np
+
+sample_rate = 48000
+with sonare.Project() as project:
+    project.set_sample_rate(sample_rate)
+    track_id = project.add_track("audio", "vocal")
+
+    # 120 BPM での 4 分音符 4 つ分のループは 2 秒。3 周には 3 * 2 秒の音声が必要。
+    loop_length_quarters = 4.0
+    passes = 3
+    pass_samples = round(loop_length_quarters * 60 / 120 * sample_rate)   # 96000
+    recorded = np.zeros(passes * pass_samples, dtype=np.float32)          # 連結した周回
+
+    clip_id, take_count = project.add_loop_recording_takes(
+        track_id, 0.0, loop_length_quarters, recorded,
+        audio_channels=1, audio_sample_rate=sample_rate, partial_tail="keep",
+    )   # take_count == 3
+```
+
+:::
+
+Node はブラウザのタブと同じ呼び出しです。
+
 ::: warning 主張するテイク数に見合う音声を渡す
 `loopLengthPpq` は 4 分音符単位なので、その長さはテンポに依存します。4 分音符 4 つ分のループは 120 BPM で 2 秒、60 BPM では 4 秒です。先にプロジェクトのテンポを設定し、そこから周回ごとのサンプル数を求め、`passes * passSamples` フレームを渡してください。これより少ないと、期待より少ないテイクしか得られません。
 :::
@@ -231,15 +291,17 @@ try {
 `audio` はどちらの形も受け付けます。単一の `Float32Array` は、`audioChannels` が 2 以上のとき L, R, L, R, … と並ぶ**インターリーブ形式**として読まれます。`Float32Array` の配列（チャンネルごとに 1 本で、長さはすべて同じ。`engine.capturedAudio()` が返す形）は**プレーナー形式**として読まれ、配列の長さがチャンネル数になって `audioChannels` は無視されます。Python も、チャンネルが先頭軸の 2 次元配列や、同じ長さのチャンネルごとのシーケンスを同様に受け付けます。
 :::
 
-この呼び出しは、ループの各周回を別テイクとして持つクリップを 1 本追加し、**アクティブテイク**を最新（最後）の周回に設定します。ここで注意したいのは、キャプチャした音声がループ境界ちょうどで終わっていない場合、この最後の周回は短い部分的なテイクになる点です。ただしこの部分テイクは残るものの、アクティブにはなりません。直前の完全なテイクがアクティブのままで、部分テイクはプロジェクト JSON の `takes` のエントリに `"partial": true` を持ち、これは往復保存されます。1 ループに満たないキャプチャは部分テイクだけになり、そのテイクがアクティブのままです。残りが 1 フレーム以下なら、テイクは作られません。
+この呼び出しは、ループの各周回を別テイクとして持つクリップを 1 本追加し、**アクティブテイク**を最新（最後）の周回に設定します。キャプチャした音声がループ境界ちょうどで終わっていないと、最後の周回は短い部分テイクになります。部分テイクは残りますが、アクティブにはなりません。直前の完全なテイクがアクティブのままで、部分テイクはプロジェクト JSON の `takes` のエントリに `"partial": true` を持ち、これは往復保存されます。1 ループに満たないキャプチャは部分テイクだけになり、そのテイクがアクティブのままです。残りが 1 フレーム以下なら、テイクは作られません。
 
-`partialTail: 'drop'`（Python は `partial_tail="drop"`）を渡すと、部分テイクを作りません。既定は `'keep'` です。上の例で、完全な 2 周回に 30000 フレームを足すと `takeCount: 3` で、テイク 2 がアクティブ、テイク 3 が partial になります。`'drop'` なら `takeCount: 2` です。ここからテイクをまたいでコンピングします。
+`partialTail: 'drop'`（Python は `partial_tail="drop"`）を渡すと、部分テイクを作りません。既定は `'keep'` です。上の例で、完全な 2 周回に 30000 フレームを足すと `takeCount: 3` で、テイク 2 がアクティブ、テイク 3 が部分テイクになります。`'drop'` なら `takeCount: 2` です。ここからテイクをまたいでコンピングします。
 
 ## テイクとコンプセグメント
 
 クリップは、順序づけられた**テイク**のリストに加えて、**アクティブテイク ID**（コンプの指定がないとき再生されるテイク）と**コンプセグメント**のリスト（PPQ 範囲ごとに、そこで再生するテイクを指す）を持てます。どちらも取り消し可能な編集で、どちらも JSON でラウンドトリップします。
 
-```typescript
+::: code-group
+
+```typescript [ブラウザ / Node]
 // takes: 各テイクは安定した id を持つ。sourceOffsetPpq はテイクのソースをクリップ下でずらす。
 project.setClipTakes(clipId, [
   { id: 1, name: 'take A' },
@@ -253,7 +315,23 @@ project.setClipCompSegments(clipId, [
 ]);
 ```
 
-`ProjectClipTake` は `{ id, sourceId?, sourceOffsetPpq?, name? }`、`ProjectClipCompSegment` は `{ startPpq, endPpq, takeId?, crossfadePpq? }` です。テイク id は一意でなければならず、コンプセグメントが参照する 0 以外の `takeId` は存在するテイクを参照しなければなりません。0 以外の参照が不正だと例外を投げるので、不正な編集はクリップを壊すのではなく、はっきり失敗します。`takeId` が 0（または省略時）のセグメントは意図的な例外で、そのリージョンではクリップのアクティブテイク（ベースソース）にフォールバックします。id を名指ししなくても、セグメントをアクティブテイクのままにできます。
+```python [Python]
+# takes: 各テイクは安定した id を持つ。source_offset_ppq はテイクのソースをクリップ下でずらす。
+project.set_clip_takes(clip_id, [
+    {"id": 1, "name": "take A"},
+    {"id": 2, "source_offset_ppq": 0.0, "name": "take B"},
+], 2)   # active_take_id
+
+# comp segments: 各 PPQ 範囲が 1 つのテイクを選ぶ。Aメロは take A、サビは take B。
+project.set_clip_comp_segments(clip_id, [
+    {"start_ppq": 0.0, "end_ppq": 2.0, "take_id": 1},
+    {"start_ppq": 2.0, "end_ppq": 4.0, "take_id": 2},
+])
+```
+
+:::
+
+`ProjectClipTake` は `{ id, sourceId?, sourceOffsetPpq?, name? }`、`ProjectClipCompSegment` は `{ startPpq, endPpq, takeId?, crossfadePpq? }` です。テイク id は一意でなければならず、コンプセグメントが参照する 0 以外の `takeId` は存在するテイクを参照しなければなりません。0 以外の参照が不正だと例外を投げるので、不正な編集はクリップを壊すのではなく、はっきり失敗します。セグメントは順序どおりで、重ならず、クリップの内側に収まり、それぞれ正の長さを持つ必要があります。`takeId` が 0（または省略時）のセグメントは意図的な例外で、そのリージョンではクリップのアクティブテイク（ベースソース）にフォールバックします。id を名指ししなくても、セグメントをアクティブテイクのままにできます。
 
 ### 継ぎ目をなじませる
 
@@ -266,7 +344,7 @@ project.setClipCompSegments(clipId, [
 ]);
 ```
 
-既定の `0` は突き合わせ（バットジョイン）で、セグメント同士は重ならずにつながります。フェード長は自身のセグメントと手前の部分のどちらも超えられません。先頭のセグメントには手前がないので、そこに指定したクロスフェードは `0` に抑えられます。
+既定の `0` は突き合わせ（バットジョイン）で、セグメント同士は重ならずにつながります。クロスフェードは、自身のセグメントと、手前の部分のうちその直前の区間の両方に収まる長さでなければなりません。先頭のセグメントには手前がないので、`0` しか指定できません。この限度を超える値を渡すと、`setClipCompSegments` は丸めずに `InvalidParameter` を投げます。
 
 3 番目の引数 `activeTakeId` は省略可能で、既定値は `0` です。`0` を渡す（または省略する）と、クリップはアクティブテイクで上書きせず、**ベースソース**をそのまま再生し続けます。テイクは定義してあるが、既定ではそのどれにも元のクリップ音声を置き換えさせたくないときに便利です。0 以外の `activeTakeId` は、渡したテイクのいずれかの `id` と一致しなければなりません。テイク id 自体は必ず 0 以外なので、`0` は明確に「アクティブテイクなし」を意味します。
 
@@ -305,7 +383,35 @@ restored.delete();
 
 ## 自由テイクのコンピング: 共通のカット位置と位置合わせ
 
-ループテイクはグリッドに乗って届きます。どの周回も同じ PPQ 範囲を覆うので、`addLoopRecordingTakes` は長さだけで分割できます。別々のパスとして録ったテイク — ガイドボーカルや伴奏に合わせて、そのつど頭からパートを通したもの — はそうなりません。それらをコンピングするにはどのテイクも同じ位置で切る必要があり、それはテイクどうしがタイムラインを共有している間しか成り立ちません。ライブで歌ったテイクはリファレンスに対して全体にわたってずれ、ここでは少し前に、あそこでは少し後ろに行くので、1 つのオフセットでは合わせられません。この領域を 3 つの呼び出しが受け持ちます。`splitSilenceCommonWithReport` は全テイクが一致するカット位置を見つけ、そもそも共通のカット位置を取れるほどテイクが揃っているかを示します。`remixAlignedIntervals` はそのカット位置を、ステレオテイクの全チャンネルで共通の 1 組のフレームにします。`alignTakeToReference` は揃っていないテイクを受け持ち、リファレンスの下へ収めるワープマップを返します。シグネチャは [JavaScript API](./js-api-audio.md) のページにあります。この節が扱うのは、それらを呼ぶ順序と、戻り値の読み方です。
+ループテイクはグリッドに乗って届きます。どの周回も同じ PPQ 範囲を覆うので、`addLoopRecordingTakes` は長さだけで分割できます。別々のパスとして録ったテイク、つまりガイドボーカルや伴奏に合わせて、そのつど頭からパートを通したものはそうなりません。ライブで歌ったテイクはリファレンスに対して、ここでは少し前に、あそこでは少し後ろにずれるので、1 つのオフセットでは合わせられず、コンピングにはどのテイクも同じ位置で切る作業が要ります。シグネチャは [JavaScript API](./js-api-audio.md) のページにあります。この節が扱うのは、呼び出しの順序と戻り値の読み方です。
+
+| 状況 | 呼び出し | 結果 |
+|------|----------|------|
+| テイクが揃っている（ループの周回、クリックに合わせて録ったテイク） | `splitSilenceCommonWithReport` のあと `remixAlignedIntervals` | 共通のカット位置と、全チャンネルで同じフレーム |
+| 1 つのテイクがリファレンスに対してずれる | `alignTakeToReference` のあと `setWarpMap` | ワープアンカー。コンプはプロジェクトのタイムライン上で切る |
+| どちらか分からない | `report.silenceCeilingDb` を `topDb` と見比べる | [テイクが共有するカット位置](#テイクが共有するカット位置)の表 |
+
+<FlowDiagram
+  title="自由テイクの進め方"
+  :nodes="[
+    { id: 'takes', label: '自由テイク', col: 0, row: 1, variant: 'muted' },
+    { id: 'split', label: 'splitSilenceCommonWithReport', col: 1, row: 1, variant: 'accent' },
+    { id: 'read', label: 'silenceCeilingDb を読む', col: 2, row: 1, variant: 'decision' },
+    { id: 'lower', label: 'より低い topDb で再実行', col: 3, row: 0 },
+    { id: 'marker', label: 'マーカーや拍で切る', col: 3, row: 1 },
+    { id: 'align', label: 'alignTakeToReference のあと setWarpMap', col: 3, row: 2 },
+    { id: 'remix', label: 'remixAlignedIntervals', col: 3, row: 3, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'takes', to: 'split' },
+    { from: 'split', to: 'read' },
+    { from: 'read', to: 'lower', label: 'topDb 未満' },
+    { from: 'read', to: 'marker', label: '0 付近' },
+    { from: 'read', to: 'align', label: '区間が 1 つ' },
+    { from: 'read', to: 'remix', label: 'カット位置あり' }
+  ]"
+  caption="判断はレポートが下します。カット位置が見つかればそのままリミックスへ進み、タイミングの合わないテイクは先にリファレンスの下へワープします。"
+/>
 
 ### テイクが共有するカット位置
 
@@ -325,13 +431,13 @@ const { intervals, report } = splitSilenceCommonWithReport({
 // report    -> { silenceCeilingDb, maxSignalIntervals, minSignalIntervals }
 ```
 
-`silenceCeilingDb` — **すべての**テイクにまだ無音が残る最大の `topDb` — を、渡した `topDb` と見比べてください。
+`silenceCeilingDb`（**すべての**テイクにまだ無音が残る最大の `topDb`）を、渡した `topDb` と見比べてください。
 
 | `silenceCeilingDb` | 意味 | 対処 |
 |--------------------|------|------|
-| `0` に近い | 鳴りやまないテイクがあり、どのしきい値でもそこに隙間は開かない | 無音以外のものからカット位置を取る — マーカーや拍 |
+| `0` に近い | 鳴りやまないテイクがあり、どのしきい値でもそこに隙間は開かない | 無音以外のものからカット位置を取る（マーカーや拍） |
 | `topDb` より低い | しきい値が緩すぎて、これらのテイクにある静けさが見えていない | 報告された ceiling を下回る `topDb` で再実行する。その値なら切れる |
-| `topDb` 以上で、なお区間が 1 つ | この設定ではどのテイクも静かになるが、同じ場所では決してならない | テイクどうしのタイミングが合っていない — 先に位置合わせする（下記） |
+| `topDb` 以上で、なお区間が 1 つ | この設定ではどのテイクも静かになるが、同じ場所では決してならない | テイクどうしのタイミングが合っていない。先に位置合わせする（下記） |
 
 2 つの区間数が表すのは形であって原因ではありません。一度鳴って止まるテイクは、無音のないテイクとまったく同じく `1` と数えられます。そのため、どれかのテイクに内部の隙間があるか（`maxSignalIntervals >= 2`）と、テイクどうしで分かれ方がどれほど違うかを見るのに使い、判定は ceiling に委ねてください。全体が無音のテイクではピークがゼロで比が定まらないため、`silenceCeilingDb` は `0` です。3 つの数値はすべて区間と同じ RMS パスから得られるので、別の測定を記述することはありません。素の `splitSilenceCommon` は切るだけの呼び出し側のために残っています。両エントリポイントは既定値（`topDb` 60、`frameLength` 2048、`hopLength` 512）と拒否条件を共有し、空の `signals` リストや空のテイクはどちらからも例外になります。
 
@@ -358,7 +464,7 @@ for (let i = 0; i < cuts.length; i += 2) {
 
 ### ずれるテイクを位置合わせする
 
-レポートの ceiling が `topDb` 以上なのに区間が 1 つしか返らないとき、各テイクは静かになるものの一緒には静かにならず、テイクどうしのタイミングが合っていません。それはしきい値では直せません。`alignTakeToReference` はリファレンスとテイクそれぞれのクロマグラム（12 の音高クラスの時間変化）を測定し、両者を動的時間伸縮（DTW）で位置合わせして、その結果をプロジェクトの**ワープアンカー** — [`setWarpMap`](./project-editing.md#ワープ-クリップをグリッドに合わせて伸縮する) が受け取る `{ warpSample, sourceSample }` の対 — として返します。向きは、ソースがそのテイクであるクリップ向けにすでに整っています。`warpSample` は**リファレンス**のタイムライン上の位置、`sourceSample` はそれに対応する**テイク**内の位置です。録音そのものには触れず、クリップがそれをリファレンスの下で伸縮して再生します。
+レポートの ceiling が `topDb` 以上なのに区間が 1 つしか返らないとき、各テイクは静かになるものの一緒には静かにならず、テイクどうしのタイミングが合っていません。それはしきい値では直せません。`alignTakeToReference` はリファレンスとテイクそれぞれのクロマグラム（12 の音高クラスの時間変化）を測定し、両者を動的時間伸縮（DTW）で位置合わせして、その結果をプロジェクトの[**ワープアンカー**](./glossary/arrangement/warp-and-tempo.md)、つまり [`setWarpMap`](./project-editing.md#ワープ-クリップをグリッドに合わせて伸縮する) が受け取る `{ warpSample, sourceSample }` の対として返します。向きは、ソースがそのテイクであるクリップ向けにすでに整っています。`warpSample` は**リファレンス**のタイムライン上の位置、`sourceSample` はそれに対応する**テイク**内の位置です。録音そのものには触れず、クリップがそれをリファレンスの下で伸縮して再生します。
 
 ```typescript
 import { alignTakeToReference, Project } from '@libraz/libsonare';
@@ -386,21 +492,26 @@ try {
 }
 ```
 
-ワープマップはクリップに属するので、位置合わせしたテイクはそれぞれ自分のクリップと自分のマップを持ちます。全部がリファレンスの下で同じタイミングで再生されるようになったら、その共有タイムライン上で `splitClip` とトリムでコンプを切ります。`'time-stretch'` のクリップは次の音声ブロックから新しいマップを反映し、焼き直しは要りません。アンカーはワープマップが求める狭義単調増加の形へすでに縮約されています。DTW の経路は 2 つの録音の速度が違う箇所で片方の軸を止めたままにするので、座標が並ぶ区間はその中央のアンカーで代表されます。したがって結果はそのまま `setWarpMap` へ渡せます。`alignment` はその組み合わせがどれほど整っていたかを表します。`takeFrames / referenceFrames` はアンカーが表す全体のレート差、`meanResidualFrames` は経路が自身の対角トレンドからどれだけ絶対値で外れたかの平均で、テイクがリファレンスとどれほど食い違うかの粗い目安であって誤差の上界ではありません。これらの値が呼び出しを失敗させることはなく、何を許容するかは呼び出し側が自分のしきい値で決めます。
+ワープマップはクリップに属するので、位置合わせしたテイクはそれぞれ自分のクリップと自分のマップを持ちます。全部がリファレンスの下で同じタイミングで再生されるようになったら、その共有タイムライン上で `splitClip` とトリムでコンプを切ります。`'time-stretch'` のクリップは次の音声ブロックから新しいマップを反映し、焼き直しは要りません。アンカーはワープマップが求める狭義単調増加の形へすでに縮約されています。DTW の経路は 2 つの録音の速度が違う箇所で片方の軸を止めたままにするので、座標が並ぶ区間はその中央のアンカーで代表されます。したがって結果はそのまま `setWarpMap` へ渡せます。
+
+`alignment` は、その組み合わせがどれほど整っていたかを表します。これらの値が呼び出しを失敗させることはなく、何を許容するかは呼び出し側が自分のしきい値で決めます。
+
+- `takeFrames / referenceFrames` は、アンカーが表す全体のレート差です。
+- `meanResidualFrames` は、経路が自身の対角トレンドから絶対値でどれだけ外れたかの平均です。テイクがリファレンスとどれほど食い違うかの粗い目安であって、誤差の上界ではありません。
 
 ::: warning 何がどう拒否されるか
 位置合わせできないテイクはエラーとして報告され、使えないマップが返されることはありません。拒否する層は 2 つあり、どちらの層で拒否されたかによって、エラーから分かることが変わります。
 
-- **測定の前に、フィールド名つきで。** 空のバッファ（`reference must not be empty`、`take must not be empty`）、非有限のサンプル（`reference contains NaN or Inf`、`take contains NaN or Inf`）、`[8000, 384000]` の整数でない `sampleRate` や `takeSampleRate`、形の合わない `hopLength` や `binsPerOctave`（文字列、小数）は、いずれも問題のフィールドを名指しする `RangeError` を投げます。
-- **測定から、`SonareError` の `InvalidParameter` として。** 負の `hopLength`、負か 12 の倍数でない `binsPerOctave`（各音高クラスは整数個の CQT ビンの平均なので、13 や 18 には畳み込み先がありません）、相異なるアンカーが 2 個得られない組み合わせ — どちらかの録音がクロマ 1 フレームに満たないとそうなります。コアは引数を名指しせずに条件を報告します。
+- **測定の前に、フィールド名つきで。** 空のバッファ（`reference must not be empty`、`take must not be empty`）、非有限のサンプル（`reference contains NaN or Inf`、`take contains NaN or Inf`）、`[8000, 384000]` の整数でない `sampleRate` や `takeSampleRate`、整数でない `hopLength` や `binsPerOctave` は、いずれも問題のフィールドを名指しする `RangeError` を投げます。数値ですらない値は `TypeError` を投げます。
+- **測定から、`SonareError` の `InvalidParameter` として。** 負の `hopLength`、負か 12 の倍数でない `binsPerOctave`（各音高クラスは整数個の CQT ビンの平均なので、13 や 18 には畳み込み先がありません）、相異なるアンカーが 2 個得られない組み合わせ（どちらかの録音がクロマ 1 フレームに満たないとそうなります）。コアは引数を名指しせずに条件を報告します。
 
 12 の倍数であることは必要条件であって十分条件ではありません。使える最も細かい `binsPerOctave` はサンプルレートに依存し、レートが上がっても細かくはならないので、実行するレートでより細かいグリッドを確認済みでなければ既定のままにしてください。どちらのフィールドも、省略するか `0` を書くとライブラリの値が選ばれます。
 
-**サンプルレート。** `sampleRate` はリファレンスのレート、`takeSampleRate`（Python は `take_sample_rate`、C は `sonare_align_take_to_reference_ex`）はテイクのレートです。両者が異なるときは、測定の前にテイクをリファレンスのグリッドへリサンプルします。2 本のアンカー軸はどちらも**リファレンスのレート**のサンプルで返り、`hopLength` もそのレートです。プロジェクトはワープアンカーをプロジェクトのレートのサンプルとして読むので、`setWarpMap` の前に `warpSample` と `sourceSample` の両方へ「プロジェクトのレート ÷ リファレンスのレート」を掛けてください（上の例では両者が等しい）。CLI 版の `sonare project align-takes` はリファレンスと各テイクをファイルから読み、レートの異なるテイクも整列し、アンカーをプロジェクトのレートで書き出します。
-:::
+サンプルレートについては次のとおりです。
 
-::: tip どちらの経路かはレポートが決める
-すでに揃っているテイク — ループの周回や、クリックに合わせて録ったテイク — は、`splitSilenceCommonWithReport` から `remixAlignedIntervals` を経てそのままコンプへ進みます。`alignTakeToReference` は、レポートがタイミングの不一致を示したテイクのためのものです。先にリファレンスの下へワープし、コンプは共通の無音ではなくプロジェクトのタイムライン上で切ってください。
+- `sampleRate` はリファレンスのレート、`takeSampleRate`（Python は `take_sample_rate`、C は `sonare_align_take_to_reference_ex`）はテイクのレートです。両者が異なるときは、測定の前にテイクをリファレンスのグリッドへリサンプルします。
+- 2 本のアンカー軸はどちらも**リファレンスのレート**のサンプルで返り、`hopLength` もそのレートです。
+- プロジェクトはワープアンカーをプロジェクトのレートのサンプルとして読むので、`setWarpMap` の前に `warpSample` と `sourceSample` の両方へ「プロジェクトのレート ÷ リファレンスのレート」を掛けてください（上の例では両者が等しい）。CLI 版の `sonare project align-takes` はリファレンスと各テイクをファイルから読み、レートの異なるテイクも整列し、アンカーをプロジェクトのレートで書き出します。
 :::
 
 ## 録音波形を描く
@@ -464,36 +575,6 @@ try {
 } finally {
   engine.destroy();
 }
-```
-::::
-
-:::: details 確定テイクへフレーズをパンチ録音する
-残りに触れずに 1 フレーズだけ録り直します。
-
-```typescript
-const inSample = Math.round(2.0 * 48000);    // 2 秒でパンチイン
-const outSample = Math.round(4.0 * 48000);   // 4 秒でパンチアウト
-engine.setCapturePunch({ startSample: inSample, endSample: outSample });
-// 秒で指定する場合: engine.setCapturePunch({ startSec: 2, endSec: 4 });
-engine.setCaptureSource('input');
-engine.armCapture();
-engine.play();
-// トランスポートが [inSample, outSample) の内側にある間だけ追記する。
-```
-::::
-
-:::: details 3 テイクをループ録音してコンプする
-2 小節フレーズを 3 周キャプチャし、テイクへ分割して、良い半分どうしを残します。
-
-```typescript
-const result = project.addLoopRecordingTakes({
-  trackId, startPpq: 0, loopLengthPpq: 4,
-  audio: threePassesOfAudio, audioChannels: 1, audioSampleRate: 48000,
-});
-project.setClipCompSegments(result.clipId, [
-  { startPpq: 0, endPpq: 2, takeId: 1 },
-  { startPpq: 2, endPpq: 4, takeId: 2 },
-]);
 ```
 ::::
 

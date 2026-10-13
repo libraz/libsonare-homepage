@@ -36,12 +36,15 @@ try {
 
 For a first-order low or high shelf, set the band's `slopeDbOct` to `6`. Its `frequencyHz` is then where the shelf reaches half its gain change in dB, and `q` has no effect. Leaving `slopeDbOct` unset uses the regular shelf design shown above.
 
-Source-built C++ CLI equivalents for file-based EQ and filtering:
+CLI equivalents for file-based EQ and filtering. `eq` exists in both the Python and the C++ CLI; `filter` only in the source-built C++ CLI.
 
-```bash [C++ CLI]
+```bash
 sonare eq track.wav --type 2 --frequency-hz 8000 --gain-db 4 --q 0.7 -o eq.wav
+# C++ CLI only
 sonare filter track.wav --type hp --cutoff 80 -o filtered.wav
 ```
+
+`nonFiniteDiscardCount()` counts the processed blocks in which a non-finite sample reached the EQ and its recursive filter state was discarded; see [Non-finite input](#non-finite-input).
 
 ## StreamingRetune
 
@@ -63,9 +66,11 @@ try {
 }
 ```
 
-Closest CLI equivalents for offline files from the source-built C++ CLI:
+<SonareDemo id="pitch-correct" />
 
-```bash [C++ CLI]
+Closest CLI equivalents for offline files (both the Python and the C++ CLI):
+
+```bash
 sonare pitch-shift vocal.wav --semitones 3 -o shifted.wav
 sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.wav
 ```
@@ -78,7 +83,7 @@ sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.
 import { init, RealtimeVoiceChanger, realtimeVoiceChangerPresetNames } from '@libraz/libsonare';
 await init();
 
-const changer = new RealtimeVoiceChanger(realtimeVoiceChangerPresetNames()[1]); // e.g. "bright-idol"
+const changer = new RealtimeVoiceChanger('bright-idol');
 changer.prepare(48000, /*maxBlockSize=*/128, /*channels=*/1);
 try {
   const out = changer.processMono(inputBlock);
@@ -91,7 +96,19 @@ try {
 }
 ```
 
-The zero-copy buffer helpers (`createRealtimeMonoBuffer`, `createRealtimeInterleavedBuffer`, `createRealtimePlanarBuffer`) return changer-owned WASM heap views; reuse them inside a realtime loop and discard after `delete()`. See [Realtime Voice Changer](./realtime-voice-changer.md) for the preset list and chain stages.
+The six factory presets are `neutral-monitor`, `bright-idol`, `soft-whisper`, `deep-narrator`, `robot-mascot` and `dark-villain`; `realtimeVoiceChangerPresetNames()` returns the same list at runtime.
+
+| Task | Methods |
+|---|---|
+| Configure | The constructor (passing `sampleRate` prepares immediately), `prepare(sampleRate, maxBlockSize?, channels?)`, `setConfig(config)`, `setPodConfig(config)` (a flat, pre-normalized config for AudioWorklet control messages), `configJson()` |
+| Process, allocating the result | `processMono(samples)`, `processInterleaved(samples, channels)` |
+| Process into your own array | `processMonoInto(samples, output)`, `processInterleavedInto(samples, channels, output)` |
+| Zero-copy | `createRealtimeMonoBuffer`, `createRealtimeInterleavedBuffer`, `createRealtimePlanarBuffer`, or the lower-level `get*Buffer` plus `processPreparedMono` / `processPreparedInterleaved` / `processPreparedPlanar` |
+| State | `reset()`, `latencySamples()`, `nonFiniteDiscardCount()`, `delete()` / `destroy()` |
+
+The zero-copy buffer helpers return changer-owned WASM heap views; reuse them inside a realtime loop and discard after `delete()`. See [Realtime Voice Changer](./realtime-voice-changer.md) for the preset list and the order of the chain stages, and [Realtime safety](./glossary/realtime/realtime-safety.md) for what a realtime loop may and may not do.
+
+<SonareDemo id="formant-shift" />
 
 ## `voiceChangeRealtime(samples, sampleRate?, preset?, options?)`
 
@@ -161,11 +178,11 @@ Without the flush, a bounce built from a streaming chain loses its last
 `latencySamples()` samples of the concatenated stream are the chain's delay and
 should be dropped for a time-aligned result.
 
-Stereo-only stages are skipped when `numChannels === 1`. Of the chain-config repair stages, only `repair.denoise` runs on the streaming chain, and only with a causal noise estimator (`noiseEstimator` 1 = MCRA, 2 = IMCRA or 3 = speech-presence probability, or the `mcra` / `imcra` / `spp` name). It defaults to `spp`, so `repair.denoise.enabled` alone prepares; the quantile estimator (0, `quantile`) ranks the whole signal's frames, so the constructor refuses it by name. `repair.declick`, `repair.dereverb`, `repair.declip`, `repair.decrackle` and `repair.dehum` throw if enabled here — run them through `masteringChain*` / `masterAudio*`, the one-shot `masteringRepair*` helpers, or as [realtime inserts](./audio-repair.md#realtime-inserts) where the stage has one. The `loudness` stage also throws unless you supply `loudnessStaticGainDb` (optionally with `loudnessStaticGainPeakDb`), since the streaming chain cannot measure whole-signal integrated LUFS. Call `reset()` between independent songs and `delete()` to free the handle.
+`nonFiniteDiscardCount()` and `nonFiniteSubstitutionCount()` report degraded input; see [Non-finite input](#non-finite-input). Stereo-only stages are skipped when `numChannels === 1`. Of the chain-config repair stages, only `repair.denoise` runs on the streaming chain, and only with a causal noise estimator (`noiseEstimator` 1 = MCRA, 2 = IMCRA or 3 = speech-presence probability, or the `mcra` / `imcra` / `spp` name). It defaults to `spp`, so `repair.denoise.enabled` alone prepares; the quantile estimator (0, `quantile`) ranks the whole signal's frames, so the constructor refuses it by name. `repair.declick`, `repair.dereverb`, `repair.declip`, `repair.decrackle` and `repair.dehum` throw if enabled here — run them through `masteringChain*` / `masterAudio*`, the one-shot `masteringRepair*` helpers, or as [realtime inserts](./audio-repair.md#realtime-inserts) where the stage has one. The `loudness` stage also throws unless you supply `loudnessStaticGainDb` (optionally with `loudnessStaticGainPeakDb`), since the streaming chain cannot measure whole-signal integrated LUFS. Call `reset()` between independent songs and `delete()` to free the handle.
 
 ## Streaming API
 
-The Streaming API enables real-time audio analysis for visualizations and live monitoring. Unlike batch analysis, streaming processes audio chunk by chunk with minimal latency.
+The Streaming API enables real-time audio analysis for visualizations and live monitoring. Unlike batch analysis, streaming processes audio chunk by chunk with minimal latency. Background: [Streaming analysis](./glossary/realtime/streaming-analysis.md).
 
 ::: tip When to Use
 - **Batch API**: Pre-recorded files, all-in-one analysis (BPM, key, chords, sections)
@@ -231,6 +248,11 @@ class StreamAnalyzer {
   // Process with an explicit, contiguous sample offset. A gap, seek, or switch
   // from process() requires reset() first.
   processWithOffset(samples: Float32Array, sampleOffset: number): void;
+
+  // Flush the tail at end of stream: drains the high-rate resampler tail and
+  // zero-pads the final partial frame. A repeat call is a no-op; process()
+  // afterwards throws until reset().
+  finalize(): void;
 
   // Number of frames ready to read
   availableFrames(): number;
@@ -348,6 +370,7 @@ interface AnalyzerStats {
   droppedOutputFrames: number; // newly produced frames dropped at the configured cap
   droppedChordProgressionEntries: number; // oldest chord-history entries dropped at the configured cap
   droppedBarProgressionEntries: number;   // oldest bar-history entries dropped at the configured cap
+  nonFiniteDiscardBlocks: number;         // process() calls in which a non-finite sample was replaced
   estimate: ProgressiveEstimate;
 }
 ```
@@ -396,6 +419,20 @@ interface ProgressiveEstimate {
 ```
 
 The key is estimated from the stream's own 186 ms chroma, so it trails the input by up to about a quarter second more than the frame outputs do. Every confidence, including per-frame `chordConfidence` and each `ChordChange` / `BarChord` confidence, stays in 0-1. `keyName`, `keyShortName` and `chordName` spell the estimate the way the batch analysis does, so a UI can show them without mapping `key` / `chordRoot` itself.
+
+### Non-finite input
+
+A NaN or infinity in the input does not raise an error in the processors below; each replaces it or discards the state it reached, so the output stays finite while no longer describing the input. These counters are the only report that happened.
+
+| Object | Counter | Counts | Cleared by |
+|---|---|---|---|
+| `StreamAnalyzer` | `stats().nonFiniteDiscardBlocks` | `process()` calls in which a non-finite sample was replaced | `reset()` |
+| `StreamingEqualizer` | `nonFiniteDiscardCount()` | Processed blocks in which a filter's recursive state was discarded | never |
+| `RealtimeVoiceChanger` | `nonFiniteDiscardCount()` | Processed blocks in which the chain discarded its own state | never |
+| `StreamingMasteringChain` | `nonFiniteDiscardCount()` | Processing calls in which a stage discarded its recursive state | `prepare()` |
+| `StreamingMasteringChain` | `nonFiniteSubstitutionCount()` | Samples a true-peak limiter replaced with a finite value | `prepare()` |
+
+The unit is a block or call, never a sample or a channel. `StreamingMasteringChain` is the exception to the rule above: a non-finite sample in its input is rejected with `InvalidParameter` before any stage runs.
 
 ### Usage, AudioWorklet integration, and timing
 

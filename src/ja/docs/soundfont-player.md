@@ -39,7 +39,7 @@ description: libsonare の GS 互換 SoundFont 2 インストゥルメントで�
     { from: 'sf2', to: 'out' },
     { from: 'syn', to: 'out', style: 'dashed' }
   ]"
-  caption="どちらの経路でも音声出力に届きます — ここで MIDI が無音になることはありません。"
+  caption="どちらの経路でも音声出力に届きます。ここで MIDI が無音になることはありません。"
 />
 
 この判定は、下記の[プログラムマニフェスト](#何が解決するかを知る-プログラムマニフェスト)でプログラムごとに事前確認できます。
@@ -47,16 +47,6 @@ description: libsonare の GS 互換 SoundFont 2 インストゥルメントで�
 下のデモはユーザーが用意した SF2 ファイルではなく内蔵音源を使いますが、SoundFont プレイヤーの基本と同じ考え方を示しています。MIDI の音符は変わらず、鳴らす楽器だけが変わります。実際のアプリでは、読み込んだ SoundFont がそのプログラムを持っていれば SF2 プリセットで鳴り、持っていなければ NativeSynth フォールバックで鳴ります。
 
 <SonareDemo id="midi-piano-roll" />
-
-## このページで身につくこと
-
-このページを読むと、次のことができるようになります。
-
-- 呼び出し側が用意した SF2 を `Project` やリアルタイムエンジンへ読み込み、解放できる。
-- どのノートが `sf2` で解決し、どれが `synth` フォールバックになるかをプログラムマニフェストで読める。
-- MIDI アレンジを SF2 インストゥルメント経由で決定的にバウンスできる。
-- プレイヤーが実装する SF2 のモジュレーター／エンベロープ意味論を理解できる。
-- ライブ MIDI 入力向けに SF2 インストゥルメントをバインドできる。
 
 ## 正しい入口を選ぶ
 
@@ -79,8 +69,10 @@ description: libsonare の GS 互換 SoundFont 2 インストゥルメントで�
 ::: info 壊れたファイルと壊れた呼び出しは別のエラー
 読み込みはこの 2 つを区別して返すので、自分の実装のバグまで巻き込むことなく、利用者に「このファイルは使えません」と伝えられます。
 
-- `SONARE_ERROR_INVALID_PARAMETER` — **呼び出し**が誤っている場合です。プロジェクトやバッファが NULL、あるいは長さが 0 のバッファを渡した場合で、データの中身は一切検査されていません。
-- `SONARE_ERROR_INVALID_FORMAT` — **データ**が使えない場合です。SF2 のパースに失敗したか、ローダーが受け付けるリソース上限をファイルサイズが超えています。
+- `SONARE_ERROR_INVALID_PARAMETER`：**呼び出し**が誤っている場合です。プロジェクトやバッファが NULL、あるいは長さが 0 のバッファを渡した場合で、データの中身は一切検査されていません。
+- `SONARE_ERROR_INVALID_FORMAT`：**データ**が使えない場合です。SF2 のパースに失敗したか、ローダーが受け付けるリソース上限をファイルサイズが超えています。
+
+ファイル内のサンプルレートが 400〜50000 Hz の範囲外でもエラーにはなりません。その範囲に丸められて読み込まれます。
 
 各バインディングはこれらを自分のエラー型（JavaScript なら送出される `Error`、Python なら `SonareError`）としてメッセージ付きで表面化します。
 :::
@@ -92,13 +84,13 @@ import { init, Project } from '@libraz/libsonare';
 
 await init();
 
-// ファイルは自分で用意する — 自前のアセットホストから取得、またはユーザーに選ばせるなど。
+// ファイルは自分で用意する（自前のアセットホストから取得、またはユーザーに選ばせるなど）。
 const sf2Bytes = new Uint8Array(await (await fetch('/instruments/my-bank.sf2')).arrayBuffer());
 
 const project = new Project();
 try {
   project.loadSoundFont(sf2Bytes);          // パース不能またはサイズ上限超過で例外
-  project.soundFontPresetCount();           // 例: 3 — 読み込んだバンクのプリセット数
+  project.soundFontPresetCount();           // 例: 3（読み込んだバンクのプリセット数）
   // ... アレンジを作成／編集し、バウンスする（後述） ...
   project.clearSoundFont();                 // 任意: 読み込んだバンクを解放
 } finally {
@@ -132,8 +124,8 @@ finally:
 
 レンダー前に、**アレンジが実際に鳴らすプログラムと、それぞれがどこで解決するか**をプロジェクトへ問い合わせます。`soundFontManifest()` は、ノートが鳴らす `(channel, bank, program)` を初回使用順にすべて列挙し、バックエンドを報告します。
 
-- `'sf2'` — 読み込んだ SoundFont がそのプログラムをカバー（GS のバリエーション／ドラムフォールバックを含む）。解決した `presetName` つき。
-- `'synth'` — どのプリセットもカバーしないため、NativeSynth GM フォールバックで鳴る。`presetName` は空。
+- `'sf2'`：読み込んだ SoundFont が、そのグループで鳴らすノートをすべてカバー（GS のバリエーション／ドラムフォールバックを含む）。解決した `presetName` つき。
+- `'synth'`：どのプリセットもカバーしないか、グループ内で鳴らすノートのどれかが SoundFont のゾーンから外れるため、そのグループは NativeSynth GM フォールバックで鳴る。`presetName` は空。
 
 SoundFont を読み込んでいない場合、すべてのエントリが `synth` フォールバックです。これはカバレッジを正確に報告した結果です。`synth` の行は「このパートは鳴るが、サンプルではなくデータ不要の最終フォールバックから出る」を意味します。フォールバックもプログラム番号を見て音色を選びます。たとえば GM プログラム 6（Harpsichord）は専用のジャック＆プレクトラム式ハープシコードエンジン、プログラム 7（Clavi）は FM 系パッチで鳴ります。
 
@@ -178,7 +170,7 @@ const project = new Project();
 try {
   project.setSampleRate(48000);
 
-  // 宛先 0 へルーティングした 1 ノートの MIDI クリップ。
+  // デスティネーション 0 へルーティングした 1 ノートの MIDI クリップ。
   const { trackId, clipId } = project.addMidiClip(0, 4);
   project.setTrackMidiDestination(trackId, 0);
   project.setMidiEvents(clipId, [
@@ -188,7 +180,7 @@ try {
 
   project.loadSoundFont(sf2Bytes);
 
-  // 既定の SF2 プレイヤーを宛先 0 へバインドし、ステレオ 4096 フレームをレンダー。
+  // 既定の SF2 プレイヤーをデスティネーション 0 へバインドし、ステレオ 4096 フレームをレンダー。
   const audio = project.bounceWithSf2Instrument(
     { destinationId: 0, gain: 1 },
     { totalFrames: 4096, numChannels: 2, sampleRate: 48000 },
@@ -234,16 +226,23 @@ finally:
 ::: tip MIDI はデータ不足で無音にならない
 **SoundFont をまったく読み込まずに**バウンスできます。バインドされたデスティネーションは鳴り続けます。カバーされないプログラムは内蔵シンセサイザー（NativeSynth）の GM フォールバックで再生されるためです。どのパートがサンプルを使い、どれがフォールバックを使うかはマニフェストが正確に教えてくれます。フォールバックエンジンは [内蔵シンセサイザー](./native-synth.md) を参照してください。
 
-このフォールバックは、実用的なプレビューに使える広さを持っています。ピアノは調整済みの拡張導波路ピアノ、ギター／ベース／ハープは Karplus-Strong モデル、弦はボウイング弦またはピチカート／ハープ／ティンパニ、合唱／声はボーカルボディ共鳴、GM 56-79 の金管／リード／フルートは物理モデルで鳴ります。ピアノ以外の物理モデルはまだ調整前で、今後のパッチリリースで修正を進めます。厳選した SF2 の代わりではありませんが、欠けたプログラムが 1 種類の汎用音に落ちることはありません。
+このフォールバックは、実用的なプレビューに使える広さを持っています。ピアノ、弦、管楽器、声、シンセのプログラムがそれぞれ最も近いエンジンで鳴るため、欠けたプログラムが 1 種類の汎用音に落ちることはありません。各プログラムのエンジンは [GM 音色マップ](./gm-tone-map.md)にあります。厳選した SF2 の代わりではありません。
 :::
+
+<MaturityNote
+  item="physical-model-maturity"
+  :labels="{
+    title: '較正の状況',
+    body: '参照録音に合わせて較正済みなのは、アコースティックピアノだけです。そのほかの物理モデルのフォールバック音色は暫定で、パッチリリースごとに音が変わることがあります。'
+  }"
+/>
 
 ### インストゥルメント設定とボイスモデル
 
-`Sf2InstrumentConfig` はプレイヤーごとのパッチです。各フィールドは任意で、非正値または省略された数値フィールドは C-ABI の既定値を取ります。
+`Sf2InstrumentConfig` はプレイヤーごとのパッチです。各フィールドは任意で、非正値または省略された数値フィールドは C-ABI の既定値を取ります。JS バインディングでは、設定にプレイヤーが応答する MIDI デスティネーションの `destinationId`（既定 `0`）も含まれます。Python では別引数の `destination_id` で渡します。
 
 | フィールド（JS／Python） | 意味 | 既定 |
 |--------------------------|------|------|
-| `destinationId` / `destination_id` | このプレイヤーが応答する MIDI デスティネーション | `0` |
 | `gain` | マスター出力ゲイン（リニア） | `0.5` |
 | `polyphony` | 最大同時ボイス数。`[1, 64]` にクランプ | `48` |
 | `preferModelForModeledFamilies` / `prefer_model_for_modeled_families` | 対応するメロディック GM プログラムを SoundFont ではなく専用の物理モデルへ回す | `false` |
@@ -252,10 +251,7 @@ finally:
 
 ボイスが足りなくなると、プレイヤーは**決定的なボイススティール**を行うため、密なパッセージはどのレンダーでも同じように劣化します。
 
-`preferModelForModeledFamilies` は設定のバージョン 2 で追加されたフィールドです。
-手持ちの SoundFont のあるファミリーのサンプルが、内蔵モデルより見劣りする場合
-（撥弦やリードのセットが薄い、など）に有効化する価値があります。どちらの設定でも
-ドラムは SoundFont 優先のままなので、良いキットがモデル側の打楽器音に置き換わることはありません。
+手持ちの SoundFont のあるファミリーのサンプルが、内蔵モデルより見劣りする場合（撥弦やリードのセットが薄い、など）は、`preferModelForModeledFamilies` を有効にしてください。どちらの設定でもドラムは SoundFont 優先のままなので、良いキットがモデル側の打楽器音に置き換わることはありません。
 
 `clearBankRig` はプレイヤー全体を直接音と比較するための設定です。パート単位で制御するときは、[GM／GS](./gm-gs.md#パートリグと-efx-の直列ルーティング) にあるプロジェクトまたはエンジンのパートリグ API を使います。`bank` は現在のバンクリグを保ち、`none` は音源の直接出力を選び、`chain` は 1〜8 個のインサートを指定します。パートを GS EFX へ割り当ててもパートリグはその後段にはならず、既定のアンプやキャビネットは残ります。
 
@@ -269,13 +265,13 @@ finally:
 
 ### SF2 合成の意味論
 
-- **プリセット／インストゥルメントゾーンのレイヤリング** — ノートは SF2 の 2 段ゾーン構造（インストゥルメントゾーンの上にプリセットゾーン）を通って解決するため、レイヤーやスプリットのプリセットが正しく鳴ります。ジェネレーターがサンプル選択・チューニング・ループモード・排他クラス（オープンハイハットを切るクローズドハイハットなど）を設定します。
-- **DAHDSR エンベロープ** — ボリュームとモジュレーションそれぞれに、Delay／Attack／Hold／Decay／Sustain／Release の各ステージを持つエンベロープ。
-- **LFO** — ビブラート LFO とモジュレーション LFO が、SF2 ジェネレーターに従ってピッチ／フィルター／振幅を変化させます。
-- **ベロシティトラッキング付きローパスフィルター** — 初期カットオフとレゾナンス。ベロシティが明るさに影響します。
-- **SF2 既定モジュレーターセット** — ベロシティと、チャンネルボリュームの **CC7**、エクスプレッションの **CC11** が二乗則ゲインを適用し、モジュレーションホイールの **CC1** がビブラート量を変えます。**CC91** はリバーブセンド、**CC93** はコーラスセンド、**CC94** はディレイセンドとして GS のシステムエフェクトセンドへ送られます（詳しくは [GS アーキテクチャ層](./gm-gs.md#gs-アーキテクチャ層) を参照）。（**CC** は MIDI の連続的な「つまみ」コントロールチェンジメッセージです。詳しくは [MIDI 入力](./midi-input.md) を参照してください。）
-- **ピッチベンド** — ベンドレンジを **RPN 0** で指定でき、Data Entry／RPN 経由で設定します。パートごとに独自のセミトーン範囲を要求できます。
-- **パートリグと GS EFX** — バンクの既定リグ、直接出力、ホストが指定するインサートチェーンのいずれかが、EFX へルーティングされる前にパートごとに動作します。プログラム 29 と 30 はオーバードライブまたはディストーションのペダルをアンプ段の前に置くため、フォールバック音声もペダルとアンプを直列に通ります。
+- **プリセット／インストゥルメントゾーンのレイヤリング**：ノートは SF2 の 2 段ゾーン構造（インストゥルメントゾーンの上にプリセットゾーン）を通って解決するため、レイヤーやスプリットのプリセットが正しく鳴ります。ジェネレーターがサンプル選択・チューニング・ループモード・排他クラス（オープンハイハットを切るクローズドハイハットなど）を設定します。
+- **DAHDSR エンベロープ**：ボリュームとモジュレーションそれぞれに、Delay／Attack／Hold／Decay／Sustain／Release の各ステージを持つエンベロープ。
+- **LFO**：ビブラート LFO とモジュレーション LFO が、SF2 ジェネレーターに従ってピッチ／フィルター／振幅を変化させます。
+- **ベロシティトラッキング付きローパスフィルター**：初期カットオフとレゾナンス。ベロシティが明るさに影響します。
+- **SF2 既定モジュレーターセット**：ベロシティと、チャンネルボリュームの **CC7**、エクスプレッションの **CC11** が二乗則ゲインを適用し、モジュレーションホイールの **CC1** がビブラート量を変えます。**CC91** はリバーブセンド、**CC93** はコーラスセンド、**CC94** はディレイセンドとして GS のシステムエフェクトセンドへ送られます（詳しくは [GS アーキテクチャ層](./gm-gs.md#gs-アーキテクチャ層) を参照）。（**CC** は MIDI の連続的な「つまみ」コントロールチェンジメッセージです。詳しくは [MIDI 入力](./midi-input.md) を参照してください。）
+- **ピッチベンド**：ベンドレンジを **RPN 0** で指定でき、Data Entry／RPN 経由で設定します。パートごとに独自のセミトーン範囲を要求できます。
+- **パートリグと GS EFX**：バンクの既定リグ、直接出力、ホストが指定するインサートチェーンのいずれかが、EFX へルーティングされる前にパートごとに動作します。プログラム 29 と 30 はオーバードライブまたはディストーションのペダルをアンプ段の前に置くため、フォールバック音声もペダルとアンプを直列に通ります。
 
 プレイヤーの GS 側には、バリエーションバンクとドラムキットの構成、NRPN／SysEx によるパート編集、センドリターン方式のシステムエフェクト、16 基の挿入エフェクトユニット（EFX）があります。これらは、ほかの GS の解説とあわせて [GM／GS フォールバックバンク](./gm-gs.md#gs-アーキテクチャ層) にまとめてあります。
 
@@ -283,7 +279,9 @@ finally:
 
 鍵盤やライブ MIDI ストリームには、`setSf2Instrument(...)` で SF2 プレイヤーをリアルタイム MIDI のデスティネーションへバインドします。エンジンは、そのデスティネーションのライブなノート／CC コマンドとスケジュールされた MIDI クリップをプレイヤー経由で鳴らします。16 チャンネル、チャンネル 10 ドラム、GS NRPN、GS／GM SysEx の挙動は同じです。SoundFont はまず**エンジン**へ読み込みます（プロジェクトの読み込みとは別です）。
 
-```typescript
+::: code-group
+
+```typescript [ブラウザ／Node]
 import { init, RealtimeEngine } from '@libraz/libsonare';
 
 await init();
@@ -291,7 +289,7 @@ await init();
 const engine = new RealtimeEngine(48000, 128);   // sampleRate, maxBlockSize
 try {
   engine.loadSoundFont(sf2Bytes);                // エンジンレベルの読み込み
-  engine.setSf2Instrument({ gain: 1 }, 7);       // プレイヤーを宛先 7 へバインド
+  engine.setSf2Instrument({ gain: 1 }, 7);       // プレイヤーをデスティネーション 7 へバインド
   engine.midiInstrumentCount();                  // 1
 
   // ライブノートを 1 つ送り、ブロックをレンダー。
@@ -305,7 +303,28 @@ try {
 }
 ```
 
-`pushMidiProgram` は、ライブのプログラムチェンジを（任意でバンクつきで）ノートや CC と同じタイミング指定でキューに入れます。MIDI 2.0 のプログラムチェンジ 1 つにまとめて送られるため、受け手側の条件がそのまま適用されます。RX PROGRAM CHANGE をオフにしたパートは、受け付けたうえで無視します。
+```python [Python]
+import libsonare as sonare
+
+engine = sonare.RealtimeEngine(sample_rate=48000.0, max_block_size=128)
+try:
+    engine.load_soundfont(sf2_bytes)                    # エンジンレベルの読み込み
+    engine.set_sf2_instrument(sonare.Sf2InstrumentConfig(gain=1.0), destination_id=7)
+    engine.midi_instrument_count()                      # 1
+
+    engine.push_midi_note_on(7, 0, 0, 60, 100)          # デスティネーション, グループ, チャンネル, ノート, ベロシティ
+    out = engine.process([[0.0] * 128, [0.0] * 128])
+
+    engine.clear_midi_instrument(7)                     # バインド解除
+finally:
+    engine.close()
+```
+
+:::
+
+再生中に `setSf2Instrument` や `loadSoundFont` をもう一度呼ぶと、バインド済みのものが差し替わります。鳴っていた側は 10 ms でフェードアウトし、新しい側は既定のチャンネル状態から始まります（詳しくは[リアルタイムエンジン](./realtime-engine.md)を参照）。
+
+`pushMidiProgram` は、ライブのプログラムチェンジを（任意でバンクつきで）ノートや CC と同じタイミング指定でキューに入れます。MIDI 2.0 のプログラムチェンジ 1 つにまとめて送られるため、受け手側の条件がそのまま適用されます。RX PROGRAM CHANGE をオフにしたパートは、受け付けたうえで無視します。SoundFont プレイヤーは RX PROGRAM CHANGE と RX BANK SELECT の条件のもとでこれに従い、`useGmPrograms: true` でバインドした NativeSynth と、GM キットを鳴らす NativeSynth（`drum-kit` プリセット、または `gmKit` をオンにした打楽器パッチ。プログラムが GS ドラムセットの選択になります）も従います。内蔵シンセとそれ以外の NativeSynth パッチは、受け付けたうえで無視します。
 
 ::: tip 読み込み前のバインドも可能
 SoundFont を読み込む前に `setSf2Instrument(...)` を呼べます。その場合、ライブ MIDI は NativeSynth GM フォールバックで鳴ります。後から SoundFont を読み込むと、バインド済みのデスティネーションがそのサンプルを使い始めます。ライブ鍵盤や Web MIDI の配線は [MIDI 入力](./midi-input.md) を参照してください。
@@ -316,7 +335,9 @@ SoundFont を読み込む前に `setSf2Instrument(...)` を呼べます。その
 :::: details カバレッジを確認してからバウンス
 SF2 を読み込み、マニフェストで `synth` 行（フォールバックを使うパート）を確認してからレンダーします。
 
-```typescript
+::: code-group
+
+```typescript [ブラウザ／Node]
 project.loadSoundFont(sf2Bytes);
 const uncovered = project.soundFontManifest().filter((p) => p.backend === 'synth');
 if (uncovered.length) {
@@ -327,12 +348,27 @@ const audio = project.bounceWithSf2Instrument(
   { totalFrames: 4096, numChannels: 2, sampleRate: 48000 },
 );
 ```
+
+```python [Python]
+project.load_soundfont(sf2_bytes)
+uncovered = [p for p in project.soundfont_manifest() if p.backend == "synth"]
+if uncovered:
+    print("NativeSynth へフォールバックするパート:", uncovered)
+audio = project.bounce_with_sf2_instrument(
+    sonare.Sf2InstrumentConfig(gain=1.0),
+    total_frames=4096, num_channels=2, sample_rate=48000,
+)
+```
+
+:::
 ::::
 
 :::: details マルチティンバー: メロディとドラムを 1 回でバウンス
 メロディトラックを 1 つのデスティネーションへ、ドラムトラック（チャンネル 10、バンク 128）を別のデスティネーションへルーティングし、それぞれにプレイヤーをバインドします。
 
-```typescript
+::: code-group
+
+```typescript [ブラウザ／Node]
 // ドラムパート: チャンネル 10（インデックス 9）のバンク 128 プログラム 0。
 project.setMidiEvents(drumClipId, [
   ...Project.midiBankProgram(0, 0, 9, 0, 0, 0),
@@ -345,6 +381,23 @@ const audio = project.bounceWithSf2Instrument(
   { totalFrames: 8192, numChannels: 2, sampleRate: 48000 },
 );
 ```
+
+```python [Python]
+# ドラムパート: チャンネル 10（インデックス 9）のバンク 128 プログラム 0。
+project.set_midi_events(drum_clip, [
+    *sonare.Project.midi_bank_program(0, 0, 9, 0, 0, 0),
+    sonare.Project.midi_note_on(0, 0, 9, 36, 110),   # 36 = Bass Drum 1
+    sonare.Project.midi_note_off(1, 0, 9, 36, 0),
+])
+
+cfg = sonare.Sf2InstrumentConfig(gain=1.0)
+audio = project.bounce_with_sf2_instrument(
+    instruments=[(0, cfg), (1, cfg)],
+    total_frames=8192, num_channels=2, sample_rate=48000,
+)
+```
+
+:::
 ::::
 
 :::: details SF2 なしでもレンダーする
@@ -360,59 +413,16 @@ const preview = project.bounceWithSf2Instrument(
 
 ## NativeSynth と SoundFont フォールバック
 
-NativeSynth は [SoundFont プレイヤー](./soundfont-player.md)の下にあるセーフティネットです。`bounceWithSf2Instrument` でレンダーする（またはライブで SF2 をバインドする）と、libsonare はアレンジが実際に鳴らす各 `(channel, bank, program)` を解決します。
+NativeSynth はプレイヤーの下にあるセーフティネットです。アレンジが鳴らす各 `(channel, bank, program)` について、読み込んだ SoundFont がカバーしていれば**SF2** から鳴ります（GS バリエーションとドラムフォールバックを含む）。そうでなければ、SoundFont を一切読み込んでいない場合も含めて、**NativeSynth の GM フォールバックバンク**（128 種すべてのプログラムとドラムマップ）で鳴ります。このバンクは常に存在するため、データがないという理由で MIDI が無音になることはありません。
 
-- 読み込んだ SoundFont がそのプログラムをカバーしていれば、そのノートは **SF2** から鳴ります（GS バリエーションとドラムフォールバックを含む）。
-- そうでなければ — SoundFont を一切読み込んでいない場合も含めて — そのノートは **NativeSynth の GM フォールバックバンク**（128 種すべてのプログラムとドラムマップ）で鳴ります。
-
-レンダー前にプログラムごとのバックエンドを確認するには `soundFontManifest()` を使います。最初に使われる順に、各プログラムについて `'sf2'` か `'synth'` を報告します。
-
-```typescript
-project.loadSoundFont(sf2Bytes);
-const manifest = project.soundFontManifest();
-// [{ channel, bank, program, backend: 'sf2' | 'synth', presetName }, ...]
-```
-
-GM フォールバックバンクが常に存在するため、データがないという理由で MIDI が無音になることはありません。SF2 データの読み込みやチャンネル／プログラムごとの解決は [SoundFont プレイヤー](./soundfont-player.md) を参照してください。
-
-### GM フォールバックのプログラムルーティング
-
-フォールバックバンクは、GM プログラムのファミリーごとに最も近い NativeSynth エンジンを使います。楽器の挙動の違いが重要な箇所では、プログラム単位の上書きがあります。ピアノは調整済みですが、その他の物理フォールバックモデルはまだ調整・キャリブレーションを行っていません。下のアコースティック楽器系の行は、完成済みのサンプル楽器並みのリアリティではなく、ルーティング上の対応範囲として読んでください。
-
-| GM プログラム | 楽器 | フォールバックエンジン | 理由 |
-|---------------|------|------------------------|------|
-| 4-5 | Electric Piano 1 / 2 | `fm` | タイン／ベル的な明るさを位相変調で表現 |
-| 6 | Harpsichord | `harpsichord` | ジャック＆プレクトラム。打鍵の速さが音量をほとんど変えない |
-| 7 | Clavi | `fm` | 打弦とピックアップの色づけを、現状は FM で近似 |
-| 8, 10, 14 | Celesta, Music Box, Tubular Bells | `modal` | フェルトで打つスティールバー、ツインティースによるタインの揺らぎ、基音を持たない打撃ピッチ |
-| 9, 11-13 | Glockenspiel, Vibraphone, Marimba, Xylophone | `modal` | 調律されたバーの共鳴 |
-| 15 | Dulcimer | `karplus-strong` | 暫定実装。撥弦ではなく打弦 |
-| 16-23 | Organ family | `additive` / `pipe-organ` / `free-reed` | ドローバー系レジストレーション（16-18）、仮実装の教会オルガンのフルーパイプ（19）、フリーリードのリードオルガン、ハーモニカ、バンドネオン（20-23） |
-| 24-31 | Guitar family | `karplus-strong` | 撥弦の導波路モデル |
-| 32-37 | Acoustic, electric, fretless, slap bass | `karplus-strong` | ベース弦導波路。スラップ／偏波はプログラム別 |
-| 40-43 | Violin, Viola, Cello, Contrabass | `bowed-string` | 仮実装の摩擦励起型・持続弦導波路 |
-| 44 | Tremolo Strings | `subtractive` | デチューンしたのこぎり波セクションにアンプトレモロ LFO を重ねたもので、擦弦モデルではない |
-| 45-46 | Pizzicato Strings, Orchestral Harp | `karplus-strong` | ヴァイオリンボディまたはスチール弦のコーパスへの短い撥弦 |
-| 47 | Timpani | `percussion` | ノートトラッキングするケトルドラムのフォールバックボイス |
-| 48 | String Ensemble 1 | `subtractive` | ソロ弓弦ではなく、パッド的なアンサンブル音色 |
-| 52-54 | Choir Aahs, Voice Oohs, Synth Voice | `vocal` | ソースフィルター方式のボイス（声門音源＋母音フォルマントバンク）で、減算合成のパッドではない |
-| 56-60 | Trumpet, Trombone, Tuba, Muted Trumpet, French Horn | `brass` | 仮実装のリップリード金管導波路 |
-| 61-63 | Brass Section, Synth Brass 1 / 2 | `fm` | 金管導波路ではなく、設計上 FM |
-| 64-71 | Saxophones, Oboe, English Horn, Bassoon, Clarinet | `reed` | 仮実装のリードと管体の導波路 |
-| 72-79 | Piccolo, Flute, Recorder, Pan Flute, Bottle, Shakuhachi, Whistle, Ocarina | `flute` | 仮実装のエアジェット／開管導波路 |
-| 104, 106, 107 | Sitar, Shamisen, Koto | `plucked-string` | バズブリッジ（ジャワリ／サワリ）の撥弦。バンジョー（105）は `karplus-strong` のまま |
-| 112-119 | Tinkle Bell, Agogo, Steel Drums, Woodblock, Taiko Drum, Melodic Tom, Synth Drum, Reverse Cymbal | `percussion` | ノートトラッキングするパーカッションエンジンのボイスで、ドラムキットのマップとは別 |
-
-Bank Select は、フォールバックがバリエーションを持つキャピタルプログラムすべてで読み取られます。全体の対応は前述の [GS バリエーション音色](./gm-gs.md#gs-バリエーション音色)を参照してください。
-
-このルーティングは名前付きプリセットカタログとは別です。`synthPresetNames()` が返すのは手で設計されたプリセット（`e-piano`、`harp`、`drum-kit` など）であり、GM フォールバックバンクは SF2 フォールバック時に MIDI プログラム番号ごとの内部パッチを選びます。
+`soundFontManifest()` は、[上で見たとおり](#何が解決するかを知る-プログラムマニフェスト)プログラムごとのバックエンドを最初に使われる順に報告します。フォールバックのプログラムがどのエンジンで鳴るかは [GM 音色マップ](./gm-tone-map.md)に、バリエーションを持つキャピタルプログラムへのバンクセレクトは [GS バリエーション音色](./gm-gs.md#gs-バリエーション音色)にあります。このルーティングは名前付きプリセットカタログとは別です。`synthPresetNames()` が一覧するのは手作りのプリセット（`e-piano`、`harp`、`drum-kit` など）で、フォールバックバンクはプログラム番号ごとに内部のパッチを選びます。
 
 ## 関連
 
-- [内蔵シンセサイザー](./native-synth.md) — MIDI を無音にしない、データ不要の GM フォールバックエンジン
-- [GM／GS フォールバックバンク](./gm-gs.md) — このプレイヤーが実装する GS アーキテクチャ層と挿入エフェクト、そしてその下のフォールバックバンク
-- [プロジェクトバウンス](./project-bounce.md) — プロジェクトのオフラインレンダー（同系統の builtin／synth バウンスを含む）
-- [MIDI 入力](./midi-input.md) — ライブ鍵盤、Web MIDI、リアルタイムエンジンのルーティング
-- [プロジェクト編集](./project-editing.md) — レンダーする MIDI トラックとクリップの構築
-- [録音とテイク](./recording-and-takes.md) — 演奏をプロジェクトへ取り込む
-- [リンクターゲット](./cpp-api.md#リンクターゲット) — C++ からプレイヤーを鳴らす方法。`BUILD_FX=OFF` にすると GS の送りエフェクトがコンパイルから外れ、プレイヤーはドライで鳴ります
+- [内蔵シンセサイザー](./native-synth.md)：MIDI を無音にしない、データ不要の GM フォールバックエンジン
+- [GM／GS フォールバックバンク](./gm-gs.md)：このプレイヤーが実装する GS アーキテクチャ層と挿入エフェクト、そしてその下のフォールバックバンク
+- [プロジェクトバウンス](./project-bounce.md)：プロジェクトのオフラインレンダー（同系統の builtin／synth バウンスを含む）
+- [MIDI 入力](./midi-input.md)：ライブ鍵盤、Web MIDI、リアルタイムエンジンのルーティング
+- [プロジェクト編集](./project-editing.md)：レンダーする MIDI トラックとクリップの構築
+- [録音とテイク](./recording-and-takes.md)：演奏をプロジェクトへ取り込む
+- [リンクターゲット](./cpp-api.md#リンクターゲット)：C++ からプレイヤーを鳴らす方法。`BUILD_FX=OFF` にすると GS の送りエフェクトがコンパイルから外れ、プレイヤーはドライで鳴ります

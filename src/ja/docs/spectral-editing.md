@@ -1,11 +1,13 @@
 ---
 title: スペクトル編集
-description: "libsonare の領域指定 STFT 編集。JavaScript/WASM と Python から、時間 x 周波数の矩形を attenuate、mute、gain、heal で処理します。"
+description: "libsonare の領域指定 STFT 編集。JavaScript/WASM と Python から、時間 × 周波数の矩形を attenuate、mute、gain、heal で処理します。"
 ---
 
 # スペクトル編集
 
-`spectralEdit(...)` は、libsonare の領域指定 STFT エディタです。STFT（短時間フーリエ変換）は信号を「時間 x 周波数」のグリッドに切り分ける表現で、周波数ごとの編集はこの上で行います。詳細は[用語集の解説](./glossary/analysis/spectrogram-stft.md)を参照してください。モノラルクリップ内の「時間 x 周波数」の矩形を変えたい場合に使います。笛鳴りを弱める、短いハムを消す、狭い帯域を持ち上げる、小さな欠落を近傍フレームから補修する、といった用途向けです。
+`spectralEdit(...)` は、libsonare の領域指定 STFT エディタです。モノラルクリップ内の「時間 × 周波数」の矩形を変えたいときに使います。笛鳴りを弱める、短いハムを消す、狭い帯域を持ち上げる、小さな欠落を近傍フレームから補修する、といった用途向けです。
+
+STFT（短時間フーリエ変換）は、信号を時間と周波数のグリッドに切り分ける表現で、周波数ごとの編集はこの上で行います。詳しくは[用語集](./glossary/analysis/spectrogram-stft.md)を参照してください。
 
 これはオフライン変換です。出力は入力と同じサンプルレート・同じ長さになり、複数の領域操作は同じ STFT バッファへ順番に適用されます。
 
@@ -122,9 +124,9 @@ const muted = spectralEdit(samples, sampleRate, [
 | `startSec` / `endSec` | 同じ境界を秒で指定します（Python は `start_sec` / `end_sec`）。呼び出しのサンプルレートで最も近いサンプルに丸められます。境界ごとにどちらか一方の表記だけを指定してください。`startSample` と `startSec`（または終了側の両表記）を併用すると拒否されます。 |
 | `lowHz` / `highHz` | Hz で指定する周波数矩形。値は `[0, Nyquist]` に丸められ、`highHz <= 0` は Nyquist 扱い。 |
 | `gainDb` | dB 単位のゲイン量。`gain` と `attenuate` のどちらも `magnitude *= 10^(gainDb/20)` という同じ式で適用され、弱めるには負値を渡します。`mute`/`heal` では無視されます。 |
-| `nFft` | `[4, 262144]` の範囲の 2 のべき乗の FFT サイズ。既定値は `2048`。それ以外の値は、`nFft` と規則を示すエラーで拒否されます。 |
-| `hopLength` | STFT の hop。既定値は `512`。`0 < hopLength <= nFft / 2` を満たす必要があります。 |
-| `window` | `hann`、`hamming`、`blackman`、`rectangular`。 |
-| `healRadiusFrames` | `heal` が参照する左右の近傍フレーム数。既定値は `2`。`1` 以上を指定する必要があります。 |
+| `nFft` | `[4, 262144]` の範囲の 2 のべき乗の FFT サイズ。既定値は `2048`。それ以外の正の値は、`nFft` と規則を示すエラーで拒否されます。JavaScript では `0` または省略で既定値になります（Python は `0` を拒否します）。 |
+| `hopLength` | STFT の hop。既定値は `512`。`0 < hopLength <= nFft / 2` を満たす必要があります（JavaScript では `0` が既定値として扱われます）。 |
+| `window` | `hann`、`hamming`、`blackman`、`rectangular`（Python は `rect` も受け付けます）。 |
+| `healRadiusFrames` | `heal` が参照する左右の近傍フレーム数。既定値は `2`。`1` 以上を指定します。`0` は既定値として扱われ、負の値は拒否されます。 |
 
 小さな領域ほど自然に仕上がります。これは音源分離ではなく STFT 表現上の編集なので、広い範囲、長い範囲、`heal` の多用は、位相のにじんだアーティファクトを生むことがあります。

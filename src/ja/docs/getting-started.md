@@ -1,21 +1,21 @@
 # はじめに
 
-libsonare は、音楽情報検索（MIR）、マスタリング、ミキシング、編集、クリエイティブ FX、ブラウザネイティブな音楽ツールのための、外部依存のない C++17 オーディオ DSP ツールキットです。
+libsonare は、音楽情報検索（MIR）、マスタリング、ミキシング、編集、クリエイティブ FX、ブラウザネイティブな音楽ツールのための、外部依存のない C++17 オーディオエンジンです。このページでは、何もインストールしていない状態から、普段使っている実行環境で BPM、キー、コード列を表示するところまで進みます。
 
-必要な機能や実行環境がまだ決まっていない場合は、先に [学習順ガイド](./learning-path.md) を読んでください。このページは、最初のサンプルを動かす段階のための入口です。
+必要な機能がまだ決まっていない場合は、先に [学習順ガイド](./learning-path.md) を読んでください。
 
 ## このページで身につくこと
 
 このページを読むと、次のことを判断・実行できるようになります。
 
 - すべての API で使うサンプル、サンプルレート、モノラル、ステレオの基本語彙を説明できる。
-- インストール前に、自分のプロジェクトに合う実行環境を選べる。
-- ブラウザ、Python、CLI、Node ネイティブの最小例を 1 つ動かせる。
-- 次に開くべき実行環境別リファレンスを判断できる。
+- 自分のプロジェクトに合う実行環境を選べる。
+- ブラウザ、Node.js、Python、ターミナルのいずれかで libsonare をインストールし、最初の解析結果を表示できる。
+- 次に開くべきリファレンスを判断できる。
 
-## 利用環境を選ぶ前に
+## 実行環境を選ぶ前に
 
-多くの例は同じ流れです。音声を読み込むかデコードし、`Float32Array` のサンプルとサンプルレートを渡し、解析結果や処理結果を受け取ります。ブラウザでは通常、ファイルのデコードを呼び出し側で行います。Python と CLI では、一般的な音声ファイルを直接読み込めることが多いです。
+多くの例は同じ流れです。音声を読み込むかデコードし、`Float32Array` のサンプルとサンプルレートを渡し、結果を受け取ります。
 
 | 用語 | 意味 |
 |------|------|
@@ -23,111 +23,117 @@ libsonare は、音楽情報検索（MIR）、マスタリング、ミキシン�
 | サンプルレート | 1 秒あたりのサンプル数。44,100 や 48,000 など |
 | モノラル | 1 チャンネルの音声 |
 | ステレオ | 左右 2 チャンネルの音声 |
-| WASM | WebAssembly。npm パッケージがブラウザで使う実行形式 |
+| WASM | WebAssembly。npm パッケージのコンパイル先で、ブラウザでも Node.js でも動く |
+
+これらの用語は [オーディオ基礎](./glossary/concepts/audio-basics.md) でさらに詳しく説明しています。
 
 ::: info 初めてなら「ファイル」と「サンプル」を分けて考える
-MP3 や WAV は音声を保存するファイル形式です。libsonare の多くの API が受け取る `Float32Array` や Python の配列は、ファイルを読み込んだ後の PCM サンプルです。ブラウザでは自分でデコードしてサンプルを渡し、Python / CLI ではパッケージ側がファイル読み込みまで担当できる場面があります。
+MP3 や WAV は音声を保存するファイル形式です。libsonare の多くの API が受け取る `Float32Array` や Python の配列は、ファイルを読み込んだ後の PCM サンプルです。下のどの実行環境でも WAV と MP3 はデコードできます。それ以外の形式は、ブラウザでは先にブラウザ側でデコードし、Python では FFmpeg 有効のビルドが必要です。
 :::
 
-## 利用環境を選ぶ
+## どこで動かすか
 
-まず、libsonare をどこで使うかを選んでください。
+| 実行環境 | インストール | ファイルを直接読めるか | リファレンス |
+|----------|--------------|------------------------|--------------|
+| ブラウザ | `npm install @libraz/libsonare`、または [CDN 版](./wasm.md#cdn) | WAV/MP3 のバイト列をデコードする。ほかの形式はブラウザのデコーダーを使う | [WebAssembly ガイド](./wasm.md) |
+| Node.js（WASM） | `npm install @libraz/libsonare`（Node.js 22.12 以上） | `node:fs` で読んだ WAV/MP3 のバイト列をデコードする | [JavaScript API](./js-api.md) |
+| Python | `pip install libsonare`（Python 3.11 以上） | 読める。WAV と MP3、FFmpeg 有効ならさらに多くの形式 | [Python API](./python-api.md) |
+| CLI | `pip install libsonare`（`sonare` コマンドも入る） | 読める。Python パッケージと同じ形式 | [CLI リファレンス](./cli.md) |
 
-| やりたいこと | 使うもの | 最初に読むページ |
-|-------------|---------|----------------|
-| Web アプリのブラウザ上で解析したい | npm の WebAssembly パッケージ | [ブラウザ / WASM](/ja/docs/wasm) |
-| Python スクリプトやノートブックで音声ファイルを解析したい | PyPI の Python パッケージ | [Python API](/ja/docs/python-api) |
-| ターミナルやバッチ処理から解析したい | `pip install libsonare` で入る `sonare` CLI | [CLI リファレンス](/ja/docs/cli) |
-| ピッチや声質の編集を入れたい | 編集 DSP | [編集 DSP](/ja/docs/editing-dsp) |
-| ミキサー、ルーティング画面、ステムレンダーを作りたい | WASM、Python、Node、C++ から使えるミキシングエンジン | [ミキシングエンジン](/ja/docs/mixing) |
-| 判断根拠を見せるマスタリング UI を作りたい | マスタリングアシスタント／プロファイル／プレビュー API | [マスタリングアシスタント](/ja/docs/mastering-assistant) |
-| ライブ可視化や再生ツールを作りたい | ストリーミングアナライザーとリアルタイムエンジン | [リアルタイムとストリーミング](/ja/docs/realtime-streaming) |
-| 作曲・アレンジしたい、MIDI を音声にレンダリングしたい | 内蔵シンセサイザーとヘッドレス DAW のプロジェクト編集 | [内蔵シンセサイザー](/ja/docs/native-synth)、[プロジェクト編集](/ja/docs/project-editing) |
-| ルーム音響を推定・合成・モーフィングしたい | ルーム音響ヘルパー | [ルーム音響解析](/ja/docs/acoustic-analysis) |
-| Node.js のサーバーやデスクトップツールから使いたい | N-API ネイティブバインディング | [Node.js ネイティブ](/ja/docs/native-bindings) |
-| C++ ライブラリとして組み込みたい | C++17 ライブラリ | [C++ API](/ja/docs/cpp-api) |
-| C++ アプリに内蔵インストゥルメントだけを組み込みたい | `sonare::midi` を単独でリンク | [リンクターゲット](/ja/docs/cpp-api#リンクターゲット) |
+npm パッケージでは `sonare` コマンドはインストールされません。Node.js ネイティブアドオンと C++ ライブラリはソースからビルドします。[ネイティブバインディング](./native-bindings.md) と [C++ API](./cpp-api.md) を参照してください。
 
-ブラウザ向け npm パッケージは主にサンプルベースで、多くの API はデコード済みの `Float32Array` PCM を受け取ります。`Audio.fromMemory(...)` は WAV/MP3 バイト列をデコードでき、`Audio.fromMemoryWithBrowserFallback(...)` はブラウザのコーデックで対応形式を読めます。Python パッケージと CLI は標準で WAV/MP3 を読み込めます。FFmpeg 有効ビルドでは、より多くの形式を直接読み込めます。
+## 最初の結果
 
-::: info パッケージ名
-- ブラウザ / WASM: npm から `@libraz/libsonare` をインストールします。
-- Python API と CLI: PyPI から `libsonare` を `pip install libsonare` でインストールします。
-- Node.js ネイティブバインディング: `bindings/node` の `@libraz/libsonare-native` を使います。現在はソースビルド前提です。
-:::
+どのタブも、インストール行、プログラム、表示される出力までそろっています。例で解析する `demo.mp3` は [楽曲解析スタジオ](/ja/music-analysis) が読み込むのと同じ曲なので、自分の出力をデモと見比べられます。
 
-## クイックスタート
+::: code-group
 
-### ブラウザ（WebAssembly）
+```html [ブラウザ]
+<!-- first.html — フォルダを任意の静的サーバー（たとえば `npx serve`）で配信し、
+     https://libsonare.libraz.net/demo.mp3 から入手した demo.mp3 を選ぶ -->
+<input type="file" id="file" accept=".mp3,.wav" />
+<pre id="out"></pre>
+<script type="module">
+  import { init, Audio } from 'https://unpkg.com/@libraz/libsonare';
 
-ブラウザでは、まずファイルをデコードし、モノラルの `Float32Array` サンプルを libsonare に渡します。次のスニペットはこれだけで動きます — モジュールスクリプトに貼り付けて URL を差し替えてください:
+  await init();
+  document.getElementById('file').addEventListener('change', async (event) => {
+    const bytes = new Uint8Array(await event.target.files[0].arrayBuffer());
+    const result = Audio.fromMemory(bytes).analyze();
+    document.getElementById('out').textContent = [
+      `BPM: ${result.bpm.toFixed(1)}`,
+      `Key: ${result.key.name}`,
+      `First chords: ${result.chords.slice(0, 8).map((c) => c.name).join(' ')}`,
+    ].join('\n');
+  });
+</script>
 
-```typescript
-import { init, analyze } from '@libraz/libsonare';
+<!-- 表示:
+BPM: 160.4
+Key: C major
+First chords: C Am C Bm G G#m Em C
+-->
+```
 
-// WASM モジュールを初期化
+```js [Node.js（WASM）]
+// npm install @libraz/libsonare
+// curl -O https://libsonare.libraz.net/demo.mp3
+// node first.mjs
+import { readFileSync } from 'node:fs';
+import { init, Audio } from '@libraz/libsonare';
+
 await init();
+const audio = Audio.fromMemory(new Uint8Array(readFileSync('demo.mp3')));
+const result = audio.analyze();
 
-// Web Audio API でデコード（デコードはブラウザ、解析は libsonare の役割）
-const audioContext = new AudioContext();
-const response = await fetch('audio.mp3');
-const arrayBuffer = await response.arrayBuffer();
-const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-const samples = audioBuffer.getChannelData(0); // モノラルの Float32Array
+console.log('BPM:', result.bpm.toFixed(1));
+console.log('Key:', result.key.name);
+console.log('First chords:', result.chords.slice(0, 8).map((c) => c.name).join(' '));
 
-// 音声サンプルを解析
-const result = analyze(samples, audioBuffer.sampleRate);
-
-console.log('BPM:', result.bpm);
-console.log('キー:', result.key.name);
-console.log('コード:', result.chords);
+// BPM: 160.4
+// Key: C major
+// First chords: C Am C Bm G G#m Em C
 ```
 
-次に読むページ: [WebAssembly ガイド](/ja/docs/wasm)、[JavaScript API リファレンス](/ja/docs/js-api)。
-
-### Python
-
-```bash
-pip install libsonare
-```
-
-標準のホイールは WAV と MP3 を読み込みます。M4A/AAC/FLAC/OGG/Opus を直接読み込む場合は、FFmpeg を有効にしてソースからビルドします。
-
-```python
+```python [Python]
+# pip install libsonare
+# curl -O https://libsonare.libraz.net/demo.mp3
+# python first.py
 from libsonare import Audio
 
-audio = Audio.from_file("music.mp3")
+audio = Audio.from_file("demo.mp3")
 result = audio.analyze()
 
-print(f"BPM: {result.bpm}")
-print(f"キー: {result.key.name}")
-print(f"ビート数: {len(result.beat_times)}")
+print(f"BPM: {result.bpm:.1f}")
+print(f"Key: {result.key.name}")
+print("First chords:", " ".join(c.name for c in result.chords[:8]))
+
+# BPM: 160.4
+# Key: C major
+# First chords: C Am C Bm G G#m Em C
 ```
 
-次に読むページ: [Python API リファレンス](/ja/docs/python-api)。
-
-### CLI（コマンドライン）
-
-CLI は、ターミナルでの簡易確認、バッチ処理、JSON サマリーの出力に向いています。`sonare` コマンドは PyPI の Python パッケージに含まれます。npm の WebAssembly パッケージには含まれません。
-
-```bash
+```bash [CLI]
 pip install libsonare
+curl -O https://libsonare.libraz.net/demo.mp3
+sonare analyze demo.mp3
 
-# BPM とキーをすばやく確認
-sonare bpm music.mp3
-sonare key music.mp3
-
-# JSON 形式で総合解析
-sonare analyze music.mp3 --json
+# warning: 2-channel input is downmixed to mono by this CLI command; use the stereo library API for channel-preserving processing
+#
+#   > Estimated BPM : 160.42 BPM  (conf 80.7%)
+#   > Estimated Key : C major  (conf 98.3%)
+#   > Time Signature: 4/4
+#   > Beats: 192
 ```
 
-CLI の対応フォーマットは、インストールされている Python パッケージのデコード対応と同じです。
+:::
 
-次に読むページ: [CLI リファレンス](/ja/docs/cli)。
+`analyze()` は 1 回の呼び出しで結果全体を返します。BPM とキーに加えて、ビート、コード、セクションと楽曲形式、さらに音色、ダイナミクス、リズム、メロディも含まれます。各フィールドの意味と、個別の推定器を呼ぶべき場面は [楽曲解析](./analysis.md) で説明しています。
 
-### Node.js（ネイティブ）
+`Audio.fromMemory` と `Audio.from_file` はステレオファイルをモノラルに畳み込みます。解析が想定しているのはモノラル入力です。ブラウザで AAC、OGG、FLAC をデコードするには `Audio.fromMemoryWithBrowserFallback` を使います（[ファイル入力](./wasm.md#ファイル入力)）。バンドラーを使うアプリでは、CDN の URL ではなく `'@libraz/libsonare'` からインポートします。
 
-Node.js からネイティブのファイル読み込みやデスクトップ／サーバーサイドの性能が必要な場合は、N-API バインディングを使います。N-API は Node.js のネイティブアドオン用インターフェースで、libsonare は WebAssembly ではなくコンパイル済みのネイティブコードとして動きます。現在はソースビルド前提です。
+::: details Node.js ネイティブアドオン
+N-API アドオン `@libraz/libsonare-native` は、libsonare を WebAssembly ではなくコンパイル済みのネイティブコードとして動かし、パスからファイルを読み込みます。npm には公開していないので、チェックアウトからビルドします。
 
 ```bash
 git clone https://github.com/libraz/libsonare.git
@@ -139,56 +145,39 @@ yarn build
 ```typescript
 import { Audio } from '@libraz/libsonare-native';
 
-const audio = Audio.fromFile('music.mp3');
-const result = audio.analyze();
-
-console.log('BPM:', result.bpm);
-console.log('キー:', result.key.name);
+const result = Audio.fromFile('demo.mp3').analyze();
+console.log('BPM:', result.bpm, 'Key:', result.key.name);
 ```
 
-次に読むページ: [Node.js / ネイティブバインディング](/ja/docs/native-bindings)。
+[Node.js / ネイティブバインディング](./native-bindings.md) を参照してください。
+:::
 
 ## できること
 
-::: info この一覧のルーム音響用語
-**RIR** は room impulse response（ルームインパルス応答）の略で、部屋の響き方そのものを記録した波形です。**等価ルーム推定**は、音声から実用上の部屋モデルを推定する処理で、正確な実寸の復元ではありません。**ルームモーフィング**は音作り向けのルーム効果です。
-:::
+| 分野 | 例 | 最初に読むページ |
+|------|----|------------------|
+| 解析 | BPM、キー、コード、ビートとダウンビート、セクション、メロディ | [楽曲解析](./analysis.md) |
+| 編集とリペア | ピッチ補正、タイムストレッチ、ノート編集、ノイズとハムの低減 | [編集 DSP](./editing-dsp.md)、[オーディオリペアの流れ](./audio-repair.md) |
+| ミキシングとマスタリング | チャンネルストリップ、センドとバス。LUFS ターゲットと True Peak リミッターを備えたマスタリングチェーン | [ミキシングエンジン](./mixing.md)、[マスタリングアシスタント](./mastering-assistant.md) |
+| 楽器と MIDI | 17 種のエンジンを持つシンセサイザー、GM/GS フォールバックバンク、SoundFont 2 プレイヤー | [音源方式](./sound-sources.md)、[内蔵シンセサイザー](./native-synth.md) |
+| プロジェクトとリアルタイム | オフラインバウンスを備えたヘッドレス DAW のプロジェクト、ストリーミング解析、リアルタイムエンジン | [プロジェクト編集](./project-editing.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
+| ルーム音響 | RT60 と明瞭度、音声からの部屋推定、インパルス応答の合成 | [ルーム音響解析](./acoustic-analysis.md) |
 
-- **BPM 検出** - テンポグラムと自己相関を使用したテンポ推定
-- **キー検出** - Krumhansl-Schmuckler プロファイルによる調性検出。A440 でない録音向けに、測定によるチューニング（`tuning: 'auto'`）も選べる
-- **ビート検出** - 動的計画法に基づくビート抽出。ダウンビートと、スコア付きの拍子推定を含む
-- **コード認識** - ルートごとのコードテンプレートによるマッチング。既定は 4 種のトライアドのみで、フルテンプレートセットを有効にすると 12 ルート × 24 クオリティに広がる。ローマ数字によるコード機能も得られる
-- **セクション検出** - イントロ、Aメロ、サビなどの構造的セグメンテーション
-- **メロディ / ピッチ検出** - YIN / pYIN アルゴリズムによる基本周波数検出
-- **音響特性** - 音色、ダイナミクス、リズム分析
-- **ルーム音響解析** - RT60 / EDT、明瞭度、定義度、オクターブバンド別減衰、ブラインド／等価ルーム推定、RIR 合成、ルームモーフィング
-- **スペクトル特徴量** - メルスペクトログラム、MFCC、クロマ、CQT/VQT、スペクトル重心、平坦度
-- **オーディオエフェクト** - HPSS、タイムストレッチ、ピッチシフト、キーへのオートチューン、ノーマライズ、トリム
-- **ストリーミング解析** - チャンク単位処理と、音声が届くにつれて更新される BPM/キー/コード推定
-- **マスタリング** - LUFS ターゲット、True Peak リミッター、EQ、ダイナミクス、リペア（解析と固定順のリペア段を 1 回の呼び出しで実行）、ステレオ処理、リファレンスマッチングを含むプリセット／設定式チェーン
-- **ミキシング** - チャンネルストリップ、センド、バス、オートメーション、シーンプリセット、ゴニオメーター／True Peak 計測、オフラインステレオレンダー
-- **編集 DSP とインサート** - ピッチ補正、ノート区間ストレッチ、ピッチ／フォルマントによるボイスチェンジを直接提供し、リバーブやダッキングは有効な場合に名前付きプロセッサまたはミキサーインサート経路から使えます
-- **逆変換ヘルパー** - メルスペクトログラムや MFCC から STFT／音声を近似的に再構成
-- **内蔵インストゥルメント** - 17 種のエンジン（うち 11 が物理モデル）を持つシンセサイザー、データ不要の GM/GS フォールバックバンク、持ち込みサンプル用の SoundFont 2 プレイヤー。サンプルを同梱しない理由は [音源方式](/ja/docs/sound-sources) を参照
-- **プロジェクトとリアルタイム** - MIDI シーケンスとオフラインバウンスを備えたヘッドレス DAW のプロジェクト編集、トランスポート・トラックレーン・ライブ MIDI 入力を備えたリアルタイムエンジン
+すべての分野と、目的ごとに書かれたページの一覧は [学習順ガイド](./learning-path.md) にあります。
 
-::: details この一覧に出る略語
-- **BPM** — 1 分あたりの拍数。曲の速さです。
-- **STFT** — 音を短い窓ごとに周波数へ分ける解析。スペクトログラムの土台です。
-- **MFCC** — 音色の特徴を少ない数値にまとめたもの。ML や分類でよく使います。
-- **CQT / VQT** — 音楽の音高間隔に合わせた周波数解析です。
-- **HPSS** — 倍音成分と打撃成分を分ける処理です。
-- **LUFS / True Peak** — LUFS（Loudness Units relative to Full Scale）は配信向けの音量感、True Peak（トゥルーピーク）はサンプル間ピーク（ISP）まで含めたピーク安全性を見るマスタリング指標です。
-- **ゴニオメーター** — 左右の広がりや位相の状態を視覚化するメーターです。
+::: details この表に出る略語
+- **BPM**: 1 分あたりの拍数。曲の速さです。
+- **LUFS / True Peak**: マスタリング指標です。LUFS（Loudness Units relative to Full Scale）は聴感上のラウドネス、True Peak（トゥルーピーク）はサンプル間のピークまで含めたピーク安全性を測ります。
+- **RT60**: 部屋の残響が 60 dB 減衰するまでの時間です。
 :::
 
 ## 今すぐ試す
 
-[デモ](/ja/demos)にアクセスして、ブラウザで libsonare を試せます。音声ファイルをドラッグ & ドロップするだけで解析結果が表示されます。
+いま表示したコードは、クロマのフレームをコードテンプレートと照合して得たものです。下のデモは同じコード認識を C–Am–F–G の短いクリップに対して実行します。計算しているのは、いまインストールしたのと同じ WASM ビルドです。
 
-このページでも試せます。下のデモはページ上でリアルタイムに動く短時間フーリエ変換で、これからインストールするのと同じ WASM ビルドが計算しています。
+<SonareDemo id="chord-track" />
 
-<SonareDemo id="stft-basics" />
+ブラウザで使える完全なツールは [デモ](/ja/demos) にあります。どのデモにも音声ファイルをドロップでき、何もアップロードされません。
 
 ## 次のステップ
 
@@ -197,7 +186,7 @@ console.log('キー:', result.key.name);
 ### 何かを作りたい
 
 - [使用例](/ja/docs/examples) — 作りたいものに一番近い動作パターンを、実行環境ごとに
-- [学習順ガイド](/ja/docs/learning-path) — 解析から室内音響まで、8 つの分野を目的別に辿る道案内
+- [学習順ガイド](/ja/docs/learning-path) — 解析から再生まで、10 の分野を目的別に辿る道案内
 - [実践ユースケース](/ja/docs/use-cases) — 素材から成果物まで 1 つの仕事を通しで、実行できるスクリプトの形で
 - [インストール](/ja/docs/installation) — 既定の構成で足りなくなったときの FFmpeg デコード、ソースビルド、Node ネイティブアドオン
 

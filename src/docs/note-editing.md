@@ -38,6 +38,8 @@ The examples below assume `samples` is a mono `Float32Array` decoded at the stat
 
 `pitchPyin` supplies an F0 track. `extractNotes` turns that track and its voicing flags into `NoteObject[]`; each object carries sample and frame bounds, `medianHz`, amplitude, and a pending `edit`. Change the edit and pass the list to `renderNotes`.
 
+<SonareDemo id="melody-contour" />
+
 ::: code-group
 
 ```typescript [Browser / WASM]
@@ -83,13 +85,38 @@ edited = sonare.render_notes(samples, sample_rate, notes, fade_ms=10)
 
 :::
 
+`extractNotes` shares its segmenter with `noteSegments` ([Note segmentation](./js-api-helpers.md#note-segmentation)); a held note with vibrato stays one note. Every option is optional, and `0` or omission takes the default:
+
+| Option | Default | Effect |
+|---|---|---|
+| `segmentationThresholdCents` | `50` | Pitch change that starts a new note |
+| `minNoteMs` | `30` | Shortest span kept as a note |
+| `referenceHz` | `440` | Reference the per-note `medianCents` is measured against |
+| `voicedThreshold` | `0.5` | `voicedProb` level that counts as voiced; read only when `voiced` is omitted |
+
+Pass `pitch.voicedFlag` through `voiced`, as the example does. pYIN's `voicedProb` rises with F0, so the default threshold drops low registers.
+
 An identity edit passes its source span through. Before rendering, all edited source spans are cleared. Notes are then rendered in array order; a later note overwrites an earlier destination where they overlap, with an equal-power cross-fade at each edited edge (5 ms by default). `renderNotes` returns audio with the same length and sample rate as its input. Every source span must satisfy `0 <= onsetSample < offsetSample <= samples.length` and source spans must not overlap; an invalid span is refused. A moved or lengthened note can write over neighboring samples, but destination writes are clipped to the output buffer and output beyond either end is truncated. A muted note clears its source span and does not erase destinations rendered by other notes. Non-finite audio samples are refused. `gainDb` and every amplitude-envelope value must be finite, envelope values must be non-negative, and a non-finite gain-times-envelope result is refused.
 
-The `NoteEdit` fields cover sample movement, semitone shift, gain in dB, time stretch, formant shift, mute, an amplitude envelope, and drift/vibrato changes. Ordinary edits do not need pitch metadata. Curve edits (`vibratoDepthChange` and `driftChange`) need the original `f0Hz` track and `frameRate` in the render request; in JS/WASM, `f0Hz` must be a `Float32Array`. An optional `voiced` flag array must have the same length as `f0Hz`: `false` suppresses a positive F0, while `true` cannot make a non-positive, non-finite, or otherwise unusable F0 valid. `decomposeNotePitch` accepts the same optional flags. `extractNotes` accepts either voiced flags or voiced probabilities; a non-positive or non-finite F0 frame contributes no pitch measurement.
+Every `NoteEdit` field is optional, and an omitted one is the neutral value:
+
+| Field | Effect | Neutral value | Needs `f0Hz` / `frameRate` at render |
+|---|---|---|---|
+| `timeOffsetSamples` | Moves the note along the timeline; negative moves it earlier | `0` | No |
+| `pitchShiftSemitones` | Transposes the note | `0` | No |
+| `gainDb` | Level change | `0` | No |
+| `timeStretchRatio` | Duration ratio; above `1` lengthens, pitch is preserved | `1` (`0` reads as `1`) | No |
+| `formantShiftSemitones` | Moves the spectral envelope on top of the pitch shift | `0` | No |
+| `vibratoDepthChange` | Change in measured vibrato depth: `-1` flattens, `+1` doubles | `0` | Yes |
+| `driftChange` | The same for the slow drift around the note's center pitch | `0` | Yes |
+| `muted` | Silences the span; the other fields then do not apply | `false` | No |
+| `amplitudeEnvelope` | Gain points stretched over the rendered note, on top of `gainDb` | empty (none) | No |
+
+Curve edits (`vibratoDepthChange`, `driftChange`) need the original `f0Hz` track and `frameRate` in the render request; in JS/WASM, `f0Hz` must be a `Float32Array`. An optional `voiced` flag array must have the same length as `f0Hz`: `false` suppresses a positive F0, while `true` cannot make an unusable F0 valid. `decomposeNotePitch` accepts the same flags. `extractNotes` accepts either voiced flags or voiced probabilities; a non-positive or non-finite F0 frame contributes no pitch measurement.
 
 ### Seconds beside samples
 
-A note or percussive event handed to `renderNotes` or `renderPercussiveEvents` gives each span bound as samples (`onsetSample`, `offsetSample`) or seconds (`onsetSec`, `offsetSec`), and an edit's move as `timeOffsetSamples` or `timeOffsetSec` (negative moves earlier). Seconds are rounded to the nearest sample at the call's sample rate. Give one spelling of each; both together is refused. Python spells these `onset_sec`, `offset_sec` and `time_offset_sec`.
+A note or percussive event handed to `renderNotes` or `renderPercussiveEvents` gives each span bound as samples (`onsetSample`, `offsetSample`) or seconds (`onsetSec`, `offsetSec`), and an edit's move as `timeOffsetSamples` or `timeOffsetSec` (negative moves earlier). Seconds are rounded to the nearest sample at the call's sample rate. Give one spelling of each; both together is refused. Python spells these `onset_sec`, `offset_sec` and `time_offset_sec`. [Editing DSP](./editing-dsp.md#samples-and-seconds) lists the spellings for every editing call.
 
 ```typescript
 const edited = renderNotes({
@@ -115,7 +142,7 @@ const halves = splitNote({ ...source, notes, index: 0, frame: middle }); // one 
 const rejoined = mergeNotes({ ...source, notes: halves, first: 0, last: 1 }); // back to the original count
 ```
 
-`frame` must lie strictly inside the note's span and `first < last < notes.length`; otherwise the call throws a `SonareError` (`InvalidParameter`). A merged note spans from the first note's onset to the last note's offset, gap included, and takes the first note's edit; set the edit afterwards if the notes carried different ones. Python: `split_note(samples, sample_rate, f0_hz, frame_rate, notes, index, frame, voiced=...)` and `merge_notes(..., notes, first, last, voiced=...)`.
+`frame` must lie strictly inside the note's span, otherwise the call throws a `SonareError` (`InvalidParameter`). An `index`, or a `first < last < notes.length` run, outside the set throws a `RangeError` on WASM and Node. A merged note spans from the first note's onset to the last note's offset, gap included, and takes the first note's edit; set the edit afterwards if the notes carried different ones. Python: `split_note(samples, sample_rate, f0_hz, frame_rate, notes, index, frame, voiced=...)` and `merge_notes(..., notes, first, last, voiced=...)`.
 
 ## Edit overlapping voices with a held analysis
 
@@ -158,10 +185,29 @@ with sonare.PolyphonicAnalysis.analyze(samples, sample_rate, max_polyphony=3) as
 
 :::
 
+`reattackRatio` decides whether a pitch that is struck again while it still sounds becomes a second note. The analysis splits a held note where its salience (how strongly a pitch stands out in the spectrogram), read over about 35 ms, climbs past this multiple of the level just before. The value must be above `1`, and `0` or omission turns the split off, so by default `analyzePolyphonic` returns one long note for a repeated, still-ringing pitch. Its defaults differ from `transcribe`'s:
+
+| Option | `analyzePolyphonic` | `transcribe` |
+|---|---|---|
+| `maxPolyphony` | `4` | `10` |
+| `reattackRatio` | off (`0`) | `2.0` |
+| Accepted range | `maxPolyphony` `1..64`; `reattackRatio` above `1` | the same |
+
+A 220 Hz tone with a second strike at 3 times the decayed level, analyzed at 44.1 kHz, shows the effect:
+
+| `reattackRatio` | Notes returned |
+|---|---|
+| omitted or `0` | 1 (0.00 s to 2.00 s) |
+| `1.5` or `2` | 2 (split at 1.02 s) |
+| `4` or `10` | 1 |
+
+A 1.5 times strike splits only at `1.5`, and an 8 times strike splits at every setting, because the ridge (the track a pitch leaves across spectrogram frames) has already ended on the level drop. Choose a value just under the strike-to-previous-level ratio you want to catch: `2` is the value `transcribe` uses; a lower value also catches softer re-strikes, and a higher one leaves them merged. Any level swell of that size within the span counts as a re-strike whatever produced it, so a sustained tone with a deep amplitude swell is split too. Out-of-range values (above `0` up to and including `1`, or negative) throw `InvalidParameter`. Python takes it as `reattack_ratio`. See [Audio to Notes](./audio-to-notes.md#options-and-limits) for the same option on `transcribe`, the tracker limits it adds, and its quiet-note gate.
+
 The fresh polyphonic render is the analysis round trip, including STFT reconstruction error; it is not a byte-for-byte copy of the source. A short passage is the practical unit: the held spectrogram and claim sets scale with the analyzed audio, and a released handle cannot be queried or rendered.
 
-## An SMF as a reference melody: note targets
+<SonareDemo id="pitch-correct" />
 
+## An SMF as a reference melody: note targets
 
 An SMF can provide the reference melody for a recorded take. `noteTargetsFromSmf` and `assignNoteTargets` are module-level functions: the first reads targets from an in-memory SMF, and the second applies them to notes from `extractNotes`. `pitchCorrectToMidi` on [Editing DSP](./editing-dsp.md) moves a whole buffer by one interval; this workflow assigns a target to each note.
 

@@ -1,6 +1,17 @@
 # FAQ
 
-Questions that come up about what the music-analysis results mean, and how far to trust them. For what is tested and how, see [Implementation Validation](./implementation-validation.md); for where libsonare agrees with librosa, see [librosa Compatibility](./librosa-compatibility.md).
+The table answers the questions that come up in a first session. The sections after it cover what the music-analysis results mean and how far to trust them. For what is tested and how, see [Implementation Validation](./implementation-validation.md); for where libsonare agrees with librosa, see [librosa Compatibility](./librosa-compatibility.md).
+
+## Quick answers
+
+| Question | Answer | Page |
+|----------|--------|------|
+| Which formats open without FFmpeg? | WAV and MP3, in every runtime. The browser can decode AAC, OGG, and FLAC through its own codecs with `Audio.fromMemoryWithBrowserFallback`; Python and the CLI need an FFmpeg-enabled build for those. `sonare doctor` lists what the installed build decodes. | [Installation](./installation.md#python-pip), [File Input](./wasm.md#file-input) |
+| The BPM is half or double what I expected. | Both readings are usually supported by the same periodicity. `result.bpmCandidates` labels each candidate `primary`, `half`, `double`, or `other`, and `analyzeBpm` accepts a narrower `bpmMin` / `bpmMax` range. | [Tempo](./analysis.md#tempo), [Tempo and BPM](./glossary/analysis/tempo-bpm.md) |
+| What happens to a stereo file? | `Audio.fromMemory` and `Audio.from_file` fold it to mono, which is what the analysis expects. Mixing, mastering, and `roomMorphStereo` keep both channels. | [Stereo to Mono Conversion](./wasm.md#stereo-to-mono-conversion) |
+| Is my audio uploaded anywhere? | No. Every binding runs the engine in your own process, and the browser build runs it in the page. The demos on this site upload nothing. | [Browser Local Processing](./glossary/concepts/browser-local-processing.md) |
+| Do I have to call `.delete()` in JavaScript? | Not on `Audio` or on the plain objects functions return; they hold no WASM memory. Stateful classes such as `StreamAnalyzer`, `Mixer`, `Project`, and `RealtimeEngine` do: call `delete()` when you are done, or declare them with `using`. | [Memory Issues](./wasm.md#memory-issues) |
+| Is it ready for production? | It is past 1.0 with semantic-version tags and is maintained by one developer. Pin the version, read the release notes before upgrading, and validate the features you depend on against your own material. | [Project Status & Support](./introduction.md#project-status-support) |
 
 ## How accurate is the music analysis?
 
@@ -26,25 +37,25 @@ Section confidence and chord confidence are different quantities again, each doc
 
 Because a chord and its relative share most of their notes, and a chromagram folds every octave into twelve numbers. A major and the minor a third below have two of three tones in common, and once the register information is gone there is very little left to say which note is the root.
 
-The chord recogniser addresses this by weighing the low register separately: the bass names the root far more reliably than the folded chroma does, so a candidate whose root the bass sounds is preferred over one whose root it does not. The weighting is deliberately a tie-breaker rather than an override, because the bass names the root only in root position — a strong bass prior would relabel every inversion after its own bass note.
+The chord recognizer addresses this by weighing the low register separately: the bass names the root far more reliably than the folded chroma does, so a candidate whose root the bass sounds is preferred over one whose root it does not. The weighting is deliberately a tie-breaker rather than an override, because the bass names the root only in root position — a strong bass prior would relabel every inversion after its own bass note.
 
-If a specific track still comes back on the relative, the useful levers are: give the analyzer material that has a bass part (a stem with the bass removed loses exactly the cue this depends on), enable chord–key context so the progression constrains the reading, and look at the runner-up candidates rather than only the winner. `KeyAnalyzer` exposes all 24 candidates with their posteriors, and a contested relative pair is visible there as two near-equal shares.
+If a specific track still comes back on the relative, the useful levers are: give the analyzer material that has a bass part (a stem with the bass removed loses exactly the cue this depends on), enable chord–key context so the progression constrains the reading, and look at the runner-up candidates rather than only the winner. `detectKeyCandidates` (Python: `detect_key_candidates`; C++: `KeyAnalyzer`) returns all 24 candidates, each with its profile correlation and its posterior share in `key.confidence`, and a contested relative pair is visible there as two near-equal shares.
 
-## Which chords can it recognise?
+## Which chords can it recognize?
 
 Triads (major, minor, diminished, augmented), sevenths (dominant, major, minor, diminished, half-diminished), suspended chords (sus2, sus4, sus2add4), added ninths, ninths, sixth chords, the minor-major seventh, 7sus4 and the altered dominants (11th, 13th, 7♭9, 7♯9).
 
 The vocabulary beyond the four triads is only searched when the full template set is enabled — `useTriadsOnly` off. The standalone chord API has it off already, so the full set is what you get. The unified `analyze()` path has it **on**, so it searches triads alone until you ask for more: pass `useTriadsOnly: false`, or `--with-seventh` on either command line. A chord outside the vocabulary is reported as the nearest member of it, not rejected.
 
-Three of those qualities are worth knowing about because they are genuinely ambiguous rather than merely hard. A major sixth chord and the minor seventh a third below spell the same four pitch classes; so do a minor sixth and the half-diminished seventh below it, and a 7sus4 and the sus2add4 a fourth below. No chromagram can separate them, because there is nothing in the chroma to separate. What separates them is the bass, and the recogniser leans on the commoner reading unless the low register says otherwise. On material with no bass part, expect the commoner name.
+Three of those qualities are worth knowing about because they are genuinely ambiguous rather than merely hard. A major sixth chord and the minor seventh a third below spell the same four pitch classes; so do a minor sixth and the half-diminished seventh below it, and a 7sus4 and the sus2add4 a fourth below. No chromagram can separate them, because there is nothing in the chroma to separate. What separates them is the bass, and the recognizer leans on the commoner reading unless the low register says otherwise. On material with no bass part, expect the commoner name.
 
 ## Why are the section labels wrong, or all `Unknown`?
 
-Structure labelling is a fixed-threshold heuristic, not a trained segmenter, and it says so. Boundary positions are generally usable; the labels (Verse, Chorus, Bridge) are best-effort and will be wrong on material that does not follow a conventional pop form.
+Structure labeling is a fixed-threshold heuristic, not a trained segmenter, and it says so. Boundary positions are generally usable; the labels (Verse, Chorus, Bridge) are best-effort and will be wrong on material that does not follow a conventional pop form.
 
 `Unknown` is a deliberate answer rather than a failure code. It appears when no boundary was detected at all, when a segment matched none of the positive branches, or when the evidence for a musical function was too weak to assert one — in the last case the sub-threshold score is kept, so you can see how close it came.
 
-Two guards make `Unknown` more common, on purpose. Adjacent segments whose chroma is indistinguishable are merged before anything is labelled, so a novelty peak inside one continuous stretch of music does not split it into two "repeating" sections. And when nearly every pair of sections counts as a repetition of every other — which is what uniform material looks like — repetition is treated as carrying no information rather than as evidence for a verse/chorus alternation. Without that rule, uniform material would yield a full song form out of bars that never changed.
+Two guards make `Unknown` more common, on purpose. Adjacent segments whose chroma is indistinguishable are merged before anything is labeled, so a novelty peak inside one continuous stretch of music does not split it into two "repeating" sections. And when nearly every pair of sections counts as a repetition of every other — which is what uniform material looks like — repetition is treated as carrying no information rather than as evidence for a verse/chorus alternation. Without that rule, uniform material would yield a full song form out of bars that never changed.
 
 For downstream algorithms, prefer the raw signals over the labels: `boundaryTimes` and the chroma cosine self-similarity matrix are exposed precisely so a caller can apply their own thresholds.
 
@@ -63,7 +74,7 @@ A test chord generated 40 cents sharp read as C major with a measured `tuning` o
 
 No, and the difference is in where the profiles come from.
 
-The major and minor key profiles are published ones — Krumhansl–Kessler, Temperley, Sha'ath, Faraldo, Bellman–Budge — each derived from listening experiments or from a corpus. The five modal profiles (Dorian, Phrygian, Lydian, Mixolydian, Locrian) are not. They are a construction in the same shape: the tonic weighted highest, its fifth and third confirming it, the degree that separates the mode from its major or minor neighbour standing above the remaining scale tones, and everything outside the scale suppressed. The ordering is what carries the meaning; the exact numbers place each weight between its neighbours and are otherwise arbitrary.
+The major and minor key profiles are published ones — Krumhansl–Kessler, Temperley, Sha'ath, Faraldo, Bellman–Budge — each derived from listening experiments or from a corpus. The five modal profiles (Dorian, Phrygian, Lydian, Mixolydian, Locrian) are not. They are a construction in the same shape: the tonic weighted highest, its fifth and third confirming it, the degree that separates the mode from its major or minor neighbor standing above the remaining scale tones, and everything outside the scale suppressed. The ordering is what carries the meaning; the exact numbers place each weight between its neighbors and are otherwise arbitrary.
 
 That construction is validated against synthetic scale histograms built independently of it, so it is not circular — but no probe-tone study or annotated corpus stands behind it. Modal detection is a plausible heuristic, and modal candidates are opt-in for that reason.
 

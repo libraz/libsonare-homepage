@@ -5,7 +5,7 @@ description: ミキサーシーンの交換形式を解説。ストリップ・�
 
 # ミキシングシーン JSON
 
-**シーン**は、ミキサー全体をプレーンデータで記述したものです。`Mixer.fromSceneJson(...)` が読み、`toSceneJson()` が書き出す形式（Python では `from_scene_json(...)` / `to_scene_json()`）で、WASM・Python・Node・C ABI・C++ で同一です。プレーンな JSON なので、プロジェクトと一緒に保存し、git で差分を取り、手で編集し、あとから読み直せます。この形式の JSON Schema `mixer-scene.schema.json` が npm と Python のパッケージに同梱されているので、手書きや生成したシーンをミキサーへ渡す前に検査できます — [スキーマでシーンを検証する](#スキーマでシーンを検証する) を参照してください。
+**シーン**は、ミキサー全体をプレーンデータで記述したものです。`Mixer.fromSceneJson(...)` が読み、`toSceneJson()` が書き出す形式（Python では `from_scene_json(...)` / `to_scene_json()`）で、WASM・Python・Node・C ABI・C++ で同一です。プレーンな JSON なので、プロジェクトと一緒に保存し、git で差分を取り、手で編集し、あとから読み直せます。この形式の JSON Schema `mixer-scene.schema.json` が npm と Python のパッケージに同梱されているので、手書きや生成したシーンをミキサーへ渡す前に検査できます。[スキーマでシーンを検証する](#スキーマでシーンを検証する) を参照してください。
 
 ストリップ・センド・バスにまだ馴染みがなければ、先に [ミキシングの基礎](./glossary/concepts/mixing-basics.md) と [ミキシングエンジン](./mixing.md) を読んでください。本ページはフィールドごとのリファレンスです。
 
@@ -58,7 +58,7 @@ description: ミキサーシーンの交換形式を解説。ストリップ・�
 
 インサートの `params` キーも同じリストに載ります。どのプロセッサも消費しなかったパラメータキーも報告されます。インサートが実際に読むキーの一覧は `masteringInsertParamNames(name)`（Python は `mastering_insert_param_names(name)`）で列挙できます。
 
-同梱のスキーマは、読み込みの前に同じ誤りを捕まえます。スキーマ内のすべてのオブジェクトが `additionalProperties: false` なので、バリデータが検証の時点で綴り間違いを報告します。
+同梱のスキーマは、読み込み前に同じ誤りを検出します。すべてのオブジェクトで `additionalProperties: false` と、`$` または `x-` で始まる注釈を許可する `patternProperties` を組み合わせています。そのため `faderDB` のような綴り間違いは検証に失敗しますが、予約されたメタデータキーは受理されます。
 
 ライブエンジンのセッターは、シーン全体の読み込みより厳格です。`setTrackStripJson`、`setBusStripJson`、`setMasterStripJson`（およびその上に載る Node・WASM・Python のセッター）と、ストリップの EQ バンドセッター（`setTrackStripEqBand`、`setTrackStripEqBandJson`、バスとマスターの対応メソッド）は、消費しないキーを `InvalidParameter` で**拒否**し、メッセージにそのキーを示します: `unknown strip key 'strips[0].faderDB'`、`unknown band key 'gainDB'`。レガシーの snake_case 表記と `$` / `x-` のキーは受理されます。
 :::
@@ -83,16 +83,17 @@ description: ミキサーシーンの交換形式を解説。ストリップ・�
 | `dualPanRight` | number | `1` | デュアルパン時の右位置（既定はハード R の恒等ルーティング）。`-1` … `+1` へクランプ |
 | `sourceLayout` | string | `"stereo"` | ストリップへ入るソースのチャンネルレイアウト。`"mono"`、`"stereo"`、`"5.1"`、`"7.1"` のいずれか。ライターは既定のステレオでは省略し、それ以外の文字列は読み込み時に拒否されます |
 | `surroundPan` | object | identity | ステレオより広いホスト向けのサラウンドパン位置。`azimuth`・`divergence`・`lfe` は[リアルタイムエンジンの 5.1/7.1 グループバスパンナー](./realtime-engine.md#サラウンドグループバスとワイドメーター)に反映され、`elevation` と `distance` は予約です。値は読み込み時にクランプされ、シーン JSON を往復します。ライターは中央の既定値ではオブジェクトごと省略します。単体のオフライン `Mixer` はステレオのため適用しません |
-| `metering` | object | すべて有効 | ストリップが計算するメーターの選択。`enabled`・`lufs`・`truePeak`（boolean、既定 `true`）と `truePeakOversample`（integer、既定 `4`、`1` … `16` の範囲）。すべてのメーターが既定のとき、ライターはオブジェクトごと省略します |
+| `metering` | object | すべて有効 | ストリップが計算するメーターの選択。`enabled`・`lufs`・`truePeak`（boolean、既定 `true`）と `truePeakOversample`（integer、既定 `4`、`1` … `16` の範囲。メーターは `2` なら 2 倍、`8`〜`16` なら 8 倍、それ以外は 4 倍に解決します）。すべてのメーターが既定のとき、ライターはオブジェクトごと省略します |
 | `polarityInvertLeft` | boolean | `false` | 左チャンネルの極性反転 |
 | `polarityInvertRight` | boolean | `false` | 右チャンネルの極性反転 |
 | `panLaw` | integer | `0` | `0` = 定 3 dB、`1` = 定 4.5 dB、`2` = 定 6 dB、`3` = リニア 0 dB。それ以外は読み込み時に**拒否**されます |
 | `channelDelaySamples` | integer | `0` | ストリップごとの遅延。`0` … `192000`。このストリップだけを遅らせ、[PDC](./mixing.md#レイテンシとプラグインディレイ補償-pdc) の対象には含まれません。範囲外は読み込み時に拒否されます |
+| `eq` | object | identity | ストリップ内蔵のイコライザー（プリフェーダーで動作）。`enabled`（既定 `true`）と、最大 24 個の [EQ バンド](#eq-バンド)を並べる `bands`。有効で全バンドが既定のあいだ、ライターは省略します。WASM の `Mixer` には EQ のセッターがないため、WASM から設定する手段はシーン JSON だけです |
 | `inserts` | array | `[]` | 直列のプロセッサ（[インサート](#インサート)参照） |
 | `sends` | array | `[]` | バスへの並列センド（[センド](#センド)参照） |
 
 ::: info enum はファイルでは整数、API では文字列
-シーン**ファイル**は `panMode` と `panLaw` を整数で保存しますが、インサートの `slot` とセンドの `timing` は短い文字列トークン `"pre"` / `"post"` で保存します。JavaScript の実行時**メソッド**は分かりやすい文字列を受け付けます — `setPanLaw(strip, 'const3dB')`、`addSend(..., 'postFader')`。Python はセンド／メータータップでは同じ名前を受け付けますが、パンロー文字列は `'const-3db'`、`'const-4.5db'`、`'const-6db'`、`'linear-0db'` のような正規化名（または enum/int 値）を使います。どちらも同じ内部値に対応し、違いはファイル形式か使いやすい API かだけです。
+シーン**ファイル**は `panMode` と `panLaw` を整数で保存しますが、インサートの `slot` とセンドの `timing` は短い文字列トークン `"pre"` / `"post"` で保存します。JavaScript の実行時**メソッド**は分かりやすい文字列を受け付けます（`setPanLaw(strip, 'const3dB')`、`addSend(..., 'postFader')`）。Python はセンド／メータータップでは同じ名前を受け付けますが、パンロー文字列は `'const-3db'`、`'const-4.5db'`、`'const-6db'`、`'linear-0db'` のような正規化名（または enum/int 値）を使います。どちらも同じ内部値に対応し、違いはファイル形式か使いやすい API かだけです。
 
 実行時にパンを編集したあとでシーンを書き出しても、ストリップの現在の `panMode` は保持されます。パン関連フィールドを手で組み直すのではなく、`Mixer.toSceneJson()` / `Mixer.to_scene_json()` を使ってください。
 
@@ -100,11 +101,11 @@ description: ミキサーシーンの交換形式を解説。ストリップ・�
 :::
 
 ::: warning シーンが拒否されたときの届き方
-シーンの構築を止める要因 — 壊れた JSON、未対応の `version`、範囲外のフィールド、文字列でない `timing` — は、C ABI 自身のコードと具体的な理由つきのメッセージで報告されます。
+シーンの構築を止める要因（壊れた JSON、未対応の `version`、範囲外のフィールド、文字列でない `timing`）は、C ABI 自身のコードと具体的な理由つきのメッセージで報告されます。
 
 | 実行環境 | 受け取るもの | コード |
 |----------|--------------|--------|
-| WASM | `SonareError`、メッセージは `failed to build mixer from scene JSON: <reason>` | 壊れた文書は `InvalidFormat`、未対応の version や範囲外のフィールドは `InvalidParameter` |
+| WASM | `SonareError`、メッセージは `failed to build mixer from scene JSON: <reason>` | 壊れた文書、小数の整数、範囲外の `panMode`・`panLaw`・`channelDelaySamples`・`metering.truePeakOversample` は `InvalidFormat`。未対応の `version`、文字列でない `slot`・`timing`、未知のレイアウト、構築が拒否するグラフは `InvalidParameter` |
 | Node ネイティブ | 同じメッセージとコードの `SonareError` | 同上 |
 | Python | 同じメッセージとコードの `SonareError` | 同上 |
 | C ABI | `sonare_mixer_from_scene_json` が `nullptr` を返す | `sonare_last_error_code()`。理由は `sonare_last_error_message()` |
@@ -112,11 +113,11 @@ description: ミキサーシーンの交換形式を解説。ストリップ・�
 分岐には `code` を使い、どのフィールドが不正だったかはメッセージをログで確認してください。ミキサーへ渡す前にシーンを検証すれば、パス付きのメッセージを最も早く得られます。
 :::
 
-::: details フィールド用語: デュアルパン・ポラリティ反転・パンロー・PDC
-- **デュアルパン**（`panMode: 2`） — 信号全体をまとめて動かすのではなく、左右チャンネルを*独立した*位置にパンします。すでにステレオの素材を狭めたり配置し直したりするのに便利です。
-- **ポラリティ反転** — チャンネルを −1 倍して波形を反転します。別トラックと逆相で録れてしまった場合の補正に使います。位相関係を変えるもので、それ自体は体感ラウドネスを変えません。
-- **パンロー**（pan law） — パンしてもラウドネスが一定に保たれるよう、中央を左右いっぱいに対してどれだけ下げるか。`定 3/4.5/6 dB` は定パワー系、`リニア 0 dB` は合算レベルを一定に保ちます。[ミキシングエンジン](./mixing.md#パンモードとパンロー) を参照してください。
-- **PDC**（プラグインディレイ補償） — ある経路がルックアヘッド処理で遅れるとき、エンジンが短い経路を合わせて遅らせ、マスターで揃えます。`channelDelaySamples` はこの計算の対象外です。
+::: details フィールド用語: デュアルパン・極性反転・パンロー・PDC
+- **デュアルパン**（`panMode: 2`）：信号全体をまとめて動かすのではなく、左右チャンネルを*独立した*位置にパンします。すでにステレオの素材を狭めたり配置し直したりするのに便利です。
+- **極性反転**：チャンネルを −1 倍して波形を反転します。別トラックと逆相で録れてしまった場合の補正に使います。位相関係を変えるもので、それ自体は体感ラウドネスを変えません。
+- **パンロー**（pan law）：パンしてもラウドネスが一定に保たれるよう、中央を左右いっぱいに対してどれだけ下げるか。`定 3/4.5/6 dB` は定パワー系、`リニア 0 dB` は合算レベルを一定に保ちます。[ミキシングエンジン](./mixing.md#パンモードとパンロー) を参照してください。
+- **PDC**（プラグインディレイ補償）：ある経路がルックアヘッド処理で遅れるとき、エンジンが短い経路を合わせて遅らせ、マスターで揃えます。`channelDelaySamples` はこの計算の対象外です。
 :::
 
 ## インサート
@@ -125,7 +126,7 @@ description: ミキサーシーンの交換形式を解説。ストリップ・�
 
 | フィールド | 型 | 意味 |
 |-----------|----|------|
-| `slot` | `"pre"` \| `"post"` | フェーダーの前か後で動く。省略時は `"pre"`。**短いトークン**に注意 — `preFader`/`postFader` ではありません。 |
+| `slot` | `"pre"` \| `"post"` | フェーダーの前か後で動く。省略時は `"pre"`。**短いトークン**に注意してください。`preFader`/`postFader` ではありません。 |
 | `processor` | string | *必須。* プロセッサ id（例 `eq.parametric`、`dynamics.compressor`、`effects.reverb.plate`）。ソロプロセッサは [マスタリングプロセッサ](./mastering-processors.md)、クリエイティブ FX のカタログは [エフェクトインサート](./effects-inserts.md) を参照。レジストリにない id を拒否するのはスキーマではなく、ミキサーの構築時です。 |
 | `params` | object | プロセッサのパラメータをパラメータ名をキーにしたオブジェクトで。例 `{ "thresholdDb": -18, "ratio": 2.5 }`。値は数値か boolean で、プロセッサ固有の例外が 2 つあります。名前付きリグや埋め込みインパルス応答には文字列、音響ルームモーフにはバンドごとの配列です。 |
 | `sidechainKey` | string | *任意。* このインサートの外部サイドチェインへ送るストリップ id（ダッキングなど）。空のときは省略されます。 |
@@ -133,21 +134,34 @@ description: ミキサーシーンの交換形式を解説。ストリップ・�
 ::: info サイドチェインとダッキング
 通常、プロセッサは自分を通過する音声に反応します。**サイドチェイン**を使うと、代わりに*別の*トラックに反応させられます。`sidechainKey` がその別ストリップを指定します。定番の用途は**ダッキング**です。音楽側にかけたコンプが、指定した声のストリップが大きいときに音楽を下げ、音楽ベッドの上で話声をクリアに保ちます。
 
-ライブの[リアルタイムエンジン](./realtime-engine.md)では、サイドチェインのキーを `setLaneSidechain`・`setBusSidechain`・`setMasterSidechain` でバインドします。ストリップ自身をキーにする、またはサイクルを閉じるバインドは `InvalidParameter` で拒否されます。`canSetLaneSidechain(trackId, insertIndex, sourceTrackId)`、`canSetBusSidechain`、`canSetMasterSidechain` は何も変更せずに同じ問いに答え、`{ ok, reason }` を返します（例: `{ ok: false, reason: 'selfKey' }` や `'cycle'`）。そのため UI は、不可能な選択をユーザーが行う前に無効化できます。
+ライブの[リアルタイムエンジン](./realtime-engine.md)では、サイドチェインのキーを `setLaneSidechain`・`setBusSidechain`・`setMasterSidechain` でバインドします。受け付けられないバインドは `InvalidParameter` で拒否されます。`canSetLaneSidechain(trackId, insertIndex, sourceTrackId)`、`canSetBusSidechain`、`canSetMasterSidechain` は何も変更せずに同じ問いに答え、`{ ok, reason }` を返します。そのため UI は、不可能な選択をユーザーが行う前に無効化できます。`reason` は `ok` が true のときに限って `null` で、そうでなければ最初に失敗した検査を表します。
+
+| `reason` | 拒否される理由 |
+|----------|----------------|
+| `invalidTarget` | トラック id が 0、またはバスが構成されていない |
+| `insertOutOfRange` | そのインデックスにインサートがない |
+| `undeclaredSource` | ソースのトラックまたはバスが宣言されていない |
+| `invalidSourceKind` | ソースの種類がトラックでもバスでもない |
+| `selfKey` | ストリップが自分自身をキーにする |
+| `cycle` | キーが出力・センド・ほかのキーをたどるループを閉じる |
+| `tableFull` | サイドチェインのバインド表が満杯 |
+| `planRefused` | その整列に対するディレイ補償の計画が作れない |
+
+呼び出しと事前準備は[リアルタイムエンジン](./realtime-engine.md)にあります。
 :::
 
 ::: warning `params` はオブジェクト。エスケープ文字列の形はレガシー
-`toSceneJson()` は `params` をネストしたオブジェクト — `"params": { "ratio": 2.5 }` — として書き出し、スキーマが認めるのもこの形だけです。ローダーは古い形であるエスケープした JSON 文字列（`"params": "{\"ratio\":2.5}"`）も引き続き受け付けるので、以前のリリースで保存したシーンはそのまま読み込めますが、バリデータは `is not object` として拒否します。シーンを手で書くときはオブジェクト形を使ってください。オブジェクトでも文字列でもない値は、読み込み時に `insert params must be a JSON object (or the legacy JSON string)` で拒否されます。
+`toSceneJson()` は `params` をネストしたオブジェクト（`"params": { "ratio": 2.5 }`）として書き出し、スキーマが認めるのもこの形だけです。ローダーは古い形であるエスケープした JSON 文字列（`"params": "{\"ratio\":2.5}"`）も引き続き受け付けるので、以前のリリースで保存したシーンはそのまま読み込めますが、バリデータは `is not object` として拒否します。シーンを手で書くときはオブジェクト形を使ってください。オブジェクトでも文字列でもない値は、読み込み時に `insert params must be a JSON object (or the legacy JSON string)` で拒否されます。
 :::
 
 ## センド
 
-センドは、ストリップ信号の*コピー*を行き先バスへ送ります。フェーダーの前（`"pre"`）でタップするか後（`"post"`）でタップするかは `timing` フィールドで選びます — [チャンネルストリップの信号フロー](./mixing.md#チャンネルストリップを信号順にたどる)を参照してください。
+センドは、ストリップ信号の*コピー*を行き先バスへ送ります。フェーダーの前（`"pre"`）でタップするか後（`"post"`）でタップするかは `timing` フィールドで選びます。[チャンネルストリップの信号フロー](./mixing.md#チャンネルストリップを信号順にたどる)を参照してください。
 
 | フィールド | 型 | 意味 |
 |-----------|----|------|
 | `id` | string | センド識別子。ストリップ内で一意 |
-| `destinationBusId` | string | *必須。* 対象バスの `id`。同じドキュメント内のバスを指していなければならず、そうでなければミキサーの構築が `send destination is not a bus` で拒否します |
+| `destinationBusId` | string | *必須。* 対象バスの `id`。どのバスも宣言していない id を指すと、マスターへ流れる暗黙の `aux` バスが作られます。綴り間違いは拒否されずに音になるので、意図するバスを宣言してください |
 | `sendDb` | number | センドレベル（dB）。既定 `0` |
 | `timing` | `"pre"` \| `"post"` | フェーダーの前か後でタップ（こちらも短いトークン）。省略時は `"post"` |
 
@@ -159,14 +173,30 @@ description: ミキサーシーンの交換形式を解説。ストリップ・�
 | `role` | string | `"master"`、`"aux"`（既定）、または `"submix"` などのグループバス |
 | `layout` | string | バスのチャンネルレイアウト。`"mono"`、`"stereo"`（既定）、`"5.1"`、`"7.1"` のいずれか。マスターバスはプロジェクトの出力レイアウトを持ちます。ライターは既定のステレオでは省略します |
 | `inputTrimDb` | number | バス入力のゲイン。既定 `0` |
-| `width` | number | バスのステレオ幅。既定 `1`。ストリップと同じく `0` … `2` へクランプ。`layout` がステレオより広いと拒否されます ── サラウンドベッドには狭めたり広げたりするステレオ像がありません |
+| `width` | number | バスのステレオ幅。既定 `1`。ストリップと同じく `0` … `2` へクランプ。`layout` がステレオより広いと拒否されます。サラウンドベッドには狭めたり広げたりするステレオ像がないためです |
 | `polarityInvertLeft` / `polarityInvertRight` | boolean | バスのチャンネルごとの極性反転。既定 `false` |
+| `pan`・`panMode`・`dualPanLeft`・`dualPanRight`・`panLaw` | ストリップと同じ | [ストリップのフィールド](#ストリップ)と同じ意味と範囲。`layout` がステレオより広い場合、既定値以外は拒否されます |
+| `eq` | object | バス内蔵のイコライザー。ストリップの [`eq`](#eq-バンド)と同じ形 |
 | `inserts` | array | バス自体のプロセッサ（ストリップと同じ[インサート](#インサート)形式） |
 
-ライターは `layout`・`inputTrimDb`・`width`・両方の極性フラグを既定値のときは省略するので、素のステレオバスは `id`・`role`・`inserts` だけでシリアライズされます。
+ライターは `layout`・`inputTrimDb`・`width`・パン関連のフィールド・`eq`・両方の極性フラグを既定値のときは省略するので、素のステレオバスは `id`・`role`・`inserts` だけでシリアライズされます。
 
-::: info 特別なロールトークンは `master` と `aux` だけ
-エンジンが特別扱いするのは `master` と `aux` だけで、**それ以外のロール文字列は単なるマスター以外のバス**です。つまり「ドラムバス」は、ロールが `submix` でも `subgroup` でも `group` でも同じように動きます。トークンは挙動を切り替えるスイッチではなくラベルです。組み込みの `drumBusSubgroup` プリセットは `subgroup` を使うので、出力する（`mixingScenePresetJson('drumBusSubgroup')`）と `"role": "submix"` ではなく `"role": "subgroup"` が表示されます。そのため、`"mastre"` と綴り間違えてもエラーにはならず、マスターバスのないシーンになります。
+### EQ バンド
+
+ストリップやバスの `eq` オブジェクトは `{ "enabled": true, "bands": [...] }` の形で、バンドは最大 24 個です。各バンドのフィールドはリアルタイムエンジンの `EqBand` と同じです。
+
+| フィールド | 意味 |
+|-----------|------|
+| `enabled` | 既定は `false`。有効にするまでバンドは何もしません |
+| `type` | `Peak`（既定）、`LowShelf`、`HighShelf`、`LowPass`、`HighPass`、`BandPass`、`Notch`、`TiltShelf`、`FlatTilt`、`AllPass` のいずれか |
+| `frequencyHz`・`gainDb`・`q` | 中心またはコーナーの周波数（既定 1000）、ゲイン（既定 0）、レゾナンスまたはスロープ |
+| `slopeDbOct`・`coeffMode`・`placement`・`phase`・`soloed`・`bypassed` | フィルターのスロープ、係数モード、ステレオ上の配置、位相モード、バンドごとのソロとバイパス |
+| `dynamic`・`thresholdDb`・`ratio`・`rangeDb`・`attackMs`・`releaseMs` など | バンドごとのダイナミック EQ のフィールド。全一覧はスキーマの `eqBand` を参照 |
+
+リストに載せないバンドは恒等のままで、全バンドが未変更のあいだ、ライターは `eq` オブジェクトごと省略します。
+
+::: info 特別なロールトークンは `master` だけ
+エンジンが特別扱いするロールは `master` だけで、`aux` はロールのないバスに付く既定値にすぎません。**それ以外のロール文字列は単なるマスター以外のバス**です。つまり「ドラムバス」は、ロールが `submix` でも `subgroup` でも `group` でも同じように動きます。トークンは挙動を切り替えるスイッチではなくラベルです。組み込みの `drumBusSubgroup` プリセットは `subgroup` を使うので、出力する（`mixingScenePresetJson('drumBusSubgroup')`）と `"role": "submix"` ではなく `"role": "subgroup"` が表示されます。`"mastre"` と綴り間違えてもエラーにはなりません。そのバスはただの汎用バスになり、マスターは id が `master` のバスか暗黙のバスになります。音は出ますが、設定したバスは通りません。
 :::
 
 ## VCA グループ
@@ -203,8 +233,8 @@ VCA グループは、複数ストリップの音声を再ルーティングせ�
 
 `$id`（`https://libraz.net/schemas/libsonare/mixer-scene.schema.json`）は識別子であってダウンロード先ではありません。バリデータにはインストール済みのコピーを指定してください。`@libraz/libsonare-native` パッケージと CMake インストールはこのファイルを含まないので、上記のパッケージのいずれかから取ってください。
 
-::: warning シーンファイルに `$schema` キーは置けない
-最上位オブジェクトは `additionalProperties: false` で、列挙するのは `version`・`strips`・`buses`・`vcaGroups`・`connections` だけです。そのため、エディタにスキーマを見つけさせる常套手段であるシーン内の `"$schema": "..."` 行は、宣言されていないキーとして検証に失敗します（ローダーは無視します）。代わりに外側からスキーマを関連づけてください。エディタのファイルマッチ規則か、下記のようなバリデータのスキーマ引数です。
+::: tip シーンとスキーマを関連づける
+エディタにスキーマを見つけさせるため、シーン内に `"$schema"` キーを置けます。`$` または `x-` で始まるキーは、すべてのオブジェクトでスキーマが受理し、ローダーは警告なしに無視します。エディタのファイルマッチ規則や、下記のようなバリデータのスキーマ引数でも関連づけられます。
 :::
 
 ::: code-group
@@ -248,7 +278,7 @@ check-jsonschema \
 
 ### スキーマとローダーの食い違い
 
-スキーマは、ローダーが誤りを黙って受け入れてしまう箇所ではローダーより**厳しく**なるように書かれています。逆方向では、スキーマが開けたままにしている境界をローダーがいくつか強制し、スキーマでは表現できない参照をミキサーの構築が検査します。まず検証し、次に読み込み、それから `sceneWarnings()`（または `Project.setMixerSceneJson` が返すリスト）を読む — 各層は前の層が捕まえられないものを捕まえます。
+スキーマは、ローダーが誤りを黙って受け入れてしまう箇所ではローダーより**厳しく**なるように書かれています。逆方向では、スキーマが開けたままにしている境界をローダーがいくつか強制し、スキーマでは表現できない参照をミキサーの構築が検査します。まず検証し、次に読み込み、それから `sceneWarnings()`（または `Project.setMixerSceneJson` が返すリスト）を読んでください。各層は前の層が捕まえられないものを捕まえます。
 
 | 入力 | スキーマ | ローダー |
 |------|----------|----------|
@@ -260,13 +290,11 @@ check-jsonschema \
 | −1 … 1 の外の `pan`・`dualPanLeft`・`dualPanRight`、0 … 2 の外の `width` | 拒否（`minimum`/`maximum`） | 範囲内へクランプ |
 | `id`・`processor`・`destinationBusId`・`source`・`destination` の欠落 | 拒否（`required`、`minLength: 1`） | 空として読み、あとでミキサーの構築が拒否 |
 | `strips`/`buses`/`vcaGroups`/`connections`/`inserts`/`sends` のオブジェクトでない要素、`members` の文字列でない要素 | 拒否 | 黙って読み飛ばす |
-| `2` を超える `panMode`、`3` を超える `panLaw` | 受理（`minimum: 0` のみ） | 拒否: `panMode enum is out of range` / `panLaw enum is out of range` |
-| `192000` を超える `channelDelaySamples` | 受理（`minimum: 0` のみ） | 拒否: `channelDelaySamples must be in [0, 192000]` |
-| `16` を超える `metering.truePeakOversample` | 受理（`minimum: 1` のみ） | 拒否: `metering.truePeakOversample must be in [1, 16]` |
 | 32 ビット float の範囲外の数値（`1e40`） | 受理 | 拒否: `floating-point field is non-finite or out of float range` |
-| 未知のプロセッサ id、ドキュメントにないバスへのセンド、未知のノードを指す接続や `sidechainKey`、id の重複 | 受理（表現できない） | ミキサーの構築が拒否 |
+| 未知のプロセッサ id、未知のノードを指す接続や `sidechainKey`、id の重複 | 受理（表現できない） | ミキサーの構築が拒否 |
+| どのバスも宣言していない `destinationBusId` | 受理（表現できない） | 受理。センドはマスターへ流れる暗黙の `aux` バスに入る。このバスは `busCount()` に数えられない |
 
-両者が一致する点 — `version` はあれば `1`、`slot` と `timing` は `"pre"`/`"post"` の文字列、`sourceLayout` と `layout` は 4 つのレイアウトトークンのいずれか、integer フィールドは整数 — では、バリデータのメッセージが単に先に届き、パスを名指しするだけの違いです。
+両者が一致する点では、バリデータのメッセージが単に先に届き、パスを名指しするだけの違いです。一致するのは、`version` はあれば `1`、`slot` と `timing` は `"pre"`/`"post"` の文字列、`sourceLayout` と `layout` は 4 つのレイアウトトークンのいずれか、integer フィールドは整数、という点です。範囲も共通で、`panMode` は 0〜2、`panLaw` は 0〜3、`channelDelaySamples` は 0〜192000、`metering.truePeakOversample` は 1〜16 です。
 
 ## 組み込みプリセット
 
@@ -280,7 +308,7 @@ check-jsonschema \
 
 ## 注釈つきの完全なシーン
 
-これは `mixingScenePresetJson('vocalReverbSend')` の実際の出力です（読みやすさのため既定値は省略。省略したキーはすべて任意なので、短くした形もそのまま検証を通ります）。すべての関係が現れます。2 つのプリフェーダーインサートとポストフェーダーセンドを持つボーカルストリップ、リバーブリターンストリップ、2 つのバス、それらをマスターへ配線する接続です。
+これは `mixingScenePresetJson('vocalReverbSend')` の実際の出力です（読みやすさのため既定値は省略しており、短くした形もそのまま検証を通ります）。`dryWet: 1` はリターンを完全なウェットに保ちます。プレートの既定は 0.35 なので、省くとリターンにドライ信号が混ざります。すべての関係が現れます。2 つのプリフェーダーインサートとポストフェーダーセンドを持つボーカルストリップ、リバーブリターンストリップ、2 つのバス、それらをマスターへ配線する接続です。
 
 ```json
 {
@@ -303,7 +331,7 @@ check-jsonschema \
       "faderDb": -10,
       "width": 1.25,
       "inserts": [
-        { "slot": "post", "processor": "effects.reverb.plate", "params": { "decaySec": 1.8, "preDelayMs": 25 } }
+        { "slot": "post", "processor": "effects.reverb.plate", "params": { "decaySec": 1.8, "preDelayMs": 25, "dryWet": 1 } }
       ]
     }
   ],
@@ -341,7 +369,7 @@ check-jsonschema \
 />
 
 ::: tip `eq.parametric` インサートはバンドインデックス指定のキーを使う
-`eq.parametric` インサートが読むのは**バンドインデックス指定のキー**です — `band{N}.type`、`band{N}.frequencyHz`、`band{N}.gainDb`、`band{N}.q`、およびバンドごとのダイナミック EQ フィールド。このプリセットでは `band0` が 80 Hz のハイパス（`"band0.type": 4` は EQ バンドタイプ enum の `HighPass`）、`band1` が 4 kHz の +2 dB プレゼンスベルで、実際に機能するハイパス＋プレゼンスブーストになっています。
+`eq.parametric` インサートが読むのは**バンドインデックス指定のキー**です。`band{N}.type`、`band{N}.frequencyHz`、`band{N}.gainDb`、`band{N}.q`、、およびバンドごとのダイナミック EQ フィールドです。このプリセットでは `band0` が 80 Hz のハイパス（`"band0.type": 4` は EQ バンドタイプ enum の `HighPass`）、`band1` が 4 kHz の +2 dB プレゼンスベルです。このインサートは、ストリップ内蔵の `eq` フィールドとは別のものです。
 
 キーの全一覧は `masteringInsertParamNames('eq.parametric')` で取得できます。一覧外のキー（たとえばフラットな `highPassHz`）も読み込みは通りますが効果を持たず、シーン読み込み後に `Mixer.sceneWarnings()` が報告します。
 
@@ -356,7 +384,7 @@ check-jsonschema \
 const json = mixingScenePresetJson('vocalReverbSend');
 const mixer = Mixer.fromSceneJson(json, 48000, 512);
 
-mixer.sceneWarnings();  // [] — タイプミスした insert パラメータがあれば非致命的にここへ並ぶ
+mixer.sceneWarnings();  // [] 読まれなかったキー（タイプミス）があれば非致命的にここへ並ぶ
 
 mixer.addSend(0, 'more-verb', 'vocal-verb', -18, 'postFader');  // トポロジー変更
 mixer.compile();                                                 // タイミングが重要な処理の前に再構築
@@ -369,7 +397,7 @@ import libsonare as sonare
 
 scene_json = sonare.mixing_scene_preset_json('vocalReverbSend')
 with sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512) as mixer:
-    mixer.scene_warnings()  # [] — タイプミスした insert パラメータがあれば非致命的にここへ並ぶ
+    mixer.scene_warnings()  # [] 読まれなかったキー（タイプミス）があれば非致命的にここへ並ぶ
 
     mixer.add_send(0, 'more-verb', 'vocal-verb', -18, 'post_fader')  # トポロジー変更
     mixer.compile()                                                  # タイミングが重要な処理の前に再構築
@@ -378,27 +406,27 @@ with sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512)
 ```
 
 ```bash [Python CLI]
-# 組み込みシーンを書き出し、JSON を編集してからレンダーする。
+# 組み込みシーンを書き出し、JSON を編集してからレンダリングする。
 sonare mixing-preset --preset vocalReverbSend > my-scene.json
-sonare mix --scene my-scene.json --input vocal.wav --input reverb-return.wav -o master.wav
+sonare mix --scene my-scene.json --input vocal=vocal.wav -o master.wav
 ```
 
 :::
 
 ::: info `mix --scene` でのストリップごとの入力指定は Python CLI 限定
-JSON ファイルからシーン全体をレンダーし、ストリップごとに `--input` を 1 つずつ渡す機能は Python CLI が実装しています。ネイティブ CLI に `mix` コマンドは存在しません。ストリップコマンドの名前は `sonare-cli mix-strip` だけなので、`sonare-cli mix` を呼ぶスクリプトは未知のコマンドとして失敗します。`mix-strip` 自体は両方の CLI にありますが、`--scene` 非対応の単一ストリップ・単一入力プロセッサです。フルシーンのレンダーではなく、ストリップ単位の手早い確認に使ってください。[チャンネルストリップ](./cli-examples.md#チャンネルストリップ) も参照してください。
+JSON ファイルからシーン全体をレンダリングし、ストリップごとに `--input` を 1 つずつ渡す機能は Python CLI が実装しています。ネイティブ CLI に `mix` コマンドは存在しません。ストリップコマンドの名前は `sonare-cli mix-strip` だけなので、`sonare-cli mix` を呼ぶスクリプトは未知のコマンドとして失敗します。`mix-strip` 自体は両方の CLI にありますが、`--scene` 非対応の単一ストリップ・単一入力プロセッサです。フルシーンのレンダリングではなく、ストリップ単位の手早い確認に使ってください。[チャンネルストリップ](./cli-examples.md#チャンネルストリップ) も参照してください。
 :::
 
 ::: tip いつ再コンパイルするか
-構造的な編集 — バス・センド・接続の追加／削除 — はグラフを dirty にし、次のタイミングが重要なブロックの前に `compile()` が必要です。パラメータ操作（`setSendDb` / Python `set_send_db`、`setPanLaw`）、VCA グループの変更（追加・削除・ゲイン調整。メンバーストリップへのコントロール専用ゲインオフセットとして即時反映されます）、スケジュール済みオートメーションには再コンパイルは不要です。
+構造的な編集（バス・センド・接続の追加／削除や、`setOutputBus` による再ルーティング）はグラフを再コンパイル待ちにし、次のタイミングが重要なブロックの前に `compile()` が必要です。パラメータ操作（`setSendDb` / Python `set_send_db`、`setPanLaw`）、VCA グループの変更（追加・削除・ゲイン調整。メンバーストリップへのコントロール専用ゲインオフセットとして即時反映されます）、スケジュール済みオートメーションには再コンパイルは不要です。
 :::
 
 ## 関連
 
-- [ミキシングデモのプロジェクト JSON](./mixing-demo-project-json.md) — `/mixing` デモの UI プロジェクトファイル。ミキサーシーン*ではない*トラックごとのアレンジ形式
-- [ミキシングエンジン](./mixing.md) — API ガイドと信号フロー
-- [ミキシングアシスタント](./mixing-assistant.md) — `suggestMixScene` が解析結果からこの形式のシーンを書き出す
-- [ミキシングの基礎](./glossary/concepts/mixing-basics.md) — 用語
-- [マスタリングプロセッサ](./mastering-processors.md) — マスタリングレジストリの有効な `processor` id
-- [エフェクトインサート](./effects-inserts.md) — 追加のクリエイティブ FX ミキサーインサート名
-- [バインディング対応表](./binding-parity.md) — 実行環境ごとの差分
+- [ミキシングデモのプロジェクト JSON](./mixing-demo-project-json.md)：`/mixing` デモの UI プロジェクトファイル。ミキサーシーン*ではない*トラックごとのアレンジ形式
+- [ミキシングエンジン](./mixing.md)：API ガイドと信号フロー
+- [ミキシングアシスタント](./mixing-assistant.md)：`suggestMixScene` が解析結果からこの形式のシーンを書き出す
+- [ミキシングの基礎](./glossary/concepts/mixing-basics.md)：用語
+- [マスタリングプロセッサ](./mastering-processors.md)：マスタリングレジストリの有効な `processor` id
+- [エフェクトインサート](./effects-inserts.md)：追加のクリエイティブ FX ミキサーインサート名
+- [バインディング対応表](./binding-parity.md)：実行環境ごとの差分

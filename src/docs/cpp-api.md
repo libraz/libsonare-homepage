@@ -4,7 +4,7 @@ API reference for the libsonare C++ interface.
 
 ## Overview
 
-libsonare provides audio analysis, metering, feature extraction, editing DSP, realtime streaming, mastering, and mixing components for C++ applications. `sonare.h` is the broad analysis/feature umbrella; mastering, mixing, engine, graph, and editing modules also have focused headers when you want to include only one subsystem. Block-by-block streaming is covered in [C++ Streaming API](./cpp-api-streaming.md); feature extraction, pitch tracking, and the core result types are covered in [C++ Analysis API](./cpp-api-analysis.md); audio effects, the mixing engine, editing helpers, and the C ABI are covered in [C++ Effects API](./cpp-api-effects.md).
+libsonare provides audio analysis, metering, feature extraction, editing DSP, realtime streaming, mastering, and mixing components for C++ applications. `sonare.h` is the broad analysis/feature umbrella; mastering, mixing, engine, graph, and editing modules also have focused headers when you want to include only one subsystem. Block-by-block streaming is covered in [C++ Streaming API](./cpp-api-streaming.md); feature extraction, pitch tracking, and the core result types are covered in [C++ Analysis API](./cpp-api-analysis.md); audio effects, the mixing engine, editing helpers, and geometric room acoustics are covered in [C++ Effects API](./cpp-api-effects.md); the C ABI is covered in [C ABI Reference](./cpp-api-c-abi.md).
 
 ## What You Will Learn
 
@@ -18,7 +18,7 @@ By the end of this page you should be able to:
 | Component | Purpose | Key Classes/Functions |
 |-----------|---------|----------------------|
 | **Core** | Audio I/O and signal processing | `Audio`, `Spectrogram` |
-| **Quick API** | Simple one-line analysis and room-acoustic entry points | `quick::detect_bpm()`, `quick::detect_key()`, `quick::detect_beats()`, `quick::detect_acoustic()` |
+| **Quick API** | Simple one-line analysis entry points | `quick::detect_bpm()`, `quick::detect_key()`, `quick::detect_beats()`, `quick::detect_onsets()` |
 | **Geometric room acoustics** | Equivalent-room estimation, RIR synthesis, and room-character morphing | `estimate_room()`, `acoustic::synthesize_rir()`, `effects::acoustic::room_morph()` |
 | **MusicAnalyzer** | Full music analysis with callbacks | `MusicAnalyzer`, `AnalysisResult` |
 | **Streaming** | Block-by-block MIR (music information retrieval) frames and estimates that update over time | `StreamAnalyzer`, `StreamConfig`, `FrameBuffer` |
@@ -26,13 +26,14 @@ By the end of this page you should be able to:
 | **Effects / editing** | Audio processing and small editing building blocks | `hpss()`, `time_stretch()`, `pitch_shift()`, pitch editor / voice changer modules |
 | **Mastering** | Presets, chains, named processors, assistant/profile JSON | `mastering::MasteringChain`, `mastering::api::*` |
 | **Mixing / engine** | Scene-based mixer and DAW-style realtime transport | `mixing::api::Scene`, `mixing::ChannelStrip`, `mixing::FxBus`, `RealtimeEngine` |
-| **C ABI** | Stable FFI API for bindings | `sonare_c.h` |
+| **C ABI** | Stable FFI API for bindings, documented in [C ABI Reference](./cpp-api-c-abi.md) | `sonare_c.h` |
 
 ## Pick The Right C++ Surface
 
 | Goal | Include / API |
 |------|---------------|
-| One-off BPM/key/beat/onset/acoustic checks | `#include <sonare.h>` and `sonare::quick::*` |
+| One-off BPM/key/beat/onset checks | `#include <sonare.h>` and `sonare::quick::*` |
+| Room acoustics (RT60, C50, DRR) from a recording or an impulse response | `detect_acoustic(audio, AcousticConfig)` / `analyze_impulse_response(ir, AcousticConfig)` from `analysis/acoustic_analyzer.h` (included by `<sonare.h>`) |
 | Geometric room estimation, RIR synthesis, or room morphing | `#include <analysis/room_estimator.h>`, `#include <acoustic/rir_synthesizer.h>`, `#include <effects/acoustic/room_morph.h>` |
 | Several music-analysis results from the same audio | `MusicAnalyzer`, so shared intermediates are reused |
 | Live visualizer or estimates that update over time | `#include <streaming/stream_analyzer.h>` |
@@ -81,26 +82,39 @@ of its commands reach the pitch editor directly.
 
 ### C ABI versions
 
-Every C-ABI header that declares flat POD structs owns a version macro guarding their exact size and member offsets. `SONARE_FEATURE_ABI_VERSION` is 7 in `sonare_c_types.h` and also covers the shipped general C function contracts, including note APIs whose `voiced` argument is part of the call signature. `SONARE_PROJECT_ABI_VERSION` is 2 in `sonare_c_project.h`, `SONARE_VOICE_CHANGER_ABI_VERSION` is 3 in `sonare_c_voice_changer.h`, and `SONARE_ACOUSTIC_ABI_VERSION` is 5 in `sonare_c_acoustic.h`. `sonare_c.h` packs the four into `SONARE_ABI_VERSION` — feature in bits 0-7, project in 8-15, voice changer in 16-23, acoustic in 24-31, so the aggregate is `0x05030207` — and `sonare_abi_version()` returns the value the loaded library was compiled with. The realtime command queue is versioned apart from these through `sonare_engine_abi_version()` (currently 3), because it describes a SharedArrayBuffer record layout rather than a POD. A consumer that passes PODs across the boundary compares `sonare_abi_version()` against its own compile-time `SONARE_ABI_VERSION` once, before the first call, and refuses to continue on a mismatch: unequal values mean the two sides disagree on a struct layout or covered function contract, and the POD path would corrupt memory rather than fail. The JSON entry points tolerate layout drift and need no such gate. A version moves on any guarded struct layout change or covered feature function-signature change — the project version once per release that changes its layout — so equal numbers mean identical layout and contracts, and a field appended to a guarded struct is a bump, not an additive change. Which value each binding checks on load is on [Native Bindings](./native-bindings.md#abi-versions).
+Every C-ABI header that declares flat POD structs owns a version macro guarding their exact size and member offsets. `sonare_c.h` packs the four into one aggregate, `SONARE_ABI_VERSION`, and `sonare_abi_version()` returns the value the loaded library was compiled with.
+
+| Macro | Value | Declared in | Bits in the aggregate |
+|-------|-------|-------------|-----------------------|
+| `SONARE_FEATURE_ABI_VERSION` | 7 | `sonare_c_types.h` | 0-7 |
+| `SONARE_PROJECT_ABI_VERSION` | 2 | `sonare_c_project.h` | 8-15 |
+| `SONARE_VOICE_CHANGER_ABI_VERSION` | 3 | `sonare_c_voice_changer.h` | 16-23 |
+| `SONARE_ACOUSTIC_ABI_VERSION` | 5 | `sonare_c_acoustic.h` | 24-31 |
+
+The aggregate is `0x05030207`. The feature version also covers the shipped general C function contracts, including note APIs whose `voiced` argument is part of the call signature. The realtime command queue is versioned apart from these through `sonare_engine_abi_version()` (currently 3), because it describes a SharedArrayBuffer record layout rather than a POD.
+
+A consumer that passes PODs across the boundary compares `sonare_abi_version()` against its own compile-time `SONARE_ABI_VERSION` once, before the first call, and refuses to continue on a mismatch. Unequal values mean the two sides disagree on a struct layout or covered function contract, and the POD path would corrupt memory rather than fail. The JSON entry points tolerate layout drift and need no such gate. A version moves on any guarded struct layout change or covered feature function-signature change (the project version once per release that changes its layout), so equal numbers mean identical layout and contracts, and a field appended to a guarded struct is a bump, not an additive change. Which value each binding checks on load is on [Native Bindings](./native-bindings.md#abi-versions).
 
 #### Versioned structs and their defaults
 
-A guarded struct that a caller fills in carries its own layout version, so a build against an older layout is refused instead of read at the wrong offsets. Start from the matching `*_default()` function rather than zeroing the struct — a zeroed struct is not the defaults:
+A guarded struct that a caller fills in carries its own layout version, so a build against an older layout is refused instead of read at the wrong offsets. Start from the matching `*_default()` function where one exists. A zeroed struct is not always the defaults, and the third column says what zeroing means for each struct:
 
-| Struct | Version field | Start from |
-|--------|---------------|------------|
-| `SonareMusicAnalyzeOptions` | leading `struct_version`, must be `SONARE_MUSIC_ANALYZE_OPTIONS_VERSION` (2); `sonare_analyze_json_ex` refuses any other value | `sonare_music_analyze_options_default()` |
-| `SonareChordDetectionOptions` | leading `struct_version`, 0 or `SONARE_CHORD_DETECTION_OPTIONS_VERSION` (2) | zero-initialise, or set the version |
-| `SonareBoundaryOptions` | none; 44 bytes, with `reference_window` (one-sided seconds the relative threshold is measured over, default 60, `0` disables the relative threshold) after `use_chroma` | `sonare_boundary_options_default()` |
-| `SonareTranscribeConfig` | `struct_version` 1, 2 or 3; version 2 appends `reference_auto` (measure the tuning reference instead of reading `reference_hz`) and version 3 the polyphonic limits `max_polyphony` (at most 64, default 10), `min_frame_peak_ratio` (0.20), `min_ridge_peak_ratio` (0.10) and `reattack_ratio` (2.0) plus `min_note_division`; versions 1 and 2 are still read. The four limits are refused with InvalidParameter naming the field when `polyphonic` is 0 | `sonare_transcribe_config_default()` |
-| `SonarePolyphonicConfig` | `struct_version` 0, 1 or 2; version 2 appends `reattack_ratio` (0 keeps re-strike splitting off), and versions 0 and 1 are still read | zero-initialise (a NULL config reads the same) |
-| `SonareSynthPatch` | `struct_version` up to `SONARE_SYNTH_PATCH_STRUCT_VERSION` (9); versions up to 8 are still read, and the layout is described in [C++ Effects API](./cpp-api-effects.md) | `sonare_synth_preset_patch(name, &patch)`, or zero-initialise |
-| `SonareRoomMorphConfig` | trailing `receiver_spacing_m` (128 bytes natively, 108 on wasm32); zero selects the 0.5 m default, and `sonare_room_morph` does not read it | zero-initialise |
-| `SonareRealtimeVoiceChangerConfig` | leading `struct_version` (0 or 1), followed by `formant_mode`; `SONARE_VOICE_CHANGER_ABI_VERSION` guards the layout | `sonare_realtime_voice_changer_config_default()` (zeroing disables the ISP limiter) |
+| Struct | Version field | Zeroed struct | Start from |
+|--------|---------------|---------------|------------|
+| `SonareMusicAnalyzeOptions` | leading `struct_version`, must be `SONARE_MUSIC_ANALYZE_OPTIONS_VERSION` (2); `sonare_analyze_json_ex` refuses any other value | refused (a zeroed `meter_candidate_numerator_count` is rejected) | `sonare_music_analyze_options_default()` |
+| `SonareChordDetectionOptions` | leading `struct_version`, 0 or `SONARE_CHORD_DETECTION_OPTIONS_VERSION` (2) | refused: `n_fft`, `hop_length` and `smoothing_window` must be positive; only the version may stay 0 | no `_default()`; zero-initialize, then set every field |
+| `SonareBoundaryOptions` | none; 44 bytes, with `reference_window` (one-sided seconds the relative threshold is measured over, default 60, `0` disables the relative threshold) after `use_chroma` | accepted but detects differently (`absolute_threshold` 0 segments stationary input) | `sonare_boundary_options_default()` |
+| `SonareTranscribeConfig` | `struct_version` 1, 2 or 3; versions 1 and 2 are still read | the defaults, once `struct_version` is set | `sonare_transcribe_config_default()` |
+| `SonarePolyphonicConfig` | `struct_version` 0, 1 or 2; versions 0 and 1 are still read | the defaults (a NULL config reads the same) | zero-initialize |
+| `SonareSynthPatch` | `struct_version` up to `SONARE_SYNTH_PATCH_STRUCT_VERSION` (9); versions up to 8 are still read, and the layout is described in [C ABI Reference](./cpp-api-c-abi.md#synth-patch-versions) | the init patch | `sonare_synth_preset_patch(name, &patch)`, or zero-initialize |
+| `SonareRoomMorphConfig` | trailing `receiver_spacing_m` (128 bytes natively, 108 on wasm32); `sonare_room_morph` does not read it | refused until geometry and placement are set; zero spacing selects the 0.5 m default | zero-initialize, then set geometry and placement |
+| `SonareRealtimeVoiceChangerConfig` | leading `struct_version` (0 or 1) and a `formant_mode` after the formant fields (152 bytes); `formant_mode` is fixed at creation, and `set_config` with another mode is refused; `SONARE_VOICE_CHANGER_ABI_VERSION` guards the layout | disables the ISP limiter | `sonare_realtime_voice_changer_config_default()` |
+
+`SonareTranscribeConfig` version 2 appends `reference_auto` (measure the tuning reference instead of reading `reference_hz`). Version 3 appends the polyphonic limits `max_polyphony` (at most 64, default 10), `min_frame_peak_ratio` (0.20), `min_ridge_peak_ratio` (0.10) and `reattack_ratio` (2.0), plus `min_note_division`. The four limits are refused with InvalidParameter naming the field when `polyphonic` is 0. `SonarePolyphonicConfig` version 2 appends `reattack_ratio` (0 keeps re-strike splitting off).
 
 The result structs `SonareChordAnalysisResult`, `SonareMelResult`, `SonareMfccResult` and `SonareTranscribeResult` also lead with a `struct_version`; the library writes it, so a caller only reads it. Results report the tuning they used (`SonareChordAnalysisResult.tuning`, `SonareTranscribeResult.tuning`), and the mel and MFCC results carry the forward-transform parameters needed to invert them. `SONARE_PROJECT_ABI_VERSION` does not move for `SonareProjectLoopRecordingDesc`: its former `reserved` word is now `flags`, which accepts `0` or `SONARE_PROJECT_LOOP_RECORDING_DROP_PARTIAL_TAIL` and refuses any other bit, so callers zero it.
 
-A zero-initialised `SonareEngineTrackLane` reads as a mono source, and `sonare_engine_set_track_lanes` refuses any source layout that is not stereo; set `source_channel_layout = SONARE_CHANNEL_LAYOUT_STEREO` on every lane.
+A zero-initialized `SonareEngineTrackLane` reads as a mono source, and `sonare_engine_set_track_lanes` refuses any source layout that is not stereo; set `source_channel_layout = SONARE_CHANNEL_LAYOUT_STEREO` on every lane.
 
 ### Link targets
 
@@ -129,6 +143,17 @@ Two further properties of an installed build are worth knowing before you plan a
 
 - **Eigen is not a usage requirement.** No installed header includes it, so a consumer needs nothing but a C++17 compiler and a resolvable threads library. The package config declares `Threads` — and FFmpeg, when the installation was built with it — and nothing else.
 - **The vendored FFT archives install under prefixed file names**, `libsonare_kissfft.a` and `libsonare_pffft.a`, rather than claiming the generic names in your library directory. Their CMake target names are unchanged.
+
+#### Installed headers
+
+`cmake --install` writes two header trees under the include root:
+
+| Tree | Include form | Contents |
+|------|--------------|----------|
+| `include/sonare/` | `<sonare/sonare_c.h>` | The C ABI headers |
+| `include/sonare/cpp/` | `<sonare/cpp/sonare.h>` | The whole `src/` C++ header tree, kept intact because its headers include each other by src-relative path |
+
+The exported targets also put `include/sonare/cpp` on the consumer's include path, so the in-tree spellings (`<sonare.h>`, `<core/audio.h>`, `<midi/ump.h>`) resolve too and a snippet written against a source checkout compiles unchanged. The namespaced `<sonare/cpp/...>` form avoids exposing those generic roots in your own include path. The C++ tree leaves out the WASM wrappers, the macOS host backends and the C-ABI implementation headers; use `<sonare/sonare_c.h>` for the C ABI.
 
 A `sonare.pc` is installed for the shared build, which is the configuration pkg-config can describe honestly; a static-only install does not get one.
 
@@ -173,7 +198,7 @@ float* channels[2] = {left, right};
 instrument.process(channels, 2, 512);
 ```
 
-Installed headers resolve under two spellings: the bare in-tree path shown above, and `<sonare/cpp/midi/synth/native_synth.h>` through the include root.
+Installed headers resolve under two spellings: the bare in-tree path shown above, and `<sonare/cpp/midi/synth/native_synth.h>` through the include root (see [Installed headers](#installed-headers)).
 
 Three limits are worth knowing before you plan around this:
 
@@ -222,6 +247,10 @@ static Audio Audio::from_file(const std::string& path);
 // Throws SonareException on decode error
 static Audio Audio::from_memory(const uint8_t* data, size_t size);
 
+// One source channel of a file, no downmix
+// Throws SonareException (InvalidParameter) for a channel the file lacks
+static Audio Audio::from_file_channel(const std::string& path, int channel_index);
+
 // Same decode, no downmix: element i is source channel i, in the source's own order
 static std::vector<Audio> Audio::from_memory_channels(const uint8_t* data, size_t size);
 ```
@@ -235,9 +264,10 @@ const float* data() const;        // Pointer to samples
 size_t size() const;              // Number of samples
 int sample_rate() const;          // Sample rate in Hz
 float duration() const;           // Duration in seconds
-int channels() const;             // Always 1 (mono)
 bool empty() const;               // True if no samples
 ```
+
+An `Audio` always holds one channel. Load a file's channels one at a time with `from_file_channel`, or all of them with `from_memory_channels`.
 
 #### Operations
 
@@ -302,7 +332,7 @@ auto reconstructed = spec.to_audio();
 
 ## Quick API
 
-Simple, single-shot functions for common analysis tasks. Use these when you want exactly one result (BPM, key, beats, downbeats, onsets, or room acoustics).
+Simple, single-shot functions for common analysis tasks. Use these when you want exactly one result (BPM, key, beats, downbeats, or onsets).
 
 ::: info When to use Quick API vs MusicAnalyzer
 - **Quick API (`sonare::quick::...`)** — When you only need one result. Only the necessary stages run.
@@ -317,6 +347,9 @@ namespace sonare::quick {
   // Key detection
   Key detect_key(const float* samples, size_t length, int sample_rate);
   Key detect_key(const float* samples, size_t length, int sample_rate, const KeyConfig& config);
+  // out_tuning receives the tuning used: measured with KeyConfig::auto_tuning, else the given one
+  Key detect_key(const float* samples, size_t length, int sample_rate, const KeyConfig& config,
+                 float* out_tuning);
   std::vector<KeyCandidate> detect_key_candidates(const float* samples, size_t length, int sample_rate,
                                                   const KeyConfig& config = KeyConfig());
 
@@ -328,13 +361,11 @@ namespace sonare::quick {
 
   // Onset times in seconds
   std::vector<float> detect_onsets(const float* samples, size_t length, int sample_rate);
+  std::vector<float> detect_onsets(const float* samples, size_t length, int sample_rate,
+                                   const OnsetDetectConfig& config);
 
   // All-in-one analysis
   AnalysisResult analyze(const float* samples, size_t length, int sample_rate);
-
-  // Room acoustics
-  AcousticParameters detect_acoustic(const float* samples, size_t length, int sample_rate);
-  AcousticParameters analyze_impulse_response(const float* samples, size_t length, int sample_rate);
 }
 ```
 
@@ -382,11 +413,13 @@ enum class Mode {
 enum class ChordQuality {
   Major, Minor, Diminished, Augmented,
   Dominant7, Major7, Minor7, Sus2, Sus4, Unknown,
-  Add9, MinorAdd9, Dim7, HalfDim7, Major9, Dominant9, Sus2Add4
+  Add9, MinorAdd9, Dim7, HalfDim7, Major9, Dominant9, Sus2Add4,
+  Major6, Minor6, MinorMajor7, Dominant7Sus4, Dominant11, Dominant13,
+  Dominant7b9, Dominant7s9
 };
 
 enum class SectionType {
-  Intro, Verse, PreChorus, Chorus, Bridge, Instrumental, Outro, Unknown
+  Intro, Verse, PreChorus, Chorus, Bridge, Instrumental, Outro, Unknown  // PreChorus is never produced by SectionAnalyzer
 };
 
 enum class WindowType {
@@ -499,9 +532,11 @@ SonareError sonare_metering_crest_factor_db_stereo(const float* left, const floa
 
 `*json_out` is heap-allocated; release it with `sonare_free_string`, the same contract as the mono entry points. Pass `NULL` / `0` for `platforms` to use the built-in Spotify / Apple Music / YouTube list rather than an error.
 
-Use the stereo forms whenever you have two channels. The mono entry points measure a `0.5 * (left + right)` downmix, which on decorrelated stereo material reads about 6 dB low — dragging integrated loudness, the normalization gain derived from it, and the ceiling-risk judgement down by the same amount. On a decorrelated pink-noise pair (48 kHz, 4 s) the downmix path reports -22.55 LUFS against -16.44 LUFS from the stereo path, a 6.11 dB gap that turns a Spotify `normalizationGainDb` of +2.44 into +8.55; a correlated pair differs by only the 3.01 dB downmix halving. Only the `loudness` block of the stereo profile is measured from both channels (integrated LUFS and LRA from the channel-summed program, true peak as the larger of the two); the spectral, dynamics, and tempo fields describe shape and timing rather than level, so they stay on the downmix and remain comparable with the mono call.
+Use the stereo forms whenever you have two channels. The mono entry points measure a `0.5 * (left + right)` downmix, which on decorrelated stereo material reads about 6 dB low — dragging integrated loudness, the normalization gain derived from it, and the ceiling-risk judgment down by the same amount. On a decorrelated pink-noise pair (48 kHz, 4 s) the downmix path reports -22.55 LUFS against -16.44 LUFS from the stereo path, a 6.11 dB gap that turns a Spotify `normalizationGainDb` of +2.44 into +8.55; a correlated pair differs by only the 3.01 dB downmix halving. Only the `loudness` block of the stereo profile is measured from both channels (integrated LUFS and LRA from the channel-summed program, true peak as the larger of the two); the spectral, dynamics, and tempo fields describe shape and timing rather than level, so they stay on the downmix and remain comparable with the mono call.
 
 `sonare_metering_crest_factor_db_stereo` fixes the opposite error — it takes the peak across both channels and the RMS over both together, where a downmix cancels an out-of-phase pair, understates RMS, and so overstates crest factor. An inverted pair reads `11.64` dB through the stereo meter and `0.00` dB through the downmix.
+
+<SonareDemo id="mono-fold" />
 
 ## Error Handling
 
@@ -522,12 +557,13 @@ try {
 }
 ```
 
-In the C ABI, `SonareError` is the return value, and `sonare_last_error_message()` carries the detail. A function that returns a handle or pointer reports failure as `NULL`; `sonare_last_error_code()` returns the `SonareError` recorded beside the message (or `SONARE_OK`), so the caller learns why. The same calls that clear the message on entry clear the code. `SONARE_ERROR_ABI_MISMATCH` (10) exists for bindings that find the loaded library is not the one they were built for; the C library never returns it.
+In the C ABI, `SonareError` is the return value, and `sonare_last_error_message()` carries the detail of a failure the library caught as an exception. A validation early return — an out-of-range sample rate, an empty or non-finite buffer, a `NULL` out-pointer — returns its code and records no message, so `sonare_error_message(code)` is the readable text for it. A function that returns a handle or pointer reports failure as `NULL`; `sonare_last_error_code()` returns the `SonareError` recorded beside the message (or `SONARE_OK`), so the caller learns why. The same calls that clear the message on entry clear the code. `SONARE_ERROR_ABI_MISMATCH` (10) exists for bindings that find the loaded library is not the one they were built for; the C library never returns it. The [error contract](./binding-parity.md#error-contract) lines these codes up with what each language binding raises and each CLI exit status.
 
-## Where the sections went
+## Related C++ pages
 
-| Section | Now on |
+| Topic | Page |
 |---|---|
 | StreamAnalyzer | [C++ Streaming API](./cpp-api-streaming.md) |
-| Feature Extraction, Types | [C++ Analysis API](./cpp-api-analysis.md) |
-| Effects, Mixing Engine, C API, Geometric Room Acoustics | [C++ Effects API](./cpp-api-effects.md) |
+| Feature extraction, types | [C++ Analysis API](./cpp-api-analysis.md) |
+| Effects, mixing engine, geometric room acoustics | [C++ Effects API](./cpp-api-effects.md) |
+| C ABI | [C ABI Reference](./cpp-api-c-abi.md) |

@@ -24,8 +24,6 @@ This is exactly the cue your ears use to judge distance in a familiar room, whic
 libsonare measures DRR on the waveform you hand it: the energy inside a ±2.5 ms window around the single loudest sample counts as direct, everything outside it counts as reverberant. On a clap, a pop, or a sweep-derived IR that peak *is* the direct sound. On ordinary music it is just the loudest transient in the programme, so `drrDb` stops being a direct-to-reverberant ratio in any useful sense. Check `confidence`, and treat DRR — and any distance derived from it — as a rough hint unless the input really is an impulse response.
 :::
 
-<SonareDemo id="room-decay" />
-
 ## Critical distance
 
 The **critical distance** is the distance from the source at which the direct sound and the reverberant field are *equally loud* — where DRR equals 0 dB.
@@ -53,4 +51,4 @@ The library part is deliberately blunt. `estimateRoom(...)` finds the strongest 
 Critical distance and source distance are not library functions at all. The Spatial Room Scanner derives them from the estimated room: the critical distance from the volume and RT60 (r<sub>c</sub> ≈ 0.057·√(V / RT60), assuming an omnidirectional source), and then the radius from the measured DRR as r = r<sub>c</sub> · 10<sup>−DRR/20</sup>. Because the model is single-channel, the result is a radius, not a position, and the visualization renders it as a distance shell around the listener. Its reliability tracks how cleanly the direct sound could be separated from the tail — sources well past the critical distance, where direct energy is faint, are inherently harder to place, and so is any source in a recording that is not impulse-like to begin with.
 :::
 
-Related: [Reverberation Time (RT60 and EDT)](./reverberation-time.md), [Room Geometry and Volume](./room-geometry.md), [Inverse Room Estimation](./inverse-estimation.md), [Acoustic Analysis](../../acoustic-analysis.md)
+Related: [Reverberation Time (RT60 and EDT)](./reverberation-time.md), [Room Geometry and Volume](./room-geometry.md), [Inverse Room Estimation](./inverse-estimation.md), [Room Acoustics](../../acoustic-analysis.md)

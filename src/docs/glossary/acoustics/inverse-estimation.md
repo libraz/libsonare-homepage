@@ -17,7 +17,7 @@ Inverse estimation runs the chain backward: from a recording, recover the decay,
 
 In **impulse-response mode**, you give the analyzer a recording that *is* (or closely approximates) an impulse response: a hand clap, a balloon pop, a starter pistol, or a deconvolved recording of a played-back sine sweep. The decay is right there in the signal, clear and uncontaminated, so the estimate is at its most accurate. A raw recorded sine sweep is the excitation convolved with the room response, not an IR; deconvolve it with the known sweep before analysis. This is the mode to use whenever you can make the recording yourself.
 
-Turn on "Treat as impulse response" when the uploaded file is one of these clean excitations or a deconvolved sweep response. The analyzer then reads the tail directly instead of trying to dig it out.
+Pass such a file, or a deconvolved sweep response, to `analyzeImpulseResponse(...)`, or to `estimateRoom(..., { mode: 'impulse_response' })`; the Spatial Room Scanner calls this "Treat as impulse response". The analyzer then reads the tail directly instead of trying to dig it out.
 
 ## Blind mode
 
@@ -28,8 +28,6 @@ In **blind mode**, the input is ordinary material — music, speech, a field rec
   caption="The tail is only visible where the program gets out of the way. Each gap exposes a different, partial slice of the decay, and the fit has to reconcile fragments that do not quite agree — which is what the confidence score is reporting on. Dense, gapless material offers no fragments to fit."
 />
 
-<SonareDemo id="room-decay" />
-
 Blind estimation is genuinely useful for ranking and visualizing spaces — comparing two rooms, getting a feel for a recording's environment — but it is **not an architectural measurement**. It is an informed inference: it can only recover decay that is actually audible in the source signal, so dense, gapless material — a loud, continuous master with no quiet moments — yields a weaker estimate than music with clear note releases and pauses.
 
 ::: tip What blind mode returns, and what it does not
@@ -38,13 +36,13 @@ Blind estimation recovers decay and only decay: `rt60`, the per-band RT60s, and 
 
 ## Confidence
 
-The **confidence** score, a percentage, reports how strongly the input supports the fitted decay. It does not establish that the assumed room geometry, absorption prior, or source distance is true. A clean impulse response with a long, uninterrupted tail scores high; noisy, compressed, or reverb-light material scores low.
+The **confidence** score, a number from 0 to 1 (the scanner shows it as a percentage), reports how strongly the input supports the fitted decay. It does not establish that the assumed room geometry, absorption prior, or source distance is true. A clean impulse response with a long, uninterrupted tail scores high; noisy, compressed, or reverb-light material scores low.
 
 | Confidence | How to read the result |
 |------------|------------------------|
-| High (≳ 70%) | The decay fit is well supported; check the priors before trusting derived geometry. |
-| Moderate (~35–70%) | Usable for comparison and visualization; treat fine detail with caution. |
-| Low (≲ 35%) | No clean decay region — the estimate is rough. Try an impulse-response recording. |
+| High (≳ 0.7) | The decay fit is well supported; check the priors before trusting derived geometry. |
+| Moderate (~0.35–0.7) | Usable for comparison and visualization; treat fine detail with caution. |
+| Low (≲ 0.35) | No clean decay region — the estimate is rough. Try an impulse-response recording. |
 
 When confidence is low, record a clean impulse (clap or pop), or record a sine sweep and deconvolve it with the known excitation before analyzing the resulting IR in impulse-response mode. Low confidence is not a failure of the algorithm so much as a signal that the recording did not contain enough readable reverberation to fit.
 
@@ -52,4 +50,4 @@ When confidence is low, record a clean impulse (clap or pop), or record a sine s
 libsonare builds an energy decay curve from the input. In impulse-response mode the curve comes straight from the supplied IR; in blind mode it is recovered by locating segments where the reverberant tail is briefly audible — note releases, transient gaps, or silences — and stitching an estimate of the decay from them. Blind mode fits the late-decay RT60 only: it has no direct-sound arrival for EDT or clarity, so `edt` is `NaN` and `edtBands` retains the requested band count with every entry set to `NaN`. The confidence score describes support for the decay fit. On an impulse response it is dominated by how closely RT60 and EDT agree — a decay that reads the same length from its full 60 dB extrapolation as from its first-10 dB slope is a decay the fit trusts — plus a smaller term that is a fixed function of the configured `minDecayDb`. In blind mode, confidence comes from the recovered decay fit itself: how well an exponential explains the frame energies, how far the decay starts above the noise floor, and how long the fitted window is relative to the recovered RT60. For `estimateRoom(...)`, band coverage and absorption plausibility under the configured priors can also affect the returned confidence. It does not show that the assumed geometry, absorption prior, or source distance is true. A studio-measured, deconvolved sweep IR can score high because a long, clean tail fits well; a loud, dense, heavily compressed master scores low because it exposes only short, noisy fragments of tail.
 :::
 
-Related: [Reverberation Time (RT60 and EDT)](./reverberation-time.md), [Room Geometry and Volume](./room-geometry.md), [Source Distance and DRR](./source-distance.md), [Acoustic Analysis](../../acoustic-analysis.md)
+Related: [Reverberation Time (RT60 and EDT)](./reverberation-time.md), [Room Geometry and Volume](./room-geometry.md), [Source Distance and DRR](./source-distance.md), [Room Acoustics](../../acoustic-analysis.md)

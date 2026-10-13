@@ -1,6 +1,6 @@
 ---
 title: 逆変換特徴量
-description: libsonare の逆変換ヘルパー — メル／MFCC から Griffin-Lim で近似的な STFT・メルスペクトログラム・プレビュー音声を再構成。戻り値の正確な形と、保持すべきパラメータを解説します。
+description: libsonare の逆変換ヘルパー。メル／MFCC から Griffin-Lim で近似的な STFT・メルスペクトログラム・プレビュー音声を再構成。戻り値の正確な形と、保持すべきパラメータを解説します。
 ---
 
 # 逆変換特徴量
@@ -33,7 +33,7 @@ libsonare の大半は、音声を特徴量へ変換します。たとえばメ�
 - **メルフィルタバンクは正方行列ではない。** メルスペクトログラムは STFT（短時間フーリエ変換）の周波数ビン（`nFft = 2048` なら約 1025 本、すなわち `nFft/2 + 1`）を、たとえば 128 のメルバンドに畳み込みます。逆変換は各メルバンドのエネルギーを元のビン群へ広げ直しますが、これは最小二乗の最良推定であって元の細部ではありません。
 - **位相は完全に失われる。** 振幅／パワースペクトログラムは各周波数に*どれだけ*エネルギーがあるかを保ちますが、波形周期の*どこ*にあるかは保ちません。音声再構成は**もっともらしい位相を作り出す**必要があり、それを担うのが Griffin-Lim です。
 
-MFCC はさらにもう 1 段の損失を加えます — 先頭 `nMfcc` 個（多くは 13〜20）のケプストラム係数だけを残します。この係数が保持するのはスペクトル包絡の大まかな形で、その内側の細かい構造 — 倍音のディテールやフォルマントの鋭いエッジ — は捨てられます。そのため MFCC の逆変換は、音声を取り戻す前に*平滑化された*メルスペクトログラムを再構成します。
+MFCC はさらにもう 1 段の損失を加えます。先頭 `nMfcc` 個（多くは 13〜20）のケプストラム係数だけを残すためです。この係数が保持するのはスペクトル包絡の大まかな形で、その内側の細かい構造（倍音のディテールやフォルマントの鋭いエッジ）は捨てられます。そのため MFCC の逆変換は、音声を取り戻す前に*平滑化された*メルスペクトログラムを再構成します。
 
 ::: details ケプストラム係数とは？
 ケプストラムは、対数スペクトルに DCT（離散コサイン変換）をかけた結果です。スペクトルの大まかな形（音色）と細かいディテールを分離します。MFCC はこの係数の先頭の数個だけを残すため、全体的な音色をコンパクトに表せる一方で、細かいスペクトルのディテールは再構成できません。
@@ -91,6 +91,10 @@ MFCC はさらにもう 1 段の損失を加えます — 先頭 `nMfcc` 個（�
 
 順変換で 0 以外の `lifter` を使った場合は、`mfccToMel` または `mfccToAudio` に同じ値を渡してください。逆変換で取り除かれます。
 
+::: warning 逆変換は長い入力を受け付けない
+`melToStft`、`melToAudio`、`mfccToAudio` は、4096 フレームを超える入力、または `nFft` が 8192 を超える設定で `input exceeds the inverse resource limit` を投げます。22050 Hz・ホップ 512 でおよそ 95 秒、44100 Hz ではおよそ 48 秒です。`mfccToMel` だけは上限がありません。長い録音は区間ごとに切り出して処理してください。
+:::
+
 ## 結果をそのまま逆変換する
 
 メルまたは MFCC の結果は、それを作った変換のパラメータを持っています。`nFft`、`hopLength`、`sampleRate`、適用された `fmin` と `fmax`、`htk`、MFCC ではさらに `nMels` と `lifter` です。JavaScript では逆変換が結果そのものをリクエストとして受け取るので、値を繰り返す必要も、ずれる余地もありません。
@@ -107,7 +111,7 @@ const fromMfcc = mfccToAudio({ result: coeffs, nIter: 32 });
 
 `result` と並べて指定したフィールドは結果の値と一致していなければならず、食い違うと両方の値を示す `RangeError` を投げます。つまり上書きできるのは順変換で使った値の再確認だけです（`nIter` は自由）。dB の状態のメル結果（`isDb`）は、`dbToPower` を案内するメッセージで拒否されるので、先に変換してください。行列で渡すリクエスト形式では、行列のフィールド名はメルが `power`、MFCC が `coefficients` です（`melToStft({ power, nMels, nFrames, ... })`、`mfccToMel({ coefficients, nMfcc, nFrames, ... })`）。それ以外のフィールド名では例外になります。`result` も行列フィールドもないリクエスト、またはオブジェクトでない引数は、欠けているフィールド名を示す `TypeError` になります（`melToStft: power is required (or pass result)`）。
 
-Python では `mel_result_to_stft(mel)`、`mel_result_to_audio(mel, n_iter=32)`、`mfcc_result_to_mel(coeffs)`、`mfcc_result_to_audio(coeffs, n_iter=32)` が同じ役割を担います。以降の位置引数形式の librosa 風関数は変わりません。
+Python では `mel_result_to_stft(mel)`、`mel_result_to_audio(mel, n_iter=32)`、`mfcc_result_to_mel(coeffs)`、`mfcc_result_to_audio(coeffs, n_iter=32)` が同じ役割を担います。以降の位置引数形式の librosa 風関数は、同じ入力を 1 つずつ渡す形です。
 
 ここではまだ音声波形には戻りません。結果は「周波数ごとのエネルギー表」です。機械学習モデルや可視化の途中結果を確認したい場合は、音声化するよりこの段階で見る方が原因を追いやすいことがあります。
 
@@ -135,12 +139,12 @@ import libsonare as sonare
 # メルパワー -> STFT 振幅
 mel = sonare.mel_spectrogram(samples, sample_rate, n_fft=2048, hop_length=512, n_mels=128)
 stft = sonare.mel_to_stft(mel.power, mel.n_mels, mel.n_frames, sample_rate=sample_rate, n_fft=2048)
-# stft.rows = n_fft/2 + 1 = 1025。stft.data は row-major の [rows x n_frames]
+# stft.rows = n_fft/2 + 1 = 1025。stft.data は行優先の [rows x n_frames]
 
 # MFCC -> メルパワー
 coeffs = sonare.mfcc(samples, sample_rate, n_fft=2048, hop_length=512, n_mels=128, n_mfcc=20)
 re_mel = sonare.mfcc_to_mel(coeffs.coefficients, coeffs.n_mfcc, coeffs.n_frames, n_mels=128)
-# re_mel.rows = n_mels。re_mel.data は row-major の [rows x n_frames]
+# re_mel.rows = n_mels。re_mel.data は行優先の [rows x n_frames]
 ```
 
 ```bash [C++ CLI]
@@ -150,15 +154,17 @@ sonare mel-to-audio song.wav --n-fft 2048 --hop-length 512 --n-mels 128 -o mel-p
 
 :::
 
-入力はいずれも**行優先**の行列です — メルの `power` は `[nMels x nFrames]`、MFCC 係数は `[nMfcc x nFrames]`。`nMels`／`nMfcc`／`nFrames` の引数は、その平坦配列の読み方をヘルパーに伝えるので、渡す行列と一致させてください。
+入力はいずれも**行優先**の行列です。メルの `power` は `[nMels x nFrames]`、MFCC 係数は `[nMfcc x nFrames]`。`nMels`／`nMfcc`／`nFrames` の引数は、その平坦配列の読み方をヘルパーに伝えるので、渡す行列と一致させてください。
 
 ## 音声を再構成する
 
-`melToAudio` と `mfccToAudio` は、再生やファイル書き出しができるモノラルの `Float32Array` を返します。特徴量に位相がないため、どちらも **Griffin-Lim** を実行します — 振幅にランダム（またはゼロ）位相を与えて開始し、STFT → 新しい位相を保持 → 既知の振幅を課す → 逆 STFT を繰り返し、位相が自己整合するまで反復します。
+`melToAudio` と `mfccToAudio` は、再生やファイル書き出しができるモノラルの `Float32Array` を返します。特徴量に位相がないため、どちらも **Griffin-Lim** を実行します。振幅にランダム（またはゼロ）位相を与えて開始し、STFT → 新しい位相を保持 → 既知の振幅を課す → 逆 STFT を繰り返し、位相が自己整合するまで反復します。
 
-`cqtToAudio` と `vqtToAudio` も、`cqt(...)`／`vqt(...)`（定 Q 変換と可変 Q 変換。周波数ビンを線形ではなく対数間隔で並べる変換です）が返す row-major の振幅行列に同じ反復手法を使います。順変換時の `sampleRate`、`hopLength`、`fmin`、`binsPerOctave`（VQT は `gamma` も。順変換で省略したなら省略）を変えずに渡してください。メル／MFCC の復元と同じく、これは近似的なモノラルプレビューであり、原音の復元ではありません。
+`cqtToAudio` と `vqtToAudio` も、`cqt(...)`／`vqt(...)`（定 Q 変換と可変 Q 変換。周波数ビンを線形ではなく対数間隔で並べる変換です）が返す行優先の振幅行列に同じ反復手法を使います。順変換時の `sampleRate`、`hopLength`、`fmin`、`binsPerOctave`（VQT は `gamma` も。順変換で省略したなら省略）を変えずに渡してください。メル／MFCC の復元と同じく、これは近似的なモノラルプレビューであり、原音の復元ではありません。
 
 聴いたときに、元の曲の輪郭やリズムは分かるが、にじみ・金属的な質感・ざらつきが出ることがあります。これは多くの場合、実装の失敗ではなく、捨てた位相を推定しているために起きる自然な限界です。
+
+順変換の結果が手元にあるなら、それをそのまま渡します。下の位置引数形式は、行列とその設定だけを持っている場合の librosa 風の書き方です。
 
 ::: code-group
 
@@ -168,6 +174,13 @@ import { init, melSpectrogram, melToAudio, mfcc, mfccToAudio } from '@libraz/lib
 await init();
 
 const mel = melSpectrogram(samples, sampleRate, 2048, 512, 128);
+const coeffs = mfcc(samples, sampleRate, 2048, 512, 128, 20);
+
+// 順変換の結果から。設定を繰り返さなくてよい。
+const previewFromResult = melToAudio({ result: mel, nIter: 32 });
+const fromMfccResult = mfccToAudio({ result: coeffs, nIter: 32 });
+
+// 位置引数形式（librosa 風）。
 const preview = melToAudio(
   mel.power, mel.nMels, mel.nFrames, // メル行列とその形
   sampleRate,
@@ -178,7 +191,6 @@ const preview = melToAudio(
   32,   // nIter     （Griffin-Lim の反復回数）
 );
 
-const coeffs = mfcc(samples, sampleRate, 2048, 512, 128, 20);
 const fromMfcc = mfccToAudio(
   coeffs.coefficients, coeffs.nMfcc, coeffs.nFrames,
   128,  // nMels — 注意: この追加引数は sampleRate の前に来る
@@ -195,10 +207,16 @@ const fromMfcc = mfccToAudio(
 import libsonare as sonare
 
 mel = sonare.mel_spectrogram(samples, sample_rate, n_fft=2048, hop_length=512, n_mels=128)
+coeffs = sonare.mfcc(samples, sample_rate, n_fft=2048, hop_length=512, n_mels=128, n_mfcc=20)
+
+# 順変換の結果から。設定を繰り返さなくてよい。
+preview_from_result = sonare.mel_result_to_audio(mel, n_iter=32)
+from_mfcc_result = sonare.mfcc_result_to_audio(coeffs, n_iter=32)
+
+# 位置引数形式（librosa 風）。
 preview = sonare.mel_to_audio(mel.power, mel.n_mels, mel.n_frames, sample_rate=sample_rate, n_iter=32)
 # n_iter=32（Griffin-Lim の反復回数）
 
-coeffs = sonare.mfcc(samples, sample_rate, n_fft=2048, hop_length=512, n_mels=128, n_mfcc=20)
 from_mfcc = sonare.mfcc_to_audio(coeffs.coefficients, coeffs.n_mfcc, coeffs.n_frames, n_mels=128, sample_rate=sample_rate, n_iter=32)
 # sample_rate の前に n_mels（128）引数が入る点に注意
 ```
@@ -215,7 +233,7 @@ sonare mfcc-to-audio song.wav -o mfcc-preview.wav
 Griffin-Lim は振幅のみからの反復再構成です。目標の振幅スペクトログラム `|S|` と初期位相 `φ` を与えると:
 
 1. `|S|·e^{iφ}` を逆 STFT して時間領域信号にする。
-2. その信号を順 STFT する — 振幅は `|S|` から少しずれるが、**位相**は実波形により整合した値になる。
+2. その信号を順 STFT する。振幅は `|S|` から少しずれるが、**位相**は実波形により整合した値になる。
 3. 新しい位相を保持し、振幅を `|S|` に戻して繰り返す。
 
 各パスが、実際の信号が生み出しうる位相へ近づけます。`nIter` はパス数を制御します。反復が多いほど近づき（滑らかでアーティファクトが少ない）線形にコストが増え、少ないほど速い代わりに位相の乱れによる滲みが目立ちます。32 が無難な既定値で、高速 UI プレビューでは 8〜16 に、プレビュー品質重視なら 60 以上に上げます。
@@ -225,17 +243,17 @@ Griffin-Lim は振幅のみからの反復再構成です。目標の振幅ス�
 
 <SonareDemo id="griffin-lim" />
 
-このデモは、上の `melSpectrogram` → `melToAudio` の往復を短い母音でそのまま実行します。反復回数をドラッグして聴いてみてください。平均スペクトルはほとんど動かないのに*音*が澄んでいくのがわかります — マグニチュードは最初から揃っており、反復が取り戻すのは使える位相だけです。
+このデモは、上の `melSpectrogram` → `melToAudio` の往復を短い母音でそのまま実行します。反復回数をドラッグして聴いてみてください。平均スペクトルはほとんど動かないのに*音*が澄んでいくのがわかります。振幅は最初から揃っており、反復が取り戻すのは使える位相だけです。
 
 ::: info Slaney と HTK のメルスケール
-メルバンドの並べ方には 2 つの代表的な流儀があります — **Slaney** の式（librosa と libsonare の既定）と **HTK** の式です。両者はバンド端の位置が異なるため、順変換と逆変換は*同じ*流儀を使う必要があります。順変換で使った場合にかぎり、逆変換にも `htk: true`（または `htk=True`）を渡してください。
+メルバンドの並べ方には 代表的な流儀は、**Slaney** の式（librosa と libsonare の既定）と **HTK** の式の 2 つです。両者はバンド端の位置が異なるため、順変換と逆変換は*同じ*流儀を使う必要があります。順変換で使った場合にかぎり、逆変換にも `htk: true`（または `htk=True`）を渡してください。
 :::
 
 ## 成分を音として残したいとき
 
 ここまでの再構成はすべて振幅から出発するため、いずれも位相を作り出す必要があります。スペクトル表現から音へ戻る経路のうち、ひとつだけそれを必要としないものがあります。
 
-`decompose` は**振幅**スペクトログラムを成分と活性度に分解します。この因子は位相を持たないため、ひとつの成分を音に戻すには積を取って Griffin-Lim に渡すことになり、`melToAudio` と同じ近似、同じにじんだ質感になります。得られるのはその成分が*何を含んでいるか*のプレビューです。ステムではありません — 成分を重ねて再生しても、元の入力には戻りません。
+`decompose` は**振幅**スペクトログラムを成分と活性度に分解します。この因子は位相を持たないため、ひとつの成分を音に戻すには積を取って Griffin-Lim に渡すことになり、`melToAudio` と同じ近似、同じにじんだ質感になります。得られるのはその成分が*何を含んでいるか*のプレビューです。ステムではないので、成分を重ねて再生しても元の入力には戻りません。
 
 `decomposeStems` はもう一方の経路を取ります。同じ分解を行ったうえで、成分ごとの**ソフトマスク**（各時間周波数点における、その成分が占める振幅の割合）を作り、それを**元の複素**スペクトログラムに適用します。推定は一切行いません。各成分はソース自身の位相をそのまま保ち、マスクは各点を近似するのではなく分配するため、成分は**足し合わせると入力に戻ります**。
 
@@ -285,7 +303,7 @@ first_right = linked["components"][0][1]
 
 ## 往復の動作確認
 
-よくある用途は、特徴量パイプラインが正しく組めているかの確認です — 特徴量を抽出し、逆変換し、その差を聴く（または測る）。結果は決して同一にはなりませんが、*認識できる*はずです。無音やノイズになるなら、どこかのパラメータか行列の形が誤っています。
+よくある用途は、特徴量パイプラインが正しく組めているかの確認です。特徴量を抽出して逆変換し、その差を聴く（または測る）。結果は決して同一にはなりませんが、*認識できる*はずです。無音やノイズになるなら、どこかのパラメータか行列の形が誤っています。
 
 ::: code-group
 
@@ -318,6 +336,6 @@ sonare mel-to-audio song.wav -o mel-preview.wav
 
 ## 関連
 
-- [librosa 互換性](./librosa-compatibility.md) — `librosa.feature.inverse.*` との対応
-- [JavaScript API](./js-api-features.md#特徴抽出) · [Python API](./python-api-analysis.md#特徴抽出) — 順変換側
-- [DSP 実装解説](./dsp-implementation.md) — メルフィルタバンクと STFT の構築方法
+- [librosa 互換性](./librosa-compatibility.md)：`librosa.feature.inverse.*` との対応
+- [JavaScript API](./js-api-features.md#特徴抽出) · [Python API](./python-api-analysis.md#特徴抽出)：順変換側
+- [DSP 実装解説](./dsp-implementation.md)：メルフィルタバンクと STFT の構築方法

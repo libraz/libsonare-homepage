@@ -30,7 +30,7 @@ Air Band Amount works in the very high-frequency region: it lifts and re-excites
 It should be subtle. If the track starts to hiss or feel detached from the midrange, the amount is too high.
 
 ::: warning It needs energy in its detector band
-Both halves of the stage are driven by energy above the shelf frequency, so they are self-limiting. Below roughly −36 dBFS of detector-band envelope, the dynamic shelf applies no boost; the harmonic path can still add a component if that band has energy. Even fully open, the shelf tops out near +3 dB, and the synthesised component is held at most half the detector band's RMS level. With the default 12 kHz shelf, a source cut off at 16 kHz may still have enough 12–16 kHz energy to drive newly generated harmonics above the cutoff. This cannot restore the original missing detail. If the detector band itself is absent, use Exciter Amount instead: it builds harmonics from lower frequencies.
+Both halves of the stage are driven by energy above the shelf frequency, so they are self-limiting. Below roughly −36 dBFS of detector-band envelope, the dynamic shelf applies no boost; the harmonic path can still add a component if that band has energy. Even fully open, the shelf tops out near +3 dB, and the synthesized component is held at most half the detector band's RMS level. With the default 12 kHz shelf, a source cut off at 16 kHz may still have enough 12–16 kHz energy to drive newly generated harmonics above the cutoff. This cannot restore the original missing detail. If the detector band itself is absent, use Exciter Amount instead: it builds harmonics from lower frequencies.
 :::
 
 ## Adjustment Order

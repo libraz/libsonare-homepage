@@ -9,6 +9,8 @@ A folder of rough takes lands on your drive: some clipped because the gain was t
 
 The job is **not** "run declip on everything". A repair stage that runs when nothing was wrong costs quality for nothing — declip resynthesizes samples that were never clipped, dehum notches out real musical content sitting at the mains frequency. The point of the repair assistant is that it declines a stage the evidence does not call for, and `--explain` is how you check that it actually did.
 
+This page uses the Python CLI (`pip install libsonare`, command `sonare`). `declip` (Step 7) is not in the native `sonare-cli`; every other command here exists in both. See [Which CLI Are You Using?](../cli.md#which-cli-are-you-using).
+
 For the library workflow and individual defects, see [Audio Repair](../audio-repair.md), [Noise and Hum Removal](../repair-noise.md), [Clicks, Crackle, and Clipping](../repair-transients.md), and [Dereverberation](../repair-reverb.md).
 
 ## What You Will Learn
@@ -115,11 +117,32 @@ reports/take-02.json  ->  repair.declick, repair.decrackle, repair.dehum
 
 ## Step 1 — Measure before touching anything
 
-```bash
+::: code-group
+
+```bash [CLI]
 sonare repair take-raw.wav --detect --json
 ```
 
-`--detect` measures and reports; it writes no file, and `-o` is not even accepted alongside it. That makes it free to run on every take in a folder before you decide anything. The full option set is in [CLI Reference — repair](../cli.md#repair).
+```typescript [Node]
+import { masteringRepairAnalyze } from '@libraz/libsonare-native';
+
+const { defects, recommended, explanation } = masteringRepairAnalyze({ channels: [left, right], sampleRate: 48000 });
+console.log(defects.clipSampleFraction, defects.humFundamentalProminence, recommended.map((s) => s.stage), explanation);
+```
+
+```python [Python]
+import libsonare as sonare
+
+analysis = sonare.mastering_repair_analyze([left, right], 48000)
+print(analysis["defects"]["clipSampleFraction"], analysis["defects"]["humFundamentalProminence"])
+print([s["stage"] for s in analysis["recommended"]], analysis["explanation"])
+```
+
+:::
+
+`--detect` measures and reports; it writes no file (the Python CLI rejects `-o` alongside it). That makes it free to run on every take in a folder before you decide anything. The full option set is in [CLI Reference — repair](../cli.md#repair).
+
+The library call covers the measuring of Step 1 and the choosing of Step 2: `recommended` and `explanation` are the stages the assistant would run and why, and `masteringRepairApply` runs them. It measures every channel, so the stereo warning in Step 8 does not apply to it. The CLI reports the same measurements under snake_case names (`clip_sample_fraction`).
 
 ```json
 {
@@ -185,7 +208,7 @@ sonare trim-silence take-clean.wav -o take-trimmed.wav --json
 {"length": 350528, "duration": 7.303, "threshold_db": -60.0, "n_fft": 2048, "hop_length": 512}
 ```
 
-The take was 7.9 seconds with padding on both ends; the trimmed file is 7.303 seconds, so roughly 0.6 seconds of dead air came off. `--threshold-db` (default −60 dB) is the level below which a frame counts as silence; `--top-db` is also accepted if you would rather express the same cut relative to the file's own peak. Trimming has nothing to do with repair and runs whether or not the take needed one — it is listed here in pipeline order, after repair, so it trims quiet padding rather than a padding-shaped clipped edge.
+The take was 7.9 seconds with padding on both ends; the trimmed file is 7.303 seconds, so roughly 0.6 seconds of dead air came off. `--threshold-db` (default −60 dB) is the level below which a frame counts as silence; `--top-db` is also accepted if you would rather express the same cut relative to the file's own peak. Trimming has nothing to do with repair and runs whether or not the take needed one — it is listed here in pipeline order, after repair, so it trims quiet padding rather than a padding-shaped clipped edge. The library has its own trimmers (`trimSilence`, `masteringRepairTrimSilence`) with their own options; their output length is not guaranteed to equal this command's, so this step is a CLI step.
 
 ## Step 4 — Cut several takes at the silence they share
 
@@ -213,7 +236,7 @@ sonare split-silence take1.wav --input take2.wav --input take3.wav --json
 
 The first interval widens from 28160–116224 to 23040–121344. That widening is the point of the feature: the reported intervals are the **union** of each take's own non-silent stretches, merged where they touch, so a cut lands only where *every* take is quiet — and mid-phrase in none of them. Cut each take to its own intervals and one take's early entrance becomes a clipped attack in another take's slice; cut all three to the union instead and every take loses exactly the silence they all share, nothing more.
 
-`split-silence` never accepts `-o`; it only reports intervals, and passing `--output` exits with a usage error. `--write-takes PREFIX` is how the shared intervals become audio, one file per take per interval, named `PREFIX{take:02d}_{interval:03d}.wav` with both counters 1-based:
+`split-silence` never accepts `-o`; it only reports intervals, and passing `--output` exits with a usage error (exit code 2). `--write-takes PREFIX` is how the shared intervals become audio, one file per take per interval, named `PREFIX{take:02d}_{interval:03d}.wav` with both counters 1-based:
 
 ```bash
 sonare split-silence take1.wav --input take2.wav --input take3.wav --write-takes comp --json
@@ -230,7 +253,7 @@ sonare split-silence take1.wav --input take2.wav --input t3_44.wav --json
 # Error: take sample rate differs: t3_44.wav is 44100 Hz, the first take is 48000 Hz
 ```
 
-That is a usage-level mismatch (exit code 3), the same class as an unrecognized `--params` key elsewhere on this page.
+The mismatch is rejected as an invalid parameter (exit code 3), the same class as an unrecognized `--params` key elsewhere on this page.
 
 ::: warning `--top-db` is measured from each take's own peak, not an absolute level
 A noisier take finds less silence than a clean one at the same `--top-db`, because the threshold sits relative to that take's own peak rather than a fixed dBFS floor. On `take1.wav`, a clean noise floor of about −99.9 dBFS (from `repair --detect`) leaves the three phrases with clear gaps between them. Raising that floor to about −69.1 dBFS — the file otherwise unchanged — collapsed the same take's result to a single interval spanning nearly the whole file: the threshold no longer found anywhere quiet enough to call silence. There is no fixed dB of headroom that guarantees a clean split; check `noise_floor_dbfs` first, and send a hot take through [Step 2](#step-2-—-let-the-assistant-choose)'s repair assistant before comping rather than lowering `--top-db` to compensate.

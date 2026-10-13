@@ -17,6 +17,7 @@ libsonare は単一の C++ コアを、C、Python、Node ネイティブ、WASM�
 - JavaScript、Python、C++、C ABI、Node ネイティブ、CLI の命名規則を相互に読み替えられる。
 - 各バインディングにある機能と、CLI からは使えない機能を見分けられる。
 - ネスト設定とフラット設定、行優先行列、Scene JSON、ストリーミングフレームバッファなどの形の違いを把握できる。
+- 同じ失敗が各ランタイムでどのエラークラス・コード・CLI の終了コードになるかを対応付けられる。
 - ドキュメントと実行時を確認するとき、どのソースファイルを正本として見るべきかを選べる。
 
 ## 命名規則
@@ -32,64 +33,92 @@ libsonare は単一の C++ コアを、C、Python、Node ネイティブ、WASM�
 
 ## 機能対応
 
-DSP コアは 1 つで、その周りのランタイムは手書きです。コアの実装は 1 つきりで、どのランタイムもそこへ呼び込むため、Python で計算した結果と WASM で計算した結果は同じコードから出てきます。一方、コアを包む API サーフェスはバインディングごとに手で書かれており、同一ではありません。
+DSP の実装は C++ コアに 1 つだけあり、どのランタイムもそれを呼び出します。そのため、同じ入力なら Python でも WASM でも同じ結果になります。違うのはコアを包む API サーフェスで、こちらはバインディングごとに手で書かれています。
 
-libsonare リポジトリは、その差を主張ではなく計測で示します。`tools/parity/surface-coverage.md` は生成される対応表で、行は機能ドメインごと（ドメインは関数が宣言されている公開 C ヘッダーなので、ヘッダーが増えれば行も自動的に増えます）、列はランタイムごとです。Python、Node、WASM に加え、2 つのコマンドラインフロントエンドは別々の列になります。Python の `sonare` CLI とネイティブの `sonare-cli` は別のバイナリで、コマンドの集合も異なるためです。各セルはそのドメインの C ABI 入口のうちランタイムが到達できる本数で、最終行が全ドメインの合計です。ここに数値を転記していないのは意図的です。この対応表は parity チェッカーの抽出器から `make surface-coverage` で再生成され、追跡しているコピーがヘッダーからずれると `make surface-coverage-check` が CI で失敗するので、古くなりようがないのはファイル本体だけだからです。
+libsonare リポジトリは、この差を主張ではなく計測で示します。`tools/parity/surface-coverage.md` は生成される対応表で、行は機能ドメイン（関数が宣言されている公開 C ヘッダー）ごと、列はランタイムごとです。Python、Node、WASM に加え、Python の `sonare` CLI とネイティブの `sonare-cli` は別の列になります。コマンドの集合が異なるためです。各セルは、そのドメインの C ABI 入口のうちランタイムが到達できる本数です。数値はここに転記していません。表は `make surface-coverage` で再生成され、追跡コピーがヘッダーとずれると `make surface-coverage-check` が CI で失敗します。
 
-セルの値は品質ではなく到達範囲についての記述として読んでください。どちらの CLI も設計上絞り込まれていますし、WASM はホストのファイルシステムもスレッドを必要とする機能も公開できません。これらの列の不足は欠陥ではなく想定どおりの形です。入口が「到達できる」と数えられるのは、parity チェッカーがそのランタイム固有の命名で見つけられたときで、クラスのメソッド、ハンドル接頭辞を付け替えた名前、検証済みの別名はいずれも到達として数えます。ファサードがコンストラクタや RAII で肩代わりするライフサイクルヘルパーは、構造上到達できるものとして数えます。許可リストに載っている差も差として数えます。許可リストの項目は「その欠落を検討済み」という記録であって、「埋まっている」という意味ではありません。特定の 1 つの呼び出しがあるランタイムから到達できるかを知りたいときは、ドメインごとの行で範囲を絞り、下の[検証時の根拠](#検証時の根拠)で確定させてください。
+セルの値は品質ではなく到達範囲として読んでください。どちらの CLI も設計上絞り込まれており、WASM はホストのファイルシステムもスレッドを必要とする機能も公開できません。parity チェッカーがそのランタイム固有の命名で入口を見つけられれば到達として数えます（クラスのメソッド、ハンドル接頭辞を付け替えた名前、検証済みの別名）。許可リストに載っている欠落も、欠落として数えます。特定の呼び出しを確かめたいときは、ドメインの行で範囲を絞り、[検証時の根拠](#検証時の根拠)で確定させてください。
 
-下の表は、その対応表に対応する読み物側の一覧です。各機能ファミリーについて、ライブラリ系での対応状況と CLI の対応範囲を示します。行に断りがなければ、ライブラリ系バインディングすべてにその機能があります。バインディングごとの名前の違いは上の[命名規則](#命名規則)に従います。
+以下の表は、その対応表に対応する読み物側の一覧です。**対応**は、セルが範囲を限定していなければ、WASM、Node、Python、C ABI のすべてで使えることを表します。CLI 列にはコマンド名を書くか、非対応または一部のみと書きます。名前の違いは[命名規則](#命名規則)に従います。
+
+### 解析・特徴量・メータリング
 
 | 機能ファミリー | ライブラリ系 | CLI |
 |----------------|------|-----|
 | バッチ解析 | 対応 | 対応 |
 | 低レベル特徴量と librosa 互換ヘルパー | 対応 | 主要コマンド |
-| NMF ステム分離（`decomposeStems` / `decomposeStemsLinked`、`decompose_stems` / `decompose_stems_linked`） | 対応 — WASM、Node、Python、C ABI | モノラル入力の `decompose-stems` のみ |
-| 定Qクロマ（`chromaCqt` / `chroma_cqt`） | 対応 — WASM、Node、Python、C ABI | 非対応 |
+| 定Qクロマ（`chromaCqt` / `chroma_cqt`） | 対応 | 非対応 |
+| コード機能（`chordFunctions` / `chord_functions`。`chordFunctionalAnalysis` も同じエントリを返す） | 対応（`sonare_chord_functions`） | 非対応 |
+| コードとキーの注釈変換（`chordSymbolFromAnalysis` / `keyModeFromAnalysis`） | 対応（`sonare_chord_symbol_from_analysis`、`sonare_key_mode_from_analysis`） | 非対応 |
+| 測定したチューニング（`tuning: 'auto'`、`referenceHz: 'auto'`、`tuningToReferenceHz` / `referenceHzToTuning`） | 対応 | 非対応 |
+| 採譜（`transcribe`、`transcribeToClip`）。ポリフォニックトラッカーの上限、`minNoteDivision`、`referenceHz: 'auto'` を含む | 対応。ポリフォニックの上限（`maxPolyphony`、`minFramePeakRatio`、`minRidgePeakRatio`、`reattackRatio`）はポリフォニックの経路にだけ効きます。[音声から MIDI](./audio-to-notes.md#オプションと制限)を参照 | 両 CLI の `transcribe`。`--max-polyphony` と `--min-note-division` を受け付ける |
+| NMF ステム分離（`decomposeStems` / `decomposeStemsLinked`） | 対応 | `decompose-stems`（モノラル入力のみ） |
+| Mel/MFCC 逆再構成 | 対応 | ネイティブ CLI のみ: `mel-to-audio`、`mfcc-to-audio` |
 | ストリーミングアナライザーと処理器（`StreamAnalyzer`、`StreamingEqualizer`、`StreamingMasteringChain`） | 対応 | 非対応 |
-| Mel/MFCC 逆再構成 | 対応 | 非対応 |
-| リアルタイムエンジン | 対応 | 非対応 |
-| エンジンのレーンミキサー（レーン、バス、センド、チャンネルストリップ）と MIDI クリップスケジュール | 対応 — [リアルタイムエンジン](./realtime-engine.md#レーンミキサー)を参照 | 非対応 |
-| リアルタイムスコープとワイドメーターのテレメトリ | 対応 — [リアルタイムエンジン](./realtime-engine.md#サラウンドグループバスとワイドメーター)を参照 | 非対応 |
-| トラックごとの PFL/AFL（フェーダー前／フェーダー後）キューモニタリング | 対応 — [リアルタイムエンジン](./realtime-engine.md#トラックモニタータップ-off・pfl・afl)を参照。WASM の AudioWorklet からも到達可能 | 非対応 |
-| マスタリング preset/chain/processor | 対応 | 一部のみ |
-| マスタリングアシスタント／プロファイル／プレビュー JSON | 対応 | 専用コマンドなし |
-| ステレオ版アシスタント／プロファイル／プレビュー JSON（`masteringAudioProfileStereo`、`masteringAssistantSuggestStereo`、`masteringStreamingPreviewStereo`） | 対応 — WASM、Node、Python（`mastering_audio_profile_stereo` ほか）、C ABI（`sonare_mastering_audio_profile_stereo` ほか）。ダウンミックスではなく左右のペアを測定する。ダウンミックスは無相関素材で積分ラウドネスを約 6 dB 過小に読む — [ステレオ素材](./mastering-assistant.md#ステレオ素材)を参照 | 専用コマンドなし |
-| ステレオ版クレストファクター（`meteringCrestFactorDbStereo` ／ `metering_crest_factor_db_stereo`） | 対応 — WASM、Node、Python、C ABI（`sonare_metering_crest_factor_db_stereo`） | 非対応 |
-| 1 回の呼び出しで行う修復（`masteringRepairAnalyze` / `masteringRepairApply`、`mastering_repair_analyze` / `mastering_repair_apply`） | 対応 — WASM、Node、Python、C ABI（`sonare_mastering_repair_analyze`、`sonare_mastering_repair_apply`）。チャンネル数は任意で、ステージ順は固定、進捗とキャンセルに対応 — [オーディオ修復ワークフロー](./audio-repair.md)を参照 | 非対応（ネイティブの `repair` コマンドは別経路） |
-| ストリーミング用ラウドネスゲイン（`streamingLoudnessGain` / `streamingLoudnessGainStereo`、`streaming_loudness_gain` / `streaming_loudness_gain_stereo`） | 対応 — WASM、Node、Python、C ABI（`sonare_streaming_loudness_gain[_stereo]`） | 非対応 |
-| ミキシングエンジンとシーン | 対応 | `mix`（C++ CLI はシーンプリセット書き出しも対応） |
-| ミキシングアシスタント（`suggestMixScene` / `suggest_mix_scene`） | 対応 — WASM、Node、Python、C ABI（`sonare_mixing_assistant_suggest`）。一般の CMake ビルドでは `BUILD_MIXING_ASSISTANT`（既定 ON）を切り替えられますが、Node ネイティブアドオンの通常ビルドはキャッシュ値にかかわらず ON を強制します。`SONARE_WASM_ANALYSIS_ONLY` を指定すると強制的に無効になります。無効なビルドでも入口はエクスポートされたまま `NotSupported` を返すため、シンボルの有無ではなく機能カタログで判定してください — [ミキシングアシスタント](./mixing-assistant.md)を参照 | 対応 — `suggest-mix` |
-| サラウンド・マルチチャンネルミキシング | プロジェクトのグラフ／バウンスとリアルタイムエンジンは 5.1/7.1 出力に対応します。リアルタイムエンジンでは、ストリップの `surroundPan` 位置に従ってレーンを 5.1/7.1 グループバスへパンし、ワイドメーターも取得できます。単体のオフライン `Mixer.processStereo` はステレオ専用で、エンジンのトラックレーンもステレオのソースしか受け付けません。`sourceChannelLayout` がモノラル・5.1・7.1 のレーンは `InvalidParameter` で拒否され（WASM のワークレットファサードは `RangeError` を投げます）、ゼロ初期化したレーンはモノラルとして読まれるため、C の呼び出し側は `SONARE_CHANNEL_LAYOUT_STEREO` を設定します。[サラウンドとマルチチャンネル](./mixing.md#サラウンドとマルチチャンネル)を参照してください。 | 対応 — `project bounce` は 1/2/6/8 チャンネル出力に対応 |
-| プロジェクト・アレンジ編集（ヘッドレス DAW） | 対応 — [プロジェクト編集](./project-editing.md)を参照 | 対応 |
-| 型付きオートメーションターゲット（トラックフェーダー／パン） | 対応 — [プロジェクト編集](./project-editing.md#オートメーションレーン)を参照 | 非対応 |
-| オーディオソースの所有メタデータ（`contentHash` / `externalStemRole`） | 対応 — [プロジェクト編集](./project-editing-midi.md#モデルを読み戻し、読み込み後に音声を再バインドする)を参照 | 非対応 |
-| 内蔵シンセサイザー（NativeSynth）のプリセット／パッチ | 対応 — [内蔵シンセサイザー](./native-synth.md)を参照 | 対応 — `project bounce --synth <preset>` で NativeSynth プリセットを固定でき（一覧は `project synth-presets`）、値なしの `--synth` は GM プログラムに追従する |
-| シンセバウンスでの GM プログラム追従 | C ABI（`use_gm_programs`）、Python（`auto_select_gm=`）、WASM／Node のシンセバウンスバインディング（`useGmPrograms`）で、入力された GM バンク／プログラム変更に追従できる。明示したパッチはフォールバックになる | 対応 — 値なしの `--synth` フラグ |
-| 機能カタログとビルド診断 | 対応 — すべてのサーフェスで `capabilityCatalog()` / `capability_catalog()` と `capabilities()`。正規 JSON は C ABI 経由 | 対応 — `doctor` |
-| 長時間のオフライン呼び出しの協調キャンセル | 対応 — Node と WASM は `cancel?: () => boolean`、Python は `cancel=`、C ABI は `SonareCancelCallback`。キャンセルされた呼び出しはエラーコード 8 を返し、出力を確保しない | 非対応 |
-| SoundFont 2 プレイヤー | 対応 — [SoundFont 2 プレイヤー](./soundfont-player.md)を参照 | 非対応（Project API のみ） |
-| リアルタイムエンジンのライブ MIDI 入力 | 対応 — [MIDI 入力](./midi-input.md)を参照 | 非対応 |
-| 外部 MIDI 出力とクロック／トランスポート転送 | 対応 — WASM、Node、Python、C ABI。ブラウザのワークレットでは MIDI 1.0 に変換済みのメッセージを `onMidiOut` で受け取る | 非対応 |
-| Web MIDI ブリッジ（`bindWebMidi`）とマイク接続（`bindMicrophoneInput`） | WASM／ブラウザ専用 | 非対応 |
-| 外部楽器バウンスプロトコル（`ExternalInstrument`） | 対応 — Node と WASM は `bounceWithInstruments` / `bounceWithInstrument`、Python は `bounce_with_instruments`、C ABI は `sonare_project_bounce_with_instruments`。[プロジェクトバウンス](./project-bounce.md)を参照 | 非対応 |
+| メータリング（計測、クリッピング、ダイナミックレンジ、ステレオイメージ、スペクトル） | 対応 | ネイティブ CLI のみ: `meter`、`clipping`、`dynamic-range` |
+| ステレオ版クレストファクター（`meteringCrestFactorDbStereo`） | 対応（`sonare_metering_crest_factor_db_stereo`） | 非対応 |
+| スケール量子化とスケールマスク（`scaleMaskForMode`） | 対応 | 両 CLI の `scale-quantize`。これと `pitch-correct-timevarying` はモード名か 12 ビットのマスクを受け付ける。スケールマスク専用コマンドはなし |
+
+### 編集・リペア・マスタリング
+
+| 機能ファミリー | ライブラリ系 | CLI |
+|----------------|------|-----|
 | 編集 DSP | 対応 | 対応 |
-| 領域ベースのスペクトル編集（`spectralEdit`） | 対応 — [スペクトル編集](./spectral-editing.md)を参照 | 非対応 |
-| メータリング（計測、クリッピング／ダイナミックレンジ、ステレオイメージ、スペクトル） | 対応 | C++ CLI のみ（`meter`／`clipping`／`dynamic-range`） |
-| スケール量子化とスケールマスク（`scaleMaskForMode` / `scale_mask_for_mode`） | 対応 | 非対応 |
-| 検出したキーまたは指定したキーへのオートチューン（`autoTune` / `auto_tune`） | 対応 — WASM、Node、Python、C ABI（`sonare_auto_tune`） | 非対応 |
-| コードとキーの注釈変換（`chordSymbolFromAnalysis` / `keyModeFromAnalysis`、`chord_symbol_from_analysis` / `key_mode_from_analysis`） | 対応 — WASM、Node、Python、C ABI（`sonare_chord_symbol_from_analysis`、`sonare_key_mode_from_analysis`） | 非対応 |
-| ステレオのルームモーフ（`roomMorphStereo` / `room_morph_stereo`） | 対応 — WASM、Node、Python、C ABI（`sonare_room_morph_stereo`） | 2 チャンネルファイルに対する両 CLI の `room-morph` |
-| 固有のサンプルレートを持つリファレンス（ペアプロセッサ、ペア解析、A/B ラウドネスマッチ、EQ マッチの `referenceSampleRate` / `reference_sample_rate`） | 対応 — WASM、Node、Python、C ABI（`reference_sample_rate` 引数、`sonare_eq_match_ex`） | `mastering-pair-analyze` と `mastering-pair-processor` は任意のレートのリファレンスファイルを読む |
-| シンセのパラメータ記述子（`synthEngineParamInfo` / `synthPatchParamInfo`、`synth_engine_param_info` / `synth_patch_param_info`）とパッチの `engineParams` / `engine_params` | 対応 — WASM、Node、Python、C ABI（`sonare_synth_engine_param_info`、`sonare_synth_patch_param_info`、`SonareSynthPatch.engine_params`） | 非対応 |
-| ライブプログラムチェンジ（`pushMidiProgram`、`pushMidiInputProgram`、`push_midi_program`、`push_midi_input_program`）、レーンごとの `setTrackSends` / `setTrackOutputBus`、オフラインの `Mixer.setOutputBus` / `set_output_bus` | 対応 — WASM、Node、Python、C ABI（`sonare_engine_push_midi_program`、`sonare_engine_set_track_sends`、`sonare_engine_set_track_output_bus`、`sonare_mixer_set_output_bus`） | 非対応 |
-| コード機能（`chordFunctions` / `chord_functions`。`chordFunctionalAnalysis` / `chord_functional_analysis` も同じ時刻付きエントリを返す） | 対応 — WASM、Node、Python、C ABI（`sonare_chord_functions`） | 非対応 |
-| 測定したチューニング（`tuning: 'auto'` / `tuning="auto"` / `tuning_auto`、`referenceHz: 'auto'`、`tuningToReferenceHz` / `referenceHzToTuning`） | 対応 — WASM、Node、Python、C ABI | 非対応 |
-| ルーム音響解析（`estimateRoom` の結果を `synthesizeRir` の入力へ変換する `roomGeometryFromEstimate` / `room_geometry_from_estimate` を含む） | 対応 — `roomGeometryFromEstimate` は WASM、Node、Python、C ABI（`sonare_room_geometry_from_estimate`） | `sonare acoustic [--ir]`、`estimate-room`、`synthesize-rir`、`room-morph` |
-| ファイルデコード | ネイティブ: WAV/MP3（FFmpeg ビルドで追加形式）。WASM: 多くの API はデコード済みサンプルを受け取り、`Audio.fromMemory(...)` は WAV/MP3 バイト列をデコードでき、ブラウザ側デコードでは対応形式も読めます | ネイティブビルドに準拠 |
-| マルチチャンネルのデコードと折りたたみ（`decodeChannels` / `decode_channels`、`downmix`） | 対応 — WASM、Node、Python、C ABI（`sonare_decode_channels`、`sonare_downmix`）。`decodeChannels` は元の全チャンネルを保持し、`downmix` は ITU-R BS.775 の規則（センターとサラウンドを -3 dB、LFE は除外）でより狭いレイアウトへ折りたたむ | 非対応 |
+| 領域ベースのスペクトル編集（`spectralEdit`） | 対応。[スペクトル編集](./spectral-editing.md)を参照 | 非対応 |
+| 検出したキーまたは指定したキーへの自動ピッチ補正（`autoTune` / `auto_tune`） | 対応（`sonare_auto_tune`） | 非対応 |
+| オフラインのボーカル編集（`VocalEditSession` と、プロジェクトに保存されるボーカル編集） | `VocalEditSession` は WASM、Node、Python。プロジェクト側のボーカル呼び出しは一部のみ（10 入口のうち 5）。[オフラインモノフォニックボーカル編集](./vocal-editing.md)を参照 | 両 CLI の `vocal-notes` がセッションのノートを一覧表示する。編集とレンダリングはなし |
+| 1 回の呼び出しで行うリペア（`masteringRepairAnalyze` / `masteringRepairApply`） | 対応。チャンネル数は任意で、段の順序は固定、進捗とキャンセルに対応。[オーディオリペアの流れ](./audio-repair.md)を参照 | 非対応（ネイティブの `repair` コマンドは別経路） |
+| マスタリングのプリセット・チェーン・プロセッサ | 対応 | 一部のみ |
+| マスタリングアシスタント／プロファイル／プレビュー JSON | 対応 | 両 CLI の `mastering-suggest`、`mastering-profile`、`mastering-streaming`（モノラルまたはダウンミックス） |
+| ステレオ版アシスタント／プロファイル／プレビュー JSON（`masteringAudioProfileStereo`、`masteringAssistantSuggestStereo`、`masteringStreamingPreviewStereo`） | 対応。左右のペアを測定します。ダウンミックスは無相関の素材で積分ラウドネスを約 6 dB 低く読みます。[ステレオ素材](./mastering-assistant.md#ステレオ素材)を参照 | 専用コマンドなし |
+| ストリーミング用ラウドネスゲイン（`streamingLoudnessGain` / `streamingLoudnessGainStereo`） | 対応（`sonare_streaming_loudness_gain[_stereo]`） | 非対応 |
+| 固有のサンプルレートを持つリファレンス（ペアプロセッサ、ペア解析、A/B ラウドネスマッチ、EQ マッチの `referenceSampleRate`） | 対応（`reference_sample_rate` 引数、`sonare_eq_match_ex`） | `mastering-pair-analyze` と `mastering-pair-processor` は任意のレートのリファレンスファイルを読む |
+| 長時間のオフライン呼び出しの協調キャンセル | 対応。Node と WASM は `cancel?: () => boolean`、Python は `cancel=`、C ABI は `SonareCancelCallback`。キャンセルされた呼び出しはエラーコード 8 を返し、出力を確保しない | 非対応 |
+
+### ミキシングとリアルタイムエンジン
+
+| 機能ファミリー | ライブラリ系 | CLI |
+|----------------|------|-----|
+| ミキシングエンジンとシーン | 対応 | 両 CLI の `mix-strip`。Python CLI にはシーンの `mix` もあります。[CLI](./cli.md)を参照 |
+| ミキシングアシスタント（`suggestMixScene` / `suggest_mix_scene`） | 対応（`sonare_mixing_assistant_suggest`）。`BUILD_MIXING_ASSISTANT`（既定 ON。Node アドオンの通常ビルドは ON を強制し、`SONARE_WASM_ANALYSIS_ONLY` は無効にする）がないビルドでも入口は残り、`NotSupported` を返します。シンボルの有無ではなく機能カタログで判定してください。[ミキシングアシスタント](./mixing-assistant.md)を参照 | `suggest-mix` |
+| サラウンド・マルチチャンネルミキシング | プロジェクトのグラフ、プロジェクトバウンス、リアルタイムエンジンは 5.1/7.1 出力に対応します。エンジンのレーンはストリップの `surroundPan` に従って 5.1/7.1 グループバスへパンされます。単体の `Mixer.processStereo` はステレオ専用で、エンジンのトラックレーンもステレオのソースしか受け付けません（[チャンネルフォーマット](./channel-formats.md#モジュール別のチャンネル対応)を参照）。[サラウンドとマルチチャンネル](./mixing.md#サラウンドとマルチチャンネル)も参照 | `project bounce` は 1/2/6/8 チャンネルを書き出す |
+| リアルタイムエンジン | 対応 | 非対応 |
+| エンジンのレーンミキサー（レーン、バス、センド、チャンネルストリップ）と MIDI クリップスケジュール | 対応。[リアルタイムエンジン](./realtime-engine.md#レーンミキサー)を参照 | 非対応 |
+| スコープとワイドメーターのテレメトリ | 対応。[リアルタイムエンジン](./realtime-engine.md#サラウンドグループバスとワイドメーター)を参照 | 非対応 |
+| トラックごとの PFL/AFL（フェーダー前／フェーダー後）キューモニタリング | 対応。[リアルタイムエンジン](./realtime-engine.md#トラックモニタータップ-off・pfl・afl)を参照。WASM の AudioWorklet からも到達できる | 非対応 |
+| レーンごとの `setTrackSends` / `setTrackOutputBus` と、オフラインの `Mixer.setOutputBus` | 対応（`sonare_engine_set_track_sends`、`sonare_engine_set_track_output_bus`、`sonare_mixer_set_output_bus`） | 非対応 |
+| ライブ MIDI 入力、および外部 MIDI 出力とクロック／トランスポート転送 | 対応。[MIDI 入力](./midi-input.md)を参照。ブラウザの worklet では MIDI 1.0 に変換済みのメッセージを `onMidiOut` で受け取る | 非対応 |
+| ライブプログラムチェンジ（`pushMidiProgram`、`pushMidiInputProgram`） | 対応（`sonare_engine_push_midi_program`）。SoundFont プレイヤー、GM プログラムを付けて割り当てた NativeSynth、ドラムキットの NativeSynth（GS ドラムセットの選択として）が従います。内蔵シンセとほかの NativeSynth パッチは無視します | 非対応 |
+
+### プロジェクト・インストゥルメント・MIDI
+
+| 機能ファミリー | ライブラリ系 | CLI |
+|----------------|------|-----|
+| プロジェクト・アレンジ編集（ヘッドレス DAW） | 対応。[プロジェクト編集](./project-editing.md)を参照 | 対応 |
+| 型付きオートメーションターゲット（トラックフェーダーとパン） | 対応。[プロジェクト編集](./project-editing.md#オートメーションレーン)を参照 | 非対応 |
+| オーディオソースの所有メタデータ（`contentHash` / `externalStemRole`） | 対応。[プロジェクト編集](./project-save-load.md#モデルを読み戻し、読み込み後に音声を再バインドする)を参照 | 非対応 |
+| 内蔵シンセサイザー（NativeSynth）のプリセットとパッチ | 対応。[内蔵シンセサイザー](./native-synth.md)を参照 | `project bounce --synth <preset>` でプリセットを固定できる（一覧は `project synth-presets`）。値なしの `--synth` は GM プログラムに追従する |
+| シンセバウンスでの GM プログラム追従 | C ABI の `use_gm_programs`、Python の `auto_select_gm=`、WASM／Node の `useGmPrograms`。明示したパッチはフォールバックになる | 値なしの `--synth` フラグ |
+| シンセのパラメータ記述子（`synthEngineParamInfo` / `synthPatchParamInfo`）とパッチの `engineParams` | 対応（`sonare_synth_engine_param_info`、`sonare_synth_patch_param_info`、`SonareSynthPatch.engine_params`） | 非対応 |
+| サンプルバンク（`SampleBank`。`sample` エンジンの音源） | 対応。[内蔵シンセサイザー](./native-synth.md)を参照 | 一部のみ |
+| パートリグ（`setPartRig` / `getPartRig` / `clearPartRig`） | 対応。[GM と GS](./gm-gs.md#パートリグと-efx-の直列ルーティング)を参照 | 非対応 |
+| コンポジションアシスト | 設計上、C ABI と C++ のみ | 非対応 |
+| SoundFont 2 プレイヤー | 対応。[SoundFont 2 プレイヤー](./soundfont-player.md)を参照 | 非対応（Project API のみ） |
+| 外部楽器バウンスプロトコル（`ExternalInstrument`） | Node と WASM は `bounceWithInstruments` / `bounceWithInstrument`、Python は `bounce_with_instruments`、C ABI は `sonare_project_bounce_with_instruments`。[プロジェクトバウンス](./project-bounce.md)を参照 | 非対応 |
+| [再生レンダラー](./playback.md)（`PlaybackRenderer`、`renderPlayback` / `render_playback`） | 対応。モノラル、ステレオ、5.1、7.1 のスピーカー出力とバイノーラル出力 | 両 CLI の `playback` |
+
+### ルーム・ファイル・ブラウザ専用
+
+| 機能ファミリー | ライブラリ系 | CLI |
+|----------------|------|-----|
+| ルーム音響解析（`estimateRoom` の結果を `synthesizeRir` の入力へ変換する `roomGeometryFromEstimate` を含む） | 対応（`sonare_room_geometry_from_estimate`） | `acoustic [--ir]`、`estimate-room`、`synthesize-rir`、`room-morph` |
+| ステレオのルームモーフ（`roomMorphStereo` / `room_morph_stereo`） | 対応（`sonare_room_morph_stereo`） | 2 チャンネルファイルに対する両 CLI の `room-morph` |
+| 機能カタログとビルド診断 | すべてのサーフェスで `capabilityCatalog()` / `capability_catalog()` と `capabilities()`。正規 JSON は C ABI 経由 | `doctor` |
+| ファイルデコード | ネイティブ: WAV/MP3（FFmpeg ビルドで追加形式）。WASM: 多くの API はデコード済みサンプルを受け取り、`Audio.fromMemory(...)` は WAV/MP3 バイト列をデコードでき、ブラウザ側デコードでは対応形式も読める | ネイティブビルドに準拠 |
+| マルチチャンネルのデコードと折りたたみ（`decodeChannels` / `decode_channels`、`downmix`） | 対応（`sonare_decode_channels`、`sonare_downmix`）。折りたたみの規則は[チャンネルフォーマット](./channel-formats.md)にあります | 非対応 |
+| Web MIDI ブリッジ（`bindWebMidi`）とマイク接続（`bindMicrophoneInput`） | WASM／ブラウザ専用 | 非対応 |
 | OPFS へのクリップ書き込みと取り込み（`writeOpfsClip`、`importOpfsClip`） | WASM／ブラウザ専用 | 非対応 |
-| オーディオグラフノードとしてのストリームアナライザー（`SonareStreamAnalyzerNode`、`registerSonareStreamAnalyzerWorkletProcessor`） | WASM／ブラウザ専用（`@libraz/libsonare/worklet`） | 非対応 |
+| オーディオグラフノードとしてのストリームアナライザー（`SonareStreamAnalyzerNode`） | WASM／ブラウザ専用（`@libraz/libsonare/worklet`） | 非対応 |
 
 ## 形の違い
 
@@ -102,7 +131,7 @@ libsonare リポジトリは、その差を主張ではなく計測で示しま�
 | 関数 | WASM | Node ネイティブ | Python |
 |------|------|----------------|--------|
 | `detectChords` / `detect_chords` | オプションオブジェクト | オプションオブジェクトまたは従来の位置引数 | 位置引数 / キーワード引数 |
-| `decomposeStemsLinked` / `decompose_stems_linked` | `channels` を持つ平面チャンネルのリクエストオブジェクト | `channels` を持つ平面チャンネルのリクエストオブジェクト | 平面チャンネル列または 2 次元配列と、位置／キーワードオプション |
+| `decomposeStemsLinked` / `decompose_stems_linked` | `channels` を持つプレーナー形式のリクエストオブジェクト | `channels` を持つプレーナー形式のリクエストオブジェクト | プレーナー形式のチャンネル列または 2 次元配列と、位置／キーワードオプション |
 | ストリーミング読み出し | `process`、`readFrames`、`stats` | float の Structure-of-Arrays 読み出しは `readFramesSoa` | `process`、`read_frames`、`stats` |
 | 量子化ストリーム読み出し | `readFramesI16` / `readFramesU8`（レガシーの `StreamConfig.outputFormat` は `0`） | WASM と同じ | `read_frames_i16` / `read_frames_u8`（レガシーの `output_format` は `0`） |
 | `Mixer` のストリップ参照 | 数値インデックス。ID 参照は `stripById(id)` | 数値インデックスまたはストリップ ID 文字列 | 数値インデックスまたはストリップ ID 文字列 |
@@ -117,28 +146,30 @@ libsonare リポジトリは、その差を主張ではなく計測で示しま�
 |------|-----------|
 | マスタリングチェーン設定 | `masteringChain(...)` と `StreamingMasteringChain` はネストした設定オブジェクトを取り、`masterAudio(...)` の上書き値はフラットなドット記法を使う。`MasteringChainConfig` では両方の書き方が型付きでサポートされており、`'loudness.targetLufs'` のようなドット記法のリーフキーは、対応するネスト形式と並べても置き換えても構わない。動的に組み立てる上書き値にはこちらが扱いやすく、C ABI が運ぶ形式でもある。手で書くコードでは正準なネスト形式を選ぶこと。ネスト形式はフィールド単位で型検査されるが、ドット記法のキーは実行時にしか検査されない |
 | ステレオ版アシスタント／メータリングのリクエスト型 | モノラル版と並んで追加されたステレオ版の入口は、どの JS 系サーフェスでも**リクエストオブジェクト専用**で、位置引数のオーバーロードはありません。リクエスト型の名前もバインディングごとに異なり、WASM はプロファイルと提案で `MasteringStereoParamsRequest` を共有するのに対し、Node は `MasteringAssistantSuggestStereoRequest` と `MasteringAudioProfileStereoRequest` に分かれる（後者は前者を継承し、フィールドの追加はない）。Python は通常の位置引数／キーワード引数（`left, right, sample_rate=…`）を取り、C ABI は `const float* left, const float* right, size_t length` を取る |
-| `StreamingMasteringChain` の対象 | ブロック処理できるステージ専用。前後文脈やファイル全体が必要な repair 段は拒否する。`loudness` 段は、事前計算した静的ゲインを `loudnessStaticGainDb`（JS）/ `loudness_static_gain_db`（Python）で渡せば利用でき、音源の True Peak も任意で指定できる。静的ゲインを指定しない場合はコンストラクタが拒否する |
+| `StreamingMasteringChain` の対象 | ブロック処理できるステージ専用。前後の文脈やファイル全体が必要なリペア段は拒否する。`loudness` 段は、事前計算した静的ゲインを `loudnessStaticGainDb`（JS）/ `loudness_static_gain_db`（Python）で渡せば利用でき、音源の True Peak も任意で指定できる。静的ゲインを指定しない場合はコンストラクタが拒否する |
 | `analyze(...)` の戻り値 | C ABI・Python・Node ネイティブ・WASM のいずれも完全な `analyze` 結果を返す。コード、セクション、音色、ダイナミクス、リズム、メロディー、フォーム、ビートごとの強さが含まれる。専用関数（`detect_chords`、`analyze_sections` …）は、追加パラメータが必要なときや、全パイプラインを通さず 1 ファミリーだけ欲しいときに引き続き使える |
-| 正規化の既定値と戻り値 | モノラルのピーク正規化は、Python・WASM・Node ネイティブのいずれでも `0.0` dBFS が既定です（モジュール関数 `normalize(...)` と `Audio.normalize()` 便利メソッドの両方）。これはゲイン 0 を適用するのではなく、ピークをフルスケールへ正規化する意味です。RMS の既定は `-20.0` dBFS で、Python の `normalize_rms` / `normalize_rms_stereo` と、CLI が従うライブラリ既定値がこれにあたります。JS 系の 2 サーフェスはここで自分のモノラル版と食い違います。`normalizeStereo` の `targetDb` は**モードごとに**既定が変わり、`'peak'` では `0`、`'rms'` では `-20` です。一方 `normalize` はどちらのモードでも `0` を既定にします。RMS 目標を `0` dBFS にすると事実上すべてのピークがフルスケールを超えるためです。ステレオ版の入口は 4 つとも、ペア全体でレベルを 1 つ測り、同じゲインを両チャンネルへ適用します。したがってステレオバランスは保たれ、戻り値もペアではなく単一の `appliedGainDb` / `applied_gain_db` を報告します。無音のペアは手を加えずに `0` で返ります。Python の `NormalizeStereoResult` には JS 側の戻り値にない 4 つめのフィールド、共有される `length` があります |
+| 正規化の既定値と戻り値 | WASM、Node、Python で、ピーク正規化は `0.0` dBFS、RMS 正規化は `-20.0` dBFS が既定です。Node と WASM のモノラル `normalize` とステレオ `normalizeStereo` も同じです。C ABI では目標値を明示する必要があります。ステレオ版はペア全体でレベルを 1 つ測り、同じゲインを両チャンネルへ適用してバランスを保ちます。戻り値は単一の `appliedGainDb` / `applied_gain_db` で、無音のペアは変更せずゲイン `0` を返します。Python の `NormalizeStereoResult` は共有の `length` も持ちます |
 | `bounceOffline(...)` の LUFS | C API と WASM で LUFS 正規化の既定値が揃っている（LUFS はフルスケール基準のラウドネス単位。詳細は[LUFS](./glossary/lufs.md)）。古いコードを移植するときは、意図が重要なら `normalizeLufs` / `normalize_lufs` を明示する |
 | `mfcc` の lifter | `mfcc(...)` / `mfcc` はどのバインディングでも末尾に `lifter` / `lifter` 引数を取る（ケプストラルリフタリング。既定は `0` でリフタリングなし）。C ABI の明示レンジ入口は `sonare_mfcc_ex` |
 | `trim` と `trimSilence` | `trim(...)` は単純な `thresholdDb` で音声だけを返す。`trimSilence(...)` / `trim_silence(...)` は `librosa.effects.trim` 互換で、`topDb`・フレーム RMS・元音源上のサンプル範囲を扱う |
-| オートメーションカーブ | ミキシング API とエンジン API では、カーブ型の名前が別々です。ミキシングの `AutomationCurve` は `'linear'`・`'exponential'`・`'hold'`・`'s-curve'` を取ります。エンジン／プロジェクト API はこれとは別の型 — `EngineAutomationPointCurve`（Node）／`ProjectAutomationCurve`（WASM。序数 `0`〜`3` も受け取る）— を使い、s-curve の値はミキシングの `'s-curve'` ではなく `'scurve'`（ハイフンなし）と綴ります。両者で名前も綴りも共通だと考えないでください |
-| オートメーション対象の種別 | 上のカーブ形状の軸とは別の軸です。`SonareAutomationTargetKind` / `ProjectAutomationTargetKind`（WASM）は、プロジェクトのオートメーションレーンが何を駆動するかを分類します — 中身をエンジンが解釈しない従来のホスト定義ターゲット、または型付きのトラックフェーダー（`TRACK_FADER_DB`）／パン（`TRACK_PAN`）ターゲットです。Node は `targetKind`、Python はキーワード引数 `target_kind`（または序数 `0`/`1`/`2`）で公開します。型付きレーンを追加すると、プロジェクト JSON はスキーマバージョン `2` に上がります。従来のレーンだけのプロジェクトはスキーマバージョン `1` のまま、既存のバイト列を保ちます — [プロジェクト編集](./project-editing.md#オートメーションレーン)を参照 |
+| オートメーションカーブ | ミキシング API とエンジン API では、カーブ型の名前が別々です。ミキシングの `AutomationCurve` は `'linear'`・`'exponential'`・`'hold'`・`'s-curve'` を取ります。エンジン／プロジェクト API はこれとは別の型（`EngineAutomationPointCurve`（Node）／`ProjectAutomationCurve`（WASM。序数 `0`〜`3` も受け取る））を使い、s-curve の値はミキシングの `'s-curve'` ではなく `'scurve'`（ハイフンなし）と綴ります。両者で名前も綴りも共通だと考えないでください |
+| オートメーション対象の種別 | 上のカーブ形状の軸とは別の軸です。`SonareAutomationTargetKind` / `ProjectAutomationTargetKind`（WASM）は、プロジェクトのオートメーションレーンが何を駆動するかを分類します。種別は、中身をエンジンが解釈しない従来のホスト定義ターゲットか、型付きのトラックフェーダー（`TRACK_FADER_DB`）／パン（`TRACK_PAN`）ターゲットのどちらかです。Node は `targetKind`、Python はキーワード引数 `target_kind`（または序数 `0`/`1`/`2`）で公開します。型付きレーンを追加すると、プロジェクト JSON はスキーマバージョン `2` に上がります。従来のレーンだけのプロジェクトはスキーマバージョン `1` のまま、既存のバイト列を保ちます。[プロジェクト編集](./project-editing.md#オートメーションレーン)を参照 |
 | Scene JSON | 永続ミキサーの交換形式。実行時に編集した状態を保存する場合は、手書き JSON より WASM/Node の `Mixer.toSceneJson()`、Python の `Mixer.to_scene_json()` を優先する |
 | クリップループのクロスフェード | `setClipLoop` / `set_clip_loop` は全バインディングで `loopCrossfadePpq` / `loop_crossfade_ppq` を受け取る（ppq は 4 分音符あたりのパルス数）。ループ継ぎ目の equal-power クロスフェードで、プリロールとループ長の半分を上限にクランプされ、ワープ時は無視され、0 でないときだけシリアライズされる |
-| プロジェクトバウンスの種類 | ヘッドレス DAW の `Project` は各バインディングで音声へバウンスできる。楽器バインド付きバウンス（`bounceWithBuiltinInstrument` / `bounceWithSynthInstrument` / `bounceWithSf2Instrument`）と、テイク／コンプのアレンジモデルは共通 — [プロジェクトバウンス](./project-bounce.md)と[録音とテイク](./recording-and-takes.md)を参照。`ExternalInstrument` バウンスプロトコルは Node・WASM・Python で共通 |
-| マスタリングチェーン JSON | チェーン JSON と named processor のパラメータマップは同じフィールド集合を持ち、相互に変換しても欠落しない。対象は `repair.declip` の `lpcBlend`、multiband のバンド別パラメータ、コンプレッサーの detector / sidechain HPF / PDR 設定、リアルタイムボイスチェンジャーのサンプル間ピーク（ISP）リミッター設定。このドキュメント自体も独自のスキーマバージョンを持つ。バージョン `1` はフラットな固定 3 バンド（low/mid/high）のマルチバンドコンプレッサー形式。バージョン `2` は、マルチバンドコンプレッサーがクロスオーバーの本数やスロープ／モード、バンド数を変える必要が生じたときに自動選択され、`dynamics.multibandComp` を厳密なフィールド検証を伴う構造化オブジェクトとしてシリアライズする — [マスタリングプロセッサ](./mastering-processors.md#チェーン設定-json-スキーマ)を参照 |
+| プロジェクトバウンスの種類 | ヘッドレス DAW の `Project` は各バインディングで音声へバウンスできる。楽器バインド付きバウンス（`bounceWithBuiltinInstrument` / `bounceWithSynthInstrument` / `bounceWithSf2Instrument`）と、テイク／コンプのアレンジモデルは共通です。[プロジェクトバウンス](./project-bounce.md)と[録音とテイク](./recording-and-takes.md)を参照してください。`ExternalInstrument` バウンスプロトコルは Node・WASM・Python で共通 |
+| マスタリングチェーン JSON | チェーン JSON と名前付きプロセッサのパラメータマップは同じフィールド集合を持ち、相互に変換しても欠落しない。対象は `repair.declip` の `lpcBlend`、multiband のバンド別パラメータ、コンプレッサーの detector / sidechain HPF / PDR 設定、リアルタイムボイスチェンジャーのサンプル間ピーク（ISP）リミッター設定。このドキュメント自体も独自のスキーマバージョンを持つ。バージョン `1` はフラットな固定 3 バンド（low/mid/high）のマルチバンドコンプレッサー形式。バージョン `2` は、マルチバンドコンプレッサーがクロスオーバーの本数やスロープ／モード、バンド数を変える必要が生じたときに自動選択され、`dynamics.multibandComp` を厳密なフィールド検証を伴う構造化オブジェクトとしてシリアライズします。[マスタリングプロセッサ](./mastering-processors.md#チェーン設定-json-スキーマ)を参照 |
 | マスタリングリミッター設定 | `releaseMs` / `release_ms` と `applyGainAtInputRate` / `apply_gain_at_input_rate` をマスタリング helper API で使える。単発 helper ではリリースが 0 のときに 50 ms のライブラリ既定値を保ち、プリセット／チェーンの上書き値はそのまま適用される |
 | 音響解析 | 測定とブラインド推定の入口は `AcousticResult` を返す。幾何ベースのルーム音響では等価ルーム推定、RIR 合成、ルームモーフィングも使える（ブラインド推定と等価ルーム推定は信頼度と一緒に表示する） |
 | エンジンのレーンミキサー / MIDI クリップ | コンパイル済みの形はどのバインディングでも同一（`EngineTrackLane` / `EngineTrackSend` / `EngineBus`。MIDI イベントは絶対サンプルの `renderFrame` と UMP（Universal MIDI Packet）ワードを持つ）。Python は `EngineMidiClipSchedule` / `EngineMidiEvent` の dataclass を使い、JS/Node はプレーンオブジェクトを渡す。素のエンジンの `setSoloMute` は固定のレーンインデックスを取るが、ブラウザの `SonareEngine` Worklet API はトラック id *または名前*を受け取る。ストリップ EQ バンドはどちらの API でも `EqBand` オブジェクトまたはバンド JSON 文字列で渡せる（`setTrackStripEqBand` / `setMasterStripEqBand`、生 JSON 用に `…EqBandJson` 系もある） |
 | 自己類似度系の命名 | Python は JavaScript の `segment_` 接頭辞を落とします。`cross_similarity` / `recurrence_matrix` / `recurrence_to_lag` / `lag_to_recurrence` / `path_enhance` / `subsegment` / `agglomerative` が、`segmentCrossSimilarity` などに対応します |
 | `Audio` のサンプル取得 | WASM の `audio.data`、Node の `audio.getData()`、Python の `audio.data` はすべてコピーを返す。返り値に書き込んでもインスタンスは変わらず、取得するたびに確保が発生する |
 | 配布形態 | 公開されている成果物は WebAssembly の npm パッケージ、Python ホイール、ネイティブ CLI のアーカイブです。Node ネイティブバインディングは private 指定でローカル依存として使う前提のため、常にソースからビルドします |
-| ABI バージョンの照合 | どのバインディングも読み込んだライブラリのインターフェースバージョン（Feature 7、フラットな解析・特徴量 POD と公開する一般 C 関数の契約を対象、Project 2、Voice changer 3、Acoustic 5、Engine 3、パック値は `0x05030207`）を読めます。Node、WASM、Python は `sonare_abi_version()` のパック値を自分でも比較し、不一致なら `ErrorCode.AbiMismatch`（10）の `SonareError` を送出します。タイミングは Node がアドオンの require 時、WASM が `init()`、Python が最初のライブラリ使用時です（Python CLI は終了コード 13）。エンジン ABI はこのパック値に含まれないので、WASM はこのパック値を `EXPECTED_ABI_VERSION` としてもエクスポートします。Node と WASM は `engineAbiVersion()` / `projectAbiVersion()` と並べて `EXPECTED_ENGINE_ABI_VERSION`（と `EXPECTED_PROJECT_ABI_VERSION`）をエクスポートし、エンジンの比較は利用側に委ねます（WASM の `engineCapabilities().abiCompatible` が比較済みの値です）。C の呼び出し側は `sonare_abi_version()` をコンパイル時の `SONARE_ABI_VERSION` と比較します。[ABI バージョン](./native-bindings.md#abi-バージョン)を参照 |
-| エラーの型 | ライブラリや、オブジェクトの状態が報告する失敗は、どのバインディングでも同じ C ABI 数値コードを持つ `SonareError` になります。WASM と Node は `code` と `codeName` を持つ `Error` サブクラスをスローし、どちらのパッケージも `ErrorCode` enum と `isSonareError(value)` ガードをエクスポートします。Python は `.code` を持つ `RuntimeError` サブクラスを送出します。両 CLI は失敗を安定した終了コードへ対応付けます（使用方法エラー 2、無効パラメータ 3、キャンセル 11。[CLI](./cli.md)を参照）。Python CLI は ABI 不一致のとき終了コード 13 で終了します。JavaScript バインディング自身が拒否する引数は、どちらの JS サーフェスでも `SonareError` にはなりません。型が違う、または値がない場合はネイティブの `TypeError`、値が定義域の外（整数を読む箇所の小数、未知の名前、長さの揃わないペア、NUL を含む文字列）なら `RangeError` で、`isSonareError` はどちらにも一致しません。サンプルとサンプルレートを取るワンショット関数に渡した空または非有限のオーディオ、範囲外または整数ではない `sampleRate` は、どちらの JS サーフェスでも `RangeError`（Python では `SonareValueError`）になり、`null`・数値・配列のリクエストオブジェクトは `TypeError` です。コアが自分のオブジェクトに対して行う検査（拒否されたストリーム設定など）は引き続きコード付きの `SonareError` で届くので、ユーザー入力を検証するときは両方の形を捕捉してください。解放済み・破棄済み・未初期化のハンドルは `InvalidState` の `SonareError` を投げます（WASM では、すでに delete された embind オブジェクトや `init()` 前の呼び出しも含みます）。WASM の 2 回目の `init()` で最初と異なるオプションを渡すと、そのオプション名を挙げた `InvalidState` を投げます。パッケージと ABI の異なるネイティブモジュールを読み込むと `AbiMismatch`（10）を投げます。バインディング固有の追加が 2 つあります。Python には `SonareValueError` があり、`SonareError` と `ValueError` の両方を継承するため、引数検証の失敗をどちらの `except` でも捕捉できます。C ABI へ到達していない失敗でも `ErrorCode.INVALID_PARAMETER` を持ちます。Node の `SonareError` は実行時のクラスで、`instanceof` はブランド判定です。アドオンがクラスを構築せずに送出したエラーも、ワーカー境界を越えてプロトタイプを失ったエラーも、そのまま絞り込めます。`isSonareError` は同じダックタイピング判定で、両者の結果が食い違うことはありません |
-| 同じ失敗の現れ方 | バインディング層より下で発生した失敗も、コード付きで各バインディングに届きます。たとえば `Mixer.fromSceneJson` に壊れた JSON を渡すと `InvalidFormat`、未知の insert を指すシーンを渡すと `InvalidParameter` で、WASM・Node・Python では `SonareError` になります。C ABI は `nullptr` を返し、コードを `sonare_last_error_code()`、詳細を `sonare_last_error_message()` に残します。詳細メッセージや例外を投げる関数そのものはランタイムごとに異なるので、メッセージではなくコードで分岐し、バインディングをまたいで型に頼る前には個々の呼び出しを確認してください |
-| WASM のオブジェクト戻り値 | 名前一覧ヘルパー（`*Names()`）、プリセット名ヘルパー、`synthPresetPatch`、セクション結果、キー候補ヘルパー、さらにミキサーのメータースナップショット（`meterTap`、`stripMeter`、`busMeter`）とゴニオメーターのサンプル（`readGoniometerLatest`）が返す WASM の配列／オブジェクトは、呼び出し元の JavaScript realm へ再ルートされるため、通常のオブジェクトと同様に `structuredClone()` / `postMessage()` へそのまま渡せる。`Mixer` や `StreamAnalyzer` のようにネイティブメソッドを持つハンドル自体は clone できないため、プレーンな戻り値のデータを渡す |
+| ABI バージョンの照合 | どのバインディングも、読み込んだライブラリのインターフェースバージョンを自分で検査します。[ABI バージョン](#abi-バージョン)を参照 |
+| 指定しないパラメータ | JavaScript と Python のバインディングでは、指定しないパラメータは不在（`undefined`、`None`、省略したフィールド）として扱われ、`-1` のような代用値は使いません |
+| ルームの帯域別配列 | JavaScript は `bandAbsorption` / `bandScattering`、Python は `band_absorption` / `band_scattering`、C ABI と CLI の `--json` 出力は `absorption_bands` / `scattering_bands` |
+| 編集位置 | すべての編集リクエストとパンチインの範囲は、サンプル数のほかに秒でも指定できます（`startSec` / `endSec`、`onsetSec` / `offsetSec`、`timeOffsetSec`、`paddingSec`。Python は snake_case）。両方の書き方を同時に渡すと拒否されます |
+| エラー | 失敗ごとの数値コードはどのバインディングでも同じです。コードを運ぶクラスと、ライブラリへ届く前にバインディングが引数を拒否するかどうかはランタイムごとに異なります。[エラー契約](#エラー契約)を参照 |
+| WASM のオブジェクト戻り値 | 名前一覧ヘルパー（`*Names()`）、プリセット名ヘルパー、`synthPresetPatch`、セクション結果、キー候補ヘルパー、さらにミキサーのメータースナップショット（`meterTap`、`stripMeter`、`busMeter`）とゴニオメーターのサンプル（`readGoniometerLatest`）が返す WASM の配列／オブジェクトは、呼び出し側の JavaScript realm へ再ルートされるため、通常のオブジェクトと同様に `structuredClone()` / `postMessage()` へそのまま渡せる。`Mixer` や `StreamAnalyzer` のようにネイティブメソッドを持つハンドル自体は clone できないため、プレーンな戻り値のデータを渡す |
 | CLI の提供範囲 | PyPI の Python CLI か、ソースビルドの C++ CLI かで異なる。詳細は [CLI](./cli.md) を参照 |
 
 ::: info 詳細な解析フィールド
@@ -154,6 +185,51 @@ C ABI・Python・Node ネイティブ・WASM のいずれも、`analyze(...)` �
 | ダイナミクス | `analyzeDynamics` / `analyze_dynamics` |
 | リズム | `analyzeRhythm` / `analyze_rhythm` |
 :::
+
+## ABI バージョン
+
+どのバインディングも、読み込んだライブラリのインターフェースバージョンを読めます。そのうち 4 つは 1 つの集約値にパックされます。
+
+| インターフェース | バージョン | 読み取り方 |
+|------------------|------------|------------|
+| Feature（フラットな解析・特徴量の構造体と、公開する一般 C 関数の契約） | 7 | `abiVersion()` にパックされる |
+| Project | 2 | パックされる。`projectAbiVersion()` |
+| ボイスチェンジャー | 3 | パックされる。`voiceChangerAbiVersion()` |
+| Acoustic | 5 | パックされる |
+| 集約値 | `0x05030207` | `abiVersion()`。WASM では `EXPECTED_ABI_VERSION`。C では `sonare_abi_version()` をコンパイル時の `SONARE_ABI_VERSION` と比較する |
+| Engine | 3 | `engineAbiVersion()`。パック値には含まれないため、各 `RealtimeEngine` コンストラクターが別に照合する |
+
+Node、WASM、Python はパック値を自分でも比較し、不一致を `AbiMismatch`（10）で拒否します。どこで送出するかは[エラー契約](#エラー契約)にあります。Node と WASM は `EXPECTED_PROJECT_ABI_VERSION` をエクスポートします。WASM は `EXPECTED_ENGINE_ABI_VERSION` もエクスポートし、`engineCapabilities().abiCompatible` がエンジンの照合結果です。Node のアドオンは `RealtimeEngine` を構築するときにエンジン ABI を検査します。不一致のとき Python CLI は 13 で終了します。[ABI バージョン](./native-bindings.md#abi-バージョン)も参照してください。
+
+## エラー契約
+
+どのバインディングも、失敗を同じ数値コード（C ABI の `SonareError` の値）で報告します。そのため、メッセージの文面ではなく原因で分岐できます。ランタイムごとに異なるのは 2 点で、コードを運ぶクラスと、ライブラリへ届く前にバインディングが引数を拒否するかどうかです。下の表は失敗の種類ごとに 1 行ずつ並べています。コード付きの行では、WASM と Node は表の名前を `codeName` に持つ `SonareError` をスローし、Python は表の `ErrorCode` メンバーを `.code` に持つ `SonareError` を送出します。
+
+| 失敗 | コード | WASM と Node | Python | C ABI | CLI の終了コード |
+|------|--------|--------------|--------|-------|------------------|
+| 型の違う引数、または欠けた引数 | — | `TypeError` | `SonareValueError`、コード 4 | — | 2 |
+| バインディングが拒否する引数（空または非有限のオーディオ、整数を読む箇所の小数（サンプルレートを含む）、バインディング自身が解決する名前（`keyRoot: 'H'`）、揃うべき長さの不一致、NUL を含む文字列） | — | `RangeError` | `SonareValueError`、コード 4 | `SONARE_ERROR_INVALID_PARAMETER` | 2 または 3 |
+| 8000〜384000 Hz の外にあるサンプルレート | 4 | `RangeError` | `INVALID_PARAMETER` | `SONARE_ERROR_INVALID_PARAMETER` | 3 |
+| ライブラリが拒否する値（`nFft` が 0、未知のプリセット名、未知の insert を指すシーンなど） | 4 | `InvalidParameter` | `INVALID_PARAMETER` | `SONARE_ERROR_INVALID_PARAMETER` | 3 |
+| 存在しないファイル | 1 | `FileNotFound`（Node。WASM はファイルパスを扱わない） | `FILE_NOT_FOUND` | `SONARE_ERROR_FILE_NOT_FOUND` | 4 |
+| 壊れたプロジェクト・シーン・プリセットの文書 | 2 | `InvalidFormat` | `INVALID_FORMAT`。プロジェクト文書では `SonareValueError` として送出 | `SONARE_ERROR_INVALID_FORMAT` | 5 |
+| デコードできないオーディオ | 3 | `DecodeFailed` | `DECODE_FAILED` | `SONARE_ERROR_DECODE_FAILED` | 6。FFmpeg なしのビルドでは 5 |
+| メモリ確保の失敗 | 5 | `OutOfMemory` | `OUT_OF_MEMORY` | `SONARE_ERROR_OUT_OF_MEMORY` | 7 |
+| このビルドに含まれない機能 | 6 | `NotSupported` | `NOT_SUPPORTED` | `SONARE_ERROR_NOT_SUPPORTED` | 8 |
+| 解放済み・クローズ済み・未初期化のオブジェクト、`init()` 前の WASM 呼び出し | 7 | `InvalidState` | `INVALID_STATE` | `SONARE_ERROR_INVALID_STATE` | 9 |
+| 進捗コールバックからキャンセルした処理 | 8 | `Cancelled` | `CANCELLED` | `SONARE_ERROR_CANCELLED` | 11 |
+| 書き出せない出力ファイル | 9 | `EncodeFailed` | `ENCODE_FAILED` | `SONARE_ERROR_ENCODE_FAILED` | 12 |
+| バインディングと別のビルドのネイティブコード | 10 | `AbiMismatch`。Node はアドオン読み込み時、WASM は `init()` | 最初のライブラリ使用時に `ABI_MISMATCH` | 返さない | 13（Python CLI のみ） |
+| その他 | 99 | `Unknown` | `UNKNOWN` | `SONARE_ERROR_UNKNOWN` | 10 |
+
+各列の読み方は次のとおりです。
+
+- **WASM と Node**: `TypeError` と `RangeError` はバインディング自身の拒否でコードを持たないため、`isSonareError` は一致しません。ユーザー入力を検証するハンドラーでは両方の形を捕捉してください。`ErrorCode` enum と実例は[エラーハンドリング](./js-api.md#エラーハンドリング)にあります。
+- **Python**: `SonareValueError` は `SonareError` と `ValueError` の両方を継承するので、どちらの `except` でも捕捉できます。`.code` を持つため、コードで分岐するコードからは、代わりに立っているライブラリ側の拒否と同じに見えます。Python は範囲外のサンプルレートをそのままライブラリへ渡すので、その行は JavaScript では `RangeError`、Python ではコード付きの `SonareError` です。[Python の例外](./python-api-types.md#例外)を参照してください。
+- **C ABI**: `SonareError` を返す関数は戻り値で報告します。検証による早期リターンはメッセージを記録しないため、読める文面は `sonare_error_message(code)` で得ます。ハンドルを返す関数は `NULL` を返し、コードを `sonare_last_error_code()`、詳細を `sonare_last_error_message()` に残します。[C++ のエラーハンドリング](./cpp-api.md#エラーハンドリング)を参照してください。
+- **CLI**: 両 CLI がこの対応を使います。終了コード 2 は引数パーサーのもので、パーサーが拒否した引数は 2、コマンドの処理側が拒否した引数は 3 で終了します。13 は Python CLI にしかありません。ネイティブ CLI はライブラリを静的リンクするためです。`SONARE_LEGACY_EXIT=1` を設定すると、すべての失敗が `1` にまとまります。[終了コード](./cli.md#終了コード)を参照してください。
+
+コードが同じでも詳細メッセージはランタイムごとに異なります。壊れたシーンは、WASM と Node では `failed to build mixer from scene JSON: …`、Python ではコードを接頭辞に付けた `[2] failed to build mixer from scene JSON: …` になります。
 
 ## 移植時の確認手順
 

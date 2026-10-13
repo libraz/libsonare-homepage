@@ -5,9 +5,9 @@ description: Deterministic offline rendering of a libsonare Project — plain au
 
 # Bouncing Projects to Audio
 
-**Bouncing turns your whole arrangement into a single audio file you can save, play, or analyze.** If you have used a DAW, it is the "export" or "render" button; in libsonare it is the `Project.bounce*` family. The rendering happens **offline** (faster than real time, all at once — not by playing the song back live) and **deterministically**: the same project plus the same options always yields exactly the same samples, down to the bit.
+**Bouncing turns your whole arrangement into a single audio file you can save, play, or analyze.** If you have used a DAW, it is the "export" or "render" button; in libsonare it is the `Project.bounce*` family. The rendering happens **offline** (faster than real time, all at once, not by playing the song back live) and **deterministically**: the same project plus the same options always yields exactly the same samples, down to the bit.
 
-A [Project](./project-editing.md) holds tracks and clips on a timeline. Audio clips already carry samples, so they render directly. MIDI clips carry *events* (note-on, note-off), not sound — they need an **instrument** to become audible, the same way sheet music needs a player. So the choice of bounce method is really one question: *which instrument plays your MIDI?*
+A [Project](./project-editing.md) holds tracks and clips on a timeline. Audio clips already carry samples, so they render directly. MIDI clips carry *events* (note-on, note-off), not sound, so they need an **instrument** to become audible, the same way sheet music needs a player. So the choice of bounce method is really one question: *which instrument plays your MIDI?*
 
 <FlowDiagram
   title="Bounce pipeline: clips to WAV"
@@ -35,7 +35,7 @@ A [Project](./project-editing.md) holds tracks and clips on a timeline. Audio cl
   caption="Instrument binding picks NativeSynth, SoundFont, or the built-in synth per MIDI destination; the channel strip then applies trim, EQ, inserts, fader, and pan before the mixer sums everything to the master bus."
 />
 
-Read the diagram top to bottom: audio clips flow straight in, MIDI clips must first have an instrument bound, and everything is summed through the mixer to the master. The whole pass is computed offline, so the result is reproducible every time.
+The whole pass is computed offline, so the result is reproducible every time.
 
 ::: info Positions are in quarter notes
 Project positions and clip lengths are expressed in **PPQ — quarter notes as a float**. `ppq: 1` is one quarter note. At 120 BPM one quarter note lasts 0.5 s, so a 4-beat clip (`lengthPpq: 4`) is 2 s. Set the tempo explicitly with `setTempoSegments([{ startPpq: 0, bpm: 120 }])` so durations in your bounce are predictable.
@@ -44,7 +44,7 @@ Project positions and clip lengths are expressed in **PPQ — quarter notes as a
 ::: tip Bounce reflects the full mixer, not raw clips
 Tracks do not sum naively. Each track renders through its channel strip — trim, EQ, inserts, fader, pan, sends, and buses — via the [scene mixer](./mixing.md). The bounce is the routed master, exactly what realtime playback would produce.
 
-`setClipGain` and clip fades reach a MIDI clip too: they shape the bound instrument's rendered output at that clip's destination rather than the clip's own samples, which a MIDI clip has none of. See [Project Editing](./project-editing.md#editing-clips) for how the envelope resolves when several clips share a destination, and use the track fader / channel strip (the [mixer scene](./mixing.md)) to move a whole MIDI track's level instead.
+On a MIDI clip, `setClipGain` and clip fades scale the bound instrument's output at that clip's destination, not velocity. [Project Editing](./project-editing.md#editing-clips) lists how the envelope resolves when several clips share a destination. To move a whole MIDI track's level, use the track fader in the [mixer scene](./mixing.md).
 :::
 
 ## What You Will Learn
@@ -71,19 +71,21 @@ Start at the top and only move down when your MIDI needs a richer instrument.
 | MIDI played by your own synth | `bounceWithInstruments` / `bounceWithInstrument` (Node, WASM); `bounce_with_instruments` (Python) | Host-supplied [`ExternalInstrument`](#host-your-own-instrument) |
 
 ::: info One Project, every runtime
-The same `Project` model and core bounce behavior are exposed through WASM/JS, Node native, and Python. Names follow each language's convention (`bounceWithSynthInstrument` ↔ `bounce_with_synth_instrument`). The CLI exposes the project workflow as commands (`project bounce` — including `--synth` to route MIDI through the built-in synth — plus SMF/MIDI 2.0 import-export), but not every per-destination instrument binding option is wired there. The arrangement model, the compiler, and the DSP are identical across runtimes.
+The same `Project` model and core bounce behavior are exposed through WASM/JS, Node native, and Python. Names follow each language's convention (`bounceWithSynthInstrument` ↔ `bounce_with_synth_instrument`). The CLI exposes the project workflow as commands (`project bounce`, including `--synth` to route MIDI through the built-in synth, plus SMF/MIDI 2.0 import-export), but not every per-destination instrument binding option is wired there. The arrangement model, the compiler, and the DSP are identical across runtimes.
 :::
 
 ## Plain bounce: audio clips
 
 `bounce` compiles the project into a renderable timeline and renders it offline to **interleaved float audio**. Audio clips play through their channel strips; MIDI clips render silently because no instrument is bound.
 
-```typescript [Browser]
+::: code-group
+
+```typescript [Browser / WASM]
 import { init, Project } from '@libraz/libsonare';
 
 await init();
 
-const project = new Project();
+const project = Project.create();
 try {
   project.setSampleRate(48000);
   project.setTempoSegments([{ startPpq: 0, bpm: 120 }]); // predictable durations
@@ -105,12 +107,36 @@ try {
 }
 ```
 
+```python [Python]
+import libsonare as sonare
+
+with sonare.Project() as project:
+    project.set_sample_rate(48000)
+    project.set_tempo_segments([{"start_ppq": 0.0, "bpm": 120}])  # predictable durations
+
+    track = project.add_track("audio", name="tone")
+    project.add_clip(
+        track,
+        start_ppq=0.0,
+        length_ppq=4.0,            # 4 quarter notes = 2 s at 120 BPM
+        audio=mono_samples,
+        audio_channels=1,
+        audio_sample_rate=48000,
+    )
+
+    audio = project.bounce(num_channels=2, sample_rate=48000)  # (frames, 2) float32 ndarray
+```
+
+:::
+
+Node uses the same calls as the browser package. The examples below show the browser form and the Python equivalent.
+
 ::: danger Always release the Project
 `Project`, like every embind object, holds a WASM heap handle the JavaScript garbage collector cannot reclaim. Call `project.delete()` in a `finally` block (Node also accepts `destroy()`; Python uses `project.close()`). Leaking handles slowly exhausts WASM memory in long sessions.
 :::
 
 ::: info Interleaved audio
-"Interleaved" means the channels are woven into one array, sample by sample: `[L0, R0, L1, R1, …]` — left sample, right sample, left, right. (The alternative, "planar", keeps each channel in its own array.) The WAV writer walks this single array straight through, so a 2-channel bounce of N frames is `2 × N` floats long.
+"Interleaved" means the channels are woven into one array, sample by sample: `[L0, R0, L1, R1, …]`: left sample, right sample, left, right. (The alternative, "planar", keeps each channel in its own array.) The WAV writer walks this single array straight through, so a 2-channel bounce of N frames is `2 × N` floats long.
 :::
 
 ### Bounce options
@@ -120,13 +146,13 @@ Every field of the options object is optional:
 | Option | Meaning | Default |
 |--------|---------|---------|
 | `totalFrames` | Render length in output frames | auto-derived (see below) |
-| `blockSize` | Render block size; any positive value is used as given | engine default (128) |
-| `numChannels` | Output channel count: `1`, `2`, `6`, or `8` | 2 |
-| `sampleRate` | Output sample rate (Hz); a positive value must equal the project rate, so this option does not resample | the project sample rate |
+| `blockSize` | Render block size; any positive value is used as given | 128 (`<= 0` too) |
+| `numChannels` | Output channel count: `1`, `2`, `6`, or `8` | 2 (`<= 0` too) |
+| `sampleRate` | Output sample rate in Hz, a whole number. It must equal the project rate: this option does not resample | the project sample rate (`<= 0` too) |
 | `instrumentLatencySamples` | Host-instrument PDC (plugin delay compensation) fed to the compiler | 0 |
 
 ::: info `numChannels` cannot exceed the mixer scene's master layout
-The master bus processes the bounce at `numChannels` — a `"5.1"` master layout allows `6`, a `"7.1"` layout allows `8`, and a plain stereo master stays at `1` or `2` (see [Bus](./mixing-scene-json.md#bus)). A value outside `{1, 2, 6, 8}`, or wider than the master layout, is refused. Bouncing a surround scene at a narrower `numChannels` than its master carries folds the extra planes down through the same [ITU-R BS.775 downmix](./realtime-engine.md#surround-group-buses-and-wide-meters) the realtime engine applies, rather than dropping them.
+The master bus processes the bounce at `numChannels`: a `"5.1"` master layout allows `6`, a `"7.1"` layout allows `8`, and a plain stereo master stays at `1` or `2` (see [Bus](./mixing-scene-json.md#bus)). A value outside `{1, 2, 6, 8}`, or wider than the master layout, is refused. Bouncing a surround scene at a narrower `numChannels` than its master carries folds the extra planes down through the same [ITU-R BS.775 downmix](./realtime-engine.md#surround-group-buses-and-wide-meters) the realtime engine applies, rather than dropping them.
 :::
 
 ::: info What is PDC / latency compensation?
@@ -139,14 +165,20 @@ An offline bounce **settles** every smoothed gain and effect parameter to its ta
 
 ### Omitting the length
 
-When `totalFrames` is omitted (or `<= 0`) the render length is **auto-derived from the compiled timeline** — the musical end of the arrangement plus the instrument's release tail. A project with content renders without you computing a frame count; an empty project yields an empty buffer. An instrument that reports `INT_MAX` (`2^31 - 1`) for `tail_samples` has an unbounded tail, so an auto-length bounce of a non-empty arrangement is refused; pass a positive `totalFrames` when you need a bounded window. Pass `totalFrames` also when you need a fixed-length buffer.
+When `totalFrames` is omitted (or `<= 0`) the render length is **auto-derived from the compiled timeline**: the musical end of the arrangement plus the instrument's release tail. A project with content renders without you computing a frame count; an empty project yields an empty buffer. An instrument that reports `INT_MAX` (`2^31 - 1`) for `tail_samples` has an unbounded tail, so an auto-length bounce of a non-empty arrangement is refused; pass a positive `totalFrames` when you need a bounded window. Pass `totalFrames` also when you need a fixed-length buffer.
+
+With `useGmPrograms: true`, NativeSynth derives the release bound from the programs and drum note/kit combinations the arrangement actually plays. Unused GM voices do not extend the bounce; the piano soundboard and guitar sympathetic resonance count only after a note has activated them. Before the first note after preparation or reset, or after more than 128 distinct patch/drum combinations have been played, the synth's tail query reports a conservative whole-bank bound.
+
+The `drum-kit` preset (a percussion patch with `gmKit` on) is bounded the same way: once a note has struck, the tail covers only the kit pieces actually played, so a project that plays one kick over a 2 s clip renders about 2.69 s, not the whole-kit maximum. Before the first note, or after the played set overflows, the tail is the maximum over every piece of the kit.
 
 ## Bounce MIDI through the built-in synth
 
 A MIDI-only project bounced with plain `bounce` is silent. Route it through the **built-in oscillator synth** to make it audible with one call. Pass a binding to choose the waveform and envelope, or `{}` for a default sine patch.
 
-```typescript [Browser]
-const project = new Project();
+::: code-group
+
+```typescript [Browser / WASM]
+const project = Project.create();
 try {
   project.setSampleRate(48000);
   project.setTempoSegments([{ startPpq: 0, bpm: 120 }]);
@@ -167,17 +199,39 @@ try {
 }
 ```
 
+```python [Python]
+with sonare.Project() as project:
+    project.set_sample_rate(48000)
+    project.set_tempo_segments([{"start_ppq": 0.0, "bpm": 120}])
+
+    _, clip_id = project.add_midi_clip(0.0, 4.0)  # MIDI track + clip, 4 beats long
+    project.set_midi_events(clip_id, [
+        sonare.Project.midi_note_on(0.0, 0, 0, 60, 100),   # C4 at beat 0
+        sonare.Project.midi_note_off(3.0, 0, 0, 60, 0),    # release at beat 3
+    ])
+
+    audio = project.bounce_with_builtin_instrument(
+        sonare.BuiltinSynthConfig(waveform="saw", gain=0.5),
+        num_channels=2,
+        sample_rate=48000,
+    )
+```
+
+:::
+
 A `BuiltinSynthBinding` accepts `waveform` (`'sine'`, `'saw'`, `'square'`, `'triangle'`), `gain`, ADSR (`attackMs`, `decayMs`, `sustain`, `releaseMs`), `polyphony`, and a `destinationId` to target one MIDI destination. Every numeric field uses "0 / omit keeps the default", so `{}` is a usable default patch. Pass an **array** of bindings to render several MIDI destinations. Omitting the argument or passing `undefined` creates one default binding; pass an explicitly empty array `[]` (or runtime `null`) to bind nothing and render silently.
 
 ## Bounce MIDI through the NativeSynth
 
-For real instrument character, `bounceWithSynthInstrument` routes MIDI through the full [NativeSynth](./native-synth.md) — its subtractive, FM, Karplus-Strong, modal, additive, percussion, and piano engines plus the realism layer. There are three ways to specify the instrument:
+For real instrument character, `bounceWithSynthInstrument` routes MIDI through the full [NativeSynth](./native-synth.md): its subtractive, FM, Karplus-Strong, modal, additive, percussion, and piano engines plus the realism layer. There are three ways to specify the instrument:
 
-```typescript [Browser]
+::: code-group
+
+```typescript [Browser / WASM]
 import { init, Project, synthPresetNames } from '@libraz/libsonare';
 
 await init();
-synthPresetNames();   // ['sine', 'saw-lead', 'square-lead', 'sub-bass', 'warm-pad', 'e-piano', 'bell', 'brass', ...]
+synthPresetNames();   // ['sine', 'saw', 'square', 'triangle', 'saw-lead', 'square-lead', ...]
 
 // 1. A preset name string
 const a = project.bounceWithSynthInstrument('saw-lead', { numChannels: 2, sampleRate: 48000 });
@@ -192,25 +246,44 @@ const c = project.bounceWithSynthInstrument(
 );
 ```
 
+```python [Python]
+sonare.synth_preset_names()   # ['sine', 'saw', 'square', 'triangle', 'saw-lead', 'square-lead', ...]
+
+# 1. A preset name string, 2. the same preset with the "va:" routing prefix
+a = project.bounce_with_synth_instrument("saw-lead", num_channels=2, sample_rate=48000)
+b = project.bounce_with_synth_instrument("va:saw-lead", num_channels=2, sample_rate=48000)
+
+# 3. A patch object: a base preset plus shared-control overrides
+c = project.bounce_with_synth_instrument(
+    sonare.SynthPatch(preset="warm-pad", cutoff_hz=1200, amp_release_ms=600),
+    num_channels=2,
+    sample_rate=48000,
+)
+```
+
+:::
+
 Use [`synthPresetNames()`](./native-synth.md) to discover valid names instead of hardcoding magic strings; unknown names throw. A patch object starts from its `preset` base (or the default subtractive patch when `preset` is omitted) and overrides the shared controls — see [NativeSynth](./native-synth.md) for the field list. Pass an array to bind several destinations; an empty array binds nothing.
 
 ::: tip Following GM programs instead of pinning one patch
 Each entry passed to `bounceWithSynthInstrument` (as a `SynthPatch` object, not a bare preset string) may also carry `destinationId` (default `0`) and `useGmPrograms` (default `false`). With `useGmPrograms` on, MIDI program changes select the matching General MIDI voice per destination while the bound patch stays as the fallback for anything the map does not cover. The sibling spellings are `use_gm_programs` on the C ABI and `auto_select_gm` in Python. See [Following GM programs instead of pinning one patch](./gm-gs.md#following-gm-programs-instead-of-pinning-one-patch) for the full explanation and examples.
 :::
 
-The piano roll below is exactly this call at work — one MIDI passage routed through `bounceWithSynthInstrument` and re-voiced live as you switch the preset; the playhead tracks the bounced audio.
+The piano roll below is exactly this call at work: one MIDI passage routed through `bounceWithSynthInstrument` and re-voiced live as you switch the preset; the playhead tracks the bounced audio.
 
 <SonareDemo id="midi-piano-roll" />
 
 ::: info Deterministic by construction
-For a fixed project, options, and patch, `bounceWithSynthInstrument` is bit-for-bit reproducible. The same is true of every bounce method — that is what makes a bounce safe to snapshot in a test or cache by hash.
+For a fixed project, options, and patch, `bounceWithSynthInstrument` is bit-for-bit reproducible. The same is true of every bounce method, which is what makes a bounce safe to snapshot in a test or cache by hash.
 :::
 
 ## Bounce MIDI through a SoundFont
 
 `bounceWithSf2Instrument` plays MIDI through a GS-compatible [SoundFont player](./soundfont-player.md) fed by the project's loaded SoundFont. Load the `.sf2` bytes first, then bounce:
 
-```typescript [Browser]
+::: code-group
+
+```typescript [Browser / WASM]
 const sf2Bytes = new Uint8Array(await (await fetch('/piano.sf2')).arrayBuffer());
 project.loadSoundFont(sf2Bytes);
 
@@ -221,6 +294,18 @@ const audio = project.bounceWithSf2Instrument(
 );
 ```
 
+```python [Python]
+project.load_soundfont(open("piano.sf2", "rb").read())
+
+audio = project.bounce_with_sf2_instrument(
+    sonare.Sf2InstrumentConfig(gain=0.5),
+    num_channels=2,
+    sample_rate=48000,
+)
+```
+
+:::
+
 ::: info General MIDI, banks, and drums
 General MIDI (GM) is the standard 128-instrument set every SoundFont maps to, so program numbers pick the same kind of instrument across files. By convention channel 10 is reserved for drums, addressed as bank 128. NRPN and SysEx are extra MIDI messages for finer or vendor-specific tweaks; you rarely set them by hand.
 :::
@@ -229,7 +314,7 @@ Programs the SoundFont does not cover — including bouncing with no SoundFont l
 
 ## Host your own instrument
 
-Every runtime can host **any** instrument you write through the `ExternalInstrument` protocol: `bounceWithInstruments` / `bounceWithInstrument` on Node and WASM, `bounce_with_instruments` on Python. Events reach the instrument as **UMP** (Universal MIDI Packet) words — the MIDI 2.0 packet encoding — and the instrument adds its audio into scratch buffers the bounce hands it.
+Every runtime can host **any** instrument you write through the `ExternalInstrument` protocol: `bounceWithInstruments` / `bounceWithInstrument` on Node and WASM, `bounce_with_instruments` on Python. Events reach the instrument as **UMP** (Universal MIDI Packet) words, the MIDI 2.0 packet encoding, and the instrument adds its audio into scratch buffers the bounce hands it.
 
 ### JavaScript (Node and WASM)
 
@@ -271,11 +356,11 @@ const audio = project.bounceWithInstrument(new SineInstrument(), { numChannels: 
 // Several instruments at once: project.bounceWithInstruments([a, b], options), one per destinationId.
 ```
 
-Every callback runs synchronously on the calling thread while the bounce is blocked, so a callback that returns a Promise is refused with a `TypeError`. A callback that throws stops all further callbacks and the bounce rethrows that first error once it returns (a native failure is reported ahead of it). Using the project from inside a callback — a mutation, a nested bounce, `delete` — throws `InvalidState`. One instrument shared by tracks that feed different channel strips is refused, because callback audio carries no source-track attribution; bind one destination per strip.
+Every callback runs synchronously on the calling thread while the bounce is blocked, so a callback that returns a Promise is refused with a `TypeError`. A callback that throws stops all further callbacks and the bounce rethrows that first error once it returns (a native failure is reported ahead of it). Using the project from inside a callback (a mutation, a nested bounce, `delete`) throws `InvalidState`. One instrument shared by tracks that feed different channel strips is refused, because callback audio carries no source-track attribution; bind one destination per strip.
 
 ### Python
 
-In Python, `bounce_with_instruments` dispatches the same protocol. Only `render` is required; `prepare`, `on_event`, and the `latency_samples` / `tail_samples` attributes are optional (duck-typed). Events reach `on_event` as **UMP** (Universal MIDI Packet) words — the MIDI 2.0 packet encoding — so a note-on arrives as a tuple of packet words rather than a decoded object.
+In Python, `bounce_with_instruments` dispatches the same protocol. Only `render` is required; `prepare`, `on_event`, and the `latency_samples` / `tail_samples` attributes are optional (duck-typed). Events reach `on_event` as **UMP** words (see above), so a note-on arrives as a tuple of packet words rather than a decoded object.
 
 ```python
 import numpy as np
@@ -316,23 +401,34 @@ To play several instruments at once, pass `instruments=[(destination_id, instrum
 
 ## Validate MIDI before bouncing
 
-The compiler is forgiving — a MIDI clip with no instrument bound is a **non-fatal warning**, not an error. After `compile()` the result still has `hasTimeline: true`, and the diagnostics carry:
+The compiler is forgiving: a MIDI clip with no instrument bound is a **non-fatal warning**, not an error. After `compile()` the result still has `hasTimeline: true`, and the diagnostics carry:
 
 ```
 project contains MIDI clips; bounce is silent unless an instrument is bound
 ```
 
-That message is your cue to switch from `bounce` to one of the instrument bounces. To catch a *real* problem — a stuck note — pre-flight each MIDI clip with `validateMidiNotes`, which checks that every note-on has a matching note-off:
+That message is your cue to switch from `bounce` to one of the instrument bounces. To catch a *real* problem, a stuck note, pre-flight each MIDI clip with `validateMidiNotes`, which checks that every note-on has a matching note-off:
 
-```typescript
+::: code-group
+
+```typescript [Browser / WASM]
 const report = project.validateMidiNotes(clipId);
 // { ok: true, unmatchedNoteOns: 0, unmatchedNoteOffs: 0 }
 if (!report.ok) {
-  // A hanging note would sound until the render ends — fix the events first.
+  // A hanging note would sound until the render ends. Fix the events first.
 }
 ```
 
-See [Project Editing](./project-editing.md) for inspecting and repairing clip events.
+```python [Python]
+report = project.validate_midi_notes(clip_id)
+# NotePairValidation(ok=True, unmatched_note_ons=0, unmatched_note_offs=0)
+if not report.ok:
+    ...  # a hanging note would sound until the render ends; fix the events first
+```
+
+:::
+
+See [Edit MIDI Clips](./midi-editing.md) for inspecting and repairing clip events.
 
 ## Write the bounce to a WAV file
 
@@ -405,7 +501,20 @@ sonare project bounce --in song.json -o master.wav --audio 1=vocals.wav
 sonare project compile --in song.json --json
 ```
 
-A project's `sources` entries name their audio by URI only — the library never opens one itself — so a project whose clips reference audio renders nothing until the command line supplies the samples. `--resolve-audio` opens the `file://` URIs the document's sources already carry; any other scheme is refused by name rather than skipped:
+| Flag | Meaning |
+|------|---------|
+| `--in FILE` | Project JSON (required) |
+| `-o FILE` | Output WAV |
+| `--sample-rate N` | Must equal the project rate (not a resample); defaults to the project rate |
+| `--frames N` | Render length in frames; `0` or omitted derives it from the arrangement |
+| `--block-size N` | Render block size |
+| `--channels N` | `1`, `2`, `6`, or `8`, at most the scene master's width (default `2`) |
+| `--instrument-latency N` | Instrument delay compensation in samples |
+| `--audio ID=WAV` | Bind one decoded file to one audio source (repeatable) |
+| `--resolve-audio` | Open the `file://` URIs the project's sources carry |
+| `--synth [PRESET]` | Bare: follow the project's GM programs. With a value: pin every destination to that preset |
+
+A project's `sources` entries name their audio by URI only, and the library never opens one itself, so a project whose clips reference audio renders nothing until the command line supplies the samples. `--resolve-audio` opens the `file://` URIs the document's sources already carry; any other scheme is refused by name rather than skipped:
 
 ```
 Error: source 1 (https://example.com/take.wav): --resolve-audio opens file:// URIs only; pass --audio 1=FILE
@@ -417,9 +526,9 @@ Error: source 1 (https://example.com/take.wav): --resolve-audio opens file:// UR
 Error: source 1 (file:///song/vocals.wav) has no audio; pass --audio 1=FILE or --resolve-audio
 ```
 
-A bound source keeps the channel count of the file it was decoded from — binding a mono take does not upmix it. `midi-render` accepts neither flag; a project bounced through it with an unresolved audio source still hits the bare `Error: [7] Invalid state` rather than a message naming options `midi-render` does not have.
+A bound source keeps the channel count of the file it was decoded from, so binding a mono take does not upmix it. `midi-render` accepts neither flag; a project bounced through it with an unresolved audio source still hits the bare `Error: [7] Invalid state` rather than a message naming options `midi-render` does not have.
 
-The `--synth` flag reads two ways. Bare `--synth` follows the project's General MIDI program changes per channel, with channel 10 routed through the GM drum-kit map, and falls back to the `sine` patch for anything the map does not cover — this is the option to use when the project carries real GM programs. `--synth <preset>` instead pins every destination to one fixed NativeSynth preset accepted by `sonare_synth_preset_patch`, i.e. the full [NativeSynth preset catalog](./native-synth.md) (`--synth warm-pad`, `--synth saw-lead`, and so on) — run `sonare project synth-presets` to list the names. SF2 and per-destination synth JSON remain binding-only (WASM/Node/Python); use the Project API for SoundFont-backed bounces. Other useful subcommands are `project new`, `project validate`, `project synth-presets`, and `project abi`.
+Bare `--synth` follows the project's General MIDI program changes per channel, with channel 10 routed through the GM drum-kit map, and falls back to the `sine` patch for anything the map does not cover. Use it when the project carries real GM programs. `--synth <preset>` pins every destination to one preset from the [NativeSynth preset catalog](./native-synth.md) (`--synth warm-pad`, `--synth saw-lead`); `sonare project synth-presets` lists the names. SF2 and per-destination synth JSON remain binding-only (WASM/Node/Python); use the Project API for SoundFont-backed bounces. Other useful subcommands are `project new`, `project validate`, `project synth-presets`, and `project abi`.
 
 ## Recipes
 
@@ -427,7 +536,7 @@ The `--synth` flag reads two ways. Bare `--synth` follows the project's General 
 The whole MIDI-to-file path, instrument and export included.
 
 ```typescript
-const project = new Project();
+const project = Project.create();
 try {
   project.setSampleRate(48000);
   project.setTempoSegments([{ startPpq: 0, bpm: 120 }]);

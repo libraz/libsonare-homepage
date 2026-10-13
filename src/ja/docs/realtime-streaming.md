@@ -7,13 +7,13 @@ description: libsonare のストリーミング API。ライブ MIR フレーム
 
 このページは libsonare の**ストリーミング**側を扱います。ライブの音声ストリームを解析フレームと音楽推定に変換すること、そしてクリップ音声を流しリアルタイムエンジンを音声スレッドで動かすための仕組みです。
 
-- **`StreamAnalyzer`** — 音声ブロックを入力し、*解析フレーム*（メル、クロマ、オンセット、スペクトル）と、時間とともに更新される音楽推定（BPM、キー、コード、コード進行、パターン）を出力します。ビジュアライザーや「今この曲で何が起きているか」のライブ表示に使います。
-- **エンジンのストリーミング機構** — `RealtimeEngine` を音声スレッドで動かす AudioWorklet ブリッジ、メモリに載せきれない大きなアレンジ向けのクリップ音声のページストリーミング、クリップ描画用の波形ピーク縮約です。
+- **`StreamAnalyzer`**: 音声ブロックを入力し、*解析フレーム*（メル、クロマ、オンセット、スペクトル）と、時間とともに更新される音楽推定（BPM、キー、コード、コード進行、パターン）を出力します。ビジュアライザーや「今この曲で何が起きているか」のライブ表示に使います。
+- **エンジンのストリーミング機構**: `RealtimeEngine` を音声スレッドで動かす AudioWorklet ブリッジ、メモリに載せきれない大きなアレンジ向けのクリップ音声のページストリーミング、クリップ描画用の波形ピーク縮約です。
 
 短く言えば、音声を入力して情報を取り出すなら `StreamAnalyzer` です。UI を作る場合、`StreamAnalyzer` はグラフ、メーター、ラベルに値を渡します。
 
 ::: tip エンジン本体を探している場合
-`RealtimeEngine` の機能 — トランスポート、レーンミキサー、グループルーティングとサイドチェイン、パラメータオートメーション、サラウンドグループバス、MIDI クリップスケジュール、外部 MIDI ルーティング — は専用ページで扱います。クリップ・MIDI・トランスポート・ミックス済み音声を*出力*として作るなら [リアルタイムエンジン](./realtime-engine.md) を参照してください。
+`RealtimeEngine` の機能（トランスポート、レーンミキサー、グループルーティングとサイドチェイン、パラメータオートメーション、サラウンドグループバス、MIDI クリップスケジュール、外部 MIDI ルーティング）は専用ページで扱います。クリップ・MIDI・トランスポート・ミックス済み音声を*出力*として作るなら [リアルタイムエンジン](./realtime-engine.md) を参照してください。
 :::
 
 このページでいう**チャンク**や**ブロック**は、AudioWorklet などで繰り返し処理する短い音声片のことです。AudioWorklet とは、メイン／UI スレッドとは別の、リアルタイム音声スレッド上で DSP を動かす音声コールバックの実行環境です。リアルタイム処理では、音声コールバック内で重いアロケーションを避けるのが基本です。先にオブジェクトを準備し、コールバックではブロック処理だけを行います。
@@ -23,7 +23,7 @@ description: libsonare のストリーミング API。ライブ MIR フレーム
 :::
 
 ::: info サンプルレートとリサンプリング
-**サンプルレート**は 1 秒が何サンプルでできているか（44100 や 48000 が一般的）です。ストリームのレートがアナライザの想定と一致しないと、処理前に別のレートへ作り直す**リサンプリング**が必要になり、余分な CPU を消費します。最初からレートを揃えておくほうが高速です。
+**サンプルレート**は 1 秒が何サンプルでできているか（44100 や 48000 が一般的）です。ストリームのレートがアナライザーの想定と一致しないと、処理前に別のレートへ作り直す**リサンプリング**が必要になり、余分な CPU を消費します。最初からレートを揃えておくほうが高速です。
 :::
 
 ## このページで身につくこと
@@ -36,7 +36,7 @@ description: libsonare のストリーミング API。ライブ MIR フレーム
 - 更新される BPM／キー／コード推定を、初期値から最終結果のように扱わずに使える。
 - 音声コールバック内で安全な処理と、事前準備すべき処理を区別できる。
 
-## 初学者向けの選び方
+## どちらを使うか
 
 | 作りたいもの | 最初に使うもの |
 |--------------|----------------|
@@ -44,31 +44,22 @@ description: libsonare のストリーミング API。ライブ MIR フレーム
 | ライブのコード／進行／パターン表示 | `StreamAnalyzer.stats()` |
 | テンポ、ループ、マーカー、メトロノーム、クリップ、オートメーションを持つ再生エンジン | [リアルタイムエンジン](./realtime-engine.md) |
 | 再生するトラックをそのままライブでミックスする再生エンジン（レーン、バス、センド、ストリップ） | [リアルタイムエンジンのレーンミキサー](./realtime-engine.md#レーンミキサー) |
+| エンジン内の楽器へサンプル精度で MIDI クリップを再生する | [リアルタイムエンジン](./realtime-engine.md#midi-クリップスケジューリングと-sampleatppq) の `setMidiClips()` + `sampleAtPpq()` |
+| 音声スレッド上のエンジンとテレメトリー | `@libraz/libsonare/worklet`（[AudioWorklet での使い分け](#audioworklet-での使い分け)） |
 | 単体のミキサー（ワンショットまたはシーンベース、ストリップ／センド／メーター付き） | [ミキシングエンジン](./mixing.md) |
 | 単純なオフラインスクリプト | このページではなく [はじめに](./getting-started.md) |
 
-## どちらを使うか
-
-| やりたいこと | API |
-|--------------|-----|
-| マイク入力や再生中のファイルからメル／クロマ／オンセットのフレームを取り出す | `StreamAnalyzer` |
-| BPM、キー、現在のコード、コード進行、パターンスコアを更新しながら推定する | `StreamAnalyzer.stats()` |
-| トランスポート、テンポ、ループ、マーカー、メトロノーム、クリップ、オートメーションを扱う | [リアルタイムエンジン](./realtime-engine.md) |
-| 再生エンジン内でトラックごとのレーン、バス、センド、チャンネルストリップを扱う | [リアルタイムエンジンのレーンミキサー](./realtime-engine.md#レーンミキサー) |
-| エンジン内の楽器へサンプル精度で MIDI クリップを再生する | [リアルタイムエンジン](./realtime-engine.md#midi-クリップスケジューリングと-sampleatppq) の `setMidiClips()` + `sampleAtPpq()` |
-| メーター情報つきの AudioWorklet ブリッジを作る | `@libraz/libsonare/worklet` |
-| センドやメーター付きでステム／ストリップをミックスする | [ミキシングエンジン](./mixing.md) |
-
 ::: info ランタイムごとの入口
-このページの中心はブラウザ / WASM の `StreamAnalyzer`、`RealtimeEngine`、AudioWorklet ブリッジです。Python と CLI は「ライブの音声コールバック内で状態を保つ」ための同一 API ではなく、ファイルや配列をまとめて処理するバッチ API が主な入口です。
+このページのライブコールバックの例はブラウザ / WASM のものです。Python にも、ブロックを渡してフレームを受け取る同じアナライザーがあり、自前のループで駆動します。CLI はファイル単位で処理します。
 
 | 実行環境 | 使う入口 | 典型的な用途 |
 |----------|----------|--------------|
 | ブラウザ / WASM | `StreamAnalyzer`、`RealtimeEngine`、`@libraz/libsonare/worklet` | ライブ可視化、AudioWorklet、更新される BPM / キー / コード表示 |
-| Python | `Audio.analyze()`、`onset_envelope(...)`、`tempogram(...)` などのバッチ関数 | ノートブック、オフライン解析、検証用スクリプト |
+| Node ネイティブ | `StreamAnalyzer` | サーバーやデスクトッププロセスでの同じアナライザー |
+| Python | `StreamAnalyzer(StreamConfig(...))`、`RealtimeEngine` | 自前のループでブロックを渡してフレームを読む（AudioWorklet なし） |
 | CLI | `sonare analyze`、`sonare bpm`、`sonare key` など | ファイル単位の確認、バッチ処理、JSON 出力 |
 
-Python / CLI で同じファイルを解析したい場合は [Python API](./python-api.md) と [CLI リファレンス](./cli.md) を使ってください。音声コールバック内で動かす実装例は、WASM / Worklet 側のコードだけを正として扱います。
+Python / CLI でファイル全体を解析したい場合は [Python API](./python-api.md) と [CLI リファレンス](./cli.md) を使ってください。音声コールバック内で動かす実装例は、WASM / worklet 側のコードだけを正として扱います。
 :::
 
 ## StreamAnalyzer
@@ -77,7 +68,7 @@ Python / CLI で同じファイルを解析したい場合は [Python API](./pyt
 
 最初の実装では、ループを単純に保つと分かりやすくなります。
 
-1. 音声デバイスと同じ `sampleRate` でアナライザを 1 つ作る。
+1. 音声デバイスと同じ `sampleRate` でアナライザーを 1 つ作る。
 2. デコード済み音声またはライブ入力のブロックごとに `process(block)` を呼ぶ。
 3. 描画には `readFrames(...)`、現在の音楽推定には `stats()` を読む。
 4. 最初の数秒の BPM／キー／コードは仮の値として扱い、音声が増えるほど安定すると考える。
@@ -87,13 +78,13 @@ Python / CLI で同じファイルを解析したい場合は [Python API](./pyt
 <SonareDemo id="beat-tracking" />
 
 ::: info メル・クロマ・オンセットを一言で
-- **メル** — 時間ごとの周波数帯域エネルギーを、知覚的な音高スケールで並べたスペクトログラムです。「どんな音か」を示すヒートマップに向きます。
-- **クロマ** — エネルギーを 12 の音高クラス（C、C#、… B）へ畳み込んだものです。ハーモニーやキーの表示に向きます。
-- **オンセット** — 新しいノートやビートが始まると跳ね上がる強度曲線です。ビート／テンポに反応する可視化に使えます。
+- **メル**: 時間ごとの周波数帯域エネルギーを、知覚的な音高スケールで並べたスペクトログラムです。「どんな音か」を示すヒートマップに向きます。
+- **クロマ**: エネルギーを 12 の音高クラス（C、C#、… B）へ畳み込んだものです。ハーモニーやキーの表示に向きます。
+- **オンセット**: 新しいノートやビートが始まると跳ね上がる強度曲線です。ビート／テンポに反応する可視化に使えます。
 :::
 
 ::: tip `nFft` と `hopLength` を一言で
-アナライザは内部で STFT（短時間フーリエ変換。短い窓を重ねながら FFT を繰り返す手法）を実行します。
+アナライザーは内部で STFT（短時間フーリエ変換。短い窓を重ねながら FFT を繰り返す手法）を実行します。
 
 | パラメータ | 意味 | 値を大きく／小さくしたとき |
 |------------|------|-----------------------------|
@@ -103,7 +94,9 @@ Python / CLI で同じファイルを解析したい場合は [Python API](./pyt
 下記の `2048`/`512` は一般的な出発点です。なじみがなければ [MIR の全体像](./glossary/concepts/mir-overview.md) を参照してください。
 :::
 
-```typescript
+::: code-group
+
+```typescript [WASM]
 import { init, StreamAnalyzer } from '@libraz/libsonare';
 
 await init();
@@ -129,6 +122,23 @@ if (stats.estimate.updated) {
   console.log(stats.estimate.bpm, stats.estimate.key, stats.estimate.chordRoot);
 }
 ```
+
+```python [Python]
+from libsonare import StreamAnalyzer, StreamConfig
+
+analyzer = StreamAnalyzer(StreamConfig(sample_rate=48000, n_fft=2048, hop_length=512, n_mels=64))
+analyzer.process(block)
+
+frames = analyzer.read_frames(analyzer.available_frames())
+stats = analyzer.stats()
+
+if stats.updated:
+    print(stats.bpm, stats.key_name, stats.chord_name)
+```
+
+:::
+
+Python の `stats()` はフラットな構造で、`.estimate` の階層はありません（`stats.bpm`、`stats.key_name`）。
 
 `maxPendingFrames` の既定値は `4096` です。UI が一時停止したり読み出しに遅れたりする可能性がある場合は小さめに設定してください。解析は継続しますが、未読キューが満杯の間に新しく生成された出力フレームは破棄されます。現在の滞留数と累積破棄数は `stats().pendingFrames` / `stats().droppedOutputFrames` で確認できます。
 
@@ -164,7 +174,7 @@ if (stats.estimate.updated) {
 | `readFramesU8(n)` | `Uint8Array` フィールドを持つ `StreamFramesU8` | 安価な可視化（ヒートマップの 1 画素は 8 ビットで足りる） |
 
 ```typescript
-// スペクトログラム描画には 8 ビットのメルで十分 — 出力時点で量子化する。
+// スペクトログラム描画には 8 ビットのメルで十分なので、出力時点で量子化する。
 const analyzer = new StreamAnalyzer({ sampleRate, nMels: 64 });
 analyzer.process(block);
 const u8 = analyzer.readFramesU8(analyzer.availableFrames());
@@ -198,7 +208,7 @@ const u8 = analyzer.readFramesU8(analyzer.availableFrames(), {
 
 ### 更新されていく推定: BPM、キー、コード、パターン
 
-`stats()` は `AnalyzerStats` を返し、その `estimate` フィールドが **`ProgressiveEstimate`** です — 音声が届くほど精緻になる、解析器の音楽に対する現在の最良推定です。読む前に `estimate.updated` を確認してください。これは、キーまたは BPM の推定を再計算した周期的なフレームで `true` になります（再計算した値が以前と実際に変わったフレームだけではありません）。そのため、そもそも再計算が起きなかったフレームをスキップできます。
+`stats()` は `AnalyzerStats` を返し、その `estimate` フィールドが **`ProgressiveEstimate`** です。音声が届くほど精緻になる、アナライザーの音楽に対する現在の最良推定にあたります。読む前に `estimate.updated` を確認してください。これは、キーまたは BPM の推定を再計算した周期的なフレームで `true` になります（再計算した値が以前と実際に変わったフレームだけではありません）。そのため、そもそも再計算が起きなかったフレームをスキップできます。
 
 ```typescript
 const { estimate } = analyzer.stats();
@@ -206,10 +216,12 @@ if (estimate.updated) {
   // テンポとキー（信頼度つき）
   estimate.bpm;            estimate.bpmConfidence;
   estimate.key;            estimate.keyMinor;  estimate.keyConfidence;
+  estimate.keyName;        // "A minor"。キーが推定されるまでは null
 
   // いま鳴っているコード
   estimate.chordRoot;      // PitchClass（数値 enum、0 = C）
   estimate.chordQuality;   // ChordQuality（数値 enum）
+  estimate.chordName;      // "Am"。鳴っているコードがないときは 'N.C.'
   estimate.chordConfidence;
   estimate.chordStartTime;
 
@@ -224,6 +236,11 @@ if (estimate.updated) {
   estimate.votedPattern;         // BarChord[] ロックされた反復パターン
   estimate.patternLength;        // そのパターンの小節数
   estimate.currentBar;           // estimate.barDuration -> 小節位置／長さ
+
+  // 推定の材料
+  estimate.bpmCandidateCount;    // 最新の BPM 推定が選んだ元のテンポ候補数
+  estimate.accumulatedSeconds;   // ここまでに推定へ取り込んだ音声の長さ
+  estimate.usedFrames;
 }
 ```
 
@@ -278,9 +295,9 @@ const pulse = plp(env, sampleRate, 512, 30, 300, 384);
 
 ## AudioWorklet での使い分け
 
-通常の WASM パッケージは `RealtimeEngine` クラスを公開します。Worklet ブリッジは、`SonareRealtimeEngineNode.create(...)` を通じて、その embind ベースのエンジンを `AudioWorkletGlobalScope` 内で動かします。エンジン本体の機能 — トランスポート、レーンミキサー、オートメーション、MIDI クリップ、外部 MIDI — は [リアルタイムエンジン](./realtime-engine.md) を参照してください。
+通常の WASM パッケージは `RealtimeEngine` クラスを公開します。worklet ブリッジは、`SonareRealtimeEngineNode.create(...)` を通じて、その embind ベースのエンジンを `AudioWorkletGlobalScope` 内で動かします。エンジン本体の機能（トランスポート、レーンミキサー、オートメーション、MIDI クリップ、外部 MIDI）は [リアルタイムエンジン](./realtime-engine.md) を参照してください。
 
-ブリッジヘルパーは `@libraz/libsonare/worklet` サブパスにあります。Worklet モジュール側でプロセッサを登録し、メインスレッド側でノードを作ります。`moduleUrl` は `registerSonareRealtimeEngineWorkletProcessor()` を呼ぶコンパイル済み Worklet モジュールです。
+ブリッジヘルパーは `@libraz/libsonare/worklet` サブパスにあります。worklet モジュール側でプロセッサを登録し、メインスレッド側でノードを作ります。`moduleUrl` は `registerSonareRealtimeEngineWorkletProcessor()` を呼ぶコンパイル済み worklet モジュールです。
 
 ```typescript
 // sonare-engine-worklet.ts
@@ -328,7 +345,7 @@ engine.node.connect(audioCtx.destination, 0);
 engine.node.connect(cueDestination, 1);
 ```
 
-独自のゼロコピー Worklet 経路では、音声処理を始める前にメッセージハンドラーから `prepareChannels(...)` と `prepareMonitorChannels(...)` を呼びます。各レンダーブロックでは `processPreparedWithMonitor(numFrames)` を呼び、`getChannelBuffer(...)` と `getMonitorChannelBuffer(...)` でプログラムとキューのビューを読みます。準備メソッドは確保を行いますが、準備済みの処理経路はアロケーションしません。ホットパス外でコピーして渡す場合は、従来の `processWithMonitor(...)` も使えます。
+独自のゼロコピー worklet 経路では、音声処理を始める前にメッセージハンドラーから `prepareChannels(...)` と `prepareMonitorChannels(...)` を呼びます。各レンダーブロックでは `processPreparedWithMonitor(numFrames)` を呼び、`getChannelBuffer(...)` と `getMonitorChannelBuffer(...)` でプログラムとキューのビューを読みます。準備メソッドは確保を行いますが、準備済みの処理経路はアロケーションしません。ホットパス外でコピーして渡す場合は、従来の `processWithMonitor(...)` も使えます。
 
 ### レンダー領域でマスタリングをプレビューする
 
@@ -338,12 +355,12 @@ engine.node.connect(cueDestination, 1);
 
 | 部品 | 役割 |
 |------|------|
-| Worklet ノード | リアルタイム音声側を実行します。 |
+| worklet ノード | リアルタイム音声側を実行します。 |
 | メインスレッド側の `RealtimeEngine` | オフライン処理やタイムライン操作を扱います。 |
 
-`transport` API は play/stop、秒または PPQ（4 分音符単位の音楽的な位置）への seek、テンポ、ループ更新を扱います。トランスポート以外も、ワークレット API はエンジンのほぼすべての機能をコントロールメッセージ経由で Worklet にミラーします。正となる状態を持つのはメインスレッドだけで、音声スレッドは同期済みスナップショットを受け取るだけです。
+`transport` API は play/stop、秒または PPQ（4 分音符単位の音楽的な位置）への seek、テンポ、ループ更新を扱います。トランスポート以外も、worklet API はエンジンのほぼすべての機能をコントロールメッセージ経由で worklet にミラーします。正となる状態を持つのはメインスレッドだけで、音声スレッドは同期済みスナップショットを受け取るだけです。
 
-| やりたいこと | ワークレット API |
+| やりたいこと | worklet API |
 |--------------|----------------|
 | トラックルーティング、フェーダー、パン、ソロ／ミュート | `setTrackLanes`、`setStripGain`、`setStripPan`、`setTrackStripPan`、`setTrackStripPanLaw`、`setTrackStripPanMode`、`setTrackStripDualPan`、`setTrackStripChannelDelaySamples`、`setSoloMute` |
 | トラック／マスターのインサートと EQ | `setTrackStripJson`、`setMasterStripJson`、`setTrackStripEqBand`、`setMasterStripEqBand`、`setTrackStripInsertParamByName`、`setMasterStripInsertParamByName`、インサートバイパス系メソッド |
@@ -353,18 +370,22 @@ engine.node.connect(cueDestination, 1);
 | 楽器 | `setBuiltinInstrument`、`setSynthInstrument`、`loadSoundFont`、`setSf2Instrument` |
 | 録音とモニタリング | `configureCapture`（`inputMonitor` を含む）、`armRecord`、`punch`、`capturedAudio`、`captureStatus` |
 | トランスポート、テンポ、マーカー | `getTransportState`、`cachedTransportState`、`setTempoSegments`、`setTimeSignatureSegments`、マーカー系メソッド（全置換の `setMarkers` を含む。解決後のマーカー一覧（各エントリがエンジン `id` を持つ）を返す）、`setLoopFromMarkers` |
-| クリップ更新 | `addClip`、`removeClip` — 差分（クリップデルタ）を Worklet へ送る |
+| クリップ更新 | `addClip`、`removeClip`（差分のクリップデルタを worklet へ送る） |
 | メーターとテレメトリ | `onMeter` / `onTelemetry` / `onScope`、`pollMeters` / `pollTelemetry` / `pollScope`。メーターレコードはマスター・レーン・バス・入力のターゲット id を持つ。オフライン／メインスレッド側エンジンではワイドメーターレコードとスコープスナップショットも読み出せる |
 | オフライン書き出し | メインスレッド側ミラーの `renderOffline`、`finishOfflineRender`、`bounceOffline`、`freezeOffline`（[オフライン書き出しの API](#オフライン書き出しの-api) を参照） |
 | プロセッサ状態とタイミング | `resetProcessorState(renderFrame?)`、`tailSamples()`、`graphLatencySamplesQ8()` |
 
-ワークレット API では、ストリップを指定するメソッドはトラック id *または名前*（`target: string | number`）を受け取り、`setSoloMute(target, solo, mute)` はレーンインデックスの解決まで行います。`setTrackStripEqBand` は `EqBand` オブジェクトを直接受け取るので、バンド JSON を手書きする必要はほとんどありません。
+`pushMidiProgram` が届くのは、プログラムを選択するレシーバーです。SoundFont プレーヤー、`useGmPrograms` を指定したシンセ、`drum-kit`（GM キット）のシンセがそれに当たり、`drum-kit` ではプログラムが GS のドラムセットを選びます。組み込みシンセとそれ以外のシンセパッチは、メッセージを受け取っても無視します。
 
-`automationParamId(target, 'faderDb' | 'pan')` と `busAutomationParamId(busId)` は予約済みエンジンパラメータ id を返すので、`addParameter` でカスタムパラメータを登録しなくても、それらをそのまま `setAutomationLane(paramId, points)` に渡してトラック／マスターのフェーダーやパン、あるいはバスのフェーダー（そのフェーダーゲイン dB に解決されます）を自動化できます。`target`／`busId` は初回利用時にミキサーのレーン／バスを宣言します。トラックやバスの id は位置ではなくそのトラック・バス自体を指します。`setTrackLanes` や `setTrackBuses` で並べ替えたり他を削除したりしても同じ対象を動かし続け、対象のトラックやバスを削除すると何も適用しなくなります。id は計算せず、必ずこれらのメソッドで取得してください。メインスレッド側ミラーと Worklet 側エンジンは同じ番号を割り当てます。
+worklet API では、ストリップを指定するメソッドはトラック id *または名前*（`target: string | number`）を受け取り、`setSoloMute(target, solo, mute)` はレーンインデックスの解決まで行います。`setTrackStripEqBand` は `EqBand` オブジェクトを直接受け取るので、バンド JSON を手書きする必要はほとんどありません。
 
-Worklet 側でスコープスナップショットを流す場合は、`SonareRealtimeEngineNode.create(...)` に `scopeIntervalFrames`、`scopeBands`、必要に応じて `scopeSharedBuffer` / `scopeRingCapacity` を渡します。SAB のスコープ共有リングはレンダーコールバック内で確保を行わず、`pollScope()` で読み出します。`onScope()` は同じ `SonareWorkletScopeSnapshot` 形式を受け取ります。SAB が使えない場合や `mode: 'postMessage'` を指定した場合、プロセッサは `bands` と `points` を転送する `Float32Array` バッファとして各スナップショットに含めて送ります。この場合も `onScope()` は同じ形式で受け取りますが、共有リングがないため `pollScope()` は空配列を返します。postMessage 経路では転送前にスナップショットごとの配列を作ります。独自ブリッジでスペクトラムとベクトルスコープのスナップショットを共有リングに流したい場合は、低レベルの `createSonareScopeRingBuffer(...)` と `readSonareScopeRingBuffer(...)` を使えます。
+`automationParamId(target, 'faderDb' | 'pan')` と `busAutomationParamId(busId)` は予約済みエンジンパラメータ id を返すので、`addParameter` でカスタムパラメータを登録しなくても、それらをそのまま `setAutomationLane(paramId, points)` に渡してトラック／マスターのフェーダーやパン、あるいはバスのフェーダー（そのフェーダーゲイン dB に解決されます）を自動化できます。`target`／`busId` は初回利用時にミキサーのレーン／バスを宣言します。トラックやバスの id はリスト内の位置ではなく、その対象自体を指します。id は計算せず、必ずこれらのメソッドで取得してください。メインスレッド側ミラーと worklet 側エンジンは同じ番号を割り当てます。
 
-メータースナップショットは、どちらの経路でも同じ形で `onMeter` に届きます。ステレオより多いチャンネルを持つターゲット（5.1 や 7.1 のバス）では、`channelCount` と、チャンネルごとの `peakDb`、`rmsDb`、`truePeakDb`、`inputPeakDb` 配列（標準の WAVE チャンネル順）が加わります。ステレオ用フィールドは常にプレーン 0 と 1 を保持します。SAB のメーターリングの 1 レコードは `SONARE_METER_RING_RECORD_FLOATS`（49）個の float で、ヘッダーのスロット 3 には `SONARE_METER_RING_PROTOCOL_VERSION`（2）が入ります。独自の読み出し側はこれらの定数でサイズを決め、パッケージのバージョンが異なるメインスレッドと Worklet の間でリングを共有しないでください。
+ファサードの `setTrackLanes` は追加専用です。既存のトラック id をすべて同じ順序で残し、その後ろに新しい id を追加してください。既存レーンの並べ替えや削除は拒否されます。生の `RealtimeEngine` ではレーンリストを置き換えて並べ替えられます。その場合も予約済みオートメーション id は同じトラックを指し続け、そのトラックがない間は何も適用しません。
+
+worklet 側でスコープスナップショットを流す場合は、`SonareRealtimeEngineNode.create(...)` に `scopeIntervalFrames`、`scopeBands`、必要に応じて `scopeSharedBuffer` / `scopeRingCapacity` を渡します。SAB のスコープ共有リングはレンダーコールバック内で確保を行わず、`pollScope()` で読み出します。`onScope()` は同じ `SonareWorkletScopeSnapshot` 形式を受け取ります。SAB が使えない場合や `mode: 'postMessage'` を指定した場合、プロセッサは `bands` と `points` を転送する `Float32Array` バッファとして各スナップショットに含めて送ります。この場合も `onScope()` は同じ形式で受け取りますが、共有リングがないため `pollScope()` は空配列を返します。postMessage 経路では転送前にスナップショットごとの配列を作ります。独自ブリッジでスペクトラムとベクトルスコープのスナップショットを共有リングに流したい場合は、低レベルの `createSonareScopeRingBuffer(...)` と `readSonareScopeRingBuffer(...)` を使えます。
+
+メータースナップショットは、どちらの経路でも同じ形で `onMeter` に届きます。ステレオより多いチャンネルを持つターゲット（5.1 や 7.1 のバス）では、`channelCount` と、チャンネルごとの `peakDb`、`rmsDb`、`truePeakDb`、`inputPeakDb` 配列（標準の WAVE チャンネル順）が加わります。ステレオ用フィールドは常にプレーン 0 と 1 を保持します。SAB のメーターリングの 1 レコードは `SONARE_METER_RING_RECORD_FLOATS`（49）個の float で、ヘッダーのスロット 3 にはプロトコルバージョン（現在は `2`）が入ります。比較にはリテラルを使ってください（パッケージが export しているのは `SONARE_METER_RING_RECORD_FLOATS` と `SONARE_METER_RING_HEADER_INTS` だけです）。独自の読み出し側は export されている定数でサイズを決め、パッケージのバージョンが異なるメインスレッドと worklet の間でリングを共有しないでください。
 
 ```typescript
 import { SonareEngine } from '@libraz/libsonare/worklet';
@@ -389,11 +410,11 @@ console.log(offline[0].length);
 engine.destroy();
 ```
 
-`SonareEngine.create`、`SonareRealtimeEngineNode.create`、再生ノード、`SonareStreamAnalyzerNode.create` は省略可能な `sampleRate` を受け取ります。Worklet は常に `AudioContext` のレートで動くため、`audioCtx.sampleRate` と異なる値を渡すとノードが作られる前に `RangeError` が投げられます。指定せずに省略してください。
+`SonareEngine.create`、`SonareRealtimeEngineNode.create`、再生ノード、`SonareStreamAnalyzerNode.create` は省略可能な `sampleRate` を受け取ります。worklet は常に `AudioContext` のレートで動くため、`audioCtx.sampleRate` と異なる値を渡すとノードが作られる前に `RangeError` が投げられます。指定せずに省略してください。
 
 ### オフライン書き出しの API
 
-`renderOffline`、`bounceOffline`、`freezeOffline` はファサードのメインスレッド側エンジンで動き、レンダーが終わるまで呼び出しスレッドをブロックします。長い処理はブロックしても問題ない場所で実行してください。いずれも、戻る前にミラーのトランスポート位置を元に戻し、OPFS ストリーミングのクリップは対象区間分を先に読み込みます。`bounceOffline` と `freezeOffline` は素のエンジンの同名メソッドと同じオプションを受け取り、同じ結果を返します。詳しくは[リアルタイムエンジン](./realtime-engine.md)を参照してください。
+`renderOffline`、`bounceOffline`、`freezeOffline` はファサードのメインスレッド側エンジンで動き、レンダーが終わるまで呼び出しスレッドをブロックします。長い処理はブロックしても問題ない場所で実行してください。OPFS ストリーミングのクリップは対象区間分を先に読み込みます。完了したレンダーはミラーのトランスポート位置を元に戻します。`finalize: false` の場合はチャンクごとに位置が進み、最後のチャンクまたは `finishOfflineRender()` で開始位置へ戻ります。`bounceOffline` と `freezeOffline` は素のエンジンの同名メソッドと同じオプションを受け取り、同じ結果を返します。詳しくは[リアルタイムエンジン](./realtime-engine.md)を参照してください。
 
 | 呼び出し | 動作 |
 |----------|------|
@@ -401,7 +422,7 @@ engine.destroy();
 | `renderOffline({ totalFrames, blockSize?, finalize? })` | リクエスト形式です。`blockSize` の既定値と上限はエンジンのオフラインブロックサイズで、超えると `RangeError` です。`finalize: false` は長いタイムラインの 1 チャンクをレンダーし、保持中のノートとディレイの残響を次の呼び出しへ持ち越します。 |
 | `finishOfflineRender()` | チャンク分割レンダーを終えます。保持中のノートを解放し、ディレイラインを空にし、トランスポート位置を戻します。 |
 | `bounceOffline(options)` | タイムラインをインターリーブバッファへバウンスします。`blockSize` の上限は同じです。 |
-| `freezeOffline(options)` | ソース層を 1 つのクリップにフリーズします。以後、ファサード、ミラー、Worklet はそのクリップだけを保持します。 |
+| `freezeOffline(options)` | ソース層を 1 つのクリップにフリーズします。以後、ファサード、ミラー、worklet はそのクリップだけを保持します。 |
 
 ```typescript
 const total = 4 * 48000;
@@ -417,58 +438,28 @@ for (let done = 0; done < total; done += chunkFrames) {
 }
 ```
 
-オフラインの各入口は最初にミラーのミキサーとエフェクトの各プロセッサを準備直後の状態へ戻すため、同じ区間を 2 回レンダーしても結果は一致します。`resetProcessorState(renderFrame?)` はこのリセットをライブエンジンに対して行います。シークと同様に、鳴っているインサートの残響とディレイラインを断ち切り、`renderFrame` で適用され（省略時は次のブロック先頭）、楽器には影響しません。`tailSamples()` は最長の可聴テールをサンプル数の上限値で返し（`2147483647` は無制限）、`graphLatencySamplesQ8()` は処理レイテンシを 1/256 サンプル単位で返します。どちらもミラーから答えます。
+オフラインレンダーは、新しいレンダーセッションの開始時にミラーのミキサーとエフェクトの各プロセッサを準備直後の状態へ戻します。継続するチャンクでは、前のチャンクのプロセッサ状態、保持中のノート、残響を引き継ぎます。この準備処理は楽器をリセットしないため、現在のボイスやコントローラーの状態は結果に影響する場合があります。`resetProcessorState(renderFrame?)` はプロセッサのリセットをライブエンジンに対して行います。シークと同様に、鳴っているインサートの残響とディレイラインを断ち切り、`renderFrame` で適用され（省略時は次のブロック先頭）、楽器には影響しません。`tailSamples()` は最長の可聴テールをサンプル数の上限値で返し（`2147483647` は無制限）、`graphLatencySamplesQ8()` は処理レイテンシを 1/256 サンプル単位で返します。どちらもミラーから答えます。
 
 ### ノード直接の制御とポーリング
 
-`engine.node` が `SonareRealtimeEngineNode` です。サンプル精度のコマンドや、Worklet の出力キューの回収にはこれを直接使います。
+ここで挙げるのは、`SonareRealtimeEngineNode.create(...)` が返すノードのメソッドです。サンプル精度のコマンドをキューに積み、worklet の出力キューを回収します。`SonareEngine.node` は `connect()` するための素の `AudioWorkletNode` です。ファサードはエンジンノードを非公開にしており、同等の機能は `transport.*`、`resetProcessorState`、`resetMasterLoudnessMeter`、`getTransportState()`、`captureStatus()` / `capturedAudio()` / `resetCapture()`、`onMidiOut`、`pollInsertGainReduction` で使えます。
 
 | メソッド | 用途 |
 |----------|------|
 | `play`、`stop`、`seekSample(timelineSample, sampleTime?)`、`seekPpq(ppq, sampleTime?)`、`resetProcessorState`、`resetMasterLoudnessMeter` | 絶対 `sampleTime` でトランスポートやリセットのコマンドをキューに積みます。省略すると次のブロック先頭で適用され、負の値は `RangeError` です。いずれもキューに積めたかどうかを返します。 |
 | `hasCommandRoom()` | いま整形済みのコマンドをもう 1 つ積めるかを返します。何も積みません。 |
-| `requestTransportState()` | Worklet 側のトランスポート状態で解決します。 |
-| `requestCaptureStatus()`、`requestCapturedAudio()`、`requestCaptureReset()` | Worklet が持つキャプチャバッファを読み書きします。 |
+| `requestTransportState()` | worklet 側のトランスポート状態で解決します。 |
+| `requestCaptureStatus()`、`requestCapturedAudio()`、`requestCaptureReset()` | worklet が持つキャプチャバッファを読み書きします。 |
 | `pollMidiOut()` / `onMidiOut(cb)` | MIDI 1.0 バイトに変換済みの外部 MIDI イベントを回収し、Web MIDI の出力ポートへ渡します。`onMidiOut` を購読している間はリングがそちらに消費されるため、手動のポーリングには以降に届いた分しか見えません。 |
 | `pollClipPageRequests()` / `onClipPageRequests(cb)` | 独自のページング処理向けに、クリップページのミスをバッチで回収します。 |
-| `onSyncError(cb)` | Worklet が拒否したコントロールメッセージを受け取ります。購読解除関数を返します。 |
+| `onSyncError(cb)` | worklet が拒否したコントロールメッセージを受け取ります。購読解除関数を返します。 |
 
 ### オーディオグラフの一部を解析する
 
-`SonareStreamAnalyzerNode` は、プロセッサを自作せずにオーディオグラフ上の任意のノードへ `StreamAnalyzer` をかけます。Worklet 側は入力をモノラルに平均して固定サイズのチャンク（`chunkFrames`、既定 4096、128 以上）を転送するだけで、解析器はメインスレッドで動きます。そのため Worklet 側に WASM も `SharedArrayBuffer` も不要で、フレームは音声より約 1 チャンク遅れます。ノードは入力 1、出力なしです。
+`SonareStreamAnalyzerNode` は、プロセッサを自作せずにオーディオグラフ上の任意のノードへ `StreamAnalyzer` をかけます。worklet 側はモノラルへのダウンミックスとチャンクの転送だけを行い、アナライザーはメインスレッドで動くため、worklet 内の WASM も `SharedArrayBuffer` も要りません。`SonareStreamAnalyzerNode.create` は、前述の省略可能な `sampleRate` を受け取ります。登録コードと完全な例は [WASM のストリーミングとリアルタイム処理](./wasm-streaming.md#オーディオグラフの一部を解析する) にあります。
 
-```typescript
-// analyzer-worklet.ts
-import { registerSonareStreamAnalyzerWorkletProcessor } from '@libraz/libsonare/worklet';
-
-registerSonareStreamAnalyzerWorkletProcessor();
-```
-
-```typescript
-// main.ts
-import { init } from '@libraz/libsonare';
-import { SonareStreamAnalyzerNode } from '@libraz/libsonare/worklet';
-
-await init();
-await audioCtx.audioWorklet.addModule('/analyzer-worklet.js');
-const analyzer = await SonareStreamAnalyzerNode.create(audioCtx, {
-  config: { nMels: 64 },
-});
-source.connect(analyzer.node);
-
-const stopFrames = analyzer.onFrames((frames) => draw(frames.mel, frames.nFrames));
-const stopStats = analyzer.onStats((stats) => console.log(stats.estimate.bpm));
-
-// 後始末:
-stopFrames();
-stopStats();
-analyzer.destroy();
-```
-
-`config` は `new StreamAnalyzer(...)` と同じフィールドを受け取ります。`sampleRate` の既定値はコンテキストのレートで、それ以外の値は `RangeError` です。`onFrames` は `readFrames` 形式で届き、`onStats` はキーまたはテンポの推定が更新されたときに呼ばれます。チャンクが落ちたりプロセッサが再起動したりした場合、解析器のサンプルオフセットはリセットされ、2 つのストリームを継ぎ合わせることはありません。
-
-::: tip Worklet 同期メッセージ
-`SonareEngine` は Worklet 内で embind エンジンを動かします。ホスト側の Worklet エントリーがメッセージ名をフィルタしてから転送している場合は、`sync*`・`captureRequest`・`transportRequest` のすべてを許可リストに加えてください。そうしないとレーン／ストリップ／MIDI の同期メッセージが黙って落ちます。
+::: tip worklet 同期メッセージ
+`SonareEngine` は worklet 内で embind エンジンを動かします。ホスト側の worklet エントリーがメッセージ名をフィルタしてから転送している場合は、`sync*`・`captureRequest`・`transportRequest` のすべてを許可リストに加えてください。そうしないとレーン／ストリップ／MIDI の同期メッセージが黙って落ちます。
 :::
 
 ## 表示用の波形ピーク
@@ -504,7 +495,7 @@ const pyramid = waveformPeakPyramid(samples, 1, {
 
 ## 関連
 
-- [リアルタイムエンジン](./realtime-engine.md) — このページのブリッジとクリップストリーミングが供給する、トランスポート・レーンミキサー・オートメーション・MIDI クリップ・外部 MIDI ルーティングを備えたエンジン本体
-- [ミキシングエンジン](./mixing.md) — マルチトラックのリアルタイム向けストリップ／バス／センド／メータリング
-- [JavaScript API](./js-api-analysis.md) · [Python API](./python-api.md) — これらの推定の背後にあるバッチ特徴量変換
-- [DSP 実装解説](./dsp-implementation.md) — オンセット、クロマ、テンポ特徴量の構築方法
+- [リアルタイムエンジン](./realtime-engine.md): このページのブリッジとクリップストリーミングが供給する、トランスポート・レーンミキサー・オートメーション・MIDI クリップ・外部 MIDI ルーティングを備えたエンジン本体
+- [ミキシングエンジン](./mixing.md): マルチトラックのリアルタイム向けストリップ／バス／センド／メータリング
+- [JavaScript API](./js-api-analysis.md) · [Python API](./python-api.md): これらの推定の背後にあるバッチ特徴量変換
+- [DSP 実装解説](./dsp-implementation.md): オンセット、クロマ、テンポ特徴量の構築方法

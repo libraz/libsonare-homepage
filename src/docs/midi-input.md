@@ -102,10 +102,12 @@ const engine = new RealtimeEngine(48000, /* maxBlockSize */ 128);
 engine.setSynthInstrument('saw-lead', 0);
 
 // You can run several destinations at once, each with its own instrument.
-engine.setSf2Instrument({ destinationId: 1, gain: 1 }, 1);
+engine.setSf2Instrument({ gain: 1 }, 1);
 ```
 
-Use `clearMidiInstrument(destinationId)` to unbind one, and `midiInstrumentCount()` to see how many are live. Multiple destinations let one engine host a layered rig — a lead synth on `0`, drums on `1`, and so on.
+Use `clearMidiInstrument(destinationId)` to unbind one, and `midiInstrumentCount()` to see how many are live. Multiple destinations let one engine host a layered rig: a lead synth on `0`, drums on `1`, and so on.
+
+Rebinding a destination while the transport rolls fades the outgoing instrument over 10 ms and starts the new one from its default channel state. Resend any program or bank with [`pushMidiProgram`](#program-change-and-the-receivers-that-follow-it) after the change; see [Realtime Engine](./realtime-engine.md#replacing-an-instrument-during-playback).
 
 ## Queueing live events
 
@@ -113,10 +115,18 @@ Live events are *queued*, not played synchronously. Each call hands the engine a
 
 There are two queueing paths, and you should pick one per destination. Rule of thumb: use the **immediate commands** when your own code generates the events (a sequencer step, an on-screen keyboard); use the **input source** when events arrive from outside with their own timestamps (a hardware keyboard via `bindWebMidi`), because that lane carries the per-port timestamp the Web MIDI bridge needs.
 
-- **Immediate engine commands** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` each take a `destinationId` and an optional `renderFrame`; omit it to fire as soon as possible. `pushMidiPanic(renderFrame?)` takes only the optional `renderFrame` — it releases every sounding note on *all* destinations at once. A negative `renderFrame` is refused (`RangeError` on Node and WASM, including the raw embind engine; `SonareValueError` in Python); "not given" is absence, never `-1`.
-- **Program change** — `pushMidiProgram(destinationId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)` and `pushMidiInputProgram(group, channel, program, bankValid?, bankMsb?, bankLsb?, portTimeSamples?)` (Python `push_midi_program`, `push_midi_input_program`; C `sonare_engine_push_midi_program`, `sonare_engine_push_midi_input_program`) queue one MIDI 2.0 Program Change, timed like a note or CC. The bank is optional: it is applied only when `bankValid` is true, and a non-zero `bankMsb` / `bankLsb` with `bankValid` false is refused. The `SonareEngine` worklet facade takes `pushMidiProgram(trackId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)`. The message takes the receiver's own program gates, so a receiver that selects nothing (the built-in synth, a part with RX PROGRAM CHANGE off) accepts it and ignores it.
-- **Argument ranges** — every live push refuses a value outside its MIDI range with an error naming the argument and the range, such as `channel must be in [0, 15]` or `bend14 must be in [0, 16383]`, on the destination pushes and the input-source pushes alike: `RangeError` on Node and WASM, `SonareValueError` in Python, `InvalidParameter` in C, each prefixed with the calling function's name.
-- **The engine-owned live input source** — `setMidiInputSource(destinationId)` opens a dedicated input lane, then `pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` send events with a `portTimeSamples` timestamp. `pushMidiInputPitchBend`, `pushMidiInputChannelPressure`, `pushMidiInputPolyPressure`, `pushMidiInputProgram`, and `pushMidiInputUmp` add the corresponding expression, program-change and raw-packet paths. This is the lane the Web MIDI bridge feeds for you. Pushing while the input source is disabled fails with `InvalidState`, and a full input queue with `OutOfMemory`; a WASM build without the input source throws `NotSupported`.
+| Call | Targets | Timing argument | Notes |
+|------|---------|-----------------|-------|
+| `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` | One destination | `renderFrame?` | Omit it to fire as soon as possible |
+| `pushMidiProgram` | One destination | `renderFrame?` | One MIDI 2.0 Program Change; see [below](#program-change-and-the-receivers-that-follow-it) |
+| `pushMidiSysex` | One destination | `renderFrame?` | Complete frame, `0xF0` to `0xF7`, 1..512 bytes |
+| `pushMidiUmp` | One destination | `renderFrame?` | 1 to 4 words; MT `0x4` keeps full width, MT `0x3` / `0x5` are rejected |
+| `pushMidiPanic` | Every destination | `renderFrame?` | Releases every sounding note |
+| `pushMidiInput*` (`NoteOn`, `NoteOff`, `Cc`, `PitchBend`, `ChannelPressure`, `PolyPressure`, `Program`, `Ump`) | The input source | `portTimeSamples` | Needs `setMidiInputSource(destinationId)`; the lane the Web MIDI bridge feeds |
+
+- **Immediate engine commands** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` each take a `destinationId` and an optional `renderFrame`; omit it to fire as soon as possible. `pushMidiPanic(renderFrame?)` takes only the optional `renderFrame` and releases every sounding note on *all* destinations at once.
+- **Refusals** — every live push refuses a value outside its MIDI range with an error naming the argument and the range, such as `channel must be in [0, 15]` or `bend14 must be in [0, 16383]`, on destination pushes and input-source pushes alike: `RangeError` from the package classes on Node and WASM (the raw embind engine refuses with a `CppException`), `SonareValueError` in Python, `InvalidParameter` in C, each prefixed with the calling function's name. A negative `renderFrame` is refused the same way; "not given" is absence, never `-1`.
+- **The engine-owned live input source** — `setMidiInputSource(destinationId)` opens a dedicated input lane, then `pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` send events with a `portTimeSamples` timestamp. `pushMidiInputPitchBend`, `pushMidiInputChannelPressure`, `pushMidiInputPolyPressure`, `pushMidiInputProgram`, and `pushMidiInputUmp` add the expression, program-change and raw-packet paths. Pushing while the input source is disabled fails with `InvalidState`, and a full input queue with `OutOfMemory`; a WASM build without the input source throws `NotSupported`.
 - **Live SysEx** — `pushMidiSysex(destinationId, data, renderFrame?)` queues a full SysEx (System Exclusive, a free-form manufacturer-specific message) frame to a destination; `data` is the complete message including the leading `0xF0` and trailing `0xF7` (1..512 bytes), and `renderFrame` follows the same omit-for-immediate convention as the other `pushMidi*` calls. Its primary use is delivering a GS/GM reset or a GS insertion-effect (EFX) selection to a live SF2-bound destination without stopping playback — see [SoundFont Player](./soundfont-player.md) for what that SysEx selects.
 - **Raw UMP messages** — `pushMidiUmp(destinationId, words, renderFrame?)` accepts an array or `Uint32Array` of 1–4 32-bit words, most significant first. The length must match the message type in the first word. MIDI 2.0 channel-voice messages (MT `0x4`) keep their full value width; SysEx7/data messages (MT `0x3`/`0x5`) are rejected, so use `pushMidiSysex` for those. The `SonareEngine` worklet facade accepts the same complete packet through `pushMidiUmp(trackId, words, renderFrame?)` (a legacy one-word number is also accepted), and its `pushMidiInputUmp(words, portTimeSamples = 0)` covers the engine-owned input source.
 
@@ -167,6 +177,19 @@ engine.pushMidiInputNoteOff(0, 0, 60, 0, 0);
 
 `group` and `channel` are MIDI nibbles (0..15); `note`, `velocity`, `controller`, and `value` are 7-bit (0..127). A note-on with velocity `0` is treated as a note-off, exactly as the MIDI spec requires.
 
+### Program change and the receivers that follow it
+
+`pushMidiProgram(destinationId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)` and `pushMidiInputProgram(group, channel, program, bankValid?, bankMsb?, bankLsb?, portTimeSamples?)` (Python `push_midi_program`, `push_midi_input_program`; C `sonare_engine_push_midi_program`, `sonare_engine_push_midi_input_program`) queue one MIDI 2.0 Program Change, timed like a note or CC. The bank is optional: it is applied only when `bankValid` is true, and a non-zero `bankMsb` / `bankLsb` with `bankValid` false is refused. The `SonareEngine` worklet facade takes `pushMidiProgram(trackId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)`.
+
+The message goes through the receiver's own program gates, so only some receivers act on it:
+
+| Receiver | Follows a program change? |
+|----------|---------------------------|
+| SoundFont player | Yes, under its RX PROGRAM CHANGE and RX BANK SELECT gates |
+| NativeSynth bound with `useGmPrograms: true` (Python `use_gm_programs`) | Yes; each channel's voice is resolved from the bank and program |
+| NativeSynth playing the GM kit (the `drum-kit` preset, or a percussion patch with `gmKit` on) | Yes; the program picks the GS drum set on every channel |
+| Built-in synth, any other NativeSynth patch, a part with RX PROGRAM CHANGE off, an MPE member channel | Accepted and ignored |
+
 ## Binding MIDI CCs to engine parameters
 
 A CC can do double duty: reach the instrument *and* drive an engine automation parameter. `bindMidiCc(channel, controller, paramId, options)` maps a controller's 7-bit value into `[minValue, maxValue]` for a registered parameter, while the CC still flows to the destination instrument.
@@ -180,14 +203,16 @@ engine.bindMidiCc(/* channel */ 0, /* controller */ 1, /* paramId */ 42, { minVa
 // engine.clearMidiCcBindings() -> remove all mappings
 ```
 
-For high-resolution controllers, call `bindMidiCcBinding(...)` with a descriptor. Its `kind` selects the controller format:
+For high-resolution controllers, call `bindMidiCcBinding(...)` with a descriptor. Its `kind` selects the controller format and which fields it reads:
 
-- `0`: 7-bit CC
-- `1`: paired 14-bit CC
-- `2`: RPN
-- `3`: NRPN
+| `kind` | Format | Fields used |
+|--------|--------|-------------|
+| `0` | 7-bit CC | `ccNumber` |
+| `1` | Paired 14-bit CC | `ccNumber`, `ccLsbNumber` |
+| `2` | RPN | `selectorMsb`, `selectorLsb` |
+| `3` | NRPN | `selectorMsb`, `selectorLsb` |
 
-Use `ccLsbNumber` for a 14-bit CC's LSB. Use `selectorMsb` and `selectorLsb` for an RPN or NRPN number. `channel: 255` matches every MIDI channel.
+`channel: 255` matches every MIDI channel.
 
 ```typescript
 engine.bindMidiCcBinding({
@@ -205,9 +230,7 @@ engine.bindMidiCcBinding({
 `addParameter` also accepts `unit` (a display string), `rtSafe`, and `defaultCurve`. The one that matters here is **`rtSafe`** (default `true`): it declares whether the audio thread may change the parameter mid-playback. Keep it `true` for anything you intend to CC-bind and move while notes sound. Register it with `rtSafe: false` and the engine rejects every live write to it outright — from automation *and* from a bound CC, and from a direct `setParameter(...)` call — regardless of whether the transport is playing or stopped.
 
 ::: tip CC "learn" workflows
-For an offline "wiggle a knob, capture which CC moved" flow, the project API exposes `Project.midiCcLearn(events, paramId, options)` plus `midiCcToBreakpoint` / `midiParamToCc` for turning recorded CC streams into automation. Those operate on captured `ProjectMidiEvent` data rather than the live engine — see [Project Editing](./project-editing.md).
-
-`options.minMovement` is an integer from `0` through `127` (default `0`) measured in 7-bit CC units. With `0`, the first observed standalone controller value binds immediately; a low-numbered CC (`0..31`) is held until the next message so it can still form a 14-bit pair. With a positive threshold, the controller must move by at least that many 7-bit units from its first value on the same UMP group and channel. MIDI 2.0 32-bit CC values are downscaled to those 7-bit units. The threshold applies only to standalone 7-bit controllers; 14-bit pairs and RPN/NRPN sequences are assembled without this gate.
+For an offline "wiggle a knob, capture which CC moved" flow, `Project.midiCcLearn` works on captured `ProjectMidiEvent` data rather than the live engine. See [Learn a CC and turn it into automation](./midi-editing.md#learn-a-cc-and-turn-it-into-automation).
 :::
 
 ## Mapping a device gesture to an expression axis
@@ -261,14 +284,14 @@ sonare_engine_clear_midi_fx(engine, /* destination_id */ 0);
 
 :::
 
-The JSON schema is the same one [`bakeMidiFx`](./project-editing-midi.md#bake-a-midi-fx-chain-into-a-clip) accepts — stages are keyed by their parameters, so include a stage's keys to enable it and omit them to skip it. Valid keys include `transpose_semitones`, `velocity_scale` / `velocity_offset` / `velocity_gamma`, `quantize_ppq` / `quantize_strength`, `chord_intervals`, and `arpeggiator_intervals` / `arpeggiator_step_ppq` / `arpeggiator_gate_ppq`. See [Project Editing](./project-editing-midi.md#bake-a-midi-fx-chain-into-a-clip) for the full key table.
+The JSON schema is the one [`bakeMidiFx`](./midi-editing.md#bake-a-midi-fx-chain-into-a-clip) accepts: stages are keyed by their parameters, so include a stage's keys to enable it and omit them to skip it. Valid keys include `transpose_semitones`, `velocity_scale` / `velocity_offset` / `velocity_gamma`, `quantize_ppq` / `quantize_strength`, `chord_intervals`, and `arpeggiator_intervals` / `arpeggiator_step_ppq` / `arpeggiator_gate_ppq`. See [Bake a MIDI-FX chain](./midi-editing.md#bake-a-midi-fx-chain-into-a-clip) for the full key table.
 
-`setMidiFx` *replaces* the insert in place without resetting the instrument's voices — but a swap onto an already-active destination releases that destination's sounding notes: each call bumps a generation counter, and the audio thread flushes (all-notes-off) any destination whose live generation no longer matches on the next block. Two safety notes for changing FX while keys are held:
+`setMidiFx` *replaces* the insert in place without resetting the instrument's voices, but swapping onto a destination that already has FX releases its sounding notes: the audio thread flushes (all-notes-off) any destination whose FX configuration changed, on the next block. For keys held while you change FX:
+
+- The very first `setMidiFx` call on a destination with no active FX flushes nothing, since there is no live configuration to replace yet.
+- Every later swap releases the sounding notes automatically, so no follow-up panic is needed. If a swap must not audibly cut a held note, time it for a gap between notes rather than mid-sustain.
 
 The call publishes an immutable configuration from the control thread and the audio thread adopts it at the next block boundary, so it may run while engine processing is active.
-
-- The very first `setMidiFx` call on a destination with no active FX does not flush anything — there is no live configuration to replace yet.
-- Because every later swap on an already-active destination releases that destination's sounding notes automatically, you do not need a follow-up panic to clear them — but if a swap must not audibly cut a currently-held note, time it for a gap between notes rather than mid-sustain.
 
 ## MIDI panic and stuck-note recovery
 
@@ -373,7 +396,7 @@ An `AudioWorkletGlobalScope` forbids dynamic `import()`, which rules out the hig
 
 - The worklet cannot fetch the `.wasm` bytes either — fetch them on the main thread and hand them in through `processorOptions`.
 - The raw embind `RealtimeEngine` constructor takes four arguments — `(sampleRate, maxBlockSize, commandCapacity, telemetryCapacity)`. The high-level `RealtimeEngine` class defaults the last two to `1024`, which is why the two-arg call earlier on this page works; the embind class has no default parameters, so the worklet must pass them explicitly. `commandCapacity` is the ring-buffer capacity for queued MIDI/automation commands, and `telemetryCapacity` is the capacity for telemetry/meter readback.
-- Some argument orders differ from the high-level JS package — notably `setSynthInstrument(destinationId, patch)`.
+- Some argument orders differ from the high-level JS package, notably `setSynthInstrument(destinationId, patch)` and `setSf2Instrument(destinationId, config)`: the destination id comes first on the raw engine.
 
 ```js
 // synth-worklet.js — load with context.audioWorklet.addModule(...).
@@ -567,8 +590,7 @@ Live MIDI is *control* input — it tells the engine what to play. **Audio** inp
 - [Native Synth](./native-synth.md) — the patch-driven instrument you bind to a destination
 - [SoundFont Player](./soundfont-player.md) — GS/GM `.sf2` playback on a destination
 - [Recording and Takes](./recording-and-takes.md) — capture what you play (and microphone audio input)
-- [Project Editing](./project-editing.md) — MIDI clips, CC-learn, and turning CC into automation
-- [Edit MIDI Clips](./midi-editing.md) — project event lists, validation, routing, and MIDI-FX baking
+- [Edit MIDI Clips](./midi-editing.md) — project event lists, validation, routing, CC learn, and MIDI-FX baking
 - [MIDI 2.0, UMP, and Clip Files](./midi2.md) — full-width UMP builders, live delivery, and file fidelity
 - [Project Bounce](./project-bounce.md) — render a MIDI performance offline
 - [Realtime and Streaming](./realtime-streaming.md) — the AudioWorklet engine bridge that renders audio output

@@ -5,7 +5,7 @@ description: 「このマスターは合格か」という問いを、不合格�
 
 # 納品前チェックを CI で回す
 
-マスターが納品されようとしている。「聴いた感じは良さそう」という段階からプラットフォーム側の受け入れチェックまでのどこかで、この仕様を満たしているかという単純な問いに、誰かが白黒をつけなければなりません。このページはその問いを 1 本のスクリプトに変えます。送信前に人間が手元で走らせられて、しかも誰も覚えていなくても CI がコミットのたびに走らせてくれるスクリプトです。
+マスターが納品されようとしている。「聴いた感じは良さそう」という段階からプラットフォーム側の受け入れチェックまでのどこかで、この仕様を満たしているかという単純な問いに、誰かが白黒をつけなければなりません。このページはその問いを 1 本のスクリプトに変えます。送信前に人間が手元で実行でき、誰も覚えていなくても CI がコミットのたびに実行してくれるスクリプトです。
 
 この作業の目的はラウドネスをゼロから測り直すことではありません。マスタリングの段階がすでに計測した数値を読み、その段階ではカバーされないフォーマットと破損のチェックを足し、どれか 1 つでも目標を外したらはっきり失敗として知らせることです。
 
@@ -16,11 +16,11 @@ description: 「このマスターは合格か」という問いを、不合格�
 - フォーマット・破損・ラウドネス・True Peak を納品仕様と突き合わせるゲートスクリプトを書き、いずれか 1 つでも失敗した瞬間に非ゼロで終了させる。
 - 各チェックのしきい値を、当てずっぽうではなく理由をもって決める。
 - ステレオファイルではラウドネスと True Peak をマスタリングレポートから読むべき理由と、別途 `lufs` や `mastering-streaming` を呼ぶとゲートを誤らせる理由を説明できる。
-- このスクリプトをコミットのたびに走る CI ジョブへ組み込む。
+- このスクリプトをコミットのたびに実行される CI ジョブへ組み込む。
 
 ## ゲートスクリプト
 
-マスタリングの段階がすでに走り、マスター本体とそれが書き出した `--report` の両方が残っていることを前提にします。その段階については [CLI だけでミックスからマスタリングまで](./cli-mix-and-master.md) を参照してください。
+マスタリングの段階がすでに実行済みで、マスター本体とそれが書き出した `--report` の両方が残っていることを前提にします。その段階については [CLI だけでミックスからマスタリングまで](./cli-mix-and-master.md) を参照してください。このスクリプトはどちらの CLI でも動きます。ネイティブ CLI では `sonare` を `sonare-cli` に読み替えてください。
 
 ```bash
 #!/usr/bin/env bash
@@ -66,17 +66,21 @@ if info["duration"] < 1.0:
     failures.append(f"duration = {info['duration']:.3f}s, file looks truncated")
 
 defects = json.load(open(defects_path))["defects"]
-if defects["clip_sample_fraction"] > 0.0:
-    failures.append(f"clipping: {defects['clip_sample_fraction'] * 100:.3f}% of samples")
-if defects["click_per_second"] > 0.2:
-    failures.append(f"clicks: {defects['click_per_second']:.2f}/s")
-if defects["crackle_per_second"] > 1.0:
-    failures.append(f"crackle: {defects['crackle_per_second']:.2f}/s")
-if defects["hum_peak_found"] and defects["hum_fundamental_prominence"] > 6.0:
-    failures.append(
-        f"mains hum at {defects['hum_fundamental_hz']:.0f} Hz, "
-        f"{defects['hum_fundamental_prominence']:.1f} dB prominence"
-    )
+if not defects.get("measured"):
+    # 短すぎて測定できないファイルは、他のフィールドを一切返さない。
+    failures.append("damage not measured (file too short for the detectors)")
+else:
+    if defects["clip_sample_fraction"] > 0.0:
+        failures.append(f"clipping: {defects['clip_sample_fraction'] * 100:.3f}% of samples")
+    if defects["click_per_second"] > 0.2:
+        failures.append(f"clicks: {defects['click_per_second']:.2f}/s")
+    if defects["crackle_per_second"] > 1.0:
+        failures.append(f"crackle: {defects['crackle_per_second']:.2f}/s")
+    if defects["hum_peak_found"] and defects["hum_fundamental_prominence"] > 6.0:
+        failures.append(
+            f"mains hum at {defects['hum_fundamental_hz']:.0f} Hz, "
+            f"{defects['hum_fundamental_prominence']:.1f} dB prominence"
+        )
 
 # Loudness and true peak come from the mastering report -- the stereo
 # measurement the chain itself took -- not from a separate `lufs` call.
@@ -161,9 +165,30 @@ sonare info master.wav --json
 
 ### 破損: `repair --detect`
 
-```bash
+::: code-group
+
+```bash [CLI]
 sonare repair master.wav --detect --json
 ```
+
+```typescript [Node]
+import { masteringRepairAnalyze } from '@libraz/libsonare-native';
+
+const { defects } = masteringRepairAnalyze({ channels: [left, right], sampleRate: 48000 });
+if (!defects.measured) throw new Error('damage not measured');
+console.log(defects.clipSampleFraction, defects.clickPerSecond, defects.cracklePerSecond, defects.humFundamentalProminence);
+```
+
+```python [Python]
+import libsonare as sonare
+
+defects = sonare.mastering_repair_analyze([left, right], 48000)["defects"]
+if not defects["measured"]:
+    raise SystemExit("damage not measured")
+print(defects["clipSampleFraction"], defects["clickPerSecond"], defects["cracklePerSecond"], defects["humFundamentalProminence"])
+```
+
+:::
 
 ```json
 {"mode": "detect", "defects": {
@@ -175,7 +200,7 @@ sonare repair master.wav --detect --json
 }}
 ```
 
-`--detect` は計測するだけで何も書き出さないので、コミットのたびに走らせてもコストがかかりません。`clip_sample_fraction` のしきい値は `0.0` にします。仕上がったマスターがクリップすることは本来ないはずで、それを防ぐのがリミッターの仕事そのものだからです。`click_per_second` と `crackle_per_second` には現実的な余裕が必要です。普通の楽曲でも検出器はゼロではない基準値を返すからで、破損のないこのマスターでもそれぞれ 1 秒あたり `0.097` と `0.485` を記録しています。`0.2` と `1.0` なら、通常の密度で誤検知することなく本当に破損したファイルを捕まえられます。
+`--detect` は計測するだけで何も書き出さないので、コミットのたびに実行してもコストがかかりません。短すぎて検出器にかけられないファイルは `{"measured": false}` だけを返します。ゲートはこれを問題なしではなく不合格として扱います。ライブラリの呼び出しは同じ計測値を camelCase の名前（`clipSampleFraction`、`clickPerSecond`）で返します。`hum_peak_found` は CLI の出力にだけ存在し、プロミネンスが 1.0 dB を超えたことを意味します。`clip_sample_fraction` のしきい値は `0.0` にします。仕上がったマスターがクリップすることは本来ないはずで、それを防ぐのがリミッターの仕事そのものだからです。`click_per_second` と `crackle_per_second` には現実的な余裕が必要です。普通の楽曲でも検出器はゼロではない基準値を返すからで、破損のないこのマスターでもそれぞれ 1 秒あたり `0.097` と `0.485` を記録しています。`0.2` と `1.0` なら、通常の密度で誤検知することなく本当に破損したファイルを捕まえられます。
 
 `hum_peak_found` はそれ単体では真偽値にすぎず、ノイズフロア以下の商用電源ハムはよくあることで、聞こえもしません。ゲートはその有無だけで落とすべきではありません。それを実用的なチェックに変えるのが `hum_fundamental_prominence` です。このマスターにたまたま乗っている 60 Hz のピークは突出度 `2.19` dB ですが、同じセッションの実際に破損したテイクは 50 Hz で `18.6` dB を記録しています。`6.0` dB はその中間に置いてあり、聞こえないピークを無視しつつ聞こえるピークは捕まえるだけの高さです。
 
@@ -188,7 +213,7 @@ sonare repair master.wav --detect --json
 
 どちらの数値も、マスタリング段階が書き出した `--report` の `after` から取ります。チェーン自身がステレオペア全体に対して行った計測です。`GATE_LUFS_TOLERANCE` はプラットフォームが目標をどれだけ厳しく運用しているかに合わせます。ストリーミング向けの目標に対して `±0.5` LU は余裕があり、放送向けには厳しめです。`GATE_CEILING_DBTP` はマスタリングの段階自身に指示したシーリングと同じ値にします。アシスタントはその値をすでに絶対の制約として扱っているので、レポートがそれを超えているなら、プラットフォームが何であれ上流の何かが自分自身の設定を守れなかったということであり、はっきり失敗として知らせる価値があります。
 
-同じファイルに対して `sonare info` は `peak_db: -1.205` を返していました。これはサンプルピークで、True Peak では不合格になった `-1.0` の天井を通ってしまう値です。この 2 つの差が、下のデモが描いているものです。保存されたサンプルはすべて天井の下にあるのに、コンバーターがその間を再構成した波形は天井を超えます。ゲートが `info` の `peak_db` ではなくレポートの `true_peak_dbtp` を読むのは、このためです。
+同じファイルに対して `sonare info` は `peak_db: -1.205` を返していました。これはサンプルピークで、True Peak では不合格になった `-1.0` のシーリングを通ってしまう値です。この 2 つの差が、下のデモが描いているものです。保存されたサンプルはすべてシーリングの下にあるのに、コンバーターがその間を再構成した波形はシーリングを超えます。ゲートが `info` の `peak_db` ではなくレポートの `true_peak_dbtp` を読むのは、このためです。
 
 <SonareDemo id="inter-sample-peak" />
 
@@ -229,6 +254,10 @@ sonare mastering-profile take-clean.wav --json
 
 `mastering-streaming` を直接使うのは、納品物がモノラルのときか、クロスチェックとしてです。マスタリングレポート以外の場面でステレオのまま正確に測りたいときは、[Python API](../python-api.md) のステレオ用エントリポイントを使ってください。`mastering_streaming_preview_stereo` などのステレオ用関数はダウンミックスではなく両チャンネルを測ります。
 :::
+
+左右がどれだけ似ているかで、モノラルへの畳み込みによる損失は変わります。デモでは、同じサイン波の位相差を広げていくと平均が小さくなり、180° で打ち消されます。
+
+<SonareDemo id="mono-fold" />
 
 `mastering-streaming` は組み込みの 3 プラットフォームの代わりに、自分の納品仕様を渡すこともできます。ここでの `platforms.json` の中身は次のとおりです。
 
@@ -279,10 +308,10 @@ jobs:
       - run: ./gate.sh master.wav report.json
 ```
 
-このスクリプトが呼ぶコマンドはすべて `--json` を受け付け、失敗はすべて素の `1` ではなく[規定の終了コード](../cli.md#終了コード)で返ります。冒頭の `set -euo pipefail` があるからこそ、それが「実際に壊れた段階でジョブが失敗する」という挙動に変わります。`SONARE_LEGACY_EXIT=1` は、パイプラインの上流にまだ古い「失敗はすべて `1`」という前提を決め打ちしている呼び出し元がいる場合のためのものです。このゲートスクリプト自身は特定の終了コードで分岐しているわけではなく自前のしきい値で判定しているので、これを必要としません。
+このスクリプトが呼ぶコマンドはすべて `--json` を受け付け、失敗はすべて素の `1` ではなく[規定の終了コード](../cli.md#終了コード)で返ります。冒頭の `set -euo pipefail` があるからこそ、それが「実際に壊れた段階でジョブが失敗する」という挙動に変わります。`SONARE_LEGACY_EXIT=1` は、パイプラインの上流にまだ古い「失敗はすべて `1`」という前提を決め打ちしている呼び出し側がいる場合のためのものです。このゲートスクリプト自身は特定の終了コードで分岐しているわけではなく自前のしきい値で判定しているので、これを必要としません。
 
 ## 次に読むもの
 
-- ゲートが落ちている理由が納品契約ではなくマスター自体にある — [CLI だけでミックスからマスタリングまで](./cli-mix-and-master.md) に戻ってください。
-- 同じ録音で破損チェックが何度も引っかかる — [録音素材をまとめて整音する](./recording-cleanup.md) は、納品ファイル側ではなくソース側で直す方法を扱っています。
-- このロジックをシェルスクリプトではなくアプリに組み込みたい — 同じ計測は [Python API](../python-api.md) にもあり、CLI からは使えないステレオ用エントリポイントも含まれています。
+- ゲートが落ちている理由が納品契約ではなくマスター自体にある場合は [CLI だけでミックスからマスタリングまで](./cli-mix-and-master.md) に戻ってください。
+- 同じ録音で破損チェックが何度も引っかかる場合は [録音素材をまとめて整音する](./recording-cleanup.md) は、納品ファイル側ではなくソース側で直す方法を扱っています。
+- このロジックをシェルスクリプトではなくアプリに組み込みたい場合は、同じ計測が [Python API](../python-api.md) にもあり、CLI からは使えないステレオ用エントリポイントも含まれています。

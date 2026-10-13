@@ -83,6 +83,8 @@ A **free-decay region** is a span where the source is no longer producing new so
 
 ## Usage
 
+These calls default `sampleRate` to 48000; always pass the recording's rate.
+
 ::: code-group
 
 ```typescript [Browser]
@@ -97,7 +99,57 @@ import {
 
 await init();
 
-const measured = analyzeImpulseResponse(irSamples, sampleRate, 6);
+const measured = analyzeImpulseResponse(irSamples, sampleRate, 6, 30); // bands, fit span in dB
+console.log(measured.rt60, measured.edt, measured.c50, measured.c80);
+
+const blind = detectAcoustic(roomRecording, sampleRate, {
+  nOctaveBands: 6,            // octave bands
+  nThirdOctaveSubbands: 24,   // third-octave subbands used by blind estimation
+  minDecayDb: 30,             // minimum usable decay in dB
+  noiseFloorMarginDb: 10,     // noise-floor margin in dB
+});
+console.log(blind.confidence, blind.isBlind);
+
+const estimate = estimateRoom(roomRecording, sampleRate, {
+  referenceAbsorption: 0.15,
+  nOctaveBands: 6,
+});
+console.log(estimate.volume, estimate.lengthM, estimate.widthM, estimate.heightM);
+console.log(estimate.drrDb, estimate.confidence, estimate.bandAbsorption, estimate.rt60Bands);
+
+// Throws a coded SonareError (e.g. acoustic.source_outside_room) for unusable geometry.
+const { rir, diagnostics: rirWarnings } = synthesizeRir({
+  lengthM: 7,
+  widthM: 5,
+  heightM: 3,
+  sourceX: 1,
+  sourceY: 1,
+  sourceZ: 1.2,
+  listenerX: 5,
+  listenerY: 4,
+  listenerZ: 1.7,
+  absorption: 0.2,
+  sampleRate,
+});
+
+const { audio: morphed, diagnostics } = roomMorph(dryVoice, sampleRate, {
+  lengthM: 12,
+  widthM: 9,
+  heightM: 4,
+  wet: 0.6,
+});
+```
+
+```typescript [Node]
+import {
+  analyzeImpulseResponse,
+  detectAcoustic,
+  estimateRoom,
+  synthesizeRir,
+  roomMorph,
+} from '@libraz/libsonare-native';
+
+const measured = analyzeImpulseResponse(irSamples, sampleRate, 6, 30); // bands, fit span in dB
 console.log(measured.rt60, measured.edt, measured.c50, measured.c80);
 
 const blind = detectAcoustic(roomRecording, sampleRate, {
@@ -143,7 +195,7 @@ import libsonare as sonare
 
 audio = sonare.Audio.from_file("room-clap.wav")
 
-measured = sonare.analyze_impulse_response(audio.data, audio.sample_rate, n_octave_bands=6)
+measured = sonare.analyze_impulse_response(audio.data, audio.sample_rate, n_octave_bands=6, min_decay_db=30.0)
 print(measured.rt60, measured.edt, measured.c50, measured.c80)
 
 blind = sonare.detect_acoustic(
@@ -195,28 +247,95 @@ sonare room-morph dry.wav --length 12 --width 9 --height 4 --wet 0.6 -o morphed.
 
 :::
 
-Python `Audio` exposes the same calls as instance methods: `audio.analyze_impulse_response(...)` and `audio.detect_acoustic(...)`. The geometric room-acoustics helpers (`synthesizeRir`, `estimateRoom`, `roomMorph`) are module-level calls in Python and standalone functions in the WASM package.
+Python `Audio` exposes the measurement calls as instance methods: `audio.analyze_impulse_response(...)` and `audio.detect_acoustic(...)`. `synthesizeRir`, `estimateRoom` and `roomMorph` are module-level calls in Python and standalone functions in the WASM package.
+
+## Estimating an equivalent room
+
+`estimateRoom(...)` estimates an equivalent room from a recording. Treat it as a practical model, not exact geometry. Always check `confidence`, because ordinary recordings may not contain enough clear room decay. The result carries `volume`, `lengthM`, `widthM`, `heightM`, `drrDb`, `confidence`, `bandAbsorption` and `rt60Bands`; Python uses the snake_case spellings.
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `mode` | `'auto'` | `'auto'` sends impulse-like input to impulse-response analysis and everything else to the blind path; `'blind'` and `'impulse_response'` force a path. Names only: a number is a `TypeError`. |
+| `aspectHintLw` / `aspectHintLh` | `1` / `1` | Length : width and length : height ratios, so `widthM = lengthM / aspectHintLw` and `heightM = lengthM / aspectHintLh`. |
+| `referenceAbsorption` | `0.15` | Mean wall absorption that fixes the room scale (see below). Clamped into `[0.01, 0.99]`. |
+| `preferEyring` | `true` | Invert the decay with Eyring (`true`) or Sabine (`false`). |
+| `nOctaveBands`, `minDecayDb`, `noiseFloorMarginDb` | `6`, `30`, `10` | The same as for `detectAcoustic(...)`; `0` selects the default. |
+
+::: warning What `estimateRoom(...)` actually solves
+It solves a *scale* only under the supplied shape and absorption priors; it does not recover the shape itself.
+
+- Without `aspectHintLw` / `aspectHintLh` the three dimensions come back identical (a cube), so do not present `lengthM`, `widthM` and `heightM` as recovered proportions unless you passed hints.
+- A single decay constrains the ratio `V / A`, where `A` is equivalent absorption area, rather than determining volume and absorption separately. With a fixed shape, surface area grows with the square of linear scale while volume grows with its cube, so a larger room needs a higher mean absorption to keep the same RT60. `referenceAbsorption` supplies the missing prior that pins the volume down. Under Sabine, the reported volume scales approximately with the cube of that prior; the default Eyring model uses the corresponding `-ln(1 − α)` term, so treat the cube rule as a Sabine approximation. Keep it fixed when comparing recordings.
+
+The prior is clamped rather than refused, so an out-of-range value still returns a successful estimate, computed from the clamped number. At the low end that is worth three orders of magnitude in the reported volume.
+:::
+
+::: warning An explicit `referenceAbsorption: 0` is not "default" everywhere
+Python and C read an explicit `0` as "use the default" (`0.15`); Node and WASM clamp it to `0.01`, which reports a normal room as a fraction of a cubic meter, with full confidence. Omit the option for the default, and write `0.01` when you want the floor.
+:::
+
+## Reading the result
+
+| Field | Meaning |
+|-------|---------|
+| `rt60` | Estimated time for reverberation to decay by 60 dB. Larger values mean a more reverberant room. |
+| `edt` | Early decay time, fitted over the first 10 dB. Often tracks perceived reverberance more closely than full RT60. Independently fitted only in impulse-response mode. |
+| `c50` | Clarity for speech. Higher values usually mean consonants and dialog are easier to understand. Impulse-response mode only. |
+| `c80` | Clarity for music. Higher values indicate more direct/early energy relative to late reverberation. Impulse-response mode only. |
+| `d50` | Definition, the fraction (`0`–`1`) of early energy in the first 50 ms. Impulse-response mode only. |
+| `rt60Bands`, `edtBands`, `c50Bands`, `c80Bands` | Per-band versions of the same measurements. Python uses snake_case names with camelCase aliases. |
+| `confidence` | Heuristic confidence from `0` to `1`. Low values mean the recording did not contain a clean enough decay. |
+| `isBlind` / `is_blind` | Whether the result came from blind estimation rather than an impulse-response assumption. |
+
+::: warning Blind analysis returns decay only
+`detectAcoustic(...)` always runs the blind path, and the blind path recovers a late-decay rate and nothing else. `c50`, `c80`, and `d50` come back `NaN`; `c50Bands` and `c80Bands` come back empty; `edt` is `NaN` because the blind path has no direct-sound arrival for an independent 0-to-−10 dB fit, and `edtBands` keeps the requested band count but every entry is `NaN`. Call `analyzeImpulseResponse(...)` on a clap, pop, or deconvolved sweep-derived IR whenever you need clarity numbers or a real EDT, and guard for `NaN` before formatting these fields in a UI.
+:::
+
+::: details What do RT60, EDT, C50/C80, and D50 measure?
+These are standard room-acoustic numbers derived from how sound decays in a space after it stops.
+
+- **RT60** — seconds for the reverberation to fall by 60 dB; the headline "how reverberant" figure. A small room might be ~0.3 s, a cathedral several seconds.
+- **EDT (early decay time)** — the decay rate measured from the first part of the tail, scaled to a 60 dB drop. It usually tracks the *perceived* liveliness of a room better than full RT60.
+- **C50 / C80 (clarity)** — the ratio, in dB, of early energy (the first 50 ms or 80 ms) to the later reverberation. Higher means clearer and more direct. C50 is the reference for speech, C80 for music.
+- **D50 (definition)** — the fraction (0–1) of total energy that arrives in the first 50 ms. Higher means a more direct, less washy sound.
+:::
+
+## Practical guidance
+
+For reliable numbers, record a clean impulse response:
+
+- keep the room quiet;
+- avoid clipping;
+- leave enough silence after the impulse;
+- trim unrelated noise before analysis.
+
+A blind estimate is useful for comparing recordings or warning that a take sounds too reverberant. Do not treat it as an architectural measurement.
 
 ## Geometric room acoustics
 
 Use this section when you are not only measuring a recording, but also creating or applying a room model.
 
+<FlowDiagram
+  title="From a recording to a synthesized room"
+  :nodes="[
+    { id: 'rec', label: 'Recording', col: 0, row: 1 },
+    { id: 'est', label: 'Room estimate', col: 1, row: 1 },
+    { id: 'geo', label: 'Room geometry', col: 2, row: 1 },
+    { id: 'own', label: 'Your own geometry', col: 2, row: 0, variant: 'muted' },
+    { id: 'rir', label: 'Room impulse response', col: 3, row: 1, variant: 'success' },
+    { id: 'out', label: 'Morphed audio', col: 3, row: 2, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'rec', to: 'est', label: 'estimateRoom' },
+    { from: 'est', to: 'geo', label: 'roomGeometryFromEstimate' },
+    { from: 'geo', to: 'rir', label: 'synthesizeRir' },
+    { from: 'own', to: 'rir', label: 'synthesizeRir', style: 'dashed' },
+    { from: 'geo', to: 'out', label: 'roomMorph / roomMorphStereo' }
+  ]"
+  caption="Geometry can come from an estimate or be written by hand; either one feeds the synthesizer and the morph."
+/>
+
 `synthesizeRir(...)` builds a mono RIR from a rectangular room. You provide dimensions in meters, one wall-absorption value, and source/listener coordinates inside the room. Unusable geometry, such as a source or listener outside the room, throws a coded `SonareError` whose message leads with the diagnostic code (for example `acoustic.source_outside_room`); Python raises `SonareValueError`. A call that returns carries only warnings on `diagnostics`.
-
-`estimateRoom(...)` estimates an equivalent room from a recording. Treat it as a practical model, not exact geometry. Always check `confidence`, because ordinary recordings may not contain enough clear room decay. Its `mode` option routes the analyzer by name: `'auto'` (the default), `'blind'` or `'impulse_response'`; a number is a `TypeError`.
-
-::: warning What `estimateRoom(...)` actually solves
-It solves a *scale* only under the supplied shape and absorption priors; it does not recover the shape itself.
-
-- The length : width : height ratios come from `aspectHintLw` / `aspectHintLh`, which default to `1`. A call that omits them always returns three identical dimensions — a cube — so do not present `lengthM`, `widthM`, and `heightM` as recovered proportions unless you passed hints.
-- A single decay constrains the ratio `V / A`, where `A` is equivalent absorption area, rather than determining volume and absorption separately. With a fixed shape, surface area grows with the square of linear scale while volume grows with its cube, so a larger room needs a higher mean absorption to keep the same RT60. `referenceAbsorption` (default `0.15`) supplies the missing prior that pins the volume down. Under Sabine, the reported volume scales approximately with the cube of that prior; the default Eyring model uses the corresponding `-ln(1 − α)` term, so treat the cube rule as a Sabine approximation. Keep it fixed when comparing recordings.
-
-The prior is clamped into `[0.01, 0.99]` rather than refused, so an out-of-range value still returns a successful estimate — computed from the clamped number, which at the low end is worth three orders of magnitude in the reported volume.
-:::
-
-::: info In C, a zero prior means "use the default"
-Every float in `SonareRoomEstimateConfig` reads `0` as *unset*, and `reference_absorption` is no exception: it selects the library default of `0.15`. The idiom the C header is written for is `SonareRoomEstimateConfig cfg = {};`, so a literal zero taken at face value would land on the analyzer's `0.01` floor and — because the prior controls the solved room scale — report a normal room as a fraction of a cubic meter, with full confidence, and then hand `sonare_synthesize_rir` an unrelated reverb to build from it. Under Sabine, this scale produces a volume that changes approximately with the **cube** of the prior; the default Eyring model uses `-ln(1 − α)` instead. Node, Python, and WASM pass `0.15` explicitly and behave the same way. If you really do want a near-rigid prior, request `0.01` rather than `0`.
-:::
 
 `roomMorph(...)` is an offline creative effect. It adds a synthesized target-room character and may soften part of the existing tail. Do not treat or present its output as dereverberation: it adds room character, it does not remove existing reverb.
 
@@ -229,6 +348,7 @@ Every float in `SonareRoomEstimateConfig` reads `0` as *unset*, and `reference_a
 | `acoustic.ism_order_clamped` | `ismOrder` was above the safe maximum of `12` and was reduced to it. | Request `12` or less so the render matches the request. |
 | `acoustic.rir_length_clamped` | The room's natural response was longer than the cap, so the tail was cut. The message says which cap: `maxSeconds`, or the shared RIR resource limit when `maxSeconds` was `0`. | Raise `maxSeconds` if you set it. Otherwise the room decays for longer than the budget allows, so make it smaller or more absorptive. |
 | `acoustic.rir_length_floored` | `maxSeconds` ended before the direct sound could arrive, so it was extended to fit it. The result is longer than you asked for. | Raise `maxSeconds`, or move the listener closer to the source. |
+| `acoustic.rir_tail_truncated` | `maxSeconds` cuts the longest-decaying band before its RT60, so a 60 dB decay cannot be measured from the RIR. | Set `maxSeconds` at least as long as that band's RT60, or use `0` for the natural length subject to the resource limit. |
 | `acoustic.no_late_tail` | No usable diffuse tail existed at the mixing time, so the target room is early reflections only. Either the walls are fully rigid (absorption `0` in every band) or so absorptive that the tail ends before the crossover. | Move the absorption away from the extremes, or lower `mixingTimeMs`. |
 
 Neither `RoomMorphResult` nor `RirResult` has an error flag: a morph that cannot be produced — invalid geometry, a listener outside the room, a climate outside the physical range — throws `InvalidParameter` instead (`synthesizeRir(...)` throws the same way), so every entry in `diagnostics` is a warning about a result you did get. Branch on `code`; the `message` text is for humans, and the `severity` of every entry on a returned morph is `'warning'`.
@@ -251,9 +371,11 @@ const { left: wetL, right: wetR } = roomMorphStereo({
 
 Summed to mono, the added room is about 3 dB lower above roughly 300 Hz than a response shared by both channels would be, because the two tails do not add coherently. The offline mono `roomMorph(...)` is the single-listener response and does not place a receiver pair. The `effects.reverb.room` and `effects.acoustic.roomMorph` inserts use the pair on a stereo strip, and refuse (`InvalidParameter`) a placement that puts either receiver outside the room, so a listener closer to a side wall than half the spacing (0.25 m by default) is refused even on a mono strip. The capability catalog publishes the matching bounds: `listenerX` and `listenerY` carry a minimum and maximum inside the walls, and the minimum `lengthM` and `widthM` are raised accordingly.
 
+What the spacing does to the two tails, band by band, is measured on [Spaced Receivers and Coherence](./glossary/acoustics/spaced-receivers.md).
+
 ### From an estimate to a synthesized RIR
 
-An `estimateRoom(...)` result already uses the names `synthesizeRir(...)` takes (`lengthM`, `widthM`, `heightM`, `bandAbsorption`), so `roomGeometryFromEstimate(...)` only merges the placement in and returns geometry you can pass straight on. An estimate carries no source or listener position; give them as `{ x, y, z }` in meters, or the synthesizer's defaults apply, which can fall outside a small estimated room. Absorption bands that did not converge are left out, so the scalar `absorption` applies. An estimate with no measurable dimensions (`NaN`, `confidence` `0`) throws a `RangeError` (`SonareValueError` in Python).
+An `estimateRoom(...)` result already uses the names `synthesizeRir(...)` takes (`lengthM`, `widthM`, `heightM`, `bandAbsorption`), so `roomGeometryFromEstimate(...)` returns geometry you can pass straight on. An estimate carries no source or listener position, so the result places them itself: the synthesizer's default source and listener, scaled per axis from the default 7 × 5 × 3 m room into the estimated dimensions (at 7 × 5 × 3 m the placement is the default one), which keeps both inside a small estimated room. Give `source` / `listener` as `{ x, y, z }` in meters to override it. The result also carries a scalar `absorption`, the mean of the finite bands, and leaves bands that did not converge out of `bandAbsorption`. An estimate with no measurable dimensions (`NaN`, `confidence` `0`) throws a `RangeError` (`SonareValueError` in Python).
 
 ::: code-group
 
@@ -375,43 +497,6 @@ Turning it on mainly shortens the high bands of a large room and leaves a small 
 Air absorption models the loss along the propagation path, inside the air. It is not a substitute for `absorption`, `bandAbsorption` or `materialPreset`, which model the loss at the boundaries, and it does not touch the image-source early reflections at all — only the statistical tail's decay rates. A room whose highs ring too long because its walls are reflective needs a more absorptive wall material; humidity will not fix it, and it will never move the low bands, where the air term is negligible.
 :::
 
-## Reading the result
-
-| Field | Meaning |
-|-------|---------|
-| `rt60` | Estimated time for reverberation to decay by 60 dB. Larger values mean a more reverberant room. |
-| `edt` | Early decay time, fitted over the first 10 dB. Often tracks perceived reverberance more closely than full RT60. Independently fitted only in impulse-response mode. |
-| `c50` | Clarity for speech. Higher values usually mean consonants and dialog are easier to understand. Impulse-response mode only. |
-| `c80` | Clarity for music. Higher values indicate more direct/early energy relative to late reverberation. Impulse-response mode only. |
-| `d50` | Definition, the fraction (`0`–`1`) of early energy in the first 50 ms. Impulse-response mode only. |
-| `rt60Bands`, `edtBands`, `c50Bands`, `c80Bands` | Per-band versions of the same measurements. Python uses snake_case names with camelCase aliases. |
-| `confidence` | Heuristic confidence from `0` to `1`. Low values mean the recording did not contain a clean enough decay. |
-| `isBlind` / `is_blind` | Whether the result came from blind estimation rather than an impulse-response assumption. |
-
-::: warning Blind analysis returns decay only
-`detectAcoustic(...)` always runs the blind path, and the blind path recovers a late-decay rate and nothing else. `c50`, `c80`, and `d50` come back `NaN`; `c50Bands` and `c80Bands` come back empty; `edt` is `NaN` because the blind path has no direct-sound arrival for an independent 0-to-−10 dB fit, and `edtBands` keeps the requested band count but every entry is `NaN`. Call `analyzeImpulseResponse(...)` on a clap, pop, or deconvolved sweep-derived IR whenever you need clarity numbers or a real EDT, and guard for `NaN` before formatting these fields in a UI.
-:::
-
-::: details What do RT60, EDT, C50/C80, and D50 measure?
-These are standard room-acoustic numbers derived from how sound decays in a space after it stops.
-
-- **RT60** — seconds for the reverberation to fall by 60 dB; the headline "how reverberant" figure. A small room might be ~0.3 s, a cathedral several seconds.
-- **EDT (early decay time)** — the decay rate measured from the first part of the tail, scaled to a 60 dB drop. It usually tracks the *perceived* liveliness of a room better than full RT60.
-- **C50 / C80 (clarity)** — the ratio, in dB, of early energy (the first 50 ms or 80 ms) to the later reverberation. Higher means clearer and more direct. C50 is the reference for speech, C80 for music.
-- **D50 (definition)** — the fraction (0–1) of total energy that arrives in the first 50 ms. Higher means a more direct, less washy sound.
-:::
-
-## Practical guidance
-
-For reliable numbers, record a clean impulse response:
-
-- keep the room quiet;
-- avoid clipping;
-- leave enough silence after the impulse;
-- trim unrelated noise before analysis.
-
-A blind estimate is useful for comparing recordings or warning that a take sounds too reverberant. Do not treat it as an architectural measurement.
-
 If you need live visual frames or BPM/key/chord estimates that update as audio arrives, use [Realtime and Streaming](./realtime-streaming.md). If you need song-level metadata, use [JavaScript API](./js-api-analysis.md#analysis-functions) or [Python API](./python-api-analysis.md#analysis-functions).
 
 ## Related
@@ -420,3 +505,4 @@ If you need live visual frames or BPM/key/chord estimates that update as audio a
 - [Source Distance and DRR](./glossary/acoustics/source-distance.md) · [Room Geometry and Volume](./glossary/acoustics/room-geometry.md) — distance, the equivalent shoebox, and Sabine's volume/absorption trade
 - [Per-Band Decay and Absorption](./glossary/acoustics/absorption-bands.md) · [Inverse Room Estimation](./glossary/acoustics/inverse-estimation.md) — octave-band decay, and impulse-response vs blind estimation with the confidence score
 - [Spatial Room Scanner](/spatial) — run this whole pipeline locally as an interactive 3D scene
+- API reference: [JavaScript](./js-api-effects.md#room-acoustics) · [Node.js](./node-api-analysis.md) · [Python](./python-api-effects.md#room-acoustics)

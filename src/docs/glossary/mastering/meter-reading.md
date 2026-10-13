@@ -59,18 +59,6 @@ Peak in the UI is scanned across every sample of the source or rendered buffer, 
 
 Because the UI metrics and the post-render metrics come from separate paths, the numbers can differ slightly. Treat the JSON report as the processing record.
 
-The preset validation script runs generated test signals through the mastering chain.
-
-It checks three practical things:
-
-| Check | Why it matters |
-|-------|----------------|
-| Finite LUFS values | The loudness path did not produce invalid numbers. |
-| Bounded peak levels | The chain did not create runaway output. |
-| Expected stage names | The preset wiring still matches the public report shape. |
-
-This catches processor wiring breakage or preset-definition inconsistencies before they reach the demo or downstream users.
-
 ::::
 
 Related: [LUFS](../lufs.md), [True Peak](../true-peak.md), [Crest Factor](../concepts/crest-factor.md), [Mono Compatibility](../concepts/mono-compatibility.md)

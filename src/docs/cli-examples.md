@@ -5,9 +5,9 @@ description: Shell walkthroughs for the sonare CLI, covering basic analysis, fea
 
 # CLI Examples
 
-End-to-end shell walkthroughs for the `sonare` CLI, split out from the [CLI Reference](./cli.md) index, which keeps the mastering walkthrough alongside the global options and exit codes.
+End-to-end shell walkthroughs for the `sonare` CLI, split out from the [CLI Reference](./cli.md) index. The mastering and repair walkthrough is on the CLI Reference, under [Mastering and Repair](./cli.md#mastering-and-repair).
 
-### Basic Analysis Workflow
+## Basic Analysis Workflow
 
 ```bash
 # Quick BPM and key check
@@ -18,7 +18,67 @@ sonare key song.mp3
 sonare analyze song.mp3 --json > analysis.json
 ```
 
-### Feature Summary Export
+### The analyze JSON
+
+```json
+{
+  "bpm": 120.5,
+  "bpm_confidence": 0.95,
+  "key": {
+    "root": 0,
+    "mode": 0,
+    "confidence": 0.85,
+    "name": "C major"
+  },
+  "time_signature": {
+    "numerator": 4,
+    "denominator": 4,
+    "confidence": 0.91
+  },
+  "beats": [
+    {"time": 0.52, "strength": 0.84},
+    {"time": 1.02, "strength": 0.78}
+  ],
+  "downbeat_indices": [0, 4, 8],
+  "downbeat_phase": 0,
+  "chords": [
+    {"name": "C", "start": 0.0, "end": 2.0, "confidence": 0.88}
+  ],
+  "sections": [
+    {"type": "intro", "start": 0.0, "end": 8.0}
+  ],
+  "timbre": {
+    "brightness": 0.61,
+    "warmth": 0.47,
+    "density": 0.72,
+    "roughness": 0.18,
+    "complexity": 0.56
+  },
+  "dynamics": {
+    "dynamic_range_db": 9.4,
+    "loudness_range_db": 6.8,
+    "crest_factor": 7.2,
+    "is_compressed": false
+  },
+  "rhythm": {
+    "syncopation": 0.32,
+    "groove_type": "straight",
+    "pattern_regularity": 0.89
+  },
+  "form": "IAB"
+}
+```
+
+The arrays above are abbreviated. In particular, `beats` contains one
+`{"time", "strength"}` object per detected beat; it is not a beat count.
+
+`downbeat_indices` indexes into `beats` rather than carrying times of its own, so
+finding the downbeats is a membership test against that array — `beats[i]` is a
+downbeat when `i` appears in `downbeat_indices`. `downbeat_phase` is the beat
+index the first downbeat falls on, which is how many beats of the first bar the
+take starts partway through.
+
+## Feature Summary Export
 
 ```bash
 # Export compact feature summaries
@@ -27,7 +87,7 @@ sonare spectral song.mp3 --json > spectral_features.json
 sonare chroma song.mp3 --json > chroma_features.json
 ```
 
-### Batch Processing
+## Batch Processing
 
 ```bash
 # Analyze all MP3 files in directory
@@ -43,7 +103,7 @@ for f in *.wav; do
 done
 ```
 
-### Mixing Workflow
+## Mixing Workflow
 
 ::: info Command availability
 `mix` — which loads a mixer scene from a JSON file or a built-in preset and
@@ -74,8 +134,16 @@ sonare mix \
 sonare mix --scene scene.json --input vocal.wav --input music.wav -o mixed.wav
 ```
 
-`--scene` and `--preset` are a required, mutually exclusive pair: give exactly
-one. Passing both is a usage error, and passing neither exits 2 as well rather
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--scene FILE` | — | Mixer scene JSON. Give exactly one of `--scene` and `--preset` |
+| `--preset NAME` | — | Built-in scene preset (`mixing-presets` lists them) |
+| `--input [ID=]WAV` | — | One input per strip, repeatable; see below |
+| `-o`, `--output` | — | Rendered stereo WAV |
+| `--sample-rate` | 48000 | Mixer sample rate; inputs are resampled to it |
+| `--block-size` | 512 | Maximum mixer block size in frames |
+
+`--scene` and `--preset` are mutually exclusive: passing both is a usage error, and passing neither exits 2 as well rather
 than falling back to a default scene. The Python CLI prints a `warning:` line on stderr for every scene key the reader does not consume (a misspelled `faderDB`, say) and still renders; keys starting with `$` or `x-` are exempt.
 
 `--input` takes `[ID=]WAV` and repeats. An `ID=` prefix names the strip the file
@@ -90,9 +158,9 @@ rather than the set being truncated.
 `--input` and `-o/--output` go together — either both or neither, and without
 them `mix` just loads the scene and reports its strip count.
 
-#### suggest-mix
+### suggest-mix
 
-`suggest-mix` goes the other way: hand it the individual tracks and it proposes a
+`suggest-mix` goes the other way: hand it the individual tracks and the [mixing assistant](./mixing-assistant.md) proposes a
 mixer scene, which `mix --scene` then renders.
 
 ```bash
@@ -114,11 +182,10 @@ sonare suggest-mix \
 The full suggestion goes to stdout as JSON; `--scene-out` is what you feed back
 into `mix`.
 
-#### The channel strip
+### The channel strip
 
 The single-input channel strip is a different command with a different job, and
-it is called `mix-strip`. Both front-ends carry it and write byte-identical
-output across the option space:
+it is called `mix-strip`. Both front-ends carry it and take the same options:
 
 ```bash
 sonare-cli mix-strip vocal.wav -o strip.wav \
@@ -149,7 +216,7 @@ channel strip on the native CLI, and the scene mixer on the Python CLI. `sonare 
 
 Related: [Mixing Engine](./mixing.md).
 
-### Project & MIDI Workflow
+## Project & MIDI Workflow
 
 The `sonare project` command group runs headless project and Standard MIDI File
 (SMF) / MIDI 2.0 workflows from JSON project files. `project bounce --synth`
@@ -251,9 +318,9 @@ takes the synth path — omit `--synth` there and it follows GM programs. It use
 the same `--channels` values and scene-master cap. The full option set is listed
 in the `sonare project` table earlier in this section.
 
-#### transcribe
+### transcribe
 
-`transcribe` is the reverse direction: audio in, a Standard MIDI File out. It is
+`transcribe` is the reverse direction: audio in, a Standard MIDI File out (see [Audio to MIDI](./audio-to-notes.md)). It is
 on both CLIs.
 
 ```bash
@@ -274,9 +341,11 @@ sonare transcribe chords.wav -o chords.mid --polyphonic --tempo-bpm 120
 | `--min-note-division N` | Shortest note as a note value, 1 to 128: `32` keeps notes from a thirty-second note up at the transcription tempo. Applies to both chains; refused together with `--min-note-ms` |
 | `--min-note-ms` | Shortest span kept as a note, in ms (default 30 monophonic, 60 polyphonic); refused together with `--min-note-division` |
 | `--segmentation-threshold-cents` | Monophonic split threshold in cents (default 50); the polyphonic path uses it only for reported F0 stability and never to split a ridge |
-| `--velocity-floor-db` | Level mapped to velocity 1; must be negative (default -48) |
-| `--fixed-velocity N` | Give every note velocity N (1-127) and skip the level measurement |
+| `--velocity-floor-db` | Level mapped to velocity 1; does not drop notes (a note more than 36 dB under the take's loudest notes, or under -80 dBFS, is dropped regardless). Must be negative (default -48) |
+| `--fixed-velocity N` | Give every note velocity N (1-127); the level gate still drops tails and ghosts |
 | `--group`, `--channel` | UMP group and MIDI channel the events are emitted on (default 0) |
+
+The options marked "Polyphonic only" are refused without `--polyphonic` (exit 3).
 
 The notes land on a project's tempo map, so an explicit `--tempo-bpm` is
 installed as that map rather than handed to the transcriber. `-o` is required.
@@ -286,3 +355,100 @@ commands; use the Project API for SoundFont-backed bounces.
 
 Related: [Project Editing](./project-editing.md), [Project Bounce](./project-bounce.md),
 [Native Synth](./native-synth.md), [SoundFont Player](./soundfont-player.md).
+
+## Note Editing Workflow
+
+### Per-note editing
+
+`polyphonic-notes` and `polyphonic-render` are a pair: the first prints the notes
+a polyphonic analysis found, numbered from 0, and the second re-renders the take
+with edits addressed by those numbers. Both run the analysis at its own defaults
+and neither takes a framing option, so the index you read from one is the index
+the other acts on.
+
+```bash
+sonare polyphonic-notes chord.wav --json
+sonare polyphonic-render chord.wav -o out.wav \
+  --edit 0.pitch_shift_semitones=2 --edit 3.muted=1
+```
+
+One `--edit` is one `NOTE.FIELD=VALUE` assignment, and the option repeats. The
+fields are `pitch_shift_semitones`, `gain_db`, `time_offset_samples`,
+`time_stretch_ratio`, `formant_shift_semitones`, `vibrato_depth_change`,
+`drift_change`, and `muted`; an unknown field is rejected rather than ignored.
+`polyphonic-render` requires `-o`; `polyphonic-notes` prints to stdout and takes
+no output file.
+
+### Scale correction and vocal notes
+
+`pitch-correct-timevarying --mode scale` picks its target for each analysis frame:
+the scale note nearest that frame's pitch. A frame within
+`--vibrato-threshold-cents` of its target is left as it is, and any other frame
+is pulled toward it with a time constant of `--retune-speed-ms`. A note sung near
+the midpoint between two scale notes, with vibrato, is therefore pulled toward
+both of them, and its vibrato widens instead of settling.
+
+`vocal-notes` reads a take the way a vocal edit session does and writes nothing.
+Each note has its start and end (seconds and samples), its center as a MIDI value,
+its median frequency, an `f0_stability` score, and the nearest note name with the
+offset in cents. The options are the session's analysis settings; an option left
+out keeps the library default. With `--json`, each note's entry also carries its
+per-frame `amplitude` array, so the output is large for a long take. Lower `--segmentation-threshold-cents` when two
+neighboring notes were sung less than 50 cents apart, or the boundary between
+them is found late. Editing and rendering a session stay in the bindings; see
+[Offline Monophonic Vocal Editing](./vocal-editing.md) and
+[Tune a Vocal Take](./use-cases/vocal-tuning.md).
+
+## Splitting Takes at Silence
+
+With more than one take, the intervals become the union of each take's own,
+merged where they touch, so a cut falls only where every take is quiet:
+
+```bash
+sonare split-silence take1.wav --input take2.wav --input take3.wav
+```
+```
+Non-silent intervals: 3
+  23040 - 121344
+  147968 - 246272
+  282624 - 399872
+```
+
+`--write-takes PREFIX` writes every take sliced at every interval as
+`PREFIX{take:02d}_{interval:03d}.wav`, both indices 1-based — three takes and
+three intervals write nine files:
+
+```bash
+sonare split-silence take1.wav --input take2.wav --input take3.wav \
+  --write-takes cut_
+```
+```
+Wrote 9 take files with prefix cut_
+```
+
+A take that ends earlier than the others is padded rather than shortened, so
+one interval's files come out the same length across every take and stay
+directly comparable. A take whose sample rate differs from the first is
+refused by name instead of resampled:
+
+```
+Error: take sample rate differs: t3_44.wav is 44100 Hz, the first take is 48000 Hz
+```
+
+## Synthesis
+
+The native CLI can generate simple test signals, and both CLIs can render a MIDI project through the built-in synth:
+
+| Command | Required or notable option |
+|---------|----------------------------|
+| `sonare tone -o tone.wav` | `--frequency`; optional `--sr` (22050), `--duration` (1.0), `--phase` (0.0), `--amplitude` (1.0) |
+| `sonare chirp -o sweep.wav` | `--fmax`; optional `--fmin`, `--exponential`, `--sr` (22050), `--duration` (1.0) |
+| `sonare clicks -o clicks.wav` | `--times` comma-separated seconds; optional `--sr` (22050), `--length`, `--frequency` (1000.0), `--click-duration` (0.1) |
+| `sonare midi-render --in project.json -o render.wav` | `--in`, `-o`; `--synth PRESET` (omitted, it follows the GM programs), `--sample-rate`, `--frames`, `--block-size`, `--channels` (positive output widths `1`, `2`, `6`, or `8`; default `2`), `--instrument-latency`. Both CLIs: a `project bounce` with the synth always on, so it takes neither `--audio` nor `--resolve-audio` |
+
+`project bounce` and its `midi-render` shorthand support positive output widths
+of `1`, `2`, `6`, or `8`. Omit `--channels` or pass `0` or a negative value to
+select the default two channels. The requested output width cannot exceed the
+scene master's layout, except that mono and stereo masters (and scenes without
+a master) allow up to two channels. A `"5.1"` master permits six channels and a
+`"7.1"` master permits eight.

@@ -9,6 +9,10 @@ You have four stems and no DAW open. This page takes them to a finished master i
 
 The job is **not** "run one magic command". It is a chain of four honest stages — measure, propose, render, master — with a human checkpoint in the middle, because the mix is the part a machine cannot finish for you.
 
+::: info Which CLI
+This page uses the Python CLI (`pip install libsonare`, command `sonare`). `mix` and `declip` are not in the native `sonare-cli`; see [Which CLI Are You Using?](../cli.md#which-cli-are-you-using). Steps with a Node or Python tab run in either binding without a CLI.
+:::
+
 ## What You Will Learn
 
 By the end of this page you should be able to:
@@ -92,13 +96,58 @@ sonare mastering mix.wav \
 
 `suggest-mix` measures every stem, measures what happens between them, and writes a mixer scene. It **never touches the audio**: `--scene-out` is a document, not a render. The full option set and the rules behind it are in [Mixing Assistant](../mixing-assistant.md).
 
-```bash
+::: code-group
+
+```bash [CLI]
 sonare suggest-mix \
   --input drums=stems/drums.wav --input bass=stems/bass.wav \
   --input gtr=stems/gtr.wav --input vox=stems/vox.wav \
   --sample-rate 48000 --tempo-bpm auto \
   --scene-out scene.json --json
 ```
+
+```typescript [Node]
+import { writeFileSync } from 'node:fs';
+import { suggestMixScene } from '@libraz/libsonare-native';
+
+// drums, bass, gtr, vox: Float32Array at 48 kHz
+const result = suggestMixScene({
+  sampleRate: 48000,
+  tracks: [
+    { id: 'drums', name: 'Drums', left: drums },
+    { id: 'bass', name: 'Bass', left: bass },
+    { id: 'gtr', name: 'Gtr', left: gtr },
+    { id: 'vox', name: 'Vox', left: vox },
+  ],
+  options: { tempoBpm: 120 },
+});
+for (const line of result.explanation) console.log(line);
+writeFileSync('scene.json', JSON.stringify(result.scene, null, 2));
+```
+
+```python [Python]
+import json
+from pathlib import Path
+
+import libsonare as sonare
+
+result = sonare.suggest_mix_scene(
+    [
+        sonare.MixTrackInput("drums", drums, name="Drums"),
+        sonare.MixTrackInput("bass", bass, name="Bass"),
+        sonare.MixTrackInput("gtr", gtr, name="Gtr"),
+        sonare.MixTrackInput("vox", vox, name="Vox"),
+    ],
+    sample_rate=48000,
+    tempo_bpm=120.0,
+)
+print("\n".join(result["explanation"]))
+Path("scene.json").write_text(json.dumps(result["scene"], indent=2))
+```
+
+:::
+
+The library calls do not detect a tempo: pass `tempoBpm` (`tempo_bpm`) yourself, or leave it out for the transport's fallback tempo. `--tempo-bpm auto` is a CLI convenience.
 
 Three parts of the output matter, and they answer different questions.
 
@@ -121,14 +170,14 @@ Read this before you read the scene. A decision you disagree with is almost alwa
 **`mix` — what happens between the stems.** `bandDominance` ranks masker/maskee pairs per frequency band, `crowdedBands` scores how contested each band is, and `monoRisks` flags material that will collapse in mono. Nothing in the scene acts on these directly; they are there so you can decide whether the problem is a fader or an arrangement.
 
 ::: tip `--tempo-bpm auto`
-Delay times in the proposed scene are voiced against the tempo — `auto` detects it from the first `--input`. Omit the flag entirely and you get the transport's fallback tempo, which is almost never your song's.
+Delay times in the proposed scene are voiced against the tempo. `auto` detects it from the first `--input`. Omit the flag entirely and you get the transport's fallback tempo, which is almost never your song's.
 :::
 
 ## Step 2 — Edit the scene
 
 `scene.json` is a plain document, specified field by field in [Mixing Scene JSON](../mixing-scene-json.md). Open it, change what you disagree with, save it. This is the point of the two-step design: there is deliberately no command that goes from stems to a mixdown without giving you this file.
 
-The scene the run above produced has six strips — the four stems plus a `reverbReturn` and a `delayReturn` fed by aux buses — and each insert carries its parameters as a JSON string:
+The scene the run above produced has six strips — the four stems plus a `reverbReturn` and a `delayReturn` fed by aux buses — and each insert carries its parameters as an object keyed by parameter name:
 
 ```json
 {
@@ -137,9 +186,9 @@ The scene the run above produced has six strips — the four stems plus a `rever
   "inputTrimDb": -7.215085029602051,
   "inserts": [
     { "processor": "dynamics.compressor", "slot": "pre",
-      "params": "{\"attackMs\":5.26,\"ratio\":3.34,\"thresholdDb\":-22.2,\"autoMakeup\":true}" },
+      "params": { "attackMs": 5.26, "ratio": 3.34, "thresholdDb": -22.2, "autoMakeup": true } },
     { "processor": "dynamics.vocalRider", "slot": "pre",
-      "params": "{\"targetDb\":-18,\"maxBoostDb\":3,\"maxCutDb\":3}" }
+      "params": { "targetDb": -18, "maxBoostDb": 3, "maxCutDb": 3 } }
   ],
   "sends": [
     { "id": "vox-to-reverbBus", "destinationBusId": "reverbBus", "sendDb": -10.5, "timing": "post" },
@@ -155,6 +204,8 @@ A `faderDb` you type into a strip is the same fader the mixer exposes as a live 
 <SonareDemo id="engine-lane-mixer" />
 
 ## Step 3 — Render
+
+`mix` is a Python CLI command. In code, `Mixer.fromSceneJson` loads the same scene and `processStereo` renders it block by block; see [Mixing Engine](../mixing.md#scene-based-mixing-mixer).
 
 ```bash
 sonare mix --scene scene.json \
@@ -180,14 +231,32 @@ Three things about that output are worth knowing before they surprise you.
 
 Mastering will make quiet damage loud. Look for it first:
 
-```bash
+::: code-group
+
+```bash [CLI]
 sonare repair mix.wav --detect --json
 ```
 
-`--detect` measures and reports without writing anything, so it is free to run on every render. It returns clip runs and their fraction of the file, click and crackle counts, the noise floor, and whether a mains-frequency harmonic series is sitting in the signal. Anything it finds is cheaper to fix in the stem than in the master — see [Clean Up a Batch of Recordings](./recording-cleanup.md) for the repair side of this.
+```typescript [Node]
+import { masteringRepairAnalyze } from '@libraz/libsonare-native';
+
+const { defects, recommended } = masteringRepairAnalyze({ channels: [left, right], sampleRate: 48000 });
+console.log(defects.clipSampleFraction, defects.cracklePerSecond, recommended.map((s) => s.stage));
+```
+
+```python [Python]
+import libsonare as sonare
+
+analysis = sonare.mastering_repair_analyze([left, right], 48000)
+print(analysis["defects"]["clipSampleFraction"], [s["stage"] for s in analysis["recommended"]])
+```
+
+:::
+
+`--detect` measures and reports without writing anything, so it is free to run on every render. It returns clip runs and their fraction of the file, click and crackle counts, the noise floor, and whether a mains-frequency harmonic series is sitting in the signal. The library calls measure the same things and also return the repair stages they recommend (`recommended`), with camelCase field names such as `clipSampleFraction`. Anything found is cheaper to fix in the stem than in the master — see [Clean Up a Batch of Recordings](./recording-cleanup.md) for the repair side of this.
 
 ::: warning `--explain` and `--detect` do not combine
-`--detect` runs no repair stage, so there is no choice to explain; passing both is a usage error. Drop `--detect` to see why the assistant would pick each stage.
+`--detect` runs no repair stage, so there is no choice to explain; passing both is rejected as an invalid parameter (exit code 3). Drop `--detect` to see why the assistant would pick each stage.
 :::
 
 ## Step 5 — Master to a delivery target
@@ -248,6 +317,10 @@ The gap is not an error in either one. [ITU-R BS.1770](../glossary/lufs.md) sums
 
 For a stereo deliverable, take the loudness and true peak from the mastering report. Reach for `lufs` when the deliverable is mono, or use the stereo entry points in the [Python API](../python-api.md).
 :::
+
+How much a fold loses depends on how alike the two channels are. In the demo, two copies of one sine wave at a growing phase offset average to a quieter signal and cancel at 180°.
+
+<SonareDemo id="mono-fold" />
 
 ## Running it as a script
 

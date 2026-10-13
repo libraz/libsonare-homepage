@@ -93,11 +93,11 @@ sonare mastering-profile reference.wav --json
                 "sub_rms_db": 11.07, "low_rms_db": 21.40, "air_rms_db": -14.28 },
   "dynamics": { "short_term_lufs_std": 3.21, "attack_density": 4.15,
                 "sustain_ratio": 0.58 },
-  "defects": { "measured": false }
+  "defects": { "measured": false, /* ... */ }
 }
 ```
 
-CLI はバインディングの camelCase のプロファイルキーを snake_case で出力します。これ 1 回で、狙っているファイルのテンポ、ラウドネス、スペクトル形状、ダイナミクスが手に入ります。[マスタリングアシスタント](../mastering-assistant.md)が自分のミックスをプロファイリングするのと同じ計測フィールドです。比較に入る前にここを読んでください。このリファレンスは統合ラウドネス -24.56 LUFS で、配信基準からすると控えめです。あとで「本当にこのラウドネスまで追うか、音色だけ追うか」を決めるときに効いてきます。
+CLI はバインディングの camelCase のプロファイルキーを snake_case で出力します。`defects` は省略して示しています。`--params detectDefects=1` で計測を求めない限り、`measured` は `false` で、損傷のフィールドは既定値のままです。これ 1 回で、狙っているファイルのテンポ、ラウドネス、スペクトル形状、ダイナミクスが手に入ります。[マスタリングアシスタント](../mastering-assistant.md)が自分のミックスをプロファイリングするのと同じ計測フィールドです。比較に入る前にここを読んでください。このリファレンスは統合ラウドネス -24.56 LUFS で、配信基準からすると控えめです。あとで「本当にこのラウドネスまで追うか、音色だけ追うか」を決めるときに効いてきます。
 
 この `loudness` のフィールドのうち 3 つは、下のメーターが再生中のクリップに対して報告するものと同じです。統合ラウドネス（LUFS）は次のステップでミックスと比較する 1 つの数値、True Peak は上限、LRA はプログラム全体でラウドネスがどれだけ動くかです。LRA の広いリファレンスは、1 つの統合ラウドネス値の裏に大きな動きを隠しています。その値だけを合わせても、ミックスが同じように動くようにはなりません。
 
@@ -105,16 +105,34 @@ CLI はバインディングの camelCase のプロファイルキーを snake_c
 
 ## ステップ 2 — ラウドネス差を計測する
 
-```bash
+::: code-group
+
+```bash [CLI]
 sonare mastering-pair-analyze mix.wav --reference reference.wav \
   --analysis match.referenceLoudness --json
 ```
+
+```typescript [Node]
+import { masteringPairAnalyze } from '@libraz/libsonare-native';
+
+// mix, reference: 同じサンプルレートのモノラル Float32Array
+const result = JSON.parse(masteringPairAnalyze('match.referenceLoudness', mix, reference, 48000));
+```
+
+```python [Python]
+import json
+import libsonare as sonare
+
+result = json.loads(sonare.mastering_pair_analyze("match.referenceLoudness", mix, reference, 48000))
+```
+
+:::
 
 ```json
 { "gain_to_match_db": -1.70, "reference_lufs": -24.56, "source_lufs": -22.86 }
 ```
 
-`gain_to_match_db` は、ソースのラウドネスをリファレンスに合わせるためのゲインです。`source_lufs + gain_to_match_db = reference_lufs` という関係にあります。ここではミックスがリファレンスより 1.7 dB 大きいので、マイナスの値でそこまで下げることになります。
+ライブラリの呼び出しは同じフィールドを camelCase（`gainToMatchDb`、`referenceLufs`、`deviationDb`）で返し、ファイルごとに 1 本のモノラル配列を受け取ります。`gain_to_match_db` は、ソースのラウドネスをリファレンスに合わせるためのゲインです。`source_lufs + gain_to_match_db = reference_lufs` という関係にあります。ここではミックスがリファレンスより 1.7 dB 大きいので、マイナスの値でそこまで下げることになります。
 
 ::: tip ラウドネスを合わせることと、目標を決めることは別
 この数値が言っているのは「ミックスとリファレンスは 1.7 dB 違う」であって、「-24.56 LUFS でマスタリングしろ」ではありません。時代やプラットフォームの違うリファレンスは、いまの配信目標から外れた位置にあることがあります。`reference_lufs` をそのまま目標値にする前に[配信ターゲット](../glossary/mastering/delivery-targets.md)を確認してください。
@@ -122,10 +140,28 @@ sonare mastering-pair-analyze mix.wav --reference reference.wav \
 
 ## ステップ 3 — 音色差を帯域ごとに計測する
 
-```bash
+::: code-group
+
+```bash [CLI]
 sonare mastering-pair-analyze mix.wav --reference reference.wav \
   --analysis match.tonalBalance --json
 ```
+
+```typescript [Node]
+import { masteringPairAnalyze } from '@libraz/libsonare-native';
+
+// mix, reference: 同じサンプルレートのモノラル Float32Array
+const result = JSON.parse(masteringPairAnalyze('match.tonalBalance', mix, reference, 48000));
+```
+
+```python [Python]
+import json
+import libsonare as sonare
+
+result = json.loads(sonare.mastering_pair_analyze("match.tonalBalance", mix, reference, 48000))
+```
+
+:::
 
 ```json
 {
@@ -148,10 +184,19 @@ sonare mastering-pair-analyze mix.wav --reference reference.wav \
 
 ティルト量は両端の帯域から読み取れます。低域は約 -2 dB、高域は約 +2 dB 必要なので、`tiltDb ≈ (低域の偏差) - (高域の偏差) = 2.00 - (-2.00) = 4.0` です。これは出発点であって最終解ではありません。ステップ 6 で計算を信じるのではなく確認するのが、この手順全体の要点です。
 
-ここで使える処理は他に 2 つあり、それぞれ違う偏差の形に向いています。
+下のデモは完成したミックスに対して `tilt` を動かします。スペクトルがピボットを軸に傾き、低域側と高域側が逆方向に動きます。
 
-- **`eq.shelving`** は独立したローシェルフとハイシェルフを持ち、それぞれ別のコーナー周波数とゲインを設定できます。低域側と高域側が 1 つの妥当なピボットを共有しないとき、たとえば低域は 250 Hz 以下を削りたいが持ち上げは 1 kHz ではなく 8 kHz より上から始めたいときに向きます。この素材に対して（`lowFrequencyHz=250, lowGainDb=-2, highFrequencyHz=2000, highGainDb=2`）を実行すると、差は 0.27 / 0.12 / -0.13 / -0.001 dB まで詰まりました。悪くはありませんが、2 つのシェルフでは連続した 1 本の傾斜を正確には再現できないぶん、ティルトほどきれいには収まりません。
-- **`eq.equalizer`** は最大 24 バンド（`band0.*` から `band23.*`）を持つフルパラメトリック EQ で、各バンドをピーク・シェルフ・ティルトのいずれかに個別に設定できます。偏差がティルト型でもシェルフ型でもない、たとえば 4 帯域のうちの 1 つの中に狭いディップやピークが埋まっているような形のとき、1 つのピボットでも 2 つのシェルフでも切り出せないので、こちらを使います。
+<SonareDemo id="tilt-eq" />
+
+補正に使える処理は 3 つあり、偏差の形でどれを使うかが決まります。
+
+| 偏差の形 | 処理 | 主なパラメータ | この素材での結果 |
+|---|---|---|---|
+| ゼロを一度だけ横切る、なめらかな 1 つの振れ | `eq.tilt` | `tiltDb`、`pivotHz`（既定 1000 Hz） | 4 帯域すべて 0.00 dB |
+| 低域側と高域側でピボットが違う補正。たとえば 250 Hz 以下を削り、持ち上げは 8 kHz より上だけにしたい場合 | `eq.shelving` | `lowFrequencyHz`、`lowGainDb`、`highFrequencyHz`、`highGainDb` | `lowFrequencyHz=250, lowGainDb=-2, highFrequencyHz=2000, highGainDb=2` で 0.27 / 0.12 / -0.13 / -0.001 dB |
+| 1 つの帯域の中にある狭いディップやピーク。1 つのピボットでも 2 つのシェルフでも切り出せない形 | `eq.equalizer`（最大 24 バンド。各バンドはピーク、シェルフ、ティルトのいずれか） | `band0.*` から `band23.*` | 使用せず |
+
+2 つのシェルフでは連続した 1 本の傾斜を正確には再現できないため、`eq.shelving` はティルトより少し収まりが悪くなります。
 
 この素材の偏差はきれいなティルト型なので、`eq.tilt` が適切な選択であり、このページもそれで通します。
 
@@ -207,6 +252,6 @@ sonare mastering-pair-analyze tilted.wav --reference reference.wav \
 
 ## 次に読むもの
 
-- この補正が組み込まれる先の全体像 — [CLI だけでミックスからマスタリングまで](./cli-mix-and-master.md)。
-- 最終的なラウドネスと True Peak を合否判定に変える — [納品前チェックを CI で回す](./delivery-check.md)。
-- ここで名前が出た各プロセッサの判断ルール — [マスタリングアシスタント](../mastering-assistant.md)と[マスタリングプロセッサ](../mastering-processors.md)。
+- この補正が組み込まれる先の全体像は [CLI だけでミックスからマスタリングまで](./cli-mix-and-master.md) にあります。
+- 最終的なラウドネスと True Peak を合否判定に変えるには [納品前チェックを CI で回す](./delivery-check.md) へ進んでください。
+- ここで名前が出た各プロセッサの判断ルールは [マスタリングアシスタント](../mastering-assistant.md)と[マスタリングプロセッサ](../mastering-processors.md)にあります。

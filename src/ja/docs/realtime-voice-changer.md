@@ -42,7 +42,7 @@
 | `maxBlockSize` | `processMono(...)` に渡す最大ブロック長です。AudioWorklet の標準レンダークォンタムなら `128` が出発点です。 |
 | `channels` | このページの例はモノラルなので `1` です。インターリーブ入力なら `processInterleaved(...)` を使います。 |
 | 出力バッファ | 単純な実装は `processMono(...)`、AudioWorklet のホットパスでは事前確保した出力へ `processMonoInto(...)` または WASM ヒープバッファ経路を使います。 |
-| 後始末 | Vue / React コンポーネントの unmount、Worklet 停止、録音停止時に `delete()` を 1 回だけ呼びます。 |
+| 後始末 | Vue / React コンポーネントの unmount、worklet 停止、録音停止時に `delete()` を呼びます。ハンドルは一度解放され、繰り返しても何も起きません。 |
 
 「インターリーブ」とは、複数チャンネルを 1 つの配列に交互に並べたもの（L, R, L, R…）で、「モノラル」は 1 チャンネルです。前者には `processInterleaved(...)`、後者には `processMono(...)` を使います。
 
@@ -107,13 +107,13 @@
 :::
 
 ::: info ボイスチェーンの用語をまとめて把握
-- **ハイパス** — 信号の最初で低域のランブルや DC を取り除くクリーンアップフィルターです。
-- **ゲート** — 信号がしきい値を下回ると無音にし、フレーズの合間の小さなマイク／部屋ノイズを取り除きます。
-- **リチューン** — 信号全体を一定の音程だけ高く／低く移調します。音を動かさずに声のキャラクターを変えるフォルマントとは別物です。あくまで移調であってオートチューンではなく、歌った音を聴き取る仕組みは入っていません。
-- **フォルマント** — 声を大きく／小さく、男性的／女性的に聞かせる共鳴です。これをずらすと、音程を変えずに声のキャラクターが変わります。
-- **コンプレッサー** — 大きい部分と小さい部分を自動でならし、レベルを安定させます。
-- **ディエッサー** — 耳に刺さる「s」「sh」の音（歯擦音）を抑えます。
-- **リミッター** — チェーン末尾でピークがクリップしないよう止める安全装置です。ここで使うのは **True Peak** リミッターで、再生時に波形を復元したときサンプルとサンプルの間に現れるピーク（サンプル間ピーク、ISP）まで見て抑えます。
+- **ハイパス**: 信号の最初で低域のランブルや DC を取り除くクリーンアップフィルターです。
+- **ゲート**: 信号がしきい値を下回ると無音にし、フレーズの合間の小さなマイク／部屋ノイズを取り除きます。
+- **リチューン**: 信号全体を一定の音程だけ高く／低くピッチシフトします。音程を変えずに声のキャラクターを変えるフォルマントとは別物です。あくまで一定量のピッチシフトであり、自動ピッチ補正ではないので、歌った音を聴き取る仕組みは入っていません。
+- **フォルマント**: 声を大きく／小さく、男性的／女性的に聞かせる共鳴です。これをずらすと、音程を変えずに声のキャラクターが変わります。
+- **コンプレッサー**: 大きい部分と小さい部分を自動でならし、レベルを安定させます。
+- **ディエッサー**: 耳に刺さる「s」「sh」の音（歯擦音）を抑えます。
+- **リミッター**: チェーン末尾でピークがクリップしないよう止める安全装置です。ここで使うのは **True Peak** リミッターで、再生時に波形を復元したときサンプルとサンプルの間に現れるピーク（サンプル間ピーク、ISP）まで見て抑えます。
 :::
 
 標準プリセット ID には `neutral-monitor`、`bright-idol`、`soft-whisper`、`deep-narrator`、`robot-mascot`、`dark-villain` があります。これらは出発点であり、ジャンルや話者属性のラベルとして固定的に扱うものではありません。
@@ -195,14 +195,14 @@ sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
 :::
 
 ::: warning 後始末はバインディングごとに違う
-生成と処理の流れは共通ですが、ネイティブハンドルの解放方法は言語ごとに異なります。解放は必ず 1 回だけ行ってください。
+生成と処理の流れは共通ですが、ネイティブハンドルの解放方法は言語ごとに異なります。
 
-- **ブラウザ / WASM** — `delete()` を呼びます（`finally` 内、コンポーネントの unmount 時、Worklet 停止時など）。
-- **Node ネイティブ** — `destroy()` を呼びます。`using`（Node 22 以降）を使えば自動で解放できます。
-- **Python** — `with` ブロックを抜けるとハンドルを解放します。`with` を使わない場合は `close()` を呼びます。
+- **ブラウザ / WASM**: `delete()`（別名 `destroy()`）を呼ぶか（`finally` 内、コンポーネントの unmount 時、worklet 停止時など）、`using` で宣言します。繰り返し呼んでも問題ありません。
+- **Node ネイティブ**: `destroy()` を呼びます。`using`（Node 22 以降）を使えば自動で解放できます。
+- **Python**: `with` ブロックを抜けるとハンドルを解放します。`with` を使わない場合は `close()` を呼びます。
 :::
 
-AudioWorklet 形式のループでは、[ブラウザ / WASM](./wasm-streaming.md#リアルタイムボイスチェンジャー) で説明している WASM ヒープ上のリアルタイムバッファを使います。ブラウザ例の素の `processMono(...)` と違い、レンダークォンタムごとに新しい出力配列を確保せずに済みます。
+AudioWorklet 形式のループでは、[ブラウザ / WASM](./wasm-streaming.md#リアルタイムボイスチェンジャー) で説明している WASM ヒープ上のリアルタイムバッファを使います。ブラウザ例の素の `processMono(...)` と違い、レンダークォンタムごとに新しい出力配列を確保せずに済みます。パッケージには出来合いのプロセッサ（`@libraz/libsonare/worklet` の `registerSonareRealtimeVoiceChangerWorkletProcessor`）も同梱されています。[AudioWorklet 内で使う](./wasm-streaming.md#audioworklet-内で使う)を参照してください。
 
 ## CLI のモード
 
@@ -239,21 +239,15 @@ if (!validation.ok) {
 import schema from '@libraz/libsonare/schemas/realtime-voice-changer-preset.schema.json';
 ```
 
-正規のプリセット ID や解決済みのフラットなネイティブ設定だけが必要なら、JSON を往復せず `voiceCharacterPresetId(...)` と `realtimeVoiceChangerPresetConfig(...)` を使います。WASM の `voiceCharacterPresetId(...)` は正規 ID または整数の序数を受け取り、未知の数値序数は `null` を返し、未知の文字列 ID は throw します。`realtimeVoiceChangerPresetConfig(...)` は無効な序数で throw します。Python では同じネイティブ設定取得経路を `realtime_voice_changer_preset_config(...)` として公開しています。
+正規のプリセット ID や解決済みのフラットなネイティブ設定だけが必要なら、JSON を往復せず `voiceCharacterPresetId(...)` と `realtimeVoiceChangerPresetConfig(...)` を使います。WASM の `voiceCharacterPresetId(...)` は正規 ID または整数の序数を受け取り、未知の数値序数は `null` を返し、未知の文字列 ID は例外を投げます。`realtimeVoiceChangerPresetConfig(...)` は無効な序数で例外を投げます。Python では同じネイティブ設定取得経路を `realtime_voice_changer_preset_config(...)` として公開しています。
 
 ::: warning プリセット文書は完全である必要があります
-有効な文書には必須のスキーマメタデータと、完全な `dsp` または `macros` のどちらか
-1 つが必要です。部分的な文書は、無関係な既定値で黙って埋められるのではなく拒否され、
-`deesser.ratio` も必須です。プリセットを手で書く場合は、変更したいフィールドだけを書く
-のではなく `realtimeVoiceChangerPresetJson('neutral-monitor')` を出発点にして編集して
-ください。`configJson()` で設定を読み出し、編集して `setConfig(...)` で書き戻す往復は
-安全です。トップレベルや各セクション内の未知のキーも拒否されます。
+有効な文書には必須のスキーマメタデータと、完全な `dsp` または `macros` のどちらか 1 つが必要です。部分的な文書は、無関係な既定値で黙って埋められるのではなく拒否され、`deesser.ratio` も必須です。プリセットを手で書く場合は、変更したいフィールドだけを書くのではなく `realtimeVoiceChangerPresetJson('neutral-monitor')` を出発点にして編集してください。`configJson()` で設定を読み出し、編集して `setConfig(...)` で書き戻す往復は安全です。トップレベルや各セクション内の未知のキーも拒否されます。
 :::
 
-### `macros` — 省略記法のセクション
+### `macros`: 省略記法のセクション
 
-「この声をもっと明るく」というだけのために `dsp` セクション全体を手で書くのは大がかりです。
-プリセットは代わりに `macros` オブジェクトを持てます。7 つの値が通常の DSP 設定にマッピングされます。
+「この声をもっと明るく」というだけのために `dsp` セクション全体を手で書くのは大がかりです。プリセットは代わりに `macros` オブジェクトを持てます。7 つの値が通常の DSP 設定にマッピングされます。
 
 | マクロ | 範囲 | 動かす対象 |
 |--------|------|------------|
@@ -265,14 +259,9 @@ import schema from '@libraz/libsonare/schemas/realtime-voice-changer-preset.sche
 | `noiseControl` | 0 〜 1 | ゲートとノイズ処理 |
 | `sibilance` | 0 〜 1 | ディエッサーの量 |
 
-マクロは**入力専用**です。共有パーサーがコントロールスレッド上で通常の DSP 設定へ展開するため、
-正規化された出力には現れません。設定を読み戻すと、書いたマクロではなく展開後の `dsp` セクションが
-返ります。1 つの文書が持てるのはどちらか一方だけで、`dsp` と `macros` の両方を書いた文書は
-不正なパラメータとして拒否されます。したがって両者の優先順位という概念はありません。
+マクロは**入力専用**です。共有パーサーがコントロールスレッド上で通常の DSP 設定へ展開するため、正規化された出力には現れません。設定を読み戻すと、書いたマクロではなく展開後の `dsp` セクションが返ります。1 つの文書が持てるのはどちらか一方だけで、`dsp` と `macros` の両方を書いた文書は不正なパラメータとして拒否されます。したがって両者の優先順位という概念はありません。
 
-0〜1 のマクロは、そのままの値が書き込まれるのではなく対象の有効範囲へマッピングされます。
-`macros.space` を `1.0` にするとリバーブミックスの上限 `0.45` に到達します。範囲外の
-`1.0` がパラメータに書き込まれるわけではありません。
+0〜1 のマクロは、そのままの値が書き込まれるのではなく対象の有効範囲へマッピングされます。`macros.space` を `1.0` にするとリバーブミックスの上限 `0.45` に到達します。範囲外の `1.0` がパラメータに書き込まれるわけではありません。
 
 ## フォルマントモード
 
@@ -285,9 +274,13 @@ import schema from '@libraz/libsonare/schemas/realtime-voice-changer-preset.sche
 | レイテンシ | `latencySamples()` の報告値 | 解析 1 フレーム分増える（48 kHz で 1024 サンプル、実測） |
 | 届く範囲 | `formantFactor` のパラメータ範囲内 | `formantFactor / 2^(retuneSemitones / 12)` が [0.55, 1.65] 内 |
 
-モードはチェンジャーの作成・prepare 時に固定されます。別のモードを持つ設定は拒否され（`SonareError`、"formant mode is fixed at prepare()"）、届かない範囲の絶対指定も拒否されます。後者のエラーには、そのピッチシフトで届く `formantFactor` の範囲と、その範囲を絞り込んでいる `formantFactor` 自体の境界が示されます（+12 半音では、届く範囲は `[1.1, 1.65]`、ワープ自体は `[1.1, 3.3]` に届きますが、`formantFactor` の `[0.55, 1.65]` で制限されます）。オートメーションは拒否せず範囲に丸めます。
+モードはチェンジャーの作成・prepare 時に固定されます。JSON ではキーを省略でき、省略時は `relative` です（フラット POD では必須）。別のモードを持つ設定は拒否され（`SonareError`、"formant mode is fixed at prepare()"）、届かない範囲の絶対指定も拒否されます。後者のエラーには、そのピッチシフトで届く `formantFactor` の範囲と、その範囲を絞り込んでいる `formantFactor` 自体の境界が示されます（+12 半音では、届く範囲は `[1.1, 1.65]`、ワープ自体は `[1.1, 3.3]` に届きますが、`formantFactor` の `[0.55, 1.65]` で制限されます）。オートメーションは拒否せず範囲に丸めます。
 
 ```typescript
+import { init, RealtimeVoiceChanger, realtimeVoiceChangerPresetConfig } from '@libraz/libsonare';
+
+await init();
+
 const cfg = realtimeVoiceChangerPresetConfig('neutral-monitor');
 const changer = new RealtimeVoiceChanger({
   ...cfg,
@@ -295,10 +288,15 @@ const changer = new RealtimeVoiceChanger({
   retuneSemitones: 5,
   formantFactor: 1, // +5 半音、フォルマントは動かさない
 });
-changer.prepare(48000, 128, 1);
+try {
+  changer.prepare(48000, 128, 1);
+  console.log(changer.latencySamples()); // relative モードより解析 1 フレーム分大きい
+} finally {
+  changer.delete();
+}
 ```
 
-`realtimeVoiceChangerPresetConfig(...)` が返し `setPodConfig(...)` が受け取るフラットな POD 設定は、`formantMode` を含むすべてのフィールドが必須で、省略すると `TypeError` になります。C の構造体は先頭に `struct_version` と `formant_mode` を持ち、`SONARE_VOICE_CHANGER_ABI_VERSION` は 3 なので、C の呼び出し側は現在のヘッダーで再ビルドしてください。
+`realtimeVoiceChangerPresetConfig(...)` が返し、コンストラクタ・`setConfig(...)`・`setPodConfig(...)` が受け取るフラットな POD 設定は、`formantMode` を含むすべてのフィールドが必須で、省略すると `TypeError` になります。C では `sonare_realtime_voice_changer_config_default()` から始めてください。`struct_version` は 0 と 1 のどちらでも現在の 152 バイトのレイアウトになります。`SONARE_VOICE_CHANGER_ABI_VERSION` は 3 なので、C の呼び出し側は現在のヘッダーで再ビルドしてください。
 
 ## ミキサーインサートとして
 
@@ -313,18 +311,10 @@ changer.prepare(48000, 128, 1);
 ::: info ここでいう「レイテンシ」とは
 **レイテンシ**は、音が入ってから加工後の音が出てくるまでの遅れで、チェーンが行う解析によって生じます。`latencySamples()` はこれをサンプル数で報告するので、サンプルレートで割れば秒になります。
 
-prepare 済みのチェーンでは値は**固定**です。リチューン経路とチェーン全体のドライ経路が
-オーバーラップアド分のレイテンシに揃えられているため、ウェットやリチューンのミックスを
-動かしても報告値は変わりません。したがってコントロールを動かすたびに読み直す必要はなく、
-`prepare(...)` の後に一度読んで補正すれば済みます。支配的な項はリチューン段がピッチシフトの
-ために解析する窓の大きさで、グレインが大きいほど 1 ステップで解析する音が増え遅延も増えます
-（[StreamingRetune](./js-api-streaming.md#streamingretune) の `grainSize` フィールドを参照）。
-True Peak（サンプル間ピーク、ISP）リミッターが有効な場合は、その遅延が加わります。報告値に加えて、ウェット経路にはシフト量に応じて最大 2 グレイン分の遅延が乗ります。
+prepare 済みのチェーンでは値は**固定**です。リチューン経路とチェーン全体のドライ経路がオーバーラップアド分のレイテンシに揃えられているため、ウェットやリチューンのミックスを動かしても報告値は変わりません。したがってコントロールを動かすたびに読み直す必要はなく、`prepare(...)` の後に一度読んで補正すれば済みます。支配的な項はリチューン段がピッチシフトのために解析する窓の大きさで、グレインが大きいほど 1 ステップで解析する音が増え遅延も増えます（[StreamingRetune](./js-api-streaming.md#streamingretune) の `grainSize` フィールドを参照）。True Peak（サンプル間ピーク、ISP）リミッターが有効な場合は、その遅延が加わります。報告値に加えて、ウェット経路にはシフト量に応じて最大 2 グレイン分の遅延が乗ります。
 :::
 
-ライブのコントロールはすべてサンプル単位でスムージングされるため、`setConfig(...)` で
-新しい設定スナップショットを適用してもブロック境界で段差になりません。フォルマント量に
-比例して変化するのは周波数の変位だけなので、量が 0 でもボディ・ブライトネス・ナザルは効きます。
+ライブのコントロールはすべてサンプル単位でスムージングされるため、`setConfig(...)` で新しい設定スナップショットを適用してもブロック境界で段差になりません。フォルマント量に比例して変化するのは周波数の変位だけなので、量が 0 でもボディ・ブライトネス・ナザルは効きます。
 
 ## 関連ページ
 

@@ -23,13 +23,14 @@ interface AnalysisResult {
   downbeatPhase: number;            // 最初の小節が始まるビート番号
   beatObservations: BeatObservations;  // beats[] と並行する拍ごとの根拠
   beatLocalBpm: number[];           // 拍ごとの平滑化された局所テンポ。オプトイン
-  chords: Chord[];
+  chords: AnalysisChord[];
   sections: Section[];
   timbre: Timbre;
   dynamics: Dynamics;
   rhythm: RhythmFeatures;
   melody: MelodyContour;
   form: string;  // 例: "IABABCO"
+  tuning: number; // クロマグラムに使用した半音単位の偏差（指定値または測定値）
 }
 
 interface BpmHypothesis {
@@ -48,30 +49,13 @@ interface BeatObservations {
 }
 ```
 
-`downbeatIndices` は `beats` と要素が 1 対 1 に対応するのではなく、`beats` を**添字で参照します**。`beats` より
-短く、`beats[downbeatIndices[k]]` が k 番目の小節頭です。ある拍が小節頭かどうかは、拍ごとの
-フラグを読むのではなく、このリストに含まれるかどうかで判定してください。`downbeatPhase` は
-拍子推定器が出した位相、つまり最初の小節が始まるビート番号で、値域は
-`[0, timeSignature.numerator)` です。したがって `downbeatIndices` は通常この値から始まります。
-コードや低域の根拠に基づいて小節頭が精緻化されたあとに再計算されるわけではないため、両者が
-食い違うことがありますが、不具合ではありません。リストが結果、位相は出発点の推測です。
+`downbeatIndices` は `beats` と要素が 1 対 1 に対応するのではなく、`beats` を**添字で参照します**。`beats` より短く、`beats[downbeatIndices[k]]` が k 番目の小節頭です。ある拍が小節頭かどうかは、拍ごとのフラグを読むのではなく、このリストに含まれるかどうかで判定してください。`downbeatPhase` は拍子推定器が出した位相、つまり最初の小節が始まるビート番号で、値域は `[0, timeSignature.numerator)` です。したがって `downbeatIndices` は通常この値から始まります。コードや低域の根拠に基づいて小節頭が精緻化されたあとに再計算されるわけではないため、両者が食い違うことがありますが、不具合ではありません。リストが結果、位相は出発点の推測です。
 
-アクセントの根拠は `beatObservations` にあり、3 本の系列はいずれも `beats` と要素が 1 対 1 に
-対応します。系列が**空**であることは、解析がそれを生成できなかったという意味であり、全拍のスコアが
-0 だったという意味ではありません。`lowFrequencyEnergy` はオーディオなしで解析を走らせた場合に
-空になり、`chordChange` はコード解析が済むまで空です。添字でアクセスする前に長さを確認して
-ください。
+アクセントの根拠は `beatObservations` にあり、3 本の系列はいずれも `beats` と要素が 1 対 1 に対応します。系列が**空**であることは、解析がそれを生成できなかったという意味であり、全拍のスコアが 0 だったという意味ではありません。`lowFrequencyEnergy` はオーディオなしで解析を走らせた場合に空になり、`chordChange` はコード解析が済むまで空です。添字でアクセスする前に長さを確認してください。
 
-`beatLocalBpm` は拍ごとの平滑化された局所テンポで、`beats` と要素が 1 対 1 に対応し、単位は BPM です。
-**`computeTempoCurve` で明示的に要求しない限り空**であり、検出された拍が 2 未満の場合は指定の
-有無にかかわらず空になります。最後の要素は、最終拍へ至る区間のテンポを繰り返した値です。
-これは `bpm` をリサンプルしたものではなく本物の局所テンポです。ただし、固定されたビート
-グリッドからデコードされたカーブはそのグリッドを記述するので、実際に動くテンポを測りたい
-場合は `adaptiveTempo` も併せて指定してください。値は固定されたテンポ格子に量子化されず、連続値になります。各値は隣接する拍間隔を対数テンポ空間で重み付き平均した局所値なので、テンポが変化すると数拍遅れて追従することがあります。
+`beatLocalBpm` は拍ごとの平滑化された局所テンポで、`beats` と要素が 1 対 1 に対応し、単位は BPM です。**`computeTempoCurve` で明示的に要求しない限り空**であり、検出された拍が 2 未満の場合は指定の有無にかかわらず空になります。最後の要素は、最終拍へ至る区間のテンポを繰り返した値です。これは `bpm` をリサンプルしたものではなく本物の局所テンポです。ただし、固定されたビートグリッドからデコードされたカーブはそのグリッドを記述するので、実際に動くテンポを測りたい場合は `adaptiveTempo` も併せて指定してください。値は固定されたテンポ格子に量子化されず、連続値になります。各値は隣接する拍間隔を対数テンポ空間で重み付き平均した局所値なので、テンポが変化すると数拍遅れて追従することがあります。
 
-`bpm` と `timeSignature` は最終的に選ばれた値で、2 つの `*Candidates` 配列はその背後にある
-順位付きの候補群です。テンポは本質的に曖昧で、ハーフタイム感とその倍テンポは同じ曲の
-どちらも妥当な読み方になり得ます。1 つの数字だけを見せるのではなく、ほかの候補も提示できます。
+`bpm` と `timeSignature` は最終的に選ばれた値で、2 つの `*Candidates` 配列はその背後にある順位付きの候補群です。テンポは本質的に曖昧で、ハーフタイム感とその倍テンポは同じ曲のどちらも妥当な読み方になり得ます。1 つの数字だけを見せるのではなく、ほかの候補も提示できます。
 
 ```typescript
 const { bpm, bpmCandidates } = analyze({ samples, sampleRate });
@@ -93,15 +77,9 @@ interface Beat {
 ```
 
 ::: warning `strength` はサリエンススコアではない
-`strength` は、その拍のフレームで取り出した**オンセット包絡の生の 1 フレーム**です。正規化
-されておらず、相対値でもなく、`0..1` に収まる保証もありません。スケールは素材に依存するため、
-同じ数値でも曲が違えば意味が違います。また窓ではなく 1 フレームであるため、拍位置のわずかな
-揺れにも追随して動きます。
+`strength` は、その拍のフレームで取り出した**オンセット包絡の生の 1 フレーム**です。正規化されておらず、相対値でもなく、`0..1` に収まる保証もありません。スケールは素材に依存するため、同じ数値でも曲が違えば意味が違います。また窓ではなく 1 フレームであるため、拍位置のわずかな揺れにも追随して動きます。
 
-アクセントのスコア付け、つまりどの拍が強いかの判定には
-`AnalysisResult.beatObservations.onsetStrength` を使ってください。これはライブラリ自身の小節頭
-推定が評価している窓集約値です。`Beat.strength` を使うのは、その瞬間の包絡値そのものが本当に
-欲しいときだけにしてください。
+アクセントのスコア付け、つまりどの拍が強いかの判定には `AnalysisResult.beatObservations.onsetStrength` を使ってください。これはライブラリ自身の小節頭推定が評価している窓集約値です。`Beat.strength` を使うのは、その瞬間の包絡値そのものが本当に欲しいときだけにしてください。
 :::
 
 ### Chord
@@ -119,11 +97,13 @@ interface Chord {
   confidence: number;
   name: string;        // "C", "Am", "G7"
 }
+
+interface AnalysisChord extends Chord {
+  romanNumeral: string; // AnalysisResult.key に対するローマ数字。N.C. は空文字列
+}
 ```
 
-`duration` は `end - start` から導出された値です。コアが保持しているのは 2 つの端点だけなので、
-独立した測定値ではなく利便のためのフィールドです。進行から経過的なコードを除外するといった
-処理は、引き算を書くよりこのフィールドで書くほうが読みやすくなります。
+`duration` は `end - start` から求めます。コアは 2 つの端点だけを保持します。
 
 ### Section
 
@@ -223,6 +203,18 @@ interface MelodyPoint {
 }
 ```
 
+### 個別解析の結果
+
+個別の `analyze*` ヘルパーはこれらを返します。いずれも、対応する `analyze()` のサブオブジェクトに、表のフィールドを加えたものです。
+
+| ヘルパー | 結果の型 | `analyze()` のサブオブジェクトに加わるフィールド |
+|----------|----------|--------------------------------------------------|
+| `analyzeBpm` | `BpmAnalysisResult` | `bpm`、`confidence`、`candidates: BpmCandidate[]`（`{ bpm, confidence }`）、`autocorrelation`、`tempogram` |
+| `analyzeRhythm` | `RhythmAnalysisResult` | `RhythmFeatures` に、`bpm`（ビートトラッカーが補正したテンポ）と `beatIntervals` を加えたもの |
+| `analyzeDynamics` | `DynamicsResult`（別名 `DynamicsAnalysisResult` は非推奨） | `Dynamics` に、`loudnessTimes` と `loudnessRmsDb`（並行する `Float32Array`）を加えたもの |
+| `analyzeTimbre` | `TimbreAnalysisResult` | `Timbre` に、`spectralCentroid`、`spectralFlatness`、`spectralRolloff`、`timbreOverTime` を加えたもの |
+| `analyzeMelody` | `MelodyResult` | `MelodyContour` の要約フィールドと、軌跡を持つ `points: MelodyPoint[]`（`analyze()` では `melody.pitches`） |
+
 ### RoomMorphResult
 
 `roomMorph(...)` は、モーフ後の音声と、目標ルームの合成がそれを作るために何を変更したかをあわせて返します。
@@ -241,7 +233,7 @@ interface RirDiagnostic {
 }
 ```
 
-生成できないモーフは例外になり、使えない `synthesizeRir(...)` の呼び出しも同様に例外になるため、どちらの結果にもエラーフラグはなく、`diagnostics` に入るのはすべて「結果は得られたが注意が要る」警告です。分岐は `code` で行ってください。`acoustic.ism_order_clamped`（鏡像音源の次数が安全上限まで下げられた）、`acoustic.rir_length_clamped`（テイルが `maxSeconds` か資源上限で切られた）、`acoustic.rir_length_floored`（`maxSeconds` が直接音の到達時間より短い）、`acoustic.rir_tail_truncated`（`maxSeconds` が最も長いバンドを 60 dB 減衰する前に切った）、`acoustic.no_late_tail`（拡散テイルが生成されなかった）はいずれも「指定したのとは別の部屋を通った」ことを意味しますが、音声そのものからは分かりません。`synthesizeRir(...)` も同じ形を `RirResult.diagnostics` で報告します。C ABI も同じ項目を構造化して公開しており — `sonare_last_diagnostic_count()`、`sonare_last_diagnostic_code(i)`、`sonare_last_diagnostic_message(i)`、`sonare_last_diagnostic_severity(i)` — そちらでも、連結済みの `sonare_last_warning_message()` 文字列を解析するのではなくコードで分岐できます。
+生成できないモーフは例外になり、使えない `synthesizeRir(...)` の呼び出しも同様に例外になるため、どちらの結果にもエラーフラグはなく、`diagnostics` に入るのはすべて「結果は得られたが注意が要る」警告です。分岐は `code` で行ってください。`acoustic.ism_order_clamped`（鏡像音源の次数が安全上限まで下げられた）、`acoustic.rir_length_clamped`（テイルが `maxSeconds` か資源上限で切られた）、`acoustic.rir_length_floored`（`maxSeconds` が直接音の到達時間より短い）、`acoustic.rir_tail_truncated`（`maxSeconds` が最も長いバンドを 60 dB 減衰する前に切った）、`acoustic.no_late_tail`（拡散テイルが生成されなかった）はいずれも「指定したのとは別の部屋を通った」ことを意味しますが、音声そのものからは分かりません。`synthesizeRir(...)` も同じ形を `RirResult.diagnostics` で報告します。C ABI も同じ項目を構造化して公開しており（`sonare_last_diagnostic_count()`、`sonare_last_diagnostic_code(i)`、`sonare_last_diagnostic_message(i)`、`sonare_last_diagnostic_severity(i)`）、そちらでも、連結済みの `sonare_last_warning_message()` 文字列を解析するのではなくコードで分岐できます。
 
 ### RoomMorphStereoResult
 
@@ -272,12 +264,11 @@ type AcousticModeName = 'auto' | 'blind' | 'impulse_response';
 interface RoomPlacement { x: number; y: number; z: number }  // メートル
 ```
 
-`materialPreset` と推定の `mode` は、これらの名前だけを受け付けます。数値は `TypeError` です。`roomGeometryFromEstimate(...)` は `RoomEstimateResult` を `synthesizeRir(...)` 用の `RoomGeometryOptions` に変換します（[ルーム音響](./acoustic-analysis.md#推定結果から-rir-を合成する)を参照）。
+`materialPreset` と推定の `mode` は、これらの名前だけを受け付けます。数値は `TypeError` です。`roomGeometryFromEstimate(...)` は `RoomEstimateResult` を `synthesizeRir(...)` 用の `RoomGeometryOptions` に変換します。結果には `source` と `listener`（既定の配置を軸ごとに推定したルームの寸法へ拡縮したもので、7 × 5 × 3 では既定と一致します）と、有限なバンドの平均であるスカラーの `absorption` も含まれ、渡した位置は拡縮した配置より優先されます（[ルーム音響](./acoustic-analysis.md#推定結果から-rir-を合成する)を参照）。
 
 ### MasteringChainConfig
 
-`masteringChain*` と `StreamingMasteringChain` は下のネスト構造の設定スキーマを使います。
-各キーは任意で、指定されたステージだけが下の固定順で有効になります。加えて、下に挙げる各ステージオブジェクト（`denoise` のオブジェクト形式、`tilt`、`compressor`、`loudness` など）はいずれも `enabled?: boolean` を受け付け、そのステージを明示的に切り替えられます。一覧では繰り返しを避けるため省いています。`"dynamics.compressor.thresholdDb"` のようなフラットなドット記法のキーも同じオブジェクトで受け付けられ、そのままコアへ渡されます。
+`masteringChain*` と `StreamingMasteringChain` は下のネスト構造の設定スキーマを使います。各キーは任意で、指定されたステージだけが下の固定順で有効になります。加えて、下に挙げる各ステージオブジェクト（`denoise` のオブジェクト形式、`tilt`、`compressor`、`loudness` など）はいずれも `enabled?: boolean` を受け付け、そのステージを明示的に切り替えられます。一覧では繰り返しを避けるため省いています。`"dynamics.compressor.thresholdDb"` のようなフラットなドット記法のキーも同じオブジェクトで受け付けられ、そのままコアへ渡されます。
 
 <FlowDiagram
   title="マスタリングチェーンの順序"
@@ -303,9 +294,7 @@ interface RoomPlacement { x: number; y: number; z: number }  // メートル
   caption="有効化したステージだけが処理されますが、有効なステージは常にこの順で実行されます。"
 />
 
-`masterAudio*` はプリセットから開始し、同じキー名を
-`"dynamics.compressor.thresholdDb"` のようなフラットなドット記法の
-`overrides`（上書き値）として受け取ります。
+`masterAudio*` はプリセットから開始し、同じキー名を `"dynamics.compressor.thresholdDb"` のようなフラットなドット記法の `overrides`（上書き値）として受け取ります。
 
 `maximizer.truePeakLimiter.releaseMs` はポストリミッターのリリース時間です。省略するとプリセット／設定の既定値 50 ms を保ちます。フラットな上書き値として渡した場合、その値がそのまま適用されます。`maximizer.truePeakLimiter.applyGainAtInputRate` を有効にすると、静的なラウドネスゲインをオーバーサンプリング前の入力サンプルレートで適用します。ホスト間でゲイン段の位置を揃えたい場合に使います。
 
@@ -316,7 +305,8 @@ interface RoomPlacement { x: number; y: number; z: number }  // メートル
 ```typescript
 interface MasteringChainConfig {
   repair?: {
-    denoise?: boolean | { mode?: number; noiseEstimator?: number; nFft?: number;
+    denoise?: boolean | { mode?: number | 'logMmse' | 'mmseStsa' | 'spectralSubtraction';
+                          noiseEstimator?: number | 'quantile' | 'mcra' | 'imcra' | 'spp'; nFft?: number;
                           hopLength?: number; ddAlpha?: number; reductionDb?: number;
                           gainFloor?: number; overSubtraction?: number;
                           spectralFloor?: number; noiseEstimationQuantile?: number;
@@ -326,11 +316,11 @@ interface MasteringChainConfig {
     gainFloor?: number;
     declip?: { clipThreshold?: number; lpcOrder?: number; iterations?: number; lpcBlend?: number; };
     decrackle?: { threshold?: number; levels?: number;
-                  /** 0 = メディアン、1 = ウェーブレット縮小 */
-                  mode?: number; };
+                  mode?: number | 'median' | 'waveletShrinkage'; };
     dehum?: { fundamentalHz?: number; harmonics?: number; q?: number; adaptive?: boolean;
               searchRangeHz?: number; adaptation?: number; frameSize?: number;
-              pllBandwidth?: number; mode?: number; };
+              pllBandwidth?: number;
+              mode?: number | 'subtract' | 'notch'; };
     declick?: { threshold?: number; neighborRatio?: number; maxClickSamples?: number;
                 lpcOrder?: number; residualRatio?: number; };
     dereverb?: { threshold?: number; attenuation?: number; nFft?: number; hopLength?: number;
@@ -434,32 +424,15 @@ interface MasteringStereoResult {        // masteringProcessStereo
 // masteringChainStereo / masterAudioStereo（および WithProgress）の戻り値。
 // MasteringChainResult の samples を left/right に置き換えた形。MasteringStereoChainResult は
 // Node/Python バインディングとのソース互換性のために残された @deprecated エイリアス。
-interface MasteringChainStereoResult {
-  left: Float32Array;
-  right: Float32Array;
-  sampleRate: number;
-  inputLufs: number;
-  outputLufs: number;
-  appliedGainDb: number;
-  stages: string[];
-  outputTruePeakDbtp: number;
-  outputLra: number;
-  loudnessTargetLimited: boolean;
-  nonFiniteSubstitutionCount: number;
-  stageGainReductions: StageGainReduction[];
-  report: MasteringReport;
-}
 ```
 
 :::
 
+列挙型のリペアキーは、序数と名前のどちらでも受け付けます。序数は列挙順に `0` から振られます: `denoise.mode`（`'logMmse'`、`'mmseStsa'`、`'spectralSubtraction'`）、`denoise.noiseEstimator`（`'quantile'`、`'mcra'`、`'imcra'`、`'spp'`）、`decrackle.mode`（`'median'`、`'waveletShrinkage'`）、`dehum.mode`（`'subtract'`、`'notch'`）。
+
 マルチバンドコンプレッサーは、バージョン 2 のチェーンドキュメントだけでなく、どのチェーン呼び出しからでも設定できます。`crossover.cutoffsHz` はカットオフのリストを置き換えてバンド数（最大 64）を決め、`bands` は `MultibandCompressorBand` でバンドをインデックスごとに指定します。フィールドは `thresholdDb`、`ratio`、`attackMs`、`releaseMs`、`kneeDb`、`makeupGainDb`、`autoMakeup`、`detector`（`'peak'`、`'rms'`、`'logRms'`、または序数）、`sidechainHpfEnabled`、`sidechainHpfHz`、`pdrTimeMs`、`pdrReleaseScale` で、すべて省略可能です（省略したフィールドはベースの値のままです）。フラットキーでは `dynamics.multibandComp.crossover.cutoffsHz.<i>` と `dynamics.multibandComp.bands.<i>.<field>` で、インプレース形式の `cutoff<i>Hz` / `band<i>.<field>` や low/mid/high の短縮形と併用できます。キーの順序は問いません。同じフィールドを 1 回の呼び出しで 2 通りの綴りで渡すと拒否され、バンドが 1 つだけのステージも拒否されます（`multiband stage needs at least two bands; one band is the compressor stage`）。`dynamics.compressor.detector` とマルチバンドのスロープ、モード、バンドごとのディテクタのキーでは、enum の名前が解決されます。
 
-各ステージの使いどころは用語集の各ページに対応しています:
-[リペア](./glossary/mastering/repair.md)、
-[トーンと Air](./glossary/mastering/tone-air.md)、
-[ダイナミクス](./glossary/mastering/dynamics.md)、
-[ステレオ・リミッター・ラウドネス](./glossary/mastering/stereo-limiter-loudness.md)。
+各ステージの使いどころは用語集の各ページに対応しています: [リペア](./glossary/mastering/repair.md)、[トーンと Air](./glossary/mastering/tone-air.md)、[ダイナミクス](./glossary/mastering/dynamics.md)、[ステレオ・リミッター・ラウドネス](./glossary/mastering/stereo-limiter-loudness.md)。
 
 ## 列挙型
 
@@ -511,11 +484,7 @@ const ChordQuality = {
 - `min6` は短 3 度下の `m7b5` と同じ構成音（`Cm6` = `Am7b5`）
 - `7sus4` は完全 4 度下の `sus2add4` と同じ構成音（`C7sus4` = `Gsus2add4`）
 
-クロマグラムにはこれらを区別する材料がありません。2 つの読み方は同一の 12 次元ベクトルだから
-です。そのため検出器は既存の読み方を既定として維持し、**ベース**が裏付けたときにだけ 6th へ
-昇格させます。演奏者が `C6` と書くような箇所は、ベースが C にない限りたいてい `Am7` として
-報告されます。`Major6` と `Minor6` は、和声だけから検出器が行う訂正ではなく、ベースについての
-根拠として扱ってください。
+クロマグラムにはこれらを区別する材料がありません。2 つの読み方は同一の 12 次元ベクトルだからです。そのため検出器は既存の読み方を既定として維持し、**ベース**が裏付けたときにだけ 6th へ昇格させます。演奏者が `C6` と書くような箇所は、ベースが C にない限りたいてい `Am7` として報告されます。`Major6` と `Minor6` は、和声だけから検出器が行う訂正ではなく、ベースについての根拠として扱ってください。
 :::
 
 ### SectionType
@@ -535,17 +504,19 @@ WASM パッケージは、関数やクラスに加えて TypeScript の補助型
 |------|----------------------|
 | 環境とエンジン | `EXPECTED_ABI_VERSION`, `EXPECTED_ENGINE_ABI_VERSION`, `EXPECTED_PROJECT_ABI_VERSION`, `EngineCapabilities`, `ProgressCallback` |
 | エンジンのレーンミキサー、マーカー、MIDI クリップ | `EngineTrackLane`, `EngineTrackSend`, `EngineBus`, `EngineMarker`, `EngineMidiClipSchedule`, `EngineMidiEvent`, `ExternalMidiEvent`, `MarkerKind`, `ProjectMarker` |
-| キー／コード／リズム／音色解析 | `ChordDetectionOptions`, `KeyMode`, `PitchClassName`, `KeyProfileName`, `RhythmAnalysisResult`, `TimbreAnalysisResult`, `TimbreFrame`, `DynamicsAnalysisResult` |
-| スペクトル／ピッチ／特徴量変換 | `MelPowerResult`, `StftPowerResult`, `PitchCorrectOptions`, `VoicedFlags`, `SpectralRegionOp`, `SpectralEditOptions`, `TempogramMode` |
+| キー／コード／リズム／音色解析 | `ChordDetectionOptions`, `KeyMode`, `PitchClassName`, `KeyProfileName`, `BpmAnalysisResult`, `BpmCandidate`, `RhythmAnalysisResult`, `TimbreAnalysisResult`, `TimbreFrame`, `DynamicsResult`, `DynamicsAnalysisResult`, `MelodyResult` |
+| Worker | `OfflineWorkerClient`, `OfflineWorkerClientOptions`, `OfflineWorkerCallOptions`, `OfflineWorkerProgress`, `OfflineWorkerTask`, `OfflineWorker`。[Web Worker の使用](./wasm-advanced.md#web-worker-の使用)を参照 |
+| スペクトル／ピッチ／特徴量変換 | `MelPowerResult`, `StftPowerResult`, `PitchCorrectOptions`, `VoicedFlags`, `SpectralRegionOp`, `SpectralEditOptions`, `TempogramMode`, `HarmonicRequest`, `HpssRequest`, `PercussiveRequest`, `AutoTuneRequest`, `PitchShiftRequest`, `TimeStretchRequest` |
 | ページ式クリップストリーミング | `ClipPageStreamerEngine`, `ClipPageStreamerOptions`, `ClipPageStreamSource`, `OpfsClipStream`, `OpfsClipStreamOptions`, `OpfsClipPageProviderOptions` |
-| マスタリングと機能カタログ | `MasteringProcessorParams`、`MasteringProcessorCatalogEntry`、`MasteringInsertParamInfo`、`MasteringInsertParamChoice`、`MasteringInsertSlot`、`MasteringInsertTiming`、`CapabilityCatalog`、`CapabilityCatalogParameter`、`CapabilityCatalogProcessor`、`CapabilityCatalogPresets`、`CapabilityCatalogMasteringPreset`、`CapabilityCatalogChain`、`CapabilityCatalogChainStage`、`CapabilityCatalogChainList`、`CapabilityCatalogChainAlias`、`MultibandCompressorBand`、`MasteringInsertParamDependency`、`MasteringChannelPolicy`、`MasteringChainStereoResult`、`MasteringStereoParamsRequest`、`MasteringStreamingPreviewStereoRequest` |
-| メータリングのリクエスト | `MeteringStereoRequest`, `MeteringStereoDecimatedRequest` |
-| ストリーミングリチューン | `StreamingRetuneConfig` |
-| ストリーミング EQ | `StreamingEqualizerConfig`, `EqBandType`, `EqBandPhase`, `EqCoeffMode`, `EqMatchOptions`, `EqStereoPlacement` |
+| マスタリングと機能カタログ | `MasteringProcessorParams`、`MasteringProcessorCatalogEntry`、`MasteringInsertParamInfo`、`MasteringInsertParamChoice`、`MasteringInsertSlot`、`MasteringInsertTiming`、`CapabilityCatalog`、`CapabilityCatalogParameter`、`CapabilityCatalogProcessor`、`CapabilityCatalogPresets`、`CapabilityCatalogMasteringPreset`、`CapabilityCatalogChain`、`CapabilityCatalogChainStage`、`CapabilityCatalogChainList`、`CapabilityCatalogChainAlias`、`MultibandCompressorBand`、`MasteringInsertParamDependency`、`MasteringChannelPolicy`、`MasteringChainStereoResult`、`MasteringStereoParamsRequest`、`MasteringStreamingPreviewStereoRequest`、`MeteringStereoRequest`、`MeteringStereoDecimatedRequest` |
+| ストリーミングリチューンと EQ | `StreamingRetuneConfig`, `StreamingEqualizerConfig`, `EqBandType`, `EqBandPhase`, `EqCoeffMode`, `EqMatchOptions`, `EqStereoPlacement` |
 | リアルタイム音声 | `VoicePresetId`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerPodConfig`, `RealtimeVoiceChangerMonoBuffer`, `RealtimeVoiceChangerInterleavedBuffer`, `RealtimeVoiceChangerPlanarBuffer` |
 | ミキシング／Worklet 用リアルタイムバッファ | `MixerRealtimeBuffer`, `SonareScopeRingBuffer`, `SonareScopeRingReadResult`, `SonareWorkletScopeSnapshot` |
 | プロジェクト／エンジンのオートメーション | `ProjectAssistSidecar`, `ProjectAssistSidecarInput`, `ProjectAutomationTargetKind`, `EngineTrackMonitorMode`, `TrackMonitorMode` |
 | パン則の入力 | `PanLaw`, `PanLawName`, `PanLawInput` |
+| コントローラーと発音方式の値テーブル | `CONTROLLER_INPUTS`、`CONTROLLER_AXES`、`ARTICULATIONS` |
+| プロジェクト自動化の対象を表す別名定数 | `PROJECT_AUTOMATION_TARGET_OPAQUE` (0)、`PROJECT_AUTOMATION_TARGET_TRACK_FADER_DB` (1)、`PROJECT_AUTOMATION_TARGET_TRACK_PAN` (2)、`AutomationTargetKind` |
+| ボーカル編集ハンドル | `VocalEditDraft`、`VocalRenderJob`、`VocalRenderSnapshot`。[ボーカル編集](./vocal-editing.md)を参照 |
 
 `SurroundPan`（`Mixer.setSurroundPan` のパラメータ型）はパッケージの公開エクスポート一覧に含まれていません。インポートせず、インラインまたはローカルなエイリアスとして型付けしてください。
 
@@ -564,7 +535,7 @@ WASM パッケージは、関数やクラスに加えて TypeScript の補助型
 | `SynthModSource` | `'none'`, `'amp-env'`, `'filter-env'`, `'lfo1'`, `'lfo2'`, `'velocity'`, `'key-track'`, `'mod-wheel'`, `'random'`, `'breath'`, `'aftertouch'`, `'expression-cc'`, `'pitch-bend'` | `SynthModRouting.source` |
 | `SynthModDestination` | `'none'`, `'pitch-cents'`, `'cutoff-cents'`, `'amp-gain'`, `'pan-units'`, `'resonance-q'`, `'vibrato-depth-cents'`, `'filter-env-depth'`, `'lfo1-rate-scale'`, `'excitation-force'`, `'excitation-position'`, `'excitation-brightness'`, `'spectrum-morph'` | `SynthModRouting.destination` |
 | `SampleLoopMode` / `SampleKeyTrack` | `'default'`, `'none'`, `'continuous'`, `'key-down'` / `'default'`, `'on'`, `'off'` | `SynthPatch.sampleLoop` / `SynthPatch.sampleKeyTrack` |
-| `SampleDescLoopMode` | `'none'`, `'continuous'`, `'key-down'` | `SampleDesc.loopMode` — 録音自体のループモードで、`SampleLoopMode` とは別の集合 |
+| `SampleDescLoopMode` | `'none'`, `'continuous'`, `'key-down'` | `SampleDesc.loopMode`。録音自体のループモードで、`SampleLoopMode` とは別の集合 |
 | `BuiltinSynthWaveform` | `'sine'`, `'saw'`, `'sawtooth'`, `'square'`, `'triangle'`, または `0`〜`3` | `BuiltinSynthConfig.waveform` |
 | `ControllerInput` / `ControllerAxis` | `'control-change'`, `'channel-pressure'`, `'poly-pressure'`, `'pitch-bend'`, `'velocity'` / `'none'`, `'excitation'`, `'position'`, `'brightness'`, `'morph'`, `'loudness'`, `'pitch-cents'`, `'vibrato-depth'` | `RealtimeEngine.bindController` に渡す `ControllerBinding.input` / `.axis` |
 | `Articulation` | `'poly'`, `'mono-retrigger'`, `'mono-legato'` | `RealtimeEngine.setArticulation` |
@@ -584,4 +555,4 @@ WASM パッケージは、関数やクラスに加えて TypeScript の補助型
 | `SpectralEditMode` / `SpectralEditWindow` | `'gain'`, `'attenuate'`, `'mute'`, `'heal'` / `'hann'`, `'hamming'`, `'blackman'`, `'rectangular'`, `'rect'` | `spectralEdit` に渡す `SpectralRegionOp.mode` / `SpectralEditOptions.window` |
 | `NoteTargetUnmatchedPolicy` | `'leave'`（既定）, `'mute'`, `'nearest'` | `assignNoteTargets` の `unmatchedPolicy` |
 
-`MasteringInsertParamInfo` と `CapabilityCatalogParameter` の `id` は `number | null`、`choices` は `MasteringInsertParamChoice[] | null`、`slot` は `string | null` です。`CapabilityCatalogProcessor.slots` は `MasteringInsertSlot` で表す条件付きキー群を列挙します。`CapabilityCatalog.masteringPresets` は `name`、`kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持つ要素を返し、修復プリセットでは後ろ 3 つが `null` です。`SynthParamInfo`（`synthEngineParamInfo(engineMode)` と `synthPatchParamInfo()` が返す）は `name`、`type`（`'number'` または `'boolean'`）、省略可能な `integer`、`min`、`max`、`default`、`unit` を持ち、`synthEngineParamInfo` はセクションを持たないモードでは `[]` を返します。`SynthPatch.retrigger` のボイス開始時の挙動は[内蔵シンセサイザー](./native-synth.md#synthpatch-オブジェクト)を参照してください。
+`MasteringInsertParamInfo` と `CapabilityCatalogParameter` の `id` は `number | null`、`choices` は `MasteringInsertParamChoice[] | null`、`slot` は `string | null` です。`CapabilityCatalogProcessor.slots` は `MasteringInsertSlot` で表す条件付きキー群を列挙します。`CapabilityCatalog.masteringPresets` は `name`、`kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持つ要素を返し、修復プリセットでは後ろ 3 つが `null` です。`SynthParamInfo`（`synthEngineParamInfo(engineMode)` と `synthPatchParamInfo()` が返す）は `name`、`type`（`'number'` または `'boolean'`）、省略可能な `integer`、`min`、`max`、`default`（`number | boolean`。スイッチでは真偽値）、`unit` に加え、省略可能な `activeWhen`（`SynthParamCondition[][]`。`key`、`scope`（`'engine'` または `'patch'`）、`relation`（`'eq'`、`'ne'`、`'gt'`、`'ge'`、`'lt'`、`'le'` のいずれか）、`value`）を持ちます。内側の配列のどれか 1 つで条件がすべて成り立てば、そのフィールドはボイスに届きます。`activeWhen` は無条件のフィールドでは存在しません。`activeWhen` のないフィールドでも、演奏（ベロシティ、コントローラー、重なったノート）があるときだけ効く場合や、ある値を超えると飽和する場合があります。`synthEngineParamInfo` はセクションを持たないモードでは `[]` を返します。`SynthPatch.retrigger` のボイス開始時の挙動は[内蔵シンセサイザー](./native-synth.md#synthpatch-オブジェクト)を参照してください。

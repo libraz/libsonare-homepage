@@ -118,7 +118,7 @@ libsonare リポジトリには、STFT、Mel/MFCC、chroma、CQT について li
 | `librosa.decompose.decompose()` | `decompose()` | 行優先スペクトログラムから NMF 分解行列を返す |
 | `librosa.decompose.decompose(init=...)` | `decomposeWithInit()` / `decompose_with_init()` | 初期化方式を選べる NMF。`init='random'`（既定）または `init='nndsvd'`（SVD によるウォームスタート） |
 | `librosa.decompose.nn_filter()` | `nnFilter()` / `nn_filter()` | 近傍フィルター |
-| _（librosa に相当なし）_ | `decomposeStems()` / `decompose_stems()` | NMF ベースのステム分離。同じ分解から各成分のソフトマスクを作り、元の**複素**スペクトログラムに適用するため、各成分は入力の位相をそのまま保持し、全成分を足すと入力に戻る |
+| _（librosa に相当なし）_ | `decomposeStems()` / `decompose_stems()` | NMF ベースのステム分離（[音源分離](./source-separation.md)）。同じ分解から各成分のソフトマスクを作り、元の**複素**スペクトログラムに適用するため、各成分は入力の位相をそのまま保持し、全成分を足すと入力に戻る |
 | ITU-R BS.1770 / EBU R128 | `lufsInterleaved()` / `lufs_interleaved()` | インターリーブサンプルからマルチチャンネル Integrated loudness を測定 |
 | EBU Tech 3342 LRA | `ebur128LoudnessRange()` / `ebur128_loudness_range()` | LU 単位の loudness range |
 
@@ -183,13 +183,12 @@ librosa は低レベル DSP の充実が強みで、上位の音楽解析は別�
 | `RhythmAnalyzer` | 拍子、グルーブ、シンコペーション、規則性 |
 
 ::: info ストリーミング
-さらに、`StreamAnalyzer` による「音声が届くにつれて更新される」リアルタイム BPM／キー／コード推定も libsonare 固有の機能です（librosa にはストリーミング API はありません）。
+さらに、[`StreamAnalyzer`](./realtime-streaming.md) による「音声が届くにつれて更新される」リアルタイム BPM／キー／コード推定も libsonare 固有の機能です（librosa にはストリーミング API はありません）。
 :::
 
 ## 関数マッピング
 
-以下の libsonare のスニペットは `import libsonare as sonare`（Python）または
-`@libraz/libsonare` からの名前付きインポート（ブラウザ）を前提とします。
+以下の libsonare のスニペットは `import libsonare as sonare`（Python）または `@libraz/libsonare` からの名前付きインポート（JavaScript）を前提とします。JavaScript のスニペットはブラウザでも Node でもそのまま動きます。C++ の形は [C++ API](./cpp-api.md) にあります。
 
 ### STFT
 
@@ -207,7 +206,7 @@ S = librosa.stft(
 
 **libsonare:**
 ::: code-group
-```typescript [ブラウザ]
+```typescript [JavaScript (WASM / Node)]
 const result = stft(samples, sampleRate, 2048, 512);
 ```
 ```python [Python]
@@ -243,7 +242,7 @@ mel_db = librosa.power_to_db(mel, ref=np.max)
 
 **libsonare:**
 ::: code-group
-```typescript [ブラウザ]
+```typescript [JavaScript (WASM / Node)]
 const mel = melSpectrogram(samples, sampleRate, 2048, 512, 128);
 // mel.power - パワースペクトル
 // mel.db - dB スケール
@@ -272,7 +271,7 @@ mfcc = librosa.feature.mfcc(
 
 **libsonare:**
 ::: code-group
-```typescript [ブラウザ]
+```typescript [JavaScript (WASM / Node)]
 const result = mfcc(samples, sampleRate, 2048, 512, 128, 13);
 // result.coefficients - [nMfcc x nFrames]
 ```
@@ -299,7 +298,7 @@ y_harm, y_perc = librosa.effects.hpss(y, kernel_size=31)
 
 **libsonare:**
 ::: code-group
-```typescript [ブラウザ]
+```typescript [JavaScript (WASM / Node)]
 const result = hpss(samples, sampleRate, 31, 31);
 // result.harmonic
 // result.percussive
@@ -324,7 +323,7 @@ beat_times = librosa.frames_to_time(beats, sr=sr, hop_length=512)
 
 **libsonare:**
 ::: code-group
-```typescript [ブラウザ]
+```typescript [JavaScript (WASM / Node)]
 const bpm = detectBpm(samples, sampleRate);
 const beats = detectBeats(samples, sampleRate);  // すでに秒単位
 ```
@@ -373,7 +372,7 @@ mel = 2595 * log10(1 + f / 700)
 
 libsonare は Slaney 変換ヘルパーを公開しており、C++ コアの Mel 設定では HTK 形式のフィルターバンク生成にも対応しています。
 ::: code-group
-```typescript [ブラウザ]
+```typescript [JavaScript (WASM / Node)]
 const melSlaney = hzToMel(hz);     // Slaney（デフォルト）
 ```
 ```python [Python]
@@ -408,8 +407,8 @@ mel_slaney = sonare.hz_to_mel(hz)  # Slaney（デフォルト）
 
 ### 2. CQT
 
-- **librosa**: librosa 固有のパラメータ体系を持つ CQT / VQT API
-- **libsonare**: libsonare 固有の API を持つ CQT / VQT 実装
+- **librosa**: `cqt()` と `vqt()` は複素係数を返します
+- **libsonare**: JavaScript と Python の `cqt()` と `vqt()` は振幅を返し、`frequencies` が添えられます。C++ の結果は複素係数も保持します。既定値（C1 の `fmin`、84 ビン、1 オクターブあたり 12 ビン）は librosa と同じで、`gamma` を省略すると自動の帯域幅が選ばれます
 
 ### 3. 窓の正規化
 
@@ -419,7 +418,7 @@ mel_slaney = sonare.hz_to_mel(hz)  # Slaney（デフォルト）
 どちらのライブラリも窓そのものをスケーリングせず、オーバーラップ加算後に正規化するため、逆 STFT のゲインは両者とも保たれます。レベルを「補正」する目的で再構成後の音声を元音源のピークや RMS に合わせ直さないでください。減衰する素材や無音を含む素材では、すでに正しいレベルを壊してしまいます。
 
 ::: details COLA とは？
-**COLA** は *Constant Overlap-Add*（定数オーバーラップ加算）の略です。STFT から音声を再構成するとき、重なり合う窓掛けフレームを足し合わせます。重なる窓がどのサンプル位置でも一定値に合算されるなら、再構成のゲインはどこでも均一になります — これが COLA 条件です。解析側だけでなく合成側にも窓を掛けるため、一定であるべき量は窓そのものの和ではなく*窓の積*の和です。どちらのライブラリも、窓とホップの組み合わせがこの条件を満たすことを前提にしていません。オーバーラップ加算しながらサンプルごとに窓の積を累積し、最後にそれで割るので、どの窓とホップの組み合わせでも再構成ゲインは平坦になります。
+**COLA** は *Constant Overlap-Add*（定数オーバーラップ加算）の略です。STFT から音声を再構成するとき、重なり合う窓掛けフレームを足し合わせます。重なる窓がどのサンプル位置でも一定値に合算されるなら、再構成のゲインはどこでも均一になります。これが COLA 条件です。解析側だけでなく合成側にも窓を掛けるため、一定であるべき量は窓そのものの和ではなく*窓の積*の和です。どちらのライブラリも、窓とホップの組み合わせがこの条件を満たすことを前提にしていません。オーバーラップ加算しながらサンプルごとに窓の積を累積し、最後にそれで割るので、どの窓とホップの組み合わせでも再構成ゲインは平坦になります。
 :::
 
 ### 4. クロマのチューニング基準
@@ -427,7 +426,7 @@ mel_slaney = sonare.hz_to_mel(hz)  # Slaney（デフォルト）
 - **librosa**: `chroma_stft` の既定は `tuning=None` で、`estimate_tuning()` を信号に対して実行し、ピッチクラスの格子を録音に合わせ直します
 - **libsonare**: 単体の `chroma()` は A440 固定で `tuning` を取りません。音楽解析の呼び出し（`analyze`、`detectChords`、`detectKey`）は既定 `0` の `tuning` を取り、`tuning: 'auto'`（Python は `tuning="auto"`）で音声から測定します
 
-A440 から外れた素材では、両者のクロマグラムは許容誤差の範囲ではなく構造的に食い違います。libsonare 側はエネルギーが隣のピッチクラスへにじみ、キーやコードの結果も劣化します。キーとコードには `tuning: 'auto'` を渡してください。各結果は使われたセミトーン端数を報告します。librosa のクロマグラムそのものに合わせるには、`estimateTuning()`／`estimate_tuning()` でずれを求め、自前のパイプラインで適用します。12 ビン／オクターブのとき、これは `tuning` オプションと同じ単位です。
+A440 から外れた素材では、両者のクロマグラムは許容誤差の範囲ではなく構造的に食い違います。libsonare 側はエネルギーが隣のピッチクラスへにじみ、キーやコードの結果も劣化します。キーとコードには `tuning: 'auto'`（[楽曲解析](./analysis.md)を参照） を渡してください。各結果は使われたセミトーン端数を報告します。librosa のクロマグラムそのものに合わせるには、`estimateTuning()`／`estimate_tuning()` でずれを求め、自前のパイプラインで適用します。12 ビン／オクターブのとき、これは `tuning` オプションと同じ単位です。
 
 ## 移行ガイド
 
@@ -486,7 +485,7 @@ auto energy = chroma.mean_energy();
 
 ネイティブとブラウザでは結果の見え方が違います。設計上、両者は異なる FFT バックエンドで動くためです。
 
-ネイティブでは、libsonare の変換処理は SIMD の FFT カーネルで動くため、変換処理が支配的な機能 — STFT 自体と、メルや MFCC などその上に構築される機能全般 — で librosa を上回ります。これに加えて、反復的なアルゴリズム（HPSS・pYIN）と総合解析パイプラインでも大きく優位です。
+ネイティブでは、libsonare の変換処理は SIMD の FFT カーネルで動くため、変換処理が支配的な機能（STFT 自体と、メルや MFCC などその上に構築される機能全般）で librosa を上回ります。これに加えて、反復的なアルゴリズム（HPSS・pYIN）と総合解析パイプラインでも大きく優位です。
 
 WebAssembly ビルドはスカラー FFT のみを使います。両方の FFT バックエンドを積むと、解析専用モジュールのサイズ予算を超えてしまうため、`BUILD_WASM` では SIMD 経路をビルドから外しています。その結果、ブラウザビルドの変換処理が支配的な機能は、ネイティブ実行の librosa とほぼ同等にとどまり、上回るわけではありません。
 

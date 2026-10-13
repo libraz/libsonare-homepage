@@ -145,7 +145,7 @@ finally:
 
 The AudioWorklet `SonareEngine` facade accepts the same complete packet through `pushMidiUmp(trackId, words, renderFrame?)`: `words` can be the legacy one-word number or a one-to-four-word array / `Uint32Array`. `pushMidiInputUmp(words, portTimeSamples = 0)` accepts the same complete packet on its engine-owned input source. Raw MT 0x3 / MT 0x5 data messages are rejected by both raw UMP calls; send a complete SysEx frame through `pushMidiSysex` instead. Queue-full and malformed-word errors are reported by the binding.
 
-A live Program Change goes out as one MIDI 2.0 message with `pushMidiProgram(destinationId, group, channel, program, bankValid?, bankMsb?, bankLsb?, renderFrame?)` on a destination or `pushMidiInputProgram(group, channel, program, bankValid?, bankMsb?, bankLsb?, portTimeSamples?)` on the input source; the bank is applied only when `bankValid` is true, and the receiver's own program gates apply. See [MIDI Input](./midi-input.md) for the argument ranges and refusals.
+A live Program Change goes out as one MIDI 2.0 message: `pushMidiProgram(...)` on a destination, `pushMidiInputProgram(...)` on the input source. Only some receivers follow it; [MIDI Input](./midi-input.md#program-change-and-the-receivers-that-follow-it) has the signatures, the argument ranges and the receiver table.
 
 ## What the built-in receivers apply
 

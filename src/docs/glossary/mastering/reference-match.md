@@ -53,15 +53,13 @@ References that differ from the source in genre or density are especially risky.
 
 The browser demo uses the reference file locally. It does not upload either file.
 
-When you choose reference matching, the worker compares source and reference channels and applies a constrained match-EQ process. The match is intentionally limited: it uses smoothing and a maximum gain range so the result behaves like a mastering adjustment rather than a brittle spectral copy.
+When you choose reference matching, the worker compares source and reference and applies a constrained match-EQ process. The match is intentionally limited: it uses smoothing and a maximum gain range so the result behaves like a mastering adjustment rather than a brittle spectral copy.
 
 :::: details Implementation notes
 
-The worker trims the source and reference to a shared duration, then runs `match.applyMatchEq` for left and right channels. The current demo uses a maximum match gain of 6 dB and smooths the difference curve across 5 frequency bins (a bin is one slice of the spectrum the analysis measures). Those limits matter because a raw spectral difference curve can contain narrow notches and spikes that are not musically useful.
+The worker mixes source and reference to mono and runs `match.tonalBalance` and `match.matchEqCurve` through `masteringPairAnalyze`, passing the reference's own rate as `referenceSampleRate` so the engine resamples it. The returned curve is smoothed over about a sixth of an octave and fitted with four Peak bands of at most 6 dB, which become the After lane's strip EQ. Those limits matter because a raw spectral difference curve can contain narrow notches and spikes that are not musically useful.
 
-The operation compares one source file with one reference file, so sample rate matters.
-
-If the reference sample rate differs from the source, the composable linearly resamples the reference before sending it to the worker. That is accurate enough for analysis alignment in the demo. Final mastering still happens through the normal libsonare chain.
+The operation compares one source file with one reference file, so sample rate matters: the match functions take `referenceSampleRate` and resample the reference onto `sampleRate` themselves (see [A reference at its own sample rate](../../js-api-mastering.md#a-reference-at-its-own-sample-rate)).
 
 The match result is also stored as metrics in the report, so it can guide manual EQ adjustments in Studio mode.
 

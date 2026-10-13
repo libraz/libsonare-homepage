@@ -5,7 +5,9 @@ description: "Region-based STFT editing in libsonare: attenuate, mute, gain, or 
 
 # Spectral Editing
 
-`spectralEdit(...)` is libsonare's region-based STFT editor — STFT (short-time Fourier transform) is the time–frequency grid a signal is cut into before it can be edited by frequency, and it is [explained in the glossary](./glossary/analysis/spectrogram-stft.md). Use `spectralEdit` when you want to change a time and frequency rectangle inside a mono clip: attenuate a whistle, mute a short hum, boost a narrow band, or heal a small dropout from neighboring frames.
+`spectralEdit(...)` is libsonare's region-based STFT editor. Use it to change a time and frequency rectangle inside a mono clip: attenuate a whistle, mute a short hum, boost a narrow band, or heal a small dropout from neighboring frames.
+
+STFT (short-time Fourier transform) is the time-frequency grid a signal is cut into so it can be edited by frequency; the [glossary](./glossary/analysis/spectrogram-stft.md) explains it.
 
 It is an offline transform. The output keeps the same sample rate and length as the input, and each region operation is applied in order to the same STFT buffer.
 
@@ -112,9 +114,9 @@ You give the region in samples and hertz, but the edit lands on the STFT grid th
 | `startSec` / `endSec` | The same bounds in seconds (Python `start_sec` / `end_sec`), rounded to the nearest sample at the call's sample rate. Give one spelling per bound; both `startSample` and `startSec` (or both end spellings) is refused. |
 | `lowHz` / `highHz` | Frequency rectangle in Hz. Values are clamped to `[0, Nyquist]`; `highHz <= 0` means Nyquist. |
 | `gainDb` | Gain in dB. Applied identically by `gain` and `attenuate` as `magnitude *= 10^(gainDb/20)`; pass a negative value to reduce. Ignored by `mute`/`heal`. |
-| `nFft` | Power-of-two FFT size in `[4, 262144]`, default `2048`; any other value is refused with an error naming `nFft` and the rule. |
-| `hopLength` | STFT hop, default `512`; must satisfy `0 < hopLength <= nFft / 2`. |
-| `window` | `hann`, `hamming`, `blackman`, or `rectangular`. |
-| `healRadiusFrames` | Neighbor frames on each side used by `heal`, default `2`; must be `>= 1`. |
+| `nFft` | Power-of-two FFT size in `[4, 262144]`, default `2048`. Any other positive value is refused with an error naming `nFft` and the rule. In JavaScript, `0` or omission keeps the default; Python refuses `0`. |
+| `hopLength` | STFT hop, default `512`; must satisfy `0 < hopLength <= nFft / 2` (JavaScript reads `0` as the default). |
+| `window` | `hann`, `hamming`, `blackman`, or `rectangular` (Python also accepts `rect`). |
+| `healRadiusFrames` | Neighbor frames on each side used by `heal`, default `2`; `1` or more (`0` keeps the default, negatives are refused). |
 
 Small regions usually work best. Broad, long, or repeatedly healed regions can sound phasey because the edit happens in an STFT representation rather than a source-separated model.

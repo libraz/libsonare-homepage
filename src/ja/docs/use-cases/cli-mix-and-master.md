@@ -9,6 +9,10 @@ description: ステムのフォルダから配信可能なマスターまでを�
 
 この作業は「コマンドを 1 つ実行すれば終わる」ものではありません。計測・提案・レンダリング・マスタリングという 4 つの段階の連鎖であり、その途中に人間のチェックポイントが入ります。ミックスは機械が最後まで代われない部分だからです。
 
+::: info どの CLI か
+このページは Python CLI（`pip install libsonare`、コマンド名 `sonare`）を使います。`mix` と `declip` はネイティブの `sonare-cli` にはありません。[どの CLI を使っているか](../cli.md#どの-cli-を使っているか)を参照してください。Node または Python のタブがあるステップは、CLI なしでどちらのバインディングでも実行できます。
+:::
+
 ## このページで身につくこと
 
 このページを読むと、次のことができるようになります。
@@ -92,13 +96,58 @@ sonare mastering mix.wav \
 
 `suggest-mix` は各ステムを計測し、さらにステム同士のあいだで起きていることを計測して、ミキサーシーンを書き出します。音声そのものには一切触れません。`--scene-out` が出すのはレンダリング結果ではなくドキュメントです。オプション全体と背後のルールは [ミキシングアシスタント](../mixing-assistant.md) にあります。
 
-```bash
+::: code-group
+
+```bash [CLI]
 sonare suggest-mix \
   --input drums=stems/drums.wav --input bass=stems/bass.wav \
   --input gtr=stems/gtr.wav --input vox=stems/vox.wav \
   --sample-rate 48000 --tempo-bpm auto \
   --scene-out scene.json --json
 ```
+
+```typescript [Node]
+import { writeFileSync } from 'node:fs';
+import { suggestMixScene } from '@libraz/libsonare-native';
+
+// drums, bass, gtr, vox: 48 kHz の Float32Array
+const result = suggestMixScene({
+  sampleRate: 48000,
+  tracks: [
+    { id: 'drums', name: 'Drums', left: drums },
+    { id: 'bass', name: 'Bass', left: bass },
+    { id: 'gtr', name: 'Gtr', left: gtr },
+    { id: 'vox', name: 'Vox', left: vox },
+  ],
+  options: { tempoBpm: 120 },
+});
+for (const line of result.explanation) console.log(line);
+writeFileSync('scene.json', JSON.stringify(result.scene, null, 2));
+```
+
+```python [Python]
+import json
+from pathlib import Path
+
+import libsonare as sonare
+
+result = sonare.suggest_mix_scene(
+    [
+        sonare.MixTrackInput("drums", drums, name="Drums"),
+        sonare.MixTrackInput("bass", bass, name="Bass"),
+        sonare.MixTrackInput("gtr", gtr, name="Gtr"),
+        sonare.MixTrackInput("vox", vox, name="Vox"),
+    ],
+    sample_rate=48000,
+    tempo_bpm=120.0,
+)
+print("\n".join(result["explanation"]))
+Path("scene.json").write_text(json.dumps(result["scene"], indent=2))
+```
+
+:::
+
+ライブラリの呼び出しはテンポを検出しません。`tempoBpm`（Python は `tempo_bpm`）を自分で渡してください。省くとトランスポートのフォールバックテンポになります。`--tempo-bpm auto` は CLI だけの機能です。
 
 出力のうち重要なのは 3 か所で、それぞれ答えている問いが違います。
 
@@ -128,7 +177,7 @@ pulled the master bus down to leave the summed mix its headroom
 
 `scene.json` は素のドキュメントで、フィールド単位の仕様は [ミキシングシーン JSON](../mixing-scene-json.md) にあります。開いて、納得できないところを直して、保存する。これが 2 段階設計の狙いです。ステムからミックスダウンまでをこのファイルを見せずに一気に進めるコマンドは、意図的に用意していません。
 
-上の実行で得られたシーンにはストリップが 6 本あります。4 本のステムに加えて、aux バスから供給される `reverbReturn` と `delayReturn` です。各インサートはパラメータを JSON 文字列として持ちます。
+上の実行で得られたシーンにはストリップが 6 本あります。4 本のステムに加えて、aux バスから供給される `reverbReturn` と `delayReturn` です。各インサートはパラメータを、パラメータ名をキーとするオブジェクトとして持ちます。
 
 ```json
 {
@@ -137,9 +186,9 @@ pulled the master bus down to leave the summed mix its headroom
   "inputTrimDb": -7.215085029602051,
   "inserts": [
     { "processor": "dynamics.compressor", "slot": "pre",
-      "params": "{\"attackMs\":5.26,\"ratio\":3.34,\"thresholdDb\":-22.2,\"autoMakeup\":true}" },
+      "params": { "attackMs": 5.26, "ratio": 3.34, "thresholdDb": -22.2, "autoMakeup": true } },
     { "processor": "dynamics.vocalRider", "slot": "pre",
-      "params": "{\"targetDb\":-18,\"maxBoostDb\":3,\"maxCutDb\":3}" }
+      "params": { "targetDb": -18, "maxBoostDb": 3, "maxCutDb": 3 } }
   ],
   "sends": [
     { "id": "vox-to-reverbBus", "destinationBusId": "reverbBus", "sendDb": -10.5, "timing": "post" },
@@ -148,13 +197,15 @@ pulled the master bus down to leave the summed mix its headroom
 }
 ```
 
-`sendDb`・`faderDb`・スレッショルドの変更は単なるテキスト編集です。プロセッサを外すのは `inserts` からオブジェクトを 1 つ消すことです。ミキサーは読み込み時にドキュメントを検証するため、記述ミスは「妙なミックス」ではなくロードエラーとして表面化します。
+`sendDb`・`faderDb`・しきい値の変更は単なるテキスト編集です。プロセッサを外すのは `inserts` からオブジェクトを 1 つ消すことです。ミキサーは読み込み時にドキュメントを検証するため、記述ミスは「妙なミックス」ではなくロードエラーとして表面化します。
 
 ストリップに書き込む `faderDb` は、シーンが読み込まれたあとにミキサーがライブの操作子として公開するフェーダーそのものです。下の各レーンはエンジン内の 3 本のストリップで、フェーダーやミュートを動かすとそのレーンの出力だけが変わります。`scene.json` で音を聴かずに行っている編集はこれで、ステップ 3 のレンダリングで初めて耳で確かめられます。
 
 <SonareDemo id="engine-lane-mixer" />
 
 ## ステップ 3 — レンダリングする
+
+`mix` は Python CLI のコマンドです。コードからは `Mixer.fromSceneJson` が同じシーンを読み込み、`processStereo` がブロック単位でレンダリングします。[ミキシングエンジン](../mixing.md#シーンベースのミックス-mixer)を参照してください。
 
 ```bash
 sonare mix --scene scene.json \
@@ -180,14 +231,32 @@ sonare mix --scene scene.json \
 
 マスタリングは、小さな破損を大きくします。先に探しておきます。
 
-```bash
+::: code-group
+
+```bash [CLI]
 sonare repair mix.wav --detect --json
 ```
 
-`--detect` は計測と報告だけを行い、何も書き出しません。レンダリングのたびに気軽に走らせられます。返ってくるのはクリップ連続の長さとファイル中の割合、クリックとクラックルの件数、ノイズフロア、そして商用電源周波数の倍音列が信号に乗っているかどうかです。見つかったものは、マスターで直すよりステムで直すほうが安く済みます。整音側の手順は [録音素材をまとめて整音する](./recording-cleanup.md) にあります。
+```typescript [Node]
+import { masteringRepairAnalyze } from '@libraz/libsonare-native';
+
+const { defects, recommended } = masteringRepairAnalyze({ channels: [left, right], sampleRate: 48000 });
+console.log(defects.clipSampleFraction, defects.cracklePerSecond, recommended.map((s) => s.stage));
+```
+
+```python [Python]
+import libsonare as sonare
+
+analysis = sonare.mastering_repair_analyze([left, right], 48000)
+print(analysis["defects"]["clipSampleFraction"], [s["stage"] for s in analysis["recommended"]])
+```
+
+:::
+
+`--detect` は計測と報告だけを行い、何も書き出しません。レンダリングのたびに気軽に実行できます。返ってくるのはクリップ連続の長さとファイル中の割合、クリックとクラックルの件数、ノイズフロア、そして商用電源周波数の倍音列が信号に乗っているかどうかです。ライブラリの呼び出しも同じ項目を計測し、推奨するリペアの段（`recommended`）も返します。フィールド名は `clipSampleFraction` のような camelCase です。見つかったものは、マスターで直すよりステムで直すほうが安く済みます。整音側の手順は [録音素材をまとめて整音する](./recording-cleanup.md) にあります。
 
 ::: warning `--explain` と `--detect` は併用できません
-`--detect` では修復ステージが 1 つも走らないため、説明すべき選択が存在しません。両方を渡すと使い方のエラーになります。各ステージが選ばれる理由を見たい場合は `--detect` を外してください。
+`--detect` ではリペアの段が 1 つも実行されないため、説明すべき選択が存在しません。両方を渡すと無効なパラメータとして拒否されます（終了コード 3）。各段が選ばれる理由を見たい場合は `--detect` を外してください。
 :::
 
 ## ステップ 5 — 配信ターゲット向けにマスタリングする
@@ -209,10 +278,10 @@ sonare mastering mix.wav \
  "latency_samples": 0}
 ```
 
-`--assistant` はミックスダウンをプロファイリングし、`--preset` で指定したプリセットを出発点にします。省略時は `streaming` を使います。音源からジャンルを推測することはありません。`--explain` は、ベースプリセットとリペアやスピーチ固有の判断を出力します。`--target-platform` は `streaming`、`youtube`、`broadcast`、`podcast`、`audiobook`、`cinema`、`club`、`cd` を受け付けます。`broadcast`、`podcast`、`club`、`cd` は、対応する値を明示していない場合に固有のラウドネスと天井を適用します。それ以外の名前は受け付けますが、現在の値を変更しません。プロセッサ自体は [マスタリングプロセッサ](../mastering-processors.md) に、アシスタントの入出力の仕様は [マスタリングアシスタント](../mastering-assistant.md) にまとまっています。
+`--assistant` はミックスダウンをプロファイリングし、`--preset` で指定したプリセットを出発点にします。省略時は `streaming` を使います。音源からジャンルを推測することはありません。`--explain` は、ベースプリセットとリペアやスピーチ固有の判断を出力します。`--target-platform` は `streaming`、`youtube`、`broadcast`、`podcast`、`audiobook`、`cinema`、`club`、`cd` を受け付けます。`broadcast`、`podcast`、`club`、`cd` は、対応する値を明示していない場合に固有のラウドネスとシーリングを適用します。それ以外の名前は受け付けますが、現在の値は変更しません。プロセッサ自体は [マスタリングプロセッサ](../mastering-processors.md) に、アシスタントの入出力の仕様は [マスタリングアシスタント](../mastering-assistant.md) にまとまっています。
 
 ::: warning `--target-platform` は `--assistant` を要求します
-プラットフォームターゲットはアシスタントへの入力であって、全体設定ではありません。プリセット実行に渡すと終了コード 3 でその旨を表示して止まります。固定プリセットでマスタリングする場合は、`--preset <name>` とそのプリセットの組み込みターゲットを使います。別のターゲットや天井を指定する場合は、`--assistant --preset <name>` と `--target-lufs`／`--ceiling-db` を組み合わせるか、`mastering-suggest` でチェーンを書き出して `--chain-config` でレンダリングします。
+プラットフォームターゲットはアシスタントへの入力であって、全体設定ではありません。プリセット実行に渡すと終了コード 3 でその旨を表示して止まります。固定プリセットでマスタリングする場合は、`--preset <name>` とそのプリセットの組み込みターゲットを使います。別のターゲットやシーリングを指定する場合は、`--assistant --preset <name>` と `--target-lufs`／`--ceiling-db` を組み合わせるか、`mastering-suggest` でチェーンを書き出して `--chain-config` でレンダリングします。
 :::
 
 素材の役割が決まっている場合は、ベースプリセットを明示してください。`sonare mastering-presets --json` が 30 種すべてを列挙します。`pop` や `jpop` から `speech`、`fieldRecording`、さらに `vinyl` や `shellac78` まで揃っています。`--assistant --preset <name>` に同じ名前を渡せます。`vinyl` などのリストア用プリセットはマスタリング用のラウドネスターゲットを持たないため、アシスタントでは拒否されます。
@@ -232,7 +301,7 @@ sonare mastering mix.wav \
 }
 ```
 
-レポートで目標と処理結果を確認します。`loudness_target_limited` は、要求した目標に実際に到達したかを示します。`false` は設定した制約の範囲で目標に到達したことを意味しますが、リミッターが動いていないことやマスターが完成したことは示しません。`max_gain_reduction_db` は実際の最大ゲインリダクションを示します。処理後のラウドネスと True Peak を読み、試聴してください。`true` の場合は設定したゲインと天井の制約下で目標に到達していないため、ミックス、目標、または天井を見直します。
+レポートで目標と処理結果を確認します。`loudness_target_limited` は、要求した目標に実際に到達したかを示します。`false` は設定した制約の範囲で目標に到達したことを意味しますが、リミッターが動いていないことやマスターが完成したことは示しません。`max_gain_reduction_db` は実際の最大ゲインリダクションを示します。処理後のラウドネスと True Peak を読み、試聴してください。`true` の場合は設定したゲインとシーリングの制約下で目標に到達していないため、ミックス、目標、またはシーリングを見直します。
 
 ::: danger レポートの数値はステレオの値です。別途 `lufs` で測った値は違います
 Python CLI では `mastering` がステレオペアを最後まで保つ一方、`lufs` をはじめとする計測系コマンドは先にモノラルへダウンミックスし、標準エラー出力に警告を出します。そのため同じファイルに対して両者の値が食い違います。
@@ -249,14 +318,18 @@ sonare lufs master.wav --json
 ステレオの納品物では、ラウドネスと True Peak をマスタリングレポートから取ってください。`lufs` を使うのは納品物がモノラルのときです。ステレオのまま測りたい場合は [Python API](../python-api.md) のステレオ用エントリポイントを使います。
 :::
 
+左右がどれだけ似ているかで、モノラルへの畳み込みによる損失は変わります。デモでは、同じサイン波の位相差を広げていくと平均が小さくなり、180° で打ち消されます。
+
+<SonareDemo id="mono-fold" />
+
 ## スクリプトとして回す
 
-ここで使ったコマンドはすべて `--json` を受け付け、失敗はすべて[規定の終了コード](../cli.md#終了コード)で返ります。使い方の誤りは 2、不正なパラメータは 3、ファイルが見つからなければ 4、出力先に書けなければ 12 です。したがってスクリプト冒頭の `set -euo pipefail` だけで、実際に壊れた段階で連鎖を止められます。レンダリングされていないファイルをマスタリングしてしまう事故は起きません。
+ここで使ったコマンドはすべて `--json` を受け付け、失敗はすべて[規定の終了コード](../cli.md#終了コード)で返ります。使用方法の誤りは 2、無効なパラメータは 3、ファイルが見つからなければ 4、出力先に書けなければ 12 です。したがってスクリプト冒頭の `set -euo pipefail` だけで、実際に壊れた段階で連鎖を止められます。レンダリングされていないファイルをマスタリングしてしまう事故は起きません。
 
 最後のステップをコミットごとの合否判定にする方法は [納品前チェックを CI で回す](./delivery-check.md) に続きます。
 
 ## 次に読むもの
 
-- ミックスは近いが音色バランスが狙いどおりでない — [リファレンス曲に寄せる](./reference-master.md)。
-- ステム自体が荒い — [録音素材をまとめて整音する](./recording-cleanup.md)。
-- スクリプトではなくアプリに組み込みたい — [ミキシングエンジン](../mixing.md) と [マスタリングアシスタント](../mastering-assistant.md) が同じパイプラインを API で示しています。
+- ミックスは近いが音色バランスが狙いどおりでない場合は [リファレンス曲に寄せる](./reference-master.md)。
+- ステム自体が荒い場合は [録音素材をまとめて整音する](./recording-cleanup.md)。
+- スクリプトではなくアプリに組み込みたい場合は [ミキシングエンジン](../mixing.md) と [マスタリングアシスタント](../mastering-assistant.md) が同じパイプラインを API で示しています。

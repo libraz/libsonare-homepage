@@ -28,6 +28,8 @@ libsonare offers two related estimators:
 - **YIN** finds F0 in the time domain using a difference function: it looks for the lag at which the waveform best repeats itself, then converts that period to frequency. It is accurate and cheap for clean monophonic audio.
 - **pYIN** (probabilistic YIN) wraps YIN in a probabilistic model that tracks multiple F0 candidates over time and also estimates **voicing** — whether a frame is pitched at all. That makes it more robust on real recordings, where silences, breaths, and noise would otherwise produce spurious pitches.
 
+`pitchYin` and `pitchPyin` read `frameLength` as samples at the input rate. `analyzeMelody` / `MelodyAnalyzer` instead reads it as samples at 22050 Hz and rescales it to the input rate: its default 2048 becomes 4096 samples at 44.1 kHz. Keep that distinction when choosing a window for low notes.
+
 ## Monophonic vs polyphonic
 
 These estimators assume **monophonic** input: one note at a time, such as a solo voice, lead line, or bass.
@@ -44,7 +46,7 @@ To track a melody inside a busy track, use an isolated recording or an actual le
 
 Not every frame has a pitch. Rests, unvoiced consonants ("s", "t"), and percussion have no clear F0. A naive tracker will still report some number for these frames, producing a jumpy, meaningless line. Voicing detection, which pYIN is designed to provide, marks those frames as unpitched so the melody line has gaps where the music does.
 
-pYIN returns that decision twice over, and the two are not interchangeable. `voiced` is the Viterbi path's voiced/unvoiced state — the decision itself, and what a consumer should gate on.
+pYIN returns that decision twice over, and the two are not interchangeable. `voicedFlag` (`voiced_flag` in Python) is the Viterbi path's voiced/unvoiced state: the decision itself, and what a consumer should gate on. Pass it as `voiced` (as 0.0/1.0) where a note function asks for it.
 
 ::: warning `voicedProb` rises with pitch, not with confidence
 `voicedProb` is not a signal-quality confidence. It is the frame's voiced observation *mass*: the summed probability of its voiced pitch hypotheses. That mass depends on how many periods of the pitch fit inside the analysis frame, because the difference-function troughs of a long period measured over a short frame are shallower. For a fixed frame length it therefore climbs with F0 even when the signal is identical — a steady three-harmonic tone at 2048 samples / 48 kHz averages well under 0.1 at C2 and around 0.5 at C5, with every frame flagged voiced throughout.

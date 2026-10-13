@@ -1,6 +1,6 @@
 ---
 title: キー検出
-description: 調性中心、メジャー／マイナーモード、クロマプロファイル、信頼度 — libsonare が曲のキーを推定する仕組み。
+description: 調性中心、メジャー／マイナーモード、クロマプロファイル、信頼度。libsonare が曲のキーを推定する仕組み。
 ---
 
 # キー検出
@@ -28,7 +28,7 @@ description: 調性中心、メジャー／マイナーモード、クロマプ�
 
 キープロファイルとは、あるキーで各ピッチクラスがどれだけ強く現れると期待されるかを表す 12 個の数値テンプレートです。既定プロファイルは Krumhansl-Schmuckler で、これは知覚実験から得られたキーごとの基準ピッチクラス重みの古典的なセットです。実装には Shaath、Faraldo EDM 系、Bellman-Budge、Temperley など、それぞれ異なる素材に合わせたプロファイルもあり、`genreHint` で選択を誘導できます。`auto` は、別プロファイルの根拠が明確に強い場合を除き、従来の挙動を保ちます。
 
-候補集合は既定でメジャー／マイナーの 24 キーです。`modes` で教会旋法 5 種（`'modal'`）、または 7 種すべて（`'all'`）まで広げられます。
+候補集合は既定でメジャー／マイナーの 24 キーです。`modes` で教会旋法 5 種（`'modal'`）、または 7 種すべて（`'all'`）まで広げられます。オプションと既定値（`profile`、`modes`、`genreHint`、`tuning`）は[楽曲解析](../../analysis.md#キー)にあります。
 
 WASM と Node バインディングは、勝ったキーの `mode` を `'major'`、`'minor'`、`'dorian'` などの名前で返し、`root` は Node、WASM、Python のいずれでもピッチクラス番号（C = 0）です。キーを受け取る入力（`detectChords` の `keyRoot` / `keyMode` やコード機能ヘルパー）は、ピッチクラス名（`'C#'`）または番号、モード名または序数のどちらでも受け付けます。結果にはクロマの生成に使った `tuning` も含まれます。`tuning: 'auto'` を渡すと先にチューニングを測定します（[クロマ特徴量](./chroma-features.md)を参照）。
 
@@ -48,7 +48,7 @@ WASM と Node バインディングは、勝ったキーの `mode` を `'major'`
 - 無音では候補を分けるものがないため、すべての候補が同じ小さな値を報告します。
 
 ::: warning 信頼度はモデルの確信であって、正解率ではない
-この値が表すのは、クロマが候補集合の中からどれだけ決定的に 1 つを選んだかです。その選択がどれだけの頻度で当たるかは表しません。注釈付き録音に対する較正は一切行っていないため、自信を持って外すことは十分に起こります。この値で分岐する処理は、自分の素材に対して自分で閾値を決める必要があります。
+この値が表すのは、クロマが候補集合の中からどれだけ決定的に 1 つを選んだかです。その選択がどれだけの頻度で当たるかは表しません。注釈付き録音に対する較正は一切行っていないため、自信を持って外すことは十分に起こります。この値で分岐する処理は、自分の素材に対して自分でしきい値を決める必要があります。
 :::
 
 ### 値の読み方
@@ -63,8 +63,21 @@ WASM と Node バインディングは、勝ったキーの `mode` を `'major'`
 
 次点候補が重要な場合は `detectKeyCandidates` を使います。UI では、キーを固定ラベルとして扱うより、最上位候補と信頼度を一緒に見せるほうが実態に合います。また、転調する曲には単一の答えがないため、区間ごとに見たい場合は短い窓で複数回推定し、平行調の取り違えに注意して候補を比べる運用が有効です。
 
+## 検出したキーをプロジェクトの注釈にする
+
+プロジェクトはキーの区間をタイムライン上の注釈ストリームとして持てます。キーはアレンジと一緒に移動し、保存と読み込みを経ても残ります。`detectKey` は主音をすでにピッチクラス（`root`。C = 0 … B = 11）で返すので、注釈の `tonicPc` にそのまま渡せます。モードは変換が必要です。注釈の番号付けでは 0 が「不明」に予約されているため、`keyModeFromAnalysis(mode)` は `'major'` を 1、`'minor'` を 2、`'dorian'` を 3 というように、7 までの値に写します。
+
+```typescript
+const key = detectKey(samples, sampleRate);
+project.annotateKeys([
+  { startPpq: 0, endPpq: 64, tonicPc: key.root, mode: keyModeFromAnalysis(key.mode) },
+]);
+```
+
+`annotateKeys` はキーのストリーム全体を 1 回の取り消し可能な編集で置き換え、保存したプロジェクト JSON では `annotation.keys` の下に入ります。転調する曲ではキーの区間ごとに 1 つのセグメントを作り、境界は呼び出し側が四分音符単位で決めます。フィールドの符号化と Python・C の名前は [プロジェクト MIDI](../../project-editing-midi.md#キーとコードの注釈書き戻し) を参照してください。
+
 ::: details libsonare がどう計算するか
-`KeyAnalyzer` は既定で `n_fft = 4096`、`hop_length = 512` のクロマを計算し、プロファイル相関でルート／モード候補を採点します。`assign_posterior_confidences` は各候補から最良の相関を引き、`kConfidenceTemperature` で割って指数を取り、正規化します。`evidence_score()` は勝者の相関を `[0, 1]` に写した値の半分と、`kFullDistinctivenessGap`（0.2）で頭打ちにした次点との差の半分の和です。オプションでは harmonic HPSS 入力、RMS ラウドネス重み付け、ハイパス cutoff、候補モード、ジャンル／プロファイルヒントを指定できます。ネイティブ層にはコード進行を使う `estimate_key_from_chords` と `refine_key_with_chords` もあります。この 2 つは `confidence` フィールドに、上で説明したソフトマックスの事後確率ではなく進行のダイアトニック率を入れて返します。JS/Python の検出ヘルパーは、クロマプロファイルによるキー推定と候補リストを公開します。
+`KeyAnalyzer` は既定で `n_fft = 4096`、`hop_length = 512` のクロマを計算し、プロファイル相関でルート／モード候補を採点します。`assign_posterior_confidences` は各候補から最良の相関を引き、`kConfidenceTemperature` で割って指数を取り、正規化します。`evidence_score()` は勝者の相関を `[0, 1]` に写した値の半分と、`kFullDistinctivenessGap`（0.2）で頭打ちにした次点との差の半分の和です。オプションでは 倍音成分のみを使う HPSS 入力、RMS ラウドネス重み付け、ハイパスのカットオフ、候補モード、ジャンル／プロファイルヒントを指定できます。ネイティブ層にはコード進行を使う `estimate_key_from_chords` と `refine_key_with_chords` もあります。この 2 つは `confidence` フィールドに、上で説明したソフトマックスの事後確率ではなく進行のダイアトニック率を入れて返します。JS/Python の検出ヘルパーは、クロマプロファイルによるキー推定と候補リストを公開します。
 :::
 
-関連: [クロマ特徴量](./chroma-features.md)、[コード認識](./chord-recognition.md)、[MIR の全体像](../concepts/mir-overview.md)
+関連: [クロマ特徴量](./chroma-features.md)、[コード認識](./chord-recognition.md)、[MIR の全体像](../concepts/mir-overview.md)、[プロジェクト MIDI](../../project-editing-midi.md)

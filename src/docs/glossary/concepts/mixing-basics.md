@@ -5,7 +5,7 @@ description: The vocabulary of mixing — tracks and strips, faders and gain sta
 
 # Mixing Basics
 
-**Mixing** is the craft of taking several recorded parts and balancing them into one stereo whole that sounds intentional: every element audible, nothing fighting, a sense of front-to-back depth and left-to-right space. This page defines the words you need before reading the [Mixing Engine](../../mixing.md) guide. It is concepts only — no code.
+**Mixing** is the craft of taking several recorded parts and balancing them into one stereo whole that sounds intentional: every element audible, nothing fighting, a sense of front-to-back depth and left-to-right space. This page defines the words you need before reading the [Mixing Engine](../../mixing.md) guide. A short example near the end shows the main controls as calls.
 
 ::: tip Where mixing sits
 You usually **edit** individual parts (timing, pitch, noise), then **mix** them together, then **master** the finished stereo file for delivery. Mixing is the middle step that turns a folder of separate stems into a balanced song. Get the balance right here and mastering becomes a polish, not a rescue.
@@ -37,12 +37,17 @@ Keeping levels sensible at every stage — not too quiet (noisy), not too hot (c
 
 This is the distinction beginners most often miss, and it is simple once named:
 
-- An **insert** sits *in series*: the whole track passes through it. Use inserts for processing that belongs to that track — a compressor on the vocal, an EQ on the bass.
-- A **send** routes a *copy* of the track in *parallel* to a shared destination. Use sends for effects several tracks share — one reverb fed by the vocal, the snare, and the guitar, so they all sit in the same space.
+| | Insert | Send |
+|---|--------|------|
+| Signal path | In series: the whole track passes through it. | In parallel: a copy of the track goes to a shared destination. |
+| Typical use | Processing that belongs to that track, such as a compressor on the vocal or an EQ on the bass. | An effect several tracks share, such as one reverb fed by the vocal, the snare, and the guitar so they sit in the same space. |
+| Level control | The track's fader sets how much of the processed signal continues. | The send level (`sendDb`) sets how much goes to the destination. |
 
 ::: info Pre-fader vs post-fader
 A send can tap the signal **before** the fader or **after** it. A pre-fader send is independent of the balance, which is what you want for headphone/cue mixes; a post-fader send follows the balance, so an effect stays proportional as you ride the fader. Choosing the right one is a common gotcha; the [Mixing Engine](../../mixing.md#the-channel-strip-signal-by-signal) page traces exactly where each tap sits.
 :::
+
+<SonareDemo id="pre-post-fader" />
 
 ## Buses and subgroups
 
@@ -64,6 +69,51 @@ Ears tire and rooms lie, so mixers watch meters too. The ones that matter most:
 - **Peak / true peak** — the highest level; [true peak](../true-peak.md) catches inter-sample overs your sample meter misses.
 - **RMS / LUFS** — average level (root mean square) and perceived [loudness](../lufs.md) in LUFS, Loudness Units relative to Full Scale, which is what listeners actually judge.
 - **Correlation** — whether the left and right channels agree; strongly negative values warn that the mix may weaken or cancel in [mono](./mono-compatibility.md).
+
+## Try it in libsonare
+
+`mixStereo` renders a few stems to one stereo master in a single call. Trim, fader, pan, and width are per-track settings, and every track comes back with its own meter reading.
+
+::: code-group
+
+```typescript [Browser]
+import { init, mixStereo } from '@libraz/libsonare';
+
+await init();
+
+const mix = mixStereo([vocalL, musicL], [vocalR, musicR], sampleRate, {
+  inputTrimDb: [3, 0],    // working level, before any processing
+  faderDb: [-3, -12],     // balance: vocal forward, music back
+  pan: [0, -0.2],         // music slightly left
+});
+
+// mix.left, mix.right: the master
+// mix.meters[i].peakDb, .rmsDb, .correlation: one reading per track
+```
+
+```python [Python]
+import libsonare as sonare
+
+mix = sonare.mix_stereo(
+    [(vocal_l, vocal_r), (music_l, music_r)],
+    sample_rate=48000,
+    input_trim_db=[3, 0],
+    fader_db=[-3, -12],
+    pan=[0, -0.2],
+)
+
+# mix.left, mix.right: the master
+# mix.meters[i]: one reading per track
+```
+
+```bash [CLI]
+# The native CLI's mix-strip runs one file through one channel strip.
+sonare-cli mix-strip vocal.wav --input-trim-db 3 --fader-db -3 --pan 0.2 -o out.wav
+```
+
+:::
+
+Sends, buses, subgroups, and automation need the scene-based `Mixer`; see the [Mixing Engine](../../mixing.md) guide.
 
 :::: details How libsonare models all of this
 libsonare's mixing engine maps these concepts to concrete objects:

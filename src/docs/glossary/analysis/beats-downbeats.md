@@ -36,6 +36,8 @@ Beat tracking starts from the onset-strength envelope and a tempo estimate. The 
 
 When adaptive tempo is enabled in the native configuration, the tracker can follow local period changes while still penalizing sudden jumps. This is still a pulse estimate, not a score-level transcription.
 
+Picture a metronome grid laid over the song, then stretched and shifted as a whole until its ticks land on as many strong onsets as possible. Matching one nearby sound throws the rest off, so the tracker looks at the whole track and picks the placement that fits best overall.
+
 ## Downbeat tracking
 
 Downbeats are inferred after beats are placed. libsonare estimates [meter](./meter-and-grouping.md) phase and scores beat positions with beat strength, low-frequency energy, and a phase prior. The downbeat result is therefore more dependent on arrangement cues than raw beat tracking.
@@ -43,6 +45,8 @@ Downbeats are inferred after beats are placed. libsonare estimates [meter](./met
 Chord-change evidence is a fourth cue, but it only becomes available once chords are known. The whole-track analysis path detects chords and then refines the downbeats a second time with that evidence; the standalone `detectDownbeats` helper never reaches that stage. Run the full music analysis when downbeat placement matters and the harmony is the clearest cue in the arrangement.
 
 Sparse intros, pickups (notes that lead in before the first downbeat), weak bass, or ambiguous meter can shift the perceived "one." For UI, it is useful to show downbeats as an assistive overlay rather than as an absolute truth.
+
+Beat tracking answers "where is the pulse", and downbeat tracking answers "which beat opens the bar". The first follows a regular grid; the second leans on musical accents such as bass and chord changes, so it is the estimate more likely to miss.
 
 ## The evidence behind the decision
 

@@ -12,13 +12,11 @@ DSP means Digital Signal Processing: measuring or transforming audio as a signal
 
 ## What You Will Learn
 
-By the end of this page you should be able to:
+Pick the edit from the table below, then read its section. The decisions the table does not make for you:
 
-- distinguish analysis APIs from editing APIs that actually rewrite the signal;
-- choose time stretch, pitch shift, pitch correction, note stretch, spectral edit, or voice change by musical intent;
-- choose the offline `voiceChange(...)` helper versus the block-safe realtime voice changer;
-- convert between seconds, samples, semitones, and MIDI notes without guessing;
-- understand why large pitch/formant moves create artifacts and how to keep edits conservative.
+- the offline `voiceChange(...)` helper versus the block-safe realtime voice changer;
+- seconds, samples, semitones, and MIDI notes, and how to convert between them;
+- why large pitch/formant moves create artifacts and how to keep edits conservative.
 
 ## Which Edit Do You Need?
 
@@ -54,7 +52,7 @@ Parameters like `f0Hz` (a per-frame pitch contour), `hopLength`, and `voiced` ar
 | Time-stretch the whole signal without changing pitch | `timeStretch(samples, sampleRate, rate)` | `time_stretch(samples, sample_rate, rate)` |
 | Correct from one MIDI note to another | `pitchCorrectToMidi(samples, sampleRate, currentMidi, targetMidi)` | `pitch_correct_to_midi(samples, sample_rate, current_midi, target_midi)` |
 | Follow a per-frame pitch contour toward a note | `pitchCorrectToMidiTimevarying(samples, f0Hz, targetMidi, sampleRate, hopLength, voiced?, voicedProb?)` | `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sample_rate, hop_length, voiced?, voiced_prob?)` |
-| Snap a contour to a musical scale (auto-tune) | `pitchCorrectTimevarying(samples, f0Hz, sampleRate, hopLength, options)` | `pitch_correct_timevarying(samples, f0_hz, sample_rate, hop_length, *, mode=..., scale_root=..., ...)` |
+| Snap a contour to a musical scale (automatic pitch correction) | `pitchCorrectTimevarying(samples, f0Hz, sampleRate, hopLength, options)` | `pitch_correct_timevarying(samples, f0_hz, sample_rate, hop_length, *, mode=..., scale_root=..., ...)` |
 | Snap a whole recording to a detected or named key | `autoTune({ samples, sampleRate, key, strength })` | `auto_tune(samples, sample_rate, key, strength=...)` |
 | Stretch only a note region | `noteStretch(samples, sampleRate, { onsetSample, offsetSample, stretchRatio })` | `note_stretch(samples, sample_rate, onset_sample, offset_sample, stretch_ratio)` |
 | Edit a time-frequency region | `spectralEdit(samples, sampleRate, ops, options?)` | `spectral_edit(samples, sample_rate, ops, ...)` |
@@ -62,8 +60,8 @@ Parameters like `f0Hz` (a per-frame pitch contour), `hopLength`, and `voiced` ar
 | Stateful realtime voice preset chain | `RealtimeVoiceChanger` | `RealtimeVoiceChanger` |
 | One-shot realtime voice preset render | `voiceChangeRealtime(samples, sampleRate, preset, options?)` | `voice_change_realtime(samples, sample_rate, preset)` |
 
-::: tip Shared positional order
-WASM and Node native use the same positional order for `timeStretch`, `pitchShift`, and `voiceChangeRealtime`: samples first, then sample rate, then the edit amount or preset.
+::: tip Positional or request object
+WASM and Node accept either positional arguments (samples first, then sample rate, then the edit amount or preset) or a single request object with the same names; pick one style per file.
 :::
 
 ## Usage
@@ -110,7 +108,7 @@ const transposed = voiceChange(vocal, sampleRate, {
 });
 ```
 
-`formantMode: 'absolute'` does that bookkeeping for you. `formantFactor` is then the formant shift relative to the *input*, whatever the pitch shift, and `1` keeps the formants where they were; the warp actually applied is `formantFactor / 2^(pitchSemitones / 12)`. The default, `'relative'`, is the behaviour described above.
+`formantMode: 'absolute'` does that bookkeeping for you. `formantFactor` is then the formant shift relative to the *input*, whatever the pitch shift, and `1` keeps the formants where they were; the warp actually applied is `formantFactor / 2^(pitchSemitones / 12)`. The default, `'relative'`, is the behavior described above.
 
 ```typescript
 const natural = voiceChange(vocal, sampleRate, {
@@ -131,7 +129,7 @@ For rectangular time/frequency edits such as whistle attenuation or short artifa
 
 The usual workflow is:
 
-1. Estimate the current pitch with `pitchYin(...)`, `pitchPyin(...)`, or your own detector.
+1. Estimate the current pitch with [`pitchYin(...)` or `pitchPyin(...)`](./js-api-features.md#pitch-detection), or your own detector.
 2. Pass the measured pitch as `currentMidi`.
 3. Pass the target note as `targetMidi`.
 
@@ -162,11 +160,10 @@ import { init, pitchPyin, pitchCorrectToMidiTimevarying } from '@libraz/libsonar
 
 await init();
 
-const frameLength = 2048;
 const hopLength = 512;
 
 // 1. Measure a per-frame F0 contour (any detector that emits one F0 per hop).
-const pitch = pitchPyin(vocal, sampleRate, frameLength, hopLength, 65, 1000, 0.3);
+const pitch = pitchPyin({ samples: vocal, sampleRate, hopLength });
 
 // 2. Retune every voiced frame toward A3 (MIDI 57) while keeping the contour.
 const tuned = pitchCorrectToMidiTimevarying(
@@ -184,7 +181,7 @@ const tuned = pitchCorrectToMidiTimevarying(
 
 `voiced` is typed `VoicedFlags` — `Int32Array`, `Uint8Array`, `Float32Array`, `readonly number[]`, or `readonly boolean[]`. Each entry is read as a flag, not a magnitude: any truthy value means voiced. That is why `pitch.voicedFlag`, which `pitchPyin` returns as a `boolean[]`, goes straight in with no conversion step.
 
-`voiced` must be the same length as `f0Hz`; when it is omitted, `voicedProb` must also be the same length. A mismatch throws a `RangeError` rather than a `SonareError`, so an `isSonareError` guard will not catch it.
+`voiced` must match the length of `f0Hz`; if you leave `voiced` out, `voicedProb` must. A mismatch throws a `RangeError` rather than a `SonareError`, so an `isSonareError` guard will not catch it.
 
 A voiced frame must have a finite, positive `f0Hz` no higher than Nyquist (`sampleRate / 2`); zero, negative, or non-finite voiced F0 is rejected. An unvoiced frame may carry `NaN` or a finite F0 between zero and Nyquist. Pass `voiced` flags from the pitch analysis when its unvoiced frames contain `NaN`.
 
@@ -192,41 +189,43 @@ A voiced frame must have a finite, positive `f0Hz` no higher than Nyquist (`samp
 Use `pitchCorrectToMidi(...)` for a steady held note where one transpose is enough. Reach for `pitchCorrectToMidiTimevarying(...)` when the take has vibrato, slides, or drift you want to preserve while nudging it onto pitch.
 :::
 
-### Scale-snap correction (auto-tune)
+### Scale-snap correction
 
-The two functions above pull toward a single note. When a whole vocal line should follow a **key** — each note snapped to the nearest tone of, say, C major — use `pitchCorrectTimevarying(...)`. It takes the same per-frame F0 contour but reads its target and correction feel from an options object, and `mode: 'scale'` is the classic auto-tune behavior: every voiced frame is pulled to the closest scale tone rather than one fixed pitch.
+The two functions above pull toward a single note. When a whole vocal line should follow a **key**, with each note snapped to the nearest tone of, say, C major, use `pitchCorrectTimevarying(...)`. It takes the same per-frame F0 contour but reads its target and correction feel from an options object. `mode: 'scale'` is automatic pitch correction in the usual sense: every voiced frame is pulled to the closest scale tone rather than one fixed pitch.
 
 <SonareDemo id="pitch-correct" />
 
-```typescript
+::: code-group
+
+```typescript [Browser]
 import { init, pitchPyin, pitchCorrectTimevarying } from '@libraz/libsonare';
 
 await init();
 
 const hopLength = 256;
-const pitch = pitchPyin(vocal, sampleRate, 2048, hopLength, 65, 1000, 0.1, true);
+const pitch = pitchPyin({ samples: vocal, sampleRate, hopLength });
 
 // Snap every voiced frame to C major, gently, keeping vibrato.
-const tuned = pitchCorrectTimevarying(vocal, pitch.f0, sampleRate, hopLength, {
+const tuned = pitchCorrectTimevarying({
+  samples: vocal,
+  f0Hz: pitch.f0,
+  sampleRate,
+  hopLength,
   mode: 'scale',
-  scaleRoot: 0,             // 0 = C .. 11 = B
-  scaleModeMask: 0xab5,     // 12-bit degree mask: C major = {0,2,4,5,7,9,11}
-  referenceMidi: 69,        // anchors the scale grid; 69 = A4 (default)
-  retuneAmount: 0.8,        // 0 = bypass, 1 = full snap
-  retuneSpeedMs: 15,        // larger = slower glide onto pitch
-  vibratoThresholdCents: 20, // corrections under this are skipped to keep vibrato
-  maxCorrectionSemitones: 2, // safety valve: clamp any single frame's jump (default 12)
+  scaleRoot: 0,              // 0 = C .. 11 = B
+  scaleModeMask: 0xab5,      // 12-bit degree mask: C major = {0,2,4,5,7,9,11}
+  retuneAmount: 0.8,         // 0 = bypass, 1 = full snap
+  retuneSpeedMs: 15,         // larger = slower glide onto pitch
+  maxCorrectionSemitones: 2, // clamp any single frame's jump (default 12)
   voiced: pitch.voicedFlag,  // the boolean[] from pitchPyin, passed as-is
 });
 ```
 
-Python exposes the same controls as keyword-only arguments rather than an options dictionary:
-
-```python
+```python [Python]
 import libsonare as sonare
 
 hop_length = 256
-pitch = sonare.pitch_pyin(vocal, sample_rate, 2048, hop_length, 65, 1000, 0.1, True)
+pitch = sonare.pitch_pyin(vocal, sample_rate, hop_length=hop_length)
 tuned = sonare.pitch_correct_timevarying(
     vocal,
     pitch.f0,
@@ -235,26 +234,66 @@ tuned = sonare.pitch_correct_timevarying(
     mode="scale",
     scale_root=0,
     scale_mode_mask=0xAB5,
-    reference_midi=69,
     retune_amount=0.8,
     retune_speed_ms=15,
-    vibrato_threshold_cents=20,
     max_correction_semitones=2,
     voiced=pitch.voiced_flag,
 )
 ```
 
-`scaleModeMask` is a 12-bit mask where bit `i` enables the semitone `i` above `scaleRoot`, so any scale is expressible (C natural minor `{0,2,3,5,7,8,10}` is `0x5ad`). With `mode: 'midi'` (the default) the same function behaves like `pitchCorrectToMidiTimevarying(...)`, retuning toward `targetMidi` instead of a scale. `retuneAmount` controls how hard the snap is — lower values leave a natural, human wobble; `retuneAmount: 1` with a short `retuneSpeedMs` is the hard, robotic effect. See the interactive [pitch-correction demo](./glossary/editing/pitch-correction.md) for this in action.
+```bash [CLI]
+# The CLI measures the pYIN contour itself
+sonare pitch-correct-timevarying vocal.wav --mode scale --scale-root 0 --scale-mode-mask major --retune-amount 0.8 -o tuned.wav
+```
 
-`vibratoThresholdCents` is measured in **cents** — one cent is 1/100 of a semitone — so the `20` above leaves any correction smaller than a fifth of a semitone alone, which is the range natural vibrato lives in.
+:::
 
-`referenceMidi` (default `69` = A4) anchors where the scale grid sits, so every degree is measured from a fixed reference note. `maxCorrectionSemitones` (default `12`) is the safety valve behind the "keep correction intervals small" advice below: it hard-clamps how far a single frame can jump, so an octave-off detector glitch on one frame is bounded instead of yanking that frame a full octave. Lower it when the detector is noisy or the take should stay close to the original.
+Node takes the same calls as the browser. Python passes the options as keyword-only arguments instead of an options dictionary. The CLI covers `pitchCorrectTimevarying`, but has no command for `autoTune` or `spectralEdit`.
+
+| Option | Python | CLI flag | Range | Default | Effect |
+|--------|--------|----------|-------|---------|--------|
+| `mode` | `mode` | `--mode` | `'midi'`, `'scale'` | `'midi'` | `'midi'` retunes toward `targetMidi`; `'scale'` snaps to the key |
+| `targetMidi` | `target_midi` | `--target-midi` | `[0, 127]` | `69` | Fixed target note in `'midi'` mode |
+| `scaleRoot` | `scale_root` | `--scale-root` | `0` (C) to `11` (B) | `0` | Root pitch class of the scale |
+| `scaleModeMask` | `scale_mode_mask` | `--scale-mode-mask` | 12-bit mask or a mode name | C major (`0xab5`) | Enabled scale degrees; bit `i` is the semitone `i` above `scaleRoot` |
+| `referenceMidi` | `reference_midi` | `--reference-midi` | finite | `69` | Anchors the scale grid; every degree is measured from this note |
+| `retuneAmount` | `retune_amount` | `--retune-amount` | `[0, 1]` | `1` | `0` bypasses, `1` snaps fully; lower values leave a natural wobble |
+| `retuneSpeedMs` | `retune_speed_ms` | `--retune-speed-ms` | `>= 0` | `50` | Retune time constant; larger glides onto pitch more slowly |
+| `vibratoThresholdCents` | `vibrato_threshold_cents` | `--vibrato-threshold-cents` | `>= 0` | `20` | Corrections smaller than this are skipped to keep vibrato |
+| `maxCorrectionSemitones` | `max_correction_semitones` | `--max-correction-semitones` | `>= 0` | `12` | Hard clamp on one frame's jump |
+| `voiced` / `voicedProb` | `voiced` / `voiced_prob` | (measured by the CLI) | flags / `[0, 1]` | all frames voiced | Which frames to retune; `voiced` wins over `voicedProb` |
+
+A cent is 1/100 of a semitone, so the default `vibratoThresholdCents` of `20` leaves any correction under a fifth of a semitone alone, which is the range natural vibrato lives in. `retuneAmount: 1` with a short `retuneSpeedMs` is the hard, robotic effect; `maxCorrectionSemitones` bounds an octave-off detector glitch on one frame instead of yanking that frame a full octave, so lower it when the detector is noisy.
+
+C natural minor `{0,2,3,5,7,8,10}` is `0x5ad`. With `mode: 'midi'` the same function behaves like `pitchCorrectToMidiTimevarying(...)`. The [pitch correction glossary page](./glossary/editing/pitch-correction.md) explains the options conceptually.
 
 ### Tune a whole recording to a key: `autoTune(...)`
 
-The functions above need an F0 contour you measured yourself. `autoTune(...)` runs the whole offline chain on a monophonic recording: it detects the key (or takes the one you name), tracks pitch with pYIN, and snaps each voiced note to the scale. The output has the input's length; unvoiced stretches and notes the corrector cannot repitch pass through unchanged.
+The functions above need an F0 contour you measured yourself. `autoTune(...)` runs the whole offline chain on a monophonic recording. It analyzes with a fixed 2048-sample frame and 512-sample hop. The output has the input's length; unvoiced stretches and notes the corrector cannot repitch pass through unchanged.
 
-```typescript
+<FlowDiagram
+  title="What autoTune runs"
+  :nodes="[
+    { id: 'audio', label: 'Mono audio', col: 0, row: 0 },
+    { id: 'key', label: 'Detect key', col: 1, row: 0 },
+    { id: 'mask', label: 'Scale mask', col: 2, row: 0 },
+    { id: 'f0', label: 'pYIN F0', col: 3, row: 0 },
+    { id: 'corr', label: 'Scale corrector', col: 4, row: 0, variant: 'accent' },
+    { id: 'out', label: 'Tuned audio', col: 5, row: 0, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'audio', to: 'key' },
+    { from: 'key', to: 'mask' },
+    { from: 'mask', to: 'f0' },
+    { from: 'f0', to: 'corr' },
+    { from: 'corr', to: 'out' }
+  ]"
+  caption="Key detection is skipped when you name the key. The corrector takes the options of pitchCorrectTimevarying, with strength as retuneAmount."
+/>
+
+::: code-group
+
+```typescript [Browser]
 import { autoTune, init } from '@libraz/libsonare';
 
 await init();
@@ -267,7 +306,20 @@ console.log(key.name, key.confidence); // the key actually used
 const inD = autoTune({ samples: vocal, sampleRate, key: { root: 2, mode: 'dorian' } });
 ```
 
-`key` is `'detect'` (the default) or `{ root, mode }`, where `root` is a pitch class (0 = C .. 11 = B) and `mode` is a name such as `'major'`, `'minor'`, `'dorian'` or a `Mode` ordinal. The result is `{ samples, key }`; `key.mode` is a name, as `detectKey` reports it. `strength` (default `1`), `retuneSpeedMs`, `vibratoThresholdCents`, `maxCorrectionSemitones` and `referenceMidi` mean what they do in `pitchCorrectTimevarying(...)`, with `strength` playing the part of `retuneAmount`. Python's `auto_tune(samples, sample_rate, key="detect", *, strength=...)` takes the key as a string, a `Key`, a mapping, or a `(root, mode)` tuple and returns an `AutoTuneResult` with `samples` and `key`.
+```python [Python]
+import libsonare as sonare
+
+# Detect the key, then tune toward it.
+result = sonare.auto_tune(vocal, sample_rate, key="detect", strength=0.8)
+print(result.key.name, result.key.confidence)  # the key actually used
+
+# Or name the key.
+in_d = sonare.auto_tune(vocal, sample_rate, key=(2, "dorian"))
+```
+
+:::
+
+`key` is `'detect'` (the default) or `{ root, mode }`, where `root` is a pitch class (0 = C .. 11 = B) and `mode` is a name such as `'major'`, `'minor'`, `'dorian'` or a `Mode` ordinal. The result is `{ samples, key }`; `key.mode` is a name, as [`detectKey`](./js-api-analysis.md#detectkey-samples-samplerate) reports it, and detection reads the chroma at concert A440. `strength` (default `1`), `retuneSpeedMs`, `vibratoThresholdCents`, `maxCorrectionSemitones` and `referenceMidi` mean what they do in `pitchCorrectTimevarying(...)`, with `strength` playing the part of `retuneAmount`. Python takes the key as a string, a `Key`, a mapping, or a `(root, mode)` tuple and returns an `AutoTuneResult` with `samples` and `key`.
 
 To snap a contour you measured yourself, build the mask with `scaleMaskForMode(root, mode)` and pass it as `scaleModeMask`. It returns the 12-bit mask of a church mode (`scaleMaskForMode(0, 'major')` is `0b101010110101`), and `pitchCorrectTimevarying(...)` also accepts the mode name directly as `scaleModeMask`.
 
@@ -288,13 +340,13 @@ For the full mapping table and the `freq ↔ midi` formula, see [Editing Basics]
 
 ### Region selection for `noteStretch(...)`
 
-`noteStretch(...)` takes the region in samples (`onsetSample`, `offsetSample`) or in seconds (`onsetSec`, `offsetSec`, rounded to the nearest sample at the call's sample rate). Give one spelling of each bound; both together is refused. `onsetSample` defaults to the start of the input and `offsetSample` to its end, so omit a boundary when the region already reaches that edge. A negative position is refused: `RangeError` on WASM and Node, `SonareValueError` in Python.
+`noteStretch(...)` takes the region in samples (`onsetSample`, `offsetSample`) or in seconds (`onsetSec`, `offsetSec`); see [Samples and seconds](#samples-and-seconds). `onsetSample` defaults to the start of the input and `offsetSample` to its end, so omit a boundary when the region already reaches that edge.
 
 ```typescript
 const heldNote = noteStretch(vocal, sampleRate, { onsetSec: 0.25, offsetSec: 0.5, stretchRatio: 1.25 });
 ```
 
-`noteMove(...)` takes the same bounds plus `targetOnsetSample` / `targetOnsetSec`, the position the note's onset moves to, under the same rules. Python spells them `onset_sec`, `offset_sec` and `target_onset_sec`.
+`noteMove(...)` takes the same bounds plus `targetOnsetSample` / `targetOnsetSec`, the position the note's onset moves to, under the same rules.
 
 `stretchRatio` is the nominal length multiplier for the selected region. `noteStretch` blends the source samples at the replacement region's start and end with equal-power crossfades. Those crossfades stay inside the replacement region and do not consume neighboring samples. The output clip length and the shift of audio after the region therefore follow the replacement region's length change. `stretchRatio: 1.0` keeps the whole clip length neutral; for other ratios, the time-stretch backend can round the replacement length by a few samples. A clip edge has no neighboring audio on that side, so it has no crossfade there.
 
@@ -303,6 +355,25 @@ const heldNote = noteStretch(vocal, sampleRate, { onsetSec: 0.25, offsetSec: 0.5
 | `1.25` | Make the replacement region 25% longer; following audio shifts later by that region-length increase, subject to sample rounding |
 | `1.0` | Keep the replacement region and whole clip at the same length |
 | `0.8` | Make the replacement region 20% shorter; following audio shifts earlier by that region-length decrease, subject to sample rounding |
+
+### Samples and seconds
+
+Every edit position can be given in samples or in seconds. Give one spelling per bound; supplying both is refused.
+
+| Call | Samples | Seconds | Python (seconds) |
+|------|---------|---------|------------------|
+| `spectralEdit` region | `startSample` / `endSample` | `startSec` / `endSec` | `start_sec` / `end_sec` |
+| `noteStretch`, `noteMove` | `onsetSample` / `offsetSample`; `noteMove` also `targetOnsetSample` | `onsetSec` / `offsetSec`; `targetOnsetSec` | `onset_sec` / `offset_sec`; `target_onset_sec` |
+| `renderNotes`, `renderPercussiveEvents` | `onsetSample` / `offsetSample`; edit `timeOffsetSamples` | `onsetSec` / `offsetSec`; `timeOffsetSec` | `onset_sec` / `offset_sec`; `time_offset_sec` |
+| Vocal `setSourceSpan` | `sourceStartSample`, `sourceEndSample`, `destinationStartSample`, `destinationLengthSamples` | the same names ending `Sec` | `source_start_sec` and the matching fields |
+| Vocal `split` | `sourceSample` | `sourceSec` | `cut_source_sample` / `cut_source_sec` |
+| Vocal render `range` | `startSample` / `endSample` | `startSec` / `endSec` | `start_sec` / `end_sec` keywords |
+
+- Seconds are rounded to the nearest sample at the call's sample rate (a vocal session's own rate for the vocal rows).
+- A negative position is refused: `RangeError` on WASM and Node, `SonareValueError` in Python.
+- `-1` is not a "to the end" sentinel. Omit an end bound to take the input's edge (Python: `None`).
+
+If a position comes from analysis, keep the sample value; it avoids a second rounding.
 
 ### Offline `voiceChange(...)` vs `RealtimeVoiceChanger`
 

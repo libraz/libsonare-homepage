@@ -1,11 +1,11 @@
 ---
 title: 練習用トラックを作る
-description: 1 本の録音から、ピッチを保ったままのスロー版、キーを移した版、倍音成分と打撃成分の分離、コード・ビート・セクションのチャートまで — CLI だけで練習キットを作ります。
+description: 1 本の録音から、ピッチを保ったままのスロー版、キーを移した版、倍音成分と打撃成分の分離、コード・ビート・セクションのチャートまで、CLI だけで練習キットを作ります。
 ---
 
 # 練習用トラックを作る
 
-耳コピをしているとき、必要なのはマルチトラックではありません。ピッチを保ったままのスロー版、自分の楽器や声域に合わせて移調した版、グルーヴだけまたはハーモニーだけで練習できる版、そして演奏しながら読める資料です。このページでは、その 4 つを `sonare` だけで 1 本の録音から作ります。
+耳コピをしているとき、必要なのはマルチトラックではありません。ピッチを保ったままのスロー版、自分の楽器や声域に合わせて移調した版、グルーヴだけまたはハーモニーだけで練習できる版、そして演奏しながら読める資料です。このページでは、その 4 つを `sonare` だけで 1 本の録音から作ります。ステップ 1 から 3 には Node と Python のタブもあります。ライブラリの呼び出しはモノラルのサンプル配列を受け取って配列を返すので、ファイルは書き出さず、後述のステレオに関する警告も出ません。
 
 ここで扱うのは楽器ごとの分離ではありません。それには実際のステムかソース分離モデルが必要です。倍音成分／打撃成分の分離は、1 本のミックスをピッチのある成分とリズムの成分の 2 つに分けるだけで、バンド全体からベースラインだけを取り出してくれるわけではありません。それでも、グルーヴだけ、あるいはコードだけをループさせて練習するには十分で、録音を相手に練習するときに必要なことの大半をカバーします。
 
@@ -87,11 +87,29 @@ sonare sections song.wav --json > kit_sections.json
 
 ## ステップ 1 — 伸縮する前に分離する
 
-`hpss` は信号を倍音成分（ピッチのある素材 — コード、ベース、メロディ）と打撃成分（過渡的な素材 — ドラム、弾いた瞬間のアタック）に分けます。
+`hpss` は信号を倍音成分（ピッチのある素材。コード、ベース、メロディ）と打撃成分（過渡的な素材。ドラム、弾いた瞬間のアタック）に分けます。
 
-```bash
+::: code-group
+
+```bash [CLI]
 sonare hpss song.wav -o kit --json
 ```
+
+```typescript [Node]
+import { hpss } from '@libraz/libsonare-native';
+
+// samples: song.wav のモノラル Float32Array
+const { harmonic, percussive } = hpss(samples, sampleRate);
+```
+
+```python [Python]
+import libsonare as sonare
+
+split = sonare.hpss(samples, sample_rate)  # samples: song.wav のモノラルのサンプル
+harmonic, percussive = split.harmonic, split.percussive
+```
+
+:::
 
 ```json
 {"length": 494549, "sample_rate": 48000,
@@ -103,9 +121,13 @@ sonare hpss song.wav -o kit --json
 `-o kit` は `kit_harmonic.wav` と `kit_percussive.wav` の 2 ファイルを書き出します。この値はどちらかのファイル名ではなく、両方の出力名の元になるプレフィックスです。`-o kit.wav` を渡すと `kit.wav_harmonic.wav` になります。これはエラーにはなりませんが、たいていの人が意図した結果ではありません。
 :::
 
+下のデモは、バンドのフレーズに同じ分離を行います。倍音成分は持続するラインを、打撃成分はアタックを受け持ちます。
+
+<SonareDemo id="hpss-separation" />
+
 既定値（`--n-fft 2048`、`--hop-length 512`、2 成分をブレンドするソフトマスク）は妥当な出発点です。練習相手として分離のにじみが気になるときは、耳で聴き比べながら 2 つのオプションを試してみてください。`--hard-mask` は各時間-周波数セルを、ブレンドせずに支配的なほうへ完全に割り当てます。このファイルでは `harmonic_energy: 0.03774, percussive_energy: 0.004027` から `harmonic_energy: 0.039008, percussive_energy: 0.002892` へ変化しました。相互のにじみは減りますが、打撃成分の音はより人工的になります。`--kernel-harmonic` と `--kernel-percussive` は分離の土台になるメディアンフィルタのカーネル幅を広げるもので、サステインの長い音が多い素材で分離を鋭くできます。
 
-次は順序の話です。`song.wav` — つまり伸縮も移調もしていない、録音されたままのファイル — に対して `hpss` を実行するのは、好みの問題ではありません。タイムストレッチは短い重なり合った解析フレームを再配置する仕組みで、これは隣接フレームへ過渡成分をにじませます。`hpss` の打撃成分検出器が探しているのは、まさにそのにじみによって壊される短く鋭いエネルギーです。この 2 つの操作を逆順で行うと、その劣化を数値で確認できます。
+次は順序の話です。`song.wav`（伸縮も移調もしていない、録音されたままのファイル）に対して `hpss` を実行するのは、好みの問題ではありません。タイムストレッチは短い重なり合った解析フレームを再配置する仕組みで、これは隣接フレームへ過渡成分をにじませます。`hpss` の打撃成分検出器が探しているのは、まさにそのにじみによって壊される短く鋭いエネルギーです。この 2 つの操作を逆順で行うと、その劣化を数値で確認できます。
 
 ```bash
 sonare hpss song.wav -o order_a --json
@@ -113,7 +135,7 @@ sonare time-stretch song.wav --rate 0.75 -o order_b_slow.wav --json
 sonare hpss order_b_slow.wav -o order_b --json
 ```
 
-先に分離した場合は `percussive_energy: 0.004027`。先に伸縮してから分離すると `percussive_energy: 0.003373` — 約 16% 低くなりました。一方 `harmonic_energy` はほとんど動きません（`0.03774` に対して `0.037546`）。倍音成分がどちらの順序でも保たれるのは、持続するピッチ素材こそフェイズボコーダーが得意とする対象だからです。打撃成分がそうならないのは、そのエネルギーがフェイズボコーダーのにじませる過渡成分そのものに宿っているからです。
+先に分離した場合は `percussive_energy: 0.004027`。先に伸縮してから分離すると `percussive_energy: 0.003373` と、約 16% 低くなりました。一方 `harmonic_energy` はほとんど動きません（`0.03774` に対して `0.037546`）。倍音成分がどちらの順序でも保たれるのは、持続するピッチ素材こそフェイズボコーダーが得意とする対象だからです。打撃成分がそうならないのは、そのエネルギーがフェイズボコーダーのにじませる過渡成分そのものに宿っているからです。
 
 ::: warning 分離は必ず最初に
 一度伸縮または移調したファイルに `hpss` をかけると、すでに打撃成分らしさの一部を失った打撃成分が返ってきます。必ず加工前の録音を分離してから、出力された 2 ファイルをそれぞれ伸縮・移調してください。上のスクリプトはそうなっています。
@@ -121,15 +143,31 @@ sonare hpss order_b_slow.wav -o order_b --json
 
 ## ステップ 2 — ピッチを保ったスロー版
 
-```bash
+::: code-group
+
+```bash [CLI]
 sonare time-stretch song.wav --rate 0.75 -o kit_full_slow.wav --json
 ```
+
+```typescript [Node]
+import { timeStretch } from '@libraz/libsonare-native';
+
+const slowFull = timeStretch(samples, sampleRate, 0.75);
+const slowHarmonic = timeStretch(harmonic, sampleRate, 0.75); // harmonic はステップ 1 のもの
+```
+
+```python [Python]
+slow_full = sonare.time_stretch(samples, sample_rate, rate=0.75)
+slow_harmonic = sonare.time_stretch(harmonic, sample_rate, rate=0.75)  # harmonic はステップ 1 のもの
+```
+
+:::
 
 ```json
 {"length": 659399, "sample_rate": 48000, "duration": 13.737479166666667, "rate": 0.75, "output": "kit_full_slow.wav"}
 ```
 
-`--rate` は再生速度の倍率です。実測がそれを裏づけています。入力は 10.303 秒、`--rate 0.75` の出力は 13.737 秒 — 元の 4 分の 3 の速さで、より長くなっています。`--rate` が 1 より大きいと速く短くなり、1 より小さいと遅く長くなります。どちらの場合もピッチは変わりません。単に再生を遅くするのではなくこちらを使う理由はそこにあります。
+`--rate` は再生速度の倍率です。実測がそれを裏づけています。入力は 10.303 秒、`--rate 0.75` の出力は 13.737 秒で、元の 4 分の 3 の速さで、より長くなっています。`--rate` が 1 より大きいと速く短くなり、1 より小さいと遅く長くなります。どちらの場合もピッチは変わりません。単に再生を遅くするのではなくこちらを使う理由はそこにあります。
 
 同じコマンドを `kit_harmonic.wav` と `kit_percussive.wav` に対して実行すれば、スローなハーモニーのみのトラックとスローなグルーヴのみのトラックが手に入ります。操作自体は同じで、対象を元のミックスではなくステップ 1 の出力に変えているだけです。今練習している側だけテンポを落とせます。
 
@@ -137,9 +175,23 @@ sonare time-stretch song.wav --rate 0.75 -o kit_full_slow.wav --json
 
 ## ステップ 3 — 移調版を作る
 
-```bash
+::: code-group
+
+```bash [CLI]
 sonare pitch-shift song.wav --semitones -2 -o kit_down2.wav --json
 ```
+
+```typescript [Node]
+import { pitchShift } from '@libraz/libsonare-native';
+
+const down2 = pitchShift(samples, sampleRate, -2);
+```
+
+```python [Python]
+down2 = sonare.pitch_shift(samples, sample_rate, semitones=-2)
+```
+
+:::
 
 ```json
 {"length": 494552, "sample_rate": 48000, "duration": 10.303166666666666, "semitones": -2.0, "output": "kit_down2.wav"}
@@ -213,7 +265,7 @@ sonare sections song.wav --json
 ]}
 ```
 
-`--min-duration`（既定値 4.0 秒）は検出器が報告する最短のセクション長を決めます。この短いクリップでは結果は変わりませんが、実際の楽曲では 4 小節のブリッジが前後のヴァースへ吸収されてしまうのを防ぎます。セクションの種類が何を意味するかは[Section Structure](../glossary/analysis/section-structure.md)を参照してください。ここでの `unknown` は、検出器が「終わりではない」以上の強いラベルを見つけられなかったというだけで、大半が 1 つのグルーヴでできた 10 秒のクリップとしては妥当な結果です。
+ネイティブ CLI の JSON には `form` キーも含まれます。`--min-duration`（既定値 4.0 秒）は検出器が報告する最短のセクション長を決めます。この短いクリップでは結果は変わりませんが、実際の楽曲では 4 小節のブリッジが前後のヴァースへ吸収されてしまうのを防ぎます。セクションの種類が何を意味するかは[Section Structure](../glossary/analysis/section-structure.md)を参照してください。ここでの `unknown` は、検出器が「終わりではない」以上の強いラベルを見つけられなかったというだけで、大半が 1 つのグルーヴでできた 10 秒のクリップとしては妥当な結果です。
 
 まとめると、このチャートは次のように読めます。A minor、80 BPM で 4 拍子、最初の 2 小節は `Am — F#dim — Am`、`F` はダウンビートの 6.11 秒から始まり（セクション検出器自身の境界である 6.22 秒のわずかに手前です。両方の検出器は独立に動くため、サンプル単位までは一致しません）、その後 `Am` が最後まで続きます。
 
@@ -229,6 +281,6 @@ sonare sections song.wav --json
 
 ## 次に読むもの
 
-- 練習キットの元になるミックスをこれから作る段階なら — [CLI だけでミックスからマスタリングまで](./cli-mix-and-master.md)は同じシェルスクリプトの発想をステムに対して適用したものです。
-- 倍音成分／打撃成分の分割やチャート用データをスクリプトではなくアプリに組み込みたいなら — [CLI リファレンス](../cli.md)と[Editing DSP](../editing-dsp.md)が同じ処理を Python / JavaScript の API 経由で示しています。
+- 練習キットの元になるミックスをこれから作る段階なら、[CLI だけでミックスからマスタリングまで](./cli-mix-and-master.md)は同じシェルスクリプトの発想をステムに対して適用したものです。
+- 倍音成分／打撃成分の分割やチャート用データをスクリプトではなくアプリに組み込みたいなら、[CLI リファレンス](../cli.md)と[Editing DSP](../editing-dsp.md)が同じ処理を Python / JavaScript の API 経由で示しています。
 - チャートに出てくるコード・ビート・キーの数値の背景は、[Chord Recognition](../glossary/analysis/chord-recognition.md)、[Beats and Downbeats](../glossary/analysis/beats-downbeats.md)、[Key Detection](../glossary/analysis/key-detection.md)にまとまっています。

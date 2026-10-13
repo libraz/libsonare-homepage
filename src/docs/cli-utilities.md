@@ -5,9 +5,9 @@ description: The low-level numeric, frame, and conversion helpers the native son
 
 # CLI Utilities
 
-The native `sonare-cli` carries a set of low-level helpers that mirror `librosa.util` and the librosa conversion functions: frame/sample conversion, the four decibel conversions, framing, padding, length fixing, peak picking, and vector normalization. They exist so a script ported from librosa can check a number against the engine without writing a binding call, and their reader is different from the one [CLI Commands](./cli-commands.md) serves: someone reproducing a calculation, not someone analysing a song. Examples on this page write `sonare`; substitute `sonare-cli` for every command marked native only.
+The native `sonare-cli` carries a set of low-level helpers that mirror `librosa.util` and the librosa conversion functions: frame/sample conversion, the four decibel conversions, framing, padding, length fixing, peak picking, and vector normalization. They exist so a script ported from librosa can check a number against the engine without writing a binding call, and their reader is different from the one [CLI Commands](./cli-commands.md) serves: someone reproducing a calculation, not someone analyzing a song. Examples on this page write `sonare`; substitute `sonare-cli` for every command marked native only.
 
-The twelve numeric helpers take no audio file. Two take a single integer, `frames-to-samples --frames N` and `samples-to-frames --samples N`; the other ten take a comma-separated list through `--values`, which is required and refuses an empty list or an element that does not parse (`invalid float value in --values: x`). Plain output is the result as one comma-separated line, and `--json` prints a bare JSON array, except where a table below says otherwise. The two commands at the end of the page are different again: `tune-to-midi` takes an audio file and is on both CLIs, and `system-info` takes nothing at all.
+The twelve numeric helpers take no audio file. `pcen` takes `--values` the same way but is a feature command, so it is listed on [CLI Commands](./cli-commands.md#more-features). Two take a single integer, `frames-to-samples --frames N` and `samples-to-frames --samples N`; the other ten take a comma-separated list through `--values`, which is required and refuses an empty list or an element that does not parse (`invalid float value in --values: x`). Plain output is the result as one comma-separated line, and `--json` prints a bare JSON array, except where a table below says otherwise. The two commands at the end of the page are different again: `tune-to-midi` takes an audio file and is on both CLIs, and `system-info` takes nothing at all.
 
 ## Frame and sample conversion
 
@@ -37,7 +37,7 @@ A zero or negative `--ref` uses the largest magnitude in the list as the referen
 
 ```bash
 sonare amplitude-to-db --values 1,0.1          # 0,-20
-sonare db-to-amplitude --values 0,-20 --json   # [1, 0.1]
+sonare db-to-amplitude --values 0,-20 --json   # [1, 0.100000001]
 ```
 
 ## Framing, padding, and length
@@ -68,7 +68,7 @@ sonare fix-frames --values 0,3,3,7 --x-max 6     # 0,3,6
 | `sonare peak-pick --values ...` | Indices of local maxima, as `librosa.util.peak_pick`: `x[i]` is the maximum over `[i - pre_max, i + post_max)`, is at least the mean over `[i - pre_avg, i + post_avg)` plus `delta`, and lies at least `wait` entries after the previous peak | `--pre-max` (1), `--post-max` (1), `--pre-avg` (1), `--post-avg` (1), `--delta` (0.0), `--wait` (0) |
 | `sonare vector-normalize --values 3,4 --norm-type 2` | The list divided by its norm | `--norm-type` (0): 0 max-abs, 1 L1, 2 L2, 3 power (sum of squares); `--threshold` (1e-12) |
 
-`peak-pick` prints integer indices, so its `--json` is an integer array. A `--norm-type` outside 0 to 3 is refused as an invalid parameter rather than falling back to the max-abs norm. `--threshold` is the norm below which the list comes back unchanged instead of being divided by something near zero, which is librosa's `fill=None` behaviour.
+`peak-pick` prints integer indices, so its `--json` is an integer array. A `--norm-type` outside 0 to 3 is refused as an invalid parameter rather than falling back to the max-abs norm. `--threshold` is the norm below which the list comes back unchanged instead of being divided by something near zero, which is librosa's `fill=None` behavior.
 
 ```bash
 sonare vector-normalize --values 3,4 --norm-type 2   # 0.6,0.8

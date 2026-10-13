@@ -17,16 +17,16 @@ This page goes deeper than [Mixing Basics](../concepts/mixing-basics.md) and gro
 
 libsonare processes each block of a strip in one fixed order. Reading it top to bottom explains most "why did that control behave like that?" questions:
 
-1. **Input trim** — a clean level adjustment on the way in, before anything else sees the signal.
-2. **Polarity invert (L/R)** — flips the waveform; used to fix phase between mics or channels.
-3. **Channel delay** — time-aligns the track against others. It is set in whole samples (`setChannelDelaySamples`, scene field `channelDelaySamples`); there is no millisecond form, so convert yourself.
-4. **EQ** — tone shaping; its position can be pre- or post-fader (see below).
-5. **Pre-fader inserts** — in-series processors that run before the fader.
-6. **Fader (+ VCA offset)** — the balance control you ride against other tracks.
-7. **Pan** — places the track across the stereo field, using the chosen [pan law](./pan-width.md) (the rule that keeps a part's loudness steady as it moves off center).
-8. **Stereo width** — narrows or widens the stereo image.
-9. **Post-fader inserts** — in-series processors after the fader.
-10. **Meter / goniometer tap** — measurement, not processing. The goniometer is the dot-plot display that shows how wide the stereo image is.
+1. **Input trim**: a clean level adjustment on the way in, before anything else sees the signal.
+2. **Polarity invert (L/R)**: flips the waveform; used to fix phase between mics or channels.
+3. **Channel delay**: time-aligns the track against others. It is set in whole samples (`setChannelDelaySamples`, scene field `channelDelaySamples`); there is no millisecond form, so convert yourself.
+4. **EQ**: tone shaping, always before the fader (see below).
+5. **Pre-fader inserts**: in-series processors that run before the fader.
+6. **Fader (+ VCA offset)**: the balance control you ride against other tracks.
+7. **Pan**: places the track across the stereo field, using the chosen [pan law](./pan-width.md) (the rule that keeps a part's loudness steady as it moves off center).
+8. **Stereo width**: narrows or widens the stereo image.
+9. **Post-fader inserts**: in-series processors after the fader.
+10. **Meter / goniometer tap**: measurement, not processing. The goniometer is the dot-plot display that shows how wide the stereo image is.
 
 ## Why the order matters
 
@@ -43,7 +43,7 @@ Picking the wrong tap point is one of the most common routing mistakes.
 
 ## EQ position
 
-EQ can sit pre- or post-fader. Pre-fader EQ shapes the tone the inserts and fader then act on; post-fader EQ shapes the already-balanced signal. libsonare exposes this as a strip option rather than forcing one choice.
+The EQ runs pre-fader, so it shapes the tone that the inserts and fader then act on. The C++ `ChannelStrip` can move it post-fader with `set_eq_position`, but scene JSON and the language bindings always run it pre-fader. In a scene the EQ is the strip's `eq` field (see [Mixing Scene JSON](../../mixing-scene-json.md#eq-bands)).
 
 ## Cue monitoring: PFL and AFL
 
@@ -59,12 +59,12 @@ Cue monitoring is a queueable realtime command: `setTrackMonitorMode(laneIndex, 
 A strip is a `ChannelStrip` configured by `ChannelStripConfig`. A block is processed in this order:
 
 ```text
-trim -> polarity -> channel delay -> EQ (pre, optional) -> pre-fader InsertSlot
+trim -> polarity -> channel delay -> EQ -> pre-fader InsertSlot
   -> fader with VCA offset -> PannerProcessor
-  -> StereoWidthProcessor -> EQ (post, optional) -> post-fader inserts
+  -> StereoWidthProcessor -> post-fader inserts
 ```
 
-`EqPosition` chooses whether the EQ runs pre- or post-fader; `PannerProcessor` takes the strip's `PanLaw`/`PanMode`. `TapPoint` marks where pre- and post-fader sends and the `GoniometerBuffer`/`MeterProcessor` read the signal. All gain and pan changes are parameter-smoothed and the path is real-time-safe (pre-allocated, denormal-guarded), so the same strip runs offline and inside an AudioWorklet.
+`EqPosition` (C++ only) chooses whether the EQ runs pre- or post-fader; `PannerProcessor` takes the strip's `PanLaw`/`PanMode`. `TapPoint` marks where pre- and post-fader sends and the `GoniometerBuffer`/`MeterProcessor` read the signal. All gain and pan changes are parameter-smoothed and the path is real-time-safe (pre-allocated, denormal-guarded), so the same strip runs offline and inside an AudioWorklet.
 :::
 
 Related: [Mixing Basics](../concepts/mixing-basics.md), [Buses and Sends](./buses-sends.md), [Pan and Stereo Width](./pan-width.md), [Realtime Engine](../realtime/realtime-engine.md), [Mixing Engine](../../mixing.md)

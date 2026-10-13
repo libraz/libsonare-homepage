@@ -14,7 +14,7 @@ This page covers the analysis, effects, and feature-extraction functions of the 
 | `detectBpm(samples, sampleRate?)` | `number` | Tempo in BPM |
 | `detectKey(request)` / `detectKey(samples, sampleRate?, options?)` | `KeyDetection` | Root (a pitch-class number, C = 0), mode (a name such as `'major'` or `'dorian'`), confidence, and the `tuning` the chroma was built with. `options` takes the `detectKeyCandidates` options plus `tuning` (a number in `[-0.5, 0.5)` or `'auto'`) |
 | `detectBeats(samples, sampleRate?)` | `Float32Array` | Beat timestamps |
-| `detectOnsets(samples, sampleRate?)` | `Float32Array` | Onset timestamps |
+| `detectOnsets(samples, sampleRate?, options?)` | `Float32Array` | Onset timestamps. `options` (`OnsetDetectOptions`): `nFft`, `hopLength`, `threshold`, `preMax`, `postMax`, `preAvg`, `postAvg`, `delta`, `wait`, `backtrack`, `backtrackRange` |
 | `detectChords(request)` / `detectChords(samples, sampleRate?, options?)` | `ChordAnalysisResult` | Chord progression with timings, plus the `tuning` used. Frames below `threshold` are returned as explicit `N.C.` intervals; the options form enables HMM smoothing, key context, inversions, chroma method (`'stft'` default), and `tuning` (a number or `'auto'`; the legacy positional form is also supported) |
 | `chordFunctionalAnalysis(request)` / `chordFunctionalAnalysis(samples, keyRoot, keyMode?, sampleRate?, options?)` | `FunctionalChord[]` | Detects chords, then returns the timed entries with `roman` (`'I'`, `'V7'`, `'vi'`) and `function` (`'tonic'`, `'subdominant'`, `'dominant'`, `'chromatic'`, `'none'`) added. `keyRoot` and `keyMode` take a pitch-class number or name and a mode name or ordinal, so `detectKey`'s result goes straight back in |
 | `chordFunctions(request)` | `FunctionalChord[]` | Labels chords you already have with `roman` and `function` in `request.key`, without re-detecting. `request.chords` is a `detectChords` result or its `chords`; `request.key` is `{ root, mode }`, so `detectKey`'s result goes in as it is (`root` as a pitch-class name or ordinal, `mode` as a name or ordinal) |
@@ -28,18 +28,20 @@ This page covers the analysis, effects, and feature-extraction functions of the 
 | `analyzeDynamics(samples, sampleRate?, options?)` | `DynamicsResult` | Dynamic range, loudness range, crest factor. `options`: `windowSec`, `hopLength`, `compressionThreshold` |
 | `analyzeTimbre(samples, sampleRate?, options?)` | `TimbreResult` | Brightness, warmth, density, roughness, complexity, plus per-window `timbreOverTime`. `options`: `nFft`, `hopLength`, `nMels`, `nMfcc`, `windowSec` |
 | `analyzeSections(samples, sampleRate?, options?)` | `Section[]` | Structural sections (intro/verse/chorus…) with timings. `options`: `nFft`, `hopLength`, `minSectionSec`. Long inputs may use a pooled boundary grid; use each section's `start` / `end` for placement |
-| `detectBoundaries(request)` | `BoundaryResult` | Structural transitions plus the novelty curve they were picked from, and the grid both live on. `request`: `samples`, `sampleRate`, `nFft`, `hopLength`, `kernelSize`, `threshold`, `absoluteThreshold`, `nMfcc`, `nChroma`, `peakDistance`, `referenceWindow` (seconds, default `60`; the span the relative `threshold` is measured over, `0` disables it), `useMfcc`, `useChroma`. Reach for it when you want to apply your own threshold rather than take `analyzeSections`' labelled spans |
+| `detectBoundaries(request)` | `BoundaryResult` | Structural transitions plus the novelty curve they were picked from, and the grid both live on. `request`: `samples`, `sampleRate`, `nFft`, `hopLength`, `kernelSize`, `threshold`, `absoluteThreshold`, `nMfcc`, `nChroma`, `peakDistance`, `referenceWindow` (seconds, default `60`; the span the relative `threshold` is measured over, `0` disables it), `useMfcc`, `useChroma`. Reach for it when you want to apply your own threshold rather than take `analyzeSections`' labeled spans |
 | `analyzeMelody(samples, sampleRate?, options?)` | `MelodyResult` | Lead-melody contour (F0 per frame). `options`: `fmin`, `fmax`, `frameLength`, `hopLength`, `threshold`, `usePyin`, `center` |
 | `detectAcoustic(samples, sampleRate?, options?)` | `AcousticResult` | Room acoustics from a recording (RT60 — the time reverberation takes to decay 60 dB — and related measures). `options`: `nOctaveBands`, `nThirdOctaveSubbands`, `minDecayDb`, `noiseFloorMarginDb` |
 | `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)` | `AcousticResult` | Room acoustics from a measured impulse response; `minDecayDb` controls the decay-fit threshold (default `30`) |
-| `estimateRoom(samples, sampleRate?, options?)` | `RoomEstimateResult` | Equivalent-room estimate with volume, dimensions, DRR (direct-to-reverberant ratio), absorption bands, RT60 bands, and confidence |
-| `synthesizeRir(options?)` | `RirResult` | Mono RIR (room impulse response) from shoebox geometry |
+| `estimateRoom(samples, sampleRate?, options?)` | `RoomEstimateResult` | Equivalent-room estimate: `volume`, `lengthM` / `widthM` / `heightM`, `drrDb` (direct-to-reverberant ratio), `bandAbsorption`, `rt60Bands`, `confidence`. `options.mode` is `'auto'` (default), `'blind'` or `'impulse_response'`; a number is a `TypeError` |
+| `synthesizeRir(options?)` | `RirResult` | Mono RIR (room impulse response) from shoebox geometry, returned as `{ rir, sampleRate, diagnostics }`. `materialPreset` takes a name (`'none'`, `'concrete'`, `'wood'`, `'curtain'`, `'carpet'`, `'glass'`); a number is a `TypeError`. Invalid geometry throws a coded `SonareError` (`InvalidParameter`) |
+| `roomGeometryFromEstimate(estimate, options?)` | `RoomGeometryOptions` | Turns an `estimateRoom` result into `synthesizeRir` input. Source and listener are placed in the estimated room (override with `options.source` / `options.listener`), and the mean of the bands becomes the scalar `absorption`. Throws `InvalidParameter` when the estimate has no measurable dimensions |
 | `roomMorph(samples, sampleRate, options?)` | `RoomMorphResult` | Offline creative morph toward a target room; read morphed samples from `.audio`, with `.sampleRate` and `.diagnostics` alongside them |
-| `lufs(samples, sampleRate?)` | `LufsResult` | Integrated, final momentary/short-term windows, their EBU R128 maxima (Max-M / Max-S), and loudness range |
+| `roomMorphStereo(request)` | `RoomMorphStereoResult` | Stereo `roomMorph`: `request` is `{ left, right, sampleRate?, receiverSpacingM?, ...options }`. The target room is heard at two receivers `receiverSpacingM` apart (in (0, 4] m, default 0.5 m), so each channel gets its own response; read `.left`, `.right`, `.sampleRate` and `.diagnostics` |
+| `lufs(samples, sampleRate?, options?)` | `LufsResult` | Integrated, final momentary/short-term windows, their EBU R128 maxima (Max-M / Max-S), and loudness range |
 | `lufsInterleaved(samples, channels, sampleRate?)` | `LufsResult` | Channel-weighted multichannel loudness from interleaved samples |
 | `ebur128LoudnessRange(samples, sampleRate?)` | `number` | Standards-compliant EBU R128 loudness range (LRA) in LU |
-| `momentaryLufs(samples, sampleRate?)` | `Float32Array` | Momentary loudness (400 ms) per step |
-| `shortTermLufs(samples, sampleRate?)` | `Float32Array` | Short-term loudness (3 s) per step |
+| `momentaryLufs(samples, sampleRate?, options?)` | `Float32Array` | Momentary loudness (400 ms) per step |
+| `shortTermLufs(samples, sampleRate?, options?)` | `Float32Array` | Short-term loudness (3 s) per step |
 | `version()` | `string` | Library version |
 | `voiceChangerAbiVersion()` | `number` | ABI version of the realtime voice-changer POD config; separate from preset JSON `schemaVersion` |
 | `voiceCharacterPresetId(preset)` | `VoicePresetId \| null` | Canonical voice-character preset ID; an unknown numeric ordinal returns `null`, while an unknown string ID throws |
@@ -51,7 +53,7 @@ Default sample rates differ by helper family:
 | Helper family | Default `sampleRate` |
 |---------------|----------------------|
 | Music analysis, effects, feature, and loudness helpers | `22050` |
-| `analyzeImpulseResponse`, `detectAcoustic`, `estimateRoom`, and `synthesizeRir` in the native addon | `48000` |
+| `analyzeImpulseResponse`, `detectAcoustic`, `estimateRoom`, `synthesizeRir`, `roomMorph`, and `roomMorphStereo` in the native addon | `48000` |
 
 Common helpers are also available as `Audio` instance methods, as noted in the `Audio` section.
 
@@ -123,8 +125,11 @@ console.log(meter.searched, meter.timeSignature.numerator, meter.grouping);
 | `beatTimes` | — | Beat positions in seconds, non-decreasing |
 | `beatStrengths` | — | Per-beat accent, the same length as `beatTimes`. The series is divided by its own maximum before scoring, so it needs no pre-scaling |
 | `candidateNumerators` | `[3, 4, 6]` | Numerators to score; at most 16 entries, each in `[2, 32]` |
-| `denominator` | `4` | Beat unit reported for the detected meter |
+| `denominator` | `4` | Beat unit reported for the detected meter, as requested: a six accented 3+3 comes back with this denominator and `grouping` `[3, 3]` |
+| `compoundSubdivisionThreshold` | `0.85` | Subdivision score at which a 6 candidate is reported as compound (x/8). Per-beat accents carry no subdivision, so it does not change this function's result |
 | `downbeatWeight` / `measureWeight` / `subdivisionWeight` | `1` / `0.5` / `0.15` | Scoring weights for the first beat of each measure, measure-to-measure accent agreement, and the subdivision pattern |
+
+<SonareDemo id="meter-estimate" />
 
 Two sources are supported for `beatStrengths`: `beatObservations.onsetStrength`,
 the windowed value the library's own downbeat pass scores, and `beats[].strength`,
@@ -167,7 +172,7 @@ Progress callbacks are not available on the async path. If you need progress upd
 
 | Function | Return Type | Description |
 |----------|-------------|-------------|
-| `analyzeAsync(samples, sampleRate?)` | `Promise<AnalysisResult>` | Async variant of `analyze(...)` |
+| `analyzeAsync(samples, sampleRate?, options?)` | `Promise<AnalysisResult>` | Async variant of `analyze(...)` |
 | `masterAudioAsync(samples, sampleRate?, presetName?, overrides?)` | `Promise<MasteringChainResult>` | Async variant of `masterAudio(...)` |
 | `masterAudioStereoAsync(left, right, sampleRate?, presetName?, overrides?)` | `Promise<MasteringChainStereoResult>` | Async variant of `masterAudioStereo(...)` |
 
@@ -184,15 +189,16 @@ Progress callbacks are not available on the async path. If you need progress upd
 | `pitchShift(samples, sampleRate, semitones, nFft?, hopLength?)` | `Float32Array` | Pitch-shift without tempo change; defaults to `nFft=2048`, `hopLength=512` |
 | `remix(samples, intervals, sr?, alignZeros?)` | `Float32Array` | Reorder or concatenate sample intervals |
 | `remixAlignedIntervals(samples, intervals, sr?, alignZeros?)` | `Int32Array` | The cut points `remix` would use, without cutting: one clamped `(start, end)` pair per input interval, flattened. `alignZeros` defaults to `true` here |
-| `normalize(samples, sr?, targetDb?, mode?)` | `Float32Array` | Normalize to target peak or RMS dB (`mode`: `'peak'` or `'rms'`, default: `'peak'`) |
+| `normalize(samples, sr?, targetDb?, mode?)` | `Float32Array` | Normalize to target peak or RMS dB (`mode`: `'peak'` (default) or `'rms'`; `targetDb` defaults to `0` for peak and `-20` for rms) |
 | `normalizeStereo(request)` | `NormalizeStereoResult` | Normalize a channel pair on a level measured across both channels. Request-only — takes `NormalizeStereoRequest` |
 | `trim(samples, sr?, thresholdDb?, frameLength?, hopLength?)` | `Float32Array` | Trim silence (defaults: `-60.0` dB, `frameLength=2048`, `hopLength=512`) |
 | `resample(samples, srcSr, targetSr)` | `Float32Array` | Resample to target sample rate |
 | `pitchCorrectToMidi(samples, sr, currentMidi, targetMidi)` | `Float32Array` | Retune a held note from one MIDI pitch to another |
 | `pitchCorrectToMidiTimevarying(samples, f0Hz, targetMidi, sr?, hopLength?, voiced?, voicedProb?)` | `Float32Array` | Retune a tracked pitch contour to a fixed note, frame by frame. `voiced` takes the `VoicedFlags` union |
 | `pitchCorrectTimevarying(samples, f0Hz, sr?, hopLength?, options?)` | `Float32Array` | Snap a tracked pitch contour to a scale or a fixed note; `options` is `PitchCorrectOptions`, whose `voiced` field takes the same `VoicedFlags` union |
-| `noteStretch(samples, sr?, options?)` | `Float32Array` | Time-stretch a single note span in place; `options` is `{ onsetSample, offsetSample, stretchRatio }` |
-| `voiceChange(samples, sr?, options?)` | `Float32Array` | Pitch + formant shift for voice transformation; `options` is `{ pitchSemitones, formantFactor }` |
+| `autoTune(request)` | `AutoTuneResult` | Tune a whole recording to a key: `request` is `{ samples, sampleRate?, key?, strength?, retuneSpeedMs?, vibratoThresholdCents?, maxCorrectionSemitones?, referenceMidi? }`, with `key` `'detect'` (default) or `{ root, mode }`. Returns `{ samples, key }`. See [Editing DSP](./editing-dsp.md) |
+| `noteStretch(samples, sr?, options?)` | `Float32Array` | Time-stretch a single note span in place; `options` is `{ onsetSample | onsetSec, offsetSample | offsetSec, stretchRatio }`; give a position in samples or in seconds, not both |
+| `voiceChange(samples, sr?, options?)` | `Float32Array` | Pitch + formant shift for voice transformation; `options` is `{ pitchSemitones, formantFactor, formantMode }`; `formantMode` is `'relative'` (default) or `'absolute'`, which keeps formants at fixed frequencies |
 
 `trim(...)` is the simple threshold edit helper. `trimSilence(...)` below is
 the librosa-compatible frame/RMS helper that returns the original sample range.
@@ -228,10 +234,9 @@ below; `mode: 'rms'` drives the root mean square over both channels' samples
 together — the quadratic mean of the per-channel figures, not their average —
 and hard-clips the result to [-1, 1].
 
-Unlike the mono `normalize(...)`, whose `targetDb` default is `0` in both modes,
-`normalizeStereo` defaults `targetDb` **by mode**: `0` for `'peak'` and `-20`
-for `'rms'`. 0 dBFS RMS is not a usable target, since the peaks sit well above
-the RMS and effectively all of them would clip.
+`normalize(...)` and `normalizeStereo(...)` both default `targetDb` **by mode**:
+`0` for `'peak'` and `-20` for `'rms'`. 0 dBFS RMS is not a usable target, since
+the peaks sit well above the RMS and effectively all of them would clip.
 
 `VoicedFlags` is `Int32Array | Uint8Array | Float32Array | readonly number[] |
 readonly boolean[]`, so the `boolean[]` that `PitchResult.voicedFlag` hands back
@@ -273,7 +278,7 @@ throws a `RangeError` (`'voiced must have the same length as f0Hz'`), not a
 |----------|-------------|-------------|
 | `stft(samples, sr?, nFft?, hopLength?)` | `StftResult` | Short-Time Fourier Transform |
 | `stftDb(samples, sr?, nFft?, hopLength?)` | `StftDbResult` | STFT in decibels |
-| `melSpectrogram(samples, sr?, nFft?, hopLength?, nMels?)` | `MelSpectrogramResult` | Mel spectrogram; the result carries `nFft`, `fmin`, `fmax` as applied, `htk` and `isDb` beside the matrix |
+| `melSpectrogram(samples, sr?, nFft?, hopLength?, nMels?, fmin?, fmax?, htk?)` | `MelSpectrogramResult` | Mel spectrogram; the result carries `nFft`, `fmin`, `fmax` as applied, `htk` and `isDb` beside the matrix |
 | `mfcc(samples, sr?, nFft?, hopLength?, nMels?, nMfcc?, fmin?, fmax?, htk?, lifter?)` | `MfccResult` | Mel-Frequency Cepstral Coefficients (`lifter` default 0 = no liftering); the result carries the Mel parameters and `lifter` it was computed with |
 | `chroma(samples, sr?, nFft?, hopLength?)` | `ChromaResult` | Chroma features |
 | `spectralCentroid(samples, sr?, nFft?, hopLength?)` | `Float32Array` | Spectral centroid per frame |
@@ -293,7 +298,7 @@ throws a `RangeError` (`'voiced must have the same length as f0Hz'`), not a
 | `tuningToReferenceHz(tuning, a4?)` / `referenceHzToTuning(hz, a4?)` | `number` | Convert between the analysis unit (a semitone fraction) and a reference pitch in Hz; `a4` defaults to `440` |
 | `cqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | Constant-Q transform magnitude |
 | `vqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?, gamma?)` | `CqtResult` | Variable-Q transform magnitude (`gamma` controls Q; omit it for the automatic value, `0` is equivalent to CQT, a negative or non-finite value is refused) |
-| `chromaCqt(samples, sr?, hopLength?, nChroma?)` | `{ nChroma, nFrames, data }` | Constant-Q chromagram (`librosa.feature.chroma_cqt` equivalent) |
+| `chromaCqt(samples, sr?, hopLength?, nChroma?, binsPerOctave?)` | `{ nChroma, nFrames, data }` | Constant-Q chromagram (`librosa.feature.chroma_cqt` equivalent) |
 | `nnlsChroma(samples, sr?, options?)` | `{ nChroma, nFrames, data }` | NNLS chromagram (note-activation chroma); `options.hopLength` defaults to `512` |
 | `decompose(s, nFeatures, nFrames, nComponents, nIter?, beta?, init?)` | `DecomposeResult` | NMF (non-negative matrix factorization) factor matrices from a row-major spectrogram, with selectable `init` (`'random'` default, `'nndsvd'`) |
 | `decomposeStems(request)` | `DecomposeStemsResult` | NMF separation that carries the original phase, so each component is directly listenable. Request-only — takes `DecomposeStemsRequest` |
@@ -303,14 +308,14 @@ throws a `RangeError` (`'voiced must have the same length as f0Hz'`), not a
 | `hybridCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | Hybrid CQT magnitude (true CQT in low bins, pseudo-CQT in high bins) |
 | `pseudoCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | Approximate (pseudo) CQT magnitude (single FFT) |
 | `bassChroma(samples, sr?, hopLength?, nChroma?)` | `ChromaResult` | Bass-focused chroma (low-register pitch-class distribution) |
-| `chromaCens(samples, sr?, hopLength?, nChroma?)` | `ChromaResult` | CENS energy-normalized/smoothed chroma |
+| `chromaCens(samples, sr?, hopLength?, nChroma?, binsPerOctave?)` | `ChromaResult` | CENS energy-normalized/smoothed chroma |
 | `onsetStrengthMulti(samples, sr?, nFft?, hopLength?, nMels?, nBands?)` | `{ nBands, nFrames, data }` | Multi-band onset strength (`nBands` default 3; `data` row-major `[nBands x nFrames]`) |
 | `nnFilter(s, nFeatures, nFrames, aggregate?, k?, width?)` | `Matrix2dResult` | Nearest-neighbor filtering |
 | `onsetEnvelope(samples, sr?, nFft?, hopLength?, nMels?)` | `Float32Array` | Onset strength envelope — how sharply energy rises per frame; the input to the tempogram family |
 
 Common defaults: `nFft=2048`, `hopLength=512`, `nMels=128`, `nMfcc=20`, pitch `fmin=65.0`, `fmax=2093.0`, `threshold=0.1`, and `rollPercent=0.85`.
 
-CQT/VQT use `fmin=32.70319566` Hz (C1), `nBins=84`, and `binsPerOctave=12`. Omitting VQT's `gamma` selects automatic ERB-derived bandwidth. `chromaCqt` defaults to `nChroma=12`, `nBins=252`, and `binsPerOctave=36`; `bassChroma` and `chromaCens` default to `nChroma=12`. `onsetStrengthMulti` defaults to `nBands=3`. `decompose` defaults to `nIter=50`, `beta=2`, and `init='random'`.
+CQT/VQT use `fmin=32.70319566` Hz (C1), `nBins=84`, and `binsPerOctave=12`. Omitting VQT's `gamma` selects automatic ERB-derived bandwidth. `chromaCqt` defaults to `nChroma=12`, `nBins=252`, and `binsPerOctave=36`; `chromaCens` defaults to `nChroma=12` and `binsPerOctave=36`, and `bassChroma` to `nChroma=12`. `onsetStrengthMulti` defaults to `nBands=3`. `decompose` defaults to `nIter=50`, `beta=2`, and `init='random'`.
 
 ### `decompose` versus `decomposeStems`
 
@@ -328,6 +333,8 @@ the cost of more artifacts on overlapping partials. `decomposeStems` defaults to
 `nComponents=4`, `nFft=2048`, `hopLength=512`, `nIter=100`, `beta=2`, and
 `init='random'`, and returns `components` — one signal per component, each the
 length of the input — alongside the `w`/`h` matrices and `sampleRate`.
+
+<SonareDemo id="stem-decompose" />
 
 For multichannel input, `decomposeStemsLinked({ channels, sampleRate, ... })`
 fits one NMF model and one mask set from the channels' averaged magnitudes, then
@@ -373,3 +380,15 @@ length it rises with F0 rather than tracking confidence. A fixed threshold
 therefore silently returns **no segments at all** for low-register material.
 Pass `pitchPyin`'s `voicedFlag` converted to `0`/`1`, or lower `voicedThreshold`.
 :::
+
+## Transcription, Annotation and Synth Descriptors
+
+| Function | Return Type | Description |
+|----------|-------------|-------------|
+| `transcribe(request)` | `TranscribeResult` | Mono audio to MIDI note events on a constant-tempo grid, returned as `{ events, noteCount, tempoBpm, tuning }` and ready for `Project.setMidiEvents`. Beyond the tempo and note-length settings, the request takes `maxPolyphony`, `minFramePeakRatio`, `minRidgePeakRatio`, `reattackRatio`, `minNoteDivision` and `referenceHz` (a number or `'auto'`). See [Audio to MIDI](./audio-to-notes.md) |
+| `alignTakeToReference(request)` | `AlignTakeToReferenceResult` | Warp anchors that map a take onto the reference timeline. `takeSampleRate` defaults to `sampleRate` |
+| `chordSymbolFromAnalysis(chord)` | `ChordSymbolFields` | Converts a `detectChords` or `analyze` chord into the fields of a chord annotation for `Project.annotateChords`. See [Project MIDI](./project-editing-midi.md) |
+| `keyModeFromAnalysis(mode)` | `number` | Converts a key mode name (`'minor'`) into the `mode` of a key annotation for `Project.annotateKeys` |
+| `synthEngineParamInfo(engineMode)` | `SynthParamInfo[]` | Range, default and unit of every numeric parameter of a synth engine mode. See [Built-in Synthesizer](./native-synth.md) |
+| `synthPatchParamInfo()` | `SynthParamInfo[]` | The same descriptors for the numeric `SynthPatch` fields |
+| `masteringInsertParamInfo(name, sampleRate?)` | `MasteringInsertParamInfo[]` | Parameter descriptors of one mastering insert processor |

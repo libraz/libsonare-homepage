@@ -87,5 +87,208 @@
     "reason": "Sidebar group names (Build By Task, 作りたいもの別, API By Runtime, 利用環境別 API, and the other renamed labels) are cited verbatim in prose on several pages. The forbidden list is filled in once the group names are finalized, so this rule can catch every stale prose citation in one place.",
     "locale": "both",
     "exceptions": []
+  },
+  {
+    "correct": "しきい値",
+    "forbidden": ["閾値"],
+    "reason": "Same referent; しきい値 is the large majority and 閾 is outside the jōyō set. スレッショルド stays as a compressor/gate control name.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "ルーム音響",
+    "forbidden": ["室内音響"],
+    "reason": "Matches the acoustic-analysis page title, the sidebar group and the API family.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "吸音率",
+    "forbidden": ["吸音係数"],
+    "reason": "One rendering of absorption coefficient across the room-acoustics pages.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "サンプルレート",
+    "forbidden": ["サンプリング周波数"],
+    "reason": "Extends the サンプリングレート entry; one name for the sample rate.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "True Peak",
+    "forbidden": ["真のピーク"],
+    "reason": "Extends the トゥルーピーク entry.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "倍音成分／打撃成分",
+    "forbidden": ["調波成分"],
+    "reason": "HPSS components are 倍音成分 and 打撃成分 throughout.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "呼び出し側",
+    "forbidden": ["呼び出し元"],
+    "reason": "Same referent (the caller); 呼び出し側 is the majority.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "レイテンシ",
+    "forbidden": ["レイテンシー"],
+    "reason": "Short form is the house style, like プロセッサ, バッファ, ブラウザ.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "プロセッサ",
+    "forbidden": ["プロセッサー"],
+    "reason": "Short form is the house style.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "バッファ",
+    "forbidden": ["バッファー"],
+    "reason": "Short form is the house style.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "ブラウザ",
+    "forbidden": ["ブラウザー"],
+    "reason": "Short form is the house style.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "次のとおり",
+    "forbidden": ["次の通り", "以下の通り"],
+    "reason": "Kana form per the house style.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "較正",
+    "forbidden": ["キャリブレーション", "校正"],
+    "reason": "Calibration is 較正; 校正 means proofreading and the katakana form split the same concept.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "採譜",
+    "forbidden": ["文字起こし", "書き起こし"],
+    "reason": "Audio to notes is 採譜; the other two mean speech transcription. トランスクリプション only when naming the API.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "ピッチ補正",
+    "forbidden": ["オートチューン"],
+    "reason": "A trademark-like product name used as a common noun; API identifiers such as autoTune are code spans and unaffected.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "pitch correction",
+    "forbidden": ["auto-tune", "Auto-tune", "auto-tuner", "Auto-Tune"],
+    "reason": "A trademark-like product name used as a common noun; API identifiers such as autoTune are code spans and unaffected.",
+    "locale": "en",
+    "exceptions": []
+  },
+  {
+    "correct": "デリバーブ",
+    "forbidden": ["ディリバーブ"],
+    "reason": "One katakana form for the dereverb processor.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "導波路",
+    "forbidden": ["導波管"],
+    "reason": "Waveguide synthesis term; 導波管 names a physical microwave guide.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "モノフォニック",
+    "forbidden": ["単旋律"],
+    "reason": "Monophonic pitch tracking and takes are モノフォニック, matching ポリフォニック.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "worklet",
+    "forbidden": ["ワークレット"],
+    "reason": "AudioWorklet and worklet stay in Latin letters.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "リアルタイム安全",
+    "forbidden": ["リアルタイムセーフ"],
+    "reason": "One rendering of realtime-safe.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "極性反転",
+    "forbidden": ["ポラリティ反転"],
+    "reason": "One rendering of polarity inversion.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "behavior",
+    "forbidden": ["behaviour", "Behaviour"],
+    "reason": "American spelling throughout the EN docs.",
+    "locale": "en",
+    "exceptions": []
+  },
+  {
+    "correct": "normalize",
+    "forbidden": ["normalis", "Normalis"],
+    "reason": "American spelling throughout the EN docs (covers every inflection).",
+    "locale": "en",
+    "exceptions": []
+  },
+  {
+    "correct": "neighbor",
+    "forbidden": ["neighbour", "Neighbour"],
+    "reason": "American spelling throughout the EN docs.",
+    "locale": "en",
+    "exceptions": []
+  },
+  {
+    "correct": "labeled",
+    "forbidden": ["labelled", "labelling"],
+    "reason": "American spelling throughout the EN docs.",
+    "locale": "en",
+    "exceptions": []
+  },
+  {
+    "correct": "canceled",
+    "forbidden": ["cancelled", "cancelling"],
+    "reason": "American spelling throughout the EN docs. The API name Cancelled is a code span.",
+    "locale": "en",
+    "exceptions": []
+  },
+  {
+    "correct": "modeling",
+    "forbidden": ["modelling", "modelled"],
+    "reason": "American spelling throughout the EN docs.",
+    "locale": "en",
+    "exceptions": []
+  },
+  {
+    "correct": "lookahead",
+    "forbidden": ["look-ahead", "Look-ahead"],
+    "reason": "Closed compound, matching the lookahead field.",
+    "locale": "en",
+    "exceptions": []
   }
 ]

@@ -1,137 +1,32 @@
 ---
 title: JavaScript/TypeScript API Reference
-description: The libsonare JavaScript/TypeScript package reference hub — installation, import, initialization, and a map of the per-subject reference pages.
+description: The libsonare JavaScript/TypeScript package reference hub, covering installation, import, initialization, errors, and a map of the per-subject reference pages.
 ---
 
 # JavaScript/TypeScript API Reference
 
-API reference for the libsonare JavaScript/TypeScript package.
+The npm package `@libraz/libsonare` is the WebAssembly build of the engine: analysis, mastering, mixing, editing DSP, and a realtime engine, all running in the browser. This page covers install, `init()`, your first call, and the conventions every function shares (request objects, errors, default sample rates). Per-subject reference pages follow from the [list at the end](#reference-pages).
 
 ## Overview
 
-libsonare provides audio analysis, mastering, mixing, and editing DSP capabilities for web applications. The npm package is the WebAssembly build. In practice, most functions expect decoded `Float32Array` PCM: the raw sample values after an MP3, WAV, or other file has already been decoded. For loading, the `Audio.fromMemory*` factories can decode encoded bytes in memory (a native WASM decoder for WAV/MP3, plus an optional browser decoder for AAC/OGG/FLAC).
+Most functions take decoded PCM, not a file: a `Float32Array` of samples plus the `sampleRate` it was decoded at. To get from encoded bytes to samples, decode with the Web Audio API (`AudioContext.decodeAudioData`) or use the `Audio.fromMemory*` factories, which decode WAV/MP3 with the bundled WASM decoder and AAC/OGG/FLAC through the browser when needed. `decodeChannelsWithBrowserFallback(bytes, options?)` takes the same path but keeps every channel instead of folding to mono; see [Keeping Every Channel](./wasm.md#keeping-every-channel).
 
-For a first browser integration, keep the path narrow:
-
-1. call `await init()` once when your app starts;
-2. decode the user file into samples and keep its `sampleRate`;
-3. call one small function such as `detectBpm(samples, sampleRate)`;
-4. only then move to `analyze`, mastering, mixing, or streaming APIs.
-
-| Category | Functions | Use Cases |
-|----------|-----------|-----------|
-| **Quick Analysis** | `detectBpm`, `detectKey`, `detectBeats` | DJ apps, music players, beat sync |
-| **All-In-One Analysis** | `analyze`, `analyzeWithProgress` | Music production, song metadata |
-| **Audio Effects** | `hpss`, `timeStretch`, `pitchShift`, `spectralEdit` | Remixing, practice tools, region repair |
-| **Features** | `melSpectrogram`, `chroma`, `mfcc` | ML input, visualization |
-| **Mastering** | `masterAudio`, `masteringChain`, `StreamingMasteringChain` | LUFS (Loudness Units relative to Full Scale) targets, true-peak limiting, presets, streaming chains |
-| **Mixing** | `mixStereo`, `Mixer`, `mixingScenePresetNames` | Stem mixing, routing, automation, meters |
-| **Editing DSP** | `pitchCorrectToMidi`, `noteStretch`, `spectralEdit`, `voiceChange`, `StreamingRetune`, `RealtimeVoiceChanger` | Vocal tuning, note edits, pitch/formant changes |
-| **Audio Class** | `Audio.fromBuffer`, `Audio.fromMemory`, `Audio.fromMemoryWithBrowserFallback`, `decodeChannelsWithBrowserFallback` | File-loading helpers and method-style access for common functions |
-
-::: tip Terminology
-New to audio analysis? See the [Glossary](/docs/glossary) for explanations of terms like BPM, STFT, Chroma, and more.
-:::
-
-::: info Most functions take decoded PCM, not a file path
-Most browser functions do not take an MP3 or WAV path; they take decoded PCM samples plus `sampleRate`. To go from encoded bytes to samples, either decode with the Web Audio API (`AudioContext.decodeAudioData`) yourself, or use the `Audio.fromMemory` / `Audio.fromMemoryWithBrowserFallback` factories below. They decode encoded bytes in memory: WAV/MP3 with the bundled WASM decoder, and AAC/OGG/FLAC through browser decoding when needed. `decodeChannelsWithBrowserFallback(bytes, options?)` takes the same path but keeps every channel instead of folding to mono.
-:::
-
-For a cross-binding feature map, see [Feature Map](./api-surface.md). For the mastering processor registry and mixing scene format, see [Mastering Processors](./mastering-processors.md) and [Mixing Scene JSON](./mixing-scene-json.md).
-
-## How To Read This Reference
-
-Read this page in three passes:
-
-1. Start with [Pick The Smallest API That Solves The Job](#pick-the-smallest-api-that-solves-the-job) and choose one function family.
-2. Read only the section for that family, then run one recipe from [Examples](./examples.md).
-3. Come back to the full type definitions when you need exact return shapes, optional parameters, or runtime parity.
-
-For browser apps, keep the core rule in mind: initialize WASM with `await init()`, decode files to PCM first, then pass `Float32Array` samples plus the original `sampleRate`.
-
-## One-shot request objects
-
-The top-level one-shot analysis, effects, mastering, metering, feature, mixer, and voice-changer APIs use a named **request object** as their canonical form. Every input is named, optional settings can grow without changing argument order, and TypeScript can guide you to the matching `*Request` type. Positional forms are compatibility overloads with identical defaults, validation, errors, results, and progress behavior.
-
-```typescript
-// Preferred request-object form
-const bpm = detectBpm({ samples, sampleRate });
-const mastered = masterAudio({
-  samples,
-  sampleRate,
-  preset: 'pop',
-  overrides: { loudness: { targetLufs: -14 } },
-  onProgress: (progress, stage) => console.log(stage, progress),
-});
-
-// Still supported for existing callers
-const legacyBpm = detectBpm(samples, sampleRate);
-```
-
-The request fields use the same camelCase names on the Node and WASM packages. Python remains keyword-oriented (`detect_bpm(samples, sample_rate=...)`), rather than adopting a JavaScript-style options object.
-
-### Cancelling a long call
-
-Requests that report progress also accept `cancel`, a predicate polled at the
-same native boundaries `onProgress` fires on. Return `true` and the call aborts.
-
-```typescript
-import { ErrorCode, isSonareError, masterAudio } from '@libraz/libsonare';
-
-let abandoned = false;
-cancelButton.onclick = () => { abandoned = true; };
-
-try {
-  const mastered = masterAudio({
-    samples,
-    sampleRate,
-    preset: 'pop',
-    onProgress: (progress, stage) => updateUi(progress, stage),
-    cancel: () => abandoned,
-  });
-} catch (error) {
-  if (!(isSonareError(error) && error.code === ErrorCode.Cancelled)) throw error;
-}
-```
-
-A cancelled call throws `SONARE_ERROR_CANCELLED` (error code 8) and leaves its
-outputs unallocated, so there is no partial result to inspect. Python takes the
-same predicate as `cancel=`.
-
-### Inputs are validated, not coerced
-
-Node and WASM reject values instead of quietly reshaping them: wrong-typed repair and
-dynamics options, an unknown track kind, capture source, or pitch-correction
-mode, a negative spectrum setting, a fractional number where an integer is read,
-enum spellings and ordinals that are not declared, and mastering override values
-that are neither number nor boolean. Instance methods also throw after
-`destroy()` instead of touching a freed handle. A bad value surfaces as an error
-at the call site rather than as a surprising default.
-
-Which error class you get depends on who refused the value:
-
-| Refused by | Class | Examples |
-|------------|-------|----------|
-| The JavaScript binding, wrong type or missing | `TypeError` | a string where samples are expected, a `samples` that is not a `Float32Array`, a `sampleRate` that is not a number, a request object that is `null`, a number or an array, a missing required field |
-| The JavaScript binding, outside the domain | `RangeError` | an unknown name, a fractional integer, two buffers whose lengths must match, a string carrying an embedded NUL, empty or non-finite audio, a `sampleRate` outside the supported range or not an integer |
-| The library or an object's state | `SonareError` with a code | a rejected stream configuration, a malformed project or scene document (`InvalidFormat`), an unknown insert in a scene (`InvalidParameter`) |
-| A released, destroyed, or uninitialised handle | `SonareError` with `InvalidState` | calling an analysis function before `init()`, any method after `destroy()` |
-
-`isSonareError` matches only the third and fourth rows, so validate user input with a catch that handles all three classes. Every one-shot that takes samples and a sample rate checks them before the core is reached: empty or non-finite audio and an out-of-range or non-integer `sampleRate` are a `RangeError`, a wrong-typed argument a `TypeError` naming it, and no raw embind `BindingError` reaches a caller. The argument checks the core makes itself on its own objects (a rejected STFT or stream configuration) stay a coded `SonareError`. See [Error Handling](./js-api.md#error-handling) for the code table.
-
-## Pick The Smallest API That Solves The Job
-
-The package is broad, so start from the task rather than the function list:
+Start from the task, not from the function list:
 
 | You need | Start with | Why |
 |----------|------------|-----|
-| One tempo/key/beat value for a track | `detectBpm`, `detectKey`, `detectBeats` | Fast, direct answers without building the all-in-one analysis object |
-| Metadata for a whole song | `analyze` or the focused `analyze*` helpers | `analyze` gives the common summary; focused helpers expose more detail |
-| A live visualizer or updating BPM/key/chord UI | `StreamAnalyzer` | Processes small audio blocks and lets the UI read the newest frames |
-| Browser mastering or delivery preview | `masterAudio*`, `masteringChain*`, `StreamingMasteringChain` | Use presets first, then move to named processors when you need control |
-| Stem balance, sends, buses, or meters | `mixStereo` or `Mixer` | One-shot mix first; persistent scene mixer when routing matters |
-| Vocal/note/spectral edits | `pitchCorrectToMidi`, `noteStretch`, `spectralEdit`, `voiceChange`, `StreamingRetune`, `RealtimeVoiceChanger` | Editing DSP changes the signal rather than analyzing it |
-| Room decay, clarity, equivalent-room estimates, or generated room character | `analyzeImpulseResponse`, `detectAcoustic`, `estimateRoom`, `synthesizeRir`, `roomMorph` | These describe or apply the recording space, not the music |
+| One tempo, key, or beat value | `detectBpm`, `detectKey`, `detectBeats` | Direct answers without building the all-in-one analysis object |
+| Metadata for a whole song | `analyze`, `analyzeWithProgress`, or a focused `analyze*` helper | `analyze` gives the common summary; the helpers expose more detail |
+| Spectral features for ML or visualization | `melSpectrogram`, `chroma`, `mfcc` | Matrix outputs |
+| A live visualizer or an updating BPM/key/chord UI | `StreamAnalyzer` | Processes small blocks; the UI reads the newest frames |
+| Remixing, practice tools, region repair | `hpss`, `timeStretch`, `pitchShift`, `spectralEdit` | Audio effects |
+| Vocal tuning, note edits, pitch or formant changes | `pitchCorrectToMidi`, `noteStretch`, `voiceChange`, `StreamingRetune`, `RealtimeVoiceChanger` | Editing DSP changes the signal rather than analyzing it |
+| Loudness targets, true-peak limiting, delivery preview | `masterAudio*`, `masteringChain*`, `StreamingMasteringChain` | Presets first, named processors when you need control |
+| Stem balance, sends, buses, or meters | `mixStereo` or `Mixer` | One-shot mix first; a persistent scene mixer when routing matters |
+| Room decay, clarity, equivalent-room estimates, generated room character | `analyzeImpulseResponse`, `detectAcoustic`, `estimateRoom`, `synthesizeRir`, `roomMorph`, `roomMorphStereo` | These describe or apply the recording space, not the music |
+| Loading files | `Audio.fromBuffer`, `Audio.fromMemory`, `Audio.fromMemoryWithBrowserFallback` | Decoding plus method-style access to common functions |
+
+New to audio terms such as BPM, STFT, or chroma? See the [Glossary](/docs/glossary). For a cross-binding feature map, see [Feature Map](./api-surface.md); for the mastering processor registry and the mixing scene format, see [Mastering Processors](./mastering-processors.md) and [Mixing Scene JSON](./mixing-scene-json.md).
 
 ## Installation
 
@@ -153,6 +48,18 @@ pnpm add @libraz/libsonare
 
 ## Import
 
+The package has five entries. The main entry carries everything; the others are narrower bundles for specific realms.
+
+| Entry | Import path | Contains | Use it when |
+|-------|-------------|----------|-------------|
+| Main | `@libraz/libsonare` | The full API: analysis, effects, mastering, mixing, projects, realtime engine | Almost always |
+| Analysis | `@libraz/libsonare/analysis` | Analysis and features only: no mastering, mixing, realtime, or project APIs | You want the smallest download for analysis alone |
+| Worklet | `@libraz/libsonare/worklet` | The AudioWorklet-side runtime, including `EXPECTED_ABI_VERSION` | Code running inside an `AudioWorkletGlobalScope` |
+| Worker | `@libraz/libsonare/worker` | The offline worker script behind `OfflineWorkerClient` | Running analysis off the main thread; see [Workers](./wasm-advanced.md#web-worker-usage) |
+| Vocal-edit worker | `@libraz/libsonare/vocal-edit-worker` | The worker script behind `VocalEditWorkerClient` | Vocal-edit drafts and render jobs off the main thread |
+
+See [Package Artifacts](./wasm.md#package-artifacts) for the files each entry ships. The bundles target ECMAScript 2020.
+
 ```typescript
 import {
   init,
@@ -171,7 +78,7 @@ import {
 
 ### `init(options?)`
 
-Initialize the WASM module. Must be called before any analysis functions.
+Initializes the WASM module. Call it once, before any other function that needs the module.
 
 ```typescript
 async function init(options?: {
@@ -184,31 +91,39 @@ async function init(options?: {
 }): Promise<void>
 ```
 
-**Example:**
+Options apply on the first call only. Calling `init()` again with no options, or with the same options (functions compared by reference), resolves immediately. A second call whose options differ throws `SonareError` with `InvalidState`, naming the option. Every function that needs the module throws `InvalidState` when called before `init()` resolves.
+
+`init()` also compares the loaded module's ABI version with the one the package was built against and throws `AbiMismatch` (code 10) when the `.wasm` and the JavaScript come from different builds, which a stale cache or a custom `wasmBinary` / `locateFile` can produce. The expected version is exported as `EXPECTED_ABI_VERSION` from the package root and from `@libraz/libsonare/worklet`, so a test double passed as `moduleFactory` can report the version `init()` checks for.
+
+### Your first call
 
 ```typescript
 import { init, detectBpm } from '@libraz/libsonare';
 
-// Basic initialization
-await init();
+await init();                                    // once, at app start
 
-// With custom file location
+const bytes = await (await fetch('/song.mp3')).arrayBuffer();
+const ctx = new AudioContext();
+const decoded = await ctx.decodeAudioData(bytes);
+const samples = decoded.getChannelData(0);       // Float32Array, first channel
+
+const bpm = detectBpm({ samples, sampleRate: decoded.sampleRate });
+console.log(`${bpm.toFixed(1)} BPM`);
+```
+
+Pass the `sampleRate` the samples were decoded at. To serve the `.wasm` from another path, pass `locateFile`:
+
+```typescript
 await init({
   locateFile: (path, prefix) => `/custom/wasm/path/${path}`
 });
 ```
 
-Options apply on the first call only. Calling `init()` again with no options, or
-with the same options (functions compared by reference), resolves immediately; a
-second call whose options differ throws `SonareError` with `InvalidState` naming
-the option. `init()` also compares the loaded module's ABI version with the one
-the package was built against and throws `AbiMismatch` (code 10) when the `.wasm`
-and the JavaScript come from different builds, which a stale cache or a custom
-`wasmBinary` / `locateFile` can produce. The expected version is exported as `EXPECTED_ABI_VERSION` from the package root and from `@libraz/libsonare/worklet`, so a test double passed as `moduleFactory` can report the version `init()` checks for. Every function called before `init()` resolves and needs the module throws `InvalidState`.
+Once that works, move to `analyze`, mastering, mixing, or streaming.
 
 ### `isInitialized()`
 
-Check if the module is initialized.
+Checks whether the module is initialized.
 
 ```typescript
 function isInitialized(): boolean
@@ -216,16 +131,144 @@ function isInitialized(): boolean
 
 ### `version()`
 
-Get the library version.
+Returns the library version.
 
 ```typescript
 function version(): string  // e.g., "{{ wasmMeta.version }}"
 ```
 
+## One-shot request objects
+
+The top-level one-shot analysis, effects, mastering, metering, feature, mixer, and voice-changer APIs use a named **request object** as their canonical form. Every input is named, optional settings can grow without changing argument order, and TypeScript can guide you to the matching `*Request` type. Positional forms are compatibility overloads with identical defaults, validation, errors, results, and progress behavior. Every positional one-shot also takes a trailing `{ validate?: boolean }`: `{ validate: false }` skips the JavaScript-side scan for NaN and infinity on hot paths, and the native layer still rejects non-finite input.
+
+```typescript
+// Preferred request-object form
+const bpm = detectBpm({ samples, sampleRate });
+const mastered = masterAudio({
+  samples,
+  sampleRate,
+  preset: 'pop',
+  overrides: { loudness: { targetLufs: -14 } },
+  onProgress: (progress, stage) => console.log(stage, progress),
+});
+
+// Positional form
+const legacyBpm = detectBpm(samples, sampleRate);
+```
+
+The request fields use the same camelCase names on the Node and WASM packages. Python remains keyword-oriented (`detect_bpm(samples, sample_rate=...)`), rather than adopting a JavaScript-style options object.
+
+### Canceling a long call
+
+Requests that report progress also accept `cancel`, a predicate polled at the same native boundaries `onProgress` fires on. Return `true` and the call aborts.
+
+```typescript
+import { ErrorCode, isSonareError, masterAudio } from '@libraz/libsonare';
+
+let abandoned = false;
+cancelButton.onclick = () => { abandoned = true; };
+
+try {
+  const mastered = masterAudio({
+    samples,
+    sampleRate,
+    preset: 'pop',
+    onProgress: (progress, stage) => updateUi(progress, stage),
+    cancel: () => abandoned,
+  });
+} catch (error) {
+  if (!(isSonareError(error) && error.code === ErrorCode.Cancelled)) throw error;
+}
+```
+
+A canceled call throws `SonareError` with code 8 (`Cancelled`) and leaves its outputs unallocated, so there is no partial result to inspect. Python takes the same predicate as `cancel=`.
+
+### Default sample rates
+
+When `sampleRate` is optional, the default depends on the function family. Pass the buffer's real rate whenever you know it.
+
+| Family | Default |
+|--------|---------|
+| Analysis, features, loudness, pitch, and effects (`detectBpm`, `stft`, `melSpectrogram`, `hpss`, `timeStretch`, ...) | 22050 |
+| `Audio.fromBuffer`, `voiceChangeRealtime`, `roomMorphStereo` | 48000 |
+| `StreamAnalyzer` (`StreamConfig.sampleRate`) | 44100 |
+
+## Error Handling
+
+Failures arrive as one of three classes, depending on who refused the input:
+
+| Class | Raised by | Matched by `isSonareError` |
+|-------|-----------|----------------------------|
+| `TypeError` | The JavaScript binding: a wrong type or a missing argument | No |
+| `RangeError` | The JavaScript binding: a value outside its domain | No |
+| `SonareError` | The library, or the state of an object | Yes |
+
+`SonareError` is an `Error` subclass carrying a numeric `code` and its canonical `codeName`, mirroring the C ABI error enum. The same failure reports the same code on every binding (WASM, Node native, Python, C ABI), so branch on the code rather than the message. The package exports the `ErrorCode` enum, the `SonareError` class, and the `isSonareError(value)` type guard.
+
+```typescript
+import { ErrorCode, isSonareError, Mixer } from '@libraz/libsonare';
+
+try {
+  const mixer = Mixer.fromSceneJson(sceneJson, 48000, 512);
+} catch (error) {
+  if (error instanceof TypeError || error instanceof RangeError) {
+    // The binding refused an argument; fix the call site.
+    console.error(`bad argument: ${error.message}`);
+  } else if (isSonareError(error) && error.code === ErrorCode.InvalidFormat) {
+    console.error(`scene is not valid JSON: ${error.message}`);
+  } else if (isSonareError(error) && error.code === ErrorCode.InvalidParameter) {
+    // 'failed to build mixer from scene JSON: unknown insert processor: nope (strip a)'
+    console.error(`scene field rejected: ${error.message}`);
+  } else {
+    throw error;
+  }
+}
+```
+
+### Which failure raises which error
+
+| Failure | Raises |
+|---------|--------|
+| Calling a function before `init()` resolves | `SonareError` `InvalidState` (7) |
+| A second `init()` with different options | `SonareError` `InvalidState` (7), naming the option |
+| `.wasm` and JavaScript from different builds | `SonareError` `AbiMismatch` (10) |
+| Any method on a released or destroyed handle | `SonareError` `InvalidState` (7) |
+| A mixer scene that is not valid JSON (`Mixer.fromSceneJson`, `Project.fromJson`) | `SonareError` `InvalidFormat` (2) |
+| A field the library rejects: an unknown preset or insert, a bad send timing | `SonareError` `InvalidParameter` (4) |
+| A rejected stream or STFT configuration | `SonareError` with the code the core reports |
+| A canceled call | `SonareError` `Cancelled` (8) |
+| A `null` or wrongly typed argument, such as a `samples` that is not a `Float32Array` | `TypeError` |
+| Empty or non-finite audio; a `sampleRate` that is not an integer in `[8000, 384000]`; a fractional integer argument; two buffers whose lengths must match; a binding-resolved name that is unknown (such as a `keyRoot`) | `RangeError` |
+| A string with an embedded NUL passed to an entry point that checks for it | `RangeError` |
+
+`Mixer.fromSceneJson` reports `InvalidFormat` for a document that is not valid JSON and `InvalidParameter` for a field the mixer rejects; the field is named at the tail of the message, `failed to build mixer from scene JSON: <inner>`.
+
+Every one-shot that takes samples and a sample rate checks them before the core is reached, so no raw embind `BindingError` reaches a caller. The argument checks the core makes on its own objects stay coded `SonareError`s. The facades reject non-finite numbers, invalid enum or index values, and oversized resources instead of clamping them; treat these as invalid input. The offline and vocal-edit worker clients rebuild `TypeError` and `RangeError` across the worker boundary.
+
+### Error codes
+
+| `ErrorCode` | Value |
+|-------------|-------|
+| `Ok` | `0` |
+| `FileNotFound` | `1` |
+| `InvalidFormat` | `2` |
+| `DecodeFailed` | `3` |
+| `InvalidParameter` | `4` |
+| `OutOfMemory` | `5` |
+| `NotSupported` | `6` |
+| `InvalidState` | `7` |
+| `Cancelled` | `8` |
+| `EncodeFailed` | `9` |
+| `AbiMismatch` | `10` |
+| `Unknown` | `99` |
+
+`AbiMismatch` is made by the bindings, never by the core: it reports a native module whose ABI version differs from the one the package expects (WASM in `init()`, Node when the addon is required, Python on first library use); [Installation](./installation.md#abimismatch-when-loading-the-library) lists the causes and fixes. The other codes match Python's `SonareError.code` and the C ABI `SonareError` enum, and the Python CLI maps them onto its [exit codes](./cli.md#exit-codes). For the same failures on Node, Python, the C ABI, and the CLI, see the [error contract](./binding-parity.md#error-contract).
+
+## Build and Environment
+
 ### `capabilities()`
 
-Describe the build that is actually loaded — the same report the CLIs print as
-`doctor`. Synchronous, and only valid after `init()`.
+Describes the build that is actually loaded, the same report the CLIs print as `doctor`. Synchronous, and valid only after `init()`.
 
 ```typescript
 function capabilities(): {
@@ -235,10 +278,16 @@ function capabilities(): {
   features: {
     mastering: boolean;
     mixing: boolean;
+    mixingAssistant: boolean;
     fx: boolean;
     ffmpeg: boolean;
-    mixingAssistant: boolean;
     instrumentParamAutomation: boolean;
+    arrangement: boolean;
+    acousticSim: boolean;
+    pitchEditor: boolean;
+    vocalEdit: boolean;
+    voiceChanger: boolean;
+    playback: boolean;
   };
   decode: { builtin: string[]; ffmpeg: string[] };
   simd: string;
@@ -246,105 +295,41 @@ function capabilities(): {
 }
 ```
 
-Branch on `features` instead of guessing: a build without `mixing` has no
-`Mixer`, and `decode.builtin` tells you which formats the module can open before
-you ask the browser to fall back.
+Branch on `features` instead of guessing. `decode.builtin` lists the formats the module can open before you ask the browser to fall back, and `simd` reads `"wasm-simd128"` for the shipped build.
 
-`mixingAssistant` and `instrumentParamAutomation` are the two probes a host is
-most likely to need and least likely to reach for, because the entry points they
-guard stay registered whether or not the subsystem was built: `suggestMixScene`
-and the instrument-parameter automation targets exist as functions in every
-module and **throw** when the subsystem is absent. Probing for the function
-therefore tells you nothing, and `typeof fn === 'function'` is not a capability
-check. `instrumentParamAutomation` reports `false` in a build without the
-arrangement subsystem; `mixingAssistant` is compiled out of the analysis-only
-module, so that build reports `false` even though the symbol is there.
+| Flag | Guards |
+|------|--------|
+| `mastering` | `masterAudio*`, `masteringChain*`, `StreamingMasteringChain`, the named mastering processors |
+| `mixing` | `Mixer`, `mixStereo`, and the mixing scene functions |
+| `mixingAssistant` | `suggestMixScene` |
+| `fx` | The effects subsystem |
+| `ffmpeg` | FFmpeg decoding (`false` in the browser package) |
+| `instrumentParamAutomation` | Instrument-parameter automation targets |
+| `arrangement` | `Project`, clips, and the arrangement subsystem |
+| `acousticSim` | `analyzeImpulseResponse`, `detectAcoustic`, `estimateRoom`, `synthesizeRir`, `roomMorph*` |
+| `pitchEditor` | Note and pitch editing |
+| `vocalEdit` | Vocal-edit drafts and render jobs |
+| `voiceChanger` | `RealtimeVoiceChanger`, `voiceChange*` |
+| `playback` | `PlaybackRenderer` (upmix, binaural, speaker output) |
+
+`mixingAssistant` and `instrumentParamAutomation` are the two probes a host is most likely to need and least likely to reach for, because the entry points they guard stay registered whether or not the subsystem was built. `suggestMixScene` and the instrument-parameter automation targets exist as functions in every module and **throw** when the subsystem is absent, so `typeof fn === 'function'` is not a capability check. `instrumentParamAutomation` reports `false` in a build without the arrangement subsystem; `mixingAssistant` is compiled out of the analysis-only module, so that build reports `false` even though the symbol is there.
 
 ### `capabilityCatalog()`
 
-Return a machine-readable catalog of every processor, its parameter descriptors,
-and the built-in preset lists. It is the same canonical JSON the C ABI publishes
-and Python exposes as `capability_catalog`, validated against
-`schemas/capability-catalog.schema.json`.
-
-The catalog carries real values: the current build publishes 95 processors (84
-of them realtime-insertable) and 5,579 parameter descriptors. Defaults can be `null` when a construction key has
-no fallback. Bounds are measured with the processor's other parameters at their
-defaults; a `null` bound means the catalog knows of no limit on that side, not
-that bounds are unavailable in general.
-
-::: warning Bounds are measured, and a measured bound has caveats
-A published bound is **a hard constraint on what may be sent, not a recommended
-UI range**, and it was measured with every other parameter of the processor
-sitting at its default. Three consequences are worth knowing before you wire a
-slider straight to one:
-
-- **Two parameters that constrain each other each report the other's default.**
-  `maximizer.adaptiveRelease` reports `minReleaseMs <= 250` and
-  `maxReleaseMs >= 20` for exactly that reason; move one and the other's real
-  limit moves with it.
-- **A bound derived from the sample rate reflects the un-prepared processor.**
-  Every EQ `band*.frequencyHz` ceiling reads as `24000` in the catalog; an
-  equalizer built at a known rate accepts band frequencies up to that rate's
-  Nyquist frequency (30000 Hz at 96 kHz).
-- **An exclusive bound is reported as the limit it excludes.**
-  `dynamics.compressor.sidechainHpfHz` reports `min` `0` and still rejects `0`.
-:::
+Returns a machine-readable catalog of every processor, its parameter descriptors, and the built-in preset lists. It is the same canonical JSON the C ABI publishes and Python exposes as `capability_catalog`, validated against `schemas/capability-catalog.schema.json`.
 
 ```typescript
 function capabilityCatalog(): {
   version: string;
   abi: { project: number; engine: number };
-  processors: Array<{
-    id: string;
-    kind: 'realtime' | 'offline' | 'pair';
-    realtimeInsertable: boolean;
-    stereoOnly: boolean;
-    latencySamples: number;
-    tailSamples: number;
-    /** Coarse realtime work estimate; null exactly when the processor is not insertable. */
-    realtimeCost: 'low' | 'moderate' | 'high' | null;
-    channelPolicy: 'multichannel' | 'stereoPairOnly' | 'perChannel' | 'passthrough';
-    category: string;
-    /** False for repair.declick, repair.declip and repair.trimSilence. */
-    causal: boolean;
-    params: Array<{
-      name: string;
-      id: number | null;
-      rtSafe: boolean;
-      type: 'boolean' | 'number' | 'enum' | 'string' | 'array';
-      min: number | null;
-      max: number | null;
-      minExclusive: boolean;
-      maxExclusive: boolean;
-      maxRelativeTo: 'nyquist' | null;
-      default: boolean | number | null;
-      /** One of a closed set ('dB', 'Hz', 'ms', 's', 'samples', ...); null for non-numeric keys. */
-      unit: MasteringInsertParamUnit | null;
-      /** Display range a control should draw, inside [min, max]; null when it equals the accepted range. */
-      uiMin: number | null;
-      uiMax: number | null;
-      scale: 'linear' | 'log';
-      choices: Array<{ name: string; value: number }> | null;
-      slot: string | null;
-      /** Siblings whose live value bounds this key, read as `this <relation> factor * sibling`. */
-      dependsOn: Array<{ key: string; relation: 'lt' | 'le' | 'gt' | 'ge'; factor: number }>;
-    }>;
-    slots: Array<{
-      name: string;
-      parent: string | null;
-      activation: 'anyKey' | 'always';
-      minCrossoverCutoffs: number;
-    }>;
-  }>;
-  /** How every flat mastering chain key is described. */
-  chain: CapabilityCatalogChain;
+  processors: CapabilityCatalogProcessor[];   // id, kind, latency, tail, params, slots, ...
+  chain: CapabilityCatalogChain;              // how every flat mastering chain key is described
   presets: {
     mastering: string[];
     synth: string[];
     mixingScene: string[];
     voiceChanger: string[];
-    playbackRoom: string[];
+    playbackRoom: string[];                   // always present; empty when playback is compiled out
   };
   masteringPresets: Array<{
     name: string;
@@ -356,26 +341,15 @@ function capabilityCatalog(): {
 }
 ```
 
-This is what you build a generic parameter UI from: every slider's range, default,
-unit, and axis (`uiMin` / `uiMax`, `scale`) comes from the catalog rather than from
-a table you maintain by hand. [Insert Effects](./effects-inserts.md#the-parameter-descriptor)
-documents each descriptor field. A
-bound the core does not know is reported as an explicit `null` — treat that as
-"unbounded/unknown", not as zero.
+This is what you build a generic parameter UI from: every slider's range, default, unit, and axis (`uiMin` / `uiMax`, `scale`) comes from the catalog instead of a table you maintain by hand. Each descriptor field is documented in [Insert Effects](./effects-inserts.md#the-parameter-descriptor). A `null` bound means the core knows of no limit on that side; treat it as "unbounded or unknown", not as zero.
 
-`chain` describes the flat keys of a mastering chain config: each stage's key prefix, the processor whose parameters its keys are and its `enabled` key (`CapabilityCatalogChainStage`); the indexed lists such as the multiband stage's `cutoffsHz` and `bands`, with their item counts (`CapabilityCatalogChainList`); descriptors for the keys no processor carries (`params`); and every alias spelling of a key (`CapabilityCatalogChainAlias`). `presets.playbackRoom` is always present, and empty when playback is compiled out.
-
-The per-band EQ surfaces publish a descriptor for every indexed band field, so a
-generic UI can lay out the bands without a hand-written table. These descriptors
-include construction keys as well as automation targets; use `id !== null`
-to select automation targets, and use `slot` plus the processor's `slots` array
-for conditional band groups. Publishing descriptors does not change which keys
-count as *read*, though — a band you supply incompletely still reports its stray
-keys as ignored, exactly as before.
+::: warning A published bound is a hard constraint, not a recommended UI range
+Bounds are measured with every other parameter of the processor at its default, so two parameters that constrain each other each report the other's default; a sample-rate-derived bound such as an EQ `band*.frequencyHz` ceiling reads as the un-prepared `24000`; and an exclusive bound is reported as the limit it excludes. [Reading a catalog bound](./mastering-processors.md#reading-a-catalog-bound) explains each case.
+:::
 
 ### `abiVersion()`
 
-Returns the aggregate native ABI version across the C POD surfaces (`0x05030207` for this build, the value `EXPECTED_ABI_VERSION` holds). Persist or compare it when loading a prebuilt binary so an incompatible JS/native artifact pair fails early.
+Returns the aggregate native ABI version across the C POD surfaces (the value `EXPECTED_ABI_VERSION` holds). Persist or compare it when loading a prebuilt binary so an incompatible JS/native artifact pair fails early.
 
 ```typescript
 function abiVersion(): number
@@ -432,6 +406,10 @@ function hasFfmpegSupport(): boolean
 
 `hasFfmpegSupport()` reports whether the loaded build can decode through FFmpeg. The browser/WASM npm package works on decoded PCM and normally returns `false`; Python/native builds are the intended place to decode files directly.
 
+### Browser support and bundle size
+
+The shipped module is built with WebAssembly SIMD, so SIMD support sets the browser minimums. [Browser Compatibility](./wasm.md#browser-compatibility) has the table and [Bundle Size](./wasm.md#bundle-size) has the file sizes.
+
 ## Releasing Native Handles
 
 Every class that owns a native handle (`Mixer`, `StreamAnalyzer`, `Project`, `ProjectTimeline`, `RealtimeEngine`, `ClipPageProvider`, `ClipPageStreamer`, `StreamingEqualizer`, `StreamingMasteringChain`, `StreamingRetune`, `RealtimeVoiceChanger`, `PlaybackRenderer`, and the others) has an idempotent `destroy()` (with `delete()` as an alias) and implements `[Symbol.dispose]()`, so the `using` declaration releases it when the scope ends, even on an exception. `Audio` holds no native handle, so its `[Symbol.dispose]()` does nothing and `using` still works on it.
@@ -452,13 +430,14 @@ The package installs `Symbol.dispose` when the host lacks it, so the methods exi
 
 The reference is split by subject. Every page below assumes the installation, import, and initialization steps above.
 
-- [Analysis](./js-api-analysis.md) — song-level analysis, feature extraction, and Roman-numeral chord analysis.
-- [Helpers and Conversions](./js-api-helpers.md) — librosa-compatible helpers, scale quantization, unit conversion, resampling, and chord functions.
-- [Effects](./js-api-effects.md) — audio effects, editing DSP, and room-acoustics measurement.
-- [Mastering](./js-api-mastering.md) — the mastering chain, named processors, presets, and the one-shot dynamics and repair processors.
-- [Streaming and Realtime](./js-api-streaming.md) — block-by-block processors, the streaming mastering chain, and the incremental `StreamAnalyzer`.
-- [Audio, Metering and Mixing](./js-api-audio.md) — the `Audio` class, metering, take alignment, mixer strips, and the mixing API.
-- [Types and Enumerations](./js-api-types.md) — type definitions, enumerations, and the type export index. Error handling is [on this page](#error-handling).
+- [Analysis](./js-api-analysis.md): song-level analysis, feature extraction, and Roman-numeral chord analysis.
+- [Helpers and Conversions](./js-api-helpers.md): librosa-compatible helpers, scale quantization, unit conversion, resampling, and chord functions.
+- [Effects](./js-api-effects.md): audio effects, editing DSP, and room-acoustics measurement.
+- [Mastering](./js-api-mastering.md): the mastering chain, named processors, presets, and the one-shot dynamics and repair processors.
+- [Streaming and Realtime](./js-api-streaming.md): block-by-block processors, the streaming mastering chain, and the incremental `StreamAnalyzer`.
+- [Audio, Metering and Mixing](./js-api-audio.md): the `Audio` class, metering, take alignment, mixer strips, and the mixing API.
+- [Types and Enumerations](./js-api-types.md): type definitions, enumerations, and the type export index.
+- [Workers](./wasm-advanced.md#web-worker-usage): `OfflineWorkerClient` and `VocalEditWorkerClient` for running offline work off the main thread.
 
 ## Projects, instruments & live MIDI
 
@@ -517,72 +496,3 @@ wire Web MIDI / a `MediaStream` into a live `RealtimeEngine`. See
 | `detectBeats` / `detectOnsets` | Light | Frame-based detection |
 | Unit conversion functions | Light | Pure computation |
 | `normalize` / `trim` | Light | Simple processing |
-
-## Bundle Size
-
-| File | Size | Gzipped |
-|------|------|---------|
-| `sonare.js` | ~{{ wasmMeta.sonareJs.sizeKB }} KB | ~{{ wasmMeta.sonareJs.gzipKB }} KB |
-| `index.js` | ~{{ wasmMeta.indexJs.sizeKB }} KB | ~{{ wasmMeta.indexJs.gzipKB }} KB |
-| `sonare.wasm` | ~{{ wasmMeta.wasm.sizeKB }} KB | ~{{ wasmMeta.wasm.gzipKB }} KB |
-| **Total** | ~{{ wasmMeta.total.sizeKB }} KB | ~{{ wasmMeta.total.gzipKB }} KB |
-
-## Browser Support
-
-| Browser | Minimum Version |
-|---------|-----------------|
-| Chrome | 57+ |
-| Firefox | 52+ |
-| Safari | 11+ |
-| Edge | 16+ |
-
-Requirements: WebAssembly, ES2017+ (async/await), Web Audio API
-
-## Error Handling
-
-A function called before the module is initialized throws a `SonareError` with code `InvalidState` — call `await init()` first. A second `init()` with different options also throws `InvalidState`, naming the option; repeating the same options is fine.
-
-Native (C++) failures throw a structured **`SonareError`**: an `Error` subclass carrying a numeric `code` and its canonical `codeName`, mirroring the C ABI error enum. The same failure reports the same numeric code on every binding (WASM, Node native, Python, C ABI), so you can branch on the cause instead of matching message text. The package exports the `ErrorCode` enum, the `SonareError` class, and an `isSonareError(value)` type guard.
-
-The facades consistently reject non-finite numbers, invalid enum/index values, and oversized resources before they reach DSP or serialization. Treat these failures as invalid input; do not rely on a binding silently clamping or accepting malformed values.
-
-An argument the binding refuses itself is a plain `TypeError` (wrong type or missing) or `RangeError` (out of domain, unknown name, empty or non-finite samples, a `sampleRate` that is not a positive integer in range), which `isSonareError` does not match. The offline and vocal-edit worker clients rebuild `TypeError` and `RangeError` across the worker boundary, and accept a `node:worker_threads` Worker or a `workerFactory` returning one. Failures made by the engine carry a code, such as `InvalidParameter` from `synthesizeRir(...)` for a source outside the room. Released or destroyed handles throw `SonareError` `InvalidState`.
-
-```typescript
-import { ErrorCode, isSonareError, Mixer } from '@libraz/libsonare';
-
-try {
-  const mixer = Mixer.fromSceneJson(sceneJson, 48000, 512);
-} catch (error) {
-  if (isSonareError(error) && error.code === ErrorCode.InvalidState) {
-    // 'failed to build mixer from scene JSON: send timing must be a string ("pre" or "post")'
-    console.error(`scene rejected: ${error.codeName}: ${error.message}`);
-  } else {
-    throw error;
-  }
-}
-```
-
-`Mixer.fromSceneJson` reports **`InvalidState`**, not `InvalidParameter`, for
-every way a scene can fail to build — a rejected field value and malformed JSON
-alike. The construction is wrapped, so the underlying complaint arrives as the
-tail of a `failed to build mixer from scene JSON: <inner>` message rather than as
-its own code; branch on `InvalidState` and show the message to locate the field.
-
-| `ErrorCode` | Value |
-|-------------|-------|
-| `Ok` | `0` |
-| `FileNotFound` | `1` |
-| `InvalidFormat` | `2` |
-| `DecodeFailed` | `3` |
-| `InvalidParameter` | `4` |
-| `OutOfMemory` | `5` |
-| `NotSupported` | `6` |
-| `InvalidState` | `7` |
-| `Cancelled` | `8` |
-| `EncodeFailed` | `9` |
-| `AbiMismatch` | `10` |
-| `Unknown` | `99` |
-
-`AbiMismatch` is made by the bindings, never by the core: it reports a native module whose ABI version differs from the one the package expects (WASM in `init()`, Node when the addon is required, Python on first library use). The other codes match Python's `SonareError.code` and the C ABI `SonareError` enum, and the Python CLI maps them onto its [exit codes](./cli.md#exit-codes).
-

@@ -20,7 +20,7 @@ Most Python APIs accept raw sample arrays plus `sample_rate`. Raw samples are th
 
 For a first script, keep it this small:
 
-1. `audio = sonare.Audio.from_file("song.mp3")`;
+1. `audio = sonare.Audio.from_file("song.mp3")`.
 2. call `sonare.detect_bpm(audio.data, audio.sample_rate)` or `sonare.analyze(audio.data, audio.sample_rate)`;
 3. print the result or save it as JSON.
 
@@ -126,10 +126,10 @@ Two exception classes cover every failure:
 |-------------|-------|---------|
 | The native library returns a non-OK code | `SonareError`, a `RuntimeError` subclass | Carries a `[4] ` numeric prefix |
 | The binding or an object's state refuses the call: the loaded library lacks the entry point, a closed object is used, a native result fails a sanity check | `SonareError` with `NOT_SUPPORTED`, `INVALID_STATE` or `UNKNOWN` | Same `[code] ` prefix; never a bare `RuntimeError` |
-| The loaded native library does not match the binding | `SonareError` with `ABI_MISMATCH` (10) | Raised on first library use, before any call is made |
+| The loaded native library does not match the binding | `SonareError` with `ABI_MISMATCH` (10); the `sonare` CLI exits 13 | Raised on first library use, before any call is made |
 | Python-side argument or buffer validation rejects a call before it reaches the C ABI | `SonareValueError` | Plain validation text, no numeric prefix |
 
-`SonareValueError` subclasses **both** `SonareError` and `ValueError`, so `except ValueError:` and `except sonare.SonareError:` each catch it and neither style of handler has to know which class a given entry point picks. Its `.code` is `ErrorCode.INVALID_PARAMETER`, so code that branches on the code treats it exactly like the C-ABI rejection it stands in for. `SonareError.code` holds the same C-ABI values the JS bindings expose as `ErrorCode` (see [Error Handling](./js-api.md#error-handling)), `.code_name` gives the cross-binding spelling, and the CLI maps the codes onto its [exit codes](./cli.md#exit-codes) (`ABI_MISMATCH` exits 13). A library whose ABI version differs from the one the package was built for, or which lacks a symbol the binding needs, fails with `ABI_MISMATCH` and a message beginning `libsonare ABI mismatch`; rebuild the library or point `SONARE_LIB_PATH` at a matching build.
+`SonareValueError` subclasses **both** `SonareError` and `ValueError`, so `except ValueError:` and `except sonare.SonareError:` each catch it and neither style of handler has to know which class a given entry point picks. Its `.code` is `ErrorCode.INVALID_PARAMETER` for an argument refusal, and the C-ABI code for a project document that fails to load (`INVALID_FORMAT` for malformed JSON), so code that branches on the code treats it exactly like the C-ABI rejection it stands in for. `SonareError.code` holds the same C-ABI values the JS bindings expose as `ErrorCode`, and `.code_name` gives the cross-binding spelling. The [error contract](./binding-parity.md#error-contract) lists which failure takes which class and code here, on the other bindings, and as a [CLI exit code](./cli.md#exit-codes). A library whose ABI version differs from the one the package was built for, or which lacks a symbol the binding needs, fails with `ABI_MISMATCH` and a message beginning `libsonare ABI mismatch`; [Installation](./installation.md#abimismatch-when-loading-the-library) covers the fix.
 
 ```python
 try:
@@ -169,7 +169,7 @@ The element-wise conversions keep their empty-in / empty-out contract: `power_to
 
 An optional numeric argument that has no value is left out or passed as `None`; `-1` is not a spelling of "not given" and is refused with `SonareValueError`. This covers the engine's `render_frame` on every transport, parameter and MIDI call (`None` applies at the next block head), `SpectralRegionOp.end_sample` (`None` runs to the end of the signal), `fix_frames(x_max=...)`, `set_program(bank=...)` and `set_program_on_channel(bank=...)` (`None` emits no Bank Select), the percentiles of `metering_dynamic_range` and `Audio.dynamic_range`, and the `gamma` of `vqt` and `vqt_to_audio` (`None` selects the automatic bandwidth). The C ABI keeps `-1` as its own spelling.
 
-CLI **usage** errors raise a plain `ValueError`, not `SonareValueError`, because they report a command-line mistake rather than an API argument. Both exit with code `3`.
+Argument-parser usage errors in the `sonare` CLI (an unknown flag or a missing argument) exit with code `2`. A command that rejects a value raises a plain `ValueError`, not `SonareValueError`, because it reports a command-line mistake rather than an API argument; it exits with `3`, the same code as a `SonareValueError`. An ABI mismatch exits with `13`; see [CLI exit codes](./cli.md#exit-codes).
 
 ### What this build can do
 
@@ -197,7 +197,7 @@ same data is `capabilities()` / `capabilityCatalog()` on Node and WASM.
 
 `catalog["masteringPresets"]` lists built-in mastering and restoration presets. Each entry has `name`, `kind`, `targetLufs`, `truePeakCeilingDb`, and `maxLimiterGainReductionDb`; restoration entries set the three numeric fields to `None`. Processor entries also expose conditional parameter groups in `slots`, with `name`, `parent`, `activation`, and `minCrossoverCutoffs` fields.
 
-### Cancelling a long call
+### Canceling a long call
 
 Analysis and mastering calls that report progress also take `cancel`, a
 predicate polled at the same native boundaries. Return `True` and the call
@@ -252,6 +252,49 @@ Python exposes the same named mastering processors as the browser demo. Use the 
   caption="Only the stages you configure are activated, but whichever are enabled run in this order."
 />
 
+Pick an entry point by purpose:
+
+| Purpose | Function |
+|---------|----------|
+| Apply simple loudness mastering | `mastering()` |
+| List built-in mastering presets | `mastering_preset_names()` |
+| Get a built-in preset's flat chain parameters | `mastering_preset_params(preset)` |
+| Apply a preset to mono audio | `master_audio()` |
+| Apply a preset to stereo audio | `master_audio_stereo()` |
+| Run a full mono chain | `mastering_chain()` |
+| Run a full stereo chain | `mastering_chain_stereo()` |
+| Run a streaming chain (block-by-block) | `StreamingMasteringChain` |
+| Generate an audio profile for mastering decisions | `mastering_audio_profile()` |
+| Generate an audio profile from both stereo channels | `mastering_audio_profile_stereo()` |
+| Generate assistant suggestions from source analysis | `mastering_assistant_suggest()` |
+| Generate assistant suggestions from both stereo channels | `mastering_assistant_suggest_stereo()` |
+| Get the assistant's suggestion as chain parameters instead of JSON | `mastering_assistant_suggest_chain()`, `mastering_assistant_suggest_chain_stereo()` |
+| Preview delivery loudness by platform | `mastering_streaming_preview()` |
+| Preview delivery loudness from both stereo channels | `mastering_streaming_preview_stereo()` |
+| List the built-in delivery platforms | `mastering_platform_names()` |
+| List mono/stereo processors | `mastering_processor_names()` |
+| Get machine-readable processor classifications | `mastering_processor_catalog()` |
+| List the guitar-amp presets with their parameters | `mastering_amp_preset_catalog()` |
+| List chain insert processors | `mastering_insert_names()` |
+| List the parameter keys an insert accepts | `mastering_insert_param_names(name)` |
+| Describe insert construction keys and automation targets | `mastering_insert_param_info(name)` |
+| Get configured insert latency and tail | `mastering_insert_timing(name, params, sample_rate)` |
+| Process mono audio | `mastering_process()` |
+| Process stereo audio | `mastering_process_stereo()` |
+| List pair processors | `mastering_pair_processor_names()` |
+| Process source/reference pair | `mastering_pair_process()` |
+| Process stereo source/reference pair | `mastering_pair_process_stereo()` |
+| List pair analyses | `mastering_pair_analysis_names()` |
+| Analyze source/reference pair | `mastering_pair_analyze()` |
+| Match source loudness to a reference | `mastering_ab_match_loudness()` |
+| Match stereo source loudness to a stereo reference | `mastering_ab_match_loudness_stereo()` |
+| List stereo analyses | `mastering_stereo_analysis_names()` |
+| Analyze stereo channels | `mastering_stereo_analyze()` |
+
+Related mastering guides: [Preset selection](./glossary/mastering/preset-selection.md), [Delivery targets](./glossary/mastering/delivery-targets.md), [Meter reading](./glossary/mastering/meter-reading.md), [Quality checklist](./glossary/mastering/quality-checklist.md).
+
+### Run one processor
+
 ```python
 import json
 import libsonare as sonare
@@ -279,7 +322,11 @@ print(json.loads(report))
 
 catalog = sonare.mastering_processor_catalog()
 insert_params = sonare.mastering_insert_param_info("eq.parametric")
+```
 
+### Presets and full chains
+
+```python
 # Preset-driven chain (one-shot)
 sonare.mastering_preset_names()
 # -> ['pop', 'edm', 'acoustic', 'hipHop', 'aiMusic', 'speech', 'streaming', 'youtube', 'broadcast', 'podcast', 'audiobook', 'cinema', 'jpop', 'ambient', 'lofi', 'classical', 'drumAndBass', 'techno', 'metal', 'trap', 'rnb', 'jazz', 'kpop', 'trance', 'gameOst', 'vinyl', 'tapeHiss', 'fieldRecording', 'voiceMemo', 'shellac78']
@@ -299,7 +346,11 @@ print(chain_result.stage_gain_reductions)
 if chain_result.report is not None:
     print(chain_result.report.before, chain_result.report.after)
     print(chain_result.report.band_energy_delta_db)
+```
 
+### Streaming chain
+
+```python
 # Block-by-block streaming variant
 with sonare.StreamingMasteringChain({
     "eq.tilt.tiltDb": 0.5,
@@ -313,7 +364,15 @@ with sonare.StreamingMasteringChain({
         if not tail:
             break
         output.extend(tail)
+```
 
+After `prepare()`, `chain.set_parameter(key, value)` changes one streaming-safe parameter at a block boundary. The call is serialized with processing, flushing, resetting, and preparing; unknown keys, structural keys, and keys for disabled stages are rejected before mutation, so a failed call leaves the chain and its audio history unchanged. Parameter changes take effect without automatic smoothing.
+
+After the final streaming input block, call `flush_mono()` until it returns an empty list; for stereo, call `flush_stereo()` until it returns two empty lists.
+
+### Assistant, profile and preview
+
+```python
 profile = json.loads(sonare.mastering_audio_profile(samples, sample_rate=sample_rate, params={
     "n_fft": 2048,
     "hop_length": 512,
@@ -344,21 +403,25 @@ stereo_suggestions = json.loads(sonare.mastering_assistant_suggest_stereo(left, 
 stereo_preview = json.loads(sonare.mastering_streaming_preview_stereo(left, right, sample_rate=sample_rate))
 ```
 
-After `prepare()`, `chain.set_parameter(key, value)` changes one streaming-safe parameter at a block boundary. The call is serialized with processing, flushing, resetting, and preparing; unknown keys, structural keys, and keys for disabled stages are rejected before mutation, so a failed call leaves the chain and its audio history unchanged. Parameter changes take effect without automatic smoothing.
+Each of the three JSON helpers has a `_stereo` sibling that takes `left` and `right` instead of one buffer, accepts the same `params` / `platforms`, and returns the same JSON string. Use it whenever you have two channels: the mono entry points measure a `0.5 * (left + right)` downmix, which reads about 6 dB low on decorrelated material and pulls integrated loudness, the normalization gain derived from it, and the ceiling-risk judgment down by the same amount.
 
-Each of the three JSON helpers has a `_stereo` sibling that takes `left` and `right` instead of one buffer, accepts the same `params` / `platforms`, and returns the same JSON string. Reach for it whenever you actually have two channels. The mono entry points measure a `0.5 * (left + right)` downmix, and on decorrelated stereo material that downmix reads about 6 dB low — which drags down integrated loudness, the normalization gain derived from it, and the ceiling-risk judgement by the same amount. On a decorrelated pink-noise pair (48 kHz, 4 s) the downmix path reports -22.55 LUFS against -16.44 LUFS from the stereo path, a 6.11 dB gap that turns a Spotify `normalizationGainDb` of +2.44 into +8.55. A correlated pair differs by only 3.01 dB, the plain downmix halving; the remaining ~3 dB is the decorrelation.
+::: details Why the stereo entry points matter
+On a decorrelated pink-noise pair (48 kHz, 4 s) the downmix path reports -22.55 LUFS against -16.44 LUFS from the stereo path, a 6.11 dB gap that turns a Spotify `normalizationGainDb` of +2.44 into +8.55. A correlated pair differs by only 3.01 dB, the plain downmix halving; the remaining ~3 dB is the decorrelation.
+:::
 
 Only the `loudness` block of the stereo profile is measured from both channels: integrated LUFS and LRA come from the channel-summed program, and true peak is the larger of the two. The spectral, dynamics, and tempo fields describe shape and timing rather than absolute level, so they stay on the downmix and remain directly comparable with the mono call.
 
-`mastering_audio_profile()` accepts optional profile params: `n_fft`, `hop_length`, and `true_peak_oversample`. `mastering_assistant_suggest()` accepts `target_lufs`, `ceiling_db`, `enable_repair`, `prefer_streaming_safe`, and `speech_mono_amount`; camelCase aliases also work through the shared native parser.
+### Options and result fields
 
-Mastering helpers also accept limiter-release and static-gain staging controls. The simple `mastering()` helper uses `release_ms` (`0` keeps the 50 ms library default) and `apply_gain_at_input_rate`. Preset/chain overrides use the flat keys `"maximizer.truePeakLimiter.releaseMs"` and `"maximizer.truePeakLimiter.applyGainAtInputRate"`; supplied override values are applied directly.
+| Entry point / result | Keys | Notes |
+|----------------------|------|-------|
+| `mastering_audio_profile(params=)` | `n_fft`, `hop_length`, `true_peak_oversample` | All optional. |
+| `mastering_assistant_suggest(params=)` | `target_lufs`, `ceiling_db`, `enable_repair`, `prefer_streaming_safe`, `speech_mono_amount` | camelCase aliases also work through the shared native parser. |
+| `mastering(...)` | `release_ms`, `apply_gain_at_input_rate` | Limiter release and static-gain staging; `release_ms=0` keeps the 50 ms library default. Preset and chain overrides use the flat keys `"maximizer.truePeakLimiter.releaseMs"` and `"maximizer.truePeakLimiter.applyGainAtInputRate"`, applied as given. |
+| Offline chain or preset result | `output_true_peak_dbtp`, `output_lra`, `stage_gain_reductions` | True peak at the configured loudness oversample factor; `output_lra` is the EBU R128 loudness range in LU; each reduction names the dynamics or maximizer stage and its most recent gain reduction in dB (zero or negative). |
+| `result.report` | `before`, `after`, `band_energy_delta_db` | `before` and `after` each hold `integrated_lufs`, `max_momentary_lufs`, `max_short_term_lufs`, `true_peak_dbtp` and `loudness_range`. `band_energy_delta_db` is the 32-band logarithmic spectral-energy change. The report also holds the applied gain, the maximum gain reduction, and whether peak headroom limited the loudness target. |
 
-Offline chain and preset results also report `output_true_peak_dbtp` at the configured loudness oversample factor, `output_lra` (EBU R128 loudness range in LU), and `stage_gain_reductions`. Each reduction identifies the reporting dynamics/maximizer stage and its most recent gain reduction in dB (zero or negative).
-
-When `result.report` is present, its `before` and `after` summaries each contain `integrated_lufs`, `max_momentary_lufs`, `max_short_term_lufs`, `true_peak_dbtp`, and `loudness_range`. The report also contains applied gain, maximum gain reduction, whether peak headroom limited the loudness target, and `band_energy_delta_db`, a 32-band logarithmic spectral-energy change from before to after.
-
-After the final streaming input block, call `flush_mono()` until it returns an empty list; for stereo, call `flush_stereo()` until it returns two empty lists.
+### Reference-track processing
 
 Reference-track workflows use `mastering_pair_processor_names()`, `mastering_pair_process()`, `mastering_pair_process_stereo()`, `mastering_pair_analysis_names()`, and `mastering_pair_analyze()`. The mono pair processor accepts `mastering_pair_process(processor_name, source, reference, sample_rate=22050, params=None, *, reference_sample_rate=None)` and returns a `MasteringResult`; source and reference lengths may differ. The stereo form accepts `source_left`, `source_right`, `reference_left`, and `reference_right` and returns a `MasteringStereoResult` with `left`, `right`, `sample_rate`, `input_lufs`, `output_lufs`, `applied_gain_db`, `latency_samples`, `loudness_target_limited`, and `non_finite_substitution_count`. Each source pair and each reference pair must have equal left/right lengths, but the source and reference pair lengths may differ; the stereo `match.abCrossfade` result uses the shorter pair length. Every pair processor, pair analysis and A/B match takes `reference_sample_rate` (default `sample_rate`): a reference at another rate is resampled onto the source's, and a delay estimate is reported in source-rate samples.
 
@@ -376,12 +439,14 @@ Every named stage is also a one-shot module-level function, so you can run a sin
 | `mastering_repair_declick(samples, sample_rate?, *, ...)` | `np.ndarray` | `threshold=0.8`, `neighbor_ratio=4.0`, `max_click_samples=8`, `lpc_order=20`, `residual_ratio=8.0` |
 | `mastering_repair_declip(samples, sample_rate?, *, ...)` | `np.ndarray` | `clip_threshold=0.98`, `lpc_order=36`, `iterations=2`, `lpc_blend=0.65` |
 | `mastering_repair_decrackle(samples, sample_rate?, *, ...)` | `np.ndarray` | `threshold=0.4`, `mode='median'`, `levels=4` |
-| `mastering_repair_dehum(samples, sample_rate?, *, ...)` | `np.ndarray` | `fundamental_hz=50.0`, `harmonics=4`, `q=20.0`, `adaptive`, `search_range_hz`, `adaptation`, `frame_size`, `pll_bandwidth` |
-| `mastering_repair_denoise_classical(samples, sample_rate?, *, ...)` | `np.ndarray` | `mode='logMmse'`, `noise_estimator='quantile'`, `n_fft=1024`, `hop_length=256`, `dd_alpha=0.98`, `gain_floor=0.05`, `over_subtraction=2.0`, `spectral_floor=0.05`, `noise_estimation_quantile=0.1`, `speech_presence_gain`, `gain_smoothing` |
-| `mastering_repair_dereverb_classical(samples, sample_rate?, *, ...)` | `np.ndarray` | `threshold=0.05`, `attenuation=0.5`, `n_fft=1024`, `hop_length=256`, `t60_sec=0.4`, `late_delay_ms=50.0`, `over_subtraction`, `spectral_floor`, `wpe_enabled`, `wpe_iterations`, `wpe_taps`, `wpe_strength` |
-| `mastering_repair_trim_silence(samples, sample_rate?, *, ...)` | `np.ndarray` | `threshold=0.001`, `padding_samples=0`, `mode='peak'`, `gate_lufs=-60.0`, `window_ms=400.0` |
+| `mastering_repair_dehum(samples, sample_rate?, *, ...)` | `np.ndarray` | `fundamental_hz=50.0`, `harmonics=4`, `q=20.0`, `adaptive`, `search_range_hz`, `adaptation`, `frame_size`, `pll_bandwidth`, `mode='subtract'` |
+| `mastering_repair_denoise_classical(samples, sample_rate?, *, ...)` | `np.ndarray` | `mode='logMmse'`, `noise_estimator='quantile'`, `n_fft=1024`, `hop_length=256`, `dd_alpha=0.98`, `reduction_db=26.0`, `over_subtraction=2.0`, `spectral_floor=0.05`, `noise_estimation_quantile=0.1`, `speech_presence_gain`, `gain_smoothing` |
+| `mastering_repair_dereverb_classical(samples, sample_rate?, *, ...)` | `np.ndarray` | `threshold=0.0`, `attenuation=1.0`, `n_fft=1024`, `hop_length=256`, `t60_sec=0.4`, `late_delay_ms=50.0`, `over_subtraction=1.0`, `spectral_floor=0.08`, `wpe_enabled`, `wpe_iterations`, `wpe_taps`, `wpe_strength` |
+| `mastering_repair_trim_silence(samples, sample_rate?, *, ...)` | `np.ndarray` | `threshold=0.001`, `padding_samples` or `padding_sec` (one of them), `mode='peak'`, `gate_lufs=-60.0`, `window_ms=400.0` |
 
-The whole-signal repair stages (declick, declip, decrackle, dehum, dereverb) are rejected by `StreamingMasteringChain` — run them with these one-shot helpers or inside `mastering_chain*` / `master_audio*`. In the realtime engine, decrackle, dehum, the classical denoiser and the classical dereverb are also available as inserts under their catalog ids; declick and declip stay offline.
+The whole-signal repair stages (declick, declip, decrackle, dehum, dereverb) are rejected by `StreamingMasteringChain`. Run them with these one-shot helpers or inside `mastering_chain*` / `master_audio*`. In the realtime engine, decrackle, dehum, the classical denoiser and the classical dereverb are also available as inserts under their catalog ids; declick and declip stay offline.
+
+Each repair helper also has a `_stereo` form, and the denoiser and dereverb a `_linked` form that treats the channels as one program. The `mastering_repair_detect_*` functions measure a defect (clicks, noise floor, clipping, crackle, hum, reverb, trim range) without changing the audio, and `mastering_repair_dereverb_config_for_room(estimate)` turns a `RoomEstimate` into a complete dereverb config.
 
 To repair audio of any channel count in two calls, `mastering_repair_analyze(channels, sample_rate)` measures the defects per channel and returns the stages the assistant would run (`recommended`, ready to pass on; dereverb is never recommended), and `mastering_repair_apply(channels, sample_rate, stages=[...])` runs them. Stages always run in the fixed order declip, declick, decrackle, dehum, denoise, dereverb whatever order the list gives; a repeated stage or an unknown setting is refused. The result carries the repaired channels and one report per stage (per channel, or once for the linked denoise and dereverb), and `on_progress` / `cancel` work as in [Progress callbacks](#progress-callbacks).
 
@@ -418,47 +483,11 @@ result = sonare.mastering_chain(
 )
 ```
 
-A config dict reaches the arbitrary-band multiband compressor too: `dynamics.multibandComp` takes `crossover` (`cutoffsHz`, `slope`, `mode`, `firKernelSize`) and `bands` (one dict per band), or the flat keys `dynamics.multibandComp.crossover.cutoffsHz.<i>` and `dynamics.multibandComp.bands.<i>.<field>` in `overrides`. The band count is 2 to 64, and `cutoffsHz` replaces the cutoff list and sets it to the length plus one. An enum-valued key takes its `choices` name beside the number (`"repair.denoise.noiseEstimator": "spp"`, `dynamics.compressor.detector`, the multiband slope, mode and detector keys); `mastering_process`, `mastering_process_stereo` and `mastering_insert_timing` params accept the same names. A streaming chain with `repair.denoise.enabled` defaults the estimator to `spp` and refuses `quantile` by name.
+### Config keys and insert descriptors
 
-The named mastering API families are:
+A config dict reaches the arbitrary-band multiband compressor too: `dynamics.multibandComp` takes `crossover` (`cutoffsHz`, `slope`, `mode`, `firKernelSize`) and `bands` (one dict per band), or the flat keys `dynamics.multibandComp.crossover.cutoffsHz.<i>` and `dynamics.multibandComp.bands.<i>.<field>` in `overrides`. The band count is 2 to 64, and `cutoffsHz` replaces the cutoff list and sets the band count to its length plus one. An enum-valued key takes its `choices` name beside the number (`"repair.denoise.noiseEstimator": "spp"`, `dynamics.compressor.detector`, the multiband slope, mode and detector keys); `mastering_process`, `mastering_process_stereo` and `mastering_insert_timing` params accept the same names. A streaming chain with `repair.denoise.enabled` defaults the estimator to `spp` and refuses `quantile` by name.
 
-`mastering_insert_param_info(name, sample_rate=None)` returns descriptors for the insert's construction keys and realtime automation targets, including their type, bounds, default, choices, and conditional `slot`; with a `sample_rate`, a Nyquist-bounded ceiling is resolved for that rate, and every catalog id answers, offline repair stages included. `mastering_insert_timing(name, params, sample_rate)` builds that configured insert and returns its `latencySamples` and `tailSamples`; keys the insert does not read are rejected. `params` takes every value type the descriptor declares (numbers, booleans, enum names, strings, number lists); a value of the wrong type is a `TypeError` and a non-finite number a `SonareValueError`. `mastering_preset_params(preset)` returns the preset's flat override map, which can be passed to `master_audio(..., overrides=...)` unchanged.
-
-| Purpose | Function |
-|---------|----------|
-| Apply simple loudness mastering | `mastering()` |
-| List built-in mastering presets | `mastering_preset_names()` |
-| Get a built-in preset's flat chain parameters | `mastering_preset_params(preset)` |
-| Apply a preset to mono audio | `master_audio()` |
-| Apply a preset to stereo audio | `master_audio_stereo()` |
-| Run a full mono chain | `mastering_chain()` |
-| Run a full stereo chain | `mastering_chain_stereo()` |
-| Run a streaming chain (block-by-block) | `StreamingMasteringChain` |
-| Generate an audio profile for mastering decisions | `mastering_audio_profile()` |
-| Generate an audio profile from both stereo channels | `mastering_audio_profile_stereo()` |
-| Generate assistant suggestions from source analysis | `mastering_assistant_suggest()` |
-| Generate assistant suggestions from both stereo channels | `mastering_assistant_suggest_stereo()` |
-| Preview delivery loudness by platform | `mastering_streaming_preview()` |
-| Preview delivery loudness from both stereo channels | `mastering_streaming_preview_stereo()` |
-| List mono/stereo processors | `mastering_processor_names()` |
-| Get machine-readable processor classifications | `mastering_processor_catalog()` |
-| List chain insert processors | `mastering_insert_names()` |
-| List the parameter keys an insert accepts | `mastering_insert_param_names(name)` |
-| Describe insert construction keys and automation targets | `mastering_insert_param_info(name)` |
-| Get configured insert latency and tail | `mastering_insert_timing(name, params, sample_rate)` |
-| Process mono audio | `mastering_process()` |
-| Process stereo audio | `mastering_process_stereo()` |
-| List pair processors | `mastering_pair_processor_names()` |
-| Process source/reference pair | `mastering_pair_process()` |
-| Process stereo source/reference pair | `mastering_pair_process_stereo()` |
-| List pair analyses | `mastering_pair_analysis_names()` |
-| Analyze source/reference pair | `mastering_pair_analyze()` |
-| Match source loudness to a reference | `mastering_ab_match_loudness()` |
-| Match stereo source loudness to a stereo reference | `mastering_ab_match_loudness_stereo()` |
-| List stereo analyses | `mastering_stereo_analysis_names()` |
-| Analyze stereo channels | `mastering_stereo_analyze()` |
-
-Related mastering guides: [Preset selection](./glossary/mastering/preset-selection.md), [Delivery targets](./glossary/mastering/delivery-targets.md), [Meter reading](./glossary/mastering/meter-reading.md), [Quality checklist](./glossary/mastering/quality-checklist.md).
+`mastering_insert_param_info(name, sample_rate=None)` returns descriptors for the insert's construction keys and realtime automation targets, including their type, bounds, default, choices, conditional `slot`, and the `dependsOn` / `coupledWith` siblings that move a bound; with a `sample_rate`, a Nyquist-bounded ceiling is resolved for that rate, and every catalog id answers, offline repair stages included. `mastering_insert_timing(name, params, sample_rate)` builds that configured insert and returns its `latencySamples` and `tailSamples`; keys the insert does not read are rejected. `params` takes every value type the descriptor declares (numbers, booleans, enum names, strings, number lists); a value of the wrong type is a `TypeError` and a non-finite number a `SonareValueError`. `mastering_preset_params(preset)` returns the preset's flat override map, which can be passed to `master_audio(..., overrides=...)` unchanged.
 
 ## Mixing API
 
@@ -507,11 +536,11 @@ The headless-DAW API is available in Python as well: author arrangements with `P
 | Render MIDI through the built-in synthesizer | `Project.bounce_with_synth_instrument(...)`, `synth_preset_names()`, `synth_preset_patch(name)`, `SynthPatch` | [Built-in Synthesizer](./native-synth.md), [Bouncing Projects](./project-bounce.md) |
 | Render MIDI through a SoundFont | `Project.load_soundfont(data)`, `Project.bounce_with_sf2_instrument(...)` | [SoundFont Player](./soundfont-player.md) |
 | Host your own instrument during a bounce | `Project.bounce_with_instruments(...)` with the `ExternalInstrument` protocol — a `render(channels, num_frames)` callback plus optional `prepare`/`on_event` hooks and `latency_samples`. Node and WASM have the callback form as `bounceWithInstruments` / `bounceWithInstrument`. | [Bouncing Projects](./project-bounce.md#host-your-own-instrument) |
-| Play instruments live from MIDI events and replace destination MIDI FX | `RealtimeEngine.set_synth_instrument(...)`, `RealtimeEngine.load_soundfont(...)`, `RealtimeEngine.set_midi_fx(...)`, plus the engine's MIDI input queue | [MIDI Input](./midi-input.md) |
+| Play instruments live from MIDI events and replace destination MIDI FX | `RealtimeEngine.set_synth_instrument(...)`, `RealtimeEngine.load_soundfont(...)`, `RealtimeEngine.set_midi_fx(...)`, the engine's MIDI input queue, and `push_midi_program(...)` / `push_midi_input_program(...)` (a program change with an optional bank in one call; the SoundFont player and a synth bound with GM programs follow the bank) | [MIDI Input](./midi-input.md) |
 | Schedule MIDI clips into the live engine, sample-accurately | `RealtimeEngine.set_midi_clips([...])` with `EngineMidiClipSchedule` / `EngineMidiEvent`, `RealtimeEngine.sample_at_ppq(ppq)` — ppq is pulses per quarter note, the musical-time unit | [Realtime Engine](./realtime-engine.md#midi-clip-scheduling-and-sampleatppq) |
 | Set per-track cue monitoring | `RealtimeEngine.set_track_monitor_mode(lane_index, mode, render_frame=None)` with `EngineTrackMonitorMode` (`off`/`pfl`/`afl` — PFL listens pre-fader, AFL post-fader) | [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
-| Send a destination to external MIDI hardware | `set_midi_destination_external(...)`, `set_external_midi_clock_enabled(...)`, `drain_external_midi(...)`, `external_midi_dropped_count()` | [Realtime Engine](./project-editing-midi.md#sending-a-track-to-external-midi-gear) |
-| Mix and automate the engine's tracks live | Lane/strip methods plus `set_bus_strip_insert_param_by_name(...)`, `set_bus_strip_insert_bypassed(...)`, `resolve_track_insert_automation_id(...)`, `resolve_master_insert_automation_id(...)`, `resolve_bus_insert_automation_id(...)`, and `set_param_smoothing_ms(...)` | [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
+| Send a destination to external MIDI hardware | `set_midi_destination_external(...)`, `set_external_midi_clock_enabled(...)`, `drain_external_midi(...)`, `external_midi_dropped_count()` | [Project Editing: MIDI](./project-editing-midi.md#sending-a-track-to-external-midi-gear) |
+| Mix and automate the engine's tracks live | Lane/strip methods plus `set_track_sends(track_id, sends)`, `set_track_output_bus(track_id, bus_id)`, `set_bus_strip_insert_param_by_name(...)`, `set_bus_strip_insert_bypassed(...)`, `resolve_track_insert_automation_id(...)`, `resolve_master_insert_automation_id(...)`, `resolve_bus_insert_automation_id(...)`, and `set_param_smoothing_ms(...)` | [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
 | Read wide meters and scopes | `drain_meter_telemetry_wide(...)`, `configure_scope_telemetry(...)`, `drain_scope_telemetry(...)` | [Realtime Engine](./realtime-engine.md#surround-group-buses-and-wide-meters) |
 
 ```python
@@ -524,7 +553,7 @@ with sonare.Project() as project:
     audio = project.bounce_with_synth_instrument("e-piano", num_channels=2)
 ```
 
-`Project` and `Mixer` support `with` for automatic cleanup.
+Every object that owns native memory (`Audio`, `Project`, `Mixer`, `RealtimeEngine`, `StreamAnalyzer`, `RealtimeVoiceChanger`, `StreamingMasteringChain`, `StreamingEqualizer`, and so on) has `close()` and works as a context manager. Calling a method after `close()` raises `SonareError` with `INVALID_STATE`.
 
 For synth preset introspection, `synth_preset_patch(name)` returns a named catalog preset as a `SynthPatch` (it raises `SonareError` for unknown names and accepts a `'va:'` routing prefix) so you can inspect and tweak fields before binding it. `synth_enum_tables()` returns the runtime enum-name tables (`dict[str, tuple[str, ...]]`) for validating `SynthModRouting` source/destination names against the loaded build.
 
@@ -542,9 +571,10 @@ Functions and types for areas covered by other pages; the full signatures are in
 |------|-----|-------|
 | Label detected chords with Roman numerals and functions without re-detecting | `chord_functions(chords, key)` returning `FunctionalChord` entries | [Analysis](./analysis.md) |
 | Let the analysis measure the tuning, and convert it to Hz | `tuning="auto"` on `analyze`, `detect_chords`, `detect_key` (`KeyDetection` carries the `tuning` used); `reference_hz="auto"` on `transcribe`; `tuning_to_reference_hz`, `reference_hz_to_tuning` | [Audio To Notes](./audio-to-notes.md) |
-| Tune a monophonic take to a detected or named key | `auto_tune(samples, sample_rate, key="detect")` returning `AutoTuneResult`; `scale_mask_for_mode(root, mode)` | [Python Effects API](./python-api-effects.md) |
+| Tune a monophonic take to a detected or named key | `auto_tune(samples, sample_rate, key="detect")` returning `AutoTuneResult` ([Python Effects API](./python-api-effects.md#effects-functions)); `scale_mask_for_mode(root, mode)` ([Python Analysis API](./python-api-analysis.md#scale-quantization)) | [Python Effects API](./python-api-effects.md#effects-functions) |
 | Invert a Mel or MFCC result without restating its parameters | `mel_result_to_stft`, `mel_result_to_audio`, `mfcc_result_to_mel`, `mfcc_result_to_audio` | [Inverse Features](./inverse-features.md) |
-| Turn a room estimate into `synthesize_rir` input | `room_geometry_from_estimate(estimate, source=..., listener=...)` returning `RoomGeometry` | [Acoustic Analysis](./acoustic-analysis.md) |
+| Convert a detected chord or key into an arrangement annotation | `chord_symbol_from_analysis(chord)`, `key_mode_from_analysis(mode)` | [Project Editing: MIDI](./project-editing-midi.md) |
+| Turn a room estimate into `synthesize_rir` input | `room_geometry_from_estimate(estimate, source=..., listener=...)` returning `RoomGeometry` (with `source`, `listener` and `absorption` derived from the estimate unless overridden) | [Acoustic Analysis](./acoustic-analysis.md) |
 | Keep every decoded channel, or fold channels to a narrower layout | `decode_channels(data)` returning `(channels, sample_rate)`, `downmix(channels, target_layout)` (centre and surround at -3 dB, LFE dropped) | [Channel Formats](./channel-formats.md) |
 | Ask whether a sidechain binding would be accepted, and why not | `RealtimeEngine.can_set_lane_sidechain`, `can_set_bus_sidechain`, `can_set_master_sidechain` returning `SidechainCheck` | [Realtime Engine](./realtime-engine.md) |
 | Edit the engine's clip set one clip at a time | `RealtimeEngine.upsert_clip`, `remove_clip` | [Realtime Engine](./realtime-engine.md) |
@@ -554,23 +584,10 @@ Functions and types for areas covered by other pages; the full signatures are in
 | List audio sources a project could not resolve | `Project.unresolved_audio_sources()` | [Project Editing](./project-editing.md) |
 | Read the mixer scene's unrecognized keys | `Mixer.scene_warnings()` | [Mixing Scene JSON](./mixing-scene-json.md) |
 
-## Where the sections went
+## Reference map
 
-| Section | Now on |
-|---------|--------|
-| Audio Effects | [Python Effects API](./python-api-effects.md#audio-effects) |
-| Feature Extraction | [Python Analysis API](./python-api-analysis.md#feature-extraction) |
-| Unit Conversions | [Python Analysis API](./python-api-analysis.md#unit-conversions) |
-| API Reference (Audio, Analysis Functions) | [Python Analysis API](./python-api-analysis.md#api-reference) |
-| Room Acoustics | [Python Effects API](./python-api-effects.md#room-acoustics) |
-| Effects Functions | [Python Effects API](./python-api-effects.md#effects-functions) |
-| Realtime voice changer | [Python Effects API](./python-api-effects.md#realtime-voice-changer) |
-| Feature Extraction Functions | [Python Analysis API](./python-api-analysis.md#feature-extraction-functions) |
-| Inverse Reconstruction Functions | [Python Analysis API](./python-api-analysis.md#inverse-reconstruction-functions) |
-| Metering Functions | [Python Analysis API](./python-api-analysis.md#metering-functions) |
-| Scale Quantization | [Python Analysis API](./python-api-analysis.md#scale-quantization) |
-| librosa-Compatible Helpers | [Python Effects API](./python-api-effects.md#librosa-compatible-helpers) |
-| Conversion Functions | [Python Analysis API](./python-api-analysis.md#conversion-functions) |
-| Types | [Python Types](./python-api-types.md#types) |
-| Streaming Analysis API | [Python Analysis API](./python-api-analysis.md#streaming-analysis-api) |
-| Streaming Equalizer API | [Python Effects API](./python-api-effects.md#streaming-equalizer-api) |
+| Page | Covers |
+|------|--------|
+| [Python Analysis API](./python-api-analysis.md) | Audio, analysis functions, feature extraction, inverse reconstruction, metering, scale quantization, conversions, streaming analysis |
+| [Python Effects API](./python-api-effects.md) | Audio effects, room acoustics, effects functions, the realtime voice changer, librosa-compatible helpers, the streaming equalizer |
+| [Python Types](./python-api-types.md) | Result and option types, exceptions |

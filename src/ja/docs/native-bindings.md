@@ -1,6 +1,6 @@
 # ネイティブバインディング
 
-libsonare には 3 つのバインディングがあります。ブラウザ向けの **WASM**、**Python**、そして **Node.js ネイティブアドオン** です。このページでは 3 つすべてを比較して選べるようにします。Node ネイティブの関数リファレンスは専用ページにあります。各言語の詳細は個別の API ページを参照してください。
+libsonare には 3 つのバインディングがあります。ブラウザ向けの **WASM**、**Python**、そして **Node.js ネイティブアドオン** です。このページでは 3 つの違い（初期化、インストール、解放の作法、エラー、Node ネイティブ固有の事項）を扱います。Node ネイティブの関数リファレンスは専用ページにあります。各言語の詳細は個別の API ページを参照してください。
 
 - **[Python API](/ja/docs/python-api)** — ctypes ベースのバインディング、PyPI でホイールを配布
 - **[Node.js Native API](/ja/docs/node-api)** — C++ の性能を直接活用するネイティブアドオン
@@ -11,7 +11,7 @@ libsonare には 3 つのバインディングがあります。ブラウザ向�
 |--------------|------|-----------|
 | ブラウザアプリ | WASM | `@libraz/libsonare` |
 | Python スクリプトやノートブック | Python | `pip install libsonare` |
-| ネイティブデコードや性能が必要な Node.js アプリ | Node ネイティブ | `@libraz/libsonare-native` |
+| ネイティブデコードや性能が必要な Node.js アプリ | Node ネイティブ | `@libraz/libsonare-native`（ソースからビルド。npm 未公開） |
 
 ## このページで身につくこと
 
@@ -27,17 +27,13 @@ libsonare には 3 つのバインディングがあります。ブラウザ向�
 | | WebAssembly | Python | Node.js（N-API） |
 |---|---|---|---|
 | **プラットフォーム** | ブラウザ | デスクトップ | デスクトップ |
+| **初期化** | `await init()` | 不要 | 不要 |
 | **配布** | npm (`@libraz/libsonare`) | PyPI (`pip install libsonare`) | ソース (`bindings/node`) |
 | **ビルド** | Emscripten | ビルド済みホイール（または CMake + pip） | CMake + cmake-js |
 | **パフォーマンス** | ネイティブに近い | ネイティブ | ネイティブ |
-| **ストリーミング** | 対応 | 対応 | 対応 |
+| **ハンドルの解放** | `delete()` | `with`／`close()` | `destroy()`。ランタイムが対応していれば `using` |
 | **ファイル I/O** | サンプルベース API。`Audio.fromMemory(...)` は WAV/MP3 バイト列をデコードでき、ブラウザ側デコード経路では追加の対応形式も読めます | 標準は WAV/MP3。FFmpeg 有効ビルドでは FFmpeg 対応形式 | 標準は WAV/MP3。FFmpeg 有効ビルドでは FFmpeg 対応形式 |
-| **エフェクト** | 対応 | 対応 | 対応 |
-| **特徴抽出** | 対応 | 対応 | 対応 |
-| **逆再構成** | 対応 | 対応 | 対応 |
-| **単位変換** | 対応 | 対応 | 対応 |
-| **マスタリング** | 対応 | 対応 | 対応 |
-| **ミキシング** | 対応 | 対応 | 対応 |
+| **通常の解析、エフェクト、特徴量、変換、マスタリング、ミキシング、ストリーミング** | 同じ機能 | 同じ機能 | 同じ機能 |
 
 ---
 
@@ -71,6 +67,8 @@ Node.js バインディングは **N-API** を使用したネイティブアド�
 
 ### インストール
 
+`@libraz/libsonare-native` は npm に公開されていません。ソースツリーの `bindings/node` でビルドしてください。別プロジェクトから使う場合は、ビルド済みのローカルパッケージをワークスペースや `file:` 依存として参照します。
+
 ```bash
 git clone https://github.com/libraz/libsonare.git
 cd libsonare/bindings/node
@@ -87,15 +85,15 @@ yarn build
 | Feature | 7 | フラットな解析・特徴量の結果構造体と、公開する一般 C 関数の契約（`SonareKey`、`SonareAnalysisResult`、`SonareChordDetectionOptions` など） |
 | Project | 2 | ヘッドレス DAW のプロジェクト・アレンジ構造体。アレンジ機能なしのビルドでは `0` を返します |
 | Voice changer | 3 | リアルタイムボイスチェンジャーの設定構造体 |
-| Acoustic | 4 | ルーム音響の構造体 |
+| Acoustic | 5 | ルーム音響の構造体 |
 | Engine | 3 | リアルタイムコマンドキュー |
 
-`sonare_abi_version()` は上の 4 つを 1 つの `uint32_t` に詰めて返します。ビット 0〜7 が Feature、8〜15 が Project、16〜23 が Voice changer、24〜31 が Acoustic で、1 回の比較で全体を照合できます。Engine の ABI はここに含めず、専用のアクセサ `sonare_engine_abi_version()` を持ちます。POD 構造体ではなく SharedArrayBuffer のレコードレイアウトをバージョン管理しているためです。各サブシステムのヘッダーが自分のマクロ（`SONARE_FEATURE_ABI_VERSION`、`SONARE_PROJECT_ABI_VERSION`、`SONARE_VOICE_CHANGER_ABI_VERSION`、`SONARE_ACOUSTIC_ABI_VERSION`）を持ちます。Feature のマクロは公開する一般 C 関数の契約も保証するため、ノート API の `voiced` 引数のようなシグネチャ変更で値が進みます。それ以外のマクロは、保証対象の構造体のレイアウトが変わるたびに値を進めます。Project のバージョンだけは、レイアウトが変わったリリースごとに 1 回進みます。したがって値が等しければレイアウトと保証対象の契約は同一であり、保証対象の構造体へのフィールド追加は「追加的な変更」ではなくバージョンの更新です。
+`sonare_abi_version()` は上の 4 つを 1 つの `uint32_t` に詰めて返します。ビット 0〜7 が Feature、8〜15 が Project、16〜23 が Voice changer、24〜31 が Acoustic（集約値は `0x05030207`）で、1 回の比較で全体を照合できます。Engine の ABI はここに含めず、専用のアクセサ `sonare_engine_abi_version()` を持ちます。POD 構造体ではなく SharedArrayBuffer のレコードレイアウトをバージョン管理しているためです。各サブシステムのヘッダーが自分のマクロ（`SONARE_FEATURE_ABI_VERSION`、`SONARE_PROJECT_ABI_VERSION`、`SONARE_VOICE_CHANGER_ABI_VERSION`、`SONARE_ACOUSTIC_ABI_VERSION`）を持ちます。Feature のマクロは公開する一般 C 関数の契約も保証するため、ノート API の `voiced` 引数のようなシグネチャ変更で値が進みます。それ以外のマクロは、保証対象の構造体のレイアウトが変わるたびに値を進めます。Project のバージョンだけは、レイアウトが変わったリリースごとに 1 回進みます。したがって値が等しければレイアウトと保証対象の契約は同一であり、保証対象の構造体へのフィールド追加は「追加的な変更」ではなくバージョンの更新です。
 
-この値をどう使うかはバインディングごとに異なり、古いライブラリがどこで露見するかもそれで決まります。
+この値をどう使うかはバインディングごとに異なり、古いライブラリがどこで露見するかもそれで決まります（ほかの失敗と並べた一覧は[エラー契約](./binding-parity.md#エラー契約)に、対処は[インストール](./installation.md#ライブラリ読み込み時の-abimismatch)にあります）。
 
-- **Python** はライブラリを最初に読み込むとき、個々のシンボルを設定する前に、詰め込まれた値をビルド時に想定した値と比較し、`libsonare ABI mismatch` で始まるメッセージの `ErrorCode.ABI_MISMATCH`（10）の `SonareError` を送出します。別のチェックアウトの共有ライブラリは、呼び出しの途中ではなく最初のライブラリ使用時に失敗します。Python CLI は終了コード 13 で終了します。
-- **Node ネイティブと WASM** も同じ比較を自分で行い、`ErrorCode.AbiMismatch`（10）の `SonareError` を投げます。Node はアドオンの require 時、WASM は `init()` です。あわせて `EXPECTED_PROJECT_ABI_VERSION` と `EXPECTED_ENGINE_ABI_VERSION`、および問い合わせ関数 `abiVersion()`・`projectAbiVersion()`・`engineAbiVersion()`・`voiceChangerAbiVersion()` をエクスポートします。`projectAbiVersion()` はアレンジ機能がコンパイルされていれば想定定数と等しく、そうでなければ `0` です。WASM の `engineCapabilities()` は `engineAbiVersion`・`expectedEngineAbiVersion`・`abiCompatible` を報告します。エンジン ABI はパック値に含まれないので、`RealtimeEngine` を構築する前の比較は利用側の仕事です。
+- **Python** はライブラリを最初に読み込むとき、個々のシンボルを設定する前に、詰め込まれた値をビルド時に想定した値と比較し、`libsonare ABI mismatch` で始まるメッセージの `ErrorCode.ABI_MISMATCH`（10）の `SonareError` を送出します。別のチェックアウトの共有ライブラリは、呼び出しの途中ではなく最初のライブラリ使用時に失敗します。`RealtimeEngine` と `Project` のコンストラクター、および `Project.from_json` も、エンジンとプロジェクトのバージョンを同じように照合します。Python CLI は終了コード 13 で終了します。
+- **Node ネイティブと WASM** も同じ比較を自分で行い、`ErrorCode.AbiMismatch`（10）の `SonareError` を投げます。Node はアドオンの require 時、WASM は `init()` です。両パッケージとも問い合わせ関数 `abiVersion()`・`projectAbiVersion()`・`engineAbiVersion()`・`voiceChangerAbiVersion()` と定数 `EXPECTED_PROJECT_ABI_VERSION` をエクスポートします。WASM はさらに `EXPECTED_ABI_VERSION`（パッケージのルートと `/worklet` から）と `EXPECTED_ENGINE_ABI_VERSION` もエクスポートします。Node アドオンは `RealtimeEngine` の構築時にエンジン ABI を照合します。`projectAbiVersion()` はアレンジ機能がコンパイルされていれば想定定数と等しく、そうでなければ `0` です。WASM の `engineCapabilities()` は `engineAbiVersion`・`expectedEngineAbiVersion`・`abiCompatible` を報告します。エンジン ABI はパック値に含まれないので、各 `RealtimeEngine` のコンストラクターが別に照合し、エンジンを作る前に `AbiMismatch` を投げます。Node の `Project` コンストラクターと `Project.fromJson` も、プロジェクトのバージョンについて同じことをします。
 - **C の呼び出し側** は `sonare_abi_version()` をコンパイル時の `SONARE_ABI_VERSION` と一度だけ比較します。JSON の入口（ボイスチェンジャーの JSON 設定、機能カタログ）はレイアウトのずれを許容するので関門は不要です。[C ABI のバージョン](./cpp-api.md#c-abi-のバージョン) も参照してください。
 
 構造体へのフィールド追加は、構造体ごとの `struct_version` で段階的に有効化されるため、既存の C 呼び出し側はソースレベルでも呼び出しレベルでも影響を受けません。覚えておくとよい例が `SonareNoteSegmenterConfig` です。末尾の `voiced_threshold` は `struct_version` が `2` のときだけ読まれるので、従来どおりに埋めた設定はそのまま同じ挙動になり、ゼロ初期化した設定は既定値 0.5 を保ちます。変わるのはライブラリが報告するバージョンのほうです。自分のコードに手を入れていなくてもライブラリをバインディングと一緒に再ビルドする必要があるのは、このためです。
@@ -193,33 +191,22 @@ const stereoPreview = JSON.parse(masteringStreamingPreviewStereo({ left, right, 
 console.log(stereoProfile, stereoSuggestions, stereoPreview)
 ```
 
-2 チャンネルの素材を扱うときは、ステレオ入口を使ってください。モノラル側は `0.5 * (left + right)` のダウンミックスを測定するため、相関の低いステレオ素材では約 6 dB 低く出ます。その分だけ、インテグレーテッドラウドネス、そこから導かれるノーマライズゲイン、ピーク余裕の判定がまとめて過小評価されます。ここで使う LUFS はフルスケール基準のラウドネス単位（Loudness Units relative to Full Scale）で、配信プラットフォームが音量を揃える基準でもあります。詳細は[LUFS](./glossary/lufs.md)を参照してください。
+2 チャンネルの素材を扱うときは、ステレオ入口を使ってください。モノラル側は `0.5 * (left + right)` のダウンミックスを測定するため、相関の低いステレオ素材では約 6 dB 低く出ます。その分だけ、インテグレーテッドラウドネスとそこから導かれる値がまとめて過小評価されます。ステレオプロファイルのうち両チャンネルから測るのは `loudness` ブロックだけです。測定の比較とデモは [C++ API のステレオのプロファイル・アシスタント・プレビュー](./cpp-api.md#ステレオのプロファイル・アシスタント・プレビュー) にあります。数値は LUFS（[LUFS](./glossary/lufs.md)）です。
 
-48 kHz・4 秒のピンクノイズのペアで測ると次のようになります。
+呼び出し規約の違いに注意してください。上のマスタリング例が位置引数なのに対し、この 4 つはリクエストオブジェクト 1 つだけを取ります。メータリング側の `meteringCrestFactorDbStereo({ left, right, sampleRate })` も同じリクエストオブジェクト形式で、`number` を返します。リクエスト型の名前は Node ネイティブと WASM で異なります。Node は関数ごとにリクエスト型（`MasteringAudioProfileStereoRequest`、`MasteringAssistantSuggestStereoRequest`、`MasteringStreamingPreviewStereoRequest`）を宣言し、WASM は共通の `MasteringStereoParamsRequest` を使います。
 
-| ペアの種類 | ダウンミックス経由とステレオ経由 | 差 |
-|------------|----------------------------------|-----|
-| 相関が低い | -22.55 LUFS と -16.44 LUFS | 6.11 dB。うち 3.01 dB はダウンミックスで振幅が半分になる分、残りの約 3 dB が相関の低さによる分 |
-| 相関が高い | 振幅が半分になる分のみ | 3.01 dB |
-
-相関の低いペアでは、この差が Spotify の `normalizationGainDb` を +2.44 から +8.55 に押し上げます。
-
-ステレオプロファイルのうち両チャンネルから測るのは `loudness` ブロックだけです。インテグレーテッド LUFS と LRA（ラウドネスレンジ。曲中の静かな部分と大きな部分の開き）はチャンネルを合算したプログラムから求め、True Peak は左右のうち大きい方を採ります。スペクトル・ダイナミクス・テンポの各フィールドは絶対レベルではなく形と時間構造を表すため、ダウンミックス基準のまま据え置き、モノラル呼び出しの結果とそのまま比較できます。
-
-呼び出し規約の違いに注意してください。上のマスタリング例が位置引数なのに対し、この 4 つはリクエストオブジェクト 1 つだけを取ります。メータリング側の `meteringCrestFactorDbStereo({ left, right, sampleRate })` も同じリクエストオブジェクト形式で、`number` を返します。リクエスト型の名前は Node ネイティブと WASM で異なります。Node は `MasteringAssistantSuggestStereoRequest` と `MasteringAudioProfileStereoRequest` を宣言し（後者は前者を継承するだけで何も追加しません）、WASM は共通の `MasteringStereoParamsRequest` 1 つを使います。
-
-アシスタント／プロファイル系ヘルパーは、WASM 入口と同じオプション名を受け取ります。プロファイル設定は `nFft`、`hopLength`、`truePeakOversample`、アシスタント設定は `targetLufs`、`ceilingDb`、`enableRepair`、`preferStreamingSafe`、`speechMonoAmount` です。共有ネイティブパーサーを通るため、snake_case の別名も受け付けます。
+アシスタント／プロファイル系ヘルパーは、WASM 入口と同じオプション名を受け取ります。プロファイル設定は `nFft`、`hopLength`（どちらも 48 kHz でのサンプル数で、入力のレートに換算されます）、`truePeakOversample`、アシスタント設定は `targetLufs`、`ceilingDb`、`enableRepair`、`preferStreamingSafe`、`speechMonoAmount` です。共有ネイティブパーサーを通るため、snake_case の別名も受け付けます。
 
 長尺のオフラインレンダリングでは、`masteringChain(...)`、`masteringChainStereo(...)`、`masterAudio(...)`、`masterAudioStereo(...)` の最後に進捗コールバックを渡し、そこから Node UI を更新します。
 
-WASM パッケージは、ブラウザデモと同じ camelCase のマスタリング API を公開しています。主なグループは次の通りです。
+WASM パッケージは、ブラウザデモと同じ camelCase のマスタリング API を公開しています。主なグループは次のとおりです。
 
 | グループ | API 名 |
 |----------|--------|
 | プリセットと簡易入口 | `mastering()`、`masteringPresetNames()`、`masteringPresetParams()`、`masteringPlatformNames()`、`masterAudio()`、`masterAudioStereo()`、`masterAudioWithProgress()`、`masterAudioStereoWithProgress()` |
 | フルチェーン | `masteringChain()`、`masteringChainStereo()`、`masteringChainWithProgress()`、`masteringChainStereoWithProgress()` |
 | オフラインのダイナミクス（単発） | `masteringDynamicsCompressor()`、`masteringDynamicsGate()`、`masteringDynamicsTransientShaper()` |
-| 1 回の呼び出しで測定と修復（任意のチャンネル数） | `masteringRepairAnalyze()`、`masteringRepairApply()` — [測定と修復を 1 回の呼び出しで行う](./audio-repair.md#測定と修復を-1-回の呼び出しで行う) を参照 |
+| 1 回の呼び出しで測定とリペア（任意のチャンネル数） | `masteringRepairAnalyze()`、`masteringRepairApply()` — [測定とリペアを 1 回の呼び出しで行う](./audio-repair.md#測定とリペアを-1-回の呼び出しで行う) を参照 |
 | オフラインのリペア — モノラル | `masteringRepairDeclick()`、`masteringRepairDeclip()`、`masteringRepairDecrackle()`、`masteringRepairDehum()`、`masteringRepairDenoiseClassical()`、`masteringRepairDereverbClassical()`、`masteringRepairTrimSilence()` |
 | オフラインのリペア — ステレオペア | `masteringRepairDeclickStereo()`、`masteringRepairDeclipStereo()`、`masteringRepairDecrackleStereo()`、`masteringRepairDehumStereo()`、`masteringRepairDenoiseClassicalStereo()`、`masteringRepairDereverbClassicalStereo()`、`masteringRepairTrimSilenceStereo()` |
 | オフラインのリペア — チャンネルリンク（任意のチャンネル数） | `masteringRepairDenoiseClassicalLinked()`、`masteringRepairDereverbClassicalLinked()` |
@@ -235,33 +222,16 @@ Node ネイティブは同じ基本名を使いますが、進捗は個別の `*
 
 ### リペアの入口
 
-リペア系の関数はいずれも、リクエストオブジェクトと位置引数のどちらでも呼べます。これは両パッケージ共通です。違うのは入力の数と戻り値です。
+リペア系の関数はいずれも、リクエストオブジェクトと位置引数のどちらでも呼べます。これは両パッケージ共通です。形によって入力の数と戻り値が変わります。
 
 | 形 | 呼び出し | 戻り値 |
 |----|---------|--------|
-| モノラル | `masteringRepairDeclick(samples, sampleRate, options?)` | 修復後の `Float32Array` |
-| ステレオペア | `masteringRepairDeclickStereo(left, right, sampleRate, config?)` | 修復後のペアとレポートのフィールド |
+| モノラル | `masteringRepairDeclick(samples, sampleRate, options?)` | リペア後の `Float32Array` |
+| ステレオペア | `masteringRepairDeclickStereo(left, right, sampleRate, config?)` | リペア後のペアとレポートのフィールド |
 | チャンネルリンク | `masteringRepairDenoiseClassicalLinked(channels, sampleRate, config?)` | `{ channels, report }`。入力順に 1 チャンネルずつ出力を返します |
 | 計測 | `masteringRepairDetectClicks(samples, sampleRate, options?)` | 検出レポートのみで、音声は返しません |
 
-ステレオ版は、モノラル版を 2 回呼ぶのとは別物です。そこがステレオ版を選ぶ理由でもあります。ステレオイメージを動かしてしまう判断はペア全体で共有し、安全に変えられる部分だけをチャンネルごとに処理します。したがって、どちらかのチャンネルの検出が選んだ同相のクリックは両チャンネルで修復され、ノイズ低減のマスクは両チャンネルを合算したパワーから作って、そのまま両側へ適用します。
-
-戻り値のレポートもこの切り分けに従うので、次のように読んでください。
-
-| 関数 | レポートのフィールド |
-|------|--------------------|
-| `masteringRepairDeclickStereo()`、`masteringRepairDeclipStereo()`、`masteringRepairDecrackleStereo()`、`masteringRepairDehumStereo()` | `leftReport` と `rightReport`。各チャンネルは自分のサンプルから補間・フィルタされるため、2 つの内容は実際に異なります |
-| `masteringRepairDenoiseClassicalStereo()`、`masteringRepairDereverbClassicalStereo()` | 共有の `report` が 1 つ。マスクが 1 つなので、報告する対象も 1 つです |
-| `masteringRepairTrimSilenceStereo()` | 共有の `report` に加えて `leftRange` と `rightRange` |
-
-`*Linked` の 2 つは、左右のペアではなく `channels: Float32Array[]` を取り、マスクを 1 つにするという同じ考え方を任意のチャンネル数（1 チャンネルを含む）へ広げたものです。リンク版のレポートの `detected` はチャンネル集合全体の値で、チャンネル数とともに動きます。同一内容の N チャンネルは 1 チャンネルより `10*log10(N)`（ペアなら約 3 dB）高く読まれます。それ以外のフィールドは比率なので動きません。
-
-計測用のヘルパーは、対応するリペアと同じオプション型を取ります。これから実行しようとしている設定そのままで計測できるということです。このうち 2 つは、信号ごとの計測ではありません。
-
-- `masteringRepairNoiseBandBins(nFft?, sampleRate?)` は、`masteringRepairDetectNoiseFloor()` が `bandFloorDbfs` を報告するときのバンド分割を表す 33 個のビン番号を `Int32Array` で返します。32 バンドそれぞれの先頭ビンと、最後のバンドの終端の次のビンです。分割を決めるのは解析のジオメトリだけなので、ノイズ低減の設定は取りません。連続する 2 つの値が等しいところはバンドが空で、そのレベルは計測値ではなくセンチネルです。
-- `masteringRepairDereverbConfigForRoom(estimate, config?)` は、`estimateRoom(...)` の結果からディリバーブ設定一式を埋めます。手で調整した数値ではなく、実測した部屋の特性でリペアを駆動できます。
-
-残る 2 つは、リペアではなくアシスタント側の入口です。`masteringPlatformNames()` は、アシスタントが `targetPlatform` として受け付ける配信先の一覧を返します。バインディング側に持った一覧ではなくライブラリから読むため、コアに配信先が増えてもバインディングを変更せずに見つけられます。`masteringAbMatchLoudness({ source, reference, sampleRate })` は A/B 試聴のために `source` を `reference` のラウドネスへ合わせ、合わせた後のサンプルとあわせて `referenceLufs`、`sourceLufs`、`appliedGainDb`、`matchedTruePeakDbtp` を返します。リファレンス側は計測するだけで、そのまま返ります。ゲインには意図的に上限を設けていないため、`matchedTruePeakDbtp` が 0 dBTP を超えることがあります。ヘッドルームに合わせてクランプすると、フルスケール近くの音源だけが自分のラウドネスのまま取り残されることになり、それはラウドネスマッチが最もやってはいけないことだからです。マッチよりピークのほうが重要な場面では、後段でリミットしてください。ステレオ版の `masteringAbMatchLoudnessStereo()` は、ステレオプログラムで計測した 1 つのゲインを両チャンネルに適用します。
+ステレオ版は、モノラル版を 2 回呼ぶのとは別物です。ステレオイメージを動かしてしまう判断はペア全体で共有されます。レポートのフィールドの形、計測用ヘルパー、`masteringAbMatchLoudness` は [JavaScript マスタリングリファレンス](./js-api-mastering.md) に、段とその固定順序は[オーディオリペア](./audio-repair.md)にあります。
 
 ## ミキシング API
 
@@ -285,9 +255,9 @@ Node ネイティブアドオンは、WASM や Python と同じヘッドレス D
 
 ## エラーハンドリング
 
-WASM パッケージと同じく、ネイティブアドオンもライブラリやオブジェクトの状態が報告する失敗を構造化された `SonareError` としてスローします。`Error` のサブクラスで、C ABI のエラー enum を映した数値の `code` と正準名 `codeName` を持ちます。両パッケージとも `ErrorCode`・`SonareError`・型ガード `isSonareError(value)` をエクスポートし、同じ失敗はどのバインディングでも同じ数値コードを報告します。呼び出しがライブラリに届く前にバインディングが拒否する引数は、どちらのパッケージでもネイティブの `TypeError`（型違い・欠落）または `RangeError`（定義域外。NUL を含む文字列、空または有限でないオーディオ、オーディオを受け取る単発関数に渡した範囲外または整数でないサンプルレートも含む）で、`isSonareError` は一致しません。`Float32Array` でない `samples`、数値でない `sampleRate`、文字列でない名前は、引数名を示した `TypeError` です。解放済みまたは破棄済みのハンドルは `InvalidState` を投げます。コード表と使用例は[エラーハンドリング](./js-api.md#エラーハンドリング)を参照してください。
+WASM パッケージと同じく、ネイティブアドオンもライブラリやオブジェクトの状態が報告する失敗を構造化された `SonareError` として投げます。`Error` のサブクラスで、C ABI のエラー enum を映した数値の `code` と正準名 `codeName` を持ちます。両パッケージとも `ErrorCode`・`SonareError`・型ガード `isSonareError(value)` をエクスポートし、同じ失敗はどのバインディングでも同じ数値コードを報告します。呼び出しがライブラリに届く前にバインディングが拒否する引数は、どちらのパッケージでもネイティブの `TypeError` または `RangeError` で、`isSonareError` は一致しません。どの失敗がどのクラスとコードになるかは、全ランタイム分を[エラー契約](./binding-parity.md#エラー契約)にまとめています。`ErrorCode` enum と使用例は[エラーハンドリング](./js-api.md#エラーハンドリング)を参照してください。
 
-`SonareError` は両パッケージとも実行時のクラスです。値としてインポートすればコンストラクタが得られ、共有の TypeScript モジュールがどちらのパッケージからインポートしても同じ種類のものが手に入ります。`instanceof` はプロトタイプ判定ではなくブランド判定で、`SonareError` という名前を持ち数値の `code` を持つ `Error` であれば絞り込めます。
+`SonareError` は両パッケージとも実行時のクラスです。値としてインポートすればコンストラクターが得られ、共有の TypeScript モジュールがどちらのパッケージからインポートしても同じ種類のものが手に入ります。`instanceof` はプロトタイプ判定ではなくブランド判定で、`SonareError` という名前を持ち数値の `code` を持つ `Error` であれば絞り込めます。
 
 ```typescript
 import { ErrorCode, isSonareError, SonareError } from '@libraz/libsonare-native'
@@ -320,7 +290,7 @@ Node ネイティブの `Audio` オブジェクトは、ネイティブアドオ
 | 機能 | Node ネイティブ | WASM |
 |------|-----------------|------|
 | 追加の `Audio` メソッド | より詳細な解析・ルーム音響系メソッドをインスタンスメソッドとして持つ | 使えるところはスタンドアロンの詳細ヘルパーを使う |
-| ファイル構築 | `Audio.fromFile(...)`、`Audio.fromMemory(...)` | `Audio.fromBuffer(...)`、`Audio.fromMemory(...)`、`Audio.fromMemoryWithBrowserFallback(...)` |
+| ファイル構築 | `Audio.fromFile(...)`、`Audio.fromFileChannel(...)`、`Audio.fromBuffer(...)`、`Audio.fromMemory(...)` | `Audio.fromBuffer(...)`、`Audio.fromMemory(...)`、`Audio.fromMemoryWithBrowserFallback(...)` |
 | サンプル取得 | `audio.getData()` はコピーを返す | `audio.data` もコピーを返す |
 
 共通メソッドに加えて、用途を絞った次のヘルパーも `Audio` のメソッドとして持ちます。`analyzeBpm(...)`、`analyzeImpulseResponse(...)`、`detectAcoustic(...)`、`analyzeRhythm(...)`、`analyzeDynamics(...)`、`analyzeTimbre(...)`。ルーム系ヘルパーの `estimateRoom(...)`、`synthesizeRir(...)`、`roomMorph(...)` はスタンドアロン関数のままです。
@@ -342,7 +312,7 @@ const chain = new StreamingMasteringChain({
 
 chain.prepare(48000, /*maxBlockSize=*/512, /*numChannels=*/2);
 
-const monoOut = chain.processMono(monoBlock);
+// processMono は numChannels = 1 で prepare したチェーンが必要
 const { left, right } = chain.processStereo(leftBlock, rightBlock);
 
 console.log(chain.stageNames(), chain.latencySamples());
@@ -350,9 +320,9 @@ chain.setParameter('eq.tilt.tiltDb', 1.0); // ブロック境界でリアルタ�
 chain.reset();   // 状態だけクリア（prepare し直さない）
 ```
 
-`prepare()` の後は `setParameter(key, value)` で、リアルタイム安全なフルチェーンパラメータをブロック境界で直列化して変更できます。ネイティブチェーンはプロセッサのインスタンス、音声履歴、レイテンシを保持します。`eq.tilt.tiltDb` のような完全なドット区切りキーを使い、構造を変えるキー、無効なステージのキー、未知のキーは拒否されます。呼び出しは `process*()`、`flush*()`、`reset()`、`prepare()` と直列化します。変更は境界で反映され、自動的にはスムージングされません。
+`prepare()` の後は `setParameter(key, value)` で、リアルタイム安全なフルチェーンパラメータをブロック境界で直列化して変更できます。ネイティブチェーンはプロセッサのインスタンス、音声履歴、レイテンシを保持します。`eq.tilt.tiltDb` のような完全なドット区切りキーを使い、構造を変えるキー、無効な段のキー、未知のキーは拒否されます。呼び出しは `process*()`、`flush*()`、`reset()`、`prepare()` と直列化します。変更は境界で反映され、自動的にはスムージングされません。
 
-`numChannels === 1` のときはステレオ専用ステージはスキップされます。ストリーミングチェーンはオフライン専用の repair 段を拒否します。`loudness` 段を使うには事前計算した静的ゲインを `loudnessStaticGainDb` で指定し、必要に応じて音源の True Peak を `loudnessStaticGainPeakDb` で渡します。後者を指定すると、静的ゲインは設定したシーリングを超えないように制限されます。WASM ビルドは `chain.delete()` でハンドルを解放します。ネイティブアドオンは冪等な `destroy()` を公開し、`[Symbol.dispose]` も実装しているので Node 22+ では `using` が使えます。ネイティブハンドルは最終的には GC でも回収されますが、リクエストごとにチェーンを生成するような長寿命プロセスでは明示的に解放しないとネイティブメモリが積み上がります。
+`numChannels === 1` のときはステレオ専用の段はスキップされます。ストリーミングチェーンはオフライン専用のリペア段を拒否します。`loudness` 段を使うには事前計算した静的ゲインを `loudnessStaticGainDb` で指定し、必要に応じて音源の True Peak を `loudnessStaticGainPeakDb` で渡します。後者を指定すると、静的ゲインは設定したシーリングを超えないように制限されます。WASM ビルドは `delete()`（別名の `destroy()` と `[Symbol.dispose]` もあります）でハンドルを解放します。ネイティブアドオンは冪等な `destroy()` と `[Symbol.dispose]` を公開します。`using` は TypeScript 5.2 以降でコンパイルしたコードか、明示的なリソース管理に対応したランタイムで使えます（Node 22 自体は `using` を解釈しません）。ネイティブハンドルは最終的には GC でも回収されますが、リクエストごとにチェーンを生成するような長寿命プロセスでは明示的に解放しないとネイティブメモリが積み上がります。
 
 関連するマスタリングガイド: [ブラウザ内ローカル処理](./glossary/concepts/browser-local-processing.md)、[リファレンスマッチ](./glossary/mastering/reference-match.md)、[品質チェックリスト](./glossary/mastering/quality-checklist.md)。
 
@@ -384,10 +354,7 @@ const { left, right } = eq.processStereo(leftBlock, rightBlock);
 console.log(eq.spectrum(), eq.latencySamples(), left, right);
 ```
 
-`@libraz/libsonare-native` は現在、ソースツリー内の `bindings/node` でビルドして使う前提です。別プロジェクトから使う場合は、ビルド済みのローカルパッケージをワークスペースや `file:` 依存として参照してください。
-
-ネイティブビルドは `pkg-config` で FFmpeg 開発ライブラリを自動検出します。
-FFmpeg がない場合は WAV/MP3 のみをデコードします。明示的に指定する場合は次の環境変数を使います。
+ネイティブビルドは `pkg-config` で FFmpeg 開発ライブラリを自動検出します。FFmpeg がない場合は WAV/MP3 のみをデコードします。明示的に指定する場合は次の環境変数を使います。
 
 ```bash
 SONARE_FFMPEG=1 yarn build  # FFmpeg デコードを必須にする

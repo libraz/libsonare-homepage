@@ -13,6 +13,25 @@ LRA — the loudness range in the demo below — is the reading that puts a numb
 
 <SonareDemo id="loudness-meter" />
 
+## Which Number Is Dynamic Range?
+
+libsonare reports three readings that are all called "dynamic range" somewhere. They answer different questions, and calling one expecting another gives a different number.
+
+| Reading | Measures | Call |
+|---------|----------|------|
+| LRA (loudness range) | Spread of short-term loudness, from the 10th to the 95th percentile, with quiet and silent blocks gated out, in LU | `lufs().loudnessRange` |
+| Window-RMS range | The same percentiles over ungated 3 s RMS windows, in dB | `meteringDynamicRange` |
+| Crest factor | Peak minus average level over the whole buffer | `meteringCrestFactorDb` |
+
+Macro dynamics (below) map to the first two rows; micro dynamics map to crest factor. The gating is where the first two diverge. Take a sine wave for 10 s, then the same sine 20 dB quieter for 10 s, and both readings give 20. Add a third 10 s section at -66 dBFS peak and they part ways:
+
+| Signal | LRA | Window-RMS range |
+|--------|-----|------------------|
+| Loud, then 20 dB quieter | 20.0 LU | 20.0 dB |
+| The same, plus a -66 dBFS tail | 20.1 LU | 60.0 dB |
+
+LRA ignores the near-silent tail because it falls below the relative gate; the ungated window range counts it. Use LRA to describe how a programme moves, and the window-RMS range when you want every quiet stretch to count.
+
 ## Macro And Micro Dynamics
 
 There are two useful ways to think about dynamics:
@@ -47,11 +66,42 @@ If the post-processing chorus no longer lifts, the kick rounds off, only the voc
 
 The opposite mistake is leaving too much movement, which makes the master hard to follow on small speakers or in noisy rooms. The goal is not to erase movement but to land in a range where the intended movement still reaches the listener.
 
-## In libsonare
+## Measure it in libsonare
 
-The libsonare demo exposes dynamics through the Quick Dynamics macro and Studio compressor controls. The meter panel also shows crest information, which gives a rough view of peak-to-average behavior.
+::: code-group
 
-The most important compressor controls are covered together in [Dynamics Controls](../mastering/dynamics.md).
+```typescript [Browser]
+import { init, lufs, meteringDynamicRange, meteringCrestFactorDb } from '@libraz/libsonare';
+
+await init();
+
+const { loudnessRange } = lufs(samples, sampleRate);                    // LRA, in LU
+const { dynamicRangeDb } = meteringDynamicRange(samples, sampleRate);   // window-RMS range, in dB
+const crest = meteringCrestFactorDb(samples, sampleRate);               // peak - RMS, in dB
+
+// Window length, hop and percentiles are options; omit them for 3 s, 1 s, 0.10 and 0.95.
+const wide = meteringDynamicRange(samples, sampleRate, { windowSec: 1, hopSec: 0.5 });
+```
+
+```python [Python]
+import libsonare as sonare
+
+audio = sonare.Audio.from_file("song.wav")
+loudness_range = audio.lufs().loudness_range
+report = sonare.metering_dynamic_range(audio.data, audio.sample_rate)
+window_rms_range = report.dynamic_range_db
+crest = audio.crest_factor_db()
+```
+
+```bash [CLI]
+sonare lufs song.wav            # includes the loudness range (LRA)
+sonare dynamic-range song.wav   # native CLI only: window-RMS range (--window-sec, --hop-sec, --low-percentile, --high-percentile)
+sonare meter song.wav           # native CLI only: includes crest factor
+```
+
+:::
+
+The libsonare demo exposes dynamics through the Quick Dynamics macro and Studio [compressor](../mastering/dynamics.md) controls. The meter panel also shows crest information, which gives a rough view of peak-to-average behavior. The most important compressor controls are covered together in [Dynamics Controls](../mastering/dynamics.md).
 
 :::: details Implementation notes
 

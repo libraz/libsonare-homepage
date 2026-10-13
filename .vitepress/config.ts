@@ -51,7 +51,7 @@ const llmsProse: Record<
   },
   ja: {
     summary:
-      '外部依存のない C++ コアを WebAssembly にコンパイルしたオーディオエンジン。librosa 互換の解析（BPM・調・コード・ビート・セクション・メロディ・ラウドネス）、放送品質のマスタリングとミキシング、室内音響、内蔵インストゥルメント（シンセ + SoundFont）、ヘッドレス DAW / リアルタイムランタイムを備える。Apache-2.0。',
+      '外部依存のない C++ コアを WebAssembly にコンパイルしたオーディオエンジン。librosa 互換の解析（BPM・調・コード・ビート・セクション・メロディ・ラウドネス）、放送品質のマスタリングとミキシング、ルーム音響、内蔵インストゥルメント（シンセ + SoundFont）、ヘッドレス DAW / リアルタイムランタイムを備える。Apache-2.0。',
     intro:
       'libsonare はブラウザ内（WebAssembly）で完結して動作し、Node.js・Python・CLI・C++ では\nネイティブに動作する。以下に挙げるデモはすべて実際に動くブラウザページで、ネイティブ版と\n同じコアを呼んでいる。以下は日本語ドキュメントへのリンク一覧。',
     overviewHeading: 'デモと主要ページ',
@@ -323,6 +323,10 @@ const glossarySidebar = [
             link: '/docs/glossary/acoustics/clarity-definition',
           },
           { text: 'Source Distance and DRR', link: '/docs/glossary/acoustics/source-distance' },
+          {
+            text: 'Spaced Receivers and Coherence',
+            link: '/docs/glossary/acoustics/spaced-receivers',
+          },
           { text: 'Room Geometry and Volume', link: '/docs/glossary/acoustics/room-geometry' },
           {
             text: 'Per-Band Decay and Absorption',
@@ -359,6 +363,7 @@ const glossarySidebar = [
         items: [
           { text: 'Repair and Input', link: '/docs/glossary/mastering/repair' },
           { text: 'Dynamics', link: '/docs/glossary/mastering/dynamics' },
+          { text: 'Crossover Slope and Mode', link: '/docs/glossary/mastering/crossover' },
           { text: 'Tone and Air', link: '/docs/glossary/mastering/tone-air' },
           { text: 'Stereo and Loudness', link: '/docs/glossary/mastering/stereo-limiter-loudness' },
           { text: 'Reference Match', link: '/docs/glossary/mastering/reference-match' },
@@ -473,12 +478,16 @@ const jaGlossarySidebar = [
         ],
       },
       {
-        text: '室内音響',
+        text: 'ルーム音響',
         collapsed: true,
         items: [
           { text: '残響時間', link: '/ja/docs/glossary/acoustics/reverberation-time' },
           { text: '明瞭度と明瞭性', link: '/ja/docs/glossary/acoustics/clarity-definition' },
           { text: '音源距離と DRR', link: '/ja/docs/glossary/acoustics/source-distance' },
+          {
+            text: 'レシーバー間隔とコヒーレンス',
+            link: '/ja/docs/glossary/acoustics/spaced-receivers',
+          },
           { text: '部屋の形状と容積', link: '/ja/docs/glossary/acoustics/room-geometry' },
           { text: '帯域別の減衰と吸音', link: '/ja/docs/glossary/acoustics/absorption-bands' },
           { text: '逆問題による部屋推定', link: '/ja/docs/glossary/acoustics/inverse-estimation' },
@@ -509,6 +518,7 @@ const jaGlossarySidebar = [
         items: [
           { text: 'リペアと入力', link: '/ja/docs/glossary/mastering/repair' },
           { text: 'ダイナミクス', link: '/ja/docs/glossary/mastering/dynamics' },
+          { text: 'クロスオーバー', link: '/ja/docs/glossary/mastering/crossover' },
           { text: 'トーンと Air', link: '/ja/docs/glossary/mastering/tone-air' },
           {
             text: 'ステレオとラウドネス',
@@ -532,8 +542,9 @@ const enDemoMenu = [
   {
     text: 'Analysis',
     items: [
-      { text: 'Visual Player', link: '/analyzer' },
       { text: 'Music Analysis Studio', link: '/music-analysis' },
+      { text: 'Piano Transcription', link: '/transcribe' },
+      { text: 'Visual Player', link: '/analyzer' },
       { text: 'Spatial Room Scanner', link: '/spatial' },
     ],
   },
@@ -546,8 +557,8 @@ const enDemoMenu = [
       { text: 'Synth Playground', link: '/synth' },
       { text: 'Studio Mini', link: '/studio' },
       { text: 'Piano Practice', link: '/practice' },
-      { text: 'GS Sound Module', link: '/gs-module' },
       { text: 'Step Bass', link: '/step-bass' },
+      { text: 'GS Sound Module', link: '/gs-module' },
     ],
   },
 ];
@@ -582,6 +593,12 @@ const enDocsSidebar = [
       { text: 'Clean Up Recordings', link: '/docs/use-cases/recording-cleanup' },
       { text: 'Produce a Spoken-Word Show', link: '/docs/use-cases/spoken-word-show' },
       { text: 'Build Practice Tracks', link: '/docs/use-cases/practice-tracks' },
+      { text: 'Turn a Piano Recording into MIDI', link: '/docs/use-cases/audio-to-midi' },
+      { text: 'Tune a Vocal Take', link: '/docs/use-cases/vocal-tuning' },
+      {
+        text: 'Build Controls from Parameter Descriptors',
+        link: '/docs/use-cases/parameter-controls',
+      },
     ],
   },
   {
@@ -751,6 +768,7 @@ const enDocsSidebar = [
           { text: 'Streaming', link: '/docs/cpp-api-streaming' },
           { text: 'Analysis', link: '/docs/cpp-api-analysis' },
           { text: 'Effects', link: '/docs/cpp-api-effects' },
+          { text: 'C ABI', link: '/docs/cpp-api-c-abi' },
         ],
       },
       { text: 'Binding Parity', link: '/docs/binding-parity' },
@@ -1068,8 +1086,9 @@ export default defineConfig({
               {
                 text: '解析',
                 items: [
+                  { text: '楽曲解析スタジオ', link: '/ja/music-analysis' },
+                  { text: 'ピアノ採譜', link: '/ja/transcribe' },
                   { text: 'ビジュアルプレイヤー', link: '/ja/analyzer' },
-                  { text: '楽曲分析スタジオ', link: '/ja/music-analysis' },
                   { text: '空間ルームスキャナー', link: '/ja/spatial' },
                 ],
               },
@@ -1082,8 +1101,8 @@ export default defineConfig({
                   { text: 'シンセプレイグラウンド', link: '/ja/synth' },
                   { text: 'スタジオミニ', link: '/ja/studio' },
                   { text: 'ピアノ練習', link: '/ja/practice' },
-                  { text: 'GS 音源モジュール', link: '/ja/gs-module' },
                   { text: 'ステップベース', link: '/ja/step-bass' },
+                  { text: 'GS 音源モジュール', link: '/ja/gs-module' },
                 ],
               },
             ],
@@ -1130,6 +1149,12 @@ export default defineConfig({
                 },
                 { text: 'トーク番組を仕上げる', link: '/ja/docs/use-cases/spoken-word-show' },
                 { text: '練習用トラックを作る', link: '/ja/docs/use-cases/practice-tracks' },
+                { text: 'ピアノの録音を MIDI にする', link: '/ja/docs/use-cases/audio-to-midi' },
+                { text: '歌のピッチを直す', link: '/ja/docs/use-cases/vocal-tuning' },
+                {
+                  text: 'パラメータ記述子からコントロールを組み立てる',
+                  link: '/ja/docs/use-cases/parameter-controls',
+                },
               ],
             },
             {
@@ -1224,7 +1249,7 @@ export default defineConfig({
               ],
             },
             {
-              text: '室内音響',
+              text: 'ルーム音響',
               collapsed: true,
               items: [
                 { text: '音響解析', link: '/ja/docs/acoustic-analysis' },
@@ -1240,7 +1265,7 @@ export default defineConfig({
               ],
             },
             {
-              text: '利用環境別 API',
+              text: '実行環境別 API',
               collapsed: true,
               items: [
                 {
@@ -1311,6 +1336,7 @@ export default defineConfig({
                     { text: 'ストリーミング', link: '/ja/docs/cpp-api-streaming' },
                     { text: '解析', link: '/ja/docs/cpp-api-analysis' },
                     { text: 'エフェクト', link: '/ja/docs/cpp-api-effects' },
+                    { text: 'C ABI', link: '/ja/docs/cpp-api-c-abi' },
                   ],
                 },
                 { text: 'バインディング対応表', link: '/ja/docs/binding-parity' },

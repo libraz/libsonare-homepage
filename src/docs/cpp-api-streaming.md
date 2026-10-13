@@ -72,7 +72,7 @@ struct StreamConfig {
 
   // Output configuration
   OutputFormat output_format = OutputFormat::Float32; // legacy; must remain Float32
-  int emit_every_n_frames = 1;   // 4 = ~60fps at 44100Hz
+  int emit_every_n_frames = 1;   // 4 = ~21.5 fps at 44100 Hz with hop_length 512
   int magnitude_downsample = 1;  // Downsample factor for magnitude
   size_t max_pending_frames = 4096; // unread cap; overflow drops newly produced frames
   size_t max_progression_entries = 4096; // per-progression cap; overflow drops the oldest entry
@@ -83,7 +83,7 @@ struct StreamConfig {
 };
 ```
 
-`n_fft` is a duration expressed in samples at 44100 Hz. The analyzer converts it to its analysis rate at construction and widens it to `hop_length` when shorter, so the same configuration describes the same window length at any sample rate. `analyzer.analysis_window_length()` returns the window in samples at the analysis rate, `analyzer.fft_length()` the FFT size the window is centred in and zero-padded to, and `analyzer.n_bins()` the bins per spectrum frame (`fft_length() / 2 + 1`) — read those rather than deriving them from `n_fft`.
+`n_fft` is a duration expressed in samples at 44100 Hz. The analyzer converts it to its analysis rate at construction and widens it to `hop_length` when shorter, so the same configuration describes the same window length at any sample rate. `analyzer.analysis_window_length()` returns the window in samples at the analysis rate, `analyzer.fft_length()` the FFT size the window is centered in and zero-padded to, and `analyzer.n_bins()` the bins per spectrum frame (`fft_length() / 2 + 1`) — read those rather than deriving them from `n_fft`.
 
 `output_format` is retained for source compatibility and must remain `OutputFormat::Float32`. Use the explicit quantized read methods below to produce `Int16` or `Uint8` payloads without changing the analyzer configuration.
 
@@ -284,6 +284,8 @@ struct ProgressiveEstimate {
 Get BPM and key estimates that improve over time:
 
 ```cpp
+#include <analysis/key_analyzer.h>
+
 AnalyzerStats stats = analyzer.stats();
 
 // BPM (available after ~10 seconds)
@@ -294,9 +296,8 @@ if (stats.estimate.bpm > 0) {
 
 // Key (available after ~5 seconds)
 if (stats.estimate.key >= 0) {
-  const char* keys[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-  std::cout << "Key: " << keys[stats.estimate.key]
-            << (stats.estimate.key_minor ? " minor" : " major") << "\n";
+  std::cout << "Key: "
+            << key_name(stats.estimate.key, stats.estimate.key_minor, /*short_form=*/false) << "\n";
 }
 
 // Chord progression pattern

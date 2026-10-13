@@ -18,13 +18,19 @@ A digital instrument makes a note in one of four broad ways. They differ less in
 | method | data size | compute | where expression enters | what it is in this engine |
 |---|---|---|---|---|
 | **sample playback** | grows without limit | low | crossfading between recordings made at different velocities and articulations | the SoundFont player, for samples you bring |
-| **FM** | near zero | moderate | operator ratios and the modulation index moving over time | several engine modes; the electric pianos, bells and clavinet of the fallback bank |
-| **physical modelling** | near zero | high | physical quantities — bow force, breath pressure, lip tension | the nine acoustic voices, plus the plucked-loop, harpsichord, modal and membrane models |
+| **FM** | near zero | moderate | operator ratios and the modulation index moving over time | several engine modes; the electric pianos, bells and Clavi program of the fallback bank |
+| **physical modeling** | near zero | high | physical quantities — bow force, breath pressure, lip tension | the nine acoustic voices, plus the plucked-loop, harpsichord, modal and membrane models |
 | **subtractive (virtual analog)** | near zero | moderate | filter cutoff and resonance under an envelope | `SynthPatch`'s analog voice; leads, pads and the synth-effect programs |
 
 Only the first row has an appetite. A sample library grows with the product of three numbers — **how many timbres, how many recorded layers per timbre, and how good the capture is** — and every one of those three is something a designer wants more of. Nothing in that product ever gets smaller.
 
-The piano has been tuned. Every other physical model still awaits adjustment and calibration; use these voices as data-free previews, with further work planned for future patch releases.
+<MaturityNote
+  item="physical-model-maturity"
+  :labels="{
+    title: 'Calibration status',
+    body: 'Only the acoustic piano is calibrated against a reference recording. Every other physical model is provisional: use these voices as data-free previews and as the fallback floor; their sound can change across patch releases.'
+  }"
+/>
 
 The other three rows store a handful of coefficients and spend processor time instead. A bowed string is not a recording of a bowed string; it is a loop that models the string, the bow's grip and slip, and the body the string is mounted on, evaluated once per sample. That is why expression works differently: you do not pick a louder recording, you push harder on the bow.
 
@@ -77,7 +83,7 @@ Writing "GS compliant" and stopping there makes every intentional difference loo
 | kind | meaning | representative example |
 |---|---|---|
 | **extension** | a capability added where the specification forbids nothing — safe precisely because **a spec-compliant file cannot reach it** | one insertion-effect unit for the whole module becomes **sixteen**, reachable through the `40 3u xx` block (`src/midi/synth/docs/gs.md`, `src/midi/synth/gs_address_table.h`) |
-| **deliberate divergence** | different behaviour chosen on purpose, with the reason recorded beside it | pan value `00` means random on the hardware and **centre** here, because a bit-identical bounce cannot live with a random number generator (the `40 1x 1C` and `41 m4 rr` rows in `src/midi/synth/gs_address_table.h`); a rhythm part's chorus send is inert on a measured unit and is sounded here. Both reasons are written up in `src/midi/synth/docs/gs.md` |
+| **deliberate divergence** | different behavior chosen on purpose, with the reason recorded beside it | pan value `00` means random on the hardware and **center** here, because a bit-identical bounce cannot live with a random number generator (the `40 1x 1C` and `41 m4 rr` rows in `src/midi/synth/gs_address_table.h`); a rhythm part's chorus send is inert on a measured unit and is sounded here. Both reasons are written up in `src/midi/synth/docs/gs.md` |
 | **reduction** | the configuration on this side does not have the thing, so the address is accepted and dropped | `40 4x 21` OUTPUT ASSIGN is `IGNORE` — "libsonare renders one output pair, so there is no second one to route a part to"; `50 ** **` and `51 ** **` are `IGNORE` for one port. Both reason strings are the rows' own, in `src/midi/synth/gs_address_table.h` |
 
 Every address in the space carries one of four levels, and an address with no row at all is treated as a defect rather than as silence. A reduction is therefore a written reason, not an omission.
@@ -125,10 +131,11 @@ These are the real ones.
 
 ## Where to go next
 
-This page is the entrance; the three that follow are where the detail lives.
+This page is the entrance; the pages below are where the detail lives.
 
 - [Built-in synthesizer](./native-synth.md) — the common control layer, the seventeen engine modes, `SynthPatch` and the named preset catalog.
-- [GM and GS fallback bank](./gm-gs.md) — the individual addresses, the bank, the drum kits, and the full 128-program tone map.
-- [Physical models](./physical-models.md) — the modelled voices themselves and the parameters each one takes.
-- [SoundFont player](./soundfont-player.md) — for samples you bring, and how they interleave with the modelled bank.
+- [GM and GS fallback bank](./gm-gs.md) — the individual addresses, the bank and the drum kits.
+- [GM tone map](./gm-tone-map.md) — the engine and voicing of all 128 programs.
+- [Physical models](./physical-models.md) — the modeled voices themselves and the parameters each one takes.
+- [SoundFont player](./soundfont-player.md) — for samples you bring, and how they interleave with the modeled bank.
 - [MIDI input](./midi-input.md) — playing any of it from a keyboard.
