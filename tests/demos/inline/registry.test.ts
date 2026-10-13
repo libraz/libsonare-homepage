@@ -29,6 +29,12 @@ const ARCHETYPES = new Set([
   'pitch-correct',
   'chord-track',
   'channel-downmix',
+  'pan-law',
+  'fm-sidebands',
+  'limiter',
+  'ducking',
+  'clarity-split',
+  'tempogram',
   'transcribe',
 ]);
 
@@ -67,6 +73,12 @@ const ARCHETYPE_SOURCE_KINDS = {
   'pitch-correct': ['generate'],
   'chord-track': ['clip'],
   'channel-downmix': ['generate'],
+  'pan-law': ['generate'],
+  'fm-sidebands': ['generate'],
+  limiter: ['clip'],
+  ducking: ['clip'],
+  'clarity-split': ['generate'],
+  tempogram: ['clip'],
   transcribe: ['clip'],
 } satisfies Record<string, Array<DemoSource['kind']>>;
 const TRANSFORMS = new Set(['stft', 'mel', 'chroma', 'mfcc']);

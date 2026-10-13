@@ -46,6 +46,12 @@ export type DemoLocale = string;
  * - `pitch-correct` — off-pitch synthetic vocal → pYIN → scale retune → raw/tuned pitch-contour A/B + audition
  * - `chord-track` — clip → `detectChords` → named chord segments laned over the waveform + audition
  * - `channel-downmix` — synthesized 5.1 bed → `downmix` to stereo/mono → unnormalized peak meters + audition
+ * - `fm-sidebands` — carrier:modulator ratio + modulation index → FM engine bounce → measured sideband spectrum + audition
+ * - `limiter`      — drive a clip into `maximizer.truePeakLimiter` → input/output peak envelopes vs ceiling + measured gain reduction + audition
+ * - `ducking`      — voice keys the mixer's sidechain router on a music bed → key/bed/gain-reduction lanes over time + audition
+ * - `clarity-split` — shoebox IR → movable early/late boundary → C-value + early fraction, engine C50/C80 marks + clap audition
+ * - `tempogram`    — click track or drum loop → onset autocorrelation tempogram + global autocorrelation vs BPM, reported tempo with ×½/×2 marks
+ * - `pan-law`      — pan law × pan mode → measured strip L/R gains, power and mono sum vs pan + pan-sweep audition
  */
 export type DemoArchetype =
   | 'transform'
@@ -72,6 +78,12 @@ export type DemoArchetype =
   | 'pitch-correct'
   | 'chord-track'
   | 'channel-downmix'
+  | 'pan-law'
+  | 'fm-sidebands'
+  | 'limiter'
+  | 'ducking'
+  | 'clarity-split'
+  | 'tempogram'
   | 'transcribe';
 
 /** Waveform shapes that can be generated in-browser without WASM (cheap test signals). */
@@ -96,6 +108,8 @@ export type DemoSource =
       sampleRate?: number;
       /** Linear amplitude 0..1. Default 0.6. */
       gain?: number;
+      /** One-sample clicks at these times in seconds, at amplitude `1 - gain`. */
+      clicks?: number[];
     }
   | {
       kind: 'clip';

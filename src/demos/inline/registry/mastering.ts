@@ -512,4 +512,31 @@ export const masteringDemos: SonareDemoDef[] = [
       },
     ],
   },
+  {
+    id: 'limiter-gr',
+    archetype: 'limiter',
+    // A full band mix keeps the limiter busy across the clip rather than only on hits.
+    source: { kind: 'clip', clip: 'band' },
+    viz: 'overlay',
+    title: {
+      en: 'True Peak limiter — drive in, ceiling out',
+      ja: 'True Peak リミッター — ドライブしてもシーリングで止まる',
+    },
+    caption: {
+      en: 'The band clip driven into maximizer.truePeakLimiter with a −1 dBTP ceiling. Raise the drive: the input (rose) climbs past 0 dBFS, the output (teal) stays at −1.0 dBTP at every setting, and the gain reduction below deepens to take up the difference. The loudness bought shrinks as you push: 18 dB of drive raises the output RMS by only about 8 dB, and the rest is peaks pressed flat. Press play to hear the limited output.',
+      ja: 'band クリップを maximizer.truePeakLimiter に入れ、シーリングは −1 dBTP です。ドライブを上げると入力（ローズ色）は 0 dBFS を超えて伸びますが、出力（ティール）はどの設定でも −1.0 dBTP にとどまり、その差を下段のゲインリダクションが引き受けます。押し込むほど得られるラウドネスは減ります。18 dB ドライブしても出力の RMS は約 8 dB しか上がらず、残りはピークが平らに潰れた分です。再生すると、リミッター後の出力を聞けます。',
+    },
+    params: [
+      {
+        key: 'drive',
+        kind: 'range',
+        default: 9,
+        min: 0,
+        max: 18,
+        step: 1,
+        unit: 'dB',
+        label: { en: 'Drive (input gain)', ja: 'ドライブ（入力ゲイン）' },
+      },
+    ],
+  },
 ];

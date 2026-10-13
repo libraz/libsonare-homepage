@@ -8,6 +8,10 @@
  * is either a generated test signal or a pre-rendered clip; the reader can audition
  * it, and a playback-synced playhead sweeps the screen.
  *
+ * An `nFft` param, when the registry defines one, overrides `config.nFft` and
+ * recomputes with the hop held fixed, so only the window length changes.
+ * `config.maxFreqHz` crops the STFT view to the band the source occupies.
+ *
  * The WASM/data wiring is independent of presentation; the frame owns all chrome
  * and the playback visuals (beam, reveal, progress ring) via its props.
  */
@@ -15,7 +19,8 @@ import { computed, ref, watch } from 'vue';
 import { generateSignal } from '@/demos/inline/signal';
 import type { SonareDemoDef } from '@/demos/inline/types';
 import { type MonoAudio, useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
-import { useDemoChrome } from '../composables';
+import { useDemoChrome, useDemoParams } from '../composables';
+import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
 import { normalizeMagnitudeRelativeDb } from './spectralDisplay';
 
@@ -34,6 +39,14 @@ const {
   tone,
   fail,
 } = useDemoChrome(props.def, isPlaying);
+
+const { values, updateParams } = useDemoParams(props.def);
+const hasParams = computed(() => (props.def.params?.length ?? 0) > 0);
+const nFft = computed<number>(() =>
+  Number(values.nFft ?? (props.def.config?.nFft as number | undefined) ?? 1024),
+);
+const hop = computed<number>(() => (props.def.config?.hopLength as number | undefined) ?? 256);
+const sampleRate = ref(0);
 
 type TransformKind = 'stft' | 'mel' | 'chroma' | 'mfcc';
 const transform = computed<TransformKind>(
@@ -66,6 +79,12 @@ const stateLabel = computed(() => {
   if (status.value === 'loading') return 'ANALYZING';
   if (status.value === 'error') return 'ERROR';
   if (isPlaying.value) return `▸ ${Math.round(progress.value * 100)}%`;
+  if (status.value === 'ready' && hasParams.value && sampleRate.value > 0) {
+    // Window length in time and bin spacing in frequency: the two sides of the trade-off.
+    const ms = (1000 * nFft.value) / sampleRate.value;
+    const hz = sampleRate.value / nFft.value;
+    return `${ms.toFixed(ms < 20 ? 1 : 0)} ms · ${hz.toFixed(1)} Hz/BIN`;
+  }
   if (status.value === 'ready') return 'READY';
   return 'IDLE';
 });
@@ -97,11 +116,21 @@ function ramp(v: number, out: Uint8ClampedArray, o: number): void {
  */
 type Grid = { rows: number; cols: number; norm: Float32Array };
 
-function gridFromStft(wasm: WasmModule, a: MonoAudio, nFft: number, hop: number): Grid {
+function gridFromStft(
+  wasm: WasmModule,
+  a: MonoAudio,
+  nFft: number,
+  hop: number,
+  maxFreqHz?: number,
+): Grid {
   const r = wasm.stft(a.samples, a.sampleRate, nFft, hop);
   const { nBins, nFrames, magnitude } = r;
-  const norm = normalizeMagnitudeRelativeDb(magnitude);
-  return { rows: nBins, cols: nFrames, norm };
+  const rows = maxFreqHz
+    ? Math.min(nBins, Math.max(2, Math.ceil((maxFreqHz * nFft) / a.sampleRate) + 1))
+    : nBins;
+  // Bins are row-major, so the low band is a prefix of the magnitude array.
+  const norm = normalizeMagnitudeRelativeDb(magnitude.subarray(0, rows * nFrames));
+  return { rows, cols: nFrames, norm };
 }
 
 function gridFromMel(
@@ -173,24 +202,25 @@ async function run(): Promise<void> {
   errorMsg.value = '';
   try {
     const wasm = await ensureWasm();
-    audio = await resolveAudio();
+    if (!audio) audio = await resolveAudio();
+    sampleRate.value = audio.sampleRate;
     const cfg = props.def.config ?? {};
-    const nFft = (cfg.nFft as number) ?? 1024;
-    const hop = (cfg.hopLength as number) ?? 256;
+    const n = nFft.value;
+    const h = hop.value;
 
     let grid: Grid;
     switch (transform.value) {
       case 'mel':
-        grid = gridFromMel(wasm, audio, nFft, hop, (cfg.nMels as number) ?? 64);
+        grid = gridFromMel(wasm, audio, n, h, (cfg.nMels as number) ?? 64);
         break;
       case 'chroma':
-        grid = gridFromChroma(wasm, audio, nFft, hop);
+        grid = gridFromChroma(wasm, audio, n, h);
         break;
       case 'mfcc':
-        grid = gridFromMfcc(wasm, audio, nFft, hop, (cfg.nMfcc as number) ?? 20);
+        grid = gridFromMfcc(wasm, audio, n, h, (cfg.nMfcc as number) ?? 20);
         break;
       default:
-        grid = gridFromStft(wasm, audio, nFft, hop);
+        grid = gridFromStft(wasm, audio, n, h, cfg.maxFreqHz as number | undefined);
     }
 
     const { rows, cols, norm } = grid;
@@ -221,6 +251,10 @@ async function onPlay(): Promise<void> {
   await play(props.def.id, audio);
 }
 
+watch(nFft, () => {
+  if (status.value !== 'idle') run();
+});
+
 watch(
   () => props.active,
   (on) => {
@@ -248,6 +282,15 @@ watch(
   >
     <template #screen>
       <canvas ref="canvas" class="td-canvas" />
+    </template>
+    <template v-if="hasParams" #controls>
+      <DemoControls
+        :model-value="values"
+        :params="def.params ?? []"
+        :locale="loc"
+        :disabled="status === 'loading'"
+        @update:model-value="updateParams"
+      />
     </template>
   </DemoFrame>
 </template>

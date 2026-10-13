@@ -91,5 +91,10 @@ export function generateSignal(source: DemoSource): {
     out[i] *= k;
     out[n - 1 - i] *= k;
   }
+  // Clicks take the headroom the tone leaves, so the sum never exceeds full scale.
+  for (const t of source.clicks ?? []) {
+    const i = Math.round(t * sampleRate);
+    if (i >= 0 && i < n) out[i] += 1 - gain;
+  }
   return { samples: out, sampleRate };
 }

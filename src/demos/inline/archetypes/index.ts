@@ -27,6 +27,12 @@ export const demoArchetypeComponents = {
   'pitch-correct': defineDemoAsync(() => import('./PitchCorrectDemo.vue')),
   'chord-track': defineDemoAsync(() => import('./ChordTrackDemo.vue')),
   'channel-downmix': defineDemoAsync(() => import('./ChannelDownmixDemo.vue')),
+  'pan-law': defineDemoAsync(() => import('./PanLawDemo.vue')),
+  'fm-sidebands': defineDemoAsync(() => import('./FmSidebandsDemo.vue')),
+  limiter: defineDemoAsync(() => import('./LimiterDemo.vue')),
+  ducking: defineDemoAsync(() => import('./DuckingDemo.vue')),
+  'clarity-split': defineDemoAsync(() => import('./ClaritySplitDemo.vue')),
+  tempogram: defineDemoAsync(() => import('./TempogramDemo.vue')),
 } satisfies Record<DemoArchetype, ReturnType<typeof defineDemoAsync>>;
 
 export function implementedDemoArchetypes(): DemoArchetype[] {

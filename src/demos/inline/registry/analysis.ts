@@ -13,19 +13,71 @@ export const analysisDemos: SonareDemoDef[] = [
   {
     id: 'stft-basics',
     archetype: 'transform',
-    // A rising chirp makes the time/frequency trade-off legible: a clean diagonal
-    // sweeps up the spectrogram as the tone rises.
-    source: { kind: 'generate', signal: 'sweep', freq: 220, freqEnd: 4000, duration: 2.5 },
+    // A slow chirp is a line only a long window resolves; a click is an instant only
+    // a short window keeps sharp. Hop stays fixed so the window is the one variable.
+    source: {
+      kind: 'generate',
+      signal: 'sweep',
+      freq: 400,
+      freqEnd: 1000,
+      duration: 3,
+      sampleRate: 22050,
+      gain: 0.25,
+      clicks: [0.5, 1.25, 2.0, 2.6],
+    },
     viz: 'spectrogram',
     title: {
       en: 'STFT — seeing time and frequency at once',
       ja: 'STFT — 時間と周波数を同時に見る',
     },
     caption: {
-      en: 'A tone sweeping from 220 Hz to 4 kHz. Each column is one short-time spectrum; brighter means more energy at that frequency.',
-      ja: '220 Hz から 4 kHz へ上昇するトーン。各列が1つの短時間スペクトルで、明るいほどその周波数のエネルギーが大きい。',
+      en: 'A tone gliding from 400 Hz to 1 kHz, with four clicks. Each column is one short-time spectrum; brighter means more energy. Change nFft: at 256 the clicks are thin lines and the tone is a band about 170 Hz wide; at 4096 the tone is a line about 20 Hz wide and each click smears across about 280 ms.',
+      ja: '400 Hz から 1 kHz へ上昇するトーンに、4 つのクリックを重ねた信号。各列が1つの短時間スペクトルで、明るいほどエネルギーが大きい。nFft を切り替えると、256 ではクリックは細い線になり、トーンは幅約 170 Hz の帯になる。4096 ではトーンは幅約 20 Hz の線になり、クリックは約 280 ms にわたってにじむ。',
     },
-    config: { nFft: 1024, hopLength: 256 },
+    params: [
+      {
+        key: 'nFft',
+        kind: 'select',
+        default: '1024',
+        label: { en: 'nFft (window)', ja: 'nFft（窓長）' },
+        options: [
+          { value: '256', label: { en: '256', ja: '256' } },
+          { value: '1024', label: { en: '1024', ja: '1024' } },
+          { value: '4096', label: { en: '4096', ja: '4096' } },
+        ],
+      },
+    ],
+    config: { nFft: 1024, hopLength: 128, maxFreqHz: 2500 },
+  },
+  {
+    id: 'tempogram',
+    archetype: 'tempogram',
+    // The drum loop is the musical case; the click tracks pin the octave-error cases.
+    source: { kind: 'clip', clip: 'drum' },
+    viz: 'heatmap',
+    title: {
+      en: 'Tempogram — where half and double tempo come from',
+      ja: 'テンポグラム — 倍テンポと半テンポはどこから来るか',
+    },
+    caption: {
+      en: 'Top: the autocorrelation tempogram of the onset envelope, time across and tempo up. Bottom: the same averaged over time; every peak is a tempo the onsets support. A beat at one tempo also repeats at half of it, so peaks stand at the slower relatives too. The amber line is what analyzeBpm reports, with its half and double dotted. The drum loop reads 120.1 BPM. Clicks at 200 BPM read 99.7 and at 240 read 80.0, because the estimator prefers a supported relative inside the shaded 80–180 band, while 60 BPM clicks stay at 60.0.',
+      ja: '上段はオンセット包絡線の自己相関テンポグラムで、横が時間、縦がテンポです。下段はそれを時間方向に平均したもので、どの山もオンセットが支持するテンポです。あるテンポで刻むビートはその半分のテンポでも繰り返すので、遅い側の関係テンポにも山が立ちます。琥珀色の線が analyzeBpm の報告値で、その半分と倍を点線で示します。ドラムループは 120.1 BPM と読まれます。200 BPM のクリックは 99.7、240 BPM は 80.0 と読まれます。推定器は網掛けの 80〜180 BPM に入る、支持のある関係テンポを優先するからです。一方、60 BPM のクリックは 60.0 のままです。',
+    },
+    params: [
+      {
+        key: 'source',
+        kind: 'select',
+        default: 'drum',
+        label: { en: 'Source', ja: 'ソース' },
+        options: [
+          { value: 'drum', label: { en: 'Drum loop', ja: 'ドラムループ' } },
+          { value: 'click-60', label: { en: 'Clicks 60', ja: 'クリック 60' } },
+          { value: 'click-100', label: { en: 'Clicks 100', ja: 'クリック 100' } },
+          { value: 'click-200', label: { en: 'Clicks 200', ja: 'クリック 200' } },
+          { value: 'click-240', label: { en: 'Clicks 240', ja: 'クリック 240' } },
+        ],
+      },
+    ],
   },
   {
     id: 'waveform-harmonics',

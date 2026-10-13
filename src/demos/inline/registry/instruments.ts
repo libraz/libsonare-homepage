@@ -223,10 +223,46 @@ export const instrumentsDemos: SonareDemoDef[] = [
         label: { en: 'Filter model', ja: 'フィルターモデル' },
         options: [
           { value: 'svf', label: { en: 'SVF', ja: 'SVF' } },
-          { value: 'moog-ladder', label: { en: 'Moog ladder', ja: 'Moog ラダー' } },
+          { value: 'moog-ladder', label: { en: 'Transistor ladder', ja: 'トランジスタラダー' } },
           { value: 'diode-ladder', label: { en: 'Diode ladder', ja: 'ダイオードラダー' } },
           { value: 'sallen-key', label: { en: 'Sallen-Key', ja: 'Sallen-Key' } },
         ],
+      },
+    ],
+  },
+  {
+    id: 'fm-index-ratio',
+    archetype: 'fm-sidebands',
+    // Source is unused: the note is bounced through the FM engine itself.
+    source: { kind: 'generate', signal: 'sine', freq: 220 },
+    viz: 'overlay',
+    title: {
+      en: 'FM — ratio and index make the sidebands',
+      ja: 'FM — 比率とインデックスがサイドバンドを作る',
+    },
+    caption: {
+      en: 'One held A3 (220 Hz) from the fm engine, with operator 1 modulating operator 0. At index 0 the spectrum is a single sine partial. Raise the index and sidebands spread out at the carrier plus and minus multiples of the modulator frequency: on a 1 : 1 ratio, index 3 gives 7 partials within 40 dB of the strongest. A whole-number ratio keeps every partial on the harmonic grid (amber dots), and 1 : 2 leaves only the odd harmonics. A non-integer ratio such as 3.5 puts partials between the grid lines (rose dots), and the tone turns bell-like. The strip on top is the waveform; press play to hear the note.',
+      ja: 'fm エンジンで A3（220 Hz）を 1 音伸ばし、オペレーター 1 でオペレーター 0 を変調します。インデックス 0 ではスペクトルはサイン波の部分音 1 本だけです。インデックスを上げると、キャリア周波数からモジュレーター周波数の整数倍だけ上下した位置にサイドバンドが広がります。比率 1 : 1 でインデックス 3 にすると、最も強い部分音から 40 dB 以内に 7 本の部分音が立ちます。整数比ではすべての部分音が倍音のグリッドに乗り（琥珀色の点）、1 : 2 では奇数倍音だけが残ります。3.5 のような非整数比では部分音がグリッドの間に入り（ローズ色の点）、ベルのような音色になります。上段の帯は波形です。再生すると音を聞けます。',
+    },
+    params: [
+      {
+        key: 'ratio',
+        kind: 'range',
+        default: 1,
+        min: 0.5,
+        max: 7,
+        step: 0.05,
+        label: { en: 'Modulator ratio', ja: 'モジュレーター比率' },
+      },
+      {
+        key: 'index',
+        kind: 'range',
+        default: 1.5,
+        min: 0,
+        max: 8,
+        step: 0.1,
+        unit: 'rad',
+        label: { en: 'Modulation index', ja: 'モジュレーションインデックス' },
       },
     ],
   },

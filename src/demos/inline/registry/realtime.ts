@@ -106,6 +106,92 @@ export const realtimeDemos: SonareDemoDef[] = [
     ],
   },
   {
+    id: 'pan-law',
+    archetype: 'pan-law',
+    // The noise is the pan-sweep audition; the curves are measured from a Mixer strip.
+    source: { kind: 'generate', signal: 'noise', duration: 4, sampleRate: 48000, gain: 0.25 },
+    viz: 'overlay',
+    title: {
+      en: 'Pan laws: what happens to level as a source moves',
+      ja: 'パンロー：音源を動かすとレベルはどう変わるか',
+    },
+    caption: {
+      en: 'A mono source panned across one mixer strip. Top: the left and right gains the strip applies. Bottom: total power and the mono sum (L + R), in dB against a hard pan, with the other laws ghosted. In stereoPan, const3dB keeps the power flat and the mono sum rises 3 dB at the center; const6dB keeps the mono sum flat and the power dips 3 dB. Switch to balance and the center is unity on both channels under every law. Press play to sweep noise from left to right.',
+      ja: 'モノラル音源をミキサーのストリップ 1 本でパンした結果です。上段はストリップが左右にかけるゲイン、下段は合計パワーとモノラル合算（L + R）を、ハードパンを基準にした dB で示し、ほかのパンローも薄く重ねています。stereoPan では、const3dB はパワーを一定に保ち、モノラル合算はセンターで 3 dB 上がります。const6dB はモノラル合算を一定に保ち、パワーが 3 dB 下がります。balance に切り替えると、どのパンローでもセンターは左右とも等倍です。再生すると、ノイズが左から右へ移動します。',
+    },
+    params: [
+      {
+        key: 'law',
+        kind: 'select',
+        default: 'const3dB',
+        label: { en: 'Pan law', ja: 'パンロー' },
+        options: [
+          { value: 'const3dB', label: { en: 'const3dB', ja: 'const3dB' } },
+          { value: 'const4.5dB', label: { en: 'const4.5dB', ja: 'const4.5dB' } },
+          { value: 'const6dB', label: { en: 'const6dB', ja: 'const6dB' } },
+          { value: 'linear0dB', label: { en: 'linear0dB', ja: 'linear0dB' } },
+        ],
+      },
+      {
+        key: 'mode',
+        kind: 'select',
+        default: 'stereoPan',
+        label: { en: 'Pan mode', ja: 'パンモード' },
+        options: [
+          { value: 'stereoPan', label: { en: 'stereoPan', ja: 'stereoPan' } },
+          { value: 'balance', label: { en: 'balance', ja: 'balance' } },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'ducking',
+    archetype: 'ducking',
+    // A synthetic voice gated into phrases keys the router; the pad is the bed it ducks.
+    source: { kind: 'clip', clip: 'pad' },
+    viz: 'overlay',
+    config: { clips: ['vowel', 'pad'] },
+    title: {
+      en: 'Ducking: a voice pulls the music bed down',
+      ja: 'ダッキング：声が音楽ベッドを押し下げる',
+    },
+    caption: {
+      en: 'A voice (top) keys dynamics.sidechainRouter on a music bed, as in the commentaryDucking scene. The middle lane is the bed before (grey) and after (teal) the duck; the bottom lane is the gain reduction between them, capped at 18 dB. At the defaults the bed sits about 10 dB down under the voice, but the 100 ms release lets it swell back to about −2 dB in each 150 ms gap between phrases: that swing is the pumping. Raise the release to 500 ms and the bed stays near −11 dB through the sentence, coming back only in the long pause. Press play to hear the mix.',
+      ja: '声（上段）が commentaryDucking シーンと同じく音楽ベッドの dynamics.sidechainRouter をキーとして動かします。中段はダッキング前（灰色）と後（ティール）のベッド、下段はその差のゲインリダクションで、18 dB が上限です。既定値では、声の下でベッドは約 10 dB 下がりますが、100 ms のリリースではフレーズ間の 150 ms の隙間ごとに約 −2 dB まで戻ってきます。この上下の揺れがポンピングです。リリースを 500 ms に上げると、ベッドは文の間ずっと −11 dB 前後にとどまり、長い休止でだけ戻ります。再生するとミックスを聞けます。',
+    },
+    params: [
+      {
+        key: 'release',
+        kind: 'range',
+        default: 100,
+        min: 20,
+        max: 800,
+        step: 10,
+        unit: 'ms',
+        label: { en: 'Release', ja: 'リリース' },
+      },
+      {
+        key: 'threshold',
+        kind: 'range',
+        default: -30,
+        min: -50,
+        max: -10,
+        step: 1,
+        unit: 'dB',
+        label: { en: 'Threshold', ja: 'スレッショルド' },
+      },
+      {
+        key: 'ratio',
+        kind: 'range',
+        default: 4,
+        min: 1.5,
+        max: 10,
+        step: 0.5,
+        label: { en: 'Ratio', ja: 'レシオ' },
+      },
+    ],
+  },
+  {
     id: 'channel-downmix',
     archetype: 'channel-downmix',
     // Source is unused for `channel-downmix`; the six 5.1 channels are

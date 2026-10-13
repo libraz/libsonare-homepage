@@ -16,6 +16,7 @@ import { prepareCanvas2D } from '@/utils/canvas';
 import { useCanvasRedraw, useDemoChrome, useDemoParams, useDisposed } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
+import { clapThroughRir, shoeboxSabineSec, synthesizeShoeboxRir } from './roomRir';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
@@ -63,30 +64,11 @@ let lastSr = 48000;
 
 type WasmModule = Awaited<ReturnType<typeof ensureWasm>>;
 
-/** Map the size slider to shoebox dimensions and synthesize a mono RIR. */
+/** Size the render from the Sabine estimate, then synthesize the shoebox RIR. */
 function renderRir(wasm: WasmModule): { rir: Float32Array; sampleRate: number } {
-  const lengthM = size.value;
-  const widthM = size.value * 0.72;
-  const heightM = Math.min(6, Math.max(2.4, size.value * 0.42));
-  const volume = lengthM * widthM * heightM;
-  const surface = 2 * (lengthM * widthM + lengthM * heightM + widthM * heightM);
-  const sabine = (0.161 * volume) / Math.max(0.01, surface * absorption.value);
+  const sabine = shoeboxSabineSec(size.value, absorption.value);
   displaySec.value = Math.min(MAX_DISPLAY_SEC, Math.max(MIN_DISPLAY_SEC, sabine * 1.12));
-  const r = wasm.synthesizeRir({
-    lengthM,
-    widthM,
-    heightM,
-    absorption: absorption.value,
-    sourceX: lengthM * 0.28,
-    sourceY: widthM * 0.3,
-    sourceZ: 1.3,
-    listenerX: lengthM * 0.68,
-    listenerY: widthM * 0.62,
-    listenerZ: 1.3,
-    sampleRate: 48000,
-    maxSeconds: displaySec.value + 0.25,
-  });
-  return { rir: r.rir, sampleRate: r.sampleRate };
+  return synthesizeShoeboxRir(wasm, size.value, absorption.value, displaySec.value + 0.25);
 }
 
 /**
@@ -272,32 +254,6 @@ function paint(): void {
 useCanvasRedraw(canvas, paint);
 
 // ---- audition: a short clap convolved with the RIR -------------------------
-/** Convolve a brief synthesized clap with the current RIR; normalize for play. */
-function buildClap(rir: Float32Array, sr: number): Float32Array {
-  const bn = Math.round(sr * 0.006);
-  const burst = new Float32Array(bn);
-  let s = 0x9e3779b9 >>> 0;
-  const rand = (): number => {
-    s = (s + 0x6d2b79f5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-  for (let i = 0; i < bn; i++) burst[i] = (rand() * 2 - 1) * (1 - i / bn);
-
-  const out = new Float32Array(rir.length + bn - 1);
-  for (let i = 0; i < bn; i++) {
-    const b = burst[i];
-    if (Math.abs(b) < 1e-5) continue;
-    for (let j = 0; j < rir.length; j++) out[i + j] += b * rir[j];
-  }
-  let pk = 1e-6;
-  for (let i = 0; i < out.length; i++) pk = Math.max(pk, Math.abs(out[i]));
-  const g = 0.75 / pk;
-  for (let i = 0; i < out.length; i++) out[i] *= g;
-  return out;
-}
-
 async function onPlay(): Promise<void> {
   if (!lastRir) {
     const wasm = await ensureWasm();
@@ -306,7 +262,7 @@ async function onPlay(): Promise<void> {
     lastSr = sampleRate;
   }
   if (!lastAudio) {
-    lastAudio = { samples: buildClap(lastRir, lastSr), sampleRate: lastSr };
+    lastAudio = { samples: clapThroughRir(lastRir, lastSr), sampleRate: lastSr };
   }
   await play(props.def.id, lastAudio);
 }
