@@ -215,7 +215,6 @@ const NOT_A_DESIGNATION = {
   'SHA-256': 'the hash the build pins artifacts with',
   'Bank-128': 'a MIDI bank number, written out in prose',
   ES2017: 'the ECMAScript edition a browser requirement is stated against',
-  KU100: 'the dummy-head measurement rig the default HRTF set is attributed to',
 };
 
 /**
@@ -236,6 +235,8 @@ export function checkDesignations({ root = process.cwd() } = {}) {
         for (const match of line.matchAll(DESIGNATION_SHAPE)) {
           const cluster = match[1] ?? match[3];
           if (!/[A-Z]/.test(cluster)) continue;
+          // A MIDI controller number (CC100, CC101) names a message, not a machine.
+          if (cluster === 'CC') continue;
           if (Object.hasOwn(NOT_A_DESIGNATION, match[0])) continue;
           failures.push(
             `${file.relPath}:${lineIndex + 1} reads as a model designation: "${match[0]}"`,

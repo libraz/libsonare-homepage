@@ -268,4 +268,11 @@ describe('checkDesignations', () => {
 
     expect(checkDesignations({ root })).toEqual([]);
   });
+
+  it('reads a MIDI controller number as a message, not a machine', () => {
+    const root = createWorkspace();
+    writeFile(root, 'src/docs/rpn.md', 'Send CC101 0 and CC100 0, then CC6 for the value.\n');
+
+    expect(checkDesignations({ root })).toEqual([]);
+  });
 });
