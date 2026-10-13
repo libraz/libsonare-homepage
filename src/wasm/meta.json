@@ -1,9 +1,9 @@
 {
-  "version": "1.8.2",
-  "size": 7641600,
-  "sizeKB": 7462,
-  "gzipSize": 2569884,
-  "gzipKB": 2509,
+  "version": "1.9.0",
+  "size": 7694196,
+  "sizeKB": 7513,
+  "gzipSize": 2590880,
+  "gzipKB": 2530,
   "assets": {
     "sonare.js": {
       "size": 96541,
@@ -12,41 +12,41 @@
       "gzipKB": 17
     },
     "index.js": {
-      "size": 526894,
-      "sizeKB": 514,
-      "gzipSize": 107505,
-      "gzipKB": 104
+      "size": 527406,
+      "sizeKB": 515,
+      "gzipSize": 107694,
+      "gzipKB": 105
     },
     "sonare.wasm": {
-      "size": 7641600,
-      "sizeKB": 7462,
-      "gzipSize": 2569884,
-      "gzipKB": 2509
+      "size": 7694196,
+      "sizeKB": 7513,
+      "gzipSize": 2590880,
+      "gzipKB": 2530
     },
     "worklet.js": {
-      "size": 443273,
-      "sizeKB": 432,
-      "gzipSize": 96923,
-      "gzipKB": 94
+      "size": 444625,
+      "sizeKB": 434,
+      "gzipSize": 97442,
+      "gzipKB": 95
     }
   },
   "total": {
-    "size": 8265035,
-    "sizeKB": 8071,
-    "gzipSize": 2694931,
-    "gzipKB": 2631
+    "size": 8318143,
+    "sizeKB": 8123,
+    "gzipSize": 2716116,
+    "gzipKB": 2652
   },
   "entries": {
     "full": {
-      "sizeKB": 7462,
-      "gzipKB": 2509
+      "sizeKB": 7513,
+      "gzipKB": 2530
     },
     "analysis": {
       "sizeKB": 1018,
-      "gzipKB": 379
+      "gzipKB": 380
     }
   },
-  "md5": "67f6926c4c34d8f5023158c415f34f9a",
-  "buildDate": "2026-10-10T20:35:42.293Z",
-  "sourcesDigest": "2b22f4f86b03"
+  "md5": "9d0c2571f1767ccaa7f5691348cf0afd",
+  "buildDate": "2026-10-12T08:24:40.648Z",
+  "sourcesDigest": "1ae5391f5af5"
 }

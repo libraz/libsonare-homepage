@@ -96,7 +96,7 @@ describe('mixing assistant source classes', () => {
       expect(byId[id].source, id).toBe('unknown');
       expect(byId[id].sourceConfidence, id).toBe(0);
     }
-    expect(byId.drums.source).toBe('tom');
+    expect(byId.drums.source).toBe('drumKit');
     expect(byId.drums.sourceConfidence).toBeGreaterThan(0);
     expect(byId.drums.sourceConfidence).toBeLessThan(GATE);
   }, 60_000);

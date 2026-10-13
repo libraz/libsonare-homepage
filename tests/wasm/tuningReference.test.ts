@@ -1,6 +1,5 @@
 // @vitest-environment node
 import { beforeAll, describe, expect, it } from 'vitest';
-import { tuningReference } from '@/demos/analyzer/audioAnalyzerProcessing';
 import * as wasm from '@/wasm/index.js';
 
 /**
@@ -63,7 +62,7 @@ describe('tuning reference', () => {
   });
 
   it('estimateTuning reads the offset to within two cents', () => {
-    expect(Math.abs(tuningReference(offset).cents + 45)).toBeLessThanOrEqual(2);
+    expect(Math.abs(offset * 100 + 45)).toBeLessThanOrEqual(2);
   });
 
   it('a quarter-tone flat loop in C reads in another key at A440', () => {
@@ -71,12 +70,12 @@ describe('tuning reference', () => {
   });
 
   it('reads in C once the analyzer takes the estimated reference', () => {
-    const { refHz } = tuningReference(offset);
+    const refHz = wasm.tuningToReferenceHz(offset);
     expect(streamKey(flat, (a) => a.setTuningRefHz(refHz))).toEqual({ key: 0, keyMinor: false });
   });
 
   it('keeps the reference across a reset, as a seek does', () => {
-    const { refHz } = tuningReference(offset);
+    const refHz = wasm.tuningToReferenceHz(offset);
     const key = streamKey(flat, (a) => {
       a.setTuningRefHz(refHz);
       a.reset(0);

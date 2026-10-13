@@ -203,6 +203,25 @@ export interface SynthEnumTables {
 /** NativeSynth engine selector ({@link SynthPatch}; `'default'` keeps the base patch's). */
 export type SynthEngineMode = (typeof SYNTH_ENGINE_MODES)[number];
 /**
+ * One condition another patch field must meet, as one of the conditions of an
+ * alternative in {@link SynthParamInfo.activeWhen}.
+ */
+export interface SynthParamCondition {
+    /** The field the condition reads. */
+    key: string;
+    /**
+     * `'engine'`: a key of the same {@link synthEngineParamInfo} table.
+     * `'patch'`: a {@link SynthPatch} field.
+     */
+    scope: 'engine' | 'patch';
+    relation: 'eq' | 'ne' | 'gt' | 'ge' | 'lt' | 'le';
+    /**
+     * A number, a boolean against a switch, or a vocabulary name against a
+     * wrapper enum (`body: 'violin'`).
+     */
+    value: number | boolean | string;
+}
+/**
  * One field a synth descriptor call reports: an engine-section key from
  * {@link synthEngineParamInfo} or a {@link SynthPatch} wrapper field from
  * {@link synthPatchParamInfo}. The insert descriptor's shape, without the
@@ -219,9 +238,28 @@ export interface SynthParamInfo {
     min?: number;
     /** Largest accepted value; absent for a field with no closed range. */
     max?: number;
-    /** The engine's base preset's value (engine fields) or the "keep base" default (patch fields). */
-    default: number;
+    /**
+     * The engine's base preset's value (engine fields) or the "keep base"
+     * default (patch fields); a boolean for a switch.
+     */
+    default: number | boolean;
     unit: MasteringInsertParamUnit;
+    /**
+     * Present only for a field that reaches the voice under conditions on other
+     * patch fields: a list of alternatives, each a list of conditions. The field
+     * reaches the voice when every condition of at least one alternative holds,
+     * so a field reached through several layers lists one alternative per
+     * layer. What a field further needs from a performance (velocity, a
+     * controller, overlapping notes), or a value past which it saturates, is not
+     * stated.
+     *
+     * @example
+     * ```ts
+     * const live = (field: SynthParamInfo, holds: (c: SynthParamCondition) => boolean) =>
+     *   field.activeWhen === undefined || field.activeWhen.some((all) => all.every(holds));
+     * ```
+     */
+    activeWhen?: SynthParamCondition[][];
 }
 /**
  * Per-patch loop override for the sample engine (`'default'` keeps what the

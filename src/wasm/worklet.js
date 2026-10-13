@@ -1922,9 +1922,15 @@ var RealtimeEngine = class _RealtimeEngine {
    * destination. The bank is applied only when `bankValid` is true; a non-zero
    * `bankMsb`/`bankLsb` with `bankValid` false is refused. `group`/`channel` are
    * 0..15, `program`/`bankMsb`/`bankLsb` 0..127. The message takes the same
-   * receive path as {@link pushMidiUmp}, so a receiver that selects no programs
-   * (builtin synth, a part with RX PROGRAM CHANGE off, an MPE member channel)
-   * accepts and ignores it. Throws when the slot ring or command queue is full.
+   * receive path as {@link pushMidiUmp}. Which receivers select programs: the
+   * SoundFont player (`setSf2Instrument`) selects bank and program under its own
+   * RX PROGRAM CHANGE / RX BANK SELECT gates; a NativeSynth bound with
+   * `useGmPrograms: true` (`setSynthInstrument`) resolves each channel's voice
+   * from the bank and program; a NativeSynth whose patch plays the GM kit (the
+   * `drum-kit` preset, or a percussion patch with `gmKit` on) takes the program
+   * as the GS drum-set select on every channel. Every other receiver accepts the
+   * message and ignores it: the built-in synth, any other NativeSynth patch, a
+   * part with RX PROGRAM CHANGE off, and an MPE member channel. Throws when the slot ring or command queue is full.
    * `renderFrame` is the frame to fire at (omit for immediate).
    */
   pushMidiProgram(destinationId, group, channel, program, bankValid = false, bankMsb = 0, bankLsb = 0, renderFrame) {
@@ -8775,6 +8781,19 @@ var SonareEngine = class _SonareEngine {
   pushMidiUmp(trackId, words, renderFrame) {
     pushMidiUmp(this.stripContext, trackId, words, renderFrame);
   }
+  /**
+   * Queues a live MIDI 2.0 Program Change, with an optional bank, to a track's
+   * MIDI destination; arguments follow the main-thread engine's
+   * `pushMidiProgram`. Which receivers select programs: the SoundFont player
+   * (`setSf2Instrument`) selects bank and program under its own RX PROGRAM
+   * CHANGE / RX BANK SELECT gates; a NativeSynth bound with
+   * `useGmPrograms: true` (`setSynthInstrument`) resolves each channel's voice
+   * from the bank and program; a NativeSynth whose patch plays the GM kit (the
+   * `drum-kit` preset, or a percussion patch with `gmKit` on) takes the program
+   * as the GS drum-set select on every channel. Every other receiver accepts the
+   * message and ignores it: the built-in synth, any other NativeSynth patch, a
+   * part with RX PROGRAM CHANGE off, and an MPE member channel.
+   */
   pushMidiProgram(trackId, group, channel, program, bankValid = false, bankMsb = 0, bankLsb = 0, renderFrame) {
     pushMidiProgram(
       this.stripContext,

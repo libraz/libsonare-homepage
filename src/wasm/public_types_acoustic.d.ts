@@ -182,7 +182,7 @@ export interface RoomPlacement {
     y: number;
     z: number;
 }
-/** Positions for `roomGeometryFromEstimate`; an omitted one is left to `synthesizeRir`'s default. */
+/** Positions for `roomGeometryFromEstimate`; each one given replaces the placement scaled into the estimated room. */
 export interface RoomGeometryFromEstimateOptions {
     source?: RoomPlacement;
     listener?: RoomPlacement;
