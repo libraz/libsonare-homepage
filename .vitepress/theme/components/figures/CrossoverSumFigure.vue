@@ -2,11 +2,12 @@
 /**
  * What the low and high band add back to around one cutoff, per crossover mode.
  *
- * Each curve is |LP(jω) + HP(jω)| of the analog prototype, both bands summed
- * with the same polarity and HP(s) = LP(1/s): Butterworth and Bessel are
- * −3 dB-normalized, Linkwitz-Riley is a squared Butterworth, and the
- * linear-phase FIR reconstructs the input exactly. The Butterworth `lr2` notch
- * is a true zero at the cutoff, so it runs off the bottom of the plot.
+ * Each curve is |LP(jω) ± HP(jω)| of the analog prototype with HP(s) = LP(1/s):
+ * Butterworth and Bessel are −3 dB-normalized, Linkwitz-Riley is a squared
+ * Butterworth, and the linear-phase FIR reconstructs the input exactly. The
+ * engine inverts the high band of a Butterworth or Bessel pair that is out of
+ * phase at its cutoff, so the sign is picked from the phase at ω = 1. The
+ * curves match `multiband.compressor` at ratio 1 to within 0.1 dB near the cutoff.
  */
 import { computed } from 'vue';
 import FigureFrame, { type FigureLegendItem } from './FigureFrame.vue';
@@ -18,7 +19,7 @@ const props = defineProps<{
   labels?: Partial<Record<Key, string>>;
 }>();
 
-type Key = 'lr' | 'fir' | 'bw4' | 'bw2' | 'bessel4' | 'cutoff' | 'sum' | 'notch' | 'frequency';
+type Key = 'lr' | 'fir' | 'bw4' | 'bw2' | 'bessel4' | 'cutoff' | 'sum' | 'frequency';
 
 const DEFAULTS: Record<Key, string> = {
   lr: 'linkwitzRiley lr4',
@@ -28,7 +29,6 @@ const DEFAULTS: Record<Key, string> = {
   bessel4: 'bessel lr4',
   cutoff: 'cutoff',
   sum: 'summed bands',
-  notch: 'notch',
   frequency: 'frequency / cutoff',
 };
 
@@ -75,9 +75,18 @@ function minus3dbScale(c: number[]): number {
   return lo;
 }
 
-const crossoverSum = (lp: Lowpass) => (w: number) => {
-  const s: Cx = [0, w];
-  return 20 * Math.log10(cabs(cadd(lp(s), lp(cdiv([1, 0], s)))));
+const hp = (lp: Lowpass, s: Cx) => lp(cdiv([1, 0], s));
+
+const crossoverSum = (lp: Lowpass) => {
+  // Re(LP · conj(HP)) < 0 at the cutoff means the bands are more than 90° apart.
+  const l1 = lp([0, 1]);
+  const h1 = hp(lp, [0, 1]);
+  const sign = l1[0] * h1[0] + l1[1] * h1[1] < 0 ? -1 : 1;
+  return (w: number) => {
+    const s: Cx = [0, w];
+    const h = hp(lp, s);
+    return 20 * Math.log10(cabs(cadd(lp(s), [sign * h[0], sign * h[1]])));
+  };
 };
 
 const MODES = {
@@ -100,14 +109,14 @@ const X0 = 64;
 const X1 = 560;
 const Y0 = 36;
 const Y1 = 214;
-const DB_TOP = 6;
-const DB_BOT = -30;
+const DB_TOP = 4.5;
+const DB_BOT = -1.5;
 const W_MIN = 1 / 8;
 const W_MAX = 8;
 
 const x = logScale(W_MIN, W_MAX, X0, X1);
 const y = linScale(DB_BOT, DB_TOP, Y1, Y0);
-const DB_TICKS = [3, 0, -6, -12, -18, -24];
+const DB_TICKS = [4, 3, 2, 1, 0, -1];
 const W_TICKS = [
   { w: 1 / 8, t: '1/8' },
   { w: 1 / 4, t: '1/4' },
@@ -132,8 +141,7 @@ const curves = computed(() =>
     const n = 400;
     for (let i = 0; i <= n; i++) {
       const w = W_MIN * (W_MAX / W_MIN) ** (i / n);
-      // Clamp below the floor so the notch leaves the plot instead of drawing to −∞.
-      pts.push([x(w), y(Math.max(DB_BOT - 4, fn(w)))]);
+      pts.push([x(w), y(fn(w))]);
     }
     return { ...s, d: path(pts), atCutoff: fn(1) };
   }),
@@ -203,14 +211,13 @@ const cutoffValues = computed(() => {
     </g>
 
     <!-- Values at the cutoff -->
-    <text class="fx-value fx-value--3" :x="x(1) + 8" :y="y(cutoffValues.bw4) - 5">
+    <text class="fx-value fx-value--3" :x="x(1)" :y="y(cutoffValues.bw4) - 6" text-anchor="middle">
       {{ fmtDb(cutoffValues.bw4) }}
     </text>
-    <text class="fx-value fx-value--4" :x="x(1) + 8" :y="y(cutoffValues.bessel4) + 13">
+    <text class="fx-value fx-value--4" :x="x(1)" :y="y(0.45)" text-anchor="middle">
       {{ fmtDb(cutoffValues.bessel4) }}
     </text>
     <text class="fx-value fx-value--1" :x="X1 + 6" :y="y(0) + 3">0 dB</text>
-    <text class="fx-value fx-value--5" :x="x(1) + 8" :y="Y1 - 8">{{ label('notch') }}</text>
     <text class="fx-note" :x="x(1)" :y="Y0 - 6" text-anchor="middle">{{ label('cutoff') }}</text>
   </FigureFrame>
 </template>

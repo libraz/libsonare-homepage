@@ -1,6 +1,9 @@
 <script setup lang="ts">
 /**
- * One DAHDSR amplitude envelope (no delay or hold) drawn in decibels.
+ * One DAHDSR amplitude envelope (no delay or hold) drawn in decibels: the
+ * SynthPatch amp and filter envelope, whose decay and release are three time
+ * constants. The built-in oscillator instrument's ADSR is a linear ramp and
+ * is not what this draws.
  *
  * The stages follow the engine's one-pole segments: the attack aims at 1.3×
  * full scale and stops where it crosses 1.0, so it is steep early and arrives
@@ -30,7 +33,8 @@ type Key =
   | 'releaseTime'
   | 'timeConstant'
   | 'tail'
-  | 'time';
+  | 'time'
+  | 'scope';
 
 const DEFAULTS: Record<Key, string> = {
   envelope: 'level',
@@ -44,6 +48,7 @@ const DEFAULTS: Record<Key, string> = {
   timeConstant: 'one time constant',
   tail: 'tail keeps falling',
   time: 'time (s)',
+  scope: 'SynthPatch envelope: decay and release = 3 time constants',
 };
 
 const label = (key: Key) => props.labels?.[key] ?? DEFAULTS[key];
@@ -144,6 +149,7 @@ const STAGES = computed(() => [
     </g>
     <text class="fx-tick" :x="X0 - 6" :y="Y0 - 8" text-anchor="end">dB</text>
     <text class="fx-axis-label" :x="X1" :y="Y1 + 30" text-anchor="end">{{ label('time') }}</text>
+    <text class="fx-note" :x="X0" :y="Y1 + 30">{{ label('scope') }}</text>
     <line class="fx-axis" :x1="X0" :x2="X0" :y1="Y0" :y2="Y1" />
     <line class="fx-axis" :x1="X0" :x2="X1" :y1="Y1" :y2="Y1" />
 
