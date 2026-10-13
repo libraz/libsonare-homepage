@@ -167,7 +167,7 @@ const captionText = computed(() => props.caption ?? label('caption'));
 const legend = computed<FigureLegendItem[]>(() => [
   { series: 1, label: label('legendReach') },
   { series: 0, label: label('legendStop') },
-  { shape: 'dashed', label: label('legendIgnore') },
+  { series: 0, shape: 'dashed', label: label('legendIgnore') },
 ]);
 
 // Layout. Text budgets at PAD inset, mono ~0.6em: a block name (10.5px) holds

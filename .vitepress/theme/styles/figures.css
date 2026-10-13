@@ -303,31 +303,32 @@
 }
 
 .doc-diagram-wrap .fx-legend-swatch {
+  --fx-swatch: var(--fx-1);
   flex: none;
   width: 14px;
   height: 3px;
   border-radius: 2px;
-  background: var(--fx-1);
+  background: var(--fx-swatch);
 }
 
 .doc-diagram-wrap .fx-legend-swatch[data-series='0'] {
-  background: var(--fx-rule);
+  --fx-swatch: var(--fx-rule);
 }
 
 .doc-diagram-wrap .fx-legend-swatch[data-series='2'] {
-  background: var(--fx-2);
+  --fx-swatch: var(--fx-2);
 }
 
 .doc-diagram-wrap .fx-legend-swatch[data-series='3'] {
-  background: var(--fx-3);
+  --fx-swatch: var(--fx-3);
 }
 
 .doc-diagram-wrap .fx-legend-swatch[data-series='4'] {
-  background: var(--fx-4);
+  --fx-swatch: var(--fx-4);
 }
 
 .doc-diagram-wrap .fx-legend-swatch[data-series='5'] {
-  background: var(--fx-5);
+  --fx-swatch: var(--fx-5);
 }
 
 .doc-diagram-wrap .fx-legend-swatch[data-shape='block'] {
@@ -337,7 +338,7 @@
 
 .doc-diagram-wrap .fx-legend-swatch[data-shape='dashed'] {
   height: 0;
-  border-top: 2px dashed var(--fx-3);
+  border-top: 2px dashed var(--fx-swatch);
   background: none;
   border-radius: 0;
 }
